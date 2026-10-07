@@ -22,7 +22,8 @@ export const COMBAT_DPS = 8;
 // Stargates: 3 on the outer ring. They burn fuel while active.
 export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with
 export const FUEL_SESSION_MAX_MS = 30 * 60 * 1000; // max fuel a single activation can burn
-export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries to connect
+export const HUB_MIN_WAIT_MS = 3 * 60 * 1000;    // give player-to-player links this long before trying the hub
+export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries the hub (after the wait)
 export const HUB_SEEK_CHANCE = 0.4;              // chance per try to find a hub entrance
 export const GATE_TRANSFER_RADIUS_KM = 8;        // a ship this close to a connected gate flies through
 export const ARRIVAL_OFFSET_KM = GATE_TRANSFER_RADIUS_KM + 6; // land clear of the partner gate

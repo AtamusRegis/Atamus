@@ -1,7 +1,7 @@
 import {
   SHIP_SPEED_KMPS, SHIP_HP, MAX_SHIPS_PER_PLAYER,
   COMBAT_RANGE_KM, COMBAT_DPS,
-  FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE,
+  FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE,
   GATE_TRANSFER_RADIUS_KM, ARRIVAL_OFFSET_KM, STATION_RADIUS_KM, HUB_SYS,
 } from "./constants.js";
 import { STARGATE_CELLS, STATION_POS, clampToSystem, dist } from "./geometry.js";
@@ -26,7 +26,7 @@ export class World {
     STARGATE_CELLS.forEach((cell, i) => {
       this.gates.set(`${id}:${i}`, {
         id: `${id}:${i}`, owner: id, sys, lx: cell.x, ly: cell.y,
-        state: "closed", fuelMs: FUEL_START_MS, sessionUsedMs: 0,
+        state: "closed", fuelMs: FUEL_START_MS, sessionUsedMs: 0, activatedAt: 0,
         connToSys: null, connToGate: null, lastSeek: 0,
       });
     });
@@ -82,7 +82,7 @@ export class World {
     const g = this.gates.get(gateId);
     if (!g || g.owner !== pid) return;
     if (open) {
-      if (g.state === "closed" && g.fuelMs > 0) { g.state = "active"; g.sessionUsedMs = 0; g.lastSeek = 0; }
+      if (g.state === "closed" && g.fuelMs > 0) { g.state = "active"; g.sessionUsedMs = 0; g.lastSeek = 0; g.activatedAt = Date.now(); }
     } else {
       if (g.state !== "active") return;
       if (this._enemiesInSystem(pid)) return;           // can't terminate with enemies present
@@ -151,13 +151,16 @@ export class World {
       g.fuelMs -= dtMs; g.sessionUsedMs += dtMs;
       if (g.fuelMs <= 0) { g.fuelMs = 0; this._closeGate(g); continue; }
       if (g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { this._closeGate(g); continue; }
-      if (!g.connToSys && now - g.lastSeek >= HUB_SEEK_INTERVAL_MS) {
-        g.lastSeek = now;
-        let paired = false;
+      if (!g.connToSys) {
+        // Always try to pair with another waiting player gate (first priority).
         for (const o of this.gates.values()) {
-          if (o !== g && o.state === "active" && !o.connToSys && o.owner !== g.owner) { this._connectGates(g, o); paired = true; break; }
+          if (o !== g && o.state === "active" && !o.connToSys && o.owner !== g.owner) { this._connectGates(g, o); break; }
         }
-        if (!paired && Math.random() < HUB_SEEK_CHANCE) this._connectToHub(g);
+        // Only fall back to the hub after the minimum wait, to give players a chance.
+        if (!g.connToSys && now - g.activatedAt >= HUB_MIN_WAIT_MS && now - g.lastSeek >= HUB_SEEK_INTERVAL_MS) {
+          g.lastSeek = now;
+          if (Math.random() < HUB_SEEK_CHANCE) this._connectToHub(g);
+        }
       }
     }
 

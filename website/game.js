@@ -81,6 +81,8 @@
   // camera: free pan, zoom from 15km (closest) to "fit all systems" (farthest)
   const ZOOM_MIN_W = 15;
   let cam = { cx: 0, cy: 0, viewW: 600 }, curMaxW = 600;
+  let viewWTarget = 600;                 // smoothed zoom target
+  const panVel = { x: 0, y: 0 };         // smoothed pan velocity (km/s)
   function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
   addEventListener("resize", resize); resize();
   const scale = () => innerWidth / cam.viewW;
@@ -96,13 +98,20 @@
     const aspect = innerWidth / innerHeight;
     return Math.max(maxX - minX, (maxY - minY) * aspect) * 1.08;
   }
-  function clampCamera(place) {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const p of place.values()) { minX = Math.min(minX, p.gx); maxX = Math.max(maxX, p.gx); minY = Math.min(minY, p.gy); maxY = Math.max(maxY, p.gy); }
-    if (!isFinite(minX)) { minX = maxX = minY = maxY = 0; }
-    const m = systemRadius * 1.1;
-    cam.cx = Math.max(minX - m, Math.min(maxX + m, cam.cx));
-    cam.cy = Math.max(minY - m, Math.min(maxY + m, cam.cy));
+  // Clamp the camera centre to a circle around the centre of mass of all
+  // visible systems, with radius large enough to include every one of them.
+  function centroidBound(place) {
+    let n = 0, sx = 0, sy = 0;
+    for (const p of place.values()) { sx += p.gx; sy += p.gy; n++; }
+    if (!n) return { cx: 0, cy: 0, r: systemRadius };
+    const cx = sx / n, cy = sy / n;
+    let maxd = 0; for (const p of place.values()) maxd = Math.max(maxd, Math.hypot(p.gx - cx, p.gy - cy));
+    return { cx, cy, r: maxd + systemRadius * 1.1 };
+  }
+  function clampCameraCircle(place) {
+    const b = centroidBound(place);
+    const dx = cam.cx - b.cx, dy = cam.cy - b.cy, d = Math.hypot(dx, dy);
+    if (d > b.r) { cam.cx = b.cx + dx / d * b.r; cam.cy = b.cy + dy / d * b.r; }
   }
 
   const keys = new Set();
@@ -115,9 +124,9 @@
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
 
-  document.getElementById("btn-in").addEventListener("click", () => { cam.viewW = Math.max(ZOOM_MIN_W, cam.viewW / 1.3); });
-  document.getElementById("btn-out").addEventListener("click", () => { cam.viewW = Math.min(curMaxW, cam.viewW * 1.3); });
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.viewW = Math.max(ZOOM_MIN_W, Math.min(curMaxW, cam.viewW * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); }, { passive: false });
+  document.getElementById("btn-in").addEventListener("click", () => { viewWTarget = Math.max(ZOOM_MIN_W, viewWTarget / 1.3); });
+  document.getElementById("btn-out").addEventListener("click", () => { viewWTarget = Math.min(curMaxW, viewWTarget * 1.3); });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); }, { passive: false });
 
   function myGate(idx) { return snap.gates.find((g) => g.mine && g.id.endsWith(":" + idx)); }
   function toggleGate(g) {
@@ -235,12 +244,22 @@
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place;
       curMaxW = fitWidth(place);
-      if (!camInit) { cam.cx = 0; cam.cy = 0; cam.viewW = curMaxW; camInit = true; }
-      cam.viewW = Math.max(ZOOM_MIN_W, Math.min(curMaxW, cam.viewW));
+      if (!camInit) { const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true; }
 
-      const panKm = cam.viewW * 1.0 * dt;
-      if (keys.has("w")) cam.cy += panKm; if (keys.has("s")) cam.cy -= panKm; if (keys.has("a")) cam.cx -= panKm; if (keys.has("d")) cam.cx += panKm;
-      clampCamera(place);
+      // smooth zoom toward target
+      viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget));
+      cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
+
+      // smooth WASD pan: ease velocity toward the desired direction
+      let dx = 0, dy = 0;
+      if (keys.has("a")) dx -= 1; if (keys.has("d")) dx += 1; if (keys.has("w")) dy += 1; if (keys.has("s")) dy -= 1;
+      if (dx || dy) { const l = Math.hypot(dx, dy); dx /= l; dy /= l; }
+      const maxSpeed = cam.viewW * 0.9;
+      const ease = 1 - Math.exp(-10 * dt);
+      panVel.x += (dx * maxSpeed - panVel.x) * ease;
+      panVel.y += (dy * maxSpeed - panVel.y) * ease;
+      cam.cx += panVel.x * dt; cam.cy += panVel.y * dt;
+      clampCameraCircle(place);
 
       const k = Math.min(1, dt * 12);
       for (const r of rships.values()) { if (r.tx != null) { r.x += (r.tx - r.x) * k; r.y += (r.ty - r.y) * k; r.hd = lerpA(r.hd, r.thd, k); } }
