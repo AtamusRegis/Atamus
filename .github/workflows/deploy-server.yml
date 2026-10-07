@@ -1,0 +1,32 @@
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/server/**"
+      - "packages/shared/**"
+      - "scripts/deploy.sh"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger redeploy over SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.ATAMUS_DEPLOY_KEY }}
+          HOST: 144.202.66.235
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          # The server forces this key to run the deploy script, so the
+          # command sent here is ignored; output streams back to the log.
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes "root@$HOST" deploy

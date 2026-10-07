@@ -153,6 +153,23 @@ systemctl daemon-reload
 systemctl enable atamus
 systemctl restart atamus
 
+# ---------------------------------------------------------------- auto-deploy hook
+log "Installing deploy script and GitHub deploy key"
+install -m 0755 "${APP_DIR}/scripts/deploy.sh" /usr/local/bin/atamus-deploy
+
+# Public half of the GitHub Actions deploy key. Restricted to only run the
+# deploy script (forced command) with no shell, forwarding, or pty.
+DEPLOY_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOUgsdi6AtL2TH3BuBPK8qnuumLG8DyTIoGASBzQmNmj atamus-github-deploy'
+DEPLOY_LINE="command=\"/usr/local/bin/atamus-deploy\",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ${DEPLOY_KEY}"
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+touch /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+# Add once; never duplicate or disturb other keys (e.g. your personal login key).
+if ! grep -qF "atamus-github-deploy" /root/.ssh/authorized_keys; then
+  echo "$DEPLOY_LINE" >> /root/.ssh/authorized_keys
+fi
+
 # ---------------------------------------------------------------- Caddy reverse proxy
 log "Configuring Caddy for ${DOMAIN}"
 cat > /etc/caddy/Caddyfile <<CADDY
