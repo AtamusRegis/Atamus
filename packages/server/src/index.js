@@ -25,7 +25,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD }));
+app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
 app.use("/auth", auth);
 
