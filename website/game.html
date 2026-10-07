@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus — System</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="game.css?v=1791407710">
+</head>
+<body class="game-body">
+  <canvas id="view"></canvas>
+
+  <!-- top-left HUD -->
+  <div id="hud" class="hud">
+    <div class="hud-title">ATAMUS</div>
+    <div class="hud-row"><span class="k">Commander</span><span id="hud-name" class="v">—</span></div>
+    <div class="hud-row"><span class="k">Location</span><span id="hud-loc" class="v">Home System</span></div>
+    <div class="hud-row" id="hud-timer-row" hidden><span class="k">Wormhole</span><span id="hud-timer" class="v">—</span></div>
+  </div>
+
+  <!-- top-right controls -->
+  <div id="controls" class="controls">
+    <button id="btn-home" class="gbtn is-active">Home</button>
+    <button id="btn-hub" class="gbtn" disabled>Hub</button>
+  </div>
+
+  <!-- bottom-left hint -->
+  <div id="hint" class="hint">
+    LMB select · double-click move · RMB deselect · click the gate to open a wormhole · click the station to build a ship
+  </div>
+
+  <!-- chat -->
+  <div id="chat" class="chat">
+    <div id="chat-log" class="chat-log"></div>
+    <form id="chat-form" class="chat-form">
+      <input id="chat-input" type="text" maxlength="240" placeholder="Message this instance…" autocomplete="off">
+    </form>
+  </div>
+
+  <div id="status" class="status">Connecting…</div>
+
+  <script src="api.js?v=1791407710"></script>
+  <script src="game.js?v=1791407710"></script>
+</body>
+</html>

@@ -1,9 +1,11 @@
 import fs from "node:fs";
+import http from "node:http";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
+import { attachGameServer } from "./game/net.js";
 
 // Short git SHA of the running code, reported by /healthz (written by deploy.sh / setup.sh).
 let BUILD = "dev";
@@ -41,8 +43,10 @@ async function main() {
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();
 
-  app.listen(config.port, "127.0.0.1", () => {
-    console.log(`Atamus server listening on 127.0.0.1:${config.port}`);
+  const server = http.createServer(app);
+  attachGameServer(server);
+  server.listen(config.port, "127.0.0.1", () => {
+    console.log(`Atamus server listening on 127.0.0.1:${config.port} (http + ws)`);
   });
 }
 
