@@ -120,8 +120,10 @@
     return place;
   }
 
-  // ---- camera ----
-  let cam = { ox: 0, oy: 0, scale: 1 };
+  // ---- camera (free pan + zoom) ----
+  // viewW is the viewport width in km. Clamp: 15km (closest) .. 100km (farthest).
+  const ZOOM_MIN_W = 15, ZOOM_MAX_W = 100;
+  let cam = { cx: 0, cy: 0, viewW: ZOOM_MAX_W };
   function resize() {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr);
@@ -129,22 +131,43 @@
   }
   addEventListener("resize", resize); resize();
 
-  function updateCamera(place) {
-    let minX = -systemRadius, maxX = systemRadius, minY = -systemRadius, maxY = systemRadius;
-    for (const p of place.values()) {
-      minX = Math.min(minX, p.gx - systemRadius); maxX = Math.max(maxX, p.gx + systemRadius);
-      minY = Math.min(minY, p.gy - systemRadius); maxY = Math.max(maxY, p.gy + systemRadius);
-    }
-    const w = innerWidth, h = innerHeight, pad = 0.9;
-    const bw = maxX - minX, bh = maxY - minY;
-    cam.scale = Math.min(w / bw, h / bh) * pad;
-    cam.ox = w / 2 - (minX + maxX) / 2 * cam.scale;
-    cam.oy = h / 2 + (minY + maxY) / 2 * cam.scale; // y inverted
+  const scale = () => innerWidth / cam.viewW;
+  const gx2s = (gx) => innerWidth / 2 + (gx - cam.cx) * scale();
+  const gy2s = (gy) => innerHeight / 2 - (gy - cam.cy) * scale();
+  const s2gx = (sx) => cam.cx + (sx - innerWidth / 2) / scale();
+  const s2gy = (sy) => cam.cy - (sy - innerHeight / 2) / scale();
+
+  function setZoom(w) {
+    cam.viewW = Math.max(ZOOM_MIN_W, Math.min(ZOOM_MAX_W, w));
+    document.getElementById("zoom-label").textContent = Math.round(cam.viewW) + "km";
   }
-  const gx2s = (gx) => cam.ox + gx * cam.scale;
-  const gy2s = (gy) => cam.oy - gy * cam.scale;
-  const s2gx = (sx) => (sx - cam.ox) / cam.scale;
-  const s2gy = (sy) => -(sy - cam.oy) / cam.scale;
+  function clampCamera(place) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of place.values()) {
+      minX = Math.min(minX, p.gx); maxX = Math.max(maxX, p.gx);
+      minY = Math.min(minY, p.gy); maxY = Math.max(maxY, p.gy);
+    }
+    if (!isFinite(minX)) { minX = maxX = minY = maxY = 0; }
+    const m = systemRadius * 1.1;
+    cam.cx = Math.max(minX - m, Math.min(maxX + m, cam.cx));
+    cam.cy = Math.max(minY - m, Math.min(maxY + m, cam.cy));
+  }
+
+  // pan keys
+  const keys = new Set();
+  addEventListener("keydown", (e) => {
+    if (document.activeElement === chatInput) return;
+    const k = e.key.toLowerCase();
+    if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); e.preventDefault(); }
+  });
+  addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+  addEventListener("blur", () => keys.clear());
+
+  // zoom controls
+  document.getElementById("btn-in").addEventListener("click", () => setZoom(cam.viewW / 1.3));
+  document.getElementById("btn-out").addEventListener("click", () => setZoom(cam.viewW * 1.3));
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(cam.viewW * (e.deltaY > 0 ? 1.12 : 1 / 1.12)); }, { passive: false });
+  setZoom(ZOOM_MAX_W);
 
   // ---- input ----
   function eventPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -254,7 +277,7 @@
     ctx.restore();
     // transfer-radius ring when connected
     if (g.state === "connected") {
-      ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, cfg.transferRadius * cam.scale, 0, Math.PI * 2);
+      ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, cfg.transferRadius * scale(), 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(255,122,42,0.35)"; ctx.setLineDash([5, 7]); ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
     }
   }
@@ -305,7 +328,14 @@
 
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place;
-      updateCamera(place);
+
+      // WASD pan (speed scales with zoom so it feels consistent)
+      const panKm = cam.viewW * 1.0 * dt;
+      if (keys.has("w")) cam.cy += panKm;
+      if (keys.has("s")) cam.cy -= panKm;
+      if (keys.has("a")) cam.cx -= panKm;
+      if (keys.has("d")) cam.cx += panKm;
+      clampCamera(place);
 
       // interpolate ships
       const k = Math.min(1, dt * 12);
@@ -331,13 +361,13 @@
         const th = systemTheme(sEntry);
         // glow
         const cx = gx2s(pl.gx), cy = gy2s(pl.gy);
-        const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, systemRadius * cam.scale);
+        const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, systemRadius * scale());
         gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr;
-        ctx.fillRect(cx - systemRadius * cam.scale, cy - systemRadius * cam.scale, systemRadius * cam.scale * 2, systemRadius * cam.scale * 2);
+        ctx.fillRect(cx - systemRadius * scale(), cy - systemRadius * scale(), systemRadius * scale() * 2, systemRadius * scale() * 2);
         // cells
         for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill);
         // name
-        label(cx, cy - systemRadius * cam.scale - 4, sEntry.mine ? "YOUR SYSTEM" : (sEntry.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), th.line);
+        label(cx, cy - systemRadius * scale() - 4, sEntry.mine ? "YOUR SYSTEM" : (sEntry.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), th.line);
       }
 
       // gates + stations + ships
