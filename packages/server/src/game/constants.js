@@ -19,11 +19,12 @@ export const MAX_SHIPS_PER_PLAYER = 2;
 export const COMBAT_RANGE_KM = 8;      // enemy ships within this damage each other (in any system)
 export const COMBAT_DPS = 8;
 
-// Stargates: 3 on the outer ring. A battery recharges, then can be activated.
-export const RECHARGE_MS = 5 * 60 * 1000;      // battery recharge after use
-export const CONNECTION_MS = 5 * 60 * 1000;    // how long a wormhole stays open
-export const SEEK_TIMEOUT_MS = 20 * 1000;      // wait for a player match before falling back to the hub
-export const GATE_TRANSFER_RADIUS_KM = 8;      // a ship this close to a connected gate flies through
+// Stargates: 3 on the outer ring. They burn fuel while active.
+export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with
+export const FUEL_SESSION_MAX_MS = 30 * 60 * 1000; // max fuel a single activation can burn
+export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries to connect
+export const HUB_SEEK_CHANCE = 0.4;              // chance per try to find a hub entrance
+export const GATE_TRANSFER_RADIUS_KM = 8;        // a ship this close to a connected gate flies through
 export const ARRIVAL_OFFSET_KM = GATE_TRANSFER_RADIUS_KM + 6; // land clear of the partner gate
 
 // Station (ship construction) at the center cell.

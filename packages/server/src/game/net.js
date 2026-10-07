@@ -5,7 +5,7 @@ import { World } from "./world.js";
 import {
   TICK_MS, SNAPSHOT_MS,
   CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, SHIP_HP, CONNECTION_MS, RECHARGE_MS, SEEK_TIMEOUT_MS,
+  GATE_TRANSFER_RADIUS_KM, SHIP_HP, FUEL_SESSION_MAX_MS, FUEL_START_MS,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 
@@ -20,9 +20,8 @@ const CLIENT_CONFIG = {
   cellCornerRound: CELL_CORNER_ROUND_KM,
   transferRadius: GATE_TRANSFER_RADIUS_KM,
   maxHp: SHIP_HP,
-  connectionMs: CONNECTION_MS,
-  rechargeMs: RECHARGE_MS,
-  seekMs: SEEK_TIMEOUT_MS,
+  fuelMaxMs: FUEL_SESSION_MAX_MS,
+  fuelStartMs: FUEL_START_MS,
 };
 
 export function attachGameServer(httpServer) {
@@ -42,10 +41,10 @@ export function attachGameServer(httpServer) {
     ws.on("message", (buf) => {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
       switch (m.t) {
-        case "move":     world.cmdMove(pid, m.id, +m.x, +m.y); break;
-        case "activate": world.cmdActivate(pid, m.gate); break;
-        case "spawn":    world.cmdSpawn(pid); break;
-        case "chat":     world.cmdChat(pid, m.text); break;
+        case "move":  world.cmdMove(pid, m.id, +m.x, +m.y); break;
+        case "gate":  world.cmdGate(pid, m.gate, !!m.open); break;
+        case "spawn": world.cmdSpawn(pid); break;
+        case "chat":  world.cmdChat(pid, m.text); break;
       }
     });
     ws.on("close", () => world.removePlayer(pid));
