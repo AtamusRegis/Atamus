@@ -5,7 +5,7 @@ import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
 
-// Short git SHA of the running code, written by deploy.sh / setup.sh.
+// Short git SHA of the running code, reported by /healthz (written by deploy.sh / setup.sh).
 let BUILD = "dev";
 try { BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
 
