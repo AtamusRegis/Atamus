@@ -5,6 +5,7 @@ import cors from "cors";
 import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
+import { game } from "./gamehttp.js";
 import { attachGameServer } from "./game/net.js";
 
 // Short git SHA of the running code, reported by /healthz (written by deploy.sh / setup.sh).
@@ -30,6 +31,7 @@ app.use(cors({
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
 app.use("/auth", auth);
+app.use("/game", game);
 
 app.use((err, _req, res, _next) => {
   if (err && err.message === "Origin not allowed")

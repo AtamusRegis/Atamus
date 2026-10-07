@@ -28,9 +28,9 @@ for (let q = -SYSTEM_RINGS; q <= SYSTEM_RINGS; q++) {
   }
 }
 
-// Three stargate cells, evenly spaced around the outer ring.
-OUTER.sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
-export const STARGATE_CELLS = [0, 1, 2].map((i) => OUTER[Math.floor((i * OUTER.length) / 3)]);
+// One stargate for now — the outer cell nearest the top of the system.
+OUTER.sort((a, b) => Math.abs(Math.atan2(a.y, a.x) - Math.PI / 2) - Math.abs(Math.atan2(b.y, b.x) - Math.PI / 2));
+export const STARGATE_CELLS = [OUTER[0]];
 
 export const STATION_POS = { x: 0, y: 0 }; // center cell
 

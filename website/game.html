@@ -5,32 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atamus — System</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="game.css?v=1791412831">
+  <link rel="stylesheet" href="game.css?v=1791415886">
 </head>
 <body class="game-body">
   <canvas id="view"></canvas>
 
-  <div id="hud" class="hud">
-    <div class="hud-title">ATAMUS</div>
-    <div class="hud-row"><span class="k">Commander</span><span id="hud-name" class="v">—</span></div>
-    <div class="hud-row"><span class="k">Systems</span><span id="hud-systems" class="v">1</span></div>
-  </div>
+  <!-- left window panel (buttons injected by ui.js) -->
+  <nav id="window-panel" class="window-panel" aria-label="Windows"></nav>
 
   <div id="zoom" class="zoom">
     <button id="btn-in" class="zbtn" aria-label="Zoom in">+</button>
     <button id="btn-out" class="zbtn" aria-label="Zoom out">&minus;</button>
   </div>
 
-  <div id="chat" class="chat">
-    <div id="chat-log" class="chat-log"></div>
-    <form id="chat-form" class="chat-form">
-      <input id="chat-input" type="text" maxlength="240" placeholder="Message nearby commanders…" autocomplete="off">
-    </form>
-  </div>
-
   <div id="status" class="status">Connecting…</div>
 
-  <script src="api.js?v=1791412831"></script>
-  <script src="game.js?v=1791412831"></script>
+  <!-- windows + tooltip container injected by ui.js -->
+  <div id="tooltip" class="tooltip" hidden></div>
+
+  <script src="api.js?v=1791415886"></script>
+  <script src="game.js?v=1791415886"></script>
+  <script src="ui.js?v=1791415886"></script>
 </body>
 </html>

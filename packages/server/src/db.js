@@ -42,6 +42,15 @@ export async function migrate() {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
       expires_at  TIMESTAMPTZ NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS pilots (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name        TEXT NOT NULL,
+      data        JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS pilots_user_idx ON pilots (user_id);
   `);
 }
 
