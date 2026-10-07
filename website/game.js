@@ -158,7 +158,16 @@
   addEventListener("keydown", (e) => {
     if (document.activeElement === chatInput) return;
     const k = e.key.toLowerCase();
-    if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); e.preventDefault(); }
+    if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); e.preventDefault(); return; }
+    // 1/2/3 activate the matching stargate without having to pan to it.
+    if (k === "1" || k === "2" || k === "3") {
+      const idx = +k - 1;
+      const g = snap.gates.find((x) => x.mine && x.id.endsWith(":" + idx));
+      if (g) {
+        if (g.state === "charged") { send({ t: "activate", gate: g.id }); setStatus("Charging wormhole on Gate " + k + "…", "ok"); }
+        else setStatus("Gate " + k + ": " + g.state, "err");
+      }
+    }
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
