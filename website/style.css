@@ -279,6 +279,13 @@ main {
   color: #cdeeff;
 }
 
+.welcome {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text);
+}
+.welcome strong { color: var(--cyan); font-weight: 600; }
+
 .is-busy { opacity: 0.85; }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Atamus — Log in</title>
-  <meta name="description" content="Atamus — a multiplayer space RTS. Own a solar system, mine, and raid through wormholes.">
+  <title>Atamus</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css?v=1791403737">
 </head>
@@ -28,30 +27,15 @@
   <main>
     <section class="card" aria-labelledby="title">
       <h1 id="title" class="brand">ATAMUS</h1>
-
-      <form id="login-form" class="form" novalidate>
-        <label class="field">
-          <span>Username</span>
-          <input name="username" type="text" autocomplete="username" required
-                 minlength="3" maxlength="24" spellcheck="false">
-        </label>
-
-        <label class="field">
-          <span>Password</span>
-          <input name="password" type="password" autocomplete="current-password" required>
-        </label>
-
-        <p class="msg" id="msg" role="alert" hidden></p>
-
-        <button type="submit" class="btn btn-primary" id="submit">Log in</button>
-        <a class="btn btn-ghost" href="signup.html">Create account</a>
-
-        <a class="link-small" href="recover.html">Forgot your password?</a>
-      </form>
+      <div class="form">
+        <p class="welcome">Signed in as <strong id="who">…</strong></p>
+        <p class="hint">Your home system is being charted. The game client lands here soon.</p>
+        <button type="button" class="btn btn-ghost" id="logout">Log out</button>
+      </div>
     </section>
   </main>
 
   <script src="api.js?v=1791403737"></script>
-  <script src="login.js?v=1791403737" defer></script>
+  <script src="play.js?v=1791403737" defer></script>
 </body>
 </html>
