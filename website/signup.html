@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus — Create account</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
+      <filter id="noise">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
+          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
+                   values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
+        </feTurbulence>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+      <rect width="100%" height="100%" filter="url(#noise)"/>
+    </svg>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <main>
+    <section class="card card-wide" aria-labelledby="title">
+      <h1 id="title" class="brand">ATAMUS</h1>
+      <p class="subtitle">Create your account</p>
+
+      <form id="signup-form" class="form" novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required
+                 minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" spellcheck="false">
+          <small>3–24 characters: letters, numbers and underscores.</small>
+        </label>
+
+        <div class="row">
+          <label class="field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="new-password" required minlength="8">
+            <small>At least 8 characters.</small>
+          </label>
+          <label class="field">
+            <span>Confirm password</span>
+            <input name="confirm" type="password" autocomplete="new-password" required minlength="8">
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Email <em>(optional)</em></span>
+          <input name="email" type="email" autocomplete="email" spellcheck="false">
+          <small>Not used for anything yet. Stored only in case recovery by email is added later.</small>
+        </label>
+
+        <fieldset class="recovery">
+          <legend>
+            Recovery questions <em>(optional, recommended)</em>
+          </legend>
+          <p class="hint">
+            Write three questions only you could answer, and the answers. If you forget your password,
+            answering all three correctly lets you set a new one. Capitalization and spacing don't matter.
+            <strong>If you skip this and forget your password, the account cannot be recovered.</strong>
+          </p>
+
+          <div class="qa">
+            <label class="field">
+              <span>Question 1</span>
+              <input name="q1" type="text" maxlength="200" placeholder="e.g. Name of my first ship?">
+            </label>
+            <label class="field">
+              <span>Answer 1</span>
+              <input name="a1" type="password" maxlength="200" autocomplete="off">
+            </label>
+          </div>
+          <div class="qa">
+            <label class="field">
+              <span>Question 2</span>
+              <input name="q2" type="text" maxlength="200">
+            </label>
+            <label class="field">
+              <span>Answer 2</span>
+              <input name="a2" type="password" maxlength="200" autocomplete="off">
+            </label>
+          </div>
+          <div class="qa">
+            <label class="field">
+              <span>Question 3</span>
+              <input name="q3" type="text" maxlength="200">
+            </label>
+            <label class="field">
+              <span>Answer 3</span>
+              <input name="a3" type="password" maxlength="200" autocomplete="off">
+            </label>
+          </div>
+        </fieldset>
+
+        <p class="msg" id="msg" role="alert" hidden></p>
+
+        <button type="submit" class="btn btn-primary" id="submit">Create account</button>
+        <a class="link-small" href="index.html">Already have an account? Log in</a>
+      </form>
+    </section>
+  </main>
+
+  <script src="api.js"></script>
+  <script src="signup.js" defer></script>
+</body>
+</html>

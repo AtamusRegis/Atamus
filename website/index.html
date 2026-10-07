@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Atamus</title>
+  <title>Atamus — Log in</title>
   <meta name="description" content="Atamus — a multiplayer space RTS. Own a solar system, mine, and raid through wormholes.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
@@ -15,7 +15,7 @@
     <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
       <filter id="noise">
         <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
-          <animate attributeName="seed" from="0" to="60" dur="4s" repeatCount="indefinite" calcMode="discrete"
+          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
                    values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
         </feTurbulence>
         <feColorMatrix type="saturate" values="0"/>
@@ -26,12 +26,32 @@
   </div>
 
   <main>
-    <a id="download" class="btn" href="https://github.com/AtamusRegis/atamus/releases/latest" rel="noopener">
-      <span class="btn-label">Download Installer</span>
-      <span class="btn-meta" id="download-meta"></span>
-    </a>
+    <section class="card" aria-labelledby="title">
+      <h1 id="title" class="brand">ATAMUS</h1>
+
+      <form id="login-form" class="form" novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required
+                 minlength="3" maxlength="24" spellcheck="false">
+        </label>
+
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+
+        <p class="msg" id="msg" role="alert" hidden></p>
+
+        <button type="submit" class="btn btn-primary" id="submit">Log in</button>
+        <a class="btn btn-ghost" href="signup.html">Create account</a>
+
+        <a class="link-small" href="recover.html">Forgot your password?</a>
+      </form>
+    </section>
   </main>
 
-  <script src="main.js" defer></script>
+  <script src="api.js"></script>
+  <script src="login.js" defer></script>
 </body>
 </html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus — Recover account</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
+      <filter id="noise">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
+          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
+                   values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
+        </feTurbulence>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+      <rect width="100%" height="100%" filter="url(#noise)"/>
+    </svg>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <main>
+    <section class="card" aria-labelledby="title">
+      <h1 id="title" class="brand">ATAMUS</h1>
+      <p class="subtitle">Recover your account</p>
+
+      <!-- Step 1: who are you -->
+      <form id="step-user" class="form" novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required spellcheck="false">
+        </label>
+        <p class="msg" id="msg1" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Continue</button>
+        <a class="link-small" href="index.html">Back to log in</a>
+      </form>
+
+      <!-- Step 2: answer questions and set a new password -->
+      <form id="step-answers" class="form" novalidate hidden>
+        <p class="hint">Answer all three questions, then choose a new password.</p>
+        <label class="field">
+          <span id="q1-label">Question 1</span>
+          <input name="a1" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span id="q2-label">Question 2</span>
+          <input name="a2" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span id="q3-label">Question 3</span>
+          <input name="a3" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>New password</span>
+          <input name="password" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="field">
+          <span>Confirm new password</span>
+          <input name="confirm" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <p class="msg" id="msg2" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Reset password</button>
+        <a class="link-small" href="index.html">Back to log in</a>
+      </form>
+    </section>
+  </main>
+
+  <script src="api.js"></script>
+  <script src="recover.js" defer></script>
+</body>
+</html>
