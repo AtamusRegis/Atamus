@@ -110,6 +110,7 @@ fi
 log "Installing server dependencies"
 cd "${APP_DIR}/${SERVER_SUBDIR}"
 npm install --omit=dev --no-audit --no-fund
+git -C "${APP_DIR}" rev-parse --short HEAD > BUILD
 
 # ---------------------------------------------------------------- env file
 log "Writing environment file"

@@ -1,8 +1,13 @@
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
+
+// Short git SHA of the running code, written by deploy.sh / setup.sh.
+let BUILD = "dev";
+try { BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
 
 const app = express();
 
@@ -20,7 +25,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD }));
 
 app.use("/auth", auth);
 

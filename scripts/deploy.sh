@@ -19,6 +19,7 @@ sudo -u atamus bash -c "
   git reset --hard origin/main
   cd '${SERVER_SUBDIR}'
   npm install --omit=dev --no-audit --no-fund
+  git -C '${APP_DIR}' rev-parse --short HEAD > BUILD
 "
 
 echo "==> Restarting service"
