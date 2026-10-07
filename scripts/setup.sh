@@ -99,6 +99,8 @@ if ! id atamus >/dev/null 2>&1; then
 fi
 
 log "Fetching application code"
+# The repo is owned by the atamus user; allow root's git to operate on it.
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 if [[ -d "${APP_DIR}/.git" ]]; then
   git -C "$APP_DIR" fetch --depth 1 origin main
   git -C "$APP_DIR" reset --hard origin/main
