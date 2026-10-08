@@ -1305,7 +1305,7 @@
     const log = el("div", { class: "chat-log" });
     for (const m of (chat[chatTab] || [])) appendChatLine(log, m);
     const isW = chatTab.startsWith("w:");
-    const ph = isW ? "Whisper " + chatTab.slice(2) : "Message " + (chatTab === "corp" ? "Meridian" : "local");
+    const ph = isW ? "Whisper " + chatTab.slice(2) : "Message " + (chatTab === "corp" ? "Expanse Excavations" : "local");
     const input = el("input", { class: "text-input", maxlength: "240", placeholder: ph + "…" });
     const form = el("form", { class: "chat-form", onsubmit: (e) => {
       e.preventDefault(); const t = input.value.trim(); if (!t) return;

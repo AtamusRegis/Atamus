@@ -36,7 +36,7 @@ export const SHIP_TYPES = {
     cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000, lasers: 2, laserM3s: 2,
     hardpoints: [[0.338, -0.184], [0.47, -0.14], [0.338, 0.184], [0.47, 0.14]], arms: [[0, 1], [2, 3]],
     req: { mining_frigate: 1 }, price: 350_000,
-    desc: "Expanse Mining Operations' entry-level mining frigate: small, nimble, with a modest ore hold. Every mining career starts in one.",
+    desc: "Deep Core Industries' entry-level mining frigate: small, nimble, with a modest ore hold. Every mining career starts in one.",
   },
   dragline: {
     name: "Dredger", cls: "Mining Barge", sprite: "barge_s", lengthKm: 0.375, speedKmps: 0.150, radiusKm: 0.16, mass: 15, hp: 3000, shield: 3000,
@@ -60,7 +60,7 @@ export const SHIP_TYPES = {
     name: "Excavator", cls: "Exhumer", sprite: "exhumer_s", lengthKm: 0.375, speedKmps: 0.160, radiusKm: 0.16, mass: 15, hp: 4500, shield: 4500,
     cargoM3: 350, oreM3: 11500, targetRangeKm: 55, maxTargets: 8, lockMs: 5000, lasers: 2, laserM3s: 12, ...ports("s"),
     req: { exumers: 3 }, price: 85_000_000,
-    desc: "The Dredger's exhumer: the highest yield in the EMO line and the softest target in any belt.",
+    desc: "The Dredger's exhumer: the highest yield in the Deep Core line and the softest target in any belt.",
   },
   keystone: {
     name: "Rampart", cls: "Exhumer", sprite: "exhumer_xs", lengthKm: 0.305, speedKmps: 0.110, radiusKm: 0.13, mass: 20, hp: 6500, shield: 6500,

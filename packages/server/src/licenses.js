@@ -51,7 +51,7 @@ export const LICENSES = [
     requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
   },
   // ============================================================
-  // Industry — Expanse Mining Operations hulls (fly at Lvl 3, next class at Lvl 5)
+  // Industry — Deep Core Industries hulls (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 8, free: true,
@@ -90,7 +90,7 @@ export const LICENSES = [
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
   // ============================================================
-  // Combat — Expanse Defense Industries hulls (fly at Lvl 3, next class at Lvl 5)
+  // Combat — Orbital Defense Industries hulls (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
     key: "warden_frigate", name: "Combat Frigate", category: "combat", maxLevel: 8,
