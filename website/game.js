@@ -33,6 +33,12 @@
     wick:       { lengthKm: 0.067 }, beacon:   { lengthKm: 0.404 }, vigil:    { lengthKm: 1.466 },
   };
   const CHISEL_LEN_KM = SHIP_TYPES.chisel.lengthKm; // legacy ref
+  // station: one per system at its centre, drawn at true size (2766 m long)
+  const STATION_LEN_KM = 2.766;
+  const stationArt = { blue: new Image(), red: new Image() };
+  stationArt.blue.src = "assets/ships/station_blue.webp";
+  stationArt.red.src = "assets/ships/station_red.webp";
+
   const shipArt = {}; // type -> { blue:Image, red:Image }
   function art(type) {
     if (!SHIP_TYPES[type]) type = "chisel";
@@ -198,6 +204,19 @@
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
+  function drawStations(place) {
+    for (const sE of snap.systems) {
+      if (sE.id === "sys:hub") continue;                 // the pirate hub has no player station
+      const pl = place.get(sE.id); if (!pl) continue;
+      const img = sE.mine ? stationArt.blue : stationArt.red;
+      if (!img.naturalWidth) continue;
+      const wPx = STATION_LEN_KM * scale(); if (wPx < 3) continue;  // true 2766 m scale
+      const hPx = wPx * (img.naturalHeight / img.naturalWidth);
+      const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
+      ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(img, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+    }
+  }
+
   function drawShips(place) {
     for (const sh of snap.ships || []) {
       const pl = place.get(sh.sys); if (!pl) continue;
@@ -255,6 +274,7 @@
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
       for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, R); gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
+      drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawShips(place);
     }

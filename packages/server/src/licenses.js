@@ -1,9 +1,6 @@
 // License catalog. Static game design data, served to the client and used
 // to validate training. Times are per endorsement level, in milliseconds.
 
-const BASE_MS = 30 * 1000; // legacy nav licenses: level 1 train time; doubles each level
-const times = (max) => Array.from({ length: max }, (_, i) => BASE_MS * Math.pow(2, i));
-
 // ---- real design train times (The Reach) ----
 // Authored in HOURS per level. DEV_TIME_SCALE compresses them so training is
 // testable during development; set it to 1 for the real multi-week timeline.
@@ -12,8 +9,6 @@ const DEV_TIME_SCALE = 1 / 3600; // dev: 1 design-hour trains in 1 second. Produ
 const hrs = (...perLevel) => perLevel.map((h) => Math.round(h * HOUR * DEV_TIME_SCALE));
 
 export const CATEGORIES = [
-  { key: "navigation", name: "Navigation" },
-  { key: "stargate", name: "Stargate Operation" },
   { key: "industry", name: "Industry" },
   { key: "combat", name: "Combat" },
 ];
@@ -22,30 +17,6 @@ export const CATEGORIES = [
 const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key, level }));
 
 export const LICENSES = [
-  // ---- Navigation (legacy / generic) ----
-  {
-    key: "speed", name: "Speed", category: "navigation", maxLevel: 5,
-    desc: "Advanced thruster tuning for faster sublight travel.",
-    effect: "+20% ship speed per endorsement level",
-    requirements: [], levelTimes: times(5),
-  },
-  {
-    key: "hull", name: "Hull Integrity", category: "navigation", maxLevel: 5,
-    desc: "Reinforced plating that toughens the hull.",
-    effect: "+10% ship HP per endorsement level",
-    requirements: [], levelTimes: times(5),
-  },
-  {
-    key: "stargate", name: "Stargate Management", category: "stargate", maxLevel: 5,
-    desc: "Optimized traversal routines for crossing stargates.",
-    effect: "Cross a stargate 5% faster per endorsement level",
-    requirements: [
-      { type: "license", key: "speed", level: 3 },
-      { type: "test", key: "stargate_operator_exam", name: "Stargate Operator Exam" },
-    ],
-    levelTimes: times(5),
-  },
-
   // ============================================================
   // Industry — Ironvein mining line (fly at Lvl 3, unlock next at Lvl 5)
   // ============================================================

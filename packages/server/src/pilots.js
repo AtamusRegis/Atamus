@@ -15,7 +15,9 @@ function advance(d, now) {
   if (d.activeStart == null) d.activeStart = now;
   while (d.queue.length) {
     const it = d.queue[0];
-    const need = trainMs(it.key, it.level) - banked(d, it.key, it.level);
+    const base = trainMs(it.key, it.level);
+    if (base == null) { clearBanked(d, it.key, it.level); d.queue.shift(); continue; } // license no longer exists
+    const need = base - banked(d, it.key, it.level);
     if (now - d.activeStart >= need) {
       d.licenses[it.key] = Math.max(d.licenses[it.key] || 0, it.level);
       clearBanked(d, it.key, it.level);
