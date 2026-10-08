@@ -179,8 +179,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .tab.unread { animation: unreadText 2s ease-in-out infinite; }
 .wbtn.unread { animation: unreadGlow 2.4s ease-in-out infinite; }
 
-/* custom scrollbar: dark rounded track, white rounded handle, blue on hover */
-.win-body, .pop-content, .chat-log { scrollbar-width: thin; scrollbar-color: #d6dee8 rgba(0,0,0,0.3); }
+/* custom scrollbar: dark rounded track, white rounded handle, blue on hover
+   (no scrollbar-width/color set, so Chromium keeps the ::-webkit styling) */
 .win-body::-webkit-scrollbar, .pop-content::-webkit-scrollbar, .chat-log::-webkit-scrollbar { width: 10px; }
 .win-body::-webkit-scrollbar-track, .pop-content::-webkit-scrollbar-track, .chat-log::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 6px; margin: 4px 0; }
 .win-body::-webkit-scrollbar-thumb, .pop-content::-webkit-scrollbar-thumb, .chat-log::-webkit-scrollbar-thumb { background: #d6dee8; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
