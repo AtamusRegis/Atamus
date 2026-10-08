@@ -7,6 +7,13 @@
   let catalog = null, state = null, selectedPilotId = null;
   let z = 100;
 
+  // persisted UI layout (window positions/sizes/open-state, panel order, data-popup pos)
+  const WKEY = "atamus.ui";
+  let saved = (() => { try { return JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch { return {}; } })();
+  saved.win = saved.win || {};
+  function persistAll() { try { localStorage.setItem(WKEY, JSON.stringify(saved)); } catch {} }
+  function persistWin(id) { const w = wins[id]; if (!w) return; const e = w.win; saved.win[id] = { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight, open: !e.hidden }; persistAll(); }
+
   // tiny DOM helper
   function el(tag, props, ...kids) {
     const e = document.createElement(tag); props = props || {};
@@ -38,11 +45,16 @@
     const bar = el("div", { class: "win-title" }, slot, close);
     const body = el("div", { class: "win-body" });
     const win = el("div", { class: "win", hidden: "" }, bar, body);
-    win.style.left = (opts.left || 120) + "px"; win.style.top = (opts.top || 70) + "px"; if (opts.width) win.style.width = opts.width + "px";
+    win.dataset.id = id;
+    const s = saved.win[id] || {};
+    win.style.left = (s.x != null ? s.x : (opts.left || 120)) + "px";
+    win.style.top = (s.y != null ? s.y : (opts.top || 70)) + "px";
+    win.style.width = (s.w != null ? s.w : (opts.width || 260)) + "px";
+    if (s.h != null) win.style.height = s.h + "px";
     document.body.appendChild(win);
     win.addEventListener("mousedown", () => { win.style.zIndex = ++z; });
-    dragMove(win, bar);
-    addResize(win, opts.minW || 220, opts.minH || 130);
+    dragMove(win, bar, () => persistWin(id));
+    addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id));
     wins[id] = { win, body, slot, render: opts.render };
     return wins[id];
   }
@@ -51,22 +63,22 @@
     const show = force != null ? force : w.win.hidden;
     w.win.hidden = !show;
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); }
-    updateBtnActive();
+    persistWin(id); updateBtnActive(); updateChatGlow();
   }
   function renderOpen() { for (const id in wins) if (!wins[id].win.hidden && wins[id].render) wins[id].render(wins[id].body); }
 
-  function dragMove(win, handle) {
+  function dragMove(win, handle, onEnd) {
     handle.addEventListener("mousedown", (e) => {
-      if (e.target.closest("select,button,input,textarea,option,.tab")) return;
+      if (e.target.closest("select,button,input,textarea,option,.tab,.dd")) return;
       e.preventDefault();
       const r = win.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
       const mv = (ev) => { win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
-      const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); };
+      const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); if (onEnd) onEnd(); };
       addEventListener("mousemove", mv); addEventListener("mouseup", up);
     });
   }
 
-  function addResize(win, MIN_W, MIN_H) {
+  function addResize(win, MIN_W, MIN_H, onEnd) {
     MIN_W = MIN_W || 220; MIN_H = MIN_H || 130;
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
       const h = el("div", { class: "rz rz-" + dir });
@@ -83,7 +95,7 @@
           if (dir.includes("n")) { hh = Math.max(MIN_H, sh - dy); t = st + (sh - hh); }
           win.style.width = w + "px"; win.style.height = hh + "px"; win.style.left = l + "px"; win.style.top = t + "px";
         };
-        const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); };
+        const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); if (onEnd) onEnd(); };
         addEventListener("mousemove", mv); addEventListener("mouseup", up);
       });
       win.appendChild(h);
@@ -102,6 +114,7 @@
     pilot: { name: "Pilot" },
     chat: { name: "Chat" },
   };
+  const clockEl = el("div", { class: "panel-clock" });
   function renderPanel() {
     panel.innerHTML = "";
     for (const id of order) {
@@ -120,6 +133,7 @@
       }
       panel.appendChild(btn);
     }
+    panel.appendChild(clockEl);
     updateBtnActive();
   }
   function reorderBtn(from, to) { order = order.filter((x) => x !== from); let i = order.indexOf(to); if (i < 1) i = 1; order.splice(i, 0, from); renderPanel(); }
@@ -134,7 +148,7 @@
     if (slot) slot.textContent = p.username;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    body.append(row("Day Born", born), row("Pilots", p.pilotCount), row("Total Skill Level", p.totalSkillLevel), row("Corp", p.corp));
+    body.append(row("Day Born", born), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
   }
 
   // ---- Pilot window ----
@@ -143,6 +157,20 @@
   const queuedCount = (pilot, key) => pilot.queue.filter((q) => q.key === key).length;
   const effLevel = (pilot, key) => trained(pilot, key) + queuedCount(pilot, key);
   function prereqMet(pilot, key) { const l = licById(key); return l.requirements.every((r) => r.type !== "license" || trained(pilot, r.key) >= r.level); }
+
+  let openMenu = null;
+  function closeMenu() { if (openMenu) { openMenu.hidden = true; openMenu = null; } }
+  function pilotDropdown(pilot, body) {
+    const wrap = el("div", { class: "dd" });
+    const btn = el("button", { class: "dd-btn", type: "button" }, pilot.name);
+    const menu = el("div", { class: "dd-menu", hidden: "" });
+    for (const p of state.pilots) {
+      menu.append(el("div", { class: "dd-item" + (p.id === pilot.id ? " sel" : ""), onclick: (e) => { e.stopPropagation(); closeMenu(); if (p.id !== selectedPilotId) { selectedPilotId = p.id; renderPilot(body); } } }, p.name));
+    }
+    btn.addEventListener("click", (e) => { e.stopPropagation(); const show = menu.hidden; closeMenu(); if (show) { menu.hidden = false; openMenu = menu; } });
+    wrap.append(btn, menu);
+    return wrap;
+  }
 
   function renderPilot(body) {
     const slot = wins.pilot && wins.pilot.slot;
@@ -153,12 +181,10 @@
     const pilot = state.pilots.find((p) => p.id === selectedPilotId) || state.pilots[0];
     selectedPilotId = pilot.id;
 
-    // pilot selector lives in the title bar
-    const sel = el("select", { class: "pilot-select", onchange: (e) => { selectedPilotId = +e.target.value; renderPilot(body); } },
-      state.pilots.map((p) => { const o = el("option", { value: p.id }, p.name); if (p.id === pilot.id) o.selected = true; return o; }));
-    if (slot) slot.append(sel);
+    // pilot selector lives in the title bar — custom themed dropdown
+    if (slot) slot.append(pilotDropdown(pilot, body));
 
-    const tabs = [["skills", "Skills"], ["queue", "Skill Queue"], ["ship", "Current Ship"], ["items", "Items"]];
+    const tabs = [["skills", "Licenses"], ["queue", "Training Queue"], ["ship", "Current Ship"], ["items", "Items"]];
     body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => {
       const dis = k === "ship" || k === "items";
       return el("button", { class: "tab" + (k === pilotTab ? " active" : "") + (dis ? " disabled" : ""), onclick: () => { if (dis) return; pilotTab = k; renderPilot(body); } }, n);
@@ -199,19 +225,28 @@
   }
 
   function licenseRow(pilot, l) {
-    const tr = trained(pilot, l.key), eff = effLevel(pilot, l.key), maxed = eff >= l.maxLevel, next = eff + 1;
-    const canAdd = !maxed && prereqMet(pilot, l.key);
+    const tr = trained(pilot, l.key), eff = effLevel(pilot, l.key), next = eff + 1;
+    const fullyTrained = tr >= l.maxLevel;        // only hide both when actually trained to max
+    const qCount = queuedCount(pilot, l.key);
+    const canAdd = eff < l.maxLevel && prereqMet(pilot, l.key);
+    const learningLevel = (pilot.active && pilot.active.key === l.key) ? pilot.active.level : 0;
     const pips = el("div", { class: "pips" });
-    for (let lv = 1; lv <= l.maxLevel; lv++) { let cls = "pip"; if (lv <= tr) cls += " on"; else if (lv <= eff) cls += " q"; pips.append(el("span", { class: cls })); }
+    for (let lv = 1; lv <= l.maxLevel; lv++) {
+      let cls = "pip";
+      if (lv === learningLevel) cls += " learning";
+      else if (lv <= tr) cls += " on";
+      else if (lv <= eff) cls += " q";
+      pips.append(el("span", { class: cls }));
+    }
     const btns = el("div", { class: "lic-btns" });
-    if (!maxed) {
-      if (queuedCount(pilot, l.key) > 0) btns.append(el("button", { class: "qbtn minus", title: "Remove top queued", onclick: () => queueRemove(l.key) }, "−"));
-      btns.append(el("button", { class: "qbtn" + (canAdd ? "" : " disabled"), title: canAdd ? "Queue next" : "Requirements not met", onclick: () => { if (canAdd) queueAdd(l.key); } }, "+"));
+    if (!fullyTrained) {
+      if (qCount > 0) btns.append(el("button", { class: "qbtn minus", title: "Remove top queued", onclick: () => queueRemove(l.key) }, "−"));
+      if (eff < l.maxLevel) btns.append(el("button", { class: "qbtn" + (canAdd ? "" : " disabled"), title: canAdd ? "Queue next" : "Requirements not met", onclick: () => { if (canAdd) queueAdd(l.key); } }, "+"));
     }
     return el("div", { class: "lic-row" },
-      el("span", { class: "lic-name", onclick: () => openLicense(l.key, Math.max(1, tr || 1)) }, l.name),
+      el("span", { class: "lic-name", onclick: (e) => openLicense(l.key, Math.max(1, tr || 1), e.shiftKey) }, l.name),
       pips,
-      el("span", { class: "lic-time" }, maxed ? "MAX" : fmtTime(l.levelTimes[next - 1])),
+      el("span", { class: "lic-time" }, eff >= l.maxLevel ? (fullyTrained ? "MAX" : "QUEUED") : fmtTime(l.levelTimes[next - 1])),
       btns);
   }
 
@@ -219,14 +254,21 @@
   async function queueRemove(key) { try { await Api.post("/game/queue/remove", { pilotId: selectedPilotId, key }); await refreshState(); } catch (e) { flash(e.message); } }
 
   function renderQueue(content, pilot) {
-    if (!pilot.queue.length) { content.append(el("div", { class: "muted" }, "Training queue empty. Add licenses from the Skills tab.")); return; }
+    if (!pilot.queue.length) { content.append(el("div", { class: "muted" }, "Training queue empty. Add licenses from the Licenses tab.")); return; }
+    const paused = !!pilot.paused;
+    const head = el("div", { class: "queue-head" },
+      el("span", { class: "q-title" }, "TRAINING QUEUE"),
+      el("button", { class: "q-pause" + (paused ? " paused" : ""), onclick: () => queuePause(!paused) }, paused ? "Resume" : "Pause"));
+    content.append(head);
     const list = el("div", { class: "queue-list" });
     pilot.queue.forEach((q, i) => {
       const l = licById(q.key);
-      const item = el("div", { class: "queue-item" + (i === 0 ? " active" : ""), draggable: "true", "data-i": i },
-        el("span", { class: "q-pos" }, i === 0 ? "▶" : (i + 1)),
+      const active = i === 0;
+      const item = el("div", { class: "queue-item" + (active ? " active" : "") + (active && paused ? " paused" : ""), draggable: "true", "data-i": i },
+        el("span", { class: "q-pos" }, active ? (paused ? "॥" : "▶") : (i + 1)),
         el("span", { class: "q-name" }, l.name + " " + q.level),
-        el("span", { class: "q-time", "data-active": i === 0 ? "1" : "" }, i === 0 && pilot.active ? fmtTime(pilot.active.remainingMs) : fmtTime(l.levelTimes[q.level - 1])));
+        el("span", { class: "q-time", "data-active": active ? "1" : "" }, active && pilot.active ? fmtTime(pilot.active.remainingMs) : fmtTime(l.levelTimes[q.level - 1])),
+        el("button", { class: "q-cancel", title: "Cancel this endorsement", onclick: (e) => { e.stopPropagation(); queueCancel(q.key, q.level); } }, "×"));
       item.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", String(i)));
       item.addEventListener("dragover", (e) => e.preventDefault());
       item.addEventListener("drop", (e) => { e.preventDefault(); const from = +e.dataTransfer.getData("text/plain"); reorderQueue(pilot, from, i); });
@@ -234,6 +276,9 @@
     });
     content.append(list);
   }
+
+  async function queuePause(paused) { try { await Api.post("/game/queue/pause", { pilotId: selectedPilotId, paused }); await refreshState(); } catch (e) { flash(e.message); } }
+  async function queueCancel(key, level) { try { await Api.post("/game/queue/cancel", { pilotId: selectedPilotId, key, level }); await refreshState(); } catch (e) { flash(e.message); } }
 
   async function reorderQueue(pilot, from, to) {
     if (from === to) return;
@@ -243,31 +288,46 @@
     try { await Api.post("/game/queue/reorder", { pilotId: selectedPilotId, order: arr }); await refreshState(); } catch (e) { flash(e.message); }
   }
 
-  // ---- license popup ----
-  let popup = null;
-  function openLicense(key, level) {
+  // ---- license popup (data window) ----
+  const popups = [];                       // open data windows
+  const DATA_DEF = { x: 440, y: 150 };
+  function openLicense(key, level, stack) {
     const l = licById(key);
     let pTab = "licensing", pLevel = Math.min(l.maxLevel, Math.max(1, level));
-    if (popup) popup.remove();
-    popup = el("div", { class: "license-popup" });
-    popup.style.left = "440px"; popup.style.top = "150px"; popup.style.width = "370px"; popup.style.zIndex = ++z;
-    const close = el("button", { class: "win-close", onclick: () => { popup.remove(); popup = null; } }, "×");
+    if (!stack) { while (popups.length) popups.pop().remove(); }
+
+    // cascade slightly down-right from the last opened position (persisted)
+    const base = saved.data || DATA_DEF;
+    let px = base.x + 24, py = base.y + 24;
+    if (px > innerWidth * 0.6 || py > innerHeight * 0.6) { px = DATA_DEF.x; py = DATA_DEF.y; }
+    saved.data = { x: px, y: py }; persistAll();
+
+    const popup = el("div", { class: "license-popup" });
+    popup.style.left = px + "px"; popup.style.top = py + "px"; popup.style.width = "370px"; popup.style.zIndex = ++z;
+    const remove = () => { const i = popups.indexOf(popup); if (i >= 0) popups.splice(i, 1); popup.remove(); };
+    const close = el("button", { class: "win-close", onclick: remove }, "×");
     const titleBar = el("div", { class: "pop-title" }, el("span", {}, l.name), close);
     const sub = el("div", { class: "pop-sub" }, catName(l.category));
     const inner = el("div", { class: "pop-inner" });
     popup.append(titleBar, sub, inner);
     document.body.appendChild(popup);
     popup.addEventListener("mousedown", () => { popup.style.zIndex = ++z; });
-    dragMove(popup, titleBar);
-    addResize(popup, 300, 240);
+    const savePos = () => { saved.data = { x: popup.offsetLeft, y: popup.offsetTop }; persistAll(); };
+    dragMove(popup, titleBar, savePos);
+    addResize(popup, 300, 240, savePos);
+    popups.push(popup);
 
     const render = () => {
       const pilot = state.pilots.find((p) => p.id === selectedPilotId);
       inner.innerHTML = "";
+      const learningLevel = (pilot && pilot.active && pilot.active.key === key) ? pilot.active.level : 0;
       const boxes = el("div", { class: "lvl-boxes" });
       for (let lv = 1; lv <= l.maxLevel; lv++) {
         const tr = trained(pilot, key), eff = effLevel(pilot, key);
-        let cls = "lvl-box"; if (lv <= tr) cls += " learned"; else if (lv <= eff) cls += " studying";
+        let cls = "lvl-box";
+        if (lv === learningLevel) cls += " learning";
+        else if (lv <= tr) cls += " learned";
+        else if (lv <= eff) cls += " studying";
         if (lv === pLevel) cls += " sel";
         boxes.append(el("div", { class: cls, onclick: () => { pLevel = lv; render(); } }, lv));
       }
@@ -293,21 +353,37 @@
 
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";
-  function pushChat(ch, msg) { chat[ch].push(msg); const w = wins.chat; if (w && !w.win.hidden && chatTab === ch) appendChatLine(w.body.querySelector(".chat-log"), msg); }
+  const unread = { local: false, corp: false };
+  function viewing(ch) { const w = wins.chat; return w && !w.win.hidden && chatTab === ch; }
+  function updateChatGlow() {
+    const w = wins.chat;
+    // tab glow (when window open)
+    if (w && !w.win.hidden && w.slot) { for (const b of w.slot.querySelectorAll(".tab")) { const k = b.dataset.ch; b.classList.toggle("unread", k !== chatTab && !!unread[k]); } }
+    // window-button glow (when any unread and window closed)
+    const btn = panel.querySelector('.wbtn[data-id="chat"]');
+    if (btn) btn.classList.toggle("unread", (!w || w.win.hidden) && (unread.local || unread.corp));
+  }
+  function pushChat(ch, msg) {
+    chat[ch].push(msg);
+    if (viewing(ch)) appendChatLine(wins.chat.body.querySelector(".chat-log"), msg);
+    else { unread[ch] = true; updateChatGlow(); }
+  }
   function appendChatLine(log, msg) { if (!log) return; const d = el("div", msg.sys ? { class: "sys" } : {}, msg.sys ? "» " + msg.text : [el("span", { class: "who" }, msg.from + ": "), msg.text]); log.append(d); log.scrollTop = log.scrollHeight; }
   window.Atamus.bus.addEventListener("chat", (e) => { const m = e.detail; const ch = m.ch === "corp" ? "corp" : "local"; pushChat(ch, { from: m.from, text: m.text }); });
   window.Atamus.bus.addEventListener("sys", (e) => pushChat("local", { sys: true, text: e.detail.text }));
 
   function renderChat(body) {
+    unread[chatTab] = false;               // viewing this channel clears its unread
     const slot = wins.chat && wins.chat.slot;
     if (slot) { slot.innerHTML = ""; slot.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, n]) =>
-      el("button", { class: "tab" + (k === chatTab ? " active" : ""), onclick: () => { chatTab = k; renderChat(body); } }, n)))); }
+      el("button", { class: "tab" + (k === chatTab ? " active" : "") + (k !== chatTab && unread[k] ? " unread" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, n)))); }
     body.innerHTML = "";
     const log = el("div", { class: "chat-log" });
     for (const m of chat[chatTab]) appendChatLine(log, m);
     const input = el("input", { class: "text-input", maxlength: "240", placeholder: "Message " + (chatTab === "corp" ? "Delve Holdings" : "local") + "…" });
     const form = el("form", { class: "chat-form", onsubmit: (e) => { e.preventDefault(); const t = input.value.trim(); if (t) window.Atamus.send({ t: "chat", text: t, channel: chatTab }); input.value = ""; } }, input);
     body.append(log, form); log.scrollTop = log.scrollHeight;
+    updateChatGlow();
   }
 
   function flash(text) { const s = document.getElementById("status"); if (!s) return; s.textContent = text; s.className = "status err"; setTimeout(() => s.classList.add("hidden"), 2500); }
@@ -319,10 +395,14 @@
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 230, render: renderChat });
     renderPanel();
 
-    // server-time clock (bottom-left)
-    const clock = el("div", { class: "server-time" });
-    document.body.appendChild(clock);
-    const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clock.innerHTML = "<b>SERVER</b> " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds()); };
+    // close any open custom dropdown when clicking elsewhere
+    document.addEventListener("mousedown", (e) => { if (openMenu && !e.target.closest(".dd")) closeMenu(); });
+
+    // restore windows the user had open last session
+    for (const id in wins) { if (saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
+
+    // clock inside the window panel (HH:MM)
+    const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clockEl.textContent = p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()); };
     tickClock(); setInterval(tickClock, 1000);
 
     try { await ensureCatalog(); await refreshState(); } catch { /* not logged in handled by game.js */ }

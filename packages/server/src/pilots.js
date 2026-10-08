@@ -3,13 +3,14 @@ import { LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 
 const CORP = "Delve Holdings";
 
-function freshData() { return { licenses: {}, banked: {}, queue: [], activeStart: null }; }
+function freshData() { return { licenses: {}, banked: {}, queue: [], activeStart: null, paused: false }; }
 const banked = (d, key, level) => (d.banked[key] && d.banked[key][level]) || 0;
 function setBanked(d, key, level, ms) { if (!d.banked[key]) d.banked[key] = {}; d.banked[key][level] = ms; }
 function clearBanked(d, key, level) { if (d.banked[key]) delete d.banked[key][level]; }
 
 /** Process completed training based on real elapsed time. Mutates data. */
 function advance(d, now) {
+  if (d.paused) return;                 // training frozen
   if (!d.queue.length) { d.activeStart = null; return; }
   if (d.activeStart == null) d.activeStart = now;
   while (d.queue.length) {
@@ -80,6 +81,35 @@ export async function queueRemove(userId, pilotId, key) {
   await save(row.id, d);
 }
 
+export async function queuePause(userId, pilotId, paused) {
+  const row = await getOwnedPilot(userId, pilotId); const d = row.data; const now = Date.now();
+  advance(d, now);
+  if (paused && !d.paused) {
+    if (d.queue.length && d.activeStart != null) {
+      const it = d.queue[0];
+      setBanked(d, it.key, it.level, banked(d, it.key, it.level) + (now - d.activeStart));
+    }
+    d.paused = true; d.activeStart = null;
+  } else if (!paused && d.paused) {
+    d.paused = false; d.activeStart = d.queue.length ? now : null;
+  }
+  await save(row.id, d);
+}
+
+// Cancel an endorsement and every higher queued level of the same license.
+export async function queueCancel(userId, pilotId, key, level) {
+  const row = await getOwnedPilot(userId, pilotId); const d = row.data; const now = Date.now();
+  advance(d, now);
+  const oldTop = d.queue[0];
+  const removedActive = oldTop && oldTop.key === key && oldTop.level >= level;
+  if (removedActive && d.activeStart != null && !d.paused) {
+    setBanked(d, oldTop.key, oldTop.level, banked(d, oldTop.key, oldTop.level) + (now - d.activeStart));
+  }
+  d.queue = d.queue.filter((q) => !(q.key === key && q.level >= level));
+  if (!d.paused && removedActive) d.activeStart = d.queue.length ? now : null;
+  await save(row.id, d);
+}
+
 export async function queueReorder(userId, pilotId, order) {
   const row = await getOwnedPilot(userId, pilotId); const d = row.data; const now = Date.now();
   advance(d, now);
@@ -117,10 +147,11 @@ export async function getState(userId) {
     if (d.queue.length) {
       const it = d.queue[0];
       const need = trainMs(it.key, it.level) - banked(d, it.key, it.level);
-      active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - (now - (d.activeStart ?? now))) };
+      const elapsed = (d.paused || d.activeStart == null) ? 0 : (now - d.activeStart);
+      active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - elapsed), paused: !!d.paused };
     }
     for (const l of LICENSES) maxByLicense[l.key] = Math.max(maxByLicense[l.key] || 0, d.licenses[l.key] || 0);
-    pilots.push({ id: row.id, name: row.name, licenses: d.licenses, banked: d.banked, queue: d.queue, active });
+    pilots.push({ id: row.id, name: row.name, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused });
   }
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 

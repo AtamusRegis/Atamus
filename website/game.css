@@ -24,9 +24,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 /* status */
 .status { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; padding: 8px 16px; font-size: 12px; color: var(--text-dim); background: var(--panel-grad); border-radius: 20px; box-shadow: var(--shadow); transition: opacity .4s; }
 
-/* server time, bottom-left */
-.server-time { position: fixed; left: 56px; bottom: 12px; z-index: 5; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; letter-spacing: .05em; pointer-events: none; }
-.server-time b { color: var(--text-dim); font-weight: 600; }
 .status.ok { color: var(--cyan); } .status.err { color: #ff9a6a; } .status.hidden { opacity: 0; pointer-events: none; }
 
 /* ---- window panel (left sliver) — the one intentional edge ---- */
@@ -36,6 +33,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
   box-shadow: 2px 0 18px rgba(0,0,0,0.5);
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
 }
+.panel-clock { margin-top: auto; font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; padding-bottom: 2px; }
 .wbtn { width: 36px; height: 36px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; display: grid; place-items: center; border-radius: 10px; transition: background .15s, color .15s; }
 .wbtn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .wbtn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
@@ -149,3 +147,34 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .chat-log .who { color: var(--cyan); }
 .chat-log .sys { color: #ff9a6a; font-style: italic; }
 .chat-form { margin-top: 8px; }
+
+/* ---- custom pilot dropdown (themed) ---- */
+.dd { position: relative; display: inline-block; max-width: 74%; }
+.dd-btn { font: inherit; font-size: 13px; color: var(--text); background: rgba(0,0,0,0.25); border: none; border-radius: var(--radius-sm); padding: 5px 26px 5px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.dd-btn::after { content: ""; position: absolute; right: 10px; top: 50%; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--text-dim); transform: translateY(-50%); }
+.dd-btn:hover { background: rgba(255,255,255,0.08); }
+.dd-menu { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); min-width: 100%; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 70; }
+.dd-menu[hidden] { display: none; }
+.dd-item { padding: 7px 12px; font-size: 13px; border-radius: 5px; cursor: pointer; white-space: nowrap; text-align: center; }
+.dd-item:hover { background: var(--sel); }
+.dd-item.sel { color: #06131f; background: var(--accent-grad); }
+
+/* ---- actively-learning blink (not solid) ---- */
+@keyframes learnBlink { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+.pip.learning { background: var(--study-grad); animation: learnBlink 1.7s ease-in-out infinite; }
+.lvl-box.learning { background: var(--study-grad); color: #1a1205; animation: learnBlink 1.7s ease-in-out infinite; }
+
+/* ---- chat unread glow (slow, light) ---- */
+@keyframes unreadGlow { 0%,100% { box-shadow: 0 0 2px rgba(255,204,80,0.35); } 50% { box-shadow: 0 0 9px 1px rgba(255,204,80,0.75); } }
+.tab.unread { animation: unreadGlow 2.4s ease-in-out infinite; border-radius: 8px; }
+.wbtn.unread { animation: unreadGlow 2.4s ease-in-out infinite; }
+
+/* ---- training queue controls ---- */
+.queue-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.queue-head .q-title { font-size: 10.5px; letter-spacing: .16em; color: var(--text-faint); }
+.q-pause { font: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.08); border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+.q-pause:hover { background: rgba(255,255,255,0.14); }
+.q-pause.paused { color: #06131f; background: var(--study-grad); }
+.queue-item.paused { opacity: .6; }
+.q-cancel { width: 20px; height: 20px; font-size: 13px; line-height: 1; color: var(--text-dim); background: rgba(255,255,255,0.07); border: none; border-radius: 5px; cursor: pointer; }
+.q-cancel:hover { color: #ff9a6a; background: rgba(255,154,106,0.14); }

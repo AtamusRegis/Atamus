@@ -38,3 +38,13 @@ game.post("/queue/reorder", auth, async (req, res) => {
   try { await pilots.queueReorder(req.uid, req.body.pilotId, req.body.order); res.json({ ok: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+
+game.post("/queue/pause", auth, async (req, res) => {
+  try { await pilots.queuePause(req.uid, req.body.pilotId, !!req.body.paused); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+game.post("/queue/cancel", auth, async (req, res) => {
+  try { await pilots.queueCancel(req.uid, req.body.pilotId, req.body.key, +req.body.level); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
