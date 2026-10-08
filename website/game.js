@@ -197,17 +197,37 @@
     const w = screenToWorld(p.x, p.y);
     send({ t: "move", ships: [...selected], x: w.x - pl.gx, y: w.y - pl.gy });
   }
+  // target lock (toggle) at a screen point for the first selected ship; true if something was there
+  function lockAt(p) {
+    const shipId = [...selected][0]; if (!shipId) return false;
+    const rk = rockAt(p); if (rk) { send({ t: "lock", ship: shipId, kind: "rock", id: rk.id }); return true; }
+    const g = gateAt(p); if (g) { send({ t: "lock", ship: shipId, kind: "gate", id: g.id }); return true; }
+    if (stationAt(p)) { send({ t: "lock", ship: shipId, kind: "station", id: "station" }); return true; }
+    const o = anyShipAt(p); if (o && o.id !== shipId) { send({ t: "lock", ship: shipId, kind: "ship", id: o.id }); return true; }
+    return false;
+  }
+  // a click/tap on the map: select what's there, or (empty) deselect after a beat so a double can still move
+  function clickAt(p, shift) {
+    const gate = gateAt(p);
+    if (gate) { selected.clear(); selectUnit({ kind: "gate", id: gate.id }); return; }
+    const ship = shipAt(p);
+    if (ship) {
+      if (!shift) selected.clear(); if (shift && selected.has(ship.id)) selected.delete(ship.id); else selected.add(ship.id);
+      syncShipSelection(); return;
+    }
+    if (stationAt(p)) { selected.clear(); selectUnit({ kind: "station", id: "station" }); return; }
+    if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // ships deselect on the timer below (dbl-click keeps them)
+    clearTimeout(deselectTimer); deselectTimer = setTimeout(() => { selected.clear(); syncShipSelection(); }, 260);
+  }
+  function boxSelect(x0, y0, x1, y1, shift) {
+    if (!shift) selected.clear();
+    for (const sh of snap.ships || []) { if (!sh.mine || sh.docked) continue; const s = shipScreen(sh); if (s && s.x >= Math.min(x0, x1) && s.x <= Math.max(x0, x1) && s.y >= Math.min(y0, y1) && s.y <= Math.max(y0, y1)) selected.add(sh.id); }
+    syncShipSelection();
+  }
   canvas.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     const p = eventPos(e);
-    if (e.ctrlKey || e.metaKey) {                      // target lock (toggle) for the selected ship
-      const shipId = [...selected][0]; if (!shipId) return;
-      const rk = rockAt(p); if (rk) { send({ t: "lock", ship: shipId, kind: "rock", id: rk.id }); return; }
-      const g = gateAt(p); if (g) { send({ t: "lock", ship: shipId, kind: "gate", id: g.id }); return; }
-      if (stationAt(p)) { send({ t: "lock", ship: shipId, kind: "station", id: "station" }); return; }
-      const o = anyShipAt(p); if (o && o.id !== shipId) send({ t: "lock", ship: shipId, kind: "ship", id: o.id });
-      return;
-    }
+    if (e.ctrlKey || e.metaKey) { lockAt(p); return; }  // target lock (toggle) for the selected ship
     drag = { x0: p.x, y0: p.y, moved: false, ship: shipAt(p), shift: e.shiftKey };
   });
   addEventListener("mousemove", (e) => {
@@ -219,28 +239,71 @@
   addEventListener("mouseup", (e) => {
     if (e.button !== 0 || !drag) return;
     const p = eventPos(e); const d = drag; drag = null; selBox = null;
-    if (d.moved && !d.ship) {                     // box select
-      if (!d.shift) selected.clear();
-      const x0 = Math.min(d.x0, p.x), y0 = Math.min(d.y0, p.y), x1 = Math.max(d.x0, p.x), y1 = Math.max(d.y0, p.y);
-      for (const sh of snap.ships || []) { if (!sh.mine || sh.docked) continue; const s = shipScreen(sh); if (s && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) selected.add(sh.id); }
-      syncShipSelection();
-    } else if (!d.moved) {                          // a click
-      const gate = gateAt(p);
-      if (gate) { selected.clear(); selectUnit({ kind: "gate", id: gate.id }); return; }
-      if (d.ship) {
-        if (!d.shift) selected.clear(); if (d.shift && selected.has(d.ship.id)) selected.delete(d.ship.id); else selected.add(d.ship.id);
-        syncShipSelection(); return;
-      }
-      if (stationAt(p)) { selected.clear(); selectUnit({ kind: "station", id: "station" }); return; }
-      if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // ships deselect on the timer below (dbl-click keeps them)
-      clearTimeout(deselectTimer); deselectTimer = setTimeout(() => { selected.clear(); syncShipSelection(); }, 220); // delay so dbl-click can move
-    }
+    if (d.moved && !d.ship) boxSelect(d.x0, d.y0, p.x, p.y, d.shift);
+    else if (!d.moved) clickAt(p, d.shift);
   });
   canvas.addEventListener("dblclick", (e) => {
     if (e.button !== 0) return; const p = eventPos(e);
     clearTimeout(deselectTimer);                  // keep selection for the move order
     if (!gateAt(p) && !shipAt(p)) commandMove(p);
   });
+
+  // ---- touch: tap = click, double-tap = move, drag = pan, hold = lock target (or box-select on empty),
+  //      two fingers = pinch zoom + pan ----
+  const touch = { pts: new Map(), mode: null, hold: 0, lastTap: 0, lastTapAt: null, pinch: null };
+  const tpos = (t) => { const r = canvas.getBoundingClientRect(); return { x: t.clientX - r.left, y: t.clientY - r.top }; };
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) touch.pts.set(t.identifier, tpos(t));
+    clearTimeout(touch.hold);
+    if (touch.pts.size === 1) {
+      const p = [...touch.pts.values()][0];
+      touch.mode = "tap"; touch.start = p; touch.cur = p; touch.cam = { cx: cam.cx, cy: cam.cy };
+      touch.hold = setTimeout(() => {                      // long press
+        if (touch.mode !== "tap") return;
+        if (lockAt(touch.start)) { touch.mode = "done"; if (navigator.vibrate) navigator.vibrate(15); }
+        else { touch.mode = "box"; selBox = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; }
+      }, 450);
+    } else if (touch.pts.size === 2) {
+      const [a, b] = [...touch.pts.values()];
+      touch.mode = "pinch"; selBox = null; follow = false;
+      touch.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), viewW: viewWTarget, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, cam: { cx: cam.cx, cy: cam.cy } };
+    }
+  }, { passive: false });
+  canvas.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) if (touch.pts.has(t.identifier)) touch.pts.set(t.identifier, tpos(t));
+    if (touch.mode === "pinch" && touch.pts.size >= 2) {
+      const [a, b] = [...touch.pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, touch.pinch.viewW * touch.pinch.d / d)); cam.viewW = viewWTarget;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, sc = scale();
+      cam.cx = touch.pinch.cam.cx - (mid.x - touch.pinch.mid.x) / sc; cam.cy = touch.pinch.cam.cy + (mid.y - touch.pinch.mid.y) / sc;
+      return;
+    }
+    const p = [...touch.pts.values()][0]; if (!p) return; touch.cur = p;
+    if (touch.mode === "tap" && Math.hypot(p.x - touch.start.x, p.y - touch.start.y) > 10) { touch.mode = "pan"; clearTimeout(touch.hold); follow = false; }
+    if (touch.mode === "pan") { const sc = scale(); cam.cx = touch.cam.cx - (p.x - touch.start.x) / sc; cam.cy = touch.cam.cy + (p.y - touch.start.y) / sc; panVel.x = panVel.y = 0; }
+    else if (touch.mode === "box") selBox = { x0: Math.min(touch.start.x, p.x), y0: Math.min(touch.start.y, p.y), x1: Math.max(touch.start.x, p.x), y1: Math.max(touch.start.y, p.y) };
+  }, { passive: false });
+  const touchEnd = (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) touch.pts.delete(t.identifier);
+    if (touch.pts.size) { if (touch.mode === "pinch" && touch.pts.size === 1) { touch.mode = "done"; } return; }
+    clearTimeout(touch.hold);
+    const mode = touch.mode; touch.mode = null;
+    if (mode === "box") { boxSelect(selBox.x0, selBox.y0, selBox.x1, selBox.y1, false); selBox = null; return; }
+    if (mode !== "tap") return;
+    const p = touch.cur, now = performance.now();
+    if (touch.lastTapAt && now - touch.lastTap < 320 && Math.hypot(p.x - touch.lastTapAt.x, p.y - touch.lastTapAt.y) < 24) {
+      touch.lastTap = 0; clearTimeout(deselectTimer);                 // double-tap: move order
+      if (!gateAt(p) && !shipAt(p)) commandMove(p);
+      return;
+    }
+    touch.lastTap = now; touch.lastTapAt = p;
+    clickAt(p, false);
+  };
+  canvas.addEventListener("touchend", touchEnd, { passive: false });
+  canvas.addEventListener("touchcancel", touchEnd, { passive: false });
 
   // ---- drawing ----
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }

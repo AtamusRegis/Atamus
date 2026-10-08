@@ -61,7 +61,7 @@
     win.style.width = (num(s.w) && s.w > 0 ? s.w : (opts.width || 260)) + "px";
     if (num(s.h) && s.h > 0) win.style.height = s.h + "px";
     document.body.appendChild(win);
-    win.addEventListener("mousedown", () => { win.style.zIndex = ++z; });
+    win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar, () => persistWin(id));
     addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id));
     wins[id] = { win, body, slot, render: opts.render };
@@ -76,14 +76,15 @@
   }
   function renderOpen() { for (const id in wins) if (!wins[id].win.hidden && wins[id].render) wins[id].render(wins[id].body); }
 
+  // pointer events so windows drag/resize with mouse, pen or finger alike
   function dragMove(win, handle, onEnd) {
-    handle.addEventListener("mousedown", (e) => {
-      if (e.target.closest("select,button,input,textarea,option,.tab,.dd")) return;
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("select,button,input,textarea,option,.tab,.dd")) return;
       e.preventDefault();
-      const r = win.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
-      const mv = (ev) => { win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
-      const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); if (onEnd) onEnd(); };
-      addEventListener("mousemove", mv); addEventListener("mouseup", up);
+      const r = win.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top, id = e.pointerId;
+      const mv = (ev) => { if (ev.pointerId !== id) return; win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
+      const up = (ev) => { if (ev.pointerId !== id) return; removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); if (onEnd) onEnd(); };
+      addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
     });
   }
 
@@ -91,12 +92,14 @@
     MIN_W = MIN_W || 220; MIN_H = MIN_H || 130;
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
       const h = el("div", { class: "rz rz-" + dir });
-      h.addEventListener("mousedown", (e) => {
+      h.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0) return;
         e.preventDefault(); e.stopPropagation();
-        const r = win.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top;
+        const r = win.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top, id = e.pointerId;
         win.style.maxHeight = "none";
         const content = win.querySelector(".win-body, .pop-inner");
         const mv = (ev) => {
+          if (ev.pointerId !== id) return;
           const dx = ev.clientX - sx, dy = ev.clientY - sy;
           let w = sw, hh = sh, l = sl, t = st;
           if (dir.includes("e")) w = Math.max(MIN_W, sw + dx);
@@ -110,8 +113,8 @@
             if (over > 0) { w += over; if (dir.includes("w")) l -= over; win.style.width = w + "px"; win.style.left = l + "px"; }
           }
         };
-        const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); if (onEnd) onEnd(); };
-        addEventListener("mousemove", mv); addEventListener("mouseup", up);
+        const up = (ev) => { if (ev.pointerId !== id) return; removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); if (onEnd) onEnd(); };
+        addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
       });
       win.appendChild(h);
     }
@@ -484,6 +487,7 @@
           b.addEventListener("dragover", (e) => { e.preventDefault(); b.classList.add("drop"); });
           b.addEventListener("dragleave", () => b.classList.remove("drop"));
           b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: { ...t, slot: null } }); });
+          b.addEventListener("touchdrop", (e) => A.send({ t: "inv_move", from: e.detail.ref, to: { ...t, slot: null } }));
           row.append(b);
         }
         w.slot.append(row);
@@ -506,10 +510,13 @@
           cell.setAttribute("draggable", "true");
           cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i } })); e.dataTransfer.effectAllowed = "move"; });
           cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openSell(ref, i); });
+          touchDrag(cell, { ref: { ...ref, slot: i } }, () => openSell(ref, i));
         }
         cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
         cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
-        cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (!d) return; A.send({ t: "inv_move", from: d.ref, to: { ...ref, slot: i < data.slots.length ? i : null } }); });
+        const dropTo = { ...ref, slot: i < data.slots.length ? i : null };
+        cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: dropTo }); });
+        cell.addEventListener("touchdrop", (e) => A.send({ t: "inv_move", from: e.detail.ref, to: dropTo }));
         grid.append(cell);
       }
       body.append(grid);
@@ -520,6 +527,27 @@
     L.stat.textContent = Math.round(data.used).toLocaleString() + " / " + data.cap.toLocaleString() + " m³ · " + data.stacks + "/" + maxStacks;
     data.slots.forEach((stck, i) => { const c = L.qty[i]; if (!c) return; c.qty.textContent = stck.qty.toLocaleString(); c.item.title = c.def.name + " × " + stck.qty + " (" + (stck.qty * (c.def.unitM3 || 0)).toFixed(1) + " m³)"; });
   }
+  // Touch fallback for HTML5 drag/drop: move the finger to drag a stack (ghost follows), hold still to open the sell panel.
+  function touchDrag(cell, payload, onHold) {
+    cell.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t0 = e.touches[0]; let ghost = null, moved = false, over = null;
+      const hold = setTimeout(() => { if (!moved) { done(); if (navigator.vibrate) navigator.vibrate(15); onHold(); } }, 500);
+      const mv = (ev) => {
+        const t = ev.touches[0]; if (!t) return;
+        if (!moved && Math.hypot(t.clientX - t0.clientX, t.clientY - t0.clientY) < 8) return;
+        ev.preventDefault(); clearTimeout(hold);
+        if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
+        ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab");
+        if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
+      };
+      const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };
+      const end = () => { const tgt = over; done(); if (moved && tgt) tgt.dispatchEvent(new CustomEvent("touchdrop", { detail: payload })); };
+      cell.addEventListener("touchmove", mv, { passive: false }); cell.addEventListener("touchend", end); cell.addEventListener("touchcancel", done);
+    }, { passive: true });
+  }
+
   // ---- sell (right-click / hold an ore stack) ----
   let sell = null; // { ref, slot }
   function openSell(ref, slot) {

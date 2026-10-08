@@ -237,3 +237,17 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .sell-range { width: 100%; margin: 8px 0 4px; accent-color: #4fd2ff; }
 .sell-num { width: 90px; font: inherit; font-size: 13px; font-weight: 600; color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 3px 6px; text-align: right; }
 .unit-btns.row2 { flex-direction: row; }
+
+/* touch */
+#view { touch-action: none; }
+.win-title { touch-action: none; }
+.rz { touch-action: none; }
+.inv-ghost { position: fixed; width: 40px; height: 40px; transform: translate(-50%, -50%); pointer-events: none; z-index: 500; opacity: .85; inset: auto; }
+@media (pointer: coarse) {
+  .rz-n, .rz-s { height: 14px; } .rz-e, .rz-w { width: 14px; }
+  .rz-ne, .rz-nw, .rz-se, .rz-sw { width: 18px; height: 18px; }
+  .wbtn { width: 44px; height: 44px; }
+  .win-close { min-width: 32px; min-height: 32px; }
+  .tab { padding: 9px 12px 11px; }
+  .inv-cell { min-height: 40px; }
+}
