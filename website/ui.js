@@ -147,36 +147,41 @@
   }
 
   function renderSkills(content, pilot) {
-    if (skillCategory == null) {
-      content.append(el("div", { class: "cat-list" }, catalog.categories.map((c) => {
-        const lics = catalog.licenses.filter((l) => l.category === c.key);
-        const total = lics.reduce((s, l) => s + l.maxLevel, 0);
-        const learned = lics.reduce((s, l) => s + trained(pilot, l.key), 0);
-        return el("div", { class: "cat-row", onclick: () => { skillCategory = c.key; renderPilot(wins.pilot.body); } },
-          el("span", { class: "cat-name" }, c.name),
-          el("span", { class: "cat-prog" }, learned + " / " + total));
-      })));
-      return;
-    }
-    content.append(el("button", { class: "link-btn", onclick: () => { skillCategory = null; renderPilot(wins.pilot.body); } }, "‹ Categories"));
-    const lics = catalog.licenses.filter((l) => l.category === skillCategory);
-    content.append(el("div", { class: "lic-list" }, lics.map((l) => {
-      const tr = trained(pilot, l.key), eff = effLevel(pilot, l.key), maxed = eff >= l.maxLevel;
-      const next = eff + 1;
-      const canAdd = !maxed && prereqMet(pilot, l.key);
-      const row = el("div", { class: "lic-row" },
-        el("span", { class: "lic-name", onclick: () => openLicense(l.key, Math.min(l.maxLevel, Math.max(1, tr || 1))) }, l.name),
-        el("span", { class: "lic-lvl" }, "Lv " + tr + (eff > tr ? " (+" + (eff - tr) + ")" : "") + " / " + l.maxLevel),
-        el("span", { class: "lic-time" }, maxed ? "MAX" : fmtTime(l.levelTimes[next - 1])));
-      const btns = el("span", { class: "lic-btns" });
-      if (!maxed) {
-        if (queuedCount(pilot, l.key) > 0) btns.append(el("button", { class: "qbtn", title: "Remove top queued", onclick: () => queueRemove(l.key) }, "−"));
-        const plus = el("button", { class: "qbtn" + (canAdd ? "" : " disabled"), title: canAdd ? "Queue next" : "Requirements not met", onclick: () => { if (canAdd) queueAdd(l.key); } }, "+");
-        btns.append(plus);
-      }
-      row.append(btns);
-      return row;
+    if (skillCategory == null) skillCategory = catalog.categories[0].key;
+    // categories stay visible as selectable slots
+    content.append(el("div", { class: "cat-list" }, catalog.categories.map((c) => {
+      const lics = catalog.licenses.filter((l) => l.category === c.key);
+      const total = lics.reduce((s, l) => s + l.maxLevel, 0);
+      const learned = lics.reduce((s, l) => s + trained(pilot, l.key), 0);
+      const frac = total ? learned / total : 0;
+      return el("div", { class: "cat-row" + (c.key === skillCategory ? " sel" : ""), onclick: () => { skillCategory = c.key; renderPilot(wins.pilot.body); } },
+        el("span", { class: "cat-name" }, c.name),
+        el("div", { class: "cat-bar" }, el("div", { class: "cat-bar-fill", style: "width:" + (frac * 100) + "%" })),
+        el("span", { class: "cat-prog" }, learned + " / " + total));
     })));
+    // selected category's licenses shown inline below
+    const cat = catalog.categories.find((c) => c.key === skillCategory);
+    const lics = catalog.licenses.filter((l) => l.category === skillCategory);
+    const sub = el("div", { class: "skills-sub" }, el("div", { class: "skills-sub-head" }, cat.name));
+    for (const l of lics) sub.append(licenseRow(pilot, l));
+    content.append(sub);
+  }
+
+  function licenseRow(pilot, l) {
+    const tr = trained(pilot, l.key), eff = effLevel(pilot, l.key), maxed = eff >= l.maxLevel, next = eff + 1;
+    const canAdd = !maxed && prereqMet(pilot, l.key);
+    const pips = el("div", { class: "pips" });
+    for (let lv = 1; lv <= l.maxLevel; lv++) { let cls = "pip"; if (lv <= tr) cls += " on"; else if (lv <= eff) cls += " q"; pips.append(el("span", { class: cls })); }
+    const btns = el("div", { class: "lic-btns" });
+    if (!maxed) {
+      if (queuedCount(pilot, l.key) > 0) btns.append(el("button", { class: "qbtn minus", title: "Remove top queued", onclick: () => queueRemove(l.key) }, "−"));
+      btns.append(el("button", { class: "qbtn" + (canAdd ? "" : " disabled"), title: canAdd ? "Queue next" : "Requirements not met", onclick: () => { if (canAdd) queueAdd(l.key); } }, "+"));
+    }
+    return el("div", { class: "lic-row" },
+      el("span", { class: "lic-name", onclick: () => openLicense(l.key, Math.max(1, tr || 1)) }, l.name),
+      pips,
+      el("span", { class: "lic-time" }, maxed ? "MAX" : fmtTime(l.levelTimes[next - 1])),
+      btns);
   }
 
   async function queueAdd(key) { try { await Api.post("/game/queue/add", { pilotId: selectedPilotId, key }); await refreshState(); } catch (e) { flash(e.message); } }
