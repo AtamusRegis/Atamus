@@ -260,7 +260,7 @@ export class World {
   cmdSell(pid, ref, slot, qty, item) {
     const a = this._inv(pid, ref); if (!a || !a.inv || !a.docked) return;
     slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot]; if (!st) return;
-    const def = Inv.ITEMS[st.item]; if (!def || !def.price) return;
+    const def = Inv.ITEMS[st.item]; if (!def || !def.price || def.kind !== "ore") return;   // only ore sells; manuals are consumed, ships are assembled
     const n = Inv.take(a.inv, +slot, qty == null ? st.qty : +qty); if (n <= 0) return;
     const p = this.players.get(pid), delta = n * def.price;
     p.credits += delta; this._markInv(pid);
