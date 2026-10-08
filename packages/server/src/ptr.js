@@ -1,4 +1,4 @@
-// PTR: a private test copy of Atamus that only runs in Claude's workspace (scripts/ptr.sh).
+// PTR: a private test copy of Atamus that only runs in Claude's workspace (scripts/ptr.sh, scripts/ptr-run.mjs).
 // Enabled solely by ATAMUS_PTR=1, which the live server never sets. With it on there are
 // no accounts or passwords: every request is the single "PTR" tester, and dev commands
 // (credits, licences, ships, items, belts...) are accepted over the game socket.
