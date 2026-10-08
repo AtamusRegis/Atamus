@@ -366,7 +366,7 @@
     const where = sh.docked ? "Docked at station" : sh.warp ? "Warping" : sh.moving ? "In space · moving" : "In space";
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
     content.append(el("div", { class: "ship-hero" }, shipIcon(sh.type, "ship-hero-img")),
-      row("Ship", t.name), row("Class", t.cls || "—"), row("Location", where),
+      row("Ship", shipName(sh)), row("Hull", t.name + " · " + (t.cls || "—")), row("Location", where),
       el("div", { class: "unit-btns" },
         el("button", { class: "btn-primary2 unit-btn", onclick: () => A.locateShip(sh.id) }, "Locate"),
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => openShipInfo(sh.type) }, "Ship info")));
@@ -536,6 +536,7 @@
   const fmtClock = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60; return h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0"); };
   // ---- ships & crews ----
   const hullOf = (type) => ((window.Atamus.cfg || {}).shipTypes || {})[type] || { name: type, sprite: "chisel" };
+  const shipName = (sh) => (sh && sh.name) || hullOf(sh && sh.type).name || "Ship";
   const pilotName = (id) => { const p = state && state.pilots.find((x) => String(x.id) === String(id)); return p ? p.name : null; };
   const canFly = (pilot, type) => Object.entries(hullOf(type).req || {}).every(([k, lvl]) => (pilot.licenses[k] || 0) >= lvl);
   const shipIcon = (type, cls) => el("img", { class: cls || "ship-ico", src: "assets/ships/" + hullOf(type).sprite + "_blue.webp", alt: "", draggable: "false" });
@@ -551,6 +552,7 @@
       }
       if (sh.pilot != null) items.push(["Remove pilot (" + (pilotName(sh.pilot) || "pilot") + ")", () => A.send({ t: "decrew", ship: sh.id })]);
     } else items.push(["Locate", () => A.locateShip(sh.id)]);
+    items.push(["Rename", () => askText("Rename ship", shipName(sh), 20, (name) => A.send({ t: "rename_ship", ship: sh.id, name }))]);
     items.push(["Info", () => openShipInfo(sh.type)]);
     showCtxMenu(x, y, items);
   }
@@ -759,7 +761,7 @@
   let pilotShipSig = "";                              // keep the pilot's Current Ship tab live (location changes)
   window.Atamus.bus.addEventListener("snap", () => {
     if (!wins.pilot || !isOpen(wins.pilot) || pilotTab !== "ship") return;
-    const sig = ((window.Atamus.snap.ships) || []).filter((x) => x.mine).map((x) => x.id + x.pilot + x.docked + x.warp + x.moving).join(",");
+    const sig = ((window.Atamus.snap.ships) || []).filter((x) => x.mine).map((x) => x.id + x.pilot + x.docked + x.warp + x.moving + (x.name || "")).join(",");
     if (sig !== pilotShipSig) { pilotShipSig = sig; renderPilot(wins.pilot.body); }
   });
   window.Atamus.bus.addEventListener("select", renderHud);
@@ -794,7 +796,7 @@
     const A = window.Atamus, w = wins.fleet;
     const ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.pilot != null);
     const sel = new Set(A.selectedShips || []);
-    const sig = ships.map((x) => x.id + x.type + x.pilot + (x.docked ? "d" : "")).join(",");
+    const sig = ships.map((x) => x.id + x.type + x.pilot + (x.name || "") + (x.docked ? "d" : "")).join(",");
     if (sig !== w.fsig) {
       w.fsig = sig; w.cards = {}; body.innerHTML = "";
       const list = el("div", { class: "fleet-list" });
@@ -804,7 +806,7 @@
         const card = el("button", { class: "fleet-card" },
           el("div", { class: "fleet-img" }, shipIcon(sh.type, "fleet-ship")),
           el("div", { class: "fleet-bar" }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
-          el("div", { class: "fleet-name" }, pilotName(sh.pilot) || t.name));
+          el("div", { class: "fleet-name" }, sh.name || pilotName(sh.pilot) || t.name));
         card.addEventListener("click", () => { const cur = A.ship(sh.id); if (!cur) return; if (cur.docked) openInventory({ owner: "ship", id: cur.id, inv: "ore" }); else A.selectShip(sh.id); });
         card.addEventListener("dblclick", () => A.locateShip(sh.id));
         card.addEventListener("contextmenu", (e) => { e.preventDefault(); const cur = A.ship(sh.id); if (cur) shipMenu(cur, e.clientX, e.clientY); });
@@ -834,14 +836,15 @@
   window.Atamus.bus.addEventListener("deselect", () => { actSig = ""; renderShipActions(); });
 
   // ---- inventories: slot grids with drag/drop ----
-  const invKey = (ref) => ref.owner === "station" ? (ref.inv === "delivery" ? "station:delivery" : "station:hangar:" + (ref.h | 0)) : "ship:" + ref.id + ":" + ref.inv;
-  const invData = (ref) => { const A = window.Atamus; if (ref.owner === "station" && ref.inv === "delivery") return A.inv.delivery || null; if (ref.owner === "station") return (A.inv.hangars || [])[ref.h | 0] || null; const s = (A.inv.ships || {})[ref.id]; return s ? s[ref.inv] : null; };
+  const invKey = (ref) => ref.owner === "can" ? "can:" + ref.id : ref.owner === "station" ? (ref.inv === "delivery" ? "station:delivery" : "station:hangar:" + (ref.h | 0)) : "ship:" + ref.id + ":" + ref.inv;
+  const invData = (ref) => { const A = window.Atamus; if (ref.owner === "can") return (A.inv.cans || {})[ref.id] || null; if (ref.owner === "station" && ref.inv === "delivery") return A.inv.delivery || null; if (ref.owner === "station") return (A.inv.hangars || [])[ref.h | 0] || null; const s = (A.inv.ships || {})[ref.id]; return s ? s[ref.inv] : null; };
   const hangarName = (h) => (((window.Atamus.inv.hangars || [])[h | 0]) || {}).name || "Hangar " + ((h | 0) + 1);
   const holdName = (inv) => inv === "ore" ? "Ore hold" : inv === "cargo" ? "Cargo" : inv;
-  const invLabel = (ref) => ref.owner === "station" ? (ref.inv === "delivery" ? "Deliveries" : hangarName(ref.h)) : hullOf((window.Atamus.ship(ref.id) || {}).type).name + " · " + holdName(ref.inv);
+  const invLabel = (ref) => ref.owner === "can" ? "Jettison can" : ref.owner === "station" ? (ref.inv === "delivery" ? "Deliveries" : hangarName(ref.h)) : shipName(window.Atamus.ship(ref.id)) + " · " + holdName(ref.inv);
   const invWins = {}; // key -> { ref (what's shown), root (the window's holder), solo }
   const shipHolds = (id) => { const s = (window.Atamus.inv.ships || {})[id] || {}; return ["ore", "cargo"].filter((k) => s[k] && s[k].cap > 0); };
   function invTabsFor(ref) {
+    if (ref.owner === "can") return [ref];
     if (ref.owner === "station") return ((window.Atamus.inv.hangars) || [{}]).map((_, h) => ({ owner: "station", inv: "hangar", h }));
     return shipHolds(ref.id).map((inv) => ({ owner: "ship", id: ref.id, inv }));
   }
@@ -911,7 +914,7 @@
     const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
     // rebuild only when the structure changes; quantities update in place
     const deliv = A.inv.delivery;
-    const sig = [invKey(ref), deliv ? deliv.stacks : 0, tabs.map((t) => invKey(t) + (t.owner === "station" ? hangarName(t.h) : "")).join(","), docked.map((d) => d.id + (saved.invOpen[d.id] ? 1 : 0) + shipHolds(d.id).join("")).join(","),
+    const sig = [invKey(ref), deliv ? deliv.stacks : 0, docked.map((d) => d.name || "").join(","), tabs.map((t) => invKey(t) + (t.owner === "station" ? hangarName(t.h) : "")).join(","), docked.map((d) => d.id + (saved.invOpen[d.id] ? 1 : 0) + shipHolds(d.id).join("")).join(","),
       data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
     if (sig !== st.sig) {
       st.sig = sig; st.live = { qty: [] };
@@ -920,7 +923,7 @@
         const row = el("div", { class: "tab-row" });
         for (const t of tabs) {
           const active = invKey(t) === invKey(ref);
-          const label = t.owner === "station" ? hangarName(t.h) : (t.inv === "ore" ? "Ore" : "Cargo");
+          const label = t.owner === "can" ? "Jettison can" : t.owner === "station" ? hangarName(t.h) : (t.inv === "ore" ? "Ore" : "Cargo");
           const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); persistWin(key); } } }, label);
           dropTarget(b, { ...t, slot: null }, A);
           const menu = (x, y) => showCtxMenu(x, y, [["Open in new window", () => openInventoryAlone(t)], ...(t.owner === "station" ? [["Rename", () => renameHangar(b, t.h)]] : [])]);
@@ -938,7 +941,7 @@
         for (const d of docked) {
           const open = !!saved.invOpen[d.id], t = hullOf(d.type);
           const head = el("button", { class: "inv-side-ship" + (open ? " open" : ""), onclick: () => { saved.invOpen[d.id] = !open; persistAll(); renderInventory(key, body); } },
-            el("span", { class: "mk-caret" }, "▸"), shipIcon(d.type), el("span", { class: "iss-name" }, t.name));
+            el("span", { class: "mk-caret" }, "▸"), shipIcon(d.type), el("span", { class: "iss-name" }, shipName(d)));
           head.addEventListener("contextmenu", (e) => { e.preventDefault(); shipMenu(d, e.clientX, e.clientY); });
           holdToOpen(head, () => { const r = head.getBoundingClientRect(); shipMenu(d, r.left + r.width / 2, r.bottom); });
           side.append(head);
@@ -1026,14 +1029,47 @@
     }, { passive: true });
   }
 
+  // ---- small dialogs ----
+  function dialog(id, title, build) {
+    if (!wins[id]) createWindow(id, { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 80), width: 300, minW: 240, minH: 110, groupable: false });
+    const w = wins[id]; w.render = null; w.slot.textContent = title; w.body.innerHTML = ""; build(w.body, () => toggleWindow(id, false));
+    toggleWindow(id, true);
+  }
+  function askText(title, value, max, onOk) {
+    dialog("ask", title, (body, close) => {
+      const input = el("input", { class: "text-input ask-input", value: value || "", maxlength: String(max) });
+      const ok = () => { onOk(input.value.trim()); close(); };
+      input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") ok(); if (e.key === "Escape") close(); });
+      body.append(input, el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: close }, "Cancel"), el("button", { class: "btn-primary2 unit-btn", onclick: ok }, "Save")));
+      setTimeout(() => { input.focus(); input.select(); }, 0);
+    });
+  }
+  function confirmBox(title, text, okLabel, onOk) {
+    dialog("confirm", title, (body, close) => body.append(el("div", { class: "info-desc" }, el("span", {}, text)),
+      el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: close }, "Cancel"), el("button", { class: "btn-primary2 unit-btn danger", onclick: () => { onOk(); close(); } }, okLabel))));
+  }
+  // clicking a jettison can in space
+  window.Atamus.bus.addEventListener("can", (e) => {
+    const A = window.Atamus, c = (A.snap.cans || []).find((x) => x.id === e.detail.id); if (!c) return;
+    const mins = Math.ceil(c.left / 60000), items = [["Open", () => openInventory({ owner: "can", id: c.id })]];
+    if (c.mine || c.empty) items.push(["Destroy", () => c.empty ? A.send({ t: "destroy_can", can: c.id }) : confirmBox("Destroy can", "Destroy this jettison can and everything in it?", "Destroy", () => A.send({ t: "destroy_can", can: c.id }))]);
+    items.push([(c.mine ? "Your can" : c.owner + "'s can") + " · " + mins + " min left", () => {}]);
+    showCtxMenu(e.detail.x, e.detail.y, items);
+  });
+  // a can that's gone takes its window with it
+  window.Atamus.bus.addEventListener("snap", () => {
+    const live = new Set(((window.Atamus.snap.cans) || []).map((c) => c.id));
+    for (const k in invWins) { const r = invWins[k].root || invWins[k].ref; if (r.owner === "can" && !live.has(r.id) && isOpen(wins[k])) toggleWindow(k, false); }
+  });
+
   // ---- item menu: split / jettison / sell / read / info ----
   function openItemMenu(ref, slot, x, y) {
     const A = window.Atamus, data = invData(ref), stck = data && data.slots[slot]; if (!stck) return;
     const def = (A.cfg.items || {})[stck.item] || { name: stck.item };
-    const holder = ref.owner === "station" ? null : A.ship(ref.id), atStation = !holder || holder.docked;
+    const holder = ref.owner === "ship" ? A.ship(ref.id) : null, atStation = ref.owner === "station" || !!(holder && holder.docked);
     const items = [];
     if (stck.qty > 1) items.push(["Split", () => openSplit(ref, slot)]);
-    items.push(["Jettison", () => A.send({ t: "jettison", ref, slot })]);
+    if (ref.owner === "ship" && holder && !holder.docked) items.push(["Jettison", () => A.send({ t: "jettison", ref, slot })]);
     if (def.price && def.kind === "ore") items.push([atStation ? "Sell" : "Sell (dock first)", () => { if (atStation) openSell(ref, slot); }]);
     if (def.kind === "manual") items.push(["Read", () => A.send({ t: "read", ref, slot })]);
     if (def.kind === "ship") items.push([ref.owner === "station" ? "Assemble" : "Assemble (in a station)", () => { if (ref.owner === "station") A.send({ t: "assemble", ref, slot }); }]);

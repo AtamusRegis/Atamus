@@ -9,6 +9,7 @@ import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
 const homeSys = (pid) => `sys:${pid}`;
 const HANGARS = 4;
+const CAN_LIFE_MS = 30 * 60 * 1000, CAN_COOLDOWN_MS = 30 * 60 * 1000, CAN_M3 = 15000, CAN_RANGE_KM = 2.5;
 const HIBERNATE_GRACE_MS = 60 * 1000;
 
 export class World {
@@ -16,6 +17,7 @@ export class World {
     this.players = new Map(); // pid -> {id,name,send,offline}
     this.gates = new Map();   // gid -> gate
     this.ships = new Map();   // sid -> ship
+    this.cans = new Map();    // jettison cans floating in space: id -> { id, owner, ownerName, sys, x, y, inv, expiresAt }
   }
 
   addPlayer(id, name, send, saved = null) {
@@ -45,6 +47,8 @@ export class World {
     });
     for (const sh of (saved && saved.ships) || []) this.ships.set(sh.id, this._hydrateShip({ ...sh, owner: id, sys: homeSys(id) }));
     // four renameable station hangars; a save from before hangars existed becomes Hangar 1
+    p.jetUntil = (saved && saved.jetUntil) || 0;
+    for (const c of (saved && saved.cans) || []) if (c.expiresAt > now) this.cans.set(c.id, { ...c, owner: id, sys: c.sys || homeSys(id) });
     p.hangars = (saved && Array.isArray(saved.hangars) && saved.hangars.length) ? saved.hangars
       : [0, 1, 2, 3].map((i) => ({ name: "Hangar " + (i + 1), inv: (i === 0 && saved && saved.hangar) || Inv.makeInv(STATION_HANGAR_M3) }));
     p.delivery = (saved && saved.delivery) || Inv.makeInv(STATION_HANGAR_M3);   // market purchases land here
@@ -55,10 +59,10 @@ export class World {
 
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
-    return { ships, gates, beltField: p ? p.beltField : null, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
+    return { ships, gates, beltField: p ? p.beltField : null, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
   }
 
   // Fill in live/derived ship fields from a saved or fresh record.
@@ -98,6 +102,7 @@ export class World {
     if (this.onBeforePurge) { try { this.onBeforePurge(id); } catch (e) { console.error("onBeforePurge", e); } }
     for (const [gid, g] of this.gates) if (g.owner === id) this.gates.delete(gid);
     for (const [sid, s] of this.ships) if (s.owner === id) this.ships.delete(sid);
+    for (const [cid, c] of this.cans) if (c.owner === id) this.cans.delete(cid);
     this.players.delete(id);
   }
 
@@ -204,6 +209,7 @@ export class World {
   }
   _inv(pid, ref) {
     const p = this.players.get(pid); if (!p) return null;
+    if (ref.owner === "can") { const c = this.cans.get(ref.id); return c ? { inv: c.inv, can: c } : null; }
     if (ref.owner === "station" && ref.inv === "delivery") return { inv: p.delivery, docked: true };
     if (ref.owner === "station") { const h = p.hangars[Math.max(0, Math.min(p.hangars.length - 1, (ref.h | 0)))]; return { inv: h.inv, docked: true }; }
     const sh = this.ships.get(ref.id); if (!sh || sh.owner !== pid) return null;
@@ -211,10 +217,16 @@ export class World {
   }
   cmdInvMove(pid, from, to, qty) {
     const a = this._inv(pid, from), b = this._inv(pid, to); if (!a || !a.inv || !b || !b.inv) return;
-    // transfers between different holders require docking (station <-> ship, ship <-> ship)
+    // transfers between different holders: both docked (station <-> ship, ship <-> ship), or a ship in space
+    // within 2.5 km of a jettison can
     const sameHolder = from.owner === to.owner && (from.owner === "station" || from.id === to.id);
-    if (!sameHolder && !(a.docked && b.docked)) return;
-    if (Inv.move(a.inv, +from.slot, b.inv, to.slot == null ? null : +to.slot, qty) > 0) this._markInv(pid);
+    const canEnd = a.can || b.can, shipEnd = a.can ? b : a;
+    if (!sameHolder) {
+      if (canEnd) {
+        if (!shipEnd.ship || shipEnd.ship.docked || shipEnd.ship.sys !== canEnd.sys || Math.hypot(shipEnd.ship.x - canEnd.x, shipEnd.ship.y - canEnd.y) > CAN_RANGE_KM) { this._tell(pid, "Get within " + CAN_RANGE_KM + " km of the can."); return; }
+      } else if (!(a.docked && b.docked)) return;
+    }
+    if (Inv.move(a.inv, +from.slot, b.inv, to.slot == null ? null : +to.slot, qty) > 0) { this._markInv(pid); if (canEnd) this._canChanged(canEnd); }
   }
   // Sell ore straight out of the hangar or a docked ship's hold. Credits are kept on the
   // user row; onCredits(pid, delta) persists the change.
@@ -228,10 +240,36 @@ export class World {
     if (this.onCredits) { try { this.onCredits(pid, delta); } catch (e) { console.error("onCredits", e); } }
   }
   cmdInvSplit(pid, ref, slot, qty) { const a = this._inv(pid, ref); if (a && a.inv && Inv.split(a.inv, +slot, +qty) > 0) this._markInv(pid); }
+  // Jettison: items go into a new can floating beside the ship. One can every 30 minutes per pilot
+  // account (destroying your can lifts that), cans hold 15,000 m³ and drift away after 30 minutes.
   cmdJettison(pid, ref, slot, qty) {
-    const a = this._inv(pid, ref); if (!a || !a.inv) return;
+    const p = this.players.get(pid), a = this._inv(pid, ref); if (!p || !a || !a.inv || !a.ship) return;
+    const sh = a.ship; if (sh.docked) { this._tell(pid, "Undock to jettison."); return; }
     const st = a.inv.slots[+slot]; if (!st) return;
-    if (Inv.take(a.inv, +slot, qty == null ? st.qty : +qty) > 0) this._markInv(pid);   // gone for good (no wrecks yet)
+    const now = Date.now();
+    if (now < p.jetUntil) { const m = Math.ceil((p.jetUntil - now) / 60000); this._tell(pid, `You can jettison again in ${m} min. Open your can to add more, or destroy it.`); return; }
+    const can = { id: "can:" + pid + ":" + now.toString(36), owner: pid, ownerName: p.name, sys: sh.sys, x: +(sh.x + 0.25).toFixed(4), y: +(sh.y - 0.2).toFixed(4), inv: Inv.makeInv(CAN_M3), expiresAt: now + CAN_LIFE_MS };
+    const moved = Inv.move(a.inv, +slot, can.inv, null, qty == null ? st.qty : +qty);
+    if (moved <= 0) { this._tell(pid, "That won't fit in a can."); return; }
+    this.cans.set(can.id, can); p.jetUntil = now + CAN_COOLDOWN_MS; this._markInv(pid); this._canChanged(can);
+  }
+  // Destroy a can: anyone may destroy an empty can; its owner may destroy it with things inside.
+  cmdDestroyCan(pid, canId) {
+    const c = this.cans.get(canId); if (!c) return;
+    if (c.inv.slots.length && c.owner !== pid) { this._tell(pid, "Only the owner can destroy a can that still holds items."); return; }
+    this._removeCan(c);
+  }
+  _removeCan(c) {
+    this.cans.delete(c.id);
+    const o = this.players.get(c.owner); if (o) o.jetUntil = 0;           // its owner may jettison again right away
+    this._canChanged(c);
+  }
+  _canChanged(c) { for (const p of this.players.values()) if (this._visibleSystems(p.id).has(c.sys)) p.invDirty = true; }
+  // Rename one ship (its hull type stays what it is).
+  cmdRenameShip(pid, shipId, name) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    const clean = String(name || "").replace(/\s+/g, " ").trim().slice(0, 20);
+    sh.name = clean || null; this._markInv(pid);
   }
   // Station market: buy into the hangar.
   cmdBuy(pid, itemKey, qty) {
@@ -307,7 +345,9 @@ export class World {
     const p = this.players.get(pid); if (!p) return null;
     const ships = {};
     for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore) };
-    return { t: "inv", ships, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), delivery: Inv.summary(p.delivery), credits: p.credits, unlocked: p.unlocked };
+    const vis = this._visibleSystems(pid), cans = {};
+    for (const c of this.cans.values()) if (vis.has(c.sys)) cans[c.id] = { ...Inv.summary(c.inv) };
+    return { t: "inv", ships, cans, jetUntil: p.jetUntil, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), delivery: Inv.summary(p.delivery), credits: p.credits, unlocked: p.unlocked };
   }
 
   cmdChat(pid, text, channel, to) {
@@ -382,6 +422,7 @@ export class World {
   // ---- tick ----
   tick(dtSec) {
     const now = Date.now(), dtMs = dtSec * 1000;
+    for (const c of this.cans.values()) if (now >= c.expiresAt) this._removeCan(c);
     for (const g of this.gates.values()) {
       if (g.state !== "active") continue;
       if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (!partner || partner.state !== "active" || partner.connToGate !== g.id) { g.connToSys = null; g.connToGate = null; } }
@@ -534,7 +575,7 @@ export class World {
       if (!vis.has(s.sys)) continue;
       const mine = s.owner === p.id;
       if (s.docked && !mine) continue;                        // docked ships are out of sight
-      const entry = { id: s.id, sys: s.sys, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
+      const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
@@ -548,6 +589,8 @@ export class World {
       ships.push(entry);
     }
 
-    return { t: "snap", systems, gates, ships };
+    const cans = [];
+    for (const c of this.cans.values()) if (vis.has(c.sys)) cans.push({ id: c.id, sys: c.sys, x: c.x, y: c.y, mine: c.owner === p.id, owner: c.ownerName, left: Math.max(0, c.expiresAt - now), empty: !c.inv.slots.length });
+    return { t: "snap", systems, gates, ships, cans };
   }
 }

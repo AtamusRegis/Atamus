@@ -287,6 +287,8 @@
   }
   // a click/tap on the map: select what's there, or (empty) deselect after a beat so a double can still move
   function clickAt(p, shift) {
+    const can = canAt(p);
+    if (can) { bus.dispatchEvent(new CustomEvent("can", { detail: { id: can.id, x: p.x, y: p.y } })); return; }
     const gate = gateAt(p);
     if (gate) { selected.clear(); selectUnit({ kind: "gate", id: gate.id }); return; }
     const ship = shipAt(p);
@@ -481,7 +483,7 @@
     if (w.rock) { const o = (cfg.ores || []).find((q) => q.key === w.rock.ore); name = (o ? o.name : w.rock.ore) + " " + w.rock.size + " m"; sub = Math.round(w.rock.m3).toLocaleString() + " m³ left"; }
     else if (tg.kind === "gate") { name = "Stargate"; }
     else if (tg.kind === "station") { name = "Station"; }
-    else if (w.ship) { const t = hull(w.ship.type); name = t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }
+    else if (w.ship) { const t = hull(w.ship.type); name = w.ship.name || t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }
     return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + hull(w.ship.type).sprite + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
   }
   function targetScreen(place, tg) {
@@ -560,6 +562,20 @@
     }
   }
 
+  // jettison cans: a small crate glyph (own cans blue, others amber), always at least a few pixels
+  function canScreen(c) { const pl = curPlace.get(c.sys); return pl ? { x: gx2s(pl.gx + c.x), y: gy2s(pl.gy + c.y) } : null; }
+  function canAt(p) { let best = null, bd = 14; for (const c of snap.cans || []) { const sc = canScreen(c); if (!sc) continue; const d = Math.hypot(p.x - sc.x, p.y - sc.y); if (d < bd) { bd = d; best = c; } } return best; }
+  function drawCans() {
+    for (const c of snap.cans || []) {
+      const sc = canScreen(c); if (!sc) continue;
+      const r = Math.max(4, 0.03 * scale());
+      ctx.save(); ctx.translate(sc.x, sc.y);
+      ctx.fillStyle = c.mine ? "rgba(70,150,220,0.9)" : "rgba(220,160,70,0.9)"; ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1;
+      ctx.fillRect(-r, -r * 0.75, r * 2, r * 1.5); ctx.strokeRect(-r + 0.5, -r * 0.75 + 0.5, r * 2 - 1, r * 1.5 - 1);
+      ctx.beginPath(); ctx.moveTo(-r, -r * 0.25); ctx.lineTo(r, -r * 0.25); ctx.stroke();
+      ctx.restore();
+    }
+  }
   function drawStations(place) {
     for (const sE of snap.systems) {
       if (sE.id === "sys:hub") continue;                 // the pirate hub has no player station
@@ -654,6 +670,7 @@
       drawBelts(place);
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
+      drawCans();
       drawShips(place);
       const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target
       if (hl) { const t = targetScreen(place, hl.tg); if (t) { ctx.save(); ctx.beginPath(); ctx.moveTo(hl.x, hl.y); ctx.lineTo(t.x, t.y); ctx.strokeStyle = "rgba(200,205,215,0.22)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); } }

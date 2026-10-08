@@ -87,6 +87,8 @@ export function attachGameServer(httpServer) {
         case "decrew": world.cmdDecrew(pid, m.ship); break;
         case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
         case "assemble": world.cmdAssemble(pid, m.ref, m.slot); break;
+        case "destroy_can": world.cmdDestroyCan(pid, m.can); break;
+        case "rename_ship": world.cmdRenameShip(pid, m.ship, m.name); break;
         case "dev": if (PTR) devCommand(world, pid, m, refreshLicenses); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
