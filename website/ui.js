@@ -25,8 +25,9 @@
   const catName = (k) => (catalog.categories.find((c) => c.key === k) || {}).name || k;
 
   // ---- data ----
+  let serverOffset = 0; // server epoch - client epoch
   async function ensureCatalog() { if (!catalog) catalog = await Api.get("/game/catalog"); }
-  async function refreshState() { state = await Api.get("/game/state"); if (selectedPilotId == null && state.pilots[0]) selectedPilotId = state.pilots[0].id; renderOpen(); }
+  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); if (selectedPilotId == null && state.pilots[0]) selectedPilotId = state.pilots[0].id; renderOpen(); }
 
   // ---- windows ----
   const wins = {};
@@ -41,7 +42,7 @@
     document.body.appendChild(win);
     win.addEventListener("mousedown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar);
-    addResize(win);
+    addResize(win, opts.minW || 220, opts.minH || 130);
     wins[id] = { win, body, slot, render: opts.render };
     return wins[id];
   }
@@ -65,8 +66,8 @@
     });
   }
 
-  function addResize(win) {
-    const MIN_W = 220, MIN_H = 130;
+  function addResize(win, MIN_W, MIN_H) {
+    MIN_W = MIN_W || 220; MIN_H = MIN_H || 130;
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
       const h = el("div", { class: "rz rz-" + dir });
       h.addEventListener("mousedown", (e) => {
@@ -187,7 +188,7 @@
       return el("div", { class: "cat-row" + (c.key === skillCategory ? " sel" : ""), onclick: () => { skillCategory = c.key; renderPilot(wins.pilot.body); } },
         el("span", { class: "cat-name" }, c.name),
         el("div", { class: "cat-bar" }, el("div", { class: "cat-bar-fill", style: "width:" + (frac * 100) + "%" })),
-        el("span", { class: "cat-prog" }, learned + " / " + total));
+        el("span", { class: "cat-prog" }, String(lics.length)));
     })));
     // selected category's licenses shown inline below
     const cat = catalog.categories.find((c) => c.key === skillCategory);
@@ -249,13 +250,20 @@
     let pTab = "licensing", pLevel = Math.min(l.maxLevel, Math.max(1, level));
     if (popup) popup.remove();
     popup = el("div", { class: "license-popup" });
-    popup.style.zIndex = ++z;
+    popup.style.left = "440px"; popup.style.top = "150px"; popup.style.width = "370px"; popup.style.zIndex = ++z;
+    const close = el("button", { class: "win-close", onclick: () => { popup.remove(); popup = null; } }, "×");
+    const titleBar = el("div", { class: "pop-title" }, el("span", {}, l.name), close);
+    const sub = el("div", { class: "pop-sub" }, catName(l.category));
+    const inner = el("div", { class: "pop-inner" });
+    popup.append(titleBar, sub, inner);
+    document.body.appendChild(popup);
+    popup.addEventListener("mousedown", () => { popup.style.zIndex = ++z; });
+    dragMove(popup, titleBar);
+    addResize(popup, 300, 240);
+
     const render = () => {
       const pilot = state.pilots.find((p) => p.id === selectedPilotId);
-      popup.innerHTML = "";
-      const close = el("button", { class: "win-close", onclick: () => { popup.remove(); popup = null; } }, "×");
-      popup.append(el("div", { class: "pop-title" }, el("span", {}, l.name), close));
-      // level selector
+      inner.innerHTML = "";
       const boxes = el("div", { class: "lvl-boxes" });
       for (let lv = 1; lv <= l.maxLevel; lv++) {
         const tr = trained(pilot, key), eff = effLevel(pilot, key);
@@ -263,11 +271,10 @@
         if (lv === pLevel) cls += " sel";
         boxes.append(el("div", { class: cls, onclick: () => { pLevel = lv; render(); } }, lv));
       }
-      popup.append(boxes);
-      // tabs
+      inner.append(boxes);
       const tabs = [["licensing", "Licensing"], ["requirements", "Requirements"], ["requiredFor", "Required For"]];
-      popup.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pTab ? " active" : ""), onclick: () => { pTab = k; render(); } }, n))));
-      const c = el("div", { class: "pop-content" }); popup.append(c);
+      inner.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pTab ? " active" : ""), onclick: () => { pTab = k; render(); } }, n))));
+      const c = el("div", { class: "pop-content" }); inner.append(c);
       if (pTab === "licensing") c.append(el("p", { class: "pop-desc" }, l.desc), el("p", { class: "pop-effect" }, l.effect), el("div", { class: "pop-traintime" }, "Train time (Lv " + pLevel + "): " + fmtTime(l.levelTimes[pLevel - 1])));
       else if (pTab === "requirements") {
         if (!l.requirements.length) c.append(el("div", { class: "muted" }, "No requirements."));
@@ -282,7 +289,6 @@
       }
     };
     render();
-    document.body.appendChild(popup);
   }
 
   // ---- chat ----
@@ -308,10 +314,17 @@
 
   // ---- init ----
   async function init() {
-    createWindow("player", { left: 90, top: 70, width: 260, render: renderPlayer });
-    createWindow("pilot", { left: 180, top: 90, width: 440, render: renderPilot });
-    createWindow("chat", { left: 280, top: 150, width: 320, render: renderChat });
+    createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
+    createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
+    createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 230, render: renderChat });
     renderPanel();
+
+    // server-time clock (bottom-left)
+    const clock = el("div", { class: "server-time" });
+    document.body.appendChild(clock);
+    const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clock.innerHTML = "<b>SERVER</b> " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds()); };
+    tickClock(); setInterval(tickClock, 1000);
+
     try { await ensureCatalog(); await refreshState(); } catch { /* not logged in handled by game.js */ }
     if (state && !state.pilots.length) toggleWindow("pilot", true); // prompt first-pilot naming
     // live countdown refresh for the queue
