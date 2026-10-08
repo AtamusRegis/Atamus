@@ -34,7 +34,7 @@ export function move(from, fromIdx, to, toIdx, qty) {
     if (target.item === st.item) { target.qty += st.qty; from.slots.splice(fromIdx, 1); return st.qty; }
     [from.slots[fromIdx], to.slots[toIdx]] = [target, st]; return st.qty;   // swap
   }
-  const target = toIdx != null ? to.slots[toIdx] : null;
+  const target = toIdx != null ? to.slots[toIdx] : (to.slots.find((s) => s.item === st.item) || null); // no slot given: merge into an existing stack
   let n;
   if (target && target.item === st.item) { n = canAdd(to, st.item, qty); if (n <= 0) return 0; target.qty += n; }
   else { n = canAdd(to, st.item, qty); if (n <= 0) return 0; if (toIdx != null && toIdx < to.slots.length) to.slots.splice(toIdx, 0, { item: st.item, qty: n }); else to.slots.push({ item: st.item, qty: n }); }
