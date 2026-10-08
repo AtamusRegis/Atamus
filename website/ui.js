@@ -496,6 +496,8 @@
     createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
+    createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit });
+    wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());
     renderPanel();
 
     // close any open custom dropdown / context menu when clicking elsewhere
