@@ -415,6 +415,8 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .hb-img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
 .hb-badge { position: absolute; right: 2px; bottom: 1px; font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
 .hb-slot.stopping .hb-img { opacity: .55; }
+.hb-slot.off .hb-img { opacity: .3; filter: grayscale(1); }
+.hb-slot.off { background: rgba(0,0,0,0.35); }
 @media (pointer: coarse) { .hb-img { width: 36px; height: 36px; } }
 
 /* the fleet bar drags by its background on touch too (no scroll takeover) */

@@ -712,21 +712,69 @@
     return tgOrder.map((k) => sh.targets.find((t) => tgKey(t) === k));
   }
   function clickLaser(sh, idx) {
-    const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L) return;
+    const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L || L.off) return;
     const rock = selTarget && selTarget.kind === "rock" ? selTarget.id : null;
     if (L.on) { A.send({ t: "laser", ship: sh.id, idx, on: !L.repeat }); return; }   // active: toggle whether it repeats after this cycle
     A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
   }
   // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells
-  function reorderable(cell, kind, index, onDrop) {
+  function reorderable(cell, kind, index, onDrop, onHold) {
     cell.setAttribute("draggable", "true");
     cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ [kind]: index })); e.dataTransfer.effectAllowed = "move"; });
     cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
     cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
     cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (d && d[kind] != null) onDrop(d[kind], index); });
     cell.addEventListener("touchdrop", (e) => { const d = e.detail; if (d && d[kind] != null) onDrop(d[kind], index); });
-    touchDrag(cell, { [kind]: index }, () => {});
+    touchDrag(cell, { [kind]: index }, onHold || (() => {}));
   }
+  // ---- hotbar module menu (right-click / hold): activate, power, info ----
+  const modName = (it) => it.k === "auto" ? "Auto Miner" : "Mining Laser " + (it.i + 1);
+  function moduleMenu(sh, it, x, y) {
+    const A = window.Atamus, items = [];
+    if (it.k === "laser") {
+      const L = (sh.lasers || [])[it.i]; if (!L) return;
+      if (!L.off) {
+        if (!L.on) items.push(["Activate", () => clickLaser(sh, it.i)]);
+        else items.push([L.repeat ? "Deactivate" : "Keep cycling", () => A.send({ t: "laser", ship: sh.id, idx: it.i, on: !L.repeat })]);
+      }
+      items.push([L.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: "laser", idx: it.i, on: !!L.off })]);
+    } else {
+      const au = sh.auto || {};
+      if (!au.off) items.push([au.on ? "Deactivate" : "Activate", () => A.send({ t: "auto", ship: sh.id, on: !au.on })]);
+      items.push([au.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: "auto", on: !!au.off })]);
+    }
+    items.push(["Info", () => openModuleInfo(sh.id, it)]);
+    showCtxMenu(x, y, items);
+  }
+  let modInfo = null;
+  function openModuleInfo(shipId, it) {
+    if (!wins.modinfo) createWindow("modinfo", { left: Math.round(innerWidth / 2 - 160), top: Math.round(innerHeight / 2 - 140), width: 320, minW: 260, minH: 160, render: renderModuleInfo, groupable: false });
+    modInfo = { shipId, it }; wins.modinfo.sig = null; toggleWindow("modinfo", true); renderModuleInfo(wins.modinfo.body);
+  }
+  function renderModuleInfo(body) {
+    const A = window.Atamus, w = wins.modinfo, sh = modInfo && A.ship(modInfo.shipId); if (!sh) return;
+    const it = modInfo.it, L = it.k === "laser" ? (sh.lasers || [])[it.i] : null, au = sh.auto || {};
+    const state = it.k === "laser" ? (!L ? "—" : L.off ? "Powered off" : L.on ? (L.repeat ? "Cycling" : "Finishing cycle") : "Idle")
+      : au.off ? "Powered off" : au.on ? "Active" : "Idle";
+    const rock = L && L.on && L.rock ? (A.targetInfo(sh, { kind: "rock", id: L.rock }) || {}).name : null;
+    const sig = [sh.id, it.k, it.i, state, rock, sh.yieldM3s, sh.laserRange, L && L.dur, au.cyc].join("|");
+    if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
+    w.slot.textContent = modName(it);
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const secs = (ms) => (ms / 1000 >= 60 ? Math.floor(ms / 60000) + ":" + String(Math.round(ms / 1000) % 60).padStart(2, "0") : (ms / 1000).toFixed(1) + " s");
+    const icon = it.k === "auto" ? "assets/icons/auto_miner.png" : "assets/icons/mining_laser.png";
+    if (it.k === "laser") {
+      const dur = (L && L.dur) || A.cfg.cycleMs || 15000;
+      body.append(el("div", { class: "info-desc" }, el("img", { class: "info-icon", src: icon, alt: "" }), el("span", {}, "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes.")),
+        row("Ship", shipName(sh)), row("Status", state), ...(rock ? [row("Target", rock)] : []),
+        row("Cycle time", secs(dur)), row("Yield per cycle", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1) + " m³"),
+        row("Range", (sh.laserRange || A.cfg.laserRange || 0).toFixed(2) + " km"));
+    } else {
+      body.append(el("div", { class: "info-desc" }, el("img", { class: "info-icon", src: icon, alt: "" }), el("span", {}, "Each cycle, puts every idle mining laser on the first locked asteroid in range.")),
+        row("Ship", shipName(sh)), row("Status", state), row("Cycle time", secs(au.cyc || 180000)));
+    }
+  }
+  window.Atamus.bus.addEventListener("snap", () => { const w = wins.modinfo; if (w && isOpen(w)) renderModuleInfo(w.body); });
   function renderHud() {
     const A = window.Atamus, sh = hudShipData();
     renderShipActions();
@@ -736,7 +784,7 @@
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (selTarget && !targets.some((x) => x && tgKey(x) === tgKey(selTarget))) selTarget = null;
-    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
+    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.off ? "x" : "") + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, sh.auto && sh.auto.off ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
     if (sig !== hudSig) {
       hudSig = sig; hudLive = { dist: {}, tip: null };
       // targets
@@ -767,21 +815,23 @@
         if (it && it.k === "laser") {
           const L = (sh.lasers || [])[it.i];
           if (L) {
-            slot.classList.add("filled"); if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping");
+            slot.classList.add("filled"); if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping"); if (L.off) slot.classList.add("off");
             slot.append(el("img", { class: "hb-img", src: "assets/icons/mining_laser.png", alt: "", draggable: "false" }), el("span", { class: "hb-badge" }, String(it.i + 1)));
             slot.title = "Mining Laser " + (it.i + 1) + (L.on ? (L.repeat ? " — cycling" : " — finishing cycle") : "");
             slot.addEventListener("click", () => clickLaser(sh, it.i));
             hudLive.slots.push({ slot, laser: it.i });
           }
         } else if (it && it.k === "auto") {
-          slot.classList.add("filled"); if (sh.auto && sh.auto.on) slot.classList.add("on");
+          slot.classList.add("filled"); if (sh.auto && sh.auto.on) slot.classList.add("on"); if (sh.auto && sh.auto.off) slot.classList.add("off");
           slot.append(el("img", { class: "hb-img", src: "assets/icons/auto_miner.png", alt: "", draggable: "false" }));
           slot.title = "Auto Miner" + (sh.auto && sh.auto.on ? " — active" : "");
           slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
           hudLive.slots.push({ slot, auto: true });
         }
         slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
-        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const a = saved.hotbar; [a[from], a[to]] = [a[to], a[from]]; persistAll(); hudSig = ""; renderHud(); });
+        const menu = it && slot.classList.contains("filled") ? () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); } : null;
+        if (menu) slot.addEventListener("contextmenu", (e) => { e.preventDefault(); const live = hudShipData() || sh; moduleMenu(live, it, e.clientX, e.clientY); });
+        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const a = saved.hotbar; [a[from], a[to]] = [a[to], a[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
         hudBar.append(slot);
       });
     }

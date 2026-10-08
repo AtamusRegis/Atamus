@@ -73,8 +73,8 @@ export class World {
     const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
     return {
       ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
-      docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: t.lasers || 0 }, (_, i) => ({ on: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
-      auto: { on: false, next: 0, ...(sh.auto || {}) },
+      docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: t.lasers || 0 }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
+      auto: { on: false, off: false, next: 0, ...(sh.auto || {}) },
       hp: Number.isFinite(sh.hp) ? Math.min(sh.hp, t.hp) : t.hp, shield: Number.isFinite(sh.shield) ? Math.min(sh.shield, t.shield) : t.shield,
       targets: (sh.targets || []).map((tg) => ({ ...tg })),
       inv: { cargo: sh.inv?.cargo || Inv.makeInv(t.cargoM3), ore: sh.inv?.ore || Inv.makeInv(t.oreM3) },
@@ -185,13 +185,13 @@ export class World {
     const rocks = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(pid, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
     if (!rocks.length) return;
     if (!rocks.some((r) => Inv.canAdd(sh.inv.ore, r.f.rock.ore, 1) > 0)) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
-    sh.lasers.forEach((L, i) => { if (L.on) { L.repeat = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
+    sh.lasers.forEach((L, i) => { if (L.off) return; if (L.on) { L.repeat = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
   }
   // One laser. Active: a click toggles whether it repeats after this cycle (the cycle itself
   // runs to completion; a laser can't be retargeted mid-cycle). Idle: start on the rock.
   cmdLaser(pid, shipId, idx, on, rockId) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
-    const L = sh.lasers[+idx]; if (!L) return;
+    const L = sh.lasers[+idx]; if (!L || L.off) return;                 // powered off: nothing to activate
     if (L.on) { if (!on) L.repeat = false; else if (rockId == null || rockId === L.rock) L.repeat = true; return; }   // a different rock has to wait for the cycle
     if (!on) return;
     const tg = this._lockedRock(sh, rockId); if (!tg) return;
@@ -203,8 +203,16 @@ export class World {
   cmdAuto(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
     if (!on) { sh.auto.on = false; return; }
-    if (!this._lockedRock(sh)) return;
+    if (sh.auto.off || !this._lockedRock(sh)) return;
     sh.auto.on = true; sh.auto.next = 0;                       // fires on the next tick
+  }
+  // Power a module on or off. Powering off an active module stops it at once (the cycle yields nothing).
+  cmdPower(pid, shipId, mod, idx, on) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    if (mod === "auto") { sh.auto.off = !on; if (!on) sh.auto.on = false; return; }
+    if (mod !== "laser") return;
+    const L = sh.lasers[Math.floor(Number(idx))]; if (!L) return;
+    L.off = !on; if (!on && L.on) this._laserStop(L);
   }
   _autoCycleMs(sh) { const lvl = Math.max(1, this._lic(sh, "auto_miner")); return Math.max(30_000, AUTO_MINER_BASE_MS - AUTO_MINER_STEP_MS * (lvl - 1)); }
   cmdDock(pid, shipId, dock) {
@@ -495,7 +503,7 @@ export class World {
       if (sh.auto.on && now >= sh.auto.next) {
         const cands = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(sh.owner, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
         if (!cands.length) sh.auto.on = false;
-        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (!L.on) this._laserStart(sh, L, i, r.tg.id, r.f, now); else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
+        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on) this._laserStart(sh, L, i, r.tg.id, r.f, now); else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;
       // the ore lands when the cycle completes, then the laser repeats (unless told not to)
@@ -613,10 +621,11 @@ export class World {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
-        entry.lasers = s.lasers.map((l) => ({ on: l.on, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / (l.dur || MINING_CYCLE_MS)) : 0, dur: l.dur || MINING_CYCLE_MS }));
+        entry.lasers = s.lasers.map((l) => ({ on: l.on, off: !!l.off, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / (l.dur || MINING_CYCLE_MS)) : 0, dur: l.dur || MINING_CYCLE_MS }));
         entry.laserRange = +this._laserRange(s).toFixed(3);
         const cyc = this._autoCycleMs(s);
-        entry.auto = { on: s.auto.on, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
+        entry.yieldM3s = +this._yieldM3s(s).toFixed(3);
+        entry.auto = { on: s.auto.on, off: !!s.auto.off, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
         entry.mining = s.lasers.some((l) => l.on);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
         entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;

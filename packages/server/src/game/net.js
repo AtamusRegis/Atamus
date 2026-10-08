@@ -100,6 +100,7 @@ export function attachGameServer(httpServer) {
         case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
         case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
         case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
+        case "power": world.cmdPower(pid, m.ship, m.mod, m.idx, !!m.on); break;
         case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
         case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
         case "buy": world.cmdBuy(pid, m.item, m.qty); break;
