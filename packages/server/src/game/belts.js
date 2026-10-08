@@ -5,11 +5,12 @@ import { STATION_POS, STARGATE_CELLS } from "./geometry.js";
 
 // Five ores, one per rarity tier. Weight = chance a belt carries it.
 export const ORES = [
-  { key: "ironstone", name: "Ironstone", rarity: "common",    weight: 60, color: "#8d8378" },
-  { key: "cuprite",   name: "Cuprite",   rarity: "uncommon",  weight: 25, color: "#c27a46" },
-  { key: "cobaltine", name: "Cobaltine", rarity: "rare",      weight: 10, color: "#4f78c8" },
-  { key: "iridite",   name: "Iridite",   rarity: "very rare", weight: 4,  color: "#b9a8d6" },
-  { key: "starglass", name: "Starglass", rarity: "legendary", weight: 1,  color: "#bfeeff" },
+  // rock = the sprite family (assets/rocks/rock_<family>_<200|500|1000>.webp)
+  { key: "ironstone", name: "Ironstone", rarity: "common",    weight: 60, color: "#8d8378", rock: "cratered"  },
+  { key: "cuprite",   name: "Cuprite",   rarity: "uncommon",  weight: 25, color: "#c27a46", rock: "elongated" },
+  { key: "cobaltine", name: "Cobaltine", rarity: "rare",      weight: 10, color: "#4f78c8", rock: "fractured" },
+  { key: "iridite",   name: "Iridite",   rarity: "very rare", weight: 4,  color: "#b9a8d6", rock: "bubble"    },
+  { key: "starglass", name: "Starglass", rarity: "legendary", weight: 1,  color: "#bfeeff", rock: "layered"   },
 ];
 
 export const BELT = {
@@ -28,8 +29,8 @@ const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math
 const insideHex = (x, y, margin) => NORMALS.every(([nx, ny]) => x * nx + y * ny <= APO - margin);
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 
-// rock radius (km) from its ore volume: bigger rocks hold more, with a nice spread
-const rockRadiusKm = (m3) => Math.min(0.42, Math.max(0.03, 0.03 * Math.cbrt(m3 / 500)));
+// rock size classes match the sprite sheet (metres across); bigger rocks hold more ore
+const SIZES = [{ m: 200, w: 55, vol: 1 }, { m: 500, w: 32, vol: 6 }, { m: 1000, w: 13, vol: 25 }];
 
 export function generateBelts(ownerId) {
   const rnd = mulberry32(seedOf("belts:" + ownerId));
@@ -68,16 +69,16 @@ export function generateBelts(ownerId) {
     const rocks = [];
     let raw = [];
     for (let i = 0; i < n; i++) {
-      // ore type by share, volume lognormal-ish for size variety
+      // ore type by share; size class by weight; volume scales with size (with jitter)
       let r = rnd() * sh, ti = 0; for (let k = 0; k < shares.length; k++) { r -= shares[k]; if (r <= 0) { ti = k; break; } }
-      const m3 = Math.exp(pick(0, 2.6));                           // 1..~13.5 relative units
-      raw.push({ ti, m3 });
+      let w = rnd() * 100, sz = SIZES[0]; for (const c of SIZES) { w -= c.w; if (w <= 0) { sz = c; break; } }
+      raw.push({ ti, size: sz.m, m3: sz.vol * pick(0.7, 1.3) });
     }
     const rawSum = raw.reduce((s, q) => s + q.m3, 0);
     for (let i = 0; i < n; i++) {
       const q = raw[i];
       const m3 = Math.round((q.m3 / rawSum) * totalM3);
-      const rad = rockRadiusKm(m3);
+      const rad = q.size / 2000;                                   // collision radius, km
       let placed = false;
       for (let t = 0; t < 60 && !placed; t++) {
         const a = facing + pick(-Math.PI / 2, Math.PI / 2);
@@ -86,7 +87,7 @@ export function generateBelts(ownerId) {
         const x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d;
         if (!insideHex(x, y, rad + 0.5)) continue;
         if (rocks.some((o) => dist(x, y, o.x, o.y) < o.r + rad + 0.06)) continue;
-        rocks.push({ id: `${bi}:${i}`, x: +x.toFixed(3), y: +y.toFixed(3), r: +rad.toFixed(3), ore: types[q.ti].key, m3, seed: Math.floor(rnd() * 1e6) });
+        rocks.push({ id: `${bi}:${i}`, x: +x.toFixed(3), y: +y.toFixed(3), r: rad, size: q.size, ore: types[q.ti].key, m3, rot: +(rnd() * Math.PI * 2).toFixed(3) });
         placed = true;
       }
     }

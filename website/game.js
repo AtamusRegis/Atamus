@@ -227,34 +227,25 @@
   const SUN_RADIUS_KM = 4;   // stylised star disc; glow/flare scale off it
   function sunRadiusPx() { return Math.max(14, Math.min(0.28 * Math.min(innerWidth, innerHeight), SUN_RADIUS_KM * scale())); }
 
-  // ---- asteroid belts: beacon + crescent of rocks, drawn at true size ----
-  const oreColor = {}; const rockShape = new Map();
-  function shapeFor(rock) {
-    let sh = rockShape.get(rock.id); if (sh) return sh;
-    let a = rock.seed | 0; const rnd = () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-    const n = 7 + Math.floor(rnd() * 4), pts = [];
-    for (let i = 0; i < n; i++) { const ang = i / n * Math.PI * 2, r = 0.72 + rnd() * 0.33; pts.push([Math.cos(ang) * r, Math.sin(ang) * r]); }
-    sh = { pts, shade: 0.85 + rnd() * 0.3, rot: rnd() * Math.PI * 2 }; rockShape.set(rock.id, sh); return sh;
-  }
-  function shade(hex, k) { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, ((n >> 16) & 255) * k) | 0, g = Math.min(255, ((n >> 8) & 255) * k) | 0, b = Math.min(255, (n & 255) * k) | 0; return `rgb(${r},${g},${b})`; }
+  // ---- asteroid belts: beacon + crescent of rocks, sprites drawn at true size ----
+  const oreRock = {}; const rockArt = {};
+  function rockImg(family, size) { const k = family + "_" + size; if (!rockArt[k]) { const i = new Image(); i.src = "assets/rocks/rock_" + k + ".webp"; rockArt[k] = i; } return rockArt[k]; }
   function drawBelts(place) {
     const home = place.get(mySys()); if (!home || !cfg) return;
-    if (!Object.keys(oreColor).length) for (const o of cfg.ores || []) oreColor[o.key] = o.color;
+    if (!Object.keys(oreRock).length) for (const o of cfg.ores || []) oreRock[o.key] = { rock: o.rock, color: o.color };
     const s = scale();
     for (const belt of belts) {
-      // rocks
       for (const rk of belt.rocks) {
-        const rPx = Math.max(1.2, rk.r * s);
         const x = gx2s(home.gx + rk.x), y = gy2s(home.gy + rk.y);
-        if (x < -20 || y < -20 || x > innerWidth + 20 || y > innerHeight + 20) continue;
-        const col = oreColor[rk.ore] || "#999";
-        if (rPx < 2.5) { ctx.fillStyle = col; ctx.fillRect(x - rPx / 2, y - rPx / 2, rPx, rPx); continue; }
-        const sh = shapeFor(rk);
-        ctx.save(); ctx.translate(x, y); ctx.rotate(sh.rot); ctx.beginPath();
-        sh.pts.forEach(([px, py], i) => i ? ctx.lineTo(px * rPx, py * rPx) : ctx.moveTo(px * rPx, py * rPx)); ctx.closePath();
-        ctx.fillStyle = shade(col, sh.shade); ctx.fill();
-        if (rPx > 6) { ctx.lineWidth = 1; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.stroke(); }
-        ctx.restore();
+        const wPx = (rk.size / 1000) * s;                        // rock width at true scale
+        if (x < -wPx || y < -wPx || x > innerWidth + wPx || y > innerHeight + wPx) continue;
+        const o = oreRock[rk.ore] || { rock: "cratered", color: "#999" };
+        if (wPx < 2.2) { ctx.fillStyle = o.color; const d = Math.max(1.2, wPx); ctx.fillRect(x - d / 2, y - d / 2, d, d); continue; }
+        const img = rockImg(o.rock, rk.size);
+        if (!img.naturalWidth) continue;
+        const hPx = wPx * (img.naturalHeight / img.naturalWidth);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rk.rot); ctx.imageSmoothingEnabled = wPx > 40;
+        ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
       }
       // beacon: small fixed-size marker at the belt centre
       const bx = gx2s(home.gx + belt.x), by = gy2s(home.gy + belt.y);
