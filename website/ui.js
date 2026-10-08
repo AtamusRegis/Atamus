@@ -737,7 +737,7 @@
         const row = el("div", { class: "tab-row" });
         for (const t of tabs) {
           const active = invKey(t) === invKey(ref);
-          const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); } } }, t.owner === "station" ? "Hangar" : (t.inv === "ore" ? "Ore" : "Cargo"));
+          const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); persistWin(key); } } }, t.owner === "station" ? "Hangar" : (t.inv === "ore" ? "Ore" : "Cargo"));
           b.addEventListener("dragover", (e) => { e.preventDefault(); b.classList.add("drop"); });
           b.addEventListener("dragleave", () => b.classList.remove("drop"));
           b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: { ...t, slot: null } }); });
