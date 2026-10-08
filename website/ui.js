@@ -394,7 +394,7 @@
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); L[k] = { fill, txt }; return el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       if (u.kind === "ship") {
         const st = u.stats || {};
-        body.append(row("Type", u.name), row("Speed", Math.round((st.speedKmps || 0) * 1000) + " m/s"), bar("Shield", "shield"), bar("Hull", "hull"));
+        body.append(row("Type", u.name));
         const btns = el("div", { class: "unit-btns" });
         if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
         if (lockedRock && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn" + (u.mining ? " off" : ""), onclick: () => A.send({ t: "mine", ship: u.id, on: !u.mining }) }, u.mining ? "Stop Mining" : "Mine (X)"));
@@ -418,11 +418,7 @@
     }
     if (!u) return;
     const L = w.live, setBar = (k, a, b, txt) => { const x = L[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
-    if (u.kind === "ship") {
-      const st = u.stats || {};
-      const maxS = st.shield || 0, maxH = st.hp || 0, sh = u.shield != null ? u.shield : maxS, hp = u.hp != null ? u.hp : maxH;
-      setBar("Shield", sh, maxS, Math.round(sh) + " / " + maxS); setBar("Hull", hp, maxH, Math.round(hp) + " / " + maxH);
-    } else if (u.kind === "station") {
+    if (u.kind === "station") {
       const h = A.inv.hangar; if (h) setBar("Hangar", h.used, h.cap, fmtM3(h.used, h.cap));
     } else if (u.kind === "gate") {
       const active = u.state === "active";
@@ -437,6 +433,103 @@
     // a docked ship's holds are reached through the station inventory: close its own windows
     for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || wins[key].win.hidden) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
   });
+
+
+  // ---- bottom HUD for the selected ship: target icons / status / hotbar ----
+  const hud = el("div", { id: "hud", hidden: "" });
+  const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
+  hud.append(hudTargets, hudStatus, hudBar); document.body.append(hud);
+  const HB_SLOTS = 8;
+  saved.hotbar = Array.isArray(saved.hotbar) && saved.hotbar.length === HB_SLOTS ? saved.hotbar : [{ k: "laser", i: 0 }, { k: "laser", i: 1 }, null, null, null, null, null, null];
+  const tgKey = (tg) => tg.kind + ":" + tg.id;
+  let hudShip = null, selTarget = null, hudSig = "", hudLive = {}, tgOrder = [];
+  const H = {};  // status row live elements
+  function hudShipData() { const A = window.Atamus, u = A.unit; return u && u.kind === "ship" ? A.ship(u.id) : null; }
+  function orderedTargets(sh) {
+    const keys = (sh.targets || []).map(tgKey);
+    tgOrder = tgOrder.filter((k) => keys.includes(k)); for (const k of keys) if (!tgOrder.includes(k)) tgOrder.push(k);
+    return tgOrder.map((k) => sh.targets.find((t) => tgKey(t) === k));
+  }
+  function clickLaser(sh, idx) {
+    const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L) return;
+    const rock = selTarget && selTarget.kind === "rock" ? selTarget.id : null;
+    if (L.on && (!rock || L.rock === rock)) A.send({ t: "laser", ship: sh.id, idx, on: false });
+    else A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
+  }
+  // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells
+  function reorderable(cell, kind, index, onDrop) {
+    cell.setAttribute("draggable", "true");
+    cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ [kind]: index })); e.dataTransfer.effectAllowed = "move"; });
+    cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
+    cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
+    cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (d && d[kind] != null) onDrop(d[kind], index); });
+    cell.addEventListener("touchdrop", (e) => { const d = e.detail; if (d && d[kind] != null) onDrop(d[kind], index); });
+    touchDrag(cell, { [kind]: index }, () => {});
+  }
+  function renderHud() {
+    const A = window.Atamus, sh = hudShipData();
+    if (!sh) { if (!hud.hidden) { hud.hidden = true; A.hud.line = null; } hudShip = null; return; }
+    if (hudShip !== sh.id) { hudShip = sh.id; selTarget = null; tgOrder = []; }
+    hud.hidden = false;
+    const t = (A.cfg.shipTypes || {})[sh.type] || {};
+    const targets = orderedTargets(sh);
+    if (selTarget && !targets.some((x) => x && tgKey(x) === tgKey(selTarget))) selTarget = null;
+    const sig = [sh.id, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.rock || "")).join(","), saved.hotbar.map((h) => h ? h.k + h.i : "-").join(",")].join("|");
+    if (sig !== hudSig) {
+      hudSig = sig; hudLive = { dist: {}, tip: null };
+      // targets
+      hudTargets.innerHTML = "";
+      targets.forEach((tg, idx) => {
+        const info = A.targetInfo(sh, tg) || {};
+        const isSel = selTarget && tgKey(selTarget) === tgKey(tg);
+        const cell = el("div", { class: "tgt" + (tg.locked ? " locked" : "") + (isSel ? " sel" : "") });
+        const ring = el("div", { class: "tgt-ring" }, info.icon ? el("img", { src: info.icon, alt: "", draggable: "false" }) : null);
+        const x = el("button", { class: "tgt-x", title: "Untarget", onclick: (e) => { e.stopPropagation(); A.send({ t: "lock", ship: sh.id, kind: tg.kind, id: tg.id }); } }, "×");
+        const dist = el("div", { class: "tgt-dist" });
+        hudLive.dist[tgKey(tg)] = dist;
+        cell.append(ring, x, dist);
+        if (isSel) { const tip = el("div", { class: "tgt-tip" }, el("div", { class: "tgt-tip-name" }, info.name || ""), el("div", { class: "tgt-tip-sub" })); hudLive.tip = tip.lastChild; hudLive.tipCell = cell; cell.append(tip); }
+        cell.addEventListener("click", () => { selTarget = isSel ? null : { kind: tg.kind, id: tg.id }; renderHud(); });
+        reorderable(cell, "tg", idx, (from, to) => { const k = tgOrder.splice(from, 1)[0]; tgOrder.splice(to, 0, k); hudSig = ""; renderHud(); });
+        hudTargets.append(cell);
+      });
+      // status
+      hudStatus.innerHTML = "";
+      const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); H[k] = { fill, txt }; return el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
+      H.speed = el("span", { class: "hud-speed" });
+      hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
+      // hotbar
+      hudBar.innerHTML = "";
+      saved.hotbar.forEach((it, idx) => {
+        const slot = el("div", { class: "hb-slot" });
+        if (it && it.k === "laser") {
+          const L = (sh.lasers || [])[it.i];
+          if (L) {
+            slot.classList.add("filled"); if (L.on) slot.classList.add("on");
+            slot.append(el("div", { class: "hb-icon laser" }, el("span", {}, "ML" + (it.i + 1))));
+            slot.title = "Mining Laser " + (it.i + 1) + (L.on ? " — mining" : "");
+            slot.addEventListener("click", () => clickLaser(sh, it.i));
+          }
+        }
+        slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
+        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const a = saved.hotbar; [a[from], a[to]] = [a[to], a[from]]; persistAll(); hudSig = ""; renderHud(); });
+        hudBar.append(slot);
+      });
+    }
+    // live values
+    for (const tg of targets) { const d = hudLive.dist[tgKey(tg)]; const info = A.targetInfo(sh, tg); if (d && info) d.textContent = info.dist < 10 ? info.dist.toFixed(1) + " km" : Math.round(info.dist) + " km"; }
+    if (hudLive.tip && selTarget) { const info = A.targetInfo(sh, selTarget); if (info) hudLive.tip.textContent = (info.dist < 10 ? info.dist.toFixed(2) : Math.round(info.dist)) + " km" + (info.sub ? " · " + info.sub : ""); }
+    const setBar = (k, a, b, txt) => { const x = H[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
+    const maxS = t.shield || 0, maxH = t.hp || 0;
+    setBar("Shield", sh.shield ?? maxS, maxS, Math.round(sh.shield ?? maxS) + " / " + maxS); setBar("Hull", sh.hp ?? maxH, maxH, Math.round(sh.hp ?? maxH) + " / " + maxH);
+    H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
+    // line from the selected target's icon to the target on the map
+    if (selTarget && hudLive.tipCell) { const r = hudLive.tipCell.querySelector(".tgt-ring").getBoundingClientRect(); A.hud.line = { x: r.left + r.width / 2, y: r.top + r.height / 2, tg: selTarget }; }
+    else A.hud.line = null;
+  }
+  window.Atamus.bus.addEventListener("snap", renderHud);
+  window.Atamus.bus.addEventListener("select", renderHud);
+  window.Atamus.bus.addEventListener("deselect", renderHud);
 
   // ---- inventories: slot grids with drag/drop ----
   const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;
@@ -542,7 +635,7 @@
         ev.preventDefault(); clearTimeout(hold);
         if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
         ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
-        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab");
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .tgt, .hb-slot");
         if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
       };
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };

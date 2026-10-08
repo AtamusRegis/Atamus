@@ -250,3 +250,36 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
   .tab { padding: 9px 12px 11px; }
   .inv-cell { min-height: 40px; }
 }
+
+/* bottom HUD: targets / status / hotbar for the selected ship */
+#hud { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; z-index: 40; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+.hud-targets { display: flex; gap: 10px; min-height: 0; }
+.tgt { position: relative; width: 54px; display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; }
+.tgt-ring { width: 44px; height: 44px; border-radius: 50%; background: rgba(8,12,20,0.7); border: 2px solid rgba(180,220,255,0.5); display: grid; place-items: center; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.5); animation: tgtBlink 0.5s ease-in-out infinite alternate; }
+.tgt.locked .tgt-ring { border-color: rgba(255,160,70,0.9); animation: none; }
+.tgt.sel .tgt-ring { box-shadow: 0 0 0 2px rgba(255,255,255,0.75), 0 2px 8px rgba(0,0,0,0.5); }
+.tgt-ring img { width: 70%; height: 70%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+.tgt-x { position: absolute; top: -4px; right: 0; width: 18px; height: 18px; border-radius: 50%; border: none; background: rgba(20,26,38,0.95); color: var(--text-dim); font: 12px/1 inherit; cursor: pointer; display: grid; place-items: center; }
+.tgt-x:hover { color: #ff9a6a; }
+.tgt-dist { margin-top: 3px; font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tgt.drop .tgt-ring { border-color: var(--cyan); }
+.tgt-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: rgba(14,19,30,0.95); border-radius: 6px; padding: 5px 8px; font-size: 11px; white-space: nowrap; box-shadow: var(--shadow); pointer-events: none; }
+.tgt-tip-name { font-weight: 600; color: var(--text); }
+.tgt-tip-sub { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+@keyframes tgtBlink { from { opacity: .35; } to { opacity: 1; } }
+.hud-status { display: flex; gap: 14px; align-items: center; background: rgba(14,19,30,0.82); border-radius: 8px; padding: 5px 10px; box-shadow: var(--shadow); }
+.hud-bar { display: flex; align-items: center; gap: 6px; }
+.hud-bar .ubar { width: 120px; max-width: none; }
+.hud-k { font-size: 11px; color: var(--text-dim); }
+.hud-speed { font-size: 12px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-hotbar { display: flex; gap: 4px; background: rgba(14,19,30,0.82); border-radius: 8px; padding: 4px; box-shadow: var(--shadow); }
+.hb-slot { position: relative; width: 46px; height: 46px; border-radius: 6px; background: rgba(0,0,0,0.35); display: grid; place-items: center; user-select: none; }
+.hb-slot.filled { cursor: pointer; }
+.hb-slot.filled:hover { background: rgba(255,255,255,0.08); }
+.hb-slot.on { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.9); background: rgba(255,140,60,0.14); }
+.hb-slot.drop { outline: 1px solid var(--cyan); }
+.hb-icon { width: 34px; height: 34px; border-radius: 6px; display: grid; place-items: center; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+.hb-icon.laser { background: linear-gradient(135deg, #5a3a1c, #c8783c); color: #fff2dc; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.hb-num { position: absolute; left: 3px; top: 1px; font-size: 9px; color: var(--text-faint); pointer-events: none; }
+@media (pointer: coarse) { .hb-slot { width: 52px; height: 52px; } .tgt-ring { width: 50px; height: 50px; } }

@@ -24,7 +24,8 @@
     return null;
   }
   function selectUnit(u) { selectedUnit = u; bus.dispatchEvent(new CustomEvent(u ? "select" : "deselect", { detail: u })); }
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; } };
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
+    targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null } };
 
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
@@ -350,6 +351,26 @@
     ctx.stroke(); ctx.restore();
   }
 
+  // world position (home-system local, km) of a target
+  function targetWorld(tg) {
+    if (tg.kind === "rock") { for (const b of belts) { const rk = b.rocks.find((r) => r.id === tg.id); if (rk) return { x: rk.x, y: rk.y, rock: rk }; } return null; }
+    if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: g.lx, y: g.ly, gate: g } : null; }
+    if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: st.x, y: st.y }; }
+    if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const p = shipPos(o); return { x: p.x, y: p.y, ship: o }; }
+    return null;
+  }
+  // what the HUD shows for one of a ship's targets: screen point, distance, name, remaining
+  function targetInfo(sh, tg) {
+    const w = targetWorld(tg); if (!w || !cfg) return null;
+    const p = shipPos(sh), dist = Math.hypot(w.x - p.x, w.y - p.y);
+    const scr = targetScreen(curPlace, tg);
+    let name = tg.kind, sub = "";
+    if (w.rock) { const o = (cfg.ores || []).find((q) => q.key === w.rock.ore); name = (o ? o.name : w.rock.ore) + " " + w.rock.size + " m"; sub = Math.round(w.rock.m3).toLocaleString() + " m³ left"; }
+    else if (tg.kind === "gate") { name = "Stargate"; }
+    else if (tg.kind === "station") { name = "Station"; }
+    else if (w.ship) { const t = (cfg.shipTypes || {})[w.ship.type] || {}; name = t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }
+    return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + ((SHIP_TYPES[w.ship.type] ? w.ship.type : "chisel")) + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
+  }
   function targetScreen(place, tg) {
     const pl = place.get(mySys()); if (!pl) return null;
     if (tg.kind === "rock") { for (const b of belts) { const rk = b.rocks.find((r) => r.id === tg.id); if (rk) return { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) }; } return null; }
@@ -371,13 +392,14 @@
   }
   // mining beams: each laser fires from one of the ship's hardpoints to its own spot on the rock's rim
   function drawLasers(place, sh, sx, sy, h) {
-    if (!sh.mining || !sh.lasers || !sh.lasers.length) return;
+    if (!sh.lasers || !sh.lasers.some((l) => l.on)) return;
     const pl = place.get(sh.sys); if (!pl) return;
     const t = (cfg.shipTypes && cfg.shipTypes[sh.type]) || {}, hps = t.hardpoints || [[0, 0]];
     const L = (SHIP_TYPES[sh.type] || SHIP_TYPES.chisel).lengthKm * scale();
     const c = Math.cos(-h), sn = Math.sin(-h);
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     for (const l of sh.lasers) {
+      if (!l.on) continue;
       const hp = hps[l.hp] || hps[0];
       const ox = sx + (hp[0] * c - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * c) * L;
       const ex = gx2s(pl.gx + l.ax) + (Math.random() - 0.5) * 1.5, ey = gy2s(pl.gy + l.ay) + (Math.random() - 0.5) * 1.5;
@@ -502,6 +524,8 @@
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawShips(place);
+      const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target
+      if (hl) { const t = targetScreen(place, hl.tg); if (t) { ctx.save(); ctx.beginPath(); ctx.moveTo(hl.x, hl.y); ctx.lineTo(t.x, t.y); ctx.strokeStyle = "rgba(200,205,215,0.22)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); } }
     }
     requestAnimationFrame(frame);
   }
