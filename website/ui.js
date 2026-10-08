@@ -650,6 +650,13 @@
     toggleWindow("unit", true); renderUnit(wins.unit.body);
   });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
+  // a ship's inventory belongs to the selected ship: selecting something else (or nothing) closes it
+  const closeOtherShipInvs = (e) => {
+    const u = e.detail, keep = u && u.kind === "ship" ? u.id : null;
+    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || r.id === keep || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (sh && sh.docked) continue; toggleWindow(key, false); }   // docked holds belong to the station window
+  };
+  window.Atamus.bus.addEventListener("select", closeOtherShipInvs);
+  window.Atamus.bus.addEventListener("deselect", closeOtherShipInvs);
   window.Atamus.bus.addEventListener("openstation", () => openInventory({ owner: "station", inv: "hangar", h: 0 }));
   window.Atamus.bus.addEventListener("snap", () => {
     const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body);
