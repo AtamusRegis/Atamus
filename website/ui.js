@@ -394,7 +394,7 @@
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); L[k] = { fill, txt }; return el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       if (u.kind === "ship") {
         const st = u.stats || {};
-        body.append(row("Type", u.name), row("Speed", Math.round((st.speedKmps || 0) * 1000) + " m/s"), bar("Shield", "shield"), bar("Hull", "hull"), bar("Ore hold", "hold"), bar("Cargo", "hold"));
+        body.append(row("Type", u.name), row("Speed", Math.round((st.speedKmps || 0) * 1000) + " m/s"), bar("Shield", "shield"), bar("Hull", "hull"));
         const btns = el("div", { class: "unit-btns" });
         if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
         if (lockedRock && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn" + (u.mining ? " off" : ""), onclick: () => A.send({ t: "mine", ship: u.id, on: !u.mining }) }, u.mining ? "Stop Mining" : "Mine (X)"));
@@ -419,11 +419,9 @@
     if (!u) return;
     const L = w.live, setBar = (k, a, b, txt) => { const x = L[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
     if (u.kind === "ship") {
-      const st = u.stats || {}, inv = (A.inv.ships || {})[u.id] || {};
+      const st = u.stats || {};
       const maxS = st.shield || 0, maxH = st.hp || 0, sh = u.shield != null ? u.shield : maxS, hp = u.hp != null ? u.hp : maxH;
       setBar("Shield", sh, maxS, Math.round(sh) + " / " + maxS); setBar("Hull", hp, maxH, Math.round(hp) + " / " + maxH);
-      if (inv.ore) setBar("Ore hold", inv.ore.used, inv.ore.cap, fmtM3(inv.ore.used, inv.ore.cap));
-      if (inv.cargo) setBar("Cargo", inv.cargo.used, inv.cargo.cap, fmtM3(inv.cargo.used, inv.cargo.cap));
     } else if (u.kind === "station") {
       const h = A.inv.hangar; if (h) setBar("Hangar", h.used, h.cap, fmtM3(h.used, h.cap));
     } else if (u.kind === "gate") {
@@ -455,7 +453,7 @@
     const key = ref.owner === "station" ? "inv:station" : "inv:" + ref.id;   // one window per holder; tabs switch inside
     if (!invWins[key]) {
       createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b) });
-      invWins[key] = { ref }; watchInvResize(key);
+      invWins[key] = { ref, root: ref }; watchInvResize(key);
     }
     invWins[key].ref = ref;
     toggleWindow(key, true); renderInventory(key, wins[key].body);
@@ -470,7 +468,7 @@
     const w = wins[key], st = invWins[key]; if (!w || !st) return;
     const A = window.Atamus, ref = st.ref, data = invData(ref);
     const items = (A.cfg && A.cfg.items) || {}, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
-    const tabs = st.solo ? [] : invTabsFor(ref);
+    const tabs = st.solo ? [] : invTabsFor(st.root || ref);   // tabs belong to the window's holder, not the tab being viewed
     // slots flow into as many columns as the window fits; rows grow with the contents (plus one spare row)
     const CELL = 44, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth + GAP) / (CELL + GAP)));
     const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
@@ -488,6 +486,7 @@
           b.addEventListener("dragleave", () => b.classList.remove("drop"));
           b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: { ...t, slot: null } }); });
           b.addEventListener("touchdrop", (e) => A.send({ t: "inv_move", from: e.detail.ref, to: { ...t, slot: null } }));
+          holdToOpen(b, () => openInventoryAlone(t));
           row.append(b);
         }
         w.slot.append(row);
@@ -545,6 +544,19 @@
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };
       const end = () => { const tgt = over; done(); if (moved && tgt) tgt.dispatchEvent(new CustomEvent("touchdrop", { detail: payload })); };
       cell.addEventListener("touchmove", mv, { passive: false }); cell.addEventListener("touchend", end); cell.addEventListener("touchcancel", done);
+    }, { passive: true });
+  }
+
+  // Touch: hold a tab to open it as its own window (desktop uses shift-click).
+  function holdToOpen(elm, fn) {
+    elm.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 1) return;
+      const t0 = e.touches[0]; let fired = false;
+      const hold = setTimeout(() => { fired = true; if (navigator.vibrate) navigator.vibrate(15); fn(); }, 500);
+      const mv = (ev) => { const t = ev.touches[0]; if (t && Math.hypot(t.clientX - t0.clientX, t.clientY - t0.clientY) > 8) done(); };
+      const done = () => { clearTimeout(hold); elm.removeEventListener("touchmove", mv); elm.removeEventListener("touchend", end); elm.removeEventListener("touchcancel", done); };
+      const end = (ev) => { done(); if (fired) ev.preventDefault(); };
+      elm.addEventListener("touchmove", mv, { passive: true }); elm.addEventListener("touchend", end); elm.addEventListener("touchcancel", done);
     }, { passive: true });
   }
 

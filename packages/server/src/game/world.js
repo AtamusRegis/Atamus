@@ -313,7 +313,7 @@ export class World {
         const tg = rocks[i % rocks.length], f = this._rockOf(sh.owner, tg.id); if (!f) continue;
         let L = sh.lasers[i];
         if (!L || L.rock !== tg.id || now >= L.until) {
-          const a = Math.random() * Math.PI * 2, arm = t.arms[i % t.arms.length];
+          const a = Math.atan2(sh.y - f.rock.y, sh.x - f.rock.x) + (Math.random() - 0.5) * Math.PI * 0.9, arm = t.arms[i % t.arms.length]; // a spot on the rim facing the ship
           L = sh.lasers[i] = { rock: tg.id, hp: arm[Math.floor(Math.random() * arm.length)], ax: +(f.rock.x + Math.cos(a) * f.rock.r).toFixed(4), ay: +(f.rock.y + Math.sin(a) * f.rock.r).toFixed(4), until: now + MINING_CYCLE_MS, carry: 0 };
         }
         const def = Inv.ITEMS[f.rock.ore];

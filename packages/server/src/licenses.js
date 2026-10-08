@@ -5,7 +5,7 @@
 // Authored in HOURS per level. DEV_TIME_SCALE compresses them so training is
 // testable during development; set it to 1 for the real multi-week timeline.
 const HOUR = 3600 * 1000;
-const DEV_TIME_SCALE = 1 / 3600; // dev: 1 design-hour trains in 1 second. Production: 1.
+const DEV_TIME_SCALE = 1; // 1 = real design times. (1/3600 trains a design-hour per second for testing.)
 const hrs = (...perLevel) => perLevel.map((h) => Math.round(h * HOUR * DEV_TIME_SCALE));
 
 export const CATEGORIES = [
