@@ -74,19 +74,19 @@ export const LICENSES = [
   {
     key: "gleaner", name: "Hauler", category: "industry", maxLevel: 8,
     desc: "Pilot haulers.",
-    bonus: "efficiency flying Haulers", hull: true, flies: { 3: ["Barrow"] },
+    bonus: "efficiency flying Haulers", hull: true, flies: { 3: ["Drover"] },
     requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 10, 20, 35, 50, 15, 30, 50),
   },
   {
     key: "lodestar", name: "Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the compact industrial command ship.",
-    bonus: "efficiency flying Industrial Command Ships", hull: true, flies: { 3: ["Aldane"] },
+    bonus: "efficiency flying Industrial Command Ships", hull: true, flies: { 3: ["Foreman"] },
     requirements: reqLic(["barges", 5], ["gleaner", 5]), levelTimes: hrs(10, 25, 50, 85, 120, 25, 50, 70),
   },
   {
     key: "motherlode", name: "Capital Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the flagship industrial command ship.",
-    bonus: "efficiency flying Capital Industrial Command Ships", hull: true, flies: { 3: ["Hadrian"] },
+    bonus: "efficiency flying Capital Industrial Command Ships", hull: true, flies: { 3: ["Overseer"] },
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
   // ============================================================
@@ -95,19 +95,19 @@ export const LICENSES = [
   {
     key: "warden_frigate", name: "Escort Frigate", category: "combat", maxLevel: 8,
     desc: "Pilot escort frigates.",
-    bonus: "efficiency flying Escort Frigates", hull: true, flies: { 3: ["Kite"] },
+    bonus: "efficiency flying Escort Frigates", hull: true, flies: { 3: ["Picket"] },
     requirements: [], levelTimes: hrs(5, 10, 10, 15, 20, 15, 25, 35),
   },
   {
     key: "warden_cruiser", name: "Escort Cruiser", category: "combat", maxLevel: 8,
     desc: "Pilot escort cruisers.",
-    bonus: "efficiency flying Escort Cruisers", hull: true, flies: { 3: ["Tribune"] },
+    bonus: "efficiency flying Escort Cruisers", hull: true, flies: { 3: ["Sentry"] },
     requirements: reqLic(["warden_frigate", 5]), levelTimes: hrs(15, 30, 50, 65, 80, 30, 50, 65),
   },
   {
     key: "warden_battleship", name: "Escort Battleship", category: "combat", maxLevel: 8,
     desc: "Pilot escort battleships.",
-    bonus: "efficiency flying Escort Battleships", hull: true, flies: { 3: ["Leonidas"] },
+    bonus: "efficiency flying Escort Battleships", hull: true, flies: { 3: ["Bastion"] },
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
 ];
