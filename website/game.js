@@ -310,14 +310,24 @@
     ctx.beginPath(); ctx.arc(t.x, t.y, r, -a, a); ctx.stroke();
     if (!tg.locked && tg.p != null) { ctx.beginPath(); ctx.arc(t.x, t.y, r + 4, -Math.PI / 2, -Math.PI / 2 + tg.p * Math.PI * 2); ctx.strokeStyle = "rgba(180,220,255,0.6)"; ctx.lineWidth = 1; ctx.stroke(); }
     ctx.restore();
-    // mining laser
-    if (sh.mining === tg.id && tg.kind === "rock") {
-      const jit = (Math.random() - 0.5) * 1.5;
-      ctx.save(); ctx.globalCompositeOperation = "lighter";
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(t.x + jit, t.y + jit); ctx.strokeStyle = "rgba(255,140,60,0.35)"; ctx.lineWidth = 4; ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(t.x + jit, t.y + jit); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.2; ctx.stroke();
-      ctx.restore();
+  }
+  // mining beams: each laser fires from one of the ship's hardpoints to its own spot on the rock's rim
+  function drawLasers(place, sh, sx, sy, h) {
+    if (!sh.mining || !sh.lasers || !sh.lasers.length) return;
+    const pl = place.get(sh.sys); if (!pl) return;
+    const t = (cfg.shipTypes && cfg.shipTypes[sh.type]) || {}, hps = t.hardpoints || [[0, 0]];
+    const L = (SHIP_TYPES[sh.type] || SHIP_TYPES.chisel).lengthKm * scale();
+    const c = Math.cos(-h), sn = Math.sin(-h);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const l of sh.lasers) {
+      const hp = hps[l.hp] || hps[0];
+      const ox = sx + (hp[0] * c - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * c) * L;
+      const ex = gx2s(pl.gx + l.ax) + (Math.random() - 0.5) * 1.5, ey = gy2s(pl.gy + l.ay) + (Math.random() - 0.5) * 1.5;
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,140,60,0.35)"; ctx.lineWidth = 4; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,240,200,0.8)"; ctx.fill();
     }
+    ctx.restore();
   }
 
   function drawBelts(place) {
@@ -397,6 +407,7 @@
         if (rr > 8) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI * 2); ctx.setLineDash([2, 5]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,200,120,0.35)"; ctx.stroke(); ctx.restore(); }
       }
       if (sh.mine && sh.targets) for (const tg of sh.targets) drawTarget(place, sh, sx, sy, tg);
+      if (sh.mine) drawLasers(place, sh, sx, sy, p.h);
     }
     // drag selection box
     if (selBox) { ctx.save(); ctx.fillStyle = "rgba(79,210,255,0.08)"; ctx.strokeStyle = "rgba(79,210,255,0.7)"; ctx.lineWidth = 1; ctx.fillRect(selBox.x0, selBox.y0, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.strokeRect(selBox.x0 + 0.5, selBox.y0 + 0.5, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.restore(); }
