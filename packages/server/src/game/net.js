@@ -42,7 +42,7 @@ export function attachGameServer(httpServer) {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
       switch (m.t) {
         case "gate": world.cmdGate(pid, m.gate, !!m.open); break;
-        case "chat": world.cmdChat(pid, m.text, m.channel); break;
+        case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
       }
     });
     ws.on("close", () => world.removePlayer(pid));

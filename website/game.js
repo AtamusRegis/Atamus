@@ -21,6 +21,11 @@
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.png";
 
+  // player's starting ship — a Chisel, drawn at true scale (128 m long)
+  const shipImg = new Image(); let shipImgReady = false;
+  shipImg.onload = () => (shipImgReady = true); shipImg.src = "assets/chisel.webp";
+  const CHISEL_LEN_KM = 0.128; // 128 m along the long axis
+
   let systemRadius = 250, placeDist = 650;
   function computeSystemRadius() { let m = 0; for (const c of cfg.cells) m = Math.max(m, Math.hypot(c.x, c.y)); systemRadius = m + cfg.cellCircumradius; placeDist = systemRadius * 2.3; }
 
@@ -107,6 +112,16 @@
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
+  function drawShip(place) {
+    if (!shipImgReady || !shipImg.naturalWidth) return;
+    const home = place.get(mySys()); if (!home) return;
+    const wPx = CHISEL_LEN_KM * scale();
+    if (wPx < 0.4) return;                 // smaller than a pixel at this zoom
+    const hPx = wPx * (shipImg.naturalHeight / shipImg.naturalWidth);
+    const sx = gx2s(home.gx), sy = gy2s(home.gy);   // station at system center
+    ctx.save(); ctx.drawImage(shipImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+  }
+
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height); gateButtons = [];
@@ -123,6 +138,7 @@
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
       for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, R); gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
+      drawShip(place);
     }
     requestAnimationFrame(frame);
   }

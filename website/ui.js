@@ -95,6 +95,7 @@
         e.preventDefault(); e.stopPropagation();
         const r = win.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top;
         win.style.maxHeight = "none";
+        const content = win.querySelector(".win-body, .pop-inner");
         const mv = (ev) => {
           const dx = ev.clientX - sx, dy = ev.clientY - sy;
           let w = sw, hh = sh, l = sl, t = st;
@@ -103,6 +104,11 @@
           if (dir.includes("w")) { w = Math.max(MIN_W, sw - dx); l = sl + (sw - w); }
           if (dir.includes("n")) { hh = Math.max(MIN_H, sh - dy); t = st + (sh - hh); }
           win.style.width = w + "px"; win.style.height = hh + "px"; win.style.left = l + "px"; win.style.top = t + "px";
+          // never shrink horizontally past what the content needs
+          if (content && (dir.includes("e") || dir.includes("w"))) {
+            const over = content.scrollWidth - content.clientWidth;
+            if (over > 0) { w += over; if (dir.includes("w")) l -= over; win.style.width = w + "px"; win.style.left = l + "px"; }
+          }
         };
         const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); if (onEnd) onEnd(); };
         addEventListener("mousemove", mv); addEventListener("mouseup", up);
@@ -366,37 +372,102 @@
 
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";
-  const unread = { local: false, corp: false };
+  const unread = {};                       // keyed by tab id (local / corp / w:Name)
+  const whisperPartners = [];              // names with an open whisper thread
+  const myName = () => (window.Atamus.me && window.Atamus.me.name) || "";
+  const wKey = (name) => "w:" + name;
   function viewing(ch) { const w = wins.chat; return w && !w.win.hidden && chatTab === ch; }
   function updateChatGlow() {
     const w = wins.chat;
-    // tab glow (when window open)
     if (w && !w.win.hidden && w.slot) { for (const b of w.slot.querySelectorAll(".tab")) { const k = b.dataset.ch; b.classList.toggle("unread", k !== chatTab && !!unread[k]); } }
-    // window-button glow (when any unread and window closed)
+    const anyUnread = Object.values(unread).some(Boolean);
     const btn = panel.querySelector('.wbtn[data-id="chat"]');
-    if (btn) btn.classList.toggle("unread", (!w || w.win.hidden) && (unread.local || unread.corp));
+    if (btn) btn.classList.toggle("unread", (!w || w.win.hidden) && anyUnread);
   }
   function pushChat(ch, msg) {
+    if (!chat[ch]) chat[ch] = [];
     chat[ch].push(msg);
     if (viewing(ch)) appendChatLine(wins.chat.body.querySelector(".chat-log"), msg);
     else { unread[ch] = true; updateChatGlow(); }
   }
-  function appendChatLine(log, msg) { if (!log) return; const d = el("div", msg.sys ? { class: "sys" } : {}, msg.sys ? "» " + msg.text : [el("span", { class: "who" }, msg.from + ": "), msg.text]); log.append(d); log.scrollTop = log.scrollHeight; }
-  window.Atamus.bus.addEventListener("chat", (e) => { const m = e.detail; const ch = m.ch === "corp" ? "corp" : "local"; pushChat(ch, { from: m.from, text: m.text }); });
+  function openWhisper(name) {
+    if (!name || name === myName()) return;
+    if (!chat[wKey(name)]) chat[wKey(name)] = [];
+    if (!whisperPartners.includes(name)) whisperPartners.push(name);
+    chatTab = wKey(name);
+    toggleWindow("chat", true);
+    if (wins.chat.render) wins.chat.render(wins.chat.body);
+  }
+  function closeWhisper(name) {
+    const i = whisperPartners.indexOf(name); if (i >= 0) whisperPartners.splice(i, 1);
+    delete unread[wKey(name)];
+    if (chatTab === wKey(name)) chatTab = "local";
+    if (wins.chat && !wins.chat.win.hidden) wins.chat.render(wins.chat.body);
+  }
+  function appendChatLine(log, msg) {
+    if (!log) return;
+    let node;
+    if (msg.sys) node = el("div", { class: "sys" }, "» " + msg.text);
+    else {
+      const who = el("span", { class: "who", "data-name": msg.from }, msg.from + ": ");
+      who.addEventListener("contextmenu", (e) => { e.preventDefault(); if (msg.from !== myName()) showCtxMenu(e.clientX, e.clientY, [["Whisper " + msg.from, () => openWhisper(msg.from)]]); });
+      node = el("div", {}, who, msg.text);
+    }
+    log.append(node); log.scrollTop = log.scrollHeight;
+  }
+  window.Atamus.bus.addEventListener("chat", (e) => {
+    const m = e.detail;
+    if (m.ch === "whisper") {
+      const partner = (m.from === myName()) ? m.to : m.from;   // thread is keyed by the other person
+      if (!whisperPartners.includes(partner)) whisperPartners.push(partner);
+      pushChat(wKey(partner), { from: m.from, text: m.text });
+      if (wins.chat && !wins.chat.win.hidden && !viewing(wKey(partner))) wins.chat.render(wins.chat.body);
+    } else {
+      pushChat(m.ch === "corp" ? "corp" : "local", { from: m.from, text: m.text });
+    }
+  });
   window.Atamus.bus.addEventListener("sys", (e) => pushChat("local", { sys: true, text: e.detail.text }));
 
   function renderChat(body) {
-    unread[chatTab] = false;               // viewing this channel clears its unread
+    unread[chatTab] = false;               // viewing a channel clears its unread
     const slot = wins.chat && wins.chat.slot;
-    if (slot) { slot.innerHTML = ""; slot.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, n]) =>
-      el("button", { class: "tab" + (k === chatTab ? " active" : "") + (k !== chatTab && unread[k] ? " unread" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, n)))); }
+    if (slot) {
+      slot.innerHTML = "";
+      const tabs = [["local", "Local"], ["corp", "Corp"], ...whisperPartners.map((n) => [wKey(n), n, n])];
+      const row = el("div", { class: "tab-row" });
+      for (const [k, label, wn] of tabs) {
+        const btn = el("button", { class: "tab" + (k === chatTab ? " active" : "") + (k !== chatTab && unread[k] ? " unread" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, label);
+        if (wn) btn.append(el("span", { class: "tab-x", title: "Close", onclick: (e) => { e.stopPropagation(); closeWhisper(wn); } }, "×"));
+        row.append(btn);
+      }
+      slot.append(row);
+    }
     body.innerHTML = "";
     const log = el("div", { class: "chat-log" });
-    for (const m of chat[chatTab]) appendChatLine(log, m);
-    const input = el("input", { class: "text-input", maxlength: "240", placeholder: "Message " + (chatTab === "corp" ? "Delve Holdings" : "local") + "…" });
-    const form = el("form", { class: "chat-form", onsubmit: (e) => { e.preventDefault(); const t = input.value.trim(); if (t) window.Atamus.send({ t: "chat", text: t, channel: chatTab }); input.value = ""; } }, input);
+    for (const m of (chat[chatTab] || [])) appendChatLine(log, m);
+    const isW = chatTab.startsWith("w:");
+    const ph = isW ? "Whisper " + chatTab.slice(2) : "Message " + (chatTab === "corp" ? "Delve Holdings" : "local");
+    const input = el("input", { class: "text-input", maxlength: "240", placeholder: ph + "…" });
+    const form = el("form", { class: "chat-form", onsubmit: (e) => {
+      e.preventDefault(); const t = input.value.trim(); if (!t) return;
+      if (isW) window.Atamus.send({ t: "chat", text: t, channel: "whisper", to: chatTab.slice(2) });
+      else window.Atamus.send({ t: "chat", text: t, channel: chatTab });
+      input.value = "";
+    } }, input);
     body.append(log, form); log.scrollTop = log.scrollHeight;
     updateChatGlow();
+  }
+
+  // ---- custom right-click context menu ----
+  let ctxMenu = null;
+  function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
+  function showCtxMenu(x, y, items) {
+    closeCtxMenu();
+    ctxMenu = el("div", { class: "ctx-menu" }, items.map(([label, fn]) => el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label)));
+    document.body.appendChild(ctxMenu);
+    const r = ctxMenu.getBoundingClientRect();
+    ctxMenu.style.left = Math.min(x, innerWidth - r.width - 6) + "px";
+    ctxMenu.style.top = Math.min(y, innerHeight - r.height - 6) + "px";
   }
 
   function flash(text) { const s = document.getElementById("status"); if (!s) return; s.textContent = text; s.className = "status err"; setTimeout(() => s.classList.add("hidden"), 2500); }
@@ -408,8 +479,14 @@
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 230, render: renderChat });
     renderPanel();
 
-    // close any open custom dropdown when clicking elsewhere
-    document.addEventListener("mousedown", (e) => { if (openMenu && !(e.target instanceof Element && e.target.closest(".dd"))) closeMenu(); });
+    // close any open custom dropdown / context menu when clicking elsewhere
+    document.addEventListener("mousedown", (e) => {
+      if (openMenu && !(e.target instanceof Element && e.target.closest(".dd"))) closeMenu();
+      if (ctxMenu && !(e.target instanceof Element && e.target.closest(".ctx-menu"))) closeCtxMenu();
+    });
+    addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMenu(); closeCtxMenu(); } });
+    // right-click is used in-game — suppress the browser's native context menu
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
 
     // restore windows the user had open last session
     for (const id in wins) { if (saved.win[id] && saved.win[id].open) toggleWindow(id, true); }

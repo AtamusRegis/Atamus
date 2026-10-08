@@ -49,10 +49,26 @@ export class World {
     }
   }
 
-  cmdChat(pid, text, channel) {
+  cmdChat(pid, text, channel, to) {
     const p = this.players.get(pid);
     if (!p || typeof text !== "string") return;
     const clean = text.trim().slice(0, 240); if (!clean) return;
+
+    if (channel === "whisper") {
+      const target = String(to || "").trim();
+      if (!target) return;
+      const now = Date.now();
+      const msg = JSON.stringify({ t: "chat", ch: "whisper", from: p.name, to: target, text: clean, ts: now });
+      let delivered = false;
+      for (const other of this.players.values()) {
+        if (other.offline || other.name !== target) continue;
+        other.send(msg); delivered = true;
+      }
+      p.send(msg); // echo to sender so it shows in their whisper thread
+      if (!delivered) p.send(JSON.stringify({ t: "sys", text: `${target} is not online.` }));
+      return;
+    }
+
     const ch = channel === "corp" ? "corp" : "local";
     const msg = JSON.stringify({ t: "chat", ch, from: p.name, text: clean, ts: Date.now() });
     if (ch === "corp") {
