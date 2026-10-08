@@ -370,6 +370,25 @@
     render();
   }
 
+  // ---- selected unit (structures now; ships later) ----
+  const fmtClock = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60; return h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0"); };
+  function renderUnit(body) {
+    const w = wins.unit, u = window.Atamus.unit;
+    body.innerHTML = "";
+    if (!u) { if (w) w.slot.textContent = "Selection"; body.append(el("div", { class: "muted" }, "Nothing selected.")); return; }
+    if (w) w.slot.textContent = u.name;
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    if (u.kind === "gate") {
+      const active = u.state === "active";
+      const fuel = active ? Math.min(u.fuelMs, u.sessionRemMs ?? u.fuelMs) : u.fuelMs;
+      body.append(row("Fuel", fmtClock(fuel)), row("Status", active ? (u.connToSys ? "Connected" : "Searching…") : "Offline"));
+      if (u.mine) body.append(el("button", { class: "btn-primary2 unit-btn" + (active ? " off" : ""), onclick: () => window.Atamus.send({ t: "gate", gate: u.id, open: !active }) }, active ? "Turn Off" : "Turn On"));
+    }
+  }
+  window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
+  window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
+  setInterval(() => { const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); }, 1000);
+
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";
   const unread = {};                       // keyed by tab id (local / corp / w:Name)
@@ -489,7 +508,7 @@
     document.addEventListener("contextmenu", (e) => e.preventDefault());
 
     // restore windows the user had open last session
-    for (const id in wins) { if (saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
+    for (const id in wins) { if (id !== "unit" && saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
 
     // clock inside the window panel (HH:MM)
     const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clockEl.textContent = p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()); };

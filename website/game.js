@@ -12,11 +12,13 @@
   let ws = null, lastFrame = performance.now();
   let camInit = false;
   const confirming = new Set();
-  let gateButtons = [];
 
   // bridge for ui.js (chat)
   const bus = new EventTarget();
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; } };
+  let selectedUnit = null; // { kind:"gate", id } — structure selected by click (ships use `selected`)
+  function unitData() { if (!selectedUnit) return null; if (selectedUnit.kind === "gate") { const g = snap.gates.find((x) => x.id === selectedUnit.id); return g ? { kind: "gate", name: "Stargate", ...g } : null; } return null; }
+  function selectUnit(u) { selectedUnit = u; bus.dispatchEvent(new CustomEvent(u ? "select" : "deselect", { detail: u })); }
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null) };
 
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
@@ -118,7 +120,6 @@
 
   function eventPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   let curPlace = new Map();
-  canvas.addEventListener("click", (e) => { const p = eventPos(e); for (const b of gateButtons) { if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { const g = snap.gates.find((x) => x.id === b.gateId); if (g) toggleGate(g); return; } } });
   function mySys() { const h = snap.systems.find((s) => s.mine); return h ? h.id : null; }
 
   // ---- ship selection + movement (semi-RTS) ----
@@ -145,7 +146,10 @@
   }
   function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
   function shipScreen(sh) { const pl = curPlace.get(sh.sys); if (!pl) return null; const p = shipPos(sh); return { x: gx2s(pl.gx + p.x), y: gy2s(pl.gy + p.y) }; }
-  function gateButtonAt(p) { return gateButtons.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h); }
+  function gateAt(p) {
+    for (const g of snap.gates) { const pl = curPlace.get(g.sys); if (!pl) continue; const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly); const r = Math.max(14, GATE_LEN_KM * scale() / 2); if (Math.hypot(p.x - sx, p.y - sy) <= r) return g; }
+    return null;
+  }
   function shipAt(p) {
     let best = null, bestD = Infinity;
     for (const sh of snap.ships || []) { if (!sh.mine) continue; const s = shipScreen(sh); if (!s) continue; const r = Math.max(12, CHISEL_LEN_KM * scale() / 2 + 5); const d = Math.hypot(p.x - s.x, p.y - s.y); if (d <= r && d < bestD) { bestD = d; best = sh; } }
@@ -160,7 +164,6 @@
   canvas.addEventListener("mousedown", (e) => {
     if (e.button !== 0) return;
     const p = eventPos(e);
-    if (gateButtonAt(p)) return;                 // let the gate click handler take it
     drag = { x0: p.x, y0: p.y, moved: false, ship: shipAt(p), shift: e.shiftKey };
   });
   addEventListener("mousemove", (e) => {
@@ -177,7 +180,9 @@
       const x0 = Math.min(d.x0, p.x), y0 = Math.min(d.y0, p.y), x1 = Math.max(d.x0, p.x), y1 = Math.max(d.y0, p.y);
       for (const sh of snap.ships || []) { if (!sh.mine) continue; const s = shipScreen(sh); if (s && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) selected.add(sh.id); }
     } else if (!d.moved) {                          // a click
-      if (gateButtonAt(p)) return;
+      const gate = gateAt(p);
+      if (gate) { selected.clear(); selectUnit({ kind: "gate", id: gate.id }); return; }
+      if (selectedUnit) selectUnit(null);
       if (d.ship) { if (!d.shift) selected.clear(); if (d.shift && selected.has(d.ship.id)) selected.delete(d.ship.id); else selected.add(d.ship.id); }
       else { clearTimeout(deselectTimer); deselectTimer = setTimeout(() => selected.clear(), 220); } // delay so dbl-click can move
     }
@@ -185,7 +190,7 @@
   canvas.addEventListener("dblclick", (e) => {
     if (e.button !== 0) return; const p = eventPos(e);
     clearTimeout(deselectTimer);                  // keep selection for the move order
-    if (!gateButtonAt(p) && !shipAt(p)) commandMove(p);
+    if (!gateAt(p) && !shipAt(p)) commandMove(p);
   });
 
   // ---- drawing ----
@@ -197,24 +202,18 @@
   function drawGate(g, pl) {
     const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly);
     const wPx = Math.max(3, GATE_LEN_KM * scale());
-    let topY = sy - wPx / 2;
     if (gateImgReady && gateImg.naturalWidth) {
-      const hPx = wPx * (gateImg.naturalHeight / gateImg.naturalWidth); topY = sy - hPx / 2;
-      ctx.save(); ctx.globalAlpha = g.state === "active" ? 1 : 0.8; ctx.imageSmoothingEnabled = wPx > 300;
-      ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+      const hPx = wPx * (gateImg.naturalHeight / gateImg.naturalWidth);
+      ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
     } else { ctx.save(); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, wPx / 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     // gate-use ring: any ship inside can use the stargate (brighter while connected)
     const rPx = cfg.transferRadius * scale();
     if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
       ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
-    if (g.mine) {
-      let y = Math.min(topY, sy - 14) - 10; const active = g.state === "active";
-      y = button(active ? "CLOSE" : "OPEN", sx, y, active ? "#ff7a2a" : "#2ab6ff", g.id);
-      const ms = active ? Math.min(g.fuelMs, g.sessionRemMs ?? g.fuelMs) : g.fuelMs;
-      centerText("Fuel " + fmt(ms), sx, y - 8, active ? "#bfe8ff" : "#8d98a8");
+    if (selectedUnit && selectedUnit.kind === "gate" && selectedUnit.id === g.id) {
+      ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, Math.max(12, wPx * 0.62), 0, Math.PI * 2); ctx.strokeStyle = "rgba(79,210,255,0.9)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
     }
   }
-  function button(text, cx, yBottom, color, gateId) { ctx.save(); ctx.font = "11px " + fontFamily(); const w = ctx.measureText(text).width + 18, h = 20, x = cx - w / 2, y = yBottom - h; ctx.fillStyle = "rgba(8,12,18,0.9)"; ctx.fillRect(x, y, w, h); ctx.lineWidth = 1; ctx.strokeStyle = color; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(text, cx, y + h / 2); ctx.restore(); gateButtons.push({ x, y, w, h, gateId }); return y - 4; }
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
@@ -314,7 +313,7 @@
 
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
-    ctx.clearRect(0, 0, canvas.width, canvas.height); gateButtons = [];
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBackground();
     if (!(cfg && snap.systems.length) && window.SunFX) window.SunFX.clear();
     if (cfg && snap.systems.length) {

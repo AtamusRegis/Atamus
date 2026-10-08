@@ -197,3 +197,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .queue-item.paused { opacity: .6; }
 .q-cancel { width: 20px; height: 20px; font-size: 13px; line-height: 1; color: var(--text-dim); background: rgba(255,255,255,0.07); border: none; border-radius: 5px; cursor: pointer; }
 .q-cancel:hover { color: #ff9a6a; background: rgba(255,154,106,0.14); }
+
+/* selected-unit window */
+.unit-btn { width: 100%; margin-top: 10px; }
+.unit-btn.off { color: var(--text); background: rgba(255,255,255,0.1); }
+.unit-btn.off:hover { background: rgba(255,154,106,0.18); color: #ff9a6a; }
