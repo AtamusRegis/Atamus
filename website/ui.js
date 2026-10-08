@@ -1291,7 +1291,7 @@
     tickClock(); setInterval(tickClock, 1000);
 
     try { await ensureCatalog(); await refreshState(); } catch { /* not logged in handled by game.js */ }
-    if (state && !state.pilots.length) toggleWindow("pilot", true); // prompt first-pilot naming
+    if (state && !state.pilots.length) { location.href = "play.html"; return; }   // pilots are named on the website, not in-game
     // live countdown refresh for the queue
     setInterval(() => {
       const w = wins.pilot; if (!w || !isOpen(w) || pilotTab !== "queue" || !state) return;

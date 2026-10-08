@@ -29,14 +29,26 @@
       <h1 id="title" class="brand">ATAMUS</h1>
       <div class="form">
         <p class="welcome">Signed in as <strong id="who">…</strong></p>
-        <p class="hint">Enter your home system — command your ships, open a wormhole to the hub, and fight.</p>
-        <a class="btn btn-primary" href="game.html">Enter System</a>
+        <div id="pilot-step" hidden>
+          <form id="pilot-form" class="form" novalidate>
+            <label class="field">
+              <span>Pilot name</span>
+              <input name="name" type="text" required maxlength="24" spellcheck="false" autocomplete="off">
+            </label>
+            <p class="msg" id="pilot-msg" role="alert" hidden></p>
+            <button type="submit" class="btn btn-primary">Create pilot</button>
+          </form>
+        </div>
+        <div id="enter-step" hidden>
+          <p class="hint">Enter your home system — command your ships, open a wormhole to the hub, and fight.</p>
+          <a class="btn btn-primary" href="game.html">Enter System</a>
+        </div>
         <button type="button" class="btn btn-ghost" id="logout">Log out</button>
       </div>
     </section>
   </main>
 
-  <script src="api.js?v=1791407710"></script>
-  <script src="play.js?v=1791407710" defer></script>
+  <script src="api.js?v=1791477233"></script>
+  <script src="play.js?v=1791477233" defer></script>
 </body>
 </html>

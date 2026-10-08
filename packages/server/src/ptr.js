@@ -11,11 +11,6 @@ export async function ptrUser() {
   if (tester) return tester;
   let { rows } = await pool.query(`SELECT id, username, email FROM users WHERE lower(username) = 'ptr'`);
   if (!rows[0]) ({ rows } = await pool.query(`INSERT INTO users (username, password) VALUES ('PTR', '!') RETURNING id, username, email`));
-  const { rows: p } = await pool.query(`SELECT id FROM pilots WHERE user_id = $1`, [rows[0].id]);
-  if (!p.length) {
-    const { createPilot } = await import("./pilots.js");
-    await createPilot(rows[0].id, "Tester");
-  }
   tester = { ...rows[0], has_recovery: true };
   return tester;
 }

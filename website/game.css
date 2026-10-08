@@ -437,3 +437,7 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 /* hull bars read red */
 .ubar-fill.hull { background: linear-gradient(90deg, #a8262b, #e0484a); }
 .fb-hp { background: #e0484a; }
+
+/* fleet bar: roomier ends to grab it by */
+.win[data-id="fleet"] .win-body { padding: 4px 16px; }
+.win[data-id="fleet"].vertical .win-body { padding: 16px 4px; }

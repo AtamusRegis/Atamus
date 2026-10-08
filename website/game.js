@@ -134,19 +134,10 @@
     };
     tick(); cdTimer = setInterval(tick, 250);
   }
-  // Never yank someone mid-sentence: while a text box has focus or unsent text, hold the reload
-  // (up to 3 minutes) and do it a moment after they stop typing.
-  const typing = () => { const e = document.activeElement; return !!(e && (e.tagName === "INPUT" || e.tagName === "TEXTAREA") && (e.value || "").trim()); };
   function reloadForUpdate(v) {
-    if (reloading) return; reloading = true;
-    const go = () => { saveView(); location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)); };
-    const until = Date.now() + 180_000; let quiet = 0;
-    const wait = () => {
-      if (typing() && Date.now() < until) { quiet = 0; setStatus("Update ready — it'll load when you finish typing", "warn"); return setTimeout(wait, 500); }
-      if (quiet++ < 2 && Date.now() < until && document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return setTimeout(wait, 500);
-      setStatus("Atamus has been updated — reloading…"); setTimeout(go, 600);
-    };
-    wait();
+    if (reloading) return; reloading = true; saveView();
+    setStatus("Atamus has been updated — reloading…");
+    setTimeout(() => location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)), 600);
   }
   // keep the camera where it was across an update reload (same tab only)
   function saveView() { try { sessionStorage.setItem("atamus.view", JSON.stringify({ cx: cam.cx, cy: cam.cy, w: viewWTarget, follow })); } catch {} }
