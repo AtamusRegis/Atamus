@@ -432,7 +432,11 @@
   }
   window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
-  window.Atamus.bus.addEventListener("snap", () => { const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); });
+  window.Atamus.bus.addEventListener("snap", () => {
+    const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body);
+    // a docked ship's holds are reached through the station inventory: close its own windows
+    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || wins[key].win.hidden) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
+  });
 
   // ---- inventories: slot grids with drag/drop ----
   const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;
