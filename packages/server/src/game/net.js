@@ -57,6 +57,7 @@ export function attachGameServer(httpServer) {
         case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
         case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
         case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
+        case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
