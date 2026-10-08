@@ -21,10 +21,28 @@
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.png";
 
-  // player's starting ship — a Chisel, drawn at true scale (128 m long)
-  const shipImg = new Image(); let shipImgReady = false;
-  shipImg.onload = () => (shipImgReady = true); shipImg.src = "assets/chisel.webp";
-  const CHISEL_LEN_KM = 0.128; // 128 m along the long axis
+  // ---- ship art registry: each hull drawn at true scale from its sprite ----
+  // lengthKm maps the sprite's long axis to real metres. Own ships render blue,
+  // other players' ships render red. Only the Chisel spawns for now; the rest
+  // are registered and ready for when ship-switching/building lands.
+  const SHIP_TYPES = {
+    chisel:     { lengthKm: 0.128 },
+    barge_xs:   { lengthKm: 0.305 }, barge_s:  { lengthKm: 0.375 }, barge_m:  { lengthKm: 0.411 },
+    exhumer_xs: { lengthKm: 0.305 }, exhumer_s:{ lengthKm: 0.375 }, exhumer_m:{ lengthKm: 0.411 },
+    gleaner:    { lengthKm: 0.859 }, lodestar: { lengthKm: 0.859 }, motherlode:{ lengthKm: 1.450 },
+    wick:       { lengthKm: 0.067 }, beacon:   { lengthKm: 0.404 }, vigil:    { lengthKm: 1.466 },
+  };
+  const CHISEL_LEN_KM = SHIP_TYPES.chisel.lengthKm; // legacy ref
+  const shipArt = {}; // type -> { blue:Image, red:Image }
+  function art(type) {
+    if (!SHIP_TYPES[type]) type = "chisel";
+    if (!shipArt[type]) {
+      const b = new Image(); b.src = "assets/ships/" + type + "_blue.webp";
+      const r = new Image(); r.src = "assets/ships/" + type + "_red.webp";
+      shipArt[type] = { blue: b, red: r };
+    }
+    return shipArt[type];
+  }
 
   let systemRadius = 250, placeDist = 650;
   function computeSystemRadius() { let m = 0; for (const c of cfg.cells) m = Math.max(m, Math.hypot(c.x, c.y)); systemRadius = m + cfg.cellCircumradius; placeDist = systemRadius * 2.3; }
@@ -192,13 +210,16 @@
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
       }
-      const wPx = Math.max(2, CHISEL_LEN_KM * scale());   // true 128 m scale (min 2px so it's never a dead pixel)
-      if (shipImgReady && shipImg.naturalWidth) {
-        const hPx = wPx * (shipImg.naturalHeight / shipImg.naturalWidth);
+      const type = SHIP_TYPES[sh.type] ? sh.type : "chisel";
+      const lenKm = SHIP_TYPES[type].lengthKm;
+      const wPx = Math.max(2, lenKm * scale());           // true metre scale (min 2px so it's never a dead pixel)
+      const img = sh.mine ? art(type).blue : art(type).red;
+      if (img && img.naturalWidth) {
+        const hPx = wPx * (img.naturalHeight / img.naturalWidth);
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); // sprite faces +x; world +y is up
-        ctx.imageSmoothingEnabled = wPx > 24;             // keep the pixel art crisp when small
-        ctx.drawImage(shipImg, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
-      } else { ctx.save(); ctx.fillStyle = "#e3c15a"; ctx.fillRect(sx - wPx / 2, sy - wPx / 4, wPx, wPx / 2); ctx.restore(); }
+        ctx.imageSmoothingEnabled = wPx > 48;             // keep the pixel art crisp when small
+        ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
+      } else { ctx.save(); ctx.fillStyle = sh.mine ? "#4fd2ff" : "#ff5a5a"; ctx.fillRect(sx - wPx / 2, sy - wPx / 4, wPx, wPx / 2); ctx.restore(); }
       // selection ring
       if (sh.mine && selected.has(sh.id)) {
         ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, Math.max(10, wPx * 0.75), 0, Math.PI * 2);
