@@ -123,3 +123,8 @@ export function tickBeltField(field, now = Date.now()) {
 }
 
 export const fieldBelts = (field) => field.slots.filter((s) => s.belt).map((s) => s.belt);
+
+/** PTR only: fill every empty slot with a fresh belt. */
+export function forceBelts(field, now = Date.now()) {
+  for (const s of field.slots) if (!s.belt) s.belt = makeBelt(s, Math.floor(fieldRnd(field) * 1e9), now);
+}

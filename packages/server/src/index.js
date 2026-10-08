@@ -25,6 +25,8 @@ app.use(cors({
   credentials: true,
 }));
 
+// PTR: the private test copy serves the website itself (same origin, no Pages, no cookies needed)
+if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../website/", import.meta.url).pathname));
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
 app.use("/auth", auth);

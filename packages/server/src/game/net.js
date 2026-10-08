@@ -13,6 +13,7 @@ import { getState } from "../pilots.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
 import { SERVER_BUILD, onWebsiteUpdate } from "../build.js";
+import { PTR, devCommand } from "../ptr.js";
 
 const world = new World();
 
@@ -85,6 +86,7 @@ export function attachGameServer(httpServer) {
         case "decrew": world.cmdDecrew(pid, m.ship); break;
         case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
         case "assemble": world.cmdAssemble(pid, m.ref, m.slot); break;
+        case "dev": if (PTR) devCommand(world, pid, m, refreshLicenses); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;

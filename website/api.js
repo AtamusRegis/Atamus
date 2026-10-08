@@ -2,7 +2,8 @@
 // The server runs at play.atamus.io; this static site only sends requests to it.
 // Sessions are HTTP-only cookies set by the server, so we always send credentials.
 
-const API_BASE = "https://play.atamus.io";
+// atamus.io talks to the live server; anything else (the private PTR copy) talks to whoever served the page
+const API_BASE = /(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin;
 
 const Api = {
   /**

@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { pool } from "./db.js";
 import { config } from "./config.js";
+import { PTR, ptrUser } from "./ptr.js";
 
 const COOKIE_NAME = "atamus_sid";
 
@@ -21,6 +22,7 @@ export async function createSession(userId) {
 
 /** Look up the user for a session token, or null. */
 export async function getSessionUser(token) {
+  if (PTR) return ptrUser();                         // private test copy: no accounts
   if (!token) return null;
   const { rows } = await pool.query(
     `SELECT u.id, u.username, u.email,

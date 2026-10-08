@@ -25,5 +25,4 @@ export function websiteDeployed() {
   const tick = async () => { const changed = await checkWebsiteBuild(); if (changed || Date.now() > burstUntil) { burstTimer = 0; return; } burstTimer = setTimeout(tick, 2000); };
   burstTimer = setTimeout(tick, 0);
 }
-checkWebsiteBuild();
-setInterval(checkWebsiteBuild, 20_000);                       // backstop if the deploy ping never arrives
+if (process.env.ATAMUS_PTR !== "1") { checkWebsiteBuild(); setInterval(checkWebsiteBuild, 20_000); }   // the PTR has no live website to watch                       // backstop if the deploy ping never arrives
