@@ -17,20 +17,26 @@ export const CATEGORIES = [
 const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key, level }));
 
 // Licenses every new pilot already holds (key -> level).
-export const STARTING_LICENSES = { small_mining_laser: 1 };
+export const STARTING_LICENSES = { small_mining_laser: 1, auto_miner: 1 };
 
 export const LICENSES = [
   // ============================================================
   // Industry — Ironvein mining line (fly at Lvl 3, unlock next at Lvl 5)
   // ============================================================
   {
-    key: "small_mining_laser", name: "Small Mining Laser", category: "industry", maxLevel: 5,
+    key: "auto_miner", name: "Automated Mining", category: "industry", maxLevel: 5, free: true,
+    desc: "Operate the auto-miner module: it keeps your lasers on your locked rocks, moving on as each one runs dry.",
+    effect: "Auto-miner cycle 3:00 at Lvl 1, −30 s per level (Lvl 1 is granted to every pilot)",
+    requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
+  },
+  {
+    key: "small_mining_laser", name: "Small Mining Laser", category: "industry", maxLevel: 5, free: true,
     desc: "Operate small mining lasers — the frigate-class laser the Chisel carries two of.",
     effect: "+5% mining laser yield per level · fit small mining lasers (Lvl 1 is granted to every pilot)",
     requirements: [], levelTimes: hrs(1, 3, 6, 12, 20),
   },
   {
-    key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 5,
+    key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 5, free: true,
     desc: "Pilot the Chisel mining frigate. The start of every Ironvein career.",
     effect: "+5% mining yield per level · fly the Chisel (starts flyable at Lvl 1)",
     requirements: [], levelTimes: hrs(1, 2, 4, 7, 10),

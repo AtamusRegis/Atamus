@@ -4,11 +4,12 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import {
   TICK_MS, SNAPSHOT_MS, CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES,
+  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, LASER_RANGE_KM, MINING_CYCLE_MS,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
-import { ITEMS, MAX_STACKS } from "./inventory.js";
+import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
+import { getState } from "../pilots.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
 
@@ -27,6 +28,8 @@ const CLIENT_CONFIG = {
   ores: ORES,
   belt: BELT,
   items: ITEMS,
+  market: MARKET,
+  laserRange: LASER_RANGE_KM, cycleMs: MINING_CYCLE_MS,
   maxStacks: MAX_STACKS,
   dockRadius: DOCK_RADIUS_KM,
   shipTypes: SHIP_TYPES,
@@ -46,6 +49,10 @@ export function attachGameServer(httpServer) {
     let saved = null; try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
     const player = world.addPlayer(pid, user.username, send, saved);
     try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
+    // highest level of each license across the account's pilots drives module stats (auto-miner cycle etc.)
+    const refreshLicenses = async () => { try { const st = await getState(user.id); const lic = {}; for (const pl of st.pilots) for (const k in pl.licenses) lic[k] = Math.max(lic[k] || 0, pl.licenses[k]); player.licenses = lic; } catch (e) { console.error("licenses", e); } };
+    await refreshLicenses();
+    const licTimer = setInterval(refreshLicenses, 60000);
     send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
@@ -58,6 +65,12 @@ export function attachGameServer(httpServer) {
         case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
         case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
         case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
+        case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
+        case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty); break;
+        case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty); break;
+        case "buy": world.cmdBuy(pid, m.item, m.qty); break;
+        case "read": if (world.cmdRead(pid, m.ref, m.slot)) persist(pid); break;
+        case "licenses": refreshLicenses(); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
@@ -65,7 +78,7 @@ export function attachGameServer(httpServer) {
         case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty); break;
       }
     });
-    ws.on("close", () => { persist(pid).finally(() => world.removePlayer(pid)); });
+    ws.on("close", () => { clearInterval(licTimer); persist(pid).finally(() => world.removePlayer(pid)); });
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
 

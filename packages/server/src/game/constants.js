@@ -18,8 +18,10 @@ export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this r
 export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
 export const WARP_MULT = 20;             // prototype warp: x speed until arrival
 export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
-export const LASER_M3_PER_S = 2;         // prototype mining laser yield (per laser)
-export const MINING_CYCLE_MS = 30_000;   // a laser re-aims at a new spot on the rock every cycle
+export const LASER_M3_PER_S = 2;         // mining laser yield (per laser), delivered at the end of each cycle
+export const MINING_CYCLE_MS = 15_000;   // one laser cycle; the ore lands when the cycle completes
+export const LASER_RANGE_KM = 5;         // a laser needs its rock within this
+export const AUTO_MINER_BASE_MS = 180_000, AUTO_MINER_STEP_MS = 30_000; // auto-miner cycle: 3:00, -30 s per license level
 export const STATION_HANGAR_M3 = 10_000_000;
 // Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
 // hardpoints: beam origins in ship lengths from the sprite centre (sprite faces +x,

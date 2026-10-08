@@ -1,10 +1,16 @@
 // Slot-based inventories. A dense list of stacks [{item, qty}], limited by
 // unique stacks (100) and by volume (m3). Items are defined in ITEMS.
 import { ORES } from "./belts.js";
+import { LICENSES } from "../licenses.js";
 
 export const MAX_STACKS = 100;
 export const ITEMS = {};
-for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", unitM3: o.unitM3, price: o.price, color: o.color, icon: "rock_" + o.rock + "_200" };
+for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", desc: o.desc, rarity: o.rarity, unitM3: o.unitM3, price: o.price, color: o.color, icon: "rock_" + o.rock + "_200" };
+// Training manuals: one per license that isn't granted at birth. Reading one unlocks training that license.
+export const MANUAL_PRICE = (lic) => { const hrs = lic.levelTimes.reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
+for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "manual:" + lic.key, name: lic.name + " Manual", kind: "manual", license: lic.key, desc: "Training manual. Read it to unlock the " + lic.name + " license for training. " + lic.desc, rarity: "restricted", unitM3: 0.1, price: MANUAL_PRICE(lic), color: "#c9b36a", icon: null };
+// What the station market sells (item key -> price).
+export const MARKET = Object.values(ITEMS).filter((it) => it.kind === "manual").map((it) => ({ key: it.key, price: it.price }));
 
 export const makeInv = (cap) => ({ cap, slots: [] });
 export const usedM3 = (inv) => inv.slots.reduce((s, st) => s + st.qty * (ITEMS[st.item]?.unitM3 || 0), 0);
@@ -39,6 +45,13 @@ export function move(from, fromIdx, to, toIdx, qty) {
   if (target && target.item === st.item) { n = canAdd(to, st.item, qty); if (n <= 0) return 0; target.qty += n; }
   else { n = canAdd(to, st.item, qty); if (n <= 0) return 0; if (toIdx != null && toIdx < to.slots.length) to.slots.splice(toIdx, 0, { item: st.item, qty: n }); else to.slots.push({ item: st.item, qty: n }); }
   st.qty -= n; if (st.qty <= 0) from.slots.splice(fromIdx, 1);
+  return n;
+}
+/** Split qty units off a stack into a new stack (same inventory). Returns the qty split. */
+export function split(inv, idx, qty) {
+  const st = inv.slots[idx]; if (!st) return 0;
+  const n = Math.max(0, Math.min(Math.floor(qty), st.qty - 1)); if (n <= 0 || inv.slots.length >= MAX_STACKS) return 0;
+  st.qty -= n; inv.slots.splice(idx + 1, 0, { item: st.item, qty: n });
   return n;
 }
 /** Take up to qty units out of a slot. Returns the qty removed. */

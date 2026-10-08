@@ -59,6 +59,11 @@ export async function queueAdd(userId, pilotId, key) {
   const row = await getOwnedPilot(userId, pilotId); const d = row.data; const now = Date.now();
   advance(d, now);
   const lic = getLicense(key); if (!lic) throw new Error("Unknown license.");
+  if (!lic.free && !(d.licenses[key] > 0)) {                       // first level needs the manual read (account-wide)
+    const { rows } = await pool.query(`SELECT data FROM systems WHERE user_id = $1`, [userId]);
+    const unlocked = (rows[0] && rows[0].data && rows[0].data.unlocked) || {};
+    if (!unlocked[key]) throw new Error(`Read the ${lic.name} Manual first (station market).`);
+  }
   const nextLevel = (d.licenses[key] || 0) + queuedCount(d, key) + 1;
   if (nextLevel > lic.maxLevel) throw new Error("License is maxed.");
   if (!requirementsMet(key, d.licenses)) throw new Error("Requirements not met.");
