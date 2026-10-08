@@ -1,0 +1,183 @@
+# Atamus: how the game works today
+
+This is a living spec of the game. Read it before every patch, and update it in the same commit as any change to behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep them unless the owner says otherwise.
+
+## World and setting
+
+- **Region:** the Expanse.
+- **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, and up to 5 asteroid belt slots.
+- **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
+- **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
+- **Factions** (`game/factions.js`, not used in gameplay yet):
+
+  | Faction | Role |
+  |---|---|
+  | Deep Core Industries (DCI) | Builds the mining hulls, and every new pilot's corp **(owner)** |
+  | Orbital Defense Industries (ODI) | Builds combat hulls (just a hull maker; no NPC escorts) **(owner)** |
+  | Expanse Transit Authority (ETA) | Law (omni weapons) |
+  | Belt Raiders | Pirates (bullets) |
+  | Free Salvage Union | Pirates (missiles) |
+  | Consolidated Ore Trading | Aggressive competitor (hybrid weapons) |
+  | Helios Resource Group | Aggressive competitor (lasers) |
+
+  Names are in DarkOrbit style: plain and corporate, nothing "on the nose" **(owner)**.
+
+## Accounts, pilots and sessions
+
+- **Website** (atamus.io): signup, login, password recovery, and `play.html` (the hub).
+- **First pilot:** named on the website (play.html), not in the game **(owner)**.
+- **Pilot limit:** up to `MAX_PILOTS = 3` per account, with no duplicate names (server enforced).
+- **One session per account (owner).** Opening the game in a new tab or device ends the old session:
+  - the old connection closes with code 4002;
+  - the old tab shows "Playing on another tab or device", then goes to play.html;
+  - the server ignores anything the replaced session sends.
+- **Session expired:** a socket closing with code 4001 sends the client to index.html.
+- **Credits** live in `users.credits`, kept in memory while online and updated with each change. Credit amounts always show in gold.
+
+## Licenses (skills)
+
+- **Training:** real-time (`DEV_TIME_SCALE = 1`), per pilot, through a queue you can add to, remove from, reorder, pause and cancel.
+- **Starting licenses** (level 1 for every pilot): Mining Frigate, Mining Laser Yield, Automated Mining.
+- **Free vs. manual:** free licenses can be trained straight away. Every other license needs its **training manual** read first; manuals are bought from the market and are a **consumable**: they can't be sold **(owner)**.
+- **One bonus per license (owner):**
+
+  | License | Bonus per level |
+  |---|---|
+  | Mining Laser Yield | +5% yield |
+  | Mining Laser Range | +5% range |
+  | Mining Laser Cycling | −3% cycle time |
+  | Automated Mining | −30 s auto-miner cycle |
+
+- **Hull licenses** reach level 8; levels 6–8 replaced the old specializations:
+  - Mining Frigate, Mining Barges, Exhumers, Hauler, Industrial Command, Capital Industrial Command, Combat Frigate/Cruiser/Battleship;
+  - efficiency flying that hull **(owner)**: +20% per level for levels 1–5 (100% at level 5), then +5% per level for levels 6–8 (up to 115%).
+- **Bonuses** come from the pilot crewing the ship. The server refreshes them every 60 s and on crew.
+- **UI:**
+  - the license list shows level pips, a timer and a +/− queue;
+  - clicking a name opens the license info popup: level boxes, bonus, "Level N unlocks", train time, requirements, and what the license is required for;
+  - level boxes that unlock something get a **white outline**, in the info popup only, not in the list **(owner)**.
+
+## Ships
+
+- **Hulls (class names, owner):** the class is the hull, like EVE's "Venture". Players rename **individual ships** (≤20 chars); the class still shows in Info **(owner)**.
+  - Mining Frigate: Prospector
+  - Mining Barge: Dredger, Bulwark, Collier
+  - Exhumer: Excavator, Rampart, Carrack
+- **Market grouping:** each hull has a role (`SHIP_ROLES`), and the market groups ships as Ships › Role › Class, e.g. Industry › Mining Barge.
+- **Crew:** a ship needs a pilot to undock.
+  - Crew or decrew from the station hangar's right-click menu; it only works docked, and needs the right licenses.
+  - A pilot already sitting in another docked ship walks across the station.
+- **Buying:** bought ships arrive in **Deliveries** as packaged items. **Assemble** (in a station) turns one into a docked, uncrewed ship.
+- **Docking:** within 4 km of the station. Docking repairs the ship, clears its targets and stops its modules. If the docked ship was selected, the selection is cleared.
+
+## Mining
+
+- **Lasers:** 2 per ship.
+  - The Prospector fires from 4 arm hardpoints. Barges and exhumers fire from the circular hopper ports on their centerline.
+  - Range is 5 km, before bonuses.
+- **Cycle:** 15 s. Ore lands at the end of the cycle, and the cycle repeats until told otherwise.
+- **Breaking a cycle (owner):** a cycle breaks only when the rock is gone, it's out of range, or the hold is full. A full hold refuses activation and stops a running laser at once, with one "ore hold full" message.
+- **Hotbar clicks:**
+  - clicking an active laser toggles whether it repeats; it never switches target mid-cycle;
+  - clicking an idle laser starts it on the selected target.
+- **Yield:** per second = hull `laserM3s` × (1 + Mining Laser Yield bonus) × hull efficiency. Units are whole numbers; a rock with less than one unit left is mined out and removed.
+- **Beams:** they aim at points on the rock and stop on the first opaque pixel of the rock sprite (an alpha-mask raycast). A chunk animation travels along the beam.
+- **Auto Miner** (Automated Mining license): cycles every 3:00, −30 s per level. Each cycle it puts every idle, powered laser on the first locked rock in range.
+- **Hotbar:** 8 slots, rearranged by dragging. The defaults are ML1, ML2 and AM, with icons.
+- **Module menu** (right-click, or hold on touch) has three options:
+  - **Activate / Deactivate** (and **Keep cycling** once deactivated).
+  - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
+  - **Info:** status, target, cycle time, yield per cycle and range, including bonuses; it updates live.
+- **Belts:** 5 slots per system and uncommon spawns, so usually 1–2 are up. Each belt has 75–150 rocks and drifts away after 60–120 minutes.
+- **Ores:**
+
+  | Ore | Rarity | Price | Volume |
+  |---|---|---|---|
+  | Ironstone | common | 5 | 0.1 m³ |
+  | Cuprite | uncommon | 12 | 0.15 m³ |
+  | Cobaltine | rare | 30 | 0.3 m³ |
+  | Iridite | very rare | 80 | 0.6 m³ |
+  | Starglass | legendary | 220 | 1.2 m³ |
+
+## Inventories and items
+
+- **Inventory slots:** each inventory holds up to 100 stacks and is limited by volume (m³).
+- **Station:** 4 renameable hangars plus Deliveries, which is gold and anchored at the bottom. The sidebar lists docked ships with their holds. Clicking the station opens the hangar window; there's no station selection panel **(owner)**.
+- **Ship holds:** ore and cargo.
+- **Transfers:** allowed between two inventories that are both at the station, or between a ship in space and a jettison can within 2.5 km.
+- **Item menu** (right-click, or hold on touch):
+  - **Split.**
+  - **Jettison:** from a ship in space.
+  - **Sell:** **ore only**, at the station. Opens a popup with price, slider and confirm.
+  - **Read:** manuals.
+  - **Assemble:** packaged ships, at the station.
+  - **Info.**
+- **Commands name their item.** If the stacks shifted underneath, the server finds that item rather than acting on whatever now sits in the slot. Quantities are whole numbers only.
+- **Jettison cans (owner):**
+  - hold 15,000 m³ and last 30 minutes;
+  - one jettison every 30 minutes per account, and destroying your own can resets that;
+  - anyone can loot a can, and anyone can destroy an empty one; the owner can destroy a full one, with confirmation;
+  - the can sprite blinks (2 frames) so it's easy to spot.
+
+## Market
+
+- Opened from its own left-panel button.
+- Sells mining hulls only for now **(owner)**, plus training manuals priced at 1M + 25k × the license's total training hours.
+- Collapsible nested groups, remembered: Ships › Industry › class, and Training Manuals › category.
+- **Buy popup:** full info, a quantity slider, the total and your credits. It keeps the typed quantity if your credits change. Purchases go to Deliveries.
+
+## UI and HUD
+
+- **Left panel:** Player, Pilot, Chat, Fleet and Market buttons. A button's name shows only on hover, or while holding on touch.
+- **Windows:**
+  - dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width);
+  - **tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again;
+  - layout, groups, open inventories (with their active tab) and the market are remembered in localStorage `atamus.ui`.
+- **The selection drives the inventories:**
+  - a ship in space shows only its own inventory;
+  - the station window stays only while the station or a docked ship is selected;
+  - it closes on deselect, or when the selected ship undocks.
+- **Ships are run from the HUD** (no selection window for them):
+  - target lock icons: select, untarget, distance, a grey line to the target, a tooltip, reorder;
+  - a shield, hull and speed row (hull bars are red);
+  - the hotbar.
+- **Ship actions** (Inventory, Dock, Warp): anchored to the fleet bar, centered on its side facing the screen center, half size.
+- **Fleet bar:**
+  - shows crewed ships, each with a split shield|hull bar;
+  - dragged by its background; hold or right-click the panel button to switch between horizontal and vertical;
+  - auto-sized, wrapping instead of scrolling, no resize edges, 16 px end padding.
+- **Pilot window:** Licenses, Training Queue, Current Ship (with Locate) and Items.
+- **Persistence across reloads:** the selection (ship or station, in localStorage `atamus.sel`) and the camera (sessionStorage `atamus.view`).
+- **Context menu:** always renders above windows, and closes on any tap elsewhere.
+- **Mobile:**
+  - tap, double-tap, pan, pinch, hold-to-lock and box select;
+  - text selection and the long-press callout are disabled.
+
+## Live updates (owner)
+
+- Every push to `main` shows **every** player a 30 s "Update incoming" panel near the top of the screen. The number bounces each second.
+- At zero, players are logged out to `play.html?updating=1`. It waits for the new build, then shows Enter System. Enter System always loads a fresh (cache-busted) game page.
+- Players who join mid-countdown see the time that's left.
+- The server only starts a countdown if `main` is really ahead of what's live, once per commit. If it can't read GitHub, it counts down anyway.
+
+## Server hardening
+
+- Malformed or hostile messages are ignored and logged, never fatal.
+- Rejected promises are logged.
+- Each connection is limited to about 40 commands a second, with a 64 KB message limit.
+- Autosave runs every 10 s but skips the database write when nothing changed. Offline players get no snapshots.
+
+## Rejected / removed (don't reintroduce)
+
+- Helper text and hint tooltips, e.g. "hold for options".
+- Holding back reloads until players are idle.
+- The Live / Pending / PTR multi-server idea. The PTR is a private local box for Claude only, with no accounts.
+- Hull specializations as separate licenses. They're merged into hull license levels 6–8.
+- Ore and cargo bars in the ship panel.
+- The station selection window.
+- Separate station ore and cargo containers. There are 4 hangars plus Deliveries instead.
+- Scrolling in the fleet bar.
+- Unlock outlines on the main license list.
+- Playing in several tabs or on several devices at once.
+- Selling manuals or ships.
+- Names: "Expanse Excavations" and the "EMO" acronym; "Black Flag" for pirates; personal-sounding hull names.

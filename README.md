@@ -1,15 +1,9 @@
 # Atamus
 
-A multiplayer space RTS. Every player owns a home solar system, mines the NPC systems around it, and ventures through timed wormholes into pirate space or other players' systems.
+A browser-based, EVE-inspired multiplayer mining semi-RTS set in the Expanse.
 
-- Website: https://atamus.io
-- Client: Electron + PixiJS (TypeScript), distributed as a Windows installer
-- Server: Node.js (TypeScript), authoritative simulation, hosted on DigitalOcean
+- Website and client: https://atamus.io (GitHub Pages, from `website/`)
+- Game server: https://play.atamus.io (Node + ws + Postgres behind Caddy, from `packages/server/`)
 
-## Layout
-
-```
-website/   atamus.io landing page (GitHub Pages)
-packages/  shared/ · server/ · client/   (coming)
-docs/      design document               (coming)
-```
+How the game works: [`docs/FEATURES.md`](docs/FEATURES.md). What changed: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
+Working on the code: [`CLAUDE.md`](CLAUDE.md), which covers the layout, the PTR test copy, the test suite and the deploy flow.
