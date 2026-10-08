@@ -2,7 +2,7 @@
 // kind: "maker" builds a hull line, "corp" is a player corporation, "law" is the police,
 // "pirate" an outlaw NPC outfit, "competitor" a rival corporation that takes belts by force. weapon: what they fight with (for later combat matchups).
 export const FACTIONS = [
-  { key: "dci", name: "Deep Core Industries", short: "DCI", kind: "maker", line: "mining", starting: true,   // builds the mining hulls and is every new pilot's corp tagline: "Every ton accounted for." },
+  { key: "dci", name: "Deep Core Industries", short: "DCI", kind: "maker", line: "mining", starting: true, tagline: "Every ton accounted for." },   // builds the mining hulls and is every new pilot's corp
   { key: "odi", name: "Orbital Defense Industries", short: "ODI", kind: "maker", line: "combat", tagline: "Hulls for pilots who defend themselves." },
   { key: "eta", name: "Expanse Transit Authority", short: "ETA", kind: "law", weapon: "omni", tagline: "Response is a promise." },
   { key: "raiders",  name: "Belt Raiders",              short: "BR",  kind: "pirate",     weapon: "bullet",  tagline: "Pay the toll or feed the dust." },
