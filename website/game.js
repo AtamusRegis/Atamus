@@ -56,7 +56,7 @@
     return place;
   }
 
-  const ZOOM_MIN_W = 15;
+  const ZOOM_MIN_W = 7.5;  // smallest view width (km) = deepest zoom-in; halved to double max magnification
   let cam = { cx: 0, cy: 0, viewW: 600 }, curMaxW = 600, viewWTarget = 600;
   const panVel = { x: 0, y: 0 };
   function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }

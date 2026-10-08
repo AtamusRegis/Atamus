@@ -9,7 +9,7 @@ export const SNAPSHOT_MS = 1000 / SNAPSHOT_HZ;
 export const CELL_FLAT_TO_FLAT_KM = 100;
 export const CELL_APOTHEM_KM = CELL_FLAT_TO_FLAT_KM / 2;                 // 50
 export const CELL_CIRCUMRADIUS_KM = CELL_APOTHEM_KM / Math.cos(Math.PI / 6); // ~57.74
-export const SYSTEM_RINGS = 2;                                          // center + 2 rings = 19 cells
+export const SYSTEM_RINGS = 1;                                          // center + 1 ring = 7 cells
 export const CELL_CORNER_ROUND_KM = 5;
 
 export const SHIP_SPEED_KMPS = 1;
