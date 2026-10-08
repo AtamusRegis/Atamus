@@ -39,7 +39,7 @@ const CLIENT_CONFIG = {
 
 export function attachGameServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
-  onCountdown((at, head, parts) => { const msg = JSON.stringify({ t: "countdown", at, parts }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
+  onCountdown((at, head, parts) => { const msg = JSON.stringify({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
   // a new website build is live: tell every connected client to reload now
   onWebsiteUpdate((v) => { const msg = JSON.stringify({ t: "update", web: v }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
 

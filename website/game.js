@@ -95,7 +95,7 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === "countdown") { pending = { at: m.at, parts: m.parts || ["server", "web"] }; startCountdown(m.at); return; }
+      if (m.t === "countdown") { const at = m.in != null ? Date.now() + m.in : m.at; pending = { at, parts: m.parts || ["server", "web"] }; startCountdown(at); return; }
       if (m.t === "update") { if (m.web !== BUILD) reloadForUpdate(m.web); return; }
       if (m.t === "hello" && m.build) {
         if (serverBuild && m.build !== serverBuild) {
