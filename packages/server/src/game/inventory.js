@@ -23,12 +23,16 @@ export const MARKET = [
 ];
 
 export const makeInv = (cap) => ({ cap, slots: [] });
+// Quantities and slot numbers arrive from clients: whole numbers only, anything else -> fallback.
+const int = (v, fallback) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? n : fallback; };
+const slotIdx = (inv, v) => { const i = int(v, -1); return i >= 0 && i < inv.slots.length ? i : -1; };
 export const usedM3 = (inv) => inv.slots.reduce((s, st) => s + st.qty * (ITEMS[st.item]?.unitM3 || 0), 0);
 export const freeM3 = (inv) => Math.max(0, inv.cap - usedM3(inv));
 
 /** How many units of `item` fit right now (volume + stack-count limits). */
 export function canAdd(inv, item, qty) {
-  const def = ITEMS[item]; if (!def) return 0;
+  const def = ITEMS[item]; if (!def || !Object.hasOwn(ITEMS, item)) return 0;
+  qty = int(qty, 0); if (qty <= 0) return 0;
   const has = inv.slots.some((s) => s.item === item);
   if (!has && inv.slots.length >= MAX_STACKS) return 0;
   return Math.max(0, Math.min(qty, Math.floor(freeM3(inv) / def.unitM3 + 1e-9)));
@@ -41,8 +45,9 @@ export function add(inv, item, qty) {
 }
 /** Move a stack (or part of it) from one inventory slot to another inventory/slot. Returns moved qty. */
 export function move(from, fromIdx, to, toIdx, qty) {
-  const st = from.slots[fromIdx]; if (!st) return 0;
-  qty = Math.min(qty ?? st.qty, st.qty); if (qty <= 0) return 0;
+  fromIdx = slotIdx(from, fromIdx); const st = from.slots[fromIdx]; if (!st) return 0;
+  qty = Math.min(qty == null ? st.qty : int(qty, 0), st.qty); if (qty <= 0) return 0;
+  if (toIdx != null) { toIdx = int(toIdx, null); if (toIdx != null && toIdx < 0) toIdx = null; }
   if (from === to) {                             // reorder / merge within one inventory
     if (toIdx == null || toIdx >= to.slots.length) { from.slots.splice(fromIdx, 1); to.slots.push(st); return st.qty; }
     const target = to.slots[toIdx];
@@ -59,15 +64,15 @@ export function move(from, fromIdx, to, toIdx, qty) {
 }
 /** Split qty units off a stack into a new stack (same inventory). Returns the qty split. */
 export function split(inv, idx, qty) {
-  const st = inv.slots[idx]; if (!st) return 0;
-  const n = Math.max(0, Math.min(Math.floor(qty), st.qty - 1)); if (n <= 0 || inv.slots.length >= MAX_STACKS) return 0;
+  idx = slotIdx(inv, idx); const st = inv.slots[idx]; if (!st) return 0;
+  const n = Math.max(0, Math.min(int(qty, 0), st.qty - 1)); if (n <= 0 || inv.slots.length >= MAX_STACKS) return 0;
   st.qty -= n; inv.slots.splice(idx + 1, 0, { item: st.item, qty: n });
   return n;
 }
 /** Take up to qty units out of a slot. Returns the qty removed. */
 export function take(inv, idx, qty) {
-  const st = inv.slots[idx]; if (!st) return 0;
-  const n = Math.max(0, Math.min(Math.floor(qty), st.qty)); if (n <= 0) return 0;
+  idx = slotIdx(inv, idx); const st = inv.slots[idx]; if (!st) return 0;
+  const n = Math.max(0, Math.min(int(qty, 0), st.qty)); if (n <= 0) return 0;
   st.qty -= n; if (st.qty <= 0) inv.slots.splice(idx, 1);
   return n;
 }

@@ -13,6 +13,8 @@ const HANGARS = 4;
 const CAN_LIFE_MS = 30 * 60 * 1000, CAN_COOLDOWN_MS = 30 * 60 * 1000, CAN_M3 = 15000, CAN_RANGE_KM = 2.5;
 const HIBERNATE_GRACE_MS = 60 * 1000;
 
+const shipLabel = (sh) => sh.name || (SHIP_TYPES[sh.type] || {}).name || "Ship";
+
 export class World {
   constructor() {
     this.players = new Map(); // pid -> {id,name,send,offline}
@@ -182,6 +184,7 @@ export class World {
     const now = Date.now();
     const rocks = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(pid, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
     if (!rocks.length) return;
+    if (!rocks.some((r) => Inv.canAdd(sh.inv.ore, r.f.rock.ore, 1) > 0)) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
     sh.lasers.forEach((L, i) => { if (L.on) { L.repeat = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
   }
   // One laser. Active: a click toggles whether it repeats after this cycle (the cycle itself
@@ -193,6 +196,7 @@ export class World {
     if (!on) return;
     const tg = this._lockedRock(sh, rockId); if (!tg) return;
     const f = this._rockOf(pid, tg.id); if (!f || !this._inLaserRange(sh, f)) return;
+    if (Inv.canAdd(sh.inv.ore, f.rock.ore, 1) <= 0) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
     this._laserStart(sh, L, +idx, tg.id, f, Date.now());
   }
   // Auto-miner module: on each of its cycles it puts every idle laser on the primary (first locked) rock.
@@ -221,12 +225,21 @@ export class World {
     sh.warp = true;
   }
   _inv(pid, ref) {
-    const p = this.players.get(pid); if (!p) return null;
+    const p = this.players.get(pid); if (!p || !ref || typeof ref !== "object") return null;
     if (ref.owner === "can") { const c = this.cans.get(ref.id); return c ? { inv: c.inv, can: c } : null; }
     if (ref.owner === "station" && ref.inv === "delivery") return { inv: p.delivery, docked: true };
     if (ref.owner === "station") { const h = p.hangars[Math.max(0, Math.min(p.hangars.length - 1, (ref.h | 0)))]; return { inv: h.inv, docked: true }; }
+    if (ref.owner !== "ship" || (ref.inv !== "ore" && ref.inv !== "cargo")) return null;
     const sh = this.ships.get(ref.id); if (!sh || sh.owner !== pid) return null;
     return { inv: sh.inv[ref.inv], docked: sh.docked, ship: sh };
+  }
+  // The client names the item it meant: if the stacks shifted under it (a sort, a merge, another tab),
+  // find that item rather than acting on whatever now sits in the slot.
+  _slotOf(inv, slot, item) {
+    const i = Math.floor(Number(slot));
+    if (typeof item !== "string") return inv.slots[i] ? i : -1;
+    if (inv.slots[i] && inv.slots[i].item === item) return i;
+    return inv.slots.findIndex((st) => st.item === item);
   }
   cmdInvMove(pid, from, to, qty) {
     const a = this._inv(pid, from), b = this._inv(pid, to); if (!a || !a.inv || !b || !b.inv) return;
@@ -239,30 +252,31 @@ export class World {
         if (!shipEnd.ship || shipEnd.ship.docked || shipEnd.ship.sys !== canEnd.sys || Math.hypot(shipEnd.ship.x - canEnd.x, shipEnd.ship.y - canEnd.y) > CAN_RANGE_KM) { this._tell(pid, "Get within " + CAN_RANGE_KM + " km of the can."); return; }
       } else if (!(a.docked && b.docked)) return;
     }
-    if (Inv.move(a.inv, +from.slot, b.inv, to.slot == null ? null : +to.slot, qty) > 0) { this._markInv(pid); if (canEnd) this._canChanged(canEnd); }
+    const fi = this._slotOf(a.inv, from.slot, from.item); if (fi < 0) return;
+    if (Inv.move(a.inv, fi, b.inv, to.slot == null ? null : +to.slot, qty) > 0) { this._markInv(pid); if (canEnd) this._canChanged(canEnd); }
   }
   // Sell ore straight out of the hangar or a docked ship's hold. Credits are kept on the
   // user row; onCredits(pid, delta) persists the change.
-  cmdSell(pid, ref, slot, qty) {
+  cmdSell(pid, ref, slot, qty, item) {
     const a = this._inv(pid, ref); if (!a || !a.inv || !a.docked) return;
-    const st = a.inv.slots[+slot]; if (!st) return;
+    slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot]; if (!st) return;
     const def = Inv.ITEMS[st.item]; if (!def || !def.price) return;
     const n = Inv.take(a.inv, +slot, qty == null ? st.qty : +qty); if (n <= 0) return;
     const p = this.players.get(pid), delta = n * def.price;
     p.credits += delta; this._markInv(pid);
     if (this.onCredits) { try { this.onCredits(pid, delta); } catch (e) { console.error("onCredits", e); } }
   }
-  cmdInvSplit(pid, ref, slot, qty) { const a = this._inv(pid, ref); if (a && a.inv && Inv.split(a.inv, +slot, +qty) > 0) this._markInv(pid); }
+  cmdInvSplit(pid, ref, slot, qty, item) { const a = this._inv(pid, ref); if (a && a.inv && Inv.split(a.inv, this._slotOf(a.inv, slot, item), qty) > 0) this._markInv(pid); }
   // Jettison: items go into a new can floating beside the ship. One can every 30 minutes per pilot
   // account (destroying your can lifts that), cans hold 15,000 m³ and drift away after 30 minutes.
-  cmdJettison(pid, ref, slot, qty) {
+  cmdJettison(pid, ref, slot, qty, item) {
     const p = this.players.get(pid), a = this._inv(pid, ref); if (!p || !a || !a.inv || !a.ship) return;
     const sh = a.ship; if (sh.docked) { this._tell(pid, "Undock to jettison."); return; }
-    const st = a.inv.slots[+slot]; if (!st) return;
+    slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot]; if (!st) return;
     const now = Date.now();
     if (now < p.jetUntil) { const m = Math.ceil((p.jetUntil - now) / 60000); this._tell(pid, `You can jettison again in ${m} min. Open your can to add more, or destroy it.`); return; }
     const can = { id: "can:" + pid + ":" + now.toString(36), owner: pid, ownerName: p.name, sys: sh.sys, x: +(sh.x + 0.25).toFixed(4), y: +(sh.y - 0.2).toFixed(4), inv: Inv.makeInv(CAN_M3), expiresAt: now + CAN_LIFE_MS };
-    const moved = Inv.move(a.inv, +slot, can.inv, null, qty == null ? st.qty : +qty);
+    const moved = Inv.move(a.inv, slot, can.inv, null, qty == null ? st.qty : qty);
     if (moved <= 0) { this._tell(pid, "That won't fit in a can."); return; }
     this.cans.set(can.id, can); p.jetUntil = now + CAN_COOLDOWN_MS; this._markInv(pid); this._canChanged(can);
   }
@@ -280,6 +294,7 @@ export class World {
   _canChanged(c) { for (const p of this.players.values()) if (this._visibleSystems(p.id).has(c.sys)) p.invDirty = true; }
   // Rename one ship (its hull type stays what it is).
   cmdRenameShip(pid, shipId, name) {
+    if (name != null && typeof name !== "string") return;
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     const clean = String(name || "").replace(/\s+/g, " ").trim().slice(0, 20);
     sh.name = clean || null; this._markInv(pid);
@@ -295,12 +310,12 @@ export class World {
     if (this.onCredits) { try { this.onCredits(pid, -cost); } catch (e) { console.error("onCredits", e); } }
   }
   // Read a training manual: consumes it and unlocks that license for training.
-  cmdRead(pid, ref, slot) {
+  cmdRead(pid, ref, slot, item) {
     const a = this._inv(pid, ref); if (!a || !a.inv) return false;
-    const st = a.inv.slots[+slot]; const def = st && Inv.ITEMS[st.item]; if (!def || def.kind !== "manual") return false;
+    slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot]; const def = st && Inv.ITEMS[st.item]; if (!def || def.kind !== "manual") return false;
     const p = this.players.get(pid);
     if (p.unlocked[def.license]) { p.send(JSON.stringify({ t: "sys", text: "You already know this manual." })); return false; }
-    Inv.take(a.inv, +slot, 1); p.unlocked[def.license] = true; this._markInv(pid);
+    Inv.take(a.inv, slot, 1); p.unlocked[def.license] = true; this._markInv(pid);
     p.send(JSON.stringify({ t: "sys", text: def.name.replace(" Manual", "") + " can now be trained." }));
     return true;
   }
@@ -341,13 +356,14 @@ export class World {
     this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null }));
   }
   // Unpack a packaged ship sitting in a station container into a docked, uncrewed ship.
-  cmdAssemble(pid, ref, slot) {
+  cmdAssemble(pid, ref, slot, item) {
     const p = this.players.get(pid), a = this._inv(pid, ref); if (!p || !a || !a.inv || ref.owner !== "station") return;
-    const st = a.inv.slots[+slot], def = st && Inv.ITEMS[st.item]; if (!def || def.kind !== "ship") return;
-    Inv.take(a.inv, +slot, 1); this._buyShip(p, def.ship); this._markInv(pid);
+    slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot], def = st && Inv.ITEMS[st.item]; if (!def || def.kind !== "ship") return;
+    Inv.take(a.inv, slot, 1); this._buyShip(p, def.ship); this._markInv(pid);
     this._tell(pid, `${def.name} assembled. Crew it from the station's ship list.`);
   }
   cmdRenameHangar(pid, h, name) {
+    if (typeof name !== "string") return;
     const p = this.players.get(pid), hg = p && p.hangars[h | 0]; if (!hg) return;
     const clean = String(name || "").replace(/\s+/g, " ").trim().slice(0, 20); if (!clean) return;
     hg.name = clean; this._markInv(pid);
@@ -414,7 +430,9 @@ export class World {
     for (const sh of this.ships.values()) {
       if (sh.sys !== sysId || sh.owner === ownerId) continue;
       sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
-      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.cargo = null;
+      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.warp = false; sh.targets = []; sh.auto.on = false;
+      for (const L of sh.lasers) this._laserStop(L);
+      sh.inv.ore.slots = []; sh.inv.cargo.slots = [];           // destroyed with everything aboard
       const o = this.players.get(sh.owner);
       if (o && !o.offline) o.send(JSON.stringify({ t: "sys", text: "The gate closed on you. Your ship was destroyed; you respawn at your station." }));
     }
@@ -481,15 +499,17 @@ export class World {
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;
       // the ore lands when the cycle completes, then the laser repeats (unless told not to)
+      let told = false;
       for (let i = 0; i < sh.lasers.length; i++) {
         const L = sh.lasers[i]; if (!L.on) continue;
         const tg = L.rock && this._lockedRock(sh, L.rock), f = tg ? this._rockOf(sh.owner, L.rock) : null;
         if (!f || !this._inLaserRange(sh, f)) { this._laserStop(L); continue; }
+        if (Inv.canAdd(sh.inv.ore, f.rock.ore, 1) <= 0) { this._laserStop(L); if (!told) this._tell(sh.owner, shipLabel(sh) + ": ore hold full."); told = true; continue; }   // hold full: breaks the cycle now
         if (now < L.until) continue;
         const def = Inv.ITEMS[f.rock.ore];
         const units = Math.min(Math.floor(this._yieldM3s(sh) * (L.dur || MINING_CYCLE_MS) / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
         const got = units > 0 ? Inv.add(sh.inv.ore, f.rock.ore, units) : 0;
-        if (got <= 0) { this._laserStop(L); continue; }                        // hold full: laser stops, target stays
+        if (got <= 0) { this._laserStop(L); continue; }
         f.rock.m3 = Math.max(0, +(f.rock.m3 - got * def.unitM3).toFixed(3));
         if (f.rock.m3 < def.unitM3) f.rock.m3 = 0;                                // less than one unit left: mined out
         owner.invDirty = true; (owner.rockDirty ||= new Map()).set(f.rock.id, f.rock.m3);

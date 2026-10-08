@@ -56,9 +56,14 @@ export async function listPilotRows(userId) {
   return rows;
 }
 
+export const MAX_PILOTS = 3;
 export async function createPilot(userId, nameRaw) {
-  const name = String(nameRaw || "").trim().slice(0, 24);
+  if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
+  const name = nameRaw.replace(/\s+/g, " ").trim().slice(0, 24);
   if (!name) throw new Error("Pilot name required.");
+  const { rows: have } = await pool.query(`SELECT name FROM pilots WHERE user_id = $1`, [userId]);
+  if (have.length >= MAX_PILOTS) throw new Error(`An account can have at most ${MAX_PILOTS} pilots.`);
+  if (have.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new Error("You already have a pilot with that name.");
   const { rows } = await pool.query(
     `INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`,
     [userId, name, freshData()]

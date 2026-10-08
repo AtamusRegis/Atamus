@@ -70,17 +70,29 @@
     wins[id] = { id, win, body, slot, bar, close, render: opts.render, label: opts.label, groupable: opts.groupable !== false, group: null };
     return wins[id];
   }
+  // keep a window on screen (phones, or a desktop window that shrank): narrower than the screen, inside it
+  const PANEL_W = 48;
+  function fitOnScreen(elm) {
+    if (!elm || elm.hidden) return;
+    const maxW = innerWidth - PANEL_W - 4;
+    if (elm.dataset.id !== "fleet" && elm.offsetWidth > maxW) elm.style.width = maxW + "px";
+    if (elm.offsetHeight > innerHeight - 4) elm.style.height = (innerHeight - 4) + "px";
+    const l = parseFloat(elm.style.left) || 0, t = parseFloat(elm.style.top) || 0;
+    elm.style.left = Math.max(PANEL_W, Math.min(innerWidth - elm.offsetWidth - 2, l)) + "px";
+    elm.style.top = Math.max(0, Math.min(innerHeight - Math.min(elm.offsetHeight, 120), t)) + "px";
+  }
+  addEventListener("resize", () => { for (const w of document.querySelectorAll(".win:not([hidden]), .license-popup")) fitOnScreen(w); });
   function toggleWindow(id, force) {
     const w = wins[id]; if (!w) return;
     const show = force != null ? force : !isOpen(w);
     if (w.group) {                                   // lives in a tab group
       const g = groups[w.group];
-      if (show || id === "unit") { setActive(g, id); g.frame.style.zIndex = ++z; }   // the selection window stays in its group
+      if (show || id === "unit") { setActive(g, id); g.frame.style.zIndex = ++z; if (show) fitOnScreen(g.frame); }   // the selection window stays in its group
       else removeFromGroup(id, true);
       updateBtnActive(); updateChatGlow(); return;
     }
     w.win.hidden = !show;
-    if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); }
+    if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
     persistWin(id); updateBtnActive(); updateChatGlow();
     if (id === "fleet" && typeof renderShipActions === "function") { actSig = ""; renderShipActions(); }
   }
@@ -498,6 +510,7 @@
     document.body.appendChild(popup);
     popup.addEventListener("mousedown", () => { popup.style.zIndex = ++z; });
     const savePos = () => { saved.data = { x: popup.offsetLeft, y: popup.offsetTop }; persistAll(); };
+    fitOnScreen(popup);
     dragMove(popup, titleBar, savePos);
     addResize(popup, 300, 240, savePos);
     popups.push(popup);
@@ -1007,9 +1020,9 @@
           st.live.qty[i] = { qty, item, def };
           cell.append(item);
           cell.setAttribute("draggable", "true");
-          cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i } })); e.dataTransfer.effectAllowed = "move"; });
+          cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i, item: stck.item } })); e.dataTransfer.effectAllowed = "move"; });
           cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openItemMenu(ref, i, e.clientX, e.clientY); });
-          touchDrag(cell, { ref: { ...ref, slot: i } }, () => { const r = cell.getBoundingClientRect(); openItemMenu(ref, i, r.left + r.width / 2, r.top + r.height / 2); });
+          touchDrag(cell, { ref: { ...ref, slot: i, item: stck.item } }, () => { const r = cell.getBoundingClientRect(); openItemMenu(ref, i, r.left + r.width / 2, r.top + r.height / 2); });
         }
         dropTarget(cell, { ...ref, slot: i < data.slots.length ? i : null }, A);
         grid.append(cell);
@@ -1096,21 +1109,23 @@
     const holder = ref.owner === "ship" ? A.ship(ref.id) : null, atStation = ref.owner === "station" || !!(holder && holder.docked);
     const items = [];
     if (stck.qty > 1) items.push(["Split", () => openSplit(ref, slot)]);
-    if (ref.owner === "ship" && holder && !holder.docked) items.push(["Jettison", () => A.send({ t: "jettison", ref, slot })]);
+    if (ref.owner === "ship" && holder && !holder.docked) items.push(["Jettison", () => A.send({ t: "jettison", ref, slot, item: stck.item })]);
     if (def.price && def.kind === "ore") items.push([atStation ? "Sell" : "Sell (dock first)", () => { if (atStation) openSell(ref, slot); }]);
-    if (def.kind === "manual") items.push(["Read", () => A.send({ t: "read", ref, slot })]);
-    if (def.kind === "ship") items.push([ref.owner === "station" ? "Assemble" : "Assemble (in a station)", () => { if (ref.owner === "station") A.send({ t: "assemble", ref, slot }); }]);
+    if (def.kind === "manual") items.push(["Read", () => A.send({ t: "read", ref, slot, item: stck.item })]);
+    if (def.kind === "ship") items.push([ref.owner === "station" ? "Assemble" : "Assemble (in a station)", () => { if (ref.owner === "station") A.send({ t: "assemble", ref, slot, item: stck.item }); }]);
     items.push(["Info", () => def.kind === "ship" ? openShipInfo(def.ship) : openInfo(stck.item, stck.qty)]);
     showCtxMenu(x, y, items);
   }
   let splitAt = null;
   function openSplit(ref, slot) {
     if (!wins.split) createWindow("split", { left: Math.round(innerWidth / 2 - 140), top: Math.round(innerHeight / 2 - 80), width: 280, minW: 240, minH: 120, render: renderSplit, groupable: false });
-    splitAt = { ref, slot }; wins.split.sig = null; toggleWindow("split", true); renderSplit(wins.split.body);
+    splitAt = { ref, slot, item: ((invData(ref) || {}).slots || [])[slot]?.item }; wins.split.sig = null; toggleWindow("split", true); renderSplit(wins.split.body);
   }
   function renderSplit(body) {
     const A = window.Atamus, w = wins.split;
-    const data = splitAt && invData(splitAt.ref), stck = data && data.slots[splitAt.slot];
+    const data = splitAt && invData(splitAt.ref);
+    if (data && splitAt.item && (data.slots[splitAt.slot] || {}).item !== splitAt.item) splitAt.slot = data.slots.findIndex((x) => x.item === splitAt.item);   // follow the stack if it moved
+    const stck = data && data.slots[splitAt.slot];
     const sig = stck ? stck.item + ":" + stck.qty : ""; if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
     if (!stck || stck.qty < 2) { w.slot.textContent = "Split"; body.append(el("div", { class: "muted" }, "Nothing to split.")); return; }
     const def = (A.cfg.items || {})[stck.item] || { name: stck.item };
@@ -1123,7 +1138,7 @@
     body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Take off"), num), range,
       el("div", { class: "unit-btns row2" },
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("split", false) }, "Cancel"),
-        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "inv_split", ref: splitAt.ref, slot: splitAt.slot, qty: +num.value }); toggleWindow("split", false); } }, "Split")));
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "inv_split", ref: splitAt.ref, slot: splitAt.slot, item: splitAt.item, qty: +num.value }); toggleWindow("split", false); } }, "Split")));
   }
   let infoItem = null;
   function openInfo(key, qty) {
@@ -1185,7 +1200,9 @@
   function renderBuy(body) {
     const A = window.Atamus, w = wins.buy, m = buyOffer; if (!m) return;
     const credits = A.inv.credits || 0, sig = m.key + ":" + credits;
-    if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
+    if (sig === w.sig && body.childElementCount) return;
+    const keepQ = w.sig && w.sig.split(":").slice(0, -1).join(":") === m.key ? w.q : 1;   // credits changed: keep the quantity being typed
+    w.sig = sig; body.innerHTML = "";
     const def = (A.cfg.items || {})[m.key] || {}, t = m.ship ? hullOf(m.ship) : null;
     w.slot.textContent = "Buy " + (m.name || def.name);
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
@@ -1196,9 +1213,9 @@
     } else body.append(el("div", { class: "info-desc" }, el("span", {}, def.desc || "")), row("Category", (m.path || []).slice(1).join(" · ") || "—"));
     const max = Math.max(1, Math.min(100, Math.floor(credits / m.price) || 1));
     const range = el("input", { type: "range", class: "sell-range", min: 1, max, value: 1 });
-    const num = el("input", { type: "number", class: "sell-num", min: 1, max: 1000, value: 1 });
+    const num = el("input", { type: "number", class: "sell-num", min: 1, max: 1000, value: keepQ || 1 });
     const total = el("span", { class: "credits" }), buyBtn = el("button", { class: "btn-primary2 unit-btn" }, "Buy");
-    const upd = () => { const q = Math.max(1, Math.min(1000, Math.round(+num.value || 1))); num.value = q; range.value = Math.min(q, max); total.textContent = (q * m.price).toLocaleString() + " cr"; total.classList.toggle("poor", q * m.price > credits); buyBtn.disabled = q * m.price > credits; };
+    const upd = () => { const q = Math.max(1, Math.min(1000, Math.round(+num.value || 1))); num.value = q; w.q = q; range.value = Math.min(q, max); total.textContent = (q * m.price).toLocaleString() + " cr"; total.classList.toggle("poor", q * m.price > credits); buyBtn.disabled = q * m.price > credits; };
     range.addEventListener("input", () => { num.value = range.value; upd(); }); num.addEventListener("input", upd);
     buyBtn.addEventListener("click", () => { A.send({ t: "buy", item: m.key, qty: +num.value }); toggleWindow("buy", false); });
     body.append(row("Price", el("span", {}, cr(m.price), " each")), row("Quantity", num), range, row("Total", total), row("Your credits", cr(credits)),
@@ -1215,12 +1232,14 @@
     const holder = ref.owner === "station" ? null : A.ship(ref.id);
     if (holder && !holder.docked) { flash("Dock to sell."); return; }
     if (!wins.sell) createWindow("sell", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 90), width: 300, minW: 260, minH: 150, render: renderSell, groupable: false });
-    sell = { ref, slot }; wins.sell.sig = null;
+    sell = { ref, slot, item: stck.item }; wins.sell.sig = null;
     toggleWindow("sell", true); renderSell(wins.sell.body);
   }
   function renderSell(body) {
     const A = window.Atamus, w = wins.sell;
-    const data = sell && invData(sell.ref), stck = data && data.slots[sell.slot];
+    const data = sell && invData(sell.ref);
+    if (data && sell.item && (data.slots[sell.slot] || {}).item !== sell.item) sell.slot = data.slots.findIndex((x) => x.item === sell.item);   // follow the stack if it moved
+    const stck = data && data.slots[sell.slot];
     const def = stck && (A.cfg.items || {})[stck.item];
     const sig = stck ? stck.item + ":" + stck.qty : "";
     if (sig === w.sig && body.childElementCount) return;             // stack unchanged: keep the slider as it is
@@ -1236,7 +1255,7 @@
     body.append(row("Price", el("span", {}, cr(def.price), " / unit")), row("Quantity", num), qty, row("You get", total),
       el("div", { class: "unit-btns row2" },
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("sell", false) }, "Cancel"),
-        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "sell", ref: sell.ref, slot: sell.slot, qty: +num.value }); toggleWindow("sell", false); } }, "Confirm")));
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "sell", ref: sell.ref, slot: sell.slot, item: sell.item, qty: +num.value }); toggleWindow("sell", false); } }, "Confirm")));
     upd();
   }
   window.Atamus.bus.addEventListener("inv", () => {

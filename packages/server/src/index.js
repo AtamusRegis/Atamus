@@ -55,3 +55,6 @@ main().catch((e) => {
   console.error("Fatal startup error:", e);
   process.exit(1);
 });
+
+// a stray rejected promise is logged, never fatal: one bad request must not take the game down for everyone
+process.on("unhandledRejection", (e) => console.error("unhandledRejection", e));

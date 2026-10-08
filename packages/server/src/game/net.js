@@ -16,6 +16,7 @@ import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../
 import { PTR, devCommand } from "../ptr.js";
 
 const world = new World();
+const conns = new Map();   // pid -> open sockets (a player may have the game open in more than one tab)
 
 const CLIENT_CONFIG = {
   cells: CELLS,
@@ -38,7 +39,7 @@ const CLIENT_CONFIG = {
 };
 
 export function attachGameServer(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 64 * 1024 });
   onCountdown((at, head, parts) => { const msg = JSON.stringify({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
   // a new website build is live: tell every connected client to reload now
   onWebsiteUpdate((v) => { const msg = JSON.stringify({ t: "update", web: v }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
@@ -51,9 +52,20 @@ export function attachGameServer(httpServer) {
 
     const pid = String(user.id);
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
-    let saved = null; try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
-    const player = world.addPlayer(pid, user.username, send, saved);
-    try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
+    if (!conns.has(pid)) conns.set(pid, new Set());
+    const mine = conns.get(pid); mine.add(ws);
+    const sendAll = (s) => { for (const c of mine) if (c.readyState === c.OPEN) c.send(s); };
+    const inMemory = world.players.has(pid);               // another tab, or a system still awake: memory is the truth
+    let saved = null; if (!inMemory) try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
+    if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }   // left while loading
+    const player = world.addPlayer(pid, user.username, sendAll, saved);
+    let licTimer = 0;
+    ws.on("close", () => {
+      clearInterval(licTimer); mine.delete(ws);
+      if (mine.size) return;                                 // still playing in another tab
+      conns.delete(pid); persist(pid).finally(() => { if (!conns.has(pid)) world.removePlayer(pid); });
+    });
+    if (!inMemory) try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
     // highest level of each license across the account's pilots drives module stats (auto-miner cycle etc.)
     const refreshLicenses = async () => {
       try {
@@ -64,12 +76,19 @@ export function attachGameServer(httpServer) {
       } catch (e) { console.error("licenses", e); }
     };
     await refreshLicenses();
-    const licTimer = setInterval(refreshLicenses, 60000);
+    licTimer = setInterval(refreshLicenses, 60000);
     send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
+    let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
+      const now = Date.now(); budget = Math.min(40, budget + (now - budgetAt) * 0.04); budgetAt = now;
+      if (budget < 1) return; budget--;
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+      if (!m || typeof m !== "object" || typeof m.t !== "string") return;
+      try { handle(m); } catch (e) { console.error("command " + m.t, e); }
+    });
+    const handle = (m) => {
       switch (m.t) {
         case "gate": world.cmdGate(pid, m.gate, !!m.open); break;
         case "move": world.cmdMove(pid, m.ships, +m.x, +m.y); break;
@@ -78,15 +97,15 @@ export function attachGameServer(httpServer) {
         case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
         case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
         case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
-        case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty); break;
-        case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty); break;
+        case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
+        case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
         case "buy": world.cmdBuy(pid, m.item, m.qty); break;
-        case "read": if (world.cmdRead(pid, m.ref, m.slot)) persist(pid); break;
+        case "read": if (world.cmdRead(pid, m.ref, m.slot, m.item)) persist(pid); break;
         case "licenses": refreshLicenses(); break;
-        case "crew": refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)); break;
+        case "crew": refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)).catch((e) => console.error("crew", e)); break;
         case "decrew": world.cmdDecrew(pid, m.ship); break;
         case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
-        case "assemble": world.cmdAssemble(pid, m.ref, m.slot); break;
+        case "assemble": world.cmdAssemble(pid, m.ref, m.slot, m.item); break;
         case "destroy_can": world.cmdDestroyCan(pid, m.can); break;
         case "rename_ship": world.cmdRenameShip(pid, m.ship, m.name); break;
         case "dev": if (PTR) devCommand(world, pid, m, refreshLicenses); break;
@@ -94,10 +113,9 @@ export function attachGameServer(httpServer) {
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
         case "inv_sort": world.cmdInvSort(pid, m.ref); break;
-        case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty); break;
+        case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty, m.item); break;
       }
-    });
-    ws.on("close", () => { clearInterval(licTimer); persist(pid).finally(() => world.removePlayer(pid)); });
+    };
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
 
