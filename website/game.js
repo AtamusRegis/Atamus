@@ -38,7 +38,15 @@
     else if (u.kind === "station") selectUnit(u);
   }
   window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
-    targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null } };
+    targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null },
+    // centre the camera on a ship (or the station it's docked at)
+    locateShip: (id) => {
+      const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
+      const pl = curPlace.get(sh.sys) || { gx: 0, gy: 0 };
+      const p = sh.docked ? (cfg.station || { x: 0, y: 0 }) : shipPos(sh);
+      follow = false; panVel.x = panVel.y = 0; cam.cx = pl.gx + p.x; cam.cy = pl.gy + p.y; viewWTarget = sh.docked ? 14 : 6;
+      return true;
+    } };
 
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
@@ -52,18 +60,9 @@
   const bgImg = new Image(); let bgReady = false;
   bgImg.onload = () => { bgReady = true; drawBackground(); }; bgImg.src = "assets/nebula_bg.webp";
 
-  // ---- ship art registry: each hull drawn at true scale from its sprite ----
-  // lengthKm maps the sprite's long axis to real metres. Own ships render blue,
-  // other players' ships render red. Only the Chisel spawns for now; the rest
-  // are registered and ready for when ship-switching/building lands.
-  const SHIP_TYPES = {
-    chisel:     { lengthKm: 0.128 },
-    barge_xs:   { lengthKm: 0.305 }, barge_s:  { lengthKm: 0.375 }, barge_m:  { lengthKm: 0.411 },
-    exhumer_xs: { lengthKm: 0.305 }, exhumer_s:{ lengthKm: 0.375 }, exhumer_m:{ lengthKm: 0.411 },
-    gleaner:    { lengthKm: 0.859 }, lodestar: { lengthKm: 0.859 }, motherlode:{ lengthKm: 1.450 },
-    wick:       { lengthKm: 0.067 }, beacon:   { lengthKm: 0.404 }, vigil:    { lengthKm: 1.466 },
-  };
-  const CHISEL_LEN_KM = SHIP_TYPES.chisel.lengthKm; // legacy ref
+  // ---- ship art: each hull is drawn at true scale from its sprite (stats come from the server) ----
+  // Own ships render blue, other players' ships red.
+  const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Chisel", sprite: "chisel", lengthKm: 0.128 };
   // station: one per system at its centre, drawn at true size (2766 m long)
   const STATION_LEN_KM = 2.766;
   const DOCK_RADIUS_KM = 4;   // ships within this of the station can dock / are anchored
@@ -73,13 +72,13 @@
 
   const shipArt = {}; // type -> { blue:Image, red:Image }
   function art(type) {
-    if (!SHIP_TYPES[type]) type = "chisel";
-    if (!shipArt[type]) {
-      const b = new Image(); b.src = "assets/ships/" + type + "_blue.webp";
-      const r = new Image(); r.src = "assets/ships/" + type + "_red.webp";
-      shipArt[type] = { blue: b, red: r };
+    const spr = hull(type).sprite;
+    if (!shipArt[spr]) {
+      const b = new Image(); b.src = "assets/ships/" + spr + "_blue.webp";
+      const r = new Image(); r.src = "assets/ships/" + spr + "_red.webp";
+      shipArt[spr] = { blue: b, red: r };
     }
-    return shipArt[type];
+    return shipArt[spr];
   }
 
   let systemRadius = 250, placeDist = 650;
@@ -96,7 +95,12 @@
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
-      else if (m.t === "snap") { snap = m; snapAt = performance.now(); if (!selRestored && invs.hangar) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
+      else if (m.t === "snap") {
+        if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
+          const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
+          if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = { kind: "station", id: "station" }; setTimeout(() => selectUnit({ kind: "station", id: "station" }), 0); }
+        }
+        snap = m; snapAt = performance.now(); if (!selRestored && invs.hangar) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
@@ -183,7 +187,7 @@
   }
   function anyShipAt(p) {   // any ship, not just mine (for targeting)
     let best = null, bd = Infinity;
-    for (const sh of snap.ships || []) { const sp = shipScreen(sh); if (!sp) continue; const r = Math.max(12, (SHIP_TYPES[sh.type] || SHIP_TYPES.chisel).lengthKm * scale() / 2 + 5); const d = Math.hypot(p.x - sp.x, p.y - sp.y); if (d <= r && d < bd) { bd = d; best = sh; } }
+    for (const sh of snap.ships || []) { const sp = shipScreen(sh); if (!sp) continue; const r = Math.max(12, hull(sh.type).lengthKm * scale() / 2 + 5); const d = Math.hypot(p.x - sp.x, p.y - sp.y); if (d <= r && d < bd) { bd = d; best = sh; } }
     return best;
   }
   function gateAt(p) {
@@ -192,7 +196,7 @@
   }
   function shipAt(p) {
     let best = null, bestD = Infinity;
-    for (const sh of snap.ships || []) { if (!sh.mine || sh.docked) continue; const s = shipScreen(sh); if (!s) continue; const r = Math.max(12, CHISEL_LEN_KM * scale() / 2 + 5); const d = Math.hypot(p.x - s.x, p.y - s.y); if (d <= r && d < bestD) { bestD = d; best = sh; } }
+    for (const sh of snap.ships || []) { if (!sh.mine || sh.docked) continue; const s = shipScreen(sh); if (!s) continue; const r = Math.max(12, hull(sh.type).lengthKm * scale() / 2 + 5); const d = Math.hypot(p.x - s.x, p.y - s.y); if (d <= r && d < bestD) { bestD = d; best = sh; } }
     return best;
   }
   // exactly one ship selected -> it owns the unit panel
@@ -411,15 +415,15 @@
     if (w.rock) { const o = (cfg.ores || []).find((q) => q.key === w.rock.ore); name = (o ? o.name : w.rock.ore) + " " + w.rock.size + " m"; sub = Math.round(w.rock.m3).toLocaleString() + " m³ left"; }
     else if (tg.kind === "gate") { name = "Stargate"; }
     else if (tg.kind === "station") { name = "Station"; }
-    else if (w.ship) { const t = (cfg.shipTypes || {})[w.ship.type] || {}; name = t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }
-    return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + ((SHIP_TYPES[w.ship.type] ? w.ship.type : "chisel")) + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
+    else if (w.ship) { const t = hull(w.ship.type); name = t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }
+    return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + hull(w.ship.type).sprite + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
   }
   function targetScreen(place, tg) {
     const pl = place.get(mySys()); if (!pl) return null;
     if (tg.kind === "rock") { for (const b of belts) { const rk = b.rocks.find((r) => r.id === tg.id); if (rk) return { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) }; } return null; }
     if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: gx2s(pl.gx + g.lx), y: gy2s(pl.gy + g.ly), r: Math.max(12, GATE_LEN_KM * scale() * 0.6) } : null; }
     if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: gx2s(pl.gx + st.x), y: gy2s(pl.gy + st.y), r: Math.max(14, STATION_LEN_KM * scale() * 0.55) }; }
-    if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const sp = shipScreen(o); return sp ? { x: sp.x, y: sp.y, r: Math.max(10, (SHIP_TYPES[o.type] || SHIP_TYPES.chisel).lengthKm * scale() * 0.62) } : null; }
+    if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const sp = shipScreen(o); return sp ? { x: sp.x, y: sp.y, r: Math.max(10, hull(o.type).lengthKm * scale() * 0.62) } : null; }
     return null;
   }
   // two half-crescents either side of the target: flashing while locking, orange when locked
@@ -438,7 +442,7 @@
     if (!sh.lasers || !sh.lasers.some((l) => l.on)) return;
     const pl = place.get(sh.sys); if (!pl) return;
     const t = (cfg.shipTypes && cfg.shipTypes[sh.type]) || {}, hps = t.hardpoints || [[0, 0]];
-    const L = (SHIP_TYPES[sh.type] || SHIP_TYPES.chisel).lengthKm * scale();
+    const L = hull(sh.type).lengthKm * scale();
     const c = Math.cos(-h), sn = Math.sin(-h);
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     const cyc = (cfg.cycleMs || 15000);
@@ -525,8 +529,8 @@
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
       }
-      const type = SHIP_TYPES[sh.type] ? sh.type : "chisel";
-      const lenKm = SHIP_TYPES[type].lengthKm;
+      const type = sh.type;
+      const lenKm = hull(type).lengthKm;
       const wPx = Math.max(2, lenKm * scale());           // true metre scale (min 2px so it's never a dead pixel)
       const img = sh.mine ? art(type).blue : art(type).red;
       if (img && img.naturalWidth) {

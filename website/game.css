@@ -309,3 +309,30 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .mk-buy:disabled { opacity: .35; cursor: default; filter: none; }
 .ship-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
 .ship-ico { height: 18px; width: auto; image-rendering: pixelated; }
+
+/* hud must really hide */
+#hud[hidden] { display: none; }
+
+/* station hangar list */
+.hangar-head { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 8px 2px 4px; }
+.hangar-ship { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.05); border: none; border-radius: var(--radius-sm); padding: 6px 8px; margin-bottom: 4px; cursor: pointer; text-align: left; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.hangar-ship:hover { background: rgba(255,255,255,0.1); }
+.hangar-ship .ship-ico { height: 16px; flex: none; }
+.hs-name { font-weight: 600; }
+.hs-pilot { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+.hs-pilot.none { color: #ff9a6a; }
+.ship-hero { display: grid; place-items: center; padding: 6px 0 10px; }
+.ship-hero-img { max-width: 100%; height: 44px; object-fit: contain; image-rendering: pixelated; }
+
+/* market groups */
+.mk-cat, .mk-sub-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; border-radius: var(--radius-sm); }
+.mk-cat { margin-top: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; background: rgba(255,255,255,0.06); }
+.mk-sub-h { margin: 4px 0 2px 10px; padding: 4px 8px; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }
+.mk-cat:hover, .mk-sub-h:hover { color: var(--text); }
+.mk-caret { display: inline-block; font-size: 9px; transition: transform .15s; }
+.mk-cat.open .mk-caret, .mk-sub-h.open .mk-caret { transform: rotate(90deg); }
+.mk-count { margin-left: auto; font-size: 10px; color: var(--text-faint); font-weight: 400; }
+.mk-row { margin-left: 10px; }
+.mk-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mk-ship { height: 14px; image-rendering: pixelated; }
+.mk-name .mk-sub { width: 100%; }

@@ -328,13 +328,26 @@
 
     const tabs = [["skills", "Licenses"], ["queue", "Training Queue"], ["ship", "Current Ship"], ["items", "Items"]];
     body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => {
-      const dis = k === "ship" || k === "items";
+      const dis = k === "items";
       return el("button", { class: "tab" + (k === pilotTab ? " active" : "") + (dis ? " disabled" : ""), onclick: () => { if (dis) return; pilotTab = k; renderPilot(body); } }, n);
     })));
     const content = el("div", { class: "tab-content" }); body.append(content);
     if (pilotTab === "skills") renderSkills(content, pilot);
     else if (pilotTab === "queue") renderQueue(content, pilot);
+    else if (pilotTab === "ship") renderPilotShip(content, pilot);
     else content.append(el("div", { class: "muted" }, "Coming soon."));
+  }
+  function renderPilotShip(content, pilot) {
+    const A = window.Atamus, sh = ((A.snap && A.snap.ships) || []).find((x) => x.mine && String(x.pilot) === String(pilot.id));
+    if (!sh) { content.append(el("div", { class: "muted" }, pilot.name + " isn't crewing a ship. Right-click a ship in your station hangar to crew it.")); return; }
+    const t = hullOf(sh.type);
+    const where = sh.docked ? "Docked at station" : sh.warp ? "Warping" : sh.moving ? "In space · moving" : "In space";
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    content.append(el("div", { class: "ship-hero" }, shipIcon(sh.type, "ship-hero-img")),
+      row("Ship", t.name), row("Class", t.cls || "—"), row("Location", where),
+      el("div", { class: "unit-btns" },
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.locateShip(sh.id); if (!sh.docked) A.selectShip(sh.id); } }, "Locate"),
+        el("button", { class: "btn-primary2 unit-btn off", onclick: () => openShipInfo(sh.type) }, "Ship info")));
   }
 
   function renderCreatePilot(body) {
@@ -499,6 +512,45 @@
 
   // ---- selected unit (structures now; ships later) ----
   const fmtClock = (ms) => { const t = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60; return h + ":" + String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0"); };
+  // ---- ships & crews ----
+  const hullOf = (type) => ((window.Atamus.cfg || {}).shipTypes || {})[type] || { name: type, sprite: "chisel" };
+  const pilotName = (id) => { const p = state && state.pilots.find((x) => String(x.id) === String(id)); return p ? p.name : null; };
+  const canFly = (pilot, type) => Object.entries(hullOf(type).req || {}).every(([k, lvl]) => (pilot.licenses[k] || 0) >= lvl);
+  const shipIcon = (type, cls) => el("img", { class: cls || "ship-ico", src: "assets/ships/" + hullOf(type).sprite + "_blue.webp", alt: "", draggable: "false" });
+  function shipMenu(sh, x, y) {
+    const A = window.Atamus, items = [];
+    if (sh.docked) {
+      if (sh.pilot != null) items.push(["Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })]);
+      items.push(["Inventory", () => openInventory({ owner: "ship", id: sh.id, inv: "ore" })]);
+      for (const p of (state && state.pilots) || []) {
+        if (String(p.id) === String(sh.pilot)) continue;
+        const ok = canFly(p, sh.type);
+        items.push([(ok ? "Crew: " : "Can't crew: ") + p.name, () => { if (ok) A.send({ t: "crew", ship: sh.id, pilot: p.id }); else flash(p.name + " lacks the licences for the " + hullOf(sh.type).name + "."); }]);
+      }
+      if (sh.pilot != null) items.push(["Remove pilot (" + (pilotName(sh.pilot) || "pilot") + ")", () => A.send({ t: "decrew", ship: sh.id })]);
+    } else items.push(["Locate", () => A.locateShip(sh.id)]);
+    items.push(["Info", () => openShipInfo(sh.type)]);
+    showCtxMenu(x, y, items);
+  }
+  let shipInfoType = null;
+  function openShipInfo(type) {
+    if (!wins.shipinfo) createWindow("shipinfo", { left: Math.round(innerWidth / 2 - 170), top: 120, width: 340, minW: 280, minH: 200, render: renderShipInfo, groupable: false });
+    shipInfoType = type; toggleWindow("shipinfo", true); renderShipInfo(wins.shipinfo.body);
+  }
+  function renderShipInfo(body) {
+    const w = wins.shipinfo, t = hullOf(shipInfoType); body.innerHTML = ""; w.slot.textContent = t.name || "Ship";
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const lic = (k) => { const l = catalog && catalog.licenses.find((x) => x.key === k); return l ? l.name : k; };
+    body.append(el("div", { class: "ship-hero" }, shipIcon(shipInfoType, "ship-hero-img")),
+      el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
+      row("Class", t.cls || "—"), row("Requires", Object.entries(t.req || {}).map(([k, l]) => lic(k) + " " + l).join(", ") || "—"),
+      row("Shield / Hull", (t.shield || 0).toLocaleString() + " / " + (t.hp || 0).toLocaleString()),
+      row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"),
+      row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"), row("Mining lasers", (t.lasers || 0) + " × " + (t.laserM3s || 0) + " m³/s"),
+      row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"),
+      row("Market price", (t.price || 0).toLocaleString() + " cr"));
+  }
+
   // The panel only rebuilds its DOM when the *structure* changes (unit, buttons);
   // numbers update in place so a button is never replaced mid-click.
   function renderUnit(body) {
@@ -507,8 +559,8 @@
     const fmtM3 = (a, b) => Math.round(a).toLocaleString() + " / " + b.toLocaleString() + " m³";
     const docked = u && u.kind === "station" ? (A.snap.ships || []).filter((sh) => sh.mine && sh.docked) : [];
     const lockedRock = !!(u && (u.targets || []).some((t) => t.kind === "rock" && t.locked));
-    const sig = !u ? "" : u.kind === "ship" ? ["ship", u.id, u.docked, u.warp, u.mining, u.moving, u.canDock, lockedRock].join("|")
-      : u.kind === "station" ? ["station", docked.map((d) => d.id).join(",")].join("|")
+    const sig = !u ? "" : u.kind === "ship" ? ["ship", u.id, u.docked, u.warp, u.mining, u.moving, u.canDock, lockedRock, u.pilot].join("|")
+      : u.kind === "station" ? ["station", docked.map((d) => d.id + ":" + d.pilot).join(","), state ? state.pilots.length : 0].join("|")
       : ["gate", u.id, u.state, u.mine].join("|");
     if (sig !== w.sig) {
       w.sig = sig; w.live = {}; body.innerHTML = "";
@@ -518,7 +570,7 @@
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); L[k] = { fill, txt }; return el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       if (u.kind === "ship") {
         const st = u.stats || {};
-        body.append(row("Type", u.name));
+        body.append(row("Type", u.name), row("Pilot", pilotName(u.pilot) || "No pilot"));
         const btns = el("div", { class: "unit-btns" });
         if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
         if (lockedRock && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn" + (u.mining ? " off" : ""), onclick: () => A.send({ t: "mine", ship: u.id, on: !u.mining }) }, u.mining ? "Stop Mining" : "Mine (X)"));
@@ -528,10 +580,14 @@
         body.append(btns);
       } else if (u.kind === "station") {
         body.append(bar("Hangar", "hold"));
-        for (const sh of docked) {                                   // click a docked ship to select it (Undock / Inventory)
-          const t = (A.cfg.shipTypes || {})[sh.type] || {};
-          body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Docked"),
-            el("button", { class: "btn-primary2 unit-btn off ship-btn", onclick: () => A.selectShip(sh.id) }, el("img", { class: "ship-ico", src: "assets/ships/" + sh.type + "_blue.webp", alt: "", draggable: "false" }), el("span", {}, t.name || sh.type))));
+        if (docked.length) body.append(el("div", { class: "hangar-head" }, "Ships in hangar"));
+        for (const sh of docked) {                                   // click: select it · right-click / hold: crew, undock, info
+          const t = hullOf(sh.type), who = pilotName(sh.pilot);
+          const b = el("button", { class: "hangar-ship", title: "Right-click or hold for crew and options", onclick: () => A.selectShip(sh.id) },
+            shipIcon(sh.type), el("span", { class: "hs-name" }, t.name || sh.type), el("span", { class: "hs-pilot" + (who ? "" : " none") }, who || "No pilot"));
+          b.addEventListener("contextmenu", (e) => { e.preventDefault(); shipMenu(sh, e.clientX, e.clientY); });
+          holdToOpen(b, () => { const r = b.getBoundingClientRect(); shipMenu(sh, r.left + r.width / 2, r.top + r.height / 2); });
+          body.append(b);
         }
         body.append(el("div", { class: "unit-btns" },
           el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory"),
@@ -872,18 +928,36 @@
     if (!wins.market) createWindow("market", { left: 300, top: 120, width: 360, minW: 300, minH: 200, render: renderMarket, label: "Market" });
     toggleWindow("market", true); renderMarket(wins.market.body);
   }
+  saved.mkOpen = saved.mkOpen || {};                 // which market groups are expanded (remembered)
   function renderMarket(body) {
-    const A = window.Atamus, w = wins.market; body.innerHTML = ""; w.slot.textContent = "Market";
+    const A = window.Atamus, w = wins.market; w.slot.textContent = "Market";
     const items = A.cfg.items || {}, credits = A.inv.credits || 0, unlocked = A.inv.unlocked || {};
+    const keep = body.scrollTop; body.innerHTML = "";
     body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Credits"), el("span", { class: "sheet-v" }, credits.toLocaleString() + " cr")));
-    for (const m of A.cfg.market || []) {
-      const def = items[m.key] || { name: m.key };
-      const known = def.license && unlocked[def.license];
-      body.append(el("div", { class: "mk-row" + (known ? " known" : "") },
-        el("div", { class: "mk-name" }, def.name, el("div", { class: "mk-sub" }, known ? "Already read" : (def.rarity || ""))),
-        el("div", { class: "mk-price" + (credits < m.price ? " poor" : "") }, m.price.toLocaleString() + " cr"),
-        el("button", { class: "btn-primary2 unit-btn mk-buy", disabled: credits < m.price ? "" : null, onclick: () => A.send({ t: "buy", item: m.key, qty: 1 }) }, "Buy")));
+    const groups = new Map();                          // cat -> sub -> [offers]
+    for (const m of A.cfg.market || []) { if (!groups.has(m.cat)) groups.set(m.cat, new Map()); const g = groups.get(m.cat); if (!g.has(m.sub)) g.set(m.sub, []); g.get(m.sub).push(m); }
+    const toggle = (k) => { saved.mkOpen[k] = !saved.mkOpen[k]; persistAll(); renderMarket(body); };
+    for (const [cat, subs] of groups) {
+      const open = !!saved.mkOpen[cat];
+      body.append(el("div", { class: "mk-cat" + (open ? " open" : ""), onclick: () => toggle(cat) }, el("span", { class: "mk-caret" }, "▸"), cat, el("span", { class: "mk-count" }, [...subs.values()].reduce((n, a) => n + a.length, 0))));
+      if (!open) continue;
+      for (const [sub, offers] of subs) {
+        const sk = cat + "/" + sub, sopen = !!saved.mkOpen[sk];
+        body.append(el("div", { class: "mk-sub-h" + (sopen ? " open" : ""), onclick: () => toggle(sk) }, el("span", { class: "mk-caret" }, "▸"), sub, el("span", { class: "mk-count" }, offers.length)));
+        if (!sopen) continue;
+        for (const m of offers) {
+          const def = items[m.key] || {};
+          const known = def.license && unlocked[def.license];
+          const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
+          if (m.ship) { name.style.cursor = "pointer"; name.title = "Ship info"; name.addEventListener("click", () => openShipInfo(m.ship)); }
+          if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
+          body.append(el("div", { class: "mk-row" + (known ? " known" : "") }, name,
+            el("div", { class: "mk-price" + (credits < m.price ? " poor" : "") }, m.price.toLocaleString() + " cr"),
+            el("button", { class: "btn-primary2 unit-btn mk-buy", disabled: credits < m.price ? "" : null, onclick: () => A.send({ t: "buy", item: m.key, qty: 1 }) }, "Buy")));
+        }
+      }
     }
+    body.scrollTop = keep;
   }
 
   // ---- sell (right-click / hold an ore stack) ----
@@ -923,6 +997,7 @@
     if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
     if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
     if (wins.market && isOpen(wins.market)) renderMarket(wins.market.body);
+    if (wins.pilot && isOpen(wins.pilot) && pilotTab === "ship") renderPilot(wins.pilot.body);
     if (wins.split && isOpen(wins.split)) renderSplit(wins.split.body);
     for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });
 
