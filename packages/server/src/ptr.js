@@ -39,7 +39,7 @@ export async function devCommand(world, pid, m, refresh) {
     case "update": {                                     // rehearse a live update on this PTR client
       const ms = Math.max(1000, (+m.seconds || 5) * 1000);
       p.send(JSON.stringify({ t: "countdown", at: Date.now() + ms, in: ms, parts: ["web"] }));
-      setTimeout(() => p.send(JSON.stringify({ t: "update", web: "ptr-" + Date.now() })), ms);
+      setTimeout(() => p.send(JSON.stringify({ t: "update", web: "ptr-" + Date.now() })), ms + 4000);   // like live: the new build lands a few seconds after zero
       break;
     }
     default: tell("unknown dev command " + m.cmd);

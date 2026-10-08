@@ -138,14 +138,23 @@
       const left = Math.max(0, Math.ceil((at - Date.now()) / 1000));
       if (left !== last) {
         last = left;
-        num.textContent = left > 0 ? "0:" + String(left).padStart(2, "0") : "Updating…";
+        num.textContent = "0:" + String(left).padStart(2, "0");
+        if (left === 0) setTimeout(kickForUpdate, 400);                                    // time's up: everyone out, then the update goes live
         num.classList.remove("bounce"); void num.offsetWidth; num.classList.add("bounce");   // restart the bounce
       }
       if (Date.now() > at + 120_000) { clearInterval(cdTimer); cdEl.hidden = true; }      // nothing arrived: give up quietly
     };
     tick(); cdTimer = setInterval(tick, 200);
   }
+  // Log out of the game to the website's welcome page, which waits for the new version to go live.
+  function kickForUpdate() {
+    if (reloading) return; reloading = true; saveView();
+    try { ws.onclose = null; ws.close(); } catch {}
+    const q = new URLSearchParams({ updating: "1", web: BUILD || "", srv: serverBuild || "", parts: ((pending && pending.parts) || ["server", "web"]).join(",") });
+    location.href = "play.html?" + q;
+  }
   function reloadForUpdate(v) {
+    if (pending && Date.now() < pending.at + 180_000) return kickForUpdate();   // part of a countdown: log out rather than reload in place
     if (reloading) return; reloading = true; saveView();
     setStatus("Atamus has been updated — reloading…");
     setTimeout(() => location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)), 600);

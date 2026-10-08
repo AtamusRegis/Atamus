@@ -291,3 +291,5 @@ main {
 @media (prefers-reduced-motion: reduce) {
   .bg-gradient { animation: none; }
 }
+
+.update-title { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .06em; color: #ffcf7a; text-shadow: 0 0 12px rgba(255,190,80,0.6); }
