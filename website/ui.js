@@ -476,7 +476,7 @@
   async function init() {
     createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
-    createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 230, render: renderChat });
+    createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     renderPanel();
 
     // close any open custom dropdown / context menu when clicking elsewhere
