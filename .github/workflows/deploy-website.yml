@@ -33,6 +33,10 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
+      - name: Warn players (30 s countdown) before switching the live build
+        run: |
+          curl -fsS -X POST https://play.atamus.io/game/update-countdown || true
+          sleep 30
       - id: deployment
         uses: actions/deploy-pages@v4
       - name: Tell the game server a new website build is live (it reloads connected players)

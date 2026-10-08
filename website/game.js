@@ -95,6 +95,7 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.t === "countdown") { startCountdown(m.at); return; }
       if (m.t === "update") { if (m.web !== BUILD) reloadForUpdate(m.web); return; }
       if (m.t === "hello" && m.build) { if (serverBuild && m.build !== serverBuild) { reloadForUpdate("s" + m.build); return; } serverBuild = m.build; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
@@ -114,6 +115,18 @@
   // ---- new build live? reload onto it (UI layout and selection are restored after the reload) ----
   const BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content;
   let serverBuild = null, reloading = false;
+  // "Update in 0:30" — the live build switches at zero, then the reload below happens
+  let cdTimer = 0;
+  function startCountdown(at) {
+    clearInterval(cdTimer);
+    const tick = () => {
+      if (reloading) { clearInterval(cdTimer); return; }
+      const left = Math.max(0, Math.ceil((at - Date.now()) / 1000));
+      setStatus(left > 0 ? "Atamus update in 0:" + String(left).padStart(2, "0") : "Updating…", "warn");
+      if (Date.now() > at + 120_000) { clearInterval(cdTimer); statusEl.classList.add("hidden"); }   // nothing arrived: give up quietly
+    };
+    tick(); cdTimer = setInterval(tick, 250);
+  }
   function reloadForUpdate(v) {
     if (reloading) return; reloading = true;
     setStatus("Atamus has been updated — reloading…");

@@ -2,7 +2,7 @@ import express from "express";
 import { getSessionUser, readCookie } from "./sessions.js";
 import { CATALOG } from "./licenses.js";
 import * as pilots from "./pilots.js";
-import { websiteDeployed } from "./build.js";
+import { websiteDeployed, announceUpdate } from "./build.js";
 
 export const game = express.Router();
 
@@ -15,6 +15,8 @@ async function auth(req, res, next) {
 
 // Called by the website deploy workflow right after GitHub Pages publishes; harmless to call any time.
 game.post("/build-check", (_req, res) => { websiteDeployed(); res.json({ ok: true }); });
+// Called by both deploy workflows ~30 s before they switch the live build.
+game.post("/update-countdown", async (_req, res) => { res.json(await announceUpdate(30)); });
 
 game.get("/catalog", (_req, res) => res.json(CATALOG));
 
