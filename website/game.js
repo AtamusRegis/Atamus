@@ -123,16 +123,27 @@
   const BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content;
   let serverBuild = null, reloading = false, pending = null;
   // "Update in 0:30" — the live build switches at zero, then the reload below happens
-  let cdTimer = 0;
+  // countdown panel near the top of the page; the number does a quick bounce on every tick
+  let cdTimer = 0, cdEl = null;
   function startCountdown(at) {
     clearInterval(cdTimer);
+    if (!cdEl) {
+      cdEl = document.createElement("div"); cdEl.id = "update-cd";
+      cdEl.innerHTML = '<div class="ucd-title">Update incoming</div><div class="ucd-num"></div>';
+      document.body.appendChild(cdEl);
+    }
+    const num = cdEl.querySelector(".ucd-num"); let last = -1;
+    cdEl.hidden = false; statusEl.classList.add("hidden");
     const tick = () => {
-      if (reloading) { clearInterval(cdTimer); return; }
       const left = Math.max(0, Math.ceil((at - Date.now()) / 1000));
-      setStatus(left > 0 ? "Atamus update in 0:" + String(left).padStart(2, "0") : "Updating…", "warn");
-      if (Date.now() > at + 120_000) { clearInterval(cdTimer); statusEl.classList.add("hidden"); }   // nothing arrived: give up quietly
+      if (left !== last) {
+        last = left;
+        num.textContent = left > 0 ? "0:" + String(left).padStart(2, "0") : "Updating…";
+        num.classList.remove("bounce"); void num.offsetWidth; num.classList.add("bounce");   // restart the bounce
+      }
+      if (Date.now() > at + 120_000) { clearInterval(cdTimer); cdEl.hidden = true; }      // nothing arrived: give up quietly
     };
-    tick(); cdTimer = setInterval(tick, 250);
+    tick(); cdTimer = setInterval(tick, 200);
   }
   function reloadForUpdate(v) {
     if (reloading) return; reloading = true; saveView();
