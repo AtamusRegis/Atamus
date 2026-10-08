@@ -362,7 +362,7 @@ export class World {
     // 3) keep inside the honeycomb, finalize arrivals
     for (const s of ships) {
       const c = clampToSystem(s.x, s.y); s.x = c.x; s.y = c.y;
-      if (s.moving && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) s.moving = false;
+      if (s.moving && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; }
     }
   }
 
