@@ -35,3 +35,5 @@ jobs:
           path: website
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Tell the game server a new website build is live (it reloads connected players)
+        run: curl -fsS -X POST https://play.atamus.io/game/build-check || true

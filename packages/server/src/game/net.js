@@ -12,6 +12,7 @@ import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
 import { getState } from "../pilots.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
+import { SERVER_BUILD, onWebsiteUpdate } from "../build.js";
 
 const world = new World();
 
@@ -37,6 +38,8 @@ const CLIENT_CONFIG = {
 
 export function attachGameServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  // a new website build is live: tell every connected client to reload now
+  onWebsiteUpdate((v) => { const msg = JSON.stringify({ t: "update", web: v }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
 
   wss.on("connection", async (ws, req) => {
     const origin = req.headers.origin;
@@ -60,7 +63,7 @@ export function attachGameServer(httpServer) {
     };
     await refreshLicenses();
     const licTimer = setInterval(refreshLicenses, 60000);
-    send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
+    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
     ws.on("message", (buf) => {

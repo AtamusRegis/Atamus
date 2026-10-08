@@ -95,6 +95,8 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m.t === "update") { if (m.web !== BUILD) reloadForUpdate(m.web); return; }
+      if (m.t === "hello" && m.build) { if (serverBuild && m.build !== serverBuild) { reloadForUpdate("s" + m.build); return; } serverBuild = m.build; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
@@ -111,14 +113,19 @@
   }
   // ---- new build live? reload onto it (UI layout and selection are restored after the reload) ----
   const BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content;
+  let serverBuild = null, reloading = false;
+  function reloadForUpdate(v) {
+    if (reloading) return; reloading = true;
+    setStatus("Atamus has been updated — reloading…");
+    setTimeout(() => location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)), 800);
+  }
   function checkVersion() {
     if (!BUILD || BUILD === "__BUILD__") return;                    // local/dev copy
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then((j) => {
       if (!j || !j.v || j.v === BUILD) return;
       if (sessionStorage.getItem("atamus.upd") === j.v) return;     // already reloaded for this build once: don't loop
       sessionStorage.setItem("atamus.upd", j.v);
-      setStatus("Atamus has been updated — reloading…");
-      setTimeout(() => location.replace(location.pathname + "?cb=" + j.v.slice(0, 7)), 1500);
+      reloadForUpdate(j.v);
     }).catch(() => {});
   }
   setInterval(checkVersion, 60000);

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import http from "node:http";
 import express from "express";
 import cors from "cors";
@@ -8,9 +7,7 @@ import { auth } from "./auth.js";
 import { game } from "./gamehttp.js";
 import { attachGameServer } from "./game/net.js";
 
-// Short git SHA of the running code, reported by /healthz (written by deploy.sh / setup.sh).
-let BUILD = "dev";
-try { BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
+import { SERVER_BUILD as BUILD } from "./build.js";
 
 const app = express();
 
