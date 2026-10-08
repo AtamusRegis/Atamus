@@ -47,6 +47,7 @@ export class World {
     // four renameable station hangars; a save from before hangars existed becomes Hangar 1
     p.hangars = (saved && Array.isArray(saved.hangars) && saved.hangars.length) ? saved.hangars
       : [0, 1, 2, 3].map((i) => ({ name: "Hangar " + (i + 1), inv: (i === 0 && saved && saved.hangar) || Inv.makeInv(STATION_HANGAR_M3) }));
+    p.delivery = (saved && saved.delivery) || Inv.makeInv(STATION_HANGAR_M3);   // market purchases land here
     while (p.hangars.length < HANGARS) p.hangars.push({ name: "Hangar " + (p.hangars.length + 1), inv: Inv.makeInv(STATION_HANGAR_M3) });
     this._ensureShips(id);
     return p;
@@ -57,7 +58,7 @@ export class World {
     const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
-    return { ships, gates, beltField: p ? p.beltField : null, hangars: p ? p.hangars : null, licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
+    return { ships, gates, beltField: p ? p.beltField : null, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
   }
 
   // Fill in live/derived ship fields from a saved or fresh record.
@@ -203,6 +204,7 @@ export class World {
   }
   _inv(pid, ref) {
     const p = this.players.get(pid); if (!p) return null;
+    if (ref.owner === "station" && ref.inv === "delivery") return { inv: p.delivery, docked: true };
     if (ref.owner === "station") { const h = p.hangars[Math.max(0, Math.min(p.hangars.length - 1, (ref.h | 0)))]; return { inv: h.inv, docked: true }; }
     const sh = this.ships.get(ref.id); if (!sh || sh.owner !== pid) return null;
     return { inv: sh.inv[ref.inv], docked: sh.docked, ship: sh };
@@ -238,7 +240,7 @@ export class World {
     const n = offer.ship ? 1 : Math.max(1, Math.floor(+qty || 1)), cost = offer.price * n;
     if (p.credits < cost) { p.send(JSON.stringify({ t: "sys", text: "Not enough credits." })); return; }
     if (offer.ship) { this._buyShip(p, offer.ship); this._tell(pid, `${offer.name} delivered to your station hangar. Crew it to fly.`); }
-    else { const h = p.hangars[0].inv; if (Inv.canAdd(h, itemKey, n) < n) { this._tell(pid, "No room in " + p.hangars[0].name + "."); return; } Inv.add(h, itemKey, n); }
+    else { if (Inv.canAdd(p.delivery, itemKey, n) < n) { this._tell(pid, "The station's delivery container is full."); return; } Inv.add(p.delivery, itemKey, n); this._tell(pid, offer.name + " delivered to your station's Deliveries."); }
     p.credits -= cost; this._markInv(pid);
     if (this.onCredits) { try { this.onCredits(pid, -cost); } catch (e) { console.error("onCredits", e); } }
   }
@@ -299,7 +301,7 @@ export class World {
     const p = this.players.get(pid); if (!p) return null;
     const ships = {};
     for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore) };
-    return { t: "inv", ships, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), credits: p.credits, unlocked: p.unlocked };
+    return { t: "inv", ships, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), delivery: Inv.summary(p.delivery), credits: p.credits, unlocked: p.unlocked };
   }
 
   cmdChat(pid, text, channel, to) {
