@@ -258,7 +258,7 @@
     player: { name: "Player Sheet", pinned: true },
     pilot: { name: "Pilot" },
     chat: { name: "Chat" },
-    fleet: { name: "Fleet (hold for layout)" },
+    fleet: { name: "Fleet" },
     market: { name: "Market" },
   };
   // press-and-hold (mouse or touch) → fn; the click that ends a hold is swallowed
@@ -605,7 +605,7 @@
         if (docked.length) body.append(el("div", { class: "hangar-head" }, "Ships in hangar"));
         for (const sh of docked) {                                   // click: select it · right-click / hold: crew, undock, info
           const t = hullOf(sh.type), who = pilotName(sh.pilot);
-          const b = el("button", { class: "hangar-ship", title: "Right-click or hold for crew and options", onclick: () => A.selectShip(sh.id) },
+          const b = el("button", { class: "hangar-ship", onclick: () => A.selectShip(sh.id) },
             shipIcon(sh.type), el("span", { class: "hs-name" }, t.name || sh.type), el("span", { class: "hs-pilot" + (who ? "" : " none") }, who || "No pilot"));
           b.addEventListener("contextmenu", (e) => { e.preventDefault(); shipMenu(sh, e.clientX, e.clientY); });
           holdToOpen(b, () => { const r = b.getBoundingClientRect(); shipMenu(sh, r.left + r.width / 2, r.top + r.height / 2); });
@@ -777,7 +777,7 @@
     for (const h of [hudAct, wins.fleet && wins.fleet.acts]) if (h) { h.innerHTML = ""; h.hidden = true; }
     if (!sh || sh.docked) return;
     const act = (ico, title, fn) => el("button", { class: "hud-act", title, "aria-label": title, html: ICO[ico], onclick: fn });
-    host.append(act("inv", "Inventory", () => openInventory({ owner: "ship", id: sh.id, inv: "ore" })));
+    host.append(act("inv", "Inventory", () => { const w = wins["inv:" + sh.id]; if (w && isOpen(w)) toggleWindow("inv:" + sh.id, false); else openInventory({ owner: "ship", id: sh.id, inv: "ore" }); }));
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
     if (sh.moving && !sh.warp) host.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
     host.hidden = false;
@@ -804,7 +804,7 @@
       if (!ships.length) list.append(el("div", { class: "fleet-empty" }, "No crewed ships"));
       for (const sh of ships) {
         const t = hullOf(sh.type), sf = el("div", { class: "fb-sh" }), hf = el("div", { class: "fb-hp" });
-        const card = el("button", { class: "fleet-card", title: t.name + " · " + (pilotName(sh.pilot) || "") + " — click to select, double-click to locate" },
+        const card = el("button", { class: "fleet-card" },
           el("div", { class: "fleet-img" }, shipIcon(sh.type, "fleet-ship")),
           el("div", { class: "fleet-bar" }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
           el("div", { class: "fleet-name" }, pilotName(sh.pilot) || t.name));
@@ -1032,7 +1032,8 @@
     items.push(["Jettison", () => A.send({ t: "jettison", ref, slot })]);
     if (def.price && def.kind === "ore") items.push([atStation ? "Sell" : "Sell (dock first)", () => { if (atStation) openSell(ref, slot); }]);
     if (def.kind === "manual") items.push(["Read", () => A.send({ t: "read", ref, slot })]);
-    items.push(["Info", () => openInfo(stck.item, stck.qty)]);
+    if (def.kind === "ship") items.push([ref.owner === "station" ? "Assemble" : "Assemble (in a station)", () => { if (ref.owner === "station") A.send({ t: "assemble", ref, slot }); }]);
+    items.push(["Info", () => def.kind === "ship" ? openShipInfo(def.ship) : openInfo(stck.item, stck.qty)]);
     showCtxMenu(x, y, items);
   }
   let splitAt = null;
@@ -1100,7 +1101,7 @@
           const def = items[m.key] || {};
           const known = def.license && unlocked[def.license];
           const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
-          if (m.ship) { name.style.cursor = "pointer"; name.title = "Ship info"; name.addEventListener("click", () => openShipInfo(m.ship)); }
+          if (m.ship) { name.style.cursor = "pointer"; name.addEventListener("click", () => openShipInfo(m.ship)); }
           if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
           body.append(el("div", { class: "mk-row" + (known ? " known" : "") }, name,
             el("div", { class: "mk-price" + (credits < m.price ? " poor" : "") }, m.price.toLocaleString() + " cr"),

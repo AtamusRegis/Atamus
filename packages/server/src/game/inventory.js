@@ -10,6 +10,9 @@ for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", de
 // Training manuals: one per license that isn't granted at birth. Reading one unlocks training that license.
 export const MANUAL_PRICE = (lic) => { const hrs = lic.levelTimes.reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
 for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "manual:" + lic.key, name: lic.name + " Manual", kind: "manual", license: lic.key, desc: "Training manual. Read it to unlock the " + lic.name + " license for training. " + lic.desc, rarity: "restricted", unitM3: 0.1, price: MANUAL_PRICE(lic), color: "#c9b36a", icon: null };
+// Packaged ships: bought ships arrive as items in the station's Deliveries; Assemble turns one into a docked ship.
+const PACKAGED_M3 = { "Mining Frigate": 2500, "Mining Barge": 3750, "Exhumer": 3750 };
+for (const [k, t] of Object.entries(SHIP_TYPES)) ITEMS["ship:" + k] = { key: "ship:" + k, name: t.name, kind: "ship", ship: k, desc: t.desc + " Packaged: assemble it in a station to fly it.", rarity: t.cls, unitM3: PACKAGED_M3[t.cls] || 5000, price: t.price, color: "#6a7fa8", icon: "assets/ships/" + t.sprite + "_blue.webp" };
 // What the station market sells, grouped for the market window: category -> sub-category.
 const catName = (k) => (CATEGORIES.find((c) => c.key === k) || {}).name || k;
 export const MARKET = [

@@ -239,8 +239,7 @@ export class World {
     const offer = Inv.MARKET.find((m) => m.key === itemKey); if (!offer) return;
     const n = offer.ship ? 1 : Math.max(1, Math.floor(+qty || 1)), cost = offer.price * n;
     if (p.credits < cost) { p.send(JSON.stringify({ t: "sys", text: "Not enough credits." })); return; }
-    if (offer.ship) { this._buyShip(p, offer.ship); this._tell(pid, `${offer.name} delivered to your station hangar. Crew it to fly.`); }
-    else { if (Inv.canAdd(p.delivery, itemKey, n) < n) { this._tell(pid, "The station's delivery container is full."); return; } Inv.add(p.delivery, itemKey, n); this._tell(pid, offer.name + " delivered to your station's Deliveries."); }
+    { if (Inv.canAdd(p.delivery, itemKey, n) < n) { this._tell(pid, "The station's delivery container is full."); return; } Inv.add(p.delivery, itemKey, n); this._tell(pid, offer.name + " delivered to your station's Deliveries."); }
     p.credits -= cost; this._markInv(pid);
     if (this.onCredits) { try { this.onCredits(pid, -cost); } catch (e) { console.error("onCredits", e); } }
   }
@@ -289,6 +288,13 @@ export class World {
     let n = 0; while (this.ships.has(`${p.id}:ship:${n}`)) n++;
     const id = `${p.id}:ship:${n}`, x = STATION_POS.x, y = STATION_POS.y;
     this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null }));
+  }
+  // Unpack a packaged ship sitting in a station container into a docked, uncrewed ship.
+  cmdAssemble(pid, ref, slot) {
+    const p = this.players.get(pid), a = this._inv(pid, ref); if (!p || !a || !a.inv || ref.owner !== "station") return;
+    const st = a.inv.slots[+slot], def = st && Inv.ITEMS[st.item]; if (!def || def.kind !== "ship") return;
+    Inv.take(a.inv, +slot, 1); this._buyShip(p, def.ship); this._markInv(pid);
+    this._tell(pid, `${def.name} assembled. Crew it from the station's ship list.`);
   }
   cmdRenameHangar(pid, h, name) {
     const p = this.players.get(pid), hg = p && p.hangars[h | 0]; if (!hg) return;
