@@ -441,3 +441,7 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 /* fleet bar: roomier ends to grab it by */
 .win[data-id="fleet"] .win-body { padding: 4px 16px; }
 .win[data-id="fleet"].vertical .win-body { padding: 16px 4px; }
+
+/* status / update countdown: top centre, above every window and the HUD */
+.status { top: 12px; bottom: auto; z-index: 2000000002; }
+.status.warn { font-size: 14px; font-weight: 600; padding: 9px 18px; color: #ffd59a; background: rgba(40,28,10,0.92); }
