@@ -826,6 +826,8 @@
     if (vert) { const fit = Math.max(1, Math.floor((innerHeight - r.top - 16) / 62)); list.style.gridAutoFlow = "column"; list.style.gridTemplateRows = "repeat(" + Math.min(n, fit) + ", auto)"; list.style.gridTemplateColumns = ""; }
     else { const fit = Math.max(1, Math.floor((innerWidth - r.left - 16) / 70)); list.style.gridAutoFlow = "row"; list.style.gridTemplateColumns = "repeat(" + Math.min(n, fit) + ", 66px)"; list.style.gridTemplateRows = ""; }
     w.win.style.width = "auto"; w.win.style.height = "auto";
+    const b = w.win.getBoundingClientRect(), side = vert ? (b.left + b.width / 2 < innerWidth / 2 ? "right" : "left") : (b.top + b.height / 2 < innerHeight / 2 ? "below" : "above");
+    for (const k of ["above", "below", "left", "right"]) w.win.classList.toggle("acts-" + k, k === side);
   }
   window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
   window.Atamus.bus.addEventListener("select", () => { actSig = ""; renderShipActions(); });
@@ -1273,10 +1275,10 @@
     renderPanel();
 
     // close any open custom dropdown / context menu when clicking elsewhere
-    document.addEventListener("mousedown", (e) => {
+    document.addEventListener("pointerdown", (e) => {
       if (openMenu && !(e.target instanceof Element && e.target.closest(".dd"))) closeMenu();
       if (ctxMenu && !(e.target instanceof Element && e.target.closest(".ctx-menu"))) closeCtxMenu();
-    });
+    }, true);
     addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMenu(); closeCtxMenu(); } });
     // right-click is used in-game — suppress the browser's native context menu
     document.addEventListener("contextmenu", (e) => e.preventDefault());

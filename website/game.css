@@ -419,3 +419,9 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 
 /* the fleet bar drags by its background on touch too (no scroll takeover) */
 .win[data-id="fleet"], .win[data-id="fleet"] .win-body, .win[data-id="fleet"] .fleet-list, .fleet-card { touch-action: none; }
+
+/* fleet actions sit on the side of the bar that faces the centre of the screen */
+.win[data-id="fleet"].acts-above .fleet-acts { top: auto; bottom: 100%; left: 0; right: auto; margin: 0 0 5px; flex-direction: row; }
+.win[data-id="fleet"].acts-below .fleet-acts { bottom: auto; top: 100%; left: 0; right: auto; margin: 5px 0 0; flex-direction: row; }
+.win[data-id="fleet"].acts-right .fleet-acts { bottom: auto; top: 0; left: 100%; right: auto; margin: 0 0 0 5px; flex-direction: column; }
+.win[data-id="fleet"].acts-left .fleet-acts { bottom: auto; top: 0; left: auto; right: 100%; margin: 0 5px 0 0; flex-direction: column; }

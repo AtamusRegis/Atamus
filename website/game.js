@@ -109,6 +109,21 @@
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
     };
   }
+  // ---- new build live? reload onto it (UI layout and selection are restored after the reload) ----
+  const BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content;
+  function checkVersion() {
+    if (!BUILD || BUILD === "__BUILD__") return;                    // local/dev copy
+    fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then((j) => {
+      if (!j || !j.v || j.v === BUILD) return;
+      if (sessionStorage.getItem("atamus.upd") === j.v) return;     // already reloaded for this build once: don't loop
+      sessionStorage.setItem("atamus.upd", j.v);
+      setStatus("Atamus has been updated — reloading…");
+      setTimeout(() => location.replace(location.pathname + "?cb=" + j.v.slice(0, 7)), 1500);
+    }).catch(() => {});
+  }
+  setInterval(checkVersion, 60000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkVersion(); });
+  setTimeout(checkVersion, 5000);
   function send(o) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o)); }
 
   function fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }

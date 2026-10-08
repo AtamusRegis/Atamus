@@ -26,6 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Stamp build id (clients compare it to reload onto new versions)
+        run: |
+          echo "{\"v\":\"${GITHUB_SHA}\"}" > website/version.json
+          sed -i "s/__BUILD__/${GITHUB_SHA}/g" website/game.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
