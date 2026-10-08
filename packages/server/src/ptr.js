@@ -41,6 +41,12 @@ export async function devCommand(world, pid, m, refresh) {
     case "item": { const n = Inv.add(p.hangars[0].inv, m.item, Math.max(1, +m.qty || 1)); p.invDirty = true; tell("+" + n + " " + m.item); break; }
     case "belts": forceBelts(p.beltField, Date.now()); p.send(JSON.stringify({ t: "belts", belts: (await import("./game/belts.js")).fieldBelts(p.beltField) })); tell("all belts spawned"); break;
     case "move": { const sh = world.ships.get(m.ship); if (sh && sh.owner === pid) { sh.docked = false; sh.x = +m.x; sh.y = +m.y; sh.tx = sh.x; sh.ty = sh.y; sh.moving = false; tell("moved"); } break; }
+    case "update": {                                     // rehearse a live update on this PTR client
+      const ms = Math.max(1000, (+m.seconds || 5) * 1000);
+      p.send(JSON.stringify({ t: "countdown", at: Date.now() + ms, in: ms, parts: ["web"] }));
+      setTimeout(() => p.send(JSON.stringify({ t: "update", web: "ptr-" + Date.now() })), ms);
+      break;
+    }
     default: tell("unknown dev command " + m.cmd);
   }
 }

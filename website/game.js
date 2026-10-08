@@ -37,7 +37,7 @@
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
   }
   window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
-    targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null },
+    targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null }, get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3) }; },
     // centre the camera on a ship (or the station it's docked at)
     locateShip: (id) => {
       const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
@@ -134,11 +134,23 @@
     };
     tick(); cdTimer = setInterval(tick, 250);
   }
+  // Never yank someone mid-sentence: while a text box has focus or unsent text, hold the reload
+  // (up to 3 minutes) and do it a moment after they stop typing.
+  const typing = () => { const e = document.activeElement; return !!(e && (e.tagName === "INPUT" || e.tagName === "TEXTAREA") && (e.value || "").trim()); };
   function reloadForUpdate(v) {
     if (reloading) return; reloading = true;
-    setStatus("Atamus has been updated — reloading…");
-    setTimeout(() => location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)), 800);
+    const go = () => { saveView(); location.replace(location.pathname + "?cb=" + String(v || Date.now()).slice(0, 8)); };
+    const until = Date.now() + 180_000; let quiet = 0;
+    const wait = () => {
+      if (typing() && Date.now() < until) { quiet = 0; setStatus("Update ready — it'll load when you finish typing", "warn"); return setTimeout(wait, 500); }
+      if (quiet++ < 2 && Date.now() < until && document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return setTimeout(wait, 500);
+      setStatus("Atamus has been updated — reloading…"); setTimeout(go, 600);
+    };
+    wait();
   }
+  // keep the camera where it was across an update reload (same tab only)
+  function saveView() { try { sessionStorage.setItem("atamus.view", JSON.stringify({ cx: cam.cx, cy: cam.cy, w: viewWTarget, follow })); } catch {} }
+  addEventListener("pagehide", saveView);
   function checkVersion() {
     if (!BUILD || BUILD === "__BUILD__") return;                    // local/dev copy
     fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).then((j) => {
@@ -604,7 +616,10 @@
     if (!(cfg && snap.systems.length) && window.SunFX) window.SunFX.clear();
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place; curMaxW = fitWidth(place);
-      if (!camInit) { const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true; }
+      if (!camInit) {
+        const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true;
+        try { const v = JSON.parse(sessionStorage.getItem("atamus.view") || "null"); if (v && isFinite(v.cx) && isFinite(v.w)) { cam.cx = v.cx; cam.cy = v.cy; cam.viewW = viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, v.w)); follow = !!v.follow; } } catch {}
+      }
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget));
       cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
       updateShipRender(dt);
