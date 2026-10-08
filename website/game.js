@@ -44,7 +44,9 @@
       const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
       const pl = curPlace.get(sh.sys) || { gx: 0, gy: 0 };
       const p = sh.docked ? (cfg.station || { x: 0, y: 0 }) : shipPos(sh);
-      follow = false; panVel.x = panVel.y = 0; cam.cx = pl.gx + p.x; cam.cy = pl.gy + p.y; viewWTarget = sh.docked ? 14 : 6;
+      panVel.x = panVel.y = 0; cam.cx = pl.gx + p.x; cam.cy = pl.gy + p.y; viewWTarget = sh.docked ? 14 : 6;
+      if (!sh.docked) { selected.clear(); selected.add(sh.id); syncShipSelection(); follow = true; }   // in space: select it and keep it centred, like [F]
+      else follow = false;
       return true;
     } };
 

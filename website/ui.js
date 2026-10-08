@@ -346,7 +346,7 @@
     content.append(el("div", { class: "ship-hero" }, shipIcon(sh.type, "ship-hero-img")),
       row("Ship", t.name), row("Class", t.cls || "—"), row("Location", where),
       el("div", { class: "unit-btns" },
-        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.locateShip(sh.id); if (!sh.docked) A.selectShip(sh.id); } }, "Locate"),
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => A.locateShip(sh.id) }, "Locate"),
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => openShipInfo(sh.type) }, "Ship info")));
   }
 
