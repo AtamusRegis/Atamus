@@ -14,6 +14,7 @@
   function persistAll() { try { localStorage.setItem(WKEY, JSON.stringify(saved)); } catch {} }
   function persistWin(id) {
     const w = wins[id]; if (!w) return; const e = w.win;
+    if (id.startsWith("inv:") && invWins[id]) { saved.invs = saved.invs || {}; const st = invWins[id]; saved.invs[id] = { ref: st.ref, root: st.root, solo: !!st.solo, open: isOpen(w) }; }
     const prev = saved.win[id] || {};
     // when hidden, offset* read 0 — keep the last known geometry and only flip `open`
     saved.win[id] = e.hidden
@@ -85,7 +86,7 @@
 
   // ---- tab groups: drop a window's title bar onto another window to stack them ----
   const groups = {}; let gseq = 0;
-  const PERSIST_GROUP_IDS = ["player", "pilot", "chat", "unit"];
+  const persistableInGroup = (id) => ["player", "pilot", "chat", "unit", "market"].includes(id) || id.startsWith("inv:");
   const winLabel = (id) => (wins[id] && wins[id].label) || (META[id] && META[id].name) || id;
   const groupOf = (elm) => { const f = elm && elm.closest(".win-group"); return f ? groups[f.dataset.group] : null; };
   function createGroupFrame(r) {
@@ -162,7 +163,7 @@
     for (const id of ids) addToGroup(g, id);
   }
   function persistGroups() {
-    saved.groups = Object.values(groups).map((g) => { const r = g.frame.getBoundingClientRect(); return { members: g.members.filter((m) => PERSIST_GROUP_IDS.includes(m)), active: g.active, x: r.left, y: r.top, w: r.width, h: r.height }; }).filter((g) => g.members.length > 1);
+    saved.groups = Object.values(groups).map((g) => { const r = g.frame.getBoundingClientRect(); return { members: g.members.filter(persistableInGroup), active: g.active, x: r.left, y: r.top, w: r.width, h: r.height }; }).filter((g) => g.members.length > 1);
     persistAll();
   }
   function restoreGroups() {
@@ -682,22 +683,42 @@
     return [{ owner: "ship", id: ref.id, inv: "ore" }, { owner: "ship", id: ref.id, inv: "cargo" }];
   }
   function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (isOpen(wins[key])) renderInventory(key, b); }).observe(b); }
+  function makeInvWindow(key, st) {
+    if (invWins[key]) return;
+    invWins[key] = st;
+    createWindow(key, st.solo
+      ? { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), groupable: false }
+      : { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory" });
+    watchInvResize(key);
+  }
   function openInventory(ref) {
     const sh = ref.owner === "ship" ? window.Atamus.ship(ref.id) : null;
     const viaStation = ref.owner === "station" || (sh && sh.docked);          // a docked ship's holds live under the station window
     const key = viaStation ? "inv:station" : "inv:" + ref.id;                 // one window per holder; tabs switch inside
-    if (!invWins[key]) {
-      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: viaStation ? "Station" : "Inventory" });
-      invWins[key] = { ref, root: viaStation ? { owner: "station", inv: "hangar" } : ref }; watchInvResize(key);
-    }
+    makeInvWindow(key, { ref, root: viaStation ? { owner: "station", inv: "hangar" } : ref });
     invWins[key].ref = ref;
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
   function openInventoryAlone(ref) {           // shift-click a tab: its own window
     const key = "inv:" + invKey(ref);
-    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), groupable: false }); invWins[key] = { ref, solo: true }; watchInvResize(key); }
+    makeInvWindow(key, { ref, solo: true });
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
+  // after a reload: reopen the inventories (and market) that were open, then rebuild tab groups
+  function restoreWorldWindows() {
+    const A = window.Atamus;
+    for (const [key, st] of Object.entries(saved.invs || {})) {
+      if (!st || !st.open || !st.ref) continue;
+      const holder = st.solo ? st.ref : (st.root || st.ref);
+      if (holder.owner === "ship" && !A.ship(holder.id)) continue;                         // ship is gone
+      if (!st.solo && key !== "inv:station" && A.ship(holder.id) && A.ship(holder.id).docked) continue; // its holds now live under the station
+      makeInvWindow(key, { ref: st.ref, root: st.root, solo: st.solo });
+      toggleWindow(key, true);
+    }
+    if (saved.win.market && saved.win.market.open) openMarket();
+    restoreGroups();
+  }
+  window.Atamus.bus.addEventListener("worldready", restoreWorldWindows, { once: true });
   const dragPayload = (e) => { try { return JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return null; } };
   function renderInventory(key, body) {
     const w = wins[key], st = invWins[key]; if (!w || !st) return;
@@ -1027,7 +1048,6 @@
 
     // restore windows the user had open last session
     for (const id in wins) { if (id !== "unit" && saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
-    restoreGroups();
 
     // clock inside the window panel (HH:MM)
     const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clockEl.textContent = p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()); };

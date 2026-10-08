@@ -24,7 +24,19 @@
     if (selectedUnit.kind === "ship") { const sh = (snap.ships || []).find((x) => x.id === selectedUnit.id); if (!sh) return null; const t = (cfg && cfg.shipTypes && cfg.shipTypes[sh.type]) || {}; return { kind: "ship", name: t.name || sh.type, ...sh, stats: t }; }
     return null;
   }
-  function selectUnit(u) { selectedUnit = u; bus.dispatchEvent(new CustomEvent(u ? "select" : "deselect", { detail: u })); }
+  function selectUnit(u) {
+    selectedUnit = u; bus.dispatchEvent(new CustomEvent(u ? "select" : "deselect", { detail: u }));
+    try { if (u) localStorage.setItem("atamus.sel", JSON.stringify(u)); else localStorage.removeItem("atamus.sel"); } catch {}
+  }
+  let selRestored = false;
+  function restoreSelection() {                       // bring back last session's selection once the world has arrived
+    selRestored = true; let u = null;
+    try { u = JSON.parse(localStorage.getItem("atamus.sel") || "null"); } catch {}
+    if (!u) return;
+    if (u.kind === "ship") { const sh = (snap.ships || []).find((x) => x.id === u.id && x.mine); if (sh) { selected.clear(); selected.add(sh.id); syncShipSelection(); } }
+    else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
+    else if (u.kind === "station") selectUnit(u);
+  }
   window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null } };
 
@@ -84,7 +96,7 @@
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
-      else if (m.t === "snap") { snap = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap")); }
+      else if (m.t === "snap") { snap = m; snapAt = performance.now(); if (!selRestored && invs.hangar) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
