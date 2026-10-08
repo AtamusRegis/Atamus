@@ -296,10 +296,14 @@
     let pTab = "licensing", pLevel = Math.min(l.maxLevel, Math.max(1, level));
     if (!stack) { while (popups.length) popups.pop().remove(); }
 
-    // cascade slightly down-right from the last opened position (persisted)
-    const base = saved.data || DATA_DEF;
+    // cascade slightly down-right from the last opened position (persisted),
+    // wrapping back to the default spot before it would run off-screen
+    const PW = 370;
+    const maxX = Math.max(20, innerWidth - PW - 10), maxY = Math.max(20, innerHeight - 140);
+    const def = { x: Math.min(DATA_DEF.x, maxX), y: Math.min(DATA_DEF.y, maxY) };
+    const base = saved.data || def;
     let px = base.x + 24, py = base.y + 24;
-    if (px > innerWidth * 0.6 || py > innerHeight * 0.6) { px = DATA_DEF.x; py = DATA_DEF.y; }
+    if (px > maxX || py > maxY || px < 48 || py < 0) { px = def.x; py = def.y; }
     saved.data = { x: px, y: py }; persistAll();
 
     const popup = el("div", { class: "license-popup" });
@@ -396,7 +400,7 @@
     renderPanel();
 
     // close any open custom dropdown when clicking elsewhere
-    document.addEventListener("mousedown", (e) => { if (openMenu && !e.target.closest(".dd")) closeMenu(); });
+    document.addEventListener("mousedown", (e) => { if (openMenu && !(e.target instanceof Element && e.target.closest(".dd"))) closeMenu(); });
 
     // restore windows the user had open last session
     for (const id in wins) { if (saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
