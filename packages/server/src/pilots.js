@@ -137,7 +137,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -158,7 +158,7 @@ export async function getState(userId) {
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, totalSkillLevel },
+    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, totalSkillLevel, credits: Number(user.credits || 0) },
     pilots, serverTime: now,
   };
 }

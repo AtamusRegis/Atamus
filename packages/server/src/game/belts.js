@@ -6,11 +6,11 @@ import { STATION_POS, STARGATE_CELLS } from "./geometry.js";
 
 // Five ores, one per rarity tier. `rock` = sprite family in assets/rocks/.
 export const ORES = [
-  { key: "ironstone", name: "Ironstone", rarity: "common",    tier: 0, color: "#8d8378", rock: "cratered"  },
-  { key: "cuprite",   name: "Cuprite",   rarity: "uncommon",  tier: 1, color: "#c27a46", rock: "elongated" },
-  { key: "cobaltine", name: "Cobaltine", rarity: "rare",      tier: 2, color: "#4f78c8", rock: "fractured" },
-  { key: "iridite",   name: "Iridite",   rarity: "very rare", tier: 3, color: "#b9a8d6", rock: "bubble"    },
-  { key: "starglass", name: "Starglass", rarity: "legendary", tier: 4, color: "#bfeeff", rock: "layered"   },
+  { key: "ironstone", name: "Ironstone", rarity: "common",    tier: 0, color: "#8d8378", unitM3: 0.1, rock: "cratered"  },
+  { key: "cuprite",   name: "Cuprite",   rarity: "uncommon",  tier: 1, color: "#c27a46", unitM3: 0.15, rock: "elongated" },
+  { key: "cobaltine", name: "Cobaltine", rarity: "rare",      tier: 2, color: "#4f78c8", unitM3: 0.3, rock: "fractured" },
+  { key: "iridite",   name: "Iridite",   rarity: "very rare", tier: 3, color: "#b9a8d6", unitM3: 0.6, rock: "bubble"    },
+  { key: "starglass", name: "Starglass", rarity: "legendary", tier: 4, color: "#bfeeff", unitM3: 1.2, rock: "layered"   },
 ];
 // belt rarity roll (which ore is the belt's primary)
 const RARITY_W = [50, 28, 14, 6, 2];

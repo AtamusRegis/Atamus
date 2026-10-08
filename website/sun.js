@@ -9,6 +9,7 @@ precision highp float;
 uniform vec2  u_res;    // device px
 uniform vec2  u_sun;    // device px, origin bottom-left
 uniform float u_t;
+uniform float u_dim;   // 1 = full, lower when zoomed out
 
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
@@ -37,19 +38,20 @@ void main(){
   float sd = length(vec2(d.x, sy));
   col += glow(sd, u_res.x * 0.5, vec3(0.43, 0.67, 1.0), 0.13);
 
+  col *= u_dim;
   col += (hash(frag + u_t) - 0.5) / 255.0;   // dither: kills banding in the big wash
   float a = clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0);
   gl_FragColor = vec4(col, a);
 }`;
 
-  let gl = null, prog = null, cv = null, uRes, uSun, uT, ready = false;
+  let gl = null, prog = null, cv = null, uRes, uSun, uT, uDim, ready = false;
 
   function init() {
     cv = document.createElement("canvas");
     cv.id = "sunfx";
     cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;";
     const view = document.getElementById("view");
-    view.insertAdjacentElement("afterend", cv);
+    view.insertAdjacentElement("beforebegin", cv);   // below the game canvas: objects + UI draw over the sun
     gl = cv.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
     if (!gl) return;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; } return s; };
@@ -61,7 +63,7 @@ void main(){
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
     const a = gl.getAttribLocation(prog, "a"); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
     uRes = gl.getUniformLocation(prog, "u_res"); uSun = gl.getUniformLocation(prog, "u_sun");
-    uT = gl.getUniformLocation(prog, "u_t");
+    uT = gl.getUniformLocation(prog, "u_t"); uDim = gl.getUniformLocation(prog, "u_dim");
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); // screen blend
     gl.clearColor(0, 0, 0, 0);
     resize(); addEventListener("resize", resize);
@@ -74,13 +76,13 @@ void main(){
     gl.viewport(0, 0, cv.width, cv.height);
   }
   // sx, sy: CSS px (top-left origin); t: seconds
-  function render(sx, sy, _unused, t) {
+  function render(sx, sy, dim, t) {
     if (!ready) return;
     const dpr = window.devicePixelRatio || 1;
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform2f(uRes, cv.width, cv.height);
     gl.uniform2f(uSun, sx * dpr, cv.height - sy * dpr);
-    gl.uniform1f(uT, t);
+    gl.uniform1f(uT, t); gl.uniform1f(uDim, dim == null ? 1 : dim);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   function clear() { if (ready) gl.clear(gl.COLOR_BUFFER_BIT); }

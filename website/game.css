@@ -19,7 +19,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0); color: var(--text); font-family: var(--font); }
-#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; z-index: 2; background: transparent; }
 
 /* status */
 .status { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; padding: 8px 16px; font-size: 12px; color: var(--text-dim); background: var(--panel-grad); border-radius: 20px; box-shadow: var(--shadow); transition: opacity .4s; }
@@ -202,3 +202,21 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .unit-btn { width: 100%; margin-top: 10px; }
 .unit-btn.off { color: var(--text); background: rgba(255,255,255,0.1); }
 .unit-btn.off:hover { background: rgba(255,154,106,0.18); color: #ff9a6a; }
+
+/* unit panel buttons */
+.unit-btns { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.unit-btns .unit-btn { margin-top: 0; }
+/* inventory */
+.inv-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.inv-cap { flex: 1; height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.inv-cap-fill { height: 100%; border-radius: 6px; background: var(--accent-grad); }
+.inv-stat { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.inv-sort { width: 26px; height: 24px; font-size: 13px; }
+.inv-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.inv-cell { aspect-ratio: 1; border-radius: 5px; background: rgba(0,0,0,0.28); position: relative; min-width: 0; }
+.inv-cell.filled { cursor: grab; }
+.inv-cell.drop { outline: 1px solid var(--cyan); background: rgba(56,198,255,0.12); }
+.inv-item { position: absolute; inset: 3px; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #0b0f16; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-shadow: 0 0 2px rgba(255,255,255,0.35); overflow: hidden; }
+.inv-abbr { text-transform: uppercase; }
+.inv-qty { font-size: 9px; font-weight: 600; opacity: .9; }
+.tab.drop { background: rgba(56,198,255,0.18); color: var(--text); }

@@ -163,7 +163,7 @@
     if (slot) slot.textContent = p.username;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    body.append(row("Day Born", born), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
+    body.append(row("Day Born", born), row("Credits", (p.credits || 0).toLocaleString() + " cr"), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
   }
 
   // ---- Pilot window ----
@@ -378,7 +378,29 @@
     if (!u) { if (w) w.slot.textContent = "Selection"; body.append(el("div", { class: "muted" }, "Nothing selected.")); return; }
     if (w) w.slot.textContent = u.name;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
-    if (u.kind === "gate") {
+    if (u.kind === "ship") {
+      const A = window.Atamus, inv = (A.inv.ships || {})[u.id] || {};
+      const status = u.docked ? "Docked" : u.warp ? "Warping" : u.mining ? "Mining" : u.moving ? "Moving" : "Idle";
+      const st = u.stats || {};
+      body.append(row("Type", u.name), row("Status", status), row("Speed", Math.round((st.speedKmps || 0) * 1000) + " m/s"));
+      if (inv.ore) body.append(row("Ore hold", Math.round(inv.ore.used).toLocaleString() + " / " + inv.ore.cap.toLocaleString() + " m³"));
+      if (inv.cargo) body.append(row("Cargo", Math.round(inv.cargo.used).toLocaleString() + " / " + inv.cargo.cap.toLocaleString() + " m³"));
+      body.append(row("Targets", (u.targets || []).length + " / " + (st.maxTargets || 0)));
+      const btns = el("div", { class: "unit-btns" });
+      const lockedRock = (u.targets || []).some((t) => t.kind === "rock" && t.locked);
+      if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
+      if (lockedRock && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn" + (u.mining ? " off" : ""), onclick: () => A.send({ t: "mine", ship: u.id, on: !u.mining }) }, u.mining ? "Stop Mining" : "Mine (X)"));
+      if (u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn off", onclick: () => A.send({ t: "dock", ship: u.id, dock: false }) }, "Undock"));
+      else if (u.canDock) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "dock", ship: u.id, dock: true }) }, "Dock"));
+      btns.append(el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "ship", id: u.id, inv: "ore" }) }, "Inventory"));
+      body.append(btns);
+    } else if (u.kind === "station") {
+      const h = window.Atamus.inv.hangar;
+      if (h) body.append(row("Hangar", Math.round(h.used).toLocaleString() + " / " + h.cap.toLocaleString() + " m³"));
+      const docked = (window.Atamus.snap.ships || []).filter((sh) => sh.mine && sh.docked);
+      body.append(row("Docked ships", docked.length));
+      body.append(el("div", { class: "unit-btns" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory")));
+    } else if (u.kind === "gate") {
       const active = u.state === "active";
       const fuel = active ? Math.min(u.fuelMs, u.sessionRemMs ?? u.fuelMs) : u.fuelMs;
       body.append(row("Fuel", fmtClock(fuel)), row("Status", active ? (u.connToSys ? "Connected" : "Searching…") : "Offline"));
@@ -388,6 +410,78 @@
   window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
   setInterval(() => { const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); }, 1000);
+
+  // ---- inventories: slot grids with drag/drop ----
+  const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;
+  const invData = (ref) => { const A = window.Atamus; if (ref.owner === "station") return A.inv.hangar; const s = (A.inv.ships || {})[ref.id]; return s ? s[ref.inv] : null; };
+  const invLabel = (ref) => ref.owner === "station" ? "Hangar" : ((window.Atamus.ship(ref.id) || {}).type === "chisel" ? "Chisel" : ref.id) + " · " + (ref.inv === "ore" ? "Ore hold" : "Cargo");
+  const invWins = {}; // key -> { ref (current tab), id }
+  function invTabsFor(ref) {
+    const A = window.Atamus;
+    if (ref.owner === "station") {
+      const tabs = [{ owner: "station", inv: "hangar" }];
+      for (const sh of A.snap.ships || []) if (sh.mine && sh.docked) tabs.push({ owner: "ship", id: sh.id, inv: "ore" }, { owner: "ship", id: sh.id, inv: "cargo" });
+      return tabs;
+    }
+    return [{ owner: "ship", id: ref.id, inv: "ore" }, { owner: "ship", id: ref.id, inv: "cargo" }];
+  }
+  function openInventory(ref) {
+    const key = ref.owner === "station" ? "inv:station" : "inv:" + ref.id;   // one window per holder; tabs switch inside
+    if (!invWins[key]) {
+      createWindow(key, { left: 360, top: 160, width: 420, minW: 400, minH: 300, render: (b) => renderInventory(key, b) });
+      invWins[key] = { ref };
+    }
+    invWins[key].ref = ref;
+    toggleWindow(key, true); renderInventory(key, wins[key].body);
+  }
+  function openInventoryAlone(ref) {           // shift-click a tab: its own window
+    const key = "inv:" + invKey(ref);
+    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 400, minH: 300, render: (b) => renderInventory(key, b) }); invWins[key] = { ref, solo: true }; }
+    toggleWindow(key, true); renderInventory(key, wins[key].body);
+  }
+  const dragPayload = (e) => { try { return JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return null; } };
+  function renderInventory(key, body) {
+    const w = wins[key], st = invWins[key]; if (!w || !st) return;
+    const A = window.Atamus, ref = st.ref, data = invData(ref);
+    body.innerHTML = ""; w.slot.innerHTML = "";
+    // tabs in the title (station: hangar + docked ships; ship: ore/cargo)
+    if (!st.solo) {
+      const row = el("div", { class: "tab-row" });
+      for (const t of invTabsFor(ref)) {
+        const active = invKey(t) === invKey(ref);
+        const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); } } }, t.owner === "station" ? "Hangar" : (t.inv === "ore" ? "Ore" : "Cargo"));
+        b.addEventListener("dragover", (e) => { e.preventDefault(); b.classList.add("drop"); });
+        b.addEventListener("dragleave", () => b.classList.remove("drop"));
+        b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: { ...t, slot: null } }); });
+        row.append(b);
+      }
+      w.slot.append(row);
+    } else w.slot.textContent = invLabel(ref);
+    if (!data) { body.append(el("div", { class: "muted" }, "No inventory.")); return; }
+    const cap = data.cap, used = data.used, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
+    body.append(el("div", { class: "inv-head" },
+      el("div", { class: "inv-cap" }, el("div", { class: "inv-cap-fill", style: "width:" + Math.min(100, used / cap * 100) + "%" })),
+      el("span", { class: "inv-stat" }, Math.round(used).toLocaleString() + " / " + cap.toLocaleString() + " m³ · " + data.stacks + "/" + maxStacks),
+      el("button", { class: "qbtn minus inv-sort", title: "Sort", onclick: () => A.send({ t: "inv_sort", ref }) }, "⇅")));
+    const grid = el("div", { class: "inv-grid" });
+    const items = (A.cfg && A.cfg.items) || {};
+    for (let i = 0; i < maxStacks; i++) {
+      const stck = data.slots[i];
+      const cell = el("div", { class: "inv-cell" + (stck ? " filled" : "") });
+      if (stck) {
+        const def = items[stck.item] || { name: stck.item, color: "#888" };
+        cell.append(el("div", { class: "inv-item", style: "background:" + def.color, title: def.name + " × " + stck.qty + " (" + (stck.qty * (def.unitM3 || 0)).toFixed(1) + " m³)" }, el("span", { class: "inv-abbr" }, def.name.slice(0, 3)), el("span", { class: "inv-qty" }, stck.qty.toLocaleString())));
+        cell.setAttribute("draggable", "true");
+        cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i } })); e.dataTransfer.effectAllowed = "move"; });
+      }
+      cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
+      cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
+      cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (!d) return; A.send({ t: "inv_move", from: d.ref, to: { ...ref, slot: i < data.slots.length ? i : null } }); });
+      grid.append(cell);
+    }
+    body.append(grid);
+  }
+  window.Atamus.bus.addEventListener("inv", () => { for (const key in invWins) if (wins[key] && !wins[key].win.hidden) renderInventory(key, wins[key].body); const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); });
 
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";

@@ -52,6 +52,8 @@ export async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS pilots_user_idx ON pilots (user_id);
 
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS credits BIGINT NOT NULL DEFAULT 0;
+
     CREATE TABLE IF NOT EXISTS systems (
       user_id     BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       data        JSONB NOT NULL DEFAULT '{}'::jsonb,

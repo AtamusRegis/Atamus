@@ -21,10 +21,14 @@ export const MAX_SHIPS_PER_PLAYER = 2;
 export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the target
 export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this range
 export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
+export const WARP_MULT = 20;             // prototype warp: x speed until arrival
+export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
+export const MINING_M3_PER_S = 4;        // prototype mining laser yield (per ship)
+export const STATION_HANGAR_M3 = 10_000_000;
 // Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
 export const SHIP_TYPES = {
   // Chisel: The Reach design doc — 335 m/s max velocity, 1,200,000 kg, 128 m.
-  chisel: { speedKmps: 0.335, radiusKm: 0.09, mass: 1.2 },
+  chisel: { name: "Chisel", speedKmps: 0.335, radiusKm: 0.09, mass: 1.2, cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000 },
 };
 
 export const COMBAT_RANGE_KM = 8;      // enemy ships within this damage each other (in any system)

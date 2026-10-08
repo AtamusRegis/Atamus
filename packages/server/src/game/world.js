@@ -1,7 +1,9 @@
 import {
   FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
+  WARP_MULT, DOCK_RADIUS_KM, MINING_M3_PER_S, STATION_HANGAR_M3,
 } from "./constants.js";
+import * as Inv from "./inventory.js";
 import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
 import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
@@ -21,7 +23,7 @@ export class World {
     const now = Date.now();
     const beltField = saved && saved.beltField ? saved.beltField : createBeltField(id, now);
     if (saved && saved.beltField) tickBeltField(beltField, now);   // catch up while we were away
-    const p = { id, name, send, offline: false, beltField };
+    const p = { id, name, send, offline: false, beltField, hangar: null, invDirty: false };
     this.players.set(id, p);
     const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
     const downtime = saved && saved.savedAt ? Math.max(0, now - saved.savedAt) : 0; // the clock keeps running while you're gone
@@ -40,20 +42,29 @@ export class World {
       // re-link with the partner gate if it's loaded (either side loading completes the link)
       if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (partner && partner.state === "active") { partner.connToSys = g.sys; partner.connToGate = g.id; } }
     });
-    for (const sh of (saved && saved.ships) || []) {
-      const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
-      this.ships.set(sh.id, { ...sh, owner: id, sys: homeSys(id), vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass });
-    }
+    for (const sh of (saved && saved.ships) || []) this.ships.set(sh.id, this._hydrateShip({ ...sh, owner: id, sys: homeSys(id) }));
+    p.hangar = (saved && saved.hangar) || Inv.makeInv(STATION_HANGAR_M3);
     this._ensureShips(id);
     return p;
   }
 
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, mining: s.mining, targets: s.targets, inv: s.inv }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
-    return { ships, gates, beltField: p ? p.beltField : null, savedAt: Date.now() };
+    return { ships, gates, beltField: p ? p.beltField : null, hangar: p ? p.hangar : null, savedAt: Date.now() };
+  }
+
+  // Fill in live/derived ship fields from a saved or fresh record.
+  _hydrateShip(sh) {
+    const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
+    return {
+      ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
+      docked: !!sh.docked, warp: !!sh.warp, mining: sh.mining || null,
+      targets: (sh.targets || []).map((tg) => ({ ...tg })),
+      inv: { cargo: sh.inv?.cargo || Inv.makeInv(t.cargoM3), ore: sh.inv?.ore || Inv.makeInv(t.oreM3) },
+    };
   }
 
   // Every pilot starts with a Chisel, parked just off the station at system center.
@@ -62,11 +73,7 @@ export class World {
     if (this.ships.has(sid)) return;
     const t = SHIP_TYPES.chisel;
     const sx = STATION_POS.x + 4, sy = STATION_POS.y + 4; // spawn beside the station
-    this.ships.set(sid, {
-      id: sid, owner: id, sys: homeSys(id), type: "chisel",
-      x: sx, y: sy, vx: 0, vy: 0, tx: sx, ty: sy, moving: false, h: Math.PI / 2,
-      speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
-    });
+    this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2 }));
   }
 
   // Logging off never drops the system immediately: it stays awake while a gate is
@@ -106,7 +113,73 @@ export class World {
     if (!owned.length) return;
     // clamp the destination into whatever system these ships are in (home for now)
     const t = clampToSystem(x, y);
-    for (const s of owned) { s.tx = t.x; s.ty = t.y; s.moving = true; }
+    for (const s of owned) { if (s.docked) continue; s.tx = t.x; s.ty = t.y; s.moving = true; s.warp = false; }
+  }
+
+  // ---- targeting / mining / docking / warp ----
+  _rockOf(pid, rockId) {
+    const p = this.players.get(pid); if (!p) return null;
+    for (const sl of p.beltField.slots) if (sl.belt) { const r = sl.belt.rocks.find((r) => r.id === rockId); if (r) return { rock: r, belt: sl.belt }; }
+    return null;
+  }
+  _targetPos(pid, tg) {
+    if (tg.kind === "rock") { const f = this._rockOf(pid, tg.id); return f ? { x: f.rock.x, y: f.rock.y } : null; }
+    if (tg.kind === "gate") { const g = this.gates.get(tg.id); return g ? { x: g.lx, y: g.ly } : null; }
+    if (tg.kind === "ship") { const o = this.ships.get(tg.id); return o ? { x: o.x, y: o.y } : null; }
+    if (tg.kind === "station") return { x: STATION_POS.x, y: STATION_POS.y };
+    return null;
+  }
+  cmdLock(pid, shipId, kind, id) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
+    const t = SHIP_TYPES[sh.type];
+    const i = sh.targets.findIndex((tg) => tg.kind === kind && tg.id === id);
+    if (i >= 0) { if (sh.mining === id) sh.mining = null; sh.targets.splice(i, 1); return; }   // toggle off
+    if (sh.targets.length >= t.maxTargets) return;
+    const pos = this._targetPos(pid, { kind, id }); if (!pos) return;
+    if (Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) return;                    // must be in range to begin a lock
+    sh.targets.push({ kind, id, lockAt: Date.now() + t.lockMs, locked: false });
+  }
+  cmdMine(pid, shipId, on) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
+    if (!on) { sh.mining = null; return; }
+    const tg = sh.targets.find((tg) => tg.kind === "rock" && tg.locked); if (!tg) return;
+    sh.mining = tg.id;
+  }
+  cmdDock(pid, shipId, dock) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    if (dock) {
+      if (sh.docked || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
+      sh.docked = true; sh.moving = false; sh.warp = false; sh.mining = null; sh.targets = []; sh.vx = sh.vy = 0;
+    } else {
+      if (!sh.docked) return;
+      sh.docked = false; sh.x = STATION_POS.x + 4; sh.y = STATION_POS.y + 4; sh.tx = sh.x; sh.ty = sh.y;
+    }
+    this._markInv(pid);
+  }
+  cmdWarp(pid, shipId) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked || !sh.moving) return;
+    sh.warp = true;
+  }
+  _inv(pid, ref) {
+    const p = this.players.get(pid); if (!p) return null;
+    if (ref.owner === "station") return { inv: p.hangar, docked: true };
+    const sh = this.ships.get(ref.id); if (!sh || sh.owner !== pid) return null;
+    return { inv: sh.inv[ref.inv], docked: sh.docked, ship: sh };
+  }
+  cmdInvMove(pid, from, to, qty) {
+    const a = this._inv(pid, from), b = this._inv(pid, to); if (!a || !a.inv || !b || !b.inv) return;
+    // transfers between different holders require docking (station <-> ship, ship <-> ship)
+    const sameHolder = from.owner === to.owner && (from.owner === "station" || from.id === to.id);
+    if (!sameHolder && !(a.docked && b.docked)) return;
+    if (Inv.move(a.inv, +from.slot, b.inv, to.slot == null ? null : +to.slot, qty) > 0) this._markInv(pid);
+  }
+  cmdInvSort(pid, ref) { const a = this._inv(pid, ref); if (a && a.inv) { Inv.sort(a.inv); this._markInv(pid); } }
+  _markInv(pid) { const p = this.players.get(pid); if (p) p.invDirty = true; }
+  inventoriesFor(pid) {
+    const p = this.players.get(pid); if (!p) return null;
+    const ships = {};
+    for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore) };
+    return { t: "inv", ships, hangar: Inv.summary(p.hangar) };
   }
 
   cmdChat(pid, text, channel, to) {
@@ -197,6 +270,7 @@ export class World {
       }
     }
     this._tickShips(dtSec);
+    this._tickTargeting(dtSec, now);
     for (const p of this.players.values()) {
       if (tickBeltField(p.beltField, now) && !p.offline) p.send(JSON.stringify({ t: "belts", belts: fieldBelts(p.beltField) }));
     }
@@ -204,6 +278,39 @@ export class World {
     for (const p of [...this.players.values()]) {
       if (!p.offline) continue;
       if (!this._busy(p.id) && now - (p.offlineSince || 0) > HIBERNATE_GRACE_MS) this._purge(p.id);   // hibernate
+    }
+  }
+
+  _tickTargeting(dtSec, now) {
+    for (const sh of this.ships.values()) {
+      if (sh.docked) continue;
+      const t = SHIP_TYPES[sh.type]; const owner = this.players.get(sh.owner); if (!owner) continue;
+      // locks: progress, and drop anything that left range or vanished
+      for (let i = sh.targets.length - 1; i >= 0; i--) {
+        const tg = sh.targets[i], pos = this._targetPos(sh.owner, tg);
+        if (!pos || Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) { sh.targets.splice(i, 1); if (sh.mining === tg.id) sh.mining = null; continue; }
+        if (!tg.locked && now >= tg.lockAt) tg.locked = true;
+      }
+      // mining laser
+      if (sh.mining) {
+        const tg = sh.targets.find((x) => x.id === sh.mining && x.locked);
+        const f = tg ? this._rockOf(sh.owner, sh.mining) : null;
+        if (!tg || !f) { sh.mining = null; continue; }
+        const def = Inv.ITEMS[f.rock.ore];
+        const wantM3 = Math.min(MINING_M3_PER_S * dtSec, f.rock.m3);
+        const units = Math.floor(wantM3 / def.unitM3 + (sh._mineCarry || 0));
+        sh._mineCarry = (wantM3 / def.unitM3 + (sh._mineCarry || 0)) - units;
+        if (units > 0) {
+          const got = Inv.add(sh.inv.ore, f.rock.ore, units);
+          if (got <= 0) { sh.mining = null; continue; }                   // hold full: lasers stop, target stays
+          f.rock.m3 = Math.max(0, f.rock.m3 - got * def.unitM3);
+          owner.invDirty = true; (owner.rockDirty ||= new Map()).set(f.rock.id, f.rock.m3);
+          if (f.rock.m3 <= 0) {                                             // rock mined out
+            f.belt.rocks = f.belt.rocks.filter((r) => r.id !== f.rock.id);
+            for (const o of this.ships.values()) { o.targets = o.targets.filter((x) => x.id !== f.rock.id); if (o.mining === f.rock.id) o.mining = null; }
+          }
+        }
+      }
     }
   }
 
@@ -216,11 +323,13 @@ export class World {
 
     // 1) steer velocities toward targets, integrate
     for (const s of ships) {
+      if (s.docked) { s.vx = 0; s.vy = 0; continue; }
       if (s.moving) {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-        if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; }
+        if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; }
         else {
-          const spd = Math.min(s.speed, (d / SHIP_SLOW_RADIUS_KM) * s.speed); // ease to a stop
+          const vmax = s.warp ? s.speed * WARP_MULT : s.speed;
+          const spd = Math.min(vmax, (d / SHIP_SLOW_RADIUS_KM) * vmax); // ease to a stop
           const dvx = (dx / d) * spd, dvy = (dy / d) * spd;
           s.vx += (dvx - s.vx) * steer; s.vy += (dvy - s.vy) * steer;
         }
@@ -235,7 +344,7 @@ export class World {
     for (let i = 0; i < ships.length; i++) {
       for (let j = i + 1; j < ships.length; j++) {
         const a = ships[i], b = ships[j];
-        if (a.sys !== b.sys) continue;
+        if (a.sys !== b.sys || a.docked || b.docked) continue;
         let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
         const minD = a.radius + b.radius;
         if (d >= minD) continue;
@@ -291,8 +400,14 @@ export class World {
     for (const s of this.ships.values()) {
       if (!vis.has(s.sys)) continue;
       const mine = s.owner === p.id;
+      if (s.docked && !mine) continue;                        // docked ships are out of sight
       const entry = { id: s.id, sys: s.sys, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
-      if (mine && s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
+      if (mine) {
+        if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
+        entry.docked = s.docked; entry.warp = s.warp; entry.mining = s.mining;
+        entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
+        entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;
+      }
       ships.push(entry);
     }
 

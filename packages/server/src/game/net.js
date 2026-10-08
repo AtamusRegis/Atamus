@@ -9,6 +9,8 @@ import {
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
+import { ITEMS, MAX_STACKS } from "./inventory.js";
+import { DOCK_RADIUS_KM, SHIP_TYPES } from "./constants.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 
 const world = new World();
@@ -26,6 +28,10 @@ const CLIENT_CONFIG = {
   fuelStartMs: FUEL_START_MS,
   ores: ORES,
   belt: BELT,
+  items: ITEMS,
+  maxStacks: MAX_STACKS,
+  dockRadius: DOCK_RADIUS_KM,
+  shipTypes: SHIP_TYPES,
 };
 
 export function attachGameServer(httpServer) {
@@ -42,6 +48,7 @@ export function attachGameServer(httpServer) {
     let saved = null; try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
     const player = world.addPlayer(pid, user.username, send, saved);
     send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
+    send(JSON.stringify(world.inventoriesFor(pid)));
 
     ws.on("message", (buf) => {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
@@ -49,6 +56,12 @@ export function attachGameServer(httpServer) {
         case "gate": world.cmdGate(pid, m.gate, !!m.open); break;
         case "move": world.cmdMove(pid, m.ships, +m.x, +m.y); break;
         case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
+        case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
+        case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
+        case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
+        case "warp": world.cmdWarp(pid, m.ship); break;
+        case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
+        case "inv_sort": world.cmdInvSort(pid, m.ref); break;
       }
     });
     ws.on("close", () => { persist(pid).finally(() => world.removePlayer(pid)); });
@@ -72,7 +85,11 @@ export function attachGameServer(httpServer) {
   }, TICK_MS);
 
   setInterval(() => {
-    for (const p of world.players.values()) p.send(JSON.stringify(world.snapshotFor(p)));
+    for (const p of world.players.values()) {
+      p.send(JSON.stringify(world.snapshotFor(p)));
+      if (p.invDirty) { p.invDirty = false; p.send(JSON.stringify(world.inventoriesFor(p.id))); }
+      if (p.rockDirty && p.rockDirty.size) { p.send(JSON.stringify({ t: "rocks", rocks: [...p.rockDirty].map(([id, m3]) => ({ id, m3 })) })); p.rockDirty.clear(); }
+    }
   }, SNAPSHOT_MS);
 
   return wss;
