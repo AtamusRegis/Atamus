@@ -4,7 +4,7 @@ import { ORES } from "./belts.js";
 
 export const MAX_STACKS = 100;
 export const ITEMS = {};
-for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", unitM3: o.unitM3, color: o.color };
+for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", unitM3: o.unitM3, price: o.price, color: o.color, icon: "rock_" + o.rock + "_200" };
 
 export const makeInv = (cap) => ({ cap, slots: [] });
 export const usedM3 = (inv) => inv.slots.reduce((s, st) => s + st.qty * (ITEMS[st.item]?.unitM3 || 0), 0);
@@ -39,6 +39,13 @@ export function move(from, fromIdx, to, toIdx, qty) {
   if (target && target.item === st.item) { n = canAdd(to, st.item, qty); if (n <= 0) return 0; target.qty += n; }
   else { n = canAdd(to, st.item, qty); if (n <= 0) return 0; if (toIdx != null && toIdx < to.slots.length) to.slots.splice(toIdx, 0, { item: st.item, qty: n }); else to.slots.push({ item: st.item, qty: n }); }
   st.qty -= n; if (st.qty <= 0) from.slots.splice(fromIdx, 1);
+  return n;
+}
+/** Take up to qty units out of a slot. Returns the qty removed. */
+export function take(inv, idx, qty) {
+  const st = inv.slots[idx]; if (!st) return 0;
+  const n = Math.max(0, Math.min(Math.floor(qty), st.qty)); if (n <= 0) return 0;
+  st.qty -= n; if (st.qty <= 0) inv.slots.splice(idx, 1);
   return n;
 }
 export function sort(inv) { inv.slots.sort((a, b) => (a.item < b.item ? -1 : a.item > b.item ? 1 : b.qty - a.qty)); }

@@ -23,12 +23,20 @@ export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this r
 export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
 export const WARP_MULT = 20;             // prototype warp: x speed until arrival
 export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
-export const MINING_M3_PER_S = 4;        // prototype mining laser yield (per ship)
+export const LASER_M3_PER_S = 2;         // prototype mining laser yield (per laser)
+export const MINING_CYCLE_MS = 30_000;   // a laser re-aims at a new spot on the rock every cycle
 export const STATION_HANGAR_M3 = 10_000_000;
 // Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
+// hardpoints: beam origins in ship lengths from the sprite centre (sprite faces +x,
+// +y is the sprite's "down" side); arms: which hardpoints each laser may fire from.
+// Barges/exhumers (later) fire from their circular hopper ports along the centreline.
 export const SHIP_TYPES = {
   // Chisel: The Reach design doc — 335 m/s max velocity, 1,200,000 kg, 128 m.
-  chisel: { name: "Chisel", speedKmps: 0.335, radiusKm: 0.09, mass: 1.2, cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000 },
+  chisel: {
+    name: "Chisel", speedKmps: 0.335, lengthKm: 0.128, radiusKm: 0.09, mass: 1.2, hp: 350, shield: 200,
+    cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000,
+    lasers: 2, hardpoints: [[0.338, -0.184], [0.47, -0.14], [0.338, 0.184], [0.47, 0.14]], arms: [[0, 1], [2, 3]],
+  },
 };
 
 export const COMBAT_RANGE_KM = 8;      // enemy ships within this damage each other (in any system)
