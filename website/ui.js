@@ -529,9 +529,12 @@
         body.append(bar("Hangar", "hold"));
         for (const sh of docked) {                                   // click a docked ship to select it (Undock / Inventory)
           const t = (A.cfg.shipTypes || {})[sh.type] || {};
-          body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Docked"), el("button", { class: "btn-primary2 unit-btn off", onclick: () => A.selectShip(sh.id) }, t.name || sh.type)));
+          body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Docked"),
+            el("button", { class: "btn-primary2 unit-btn off ship-btn", onclick: () => A.selectShip(sh.id) }, el("img", { class: "ship-ico", src: "assets/ships/" + sh.type + "_blue.webp", alt: "", draggable: "false" }), el("span", {}, t.name || sh.type))));
         }
-        body.append(el("div", { class: "unit-btns" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory")));
+        body.append(el("div", { class: "unit-btns" },
+          el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory"),
+          el("button", { class: "btn-primary2 unit-btn off", onclick: openMarket }, "Market")));
       } else if (u.kind === "gate") {
         const fuel = row("Fuel", ""), status = row("Status", ""); L.fuel = fuel.lastChild; L.status = status.lastChild;
         body.append(fuel, status);
@@ -563,7 +566,8 @@
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   hud.append(hudTargets, hudStatus, hudBar); document.body.append(hud);
   const HB_SLOTS = 8;
-  saved.hotbar = Array.isArray(saved.hotbar) && saved.hotbar.length === HB_SLOTS ? saved.hotbar : [{ k: "laser", i: 0 }, { k: "laser", i: 1 }, null, null, null, null, null, null];
+  saved.hotbar = Array.isArray(saved.hotbar) && saved.hotbar.length === HB_SLOTS ? saved.hotbar : [{ k: "laser", i: 0 }, { k: "laser", i: 1 }, { k: "auto" }, null, null, null, null, null];
+  if (!saved.hotbar.some((h) => h && h.k === "auto")) { const i = saved.hotbar.findIndex((h) => !h); if (i >= 0) saved.hotbar[i] = { k: "auto" }; }
   const tgKey = (tg) => tg.kind + ":" + tg.id;
   let hudShip = null, selTarget = null, hudSig = "", hudLive = {}, tgOrder = [];
   const H = {};  // status row live elements
@@ -576,8 +580,13 @@
   function clickLaser(sh, idx) {
     const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L) return;
     const rock = selTarget && selTarget.kind === "rock" ? selTarget.id : null;
-    if (L.on && (!rock || L.rock === rock)) A.send({ t: "laser", ship: sh.id, idx, on: false });
-    else A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
+    if (L.on) {
+      if (!L.repeat) A.send({ t: "laser", ship: sh.id, idx, on: true });                           // resume repeating
+      else if (!rock || L.rock === rock) A.send({ t: "laser", ship: sh.id, idx, on: false });      // stop after this cycle
+      else flash("Cycle in progress — the laser switches targets when it completes.");
+      return;
+    }
+    A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
   }
   // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells
   function reorderable(cell, kind, index, onDrop) {
@@ -591,13 +600,13 @@
   }
   function renderHud() {
     const A = window.Atamus, sh = hudShipData();
-    if (!sh) { if (!hud.hidden) { hud.hidden = true; A.hud.line = null; } hudShip = null; return; }
+    if (!sh || sh.docked) { if (!hud.hidden) { hud.hidden = true; A.hud.line = null; } hudShip = null; return; }
     if (hudShip !== sh.id) { hudShip = sh.id; selTarget = null; tgOrder = []; }
     hud.hidden = false;
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (selTarget && !targets.some((x) => x && tgKey(x) === tgKey(selTarget))) selTarget = null;
-    const sig = [sh.id, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.rock || "")).join(","), saved.hotbar.map((h) => h ? h.k + h.i : "-").join(",")].join("|");
+    const sig = [sh.id, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
     if (sig !== hudSig) {
       hudSig = sig; hudLive = { dist: {}, tip: null };
       // targets
@@ -622,17 +631,24 @@
       H.speed = el("span", { class: "hud-speed" });
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
       // hotbar
-      hudBar.innerHTML = "";
+      hudBar.innerHTML = ""; hudLive.slots = [];
       saved.hotbar.forEach((it, idx) => {
         const slot = el("div", { class: "hb-slot" });
         if (it && it.k === "laser") {
           const L = (sh.lasers || [])[it.i];
           if (L) {
-            slot.classList.add("filled"); if (L.on) slot.classList.add("on");
+            slot.classList.add("filled"); if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping");
             slot.append(el("div", { class: "hb-icon laser" }, el("span", {}, "ML" + (it.i + 1))));
-            slot.title = "Mining Laser " + (it.i + 1) + (L.on ? " — mining" : "");
+            slot.title = "Mining Laser " + (it.i + 1) + (L.on ? (L.repeat ? " — cycling" : " — finishing cycle") : "");
             slot.addEventListener("click", () => clickLaser(sh, it.i));
+            hudLive.slots.push({ slot, laser: it.i });
           }
+        } else if (it && it.k === "auto") {
+          slot.classList.add("filled"); if (sh.auto && sh.auto.on) slot.classList.add("on");
+          slot.append(el("div", { class: "hb-icon auto" }, el("span", {}, "AM")));
+          slot.title = "Auto Miner" + (sh.auto && sh.auto.on ? " — active" : "");
+          slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
+          hudLive.slots.push({ slot, auto: true });
         }
         slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
         reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const a = saved.hotbar; [a[from], a[to]] = [a[to], a[from]]; persistAll(); hudSig = ""; renderHud(); });
@@ -646,6 +662,7 @@
     const maxS = t.shield || 0, maxH = t.hp || 0;
     setBar("Shield", sh.shield ?? maxS, maxS, Math.round(sh.shield ?? maxS) + " / " + maxS); setBar("Hull", sh.hp ?? maxH, maxH, Math.round(sh.hp ?? maxH) + " / " + maxH);
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
+    for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
     // line from the selected target's icon to the target on the map
     if (selTarget && hudLive.tipCell) { const r = hudLive.tipCell.querySelector(".tgt-ring").getBoundingClientRect(); A.hud.line = { x: r.left + r.width / 2, y: r.top + r.height / 2, tg: selTarget }; }
     else A.hud.line = null;
@@ -653,6 +670,7 @@
   window.Atamus.bus.addEventListener("snap", renderHud);
   window.Atamus.bus.addEventListener("select", renderHud);
   window.Atamus.bus.addEventListener("deselect", renderHud);
+  setInterval(renderHud, 500);                       // safety net: never leave the HUD up for a ship that's gone
 
   // ---- inventories: slot grids with drag/drop ----
   const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;
@@ -690,7 +708,7 @@
     const items = (A.cfg && A.cfg.items) || {}, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
     const tabs = st.solo ? [] : invTabsFor(st.root || ref);   // tabs belong to the window's holder, not the tab being viewed
     // slots flow into as many columns as the window fits; rows grow with the contents (plus one spare row)
-    const CELL = 44, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth + GAP) / (CELL + GAP)));
+    const CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth + GAP) / (CELL + GAP)));
     const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
     // rebuild only when the structure changes (tab set, which stacks exist, column count); quantities update in place
     const sig = [invKey(ref), tabs.map(invKey).join(","), data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
@@ -728,8 +746,8 @@
           cell.append(item);
           cell.setAttribute("draggable", "true");
           cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i } })); e.dataTransfer.effectAllowed = "move"; });
-          cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openSell(ref, i); });
-          touchDrag(cell, { ref: { ...ref, slot: i } }, () => openSell(ref, i));
+          cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openItemMenu(ref, i, e.clientX, e.clientY); });
+          touchDrag(cell, { ref: { ...ref, slot: i } }, () => { const r = cell.getBoundingClientRect(); openItemMenu(ref, i, r.left + r.width / 2, r.top + r.height / 2); });
         }
         cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
         cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
@@ -780,6 +798,76 @@
     }, { passive: true });
   }
 
+  // ---- item menu: split / jettison / sell / read / info ----
+  function openItemMenu(ref, slot, x, y) {
+    const A = window.Atamus, data = invData(ref), stck = data && data.slots[slot]; if (!stck) return;
+    const def = (A.cfg.items || {})[stck.item] || { name: stck.item };
+    const holder = ref.owner === "station" ? null : A.ship(ref.id), atStation = !holder || holder.docked;
+    const items = [];
+    if (stck.qty > 1) items.push(["Split", () => openSplit(ref, slot)]);
+    items.push(["Jettison", () => A.send({ t: "jettison", ref, slot })]);
+    if (def.price && def.kind === "ore") items.push([atStation ? "Sell" : "Sell (dock first)", () => { if (atStation) openSell(ref, slot); }]);
+    if (def.kind === "manual") items.push(["Read", () => A.send({ t: "read", ref, slot })]);
+    items.push(["Info", () => openInfo(stck.item, stck.qty)]);
+    showCtxMenu(x, y, items);
+  }
+  let splitAt = null;
+  function openSplit(ref, slot) {
+    if (!wins.split) createWindow("split", { left: Math.round(innerWidth / 2 - 140), top: Math.round(innerHeight / 2 - 80), width: 280, minW: 240, minH: 120, render: renderSplit, groupable: false });
+    splitAt = { ref, slot }; wins.split.sig = null; toggleWindow("split", true); renderSplit(wins.split.body);
+  }
+  function renderSplit(body) {
+    const A = window.Atamus, w = wins.split;
+    const data = splitAt && invData(splitAt.ref), stck = data && data.slots[splitAt.slot];
+    const sig = stck ? stck.item + ":" + stck.qty : ""; if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
+    if (!stck || stck.qty < 2) { w.slot.textContent = "Split"; body.append(el("div", { class: "muted" }, "Nothing to split.")); return; }
+    const def = (A.cfg.items || {})[stck.item] || { name: stck.item };
+    w.slot.textContent = "Split " + def.name;
+    const max = stck.qty - 1, start = Math.max(1, Math.floor(stck.qty / 2));
+    const range = el("input", { type: "range", class: "sell-range", min: 1, max, value: start });
+    const num = el("input", { type: "number", class: "sell-num", min: 1, max, value: start });
+    const upd = () => { const q = Math.max(1, Math.min(max, Math.round(+num.value || 1))); num.value = q; range.value = q; };
+    range.addEventListener("input", () => { num.value = range.value; }); num.addEventListener("input", upd);
+    body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Take off"), num), range,
+      el("div", { class: "unit-btns row2" },
+        el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("split", false) }, "Cancel"),
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "inv_split", ref: splitAt.ref, slot: splitAt.slot, qty: +num.value }); toggleWindow("split", false); } }, "Split")));
+  }
+  let infoItem = null;
+  function openInfo(key, qty) {
+    if (!wins.info) createWindow("info", { left: Math.round(innerWidth / 2 - 160), top: Math.round(innerHeight / 2 - 120), width: 320, minW: 260, minH: 160, render: renderInfo, groupable: false });
+    infoItem = { key, qty }; toggleWindow("info", true); renderInfo(wins.info.body);
+  }
+  function renderInfo(body) {
+    const A = window.Atamus, w = wins.info; body.innerHTML = "";
+    const def = infoItem && (A.cfg.items || {})[infoItem.key]; if (!def) { w.slot.textContent = "Info"; return; }
+    w.slot.textContent = def.name;
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const perM3 = def.unitM3 ? def.price / def.unitM3 : 0;
+    body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: "assets/rocks/" + def.icon + ".webp", alt: "" }) : null, el("span", {}, def.desc || "")),
+      row("Rarity", def.rarity || "—"), row("Weight", def.unitM3 + " m³ / unit"), row("Price", (def.price || 0).toLocaleString() + " cr / unit"),
+      row("Price per m³", Math.round(perM3).toLocaleString() + " cr"), row("Stack", infoItem.qty.toLocaleString() + " × = " + (infoItem.qty * (def.price || 0)).toLocaleString() + " cr · " + (infoItem.qty * def.unitM3).toLocaleString() + " m³"));
+  }
+
+  // ---- station market ----
+  function openMarket() {
+    if (!wins.market) createWindow("market", { left: 300, top: 120, width: 360, minW: 300, minH: 200, render: renderMarket, label: "Market" });
+    toggleWindow("market", true); renderMarket(wins.market.body);
+  }
+  function renderMarket(body) {
+    const A = window.Atamus, w = wins.market; body.innerHTML = ""; w.slot.textContent = "Market";
+    const items = A.cfg.items || {}, credits = A.inv.credits || 0, unlocked = A.inv.unlocked || {};
+    body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Credits"), el("span", { class: "sheet-v" }, credits.toLocaleString() + " cr")));
+    for (const m of A.cfg.market || []) {
+      const def = items[m.key] || { name: m.key };
+      const known = def.license && unlocked[def.license];
+      body.append(el("div", { class: "mk-row" + (known ? " known" : "") },
+        el("div", { class: "mk-name" }, def.name, el("div", { class: "mk-sub" }, known ? "Already read" : (def.rarity || ""))),
+        el("div", { class: "mk-price" + (credits < m.price ? " poor" : "") }, m.price.toLocaleString() + " cr"),
+        el("button", { class: "btn-primary2 unit-btn mk-buy", disabled: credits < m.price ? "" : null, onclick: () => A.send({ t: "buy", item: m.key, qty: 1 }) }, "Buy")));
+    }
+  }
+
   // ---- sell (right-click / hold an ore stack) ----
   let sell = null; // { ref, slot }
   function openSell(ref, slot) {
@@ -816,6 +904,8 @@
     const A = window.Atamus;
     if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
     if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
+    if (wins.market && isOpen(wins.market)) renderMarket(wins.market.body);
+    if (wins.split && isOpen(wins.split)) renderSplit(wins.split.body);
     for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });
 
   // ---- chat ----

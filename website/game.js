@@ -15,6 +15,7 @@
 
   // bridge for ui.js (chat)
   const bus = new EventTarget();
+  let snapAt = 0;             // when the last snapshot arrived (for smooth cycle progress)
   let selectedUnit = null; // { kind:"gate", id } — structure selected by click (ships use `selected`)
   function unitData() {
     if (!selectedUnit) return null;
@@ -83,7 +84,7 @@
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
-      else if (m.t === "snap") { snap = m; bus.dispatchEvent(new CustomEvent("snap")); }
+      else if (m.t === "snap") { snap = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
@@ -398,14 +399,20 @@
     const L = (SHIP_TYPES[sh.type] || SHIP_TYPES.chisel).lengthKm * scale();
     const c = Math.cos(-h), sn = Math.sin(-h);
     ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const cyc = (cfg.cycleMs || 15000);
     for (const l of sh.lasers) {
       if (!l.on) continue;
       const hp = hps[l.hp] || hps[0];
       const ox = sx + (hp[0] * c - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * c) * L;
       const ex = gx2s(pl.gx + l.ax) + (Math.random() - 0.5) * 1.5, ey = gy2s(pl.gy + l.ay) + (Math.random() - 0.5) * 1.5;
-      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,140,60,0.35)"; ctx.lineWidth = 4; ctx.stroke();
+      const col = l.repeat ? "255,140,60" : "200,120,80";
+      ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = `rgba(${col},0.35)`; ctx.lineWidth = 4; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.2; ctx.stroke();
       ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,240,200,0.8)"; ctx.fill();
+      // the chunk being cut: rides the beam from the rock to the ship over the cycle
+      const p = Math.min(1, (l.p || 0) + (performance.now() - snapAt) / cyc);
+      const qx = ex + (ox - ex) * p, qy = ey + (oy - ey) * p, qs = Math.max(3, Math.min(7, L * 0.12));
+      ctx.save(); ctx.translate(qx, qy); ctx.rotate(p * 6); ctx.fillStyle = "rgba(190,170,140,0.95)"; ctx.fillRect(-qs / 2, -qs / 2, qs, qs); ctx.strokeStyle = "rgba(255,220,170,0.8)"; ctx.lineWidth = 1; ctx.strokeRect(-qs / 2, -qs / 2, qs, qs); ctx.restore();
     }
     ctx.restore();
   }
@@ -483,8 +490,11 @@
       if (sh.mine && selected.has(sh.id)) {
         drawSelBox(sx, sy, Math.max(10, wPx * 0.62));
         // targeting range
-        const tr = ((cfg.shipTypes && cfg.shipTypes[sh.type]) || {}).targetRangeKm || 15, rr = tr * scale();
-        if (rr > 8) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI * 2); ctx.setLineDash([2, 5]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(255,200,120,0.35)"; ctx.stroke(); ctx.restore(); }
+        const tr = ((cfg.shipTypes && cfg.shipTypes[sh.type]) || {}).targetRangeKm || 15, rr = tr * scale(), lr = (cfg.laserRange || 5) * scale();
+        ctx.save(); ctx.setLineDash([2, 5]); ctx.lineWidth = 1;
+        if (rr > 8) { ctx.beginPath(); ctx.arc(sx, sy, rr, 0, Math.PI * 2); ctx.strokeStyle = "rgba(200,210,230,0.22)"; ctx.stroke(); }
+        if (lr > 8) { ctx.beginPath(); ctx.arc(sx, sy, lr, 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,200,120,0.35)"; ctx.stroke(); }
+        ctx.restore();
       }
       if (sh.mine && sh.targets) for (const tg of sh.targets) drawTarget(place, sh, sx, sy, tg);
       if (sh.mine) drawLasers(place, sh, sx, sy, p.h);
