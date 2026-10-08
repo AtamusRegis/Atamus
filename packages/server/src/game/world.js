@@ -2,7 +2,7 @@ import {
   FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
 } from "./constants.js";
-import { STARGATE_CELLS, clampToSystem } from "./geometry.js";
+import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
 
 const homeSys = (pid) => `sys:${pid}`;
 
@@ -34,9 +34,10 @@ export class World {
     const sid = `${id}:ship:0`;
     if (this.ships.has(sid)) return;
     const t = SHIP_TYPES.chisel;
+    const sx = STATION_POS.x + 4, sy = STATION_POS.y + 4; // spawn beside the station
     this.ships.set(sid, {
       id: sid, owner: id, sys: homeSys(id), type: "chisel",
-      x: 0, y: 2, vx: 0, vy: 0, tx: 0, ty: 2, moving: false, h: Math.PI / 2,
+      x: sx, y: sy, vx: 0, vy: 0, tx: sx, ty: sy, moving: false, h: Math.PI / 2,
       speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
     });
   }

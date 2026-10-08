@@ -28,11 +28,11 @@ for (let q = -SYSTEM_RINGS; q <= SYSTEM_RINGS; q++) {
   }
 }
 
-// One stargate for now — the outer cell nearest the top of the system.
-OUTER.sort((a, b) => Math.abs(Math.atan2(a.y, a.x) - Math.PI / 2) - Math.abs(Math.atan2(b.y, b.x) - Math.PI / 2));
-export const STARGATE_CELLS = [OUTER[0]];
+// No stargate for now.
+export const STARGATE_CELLS = [];
 
-export const STATION_POS = { x: 0, y: 0 }; // center cell
+// Station sits off-centre within the hex (apothem = 100 km).
+export const STATION_POS = { x: -52, y: 38 };
 
 export function dist(ax, ay, bx, by) { return Math.hypot(ax - bx, ay - by); }
 

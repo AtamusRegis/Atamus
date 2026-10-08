@@ -21,6 +21,9 @@
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.png";
 
+  const bgImg = new Image(); let bgReady = false;
+  bgImg.onload = () => (bgReady = true); bgImg.src = "assets/nebula_bg.webp";
+
   // ---- ship art registry: each hull drawn at true scale from its sprite ----
   // lengthKm maps the sprite's long axis to real metres. Own ships render blue,
   // other players' ships render red. Only the Chisel spawns for now; the rest
@@ -35,7 +38,7 @@
   const CHISEL_LEN_KM = SHIP_TYPES.chisel.lengthKm; // legacy ref
   // station: one per system at its centre, drawn at true size (2766 m long)
   const STATION_LEN_KM = 2.766;
-  const DOCK_RADIUS_KM = 2;   // ships within this of the station can dock / are anchored
+  const DOCK_RADIUS_KM = 4;   // ships within this of the station can dock / are anchored
   const stationArt = { blue: new Image(), red: new Image() };
   stationArt.blue.src = "assets/ships/station_blue.webp";
   stationArt.red.src = "assets/ships/station_red.webp";
@@ -205,11 +208,38 @@
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
+  function drawBackground() {
+    if (bgReady && bgImg.naturalWidth) {
+      const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight, s = Math.max(innerWidth / iw, innerHeight / ih);
+      const w = iw * s, h = ih * s;
+      ctx.drawImage(bgImg, (innerWidth - w) / 2, (innerHeight - h) / 2, w, h);
+    } else { ctx.fillStyle = "#05080f"; ctx.fillRect(0, 0, innerWidth, innerHeight); }
+    ctx.save(); ctx.fillStyle = "rgba(4,6,12,0.55)"; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.restore(); // darken
+  }
+
+  function drawSun(sx, sy) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const R = 240;
+    let g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R);
+    g.addColorStop(0, "rgba(255,246,224,0.9)"); g.addColorStop(0.08, "rgba(255,228,180,0.5)");
+    g.addColorStop(0.32, "rgba(255,180,120,0.16)"); g.addColorStop(1, "rgba(255,150,90,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI * 2); ctx.fill();
+    let c = ctx.createRadialGradient(sx, sy, 0, sx, sy, 24);
+    c.addColorStop(0, "rgba(255,255,255,1)"); c.addColorStop(1, "rgba(255,240,210,0)");
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx, sy, 24, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,238,205,0.3)";
+    for (const [dx, dy, len, w] of [[1, 0, R * 1.5, 2], [0, 1, R * 1.15, 2], [0.7, 0.7, R * 0.85, 1], [-0.7, 0.7, R * 0.85, 1]]) {
+      ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(sx - dx * len, sy - dy * len); ctx.lineTo(sx + dx * len, sy + dy * len); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawStations(place) {
     for (const sE of snap.systems) {
       if (sE.id === "sys:hub") continue;                 // the pirate hub has no player station
       const pl = place.get(sE.id); if (!pl) continue;
-      const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
+      const st = cfg.station || { x: 0, y: 0 };
+      const sx = gx2s(pl.gx + st.x), sy = gy2s(pl.gy + st.y);
       // dock / anchor radius ring
       const rPx = DOCK_RADIUS_KM * scale();
       if (rPx > 6) {
@@ -261,6 +291,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height); gateButtons = [];
+    drawBackground();
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place; curMaxW = fitWidth(place);
       if (!camInit) { const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true; }
@@ -283,6 +314,7 @@
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
       for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, R); gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
+      drawSun(gx2s(0), gy2s(0));                 // sun at the system centre
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawShips(place);
