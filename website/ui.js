@@ -580,12 +580,7 @@
   function clickLaser(sh, idx) {
     const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L) return;
     const rock = selTarget && selTarget.kind === "rock" ? selTarget.id : null;
-    if (L.on) {
-      if (!L.repeat) A.send({ t: "laser", ship: sh.id, idx, on: true });                           // resume repeating
-      else if (!rock || L.rock === rock) A.send({ t: "laser", ship: sh.id, idx, on: false });      // stop after this cycle
-      else flash("Cycle in progress — the laser switches targets when it completes.");
-      return;
-    }
+    if (L.on) { A.send({ t: "laser", ship: sh.id, idx, on: !L.repeat }); return; }   // active: toggle whether it repeats after this cycle
     A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
   }
   // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells

@@ -496,7 +496,7 @@
         if (lr > 8) { ctx.beginPath(); ctx.arc(sx, sy, lr, 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,200,120,0.35)"; ctx.stroke(); }
         ctx.restore();
       }
-      if (sh.mine && sh.targets) for (const tg of sh.targets) drawTarget(place, sh, sx, sy, tg);
+      if (sh.mine && sh.targets && selected.has(sh.id)) for (const tg of sh.targets) drawTarget(place, sh, sx, sy, tg);
       if (sh.mine) drawLasers(place, sh, sx, sy, p.h);
     }
     // drag selection box
