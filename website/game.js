@@ -35,6 +35,7 @@
   const CHISEL_LEN_KM = SHIP_TYPES.chisel.lengthKm; // legacy ref
   // station: one per system at its centre, drawn at true size (2766 m long)
   const STATION_LEN_KM = 2.766;
+  const DOCK_RADIUS_KM = 2;   // ships within this of the station can dock / are anchored
   const stationArt = { blue: new Image(), red: new Image() };
   stationArt.blue.src = "assets/ships/station_blue.webp";
   stationArt.red.src = "assets/ships/station_red.webp";
@@ -208,11 +209,19 @@
     for (const sE of snap.systems) {
       if (sE.id === "sys:hub") continue;                 // the pirate hub has no player station
       const pl = place.get(sE.id); if (!pl) continue;
+      const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
+      // dock / anchor radius ring
+      const rPx = DOCK_RADIUS_KM * scale();
+      if (rPx > 6) {
+        ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
+        ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
+        ctx.strokeStyle = sE.mine ? "rgba(120,170,255,0.35)" : "rgba(255,110,110,0.3)";
+        ctx.stroke(); ctx.restore();
+      }
       const img = sE.mine ? stationArt.blue : stationArt.red;
       if (!img.naturalWidth) continue;
       const wPx = STATION_LEN_KM * scale(); if (wPx < 3) continue;  // true 2766 m scale
       const hPx = wPx * (img.naturalHeight / img.naturalWidth);
-      const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
       ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(img, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
     }
   }
