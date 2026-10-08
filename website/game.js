@@ -35,7 +35,6 @@
     if (!u) return;
     if (u.kind === "ship") { const sh = (snap.ships || []).find((x) => x.id === u.id && x.mine); if (sh) { selected.clear(); selected.add(sh.id); syncShipSelection(); } }
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
-    else if (u.kind === "station") selectUnit(u);
   }
   window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null },
@@ -100,7 +99,7 @@
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
-          if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = { kind: "station", id: "station" }; setTimeout(() => selectUnit({ kind: "station", id: "station" }), 0); }
+          if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = null; setTimeout(() => selectUnit(null), 0); }   // the selected ship docked: drop the selection
         }
         snap = m; snapAt = performance.now(); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
@@ -230,7 +229,7 @@
       if (!shift) selected.clear(); if (shift && selected.has(ship.id)) selected.delete(ship.id); else selected.add(ship.id);
       syncShipSelection(); return;
     }
-    if (stationAt(p)) { selected.clear(); selectUnit({ kind: "station", id: "station" }); return; }
+    if (stationAt(p)) { bus.dispatchEvent(new CustomEvent("openstation")); return; }   // clicking the station opens its hangar
     if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // ships deselect on the timer below (dbl-click keeps them)
     clearTimeout(deselectTimer); deselectTimer = setTimeout(() => { selected.clear(); syncShipSelection(); }, 260);
   }

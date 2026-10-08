@@ -39,7 +39,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .wbtn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 .wbtn.open { color: #0a1420; background: var(--accent-grad); }
 .wbtn[draggable="true"]:active { opacity: .5; }
-.tooltip { position: fixed; z-index: 60; transform: translateY(-50%); background: #151d2b; color: var(--text); font-size: 12px; padding: 6px 10px; white-space: nowrap; pointer-events: none; border-radius: 8px; box-shadow: var(--shadow); }
+.tooltip { position: fixed; z-index: 2000000000; transform: translateY(-50%); background: #151d2b; color: var(--text); font-size: 12px; padding: 6px 10px; white-space: nowrap; pointer-events: none; border-radius: 8px; box-shadow: var(--shadow); }
 
 /* ---- windows ---- */
 .win { position: fixed; z-index: 30; min-width: 190px; background: var(--panel-grad); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; max-height: 90vh; }
@@ -162,7 +162,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .dd-item.sel { color: #06131f; background: var(--accent-grad); }
 
 /* right-click context menu */
-.ctx-menu { position: fixed; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 200; min-width: 150px; }
+.ctx-menu { position: fixed; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 2000000000; min-width: 150px; }
 .ctx-item { padding: 6px 10px; font-size: 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; color: var(--text); }
 .ctx-item:hover { background: var(--sel); }
 .who { cursor: context-menu; }
@@ -241,7 +241,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 #view { touch-action: none; }
 .win-title { touch-action: none; }
 .rz { touch-action: none; }
-.inv-ghost { position: fixed; width: 40px; height: 40px; transform: translate(-50%, -50%); pointer-events: none; z-index: 500; opacity: .85; inset: auto; }
+.inv-ghost { position: fixed; width: 40px; height: 40px; transform: translate(-50%, -50%); pointer-events: none; z-index: 2000000001; opacity: .85; inset: auto; }
 @media (pointer: coarse) {
   .rz-n, .rz-s { height: 14px; } .rz-e, .rz-w { width: 14px; }
   .rz-ne, .rz-nw, .rz-se, .rz-sw { width: 18px; height: 18px; }
@@ -390,3 +390,22 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fb-sh { height: 100%; background: #4a9dff; }
 .fb-hp { height: 100%; background: #e2914a; }
 .fleet-name { font-size: 9px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ship actions anchored to the fleet bar */
+.fleet-acts { position: absolute; bottom: 100%; left: 0; margin-bottom: 5px; display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: var(--shadow); }
+.win[data-id="fleet"].vertical .fleet-acts { bottom: auto; top: 0; left: 100%; margin: 0 0 0 5px; flex-direction: column; }
+.fleet-acts[hidden], .hud-actions[hidden] { display: none; }
+.win[data-id="fleet"] .win-body { cursor: move; }
+.fleet-card { cursor: pointer; }
+
+/* station inventory: ship list on top, deliveries anchored to the bottom */
+.win-body:has(> .inv-split) { display: flex; flex-direction: column; }
+.inv-split { flex: 1 0 auto; align-items: stretch; }
+.inv-side-fill { flex: 1; min-height: 10px; }
+.inv-side-div { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 2px; }
+.inv-side-deliv { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 11.5px; font-weight: 600; color: #e8c27a; background: rgba(232,194,122,0.10); border: none; border-radius: 5px; padding: 6px; cursor: pointer; text-align: left; }
+.inv-side-deliv:hover { background: rgba(232,194,122,0.18); }
+.inv-side-deliv.active { box-shadow: inset 0 0 0 1px rgba(232,194,122,0.7); }
+.inv-side-deliv.drop { outline: 1px solid #e8c27a; }
+.deliv-count { margin-left: auto; font-size: 10px; background: #e8c27a; color: #1a1408; border-radius: 8px; padding: 0 6px; }
+.mk-deliver { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: none; border-radius: 5px; padding: 2px 6px; }
