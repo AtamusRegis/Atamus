@@ -80,6 +80,7 @@ export function attachGameServer(httpServer) {
         case "licenses": refreshLicenses(); break;
         case "crew": refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)); break;
         case "decrew": world.cmdDecrew(pid, m.ship); break;
+        case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
