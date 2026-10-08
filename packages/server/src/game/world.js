@@ -72,7 +72,7 @@ export class World {
     const sid = `${id}:ship:0`;
     if (this.ships.has(sid)) return;
     const t = SHIP_TYPES.chisel;
-    const sx = STATION_POS.x + 4, sy = STATION_POS.y + 4; // spawn beside the station
+    const sx = STATION_POS.x + 2.2, sy = STATION_POS.y + 2.2; // spawn beside the station
     this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2 }));
   }
 
@@ -152,7 +152,7 @@ export class World {
       sh.docked = true; sh.moving = false; sh.warp = false; sh.mining = null; sh.targets = []; sh.vx = sh.vy = 0;
     } else {
       if (!sh.docked) return;
-      sh.docked = false; sh.x = STATION_POS.x + 4; sh.y = STATION_POS.y + 4; sh.tx = sh.x; sh.ty = sh.y;
+      sh.docked = false; sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
     }
     this._markInv(pid);
   }
@@ -232,7 +232,7 @@ export class World {
     const ownerId = sysId.startsWith("sys:") ? sysId.slice(4) : null;
     for (const sh of this.ships.values()) {
       if (sh.sys !== sysId || sh.owner === ownerId) continue;
-      sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 4; sh.y = STATION_POS.y + 4; sh.tx = sh.x; sh.ty = sh.y;
+      sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
       sh.vx = 0; sh.vy = 0; sh.moving = false; sh.cargo = null;
       const o = this.players.get(sh.owner);
       if (o && !o.offline) o.send(JSON.stringify({ t: "sys", text: "The gate closed on you. Your ship was destroyed; you respawn at your station." }));
