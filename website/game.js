@@ -564,15 +564,25 @@
 
   // jettison cans: a small crate glyph (own cans blue, others amber), always at least a few pixels
   function canScreen(c) { const pl = curPlace.get(c.sys); return pl ? { x: gx2s(pl.gx + c.x), y: gy2s(pl.gy + c.y) } : null; }
-  function canAt(p) { let best = null, bd = 14; for (const c of snap.cans || []) { const sc = canScreen(c); if (!sc) continue; const d = Math.hypot(p.x - sc.x, p.y - sc.y); if (d < bd) { bd = d; best = c; } } return best; }
+  function canAt(p) { let best = null, bd = 18; for (const c of snap.cans || []) { const sc = canScreen(c); if (!sc) continue; const d = Math.hypot(p.x - sc.x, p.y - sc.y); if (d < bd) { bd = d; best = c; } } return best; }
+  const canArt = { on: new Image(), off: new Image() };
+  canArt.on.src = "assets/ships/jettison_can_on.png"; canArt.off.src = "assets/ships/jettison_can_off.png";
+  const CAN_LEN_KM = 0.069;
   function drawCans() {
+    const t = performance.now();
     for (const c of snap.cans || []) {
       const sc = canScreen(c); if (!sc) continue;
-      const r = Math.max(4, 0.03 * scale());
-      ctx.save(); ctx.translate(sc.x, sc.y);
-      ctx.fillStyle = c.mine ? "rgba(70,150,220,0.9)" : "rgba(220,160,70,0.9)"; ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1;
-      ctx.fillRect(-r, -r * 0.75, r * 2, r * 1.5); ctx.strokeRect(-r + 0.5, -r * 0.75 + 0.5, r * 2 - 1, r * 1.5 - 1);
-      ctx.beginPath(); ctx.moveTo(-r, -r * 0.25); ctx.lineTo(r, -r * 0.25); ctx.stroke();
+      // each can blinks its beacon on its own beat (~every 2 s, lit for ~0.25 s) so cans are easy to spot
+      const phase = (t + (c.id.charCodeAt(c.id.length - 1) * 137)) % 2000, lit = phase < 250;
+      const img = lit ? canArt.on : canArt.off; if (!img.naturalWidth) continue;
+      const w = Math.max(18, CAN_LEN_KM * scale()), h = w * img.naturalHeight / img.naturalWidth;
+      ctx.save(); ctx.imageSmoothingEnabled = w > 74;
+      ctx.drawImage(img, sc.x - w / 2, sc.y - h / 2, w, h);
+      if (lit) {                                         // soft glow at the beacon so the blink reads even when tiny
+        const bx = sc.x - w / 2 + w * 0.88, by = sc.y - h / 2 + h * 0.12, g = ctx.createRadialGradient(bx, by, 0, bx, by, Math.max(8, w * 0.35));
+        g.addColorStop(0, "rgba(255,190,90,0.9)"); g.addColorStop(1, "rgba(255,150,40,0)");
+        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(bx, by, Math.max(8, w * 0.35), 0, Math.PI * 2); ctx.fill();
+      }
       ctx.restore();
     }
   }
