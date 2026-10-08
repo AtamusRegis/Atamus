@@ -410,6 +410,14 @@
   window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
   setInterval(() => { const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); }, 1000);
+  // re-render right away when the selected unit's state changes (status / available buttons)
+  let unitSig = "";
+  window.Atamus.bus.addEventListener("snap", () => {
+    const w = wins.unit; if (!w || w.win.hidden) return;
+    const u = window.Atamus.unit;
+    const sig = u ? [u.kind, u.id, u.docked, u.warp, u.mining, u.moving, u.canDock, u.state, u.connToSys, (u.targets || []).map((t) => t.kind + t.id + (t.locked ? 1 : 0)).join(",")].join("|") : "";
+    if (sig !== unitSig) { unitSig = sig; renderUnit(w.body); }
+  });
 
   // ---- inventories: slot grids with drag/drop ----
   const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;

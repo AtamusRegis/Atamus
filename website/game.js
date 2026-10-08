@@ -82,7 +82,7 @@
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
-      else if (m.t === "snap") snap = m;
+      else if (m.t === "snap") { snap = m; bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
@@ -232,7 +232,7 @@
         syncShipSelection(); return;
       }
       if (stationAt(p)) { selected.clear(); selectUnit({ kind: "station", id: "station" }); return; }
-      if (selectedUnit) selectUnit(null);
+      if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // ships deselect on the timer below (dbl-click keeps them)
       clearTimeout(deselectTimer); deselectTimer = setTimeout(() => { selected.clear(); syncShipSelection(); }, 220); // delay so dbl-click can move
     }
   });
