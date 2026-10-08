@@ -12,3 +12,12 @@ export async function saveSystem(userId, data) {
     [userId, data]
   );
 }
+
+/** Systems whose owner is offline but still has an active stargate (restored on boot). */
+export async function loadActiveGateSystems() {
+  const { rows } = await pool.query(
+    `SELECT s.user_id, u.username, s.data FROM systems s JOIN users u ON u.id = s.user_id
+     WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(s.data->'gates') g WHERE g->>'state' = 'active')`
+  );
+  return rows;
+}

@@ -23,13 +23,21 @@ export class World {
     const p = { id, name, send, offline: false, beltField };
     this.players.set(id, p);
     const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
+    const downtime = saved && saved.savedAt ? Math.max(0, now - saved.savedAt) : 0; // the clock keeps running while you're gone
     STARGATE_CELLS.forEach((cell, i) => {
       const gid = `${id}:${i}`, sg = savedGates.get(gid);
-      this.gates.set(gid, {
+      const g = {
         id: gid, owner: id, sys: homeSys(id), lx: cell.x, ly: cell.y,
         state: sg ? sg.state : "closed", fuelMs: sg ? sg.fuelMs : FUEL_START_MS, sessionUsedMs: sg ? sg.sessionUsedMs : 0, activatedAt: sg ? sg.activatedAt : 0,
-        connToSys: null, connToGate: null, lastSeek: 0,            // links don't survive a reload; an active gate re-seeks
-      });
+        connToSys: sg ? (sg.connToSys || null) : null, connToGate: sg ? (sg.connToGate || null) : null, lastSeek: 0,
+      };
+      if (g.state === "active" && downtime) {
+        g.fuelMs -= downtime; g.sessionUsedMs += downtime;
+        if (g.fuelMs <= 0 || g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { g.fuelMs = Math.max(0, g.fuelMs); g.state = "closed"; g.sessionUsedMs = 0; g.connToSys = null; g.connToGate = null; }
+      }
+      this.gates.set(gid, g);
+      // re-link with the partner gate if it's loaded (either side loading completes the link)
+      if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (partner && partner.state === "active") { partner.connToSys = g.sys; partner.connToGate = g.id; } }
     });
     for (const sh of (saved && saved.ships) || []) {
       const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
@@ -42,7 +50,7 @@ export class World {
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
     const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h }));
-    const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt }));
+    const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
     return { ships, gates, beltField: p ? p.beltField : null, savedAt: Date.now() };
   }
@@ -67,6 +75,7 @@ export class World {
     this._purge(id);
   }
   _purge(id) {
+    if (this.onBeforePurge) { try { this.onBeforePurge(id); } catch (e) { console.error("onBeforePurge", e); } }
     for (const [gid, g] of this.gates) if (g.owner === id) this.gates.delete(gid);
     for (const [sid, s] of this.ships) if (s.owner === id) this.ships.delete(sid);
     this.players.delete(id);
@@ -155,6 +164,7 @@ export class World {
     const now = Date.now(), dtMs = dtSec * 1000;
     for (const g of this.gates.values()) {
       if (g.state !== "active") continue;
+      if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (!partner || partner.state !== "active" || partner.connToGate !== g.id) { g.connToSys = null; g.connToGate = null; } }
       g.fuelMs -= dtMs; g.sessionUsedMs += dtMs;
       if (g.fuelMs <= 0) { g.fuelMs = 0; this._closeGate(g); continue; }
       if (g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { this._closeGate(g); continue; }
