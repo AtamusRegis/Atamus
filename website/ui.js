@@ -785,9 +785,6 @@
   saved.fleetOrient = saved.fleetOrient === "v" ? "v" : "h";
   function setFleetOrient(o) {
     saved.fleetOrient = o; const w = wins.fleet; if (!w) return;
-    const r = w.win.getBoundingClientRect();
-    if (o === "v" && r.width > r.height) { w.win.style.width = "92px"; w.win.style.height = Math.max(200, r.width) + "px"; }
-    if (o === "h" && r.height > r.width) { w.win.style.height = "92px"; w.win.style.width = Math.max(200, r.height) + "px"; }
     toggleWindow("fleet", true); persistWin("fleet"); w.fsig = null; renderFleet(w.body); actSig = ""; renderShipActions();
   }
 
@@ -823,7 +820,12 @@
       c.hf.style.width = (t.hp ? Math.max(0, Math.min(1, (sh.hp ?? t.hp) / t.hp)) * 100 : 0) + "%";
       c.card.classList.toggle("sel", sel.has(sh.id)); c.card.classList.toggle("docked", !!sh.docked);
     }
-    w.win.classList.toggle("vertical", saved.fleetOrient === "v");
+    // the bar is exactly as big as its ships; it only wraps to a second row/column when it would leave the screen
+    const vert = saved.fleetOrient === "v"; w.win.classList.toggle("vertical", vert);
+    const list = body.querySelector(".fleet-list"), r = w.win.getBoundingClientRect(), n = Math.max(1, ships.length);
+    if (vert) { const fit = Math.max(1, Math.floor((innerHeight - r.top - 16) / 62)); list.style.gridAutoFlow = "column"; list.style.gridTemplateRows = "repeat(" + Math.min(n, fit) + ", auto)"; list.style.gridTemplateColumns = ""; }
+    else { const fit = Math.max(1, Math.floor((innerWidth - r.left - 16) / 70)); list.style.gridAutoFlow = "row"; list.style.gridTemplateColumns = "repeat(" + Math.min(n, fit) + ", 66px)"; list.style.gridTemplateRows = ""; }
+    w.win.style.width = "auto"; w.win.style.height = "auto";
   }
   window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
   window.Atamus.bus.addEventListener("select", () => { actSig = ""; renderShipActions(); });
@@ -1262,7 +1264,8 @@
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     createWindow("fleet", { left: 300, top: 6, width: 420, minW: 64, minH: 64, render: renderFleet, label: "Fleet", groupable: false });
     wins.fleet.acts = el("div", { class: "fleet-acts", hidden: "" }); wins.fleet.win.append(wins.fleet.acts);
-    dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));       // drag the bar by its background; edges resize
+    dragMove(wins.fleet.win, wins.fleet.body, () => { persistWin("fleet"); wins.fleet.fsig = null; renderFleet(wins.fleet.body); });   // drag the bar by its background
+    addEventListener("resize", () => { if (isOpen(wins.fleet)) { wins.fleet.fsig = null; renderFleet(wins.fleet.body); } });
     wins.fleet.win.addEventListener("pointerup", () => { actSig = ""; renderShipActions(); });
     createWindow("market", { left: 300, top: 120, width: 380, minW: 300, minH: 200, render: renderMarket, label: "Market" });
     createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
