@@ -179,12 +179,12 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .tab.unread { animation: unreadText 2s ease-in-out infinite; }
 .wbtn.unread { animation: unreadGlow 2.4s ease-in-out infinite; }
 
-/* custom scrollbar: dark rounded track, white rounded handle, blue on hover
+/* custom scrollbar: subtle dark track, muted rounded handle, soft blue on hover
    (no scrollbar-width/color set, so Chromium keeps the ::-webkit styling) */
-.win-body::-webkit-scrollbar, .pop-content::-webkit-scrollbar, .chat-log::-webkit-scrollbar { width: 10px; }
-.win-body::-webkit-scrollbar-track, .pop-content::-webkit-scrollbar-track, .chat-log::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 6px; margin: 4px 0; }
-.win-body::-webkit-scrollbar-thumb, .pop-content::-webkit-scrollbar-thumb, .chat-log::-webkit-scrollbar-thumb { background: #d6dee8; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
-.win-body::-webkit-scrollbar-thumb:hover, .pop-content::-webkit-scrollbar-thumb:hover, .chat-log::-webkit-scrollbar-thumb:hover { background: var(--cyan); background-clip: padding-box; }
+.win-body::-webkit-scrollbar, .pop-content::-webkit-scrollbar, .chat-log::-webkit-scrollbar { width: 9px; }
+.win-body::-webkit-scrollbar-track, .pop-content::-webkit-scrollbar-track, .chat-log::-webkit-scrollbar-track { background: rgba(0,0,0,0.22); border-radius: 6px; margin: 4px 0; }
+.win-body::-webkit-scrollbar-thumb, .pop-content::-webkit-scrollbar-thumb, .chat-log::-webkit-scrollbar-thumb { background: rgba(150,165,190,0.32); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; transition: background .15s; }
+.win-body::-webkit-scrollbar-thumb:hover, .pop-content::-webkit-scrollbar-thumb:hover, .chat-log::-webkit-scrollbar-thumb:hover { background: rgba(56,198,255,0.55); background-clip: padding-box; }
 
 /* ---- training queue controls ---- */
 .queue-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
