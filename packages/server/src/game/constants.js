@@ -36,7 +36,7 @@ export const FUEL_SESSION_MAX_MS = 30 * 60 * 1000; // max fuel a single activati
 export const HUB_MIN_WAIT_MS = 3 * 60 * 1000;    // give player-to-player links this long before trying the hub
 export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries the hub (after the wait)
 export const HUB_SEEK_CHANCE = 0.4;              // chance per try to find a hub entrance
-export const GATE_TRANSFER_RADIUS_KM = 8;        // a ship this close to a connected gate flies through
+export const GATE_TRANSFER_RADIUS_KM = 4;        // a ship inside this ring can use the gate
 export const ARRIVAL_OFFSET_KM = GATE_TRANSFER_RADIUS_KM + 6; // land clear of the partner gate
 
 // Station (ship construction) at the center cell.

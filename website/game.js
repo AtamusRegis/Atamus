@@ -203,7 +203,10 @@
       ctx.save(); ctx.globalAlpha = g.state === "active" ? 1 : 0.8; ctx.imageSmoothingEnabled = wPx > 300;
       ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
     } else { ctx.save(); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, wPx / 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-    if (g.state === "active" && g.connToSys) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, cfg.transferRadius * scale(), 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,160,70,0.4)"; ctx.setLineDash([5, 7]); ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); }
+    // gate-use ring: any ship inside can use the stargate (brighter while connected)
+    const rPx = cfg.transferRadius * scale();
+    if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
+      ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
     if (g.mine) {
       let y = Math.min(topY, sy - 14) - 10; const active = g.state === "active";
       y = button(active ? "CLOSE" : "OPEN", sx, y, active ? "#ff7a2a" : "#2ab6ff", g.id);
