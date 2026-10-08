@@ -249,12 +249,14 @@
     player: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
     pilot: '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7v4l-1 3h16l-1-3V9a7 7 0 0 0-7-7z"/><path d="M9 20h6"/></svg>',
     chat: '<svg viewBox="0 0 24 24"><path d="M4 4h16v11H9l-5 4z"/></svg>',
+    fleet: '<svg viewBox="0 0 24 24"><path d="M3 12l5-3v6z"/><path d="M10 7l5-3v6z"/><path d="M10 17l5-3v6z"/><path d="M17 12l4-2.4v4.8z"/></svg>',
   };
-  let order = ["player", "pilot", "chat"];
+  let order = ["player", "pilot", "chat", "fleet"];
   const META = {
     player: { name: "Player Sheet", pinned: true },
     pilot: { name: "Pilot" },
     chat: { name: "Chat" },
+    fleet: { name: "Fleet" },
   };
   const clockEl = el("div", { class: "panel-clock" });
   function renderPanel() {
@@ -590,7 +592,7 @@
           body.append(b);
         }
         body.append(el("div", { class: "unit-btns" },
-          el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory"),
+          el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar", h: 0 }) }, "Inventory"),
           el("button", { class: "btn-primary2 unit-btn off", onclick: openMarket }, "Market")));
       } else if (u.kind === "gate") {
         const fuel = row("Fuel", ""), status = row("Status", ""); L.fuel = fuel.lastChild; L.status = status.lastChild;
@@ -602,14 +604,19 @@
     if (!u) return;
     const L = w.live, setBar = (k, a, b, txt) => { const x = L[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
     if (u.kind === "station") {
-      const h = A.inv.hangar; if (h) setBar("Hangar", h.used, h.cap, fmtM3(h.used, h.cap));
+      const hs = A.inv.hangars || []; if (hs.length) { const used = hs.reduce((a, h) => a + h.used, 0), cap = hs.reduce((a, h) => a + h.cap, 0); setBar("Hangar", used, cap, fmtM3(used, cap)); }
     } else if (u.kind === "gate") {
       const active = u.state === "active";
       const fuel = active ? Math.min(u.fuelMs, u.sessionRemMs ?? u.fuelMs) : u.fuelMs;
       L.fuel.textContent = fmtClock(fuel); L.status.textContent = active ? (u.connToSys ? "Connected" : "Searching…") : "Offline";
     }
   }
-  window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
+  // ships are run from the HUD (targets / hotbar / action buttons) — the selection window is for structures
+  window.Atamus.bus.addEventListener("select", (e) => {
+    const ship = e.detail && e.detail.kind === "ship";
+    if (ship && !wins.unit.group) { toggleWindow("unit", false); return; }
+    toggleWindow("unit", true); renderUnit(wins.unit.body);
+  });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
   window.Atamus.bus.addEventListener("snap", () => {
     const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body);
@@ -621,7 +628,13 @@
   // ---- bottom HUD for the selected ship: target icons / status / hotbar ----
   const hud = el("div", { id: "hud", hidden: "" });
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
-  hud.append(hudTargets, hudStatus, hudBar); document.body.append(hud);
+  const hudAct = el("div", { class: "hud-actions" });
+  hud.append(hudTargets, hudStatus, el("div", { class: "hud-row" }, hudBar, hudAct)); document.body.append(hud);
+  const ICO = {
+    inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
+    dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
+    warp: '<svg viewBox="0 0 24 24"><path d="M3 12h11M10 7l5 5-5 5"/><path d="M17 6v12M21 8v8"/></svg>',
+  };
   const HB_SLOTS = 8;
   saved.hotbar = Array.isArray(saved.hotbar) && saved.hotbar.length === HB_SLOTS ? saved.hotbar : [{ k: "laser", i: 0 }, { k: "laser", i: 1 }, { k: "auto" }, null, null, null, null, null];
   if (!saved.hotbar.some((h) => h && h.k === "auto")) { const i = saved.hotbar.findIndex((h) => !h); if (i >= 0) saved.hotbar[i] = { k: "auto" }; }
@@ -658,7 +671,7 @@
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (selTarget && !targets.some((x) => x && tgKey(x) === tgKey(selTarget))) selTarget = null;
-    const sig = [sh.id, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
+    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
     if (sig !== hudSig) {
       hudSig = sig; hudLive = { dist: {}, tip: null };
       // targets
@@ -683,6 +696,11 @@
       H.speed = el("span", { class: "hud-speed" });
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
       // hotbar
+      hudAct.innerHTML = "";
+      const act = (ico, title, fn) => el("button", { class: "hud-act", title, "aria-label": title, html: ICO[ico], onclick: fn });
+      hudAct.append(act("inv", "Inventory", () => openInventory({ owner: "ship", id: sh.id, inv: "ore" })));
+      if (sh.canDock) hudAct.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
+      if (sh.moving && !sh.warp) hudAct.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
       hudBar.innerHTML = ""; hudLive.slots = [];
       saved.hotbar.forEach((it, idx) => {
         const slot = el("div", { class: "hb-slot" });
@@ -730,19 +748,63 @@
   window.Atamus.bus.addEventListener("deselect", renderHud);
   setInterval(renderHud, 500);                       // safety net: never leave the HUD up for a ship that's gone
 
-  // ---- inventories: slot grids with drag/drop ----
-  const invKey = (ref) => ref.owner === "station" ? "station:hangar" : "ship:" + ref.id + ":" + ref.inv;
-  const invData = (ref) => { const A = window.Atamus; if (ref.owner === "station") return A.inv.hangar; const s = (A.inv.ships || {})[ref.id]; return s ? s[ref.inv] : null; };
-  const invLabel = (ref) => ref.owner === "station" ? "Hangar" : ((window.Atamus.ship(ref.id) || {}).type === "chisel" ? "Chisel" : ref.id) + " · " + (ref.inv === "ore" ? "Ore hold" : "Cargo");
-  const invWins = {}; // key -> { ref (current tab), id }
-  function invTabsFor(ref) {
-    const A = window.Atamus;
-    if (ref.owner === "station") {
-      const tabs = [{ owner: "station", inv: "hangar" }];
-      for (const sh of A.snap.ships || []) if (sh.mine && sh.docked) tabs.push({ owner: "ship", id: sh.id, inv: "ore" }, { owner: "ship", id: sh.id, inv: "cargo" });
-      return tabs;
+  // ---- fleet bar: every crewed ship, docked or not, with a split shield|hull bar ----
+  // Resize it wide for a horizontal bar or tall for a vertical one; grips at both ends move it.
+  function renderFleet(body) {
+    const A = window.Atamus, w = wins.fleet;
+    const ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.pilot != null);
+    const sel = new Set(A.selectedShips || []);
+    const sig = ships.map((x) => x.id + x.type + x.pilot + (x.docked ? "d" : "")).join(",");
+    if (sig !== w.fsig) {
+      w.fsig = sig; w.cards = {}; body.innerHTML = "";
+      const grip = () => { const g = el("div", { class: "fleet-grip", title: "Drag to move" }); dragMove(w.win, g, () => persistWin("fleet")); return g; };
+      const list = el("div", { class: "fleet-list" });
+      if (!ships.length) list.append(el("div", { class: "fleet-empty" }, "No crewed ships"));
+      for (const sh of ships) {
+        const t = hullOf(sh.type), sf = el("div", { class: "fb-sh" }), hf = el("div", { class: "fb-hp" });
+        const card = el("button", { class: "fleet-card", title: t.name + " · " + (pilotName(sh.pilot) || "") + " — click to select, double-click to locate" },
+          el("div", { class: "fleet-img" }, shipIcon(sh.type, "fleet-ship")),
+          el("div", { class: "fleet-bar" }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
+          el("div", { class: "fleet-name" }, pilotName(sh.pilot) || t.name));
+        card.addEventListener("click", () => { const cur = A.ship(sh.id); if (!cur) return; if (cur.docked) { A.selectStation(); A.locateShip(sh.id); } else A.selectShip(sh.id); });
+        card.addEventListener("dblclick", () => A.locateShip(sh.id));
+        card.addEventListener("contextmenu", (e) => { e.preventDefault(); const cur = A.ship(sh.id); if (cur) shipMenu(cur, e.clientX, e.clientY); });
+        holdToOpen(card, () => { const cur = A.ship(sh.id), r = card.getBoundingClientRect(); if (cur) shipMenu(cur, r.left + r.width / 2, r.bottom); });
+        w.cards[sh.id] = { card, sf, hf };
+        list.append(card);
+      }
+      body.append(grip(), list, grip());
     }
-    return [{ owner: "ship", id: ref.id, inv: "ore" }, { owner: "ship", id: ref.id, inv: "cargo" }];
+    for (const sh of ships) {
+      const c = w.cards[sh.id]; if (!c) continue; const t = hullOf(sh.type);
+      c.sf.style.width = (t.shield ? Math.max(0, Math.min(1, (sh.shield ?? t.shield) / t.shield)) * 100 : 0) + "%";
+      c.hf.style.width = (t.hp ? Math.max(0, Math.min(1, (sh.hp ?? t.hp) / t.hp)) * 100 : 0) + "%";
+      c.card.classList.toggle("sel", sel.has(sh.id)); c.card.classList.toggle("docked", !!sh.docked);
+    }
+    const r = w.win.getBoundingClientRect(); w.win.classList.toggle("vertical", r.height > r.width);
+  }
+  window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
+
+  // ---- inventories: slot grids with drag/drop ----
+  const invKey = (ref) => ref.owner === "station" ? "station:hangar:" + (ref.h | 0) : "ship:" + ref.id + ":" + ref.inv;
+  const invData = (ref) => { const A = window.Atamus; if (ref.owner === "station") return (A.inv.hangars || [])[ref.h | 0] || null; const s = (A.inv.ships || {})[ref.id]; return s ? s[ref.inv] : null; };
+  const hangarName = (h) => (((window.Atamus.inv.hangars || [])[h | 0]) || {}).name || "Hangar " + ((h | 0) + 1);
+  const holdName = (inv) => inv === "ore" ? "Ore hold" : inv === "cargo" ? "Cargo" : inv;
+  const invLabel = (ref) => ref.owner === "station" ? hangarName(ref.h) : hullOf((window.Atamus.ship(ref.id) || {}).type).name + " · " + holdName(ref.inv);
+  const invWins = {}; // key -> { ref (what's shown), root (the window's holder), solo }
+  const shipHolds = (id) => { const s = (window.Atamus.inv.ships || {})[id] || {}; return ["ore", "cargo"].filter((k) => s[k] && s[k].cap > 0); };
+  function invTabsFor(ref) {
+    if (ref.owner === "station") return ((window.Atamus.inv.hangars) || [{}]).map((_, h) => ({ owner: "station", inv: "hangar", h }));
+    return shipHolds(ref.id).map((inv) => ({ owner: "ship", id: ref.id, inv }));
+  }
+  saved.invOpen = saved.invOpen || {};               // which ships are expanded in the station inventory's ship list
+  function renameHangar(tabEl, h) {
+    const input = el("input", { class: "tab-rename", value: hangarName(h), maxlength: "20" });
+    tabEl.replaceChildren(input); input.focus(); input.select();
+    const done = (ok) => { if (ok && input.value.trim()) window.Atamus.send({ t: "rename_hangar", h, name: input.value }); for (const k in invWins) invWins[k].sig = null; for (const k in invWins) if (isOpen(wins[k])) renderInventory(k, wins[k].body); };
+    input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+    input.addEventListener("blur", () => done(true));
+    input.addEventListener("click", (e) => e.stopPropagation());
   }
   function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (isOpen(wins[key])) renderInventory(key, b); }).observe(b); }
   function makeInvWindow(key, st) {
@@ -757,8 +819,9 @@
     const sh = ref.owner === "ship" ? window.Atamus.ship(ref.id) : null;
     const viaStation = ref.owner === "station" || (sh && sh.docked);          // a docked ship's holds live under the station window
     const key = viaStation ? "inv:station" : "inv:" + ref.id;                 // one window per holder; tabs switch inside
-    makeInvWindow(key, { ref, root: viaStation ? { owner: "station", inv: "hangar" } : ref });
-    invWins[key].ref = ref;
+    makeInvWindow(key, { ref, root: viaStation ? { owner: "station", inv: "hangar", h: 0 } : ref });
+    invWins[key].ref = ref; invWins[key].sig = null;
+    if (viaStation && ref.owner === "ship") { saved.invOpen[ref.id] = true; persistAll(); }
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
   function openInventoryAlone(ref) {           // shift-click a tab: its own window
@@ -782,16 +845,25 @@
   }
   window.Atamus.bus.addEventListener("worldready", restoreWorldWindows, { once: true });
   const dragPayload = (e) => { try { return JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return null; } };
+  function dropTarget(elm, to, A) {
+    elm.addEventListener("dragover", (e) => { e.preventDefault(); elm.classList.add("drop"); });
+    elm.addEventListener("dragleave", () => elm.classList.remove("drop"));
+    elm.addEventListener("drop", (e) => { e.preventDefault(); elm.classList.remove("drop"); const d = dragPayload(e); if (d && d.ref) A.send({ t: "inv_move", from: d.ref, to }); });
+    elm.addEventListener("touchdrop", (e) => { if (e.detail && e.detail.ref) A.send({ t: "inv_move", from: e.detail.ref, to }); });
+  }
   function renderInventory(key, body) {
     const w = wins[key], st = invWins[key]; if (!w || !st) return;
     const A = window.Atamus, ref = st.ref, data = invData(ref);
     const items = (A.cfg && A.cfg.items) || {}, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
-    const tabs = st.solo ? [] : invTabsFor(st.root || ref);   // tabs belong to the window's holder, not the tab being viewed
-    // slots flow into as many columns as the window fits; rows grow with the contents (plus one spare row)
-    const CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth + GAP) / (CELL + GAP)));
+    const root = st.root || ref, station = !st.solo && root.owner === "station";
+    const tabs = st.solo ? [] : invTabsFor(root);              // tabs belong to the window's holder, not the tab being viewed
+    const docked = station ? (A.snap.ships || []).filter((x) => x.mine && x.docked) : [];
+    // slots flow into as many columns as the grid area fits; rows grow with the contents (plus one spare row)
+    const SIDE = station ? 128 : 0, CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth - SIDE + GAP) / (CELL + GAP)));
     const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
-    // rebuild only when the structure changes (tab set, which stacks exist, column count); quantities update in place
-    const sig = [invKey(ref), tabs.map(invKey).join(","), data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
+    // rebuild only when the structure changes; quantities update in place
+    const sig = [invKey(ref), tabs.map((t) => invKey(t) + (t.owner === "station" ? hangarName(t.h) : "")).join(","), docked.map((d) => d.id + (saved.invOpen[d.id] ? 1 : 0) + shipHolds(d.id).join("")).join(","),
+      data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
     if (sig !== st.sig) {
       st.sig = sig; st.live = { qty: [] };
       body.innerHTML = ""; w.slot.innerHTML = "";
@@ -799,22 +871,47 @@
         const row = el("div", { class: "tab-row" });
         for (const t of tabs) {
           const active = invKey(t) === invKey(ref);
-          const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); persistWin(key); } } }, t.owner === "station" ? "Hangar" : (t.inv === "ore" ? "Ore" : "Cargo"));
-          b.addEventListener("dragover", (e) => { e.preventDefault(); b.classList.add("drop"); });
-          b.addEventListener("dragleave", () => b.classList.remove("drop"));
-          b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: { ...t, slot: null } }); });
-          b.addEventListener("touchdrop", (e) => A.send({ t: "inv_move", from: e.detail.ref, to: { ...t, slot: null } }));
-          holdToOpen(b, () => openInventoryAlone(t));
+          const label = t.owner === "station" ? hangarName(t.h) : (t.inv === "ore" ? "Ore" : "Cargo");
+          const b = el("button", { class: "tab" + (active ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(t); else { st.ref = t; renderInventory(key, body); persistWin(key); } } }, label);
+          dropTarget(b, { ...t, slot: null }, A);
+          const menu = (x, y) => showCtxMenu(x, y, [["Open in new window", () => openInventoryAlone(t)], ...(t.owner === "station" ? [["Rename", () => renameHangar(b, t.h)]] : [])]);
+          b.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
+          if (t.owner === "station") b.addEventListener("dblclick", () => renameHangar(b, t.h));
+          holdToOpen(b, () => { const r = b.getBoundingClientRect(); menu(r.left + r.width / 2, r.bottom); });
           row.append(b);
         }
         w.slot.append(row);
       } else w.slot.textContent = invLabel(ref);
-      if (!data) { body.append(el("div", { class: "muted" }, "No inventory.")); return; }
+      let main = body;
+      if (station) {                                   // ships docked here, each with its holds; click to view, drop to move
+        const side = el("div", { class: "inv-side" }, el("div", { class: "inv-side-h" }, "Ships"));
+        if (!docked.length) side.append(el("div", { class: "inv-side-empty" }, "No ships docked"));
+        for (const d of docked) {
+          const open = !!saved.invOpen[d.id], t = hullOf(d.type);
+          const head = el("button", { class: "inv-side-ship" + (open ? " open" : ""), onclick: () => { saved.invOpen[d.id] = !open; persistAll(); renderInventory(key, body); } },
+            el("span", { class: "mk-caret" }, "▸"), shipIcon(d.type), el("span", { class: "iss-name" }, t.name));
+          head.addEventListener("contextmenu", (e) => { e.preventDefault(); shipMenu(d, e.clientX, e.clientY); });
+          holdToOpen(head, () => { const r = head.getBoundingClientRect(); shipMenu(d, r.left + r.width / 2, r.bottom); });
+          side.append(head);
+          if (!open) continue;
+          for (const inv of shipHolds(d.id)) {
+            const cref = { owner: "ship", id: d.id, inv };
+            const c = el("button", { class: "inv-side-c" + (invKey(cref) === invKey(ref) ? " active" : ""), onclick: (e) => { if (e.shiftKey) openInventoryAlone(cref); else { st.ref = cref; renderInventory(key, body); persistWin(key); } } }, holdName(inv));
+            dropTarget(c, { ...cref, slot: null }, A);
+            c.addEventListener("contextmenu", (e) => { e.preventDefault(); showCtxMenu(e.clientX, e.clientY, [["Open in new window", () => openInventoryAlone(cref)]]); });
+            side.append(c);
+          }
+        }
+        main = el("div", { class: "inv-main" });
+        body.append(el("div", { class: "inv-split" }, side, main));
+        if (ref.owner === "ship") main.append(el("div", { class: "inv-viewing" }, invLabel(ref)));
+      }
+      if (!data) { main.append(el("div", { class: "muted" }, "No inventory.")); return; }
       const fill = el("div", { class: "inv-cap-fill" }), stat = el("span", { class: "inv-stat" });
       st.live.fill = fill; st.live.stat = stat;
-      body.append(el("div", { class: "inv-head" }, el("div", { class: "inv-cap" }, fill), stat,
+      main.append(el("div", { class: "inv-head" }, el("div", { class: "inv-cap" }, fill), stat,
         el("button", { class: "qbtn minus inv-sort", title: "Sort", onclick: () => A.send({ t: "inv_sort", ref }) }, "⇅")));
-      const grid = el("div", { class: "inv-grid", style: "grid-template-columns: repeat(" + cols + ", 1fr)" });
+      const grid = el("div", { class: "inv-grid", style: "grid-template-columns: repeat(" + cols + ", " + CELL + "px)" });
       for (let i = 0; i < total; i++) {
         const stck = data.slots[i];
         const cell = el("div", { class: "inv-cell" + (stck ? " filled" : "") });
@@ -829,14 +926,10 @@
           cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openItemMenu(ref, i, e.clientX, e.clientY); });
           touchDrag(cell, { ref: { ...ref, slot: i } }, () => { const r = cell.getBoundingClientRect(); openItemMenu(ref, i, r.left + r.width / 2, r.top + r.height / 2); });
         }
-        cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
-        cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
-        const dropTo = { ...ref, slot: i < data.slots.length ? i : null };
-        cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (d) A.send({ t: "inv_move", from: d.ref, to: dropTo }); });
-        cell.addEventListener("touchdrop", (e) => A.send({ t: "inv_move", from: e.detail.ref, to: dropTo }));
+        dropTarget(cell, { ...ref, slot: i < data.slots.length ? i : null }, A);
         grid.append(cell);
       }
-      body.append(grid);
+      main.append(grid);
     }
     if (!data) return;
     const L = st.live;
@@ -856,7 +949,7 @@
         ev.preventDefault(); clearTimeout(hold);
         if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
         ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
-        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .tgt, .hb-slot");
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .tgt, .hb-slot");
         if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
       };
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };
@@ -1114,6 +1207,8 @@
     createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
+    createWindow("fleet", { left: 300, top: 6, width: 420, minW: 64, minH: 64, render: renderFleet, label: "Fleet", groupable: false });
+    new ResizeObserver(() => { if (isOpen(wins.fleet)) { wins.fleet.fsig = null; renderFleet(wins.fleet.body); } }).observe(wins.fleet.win);
     createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
     wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());
     renderPanel();

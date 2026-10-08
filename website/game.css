@@ -336,3 +336,57 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .mk-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mk-ship { height: 14px; image-rendering: pixelated; }
 .mk-name .mk-sub { width: 100%; }
+
+/* no text selection / long-press callouts in the game UI (Android tap-to-search) */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+
+/* hud action buttons beside the hotbar */
+.hud-row { display: flex; align-items: center; gap: 6px; }
+.hud-actions { display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: var(--shadow); }
+.hud-act { width: 36px; height: 36px; border: none; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; display: grid; place-items: center; touch-action: manipulation; }
+.hud-act:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.hud-act svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+@media (pointer: coarse) { .hud-act { width: 44px; height: 44px; } }
+
+/* station inventory: ship list + hangar grid */
+.inv-split { display: flex; gap: 8px; align-items: flex-start; }
+.inv-side { width: 120px; flex: none; display: flex; flex-direction: column; gap: 2px; }
+.inv-side-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 2px 2px 4px; }
+.inv-side-empty { font-size: 11px; color: var(--text-dim); padding: 4px; }
+.inv-side-ship, .inv-side-c { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 11.5px; color: var(--text); background: none; border: none; border-radius: 5px; padding: 5px 6px; cursor: pointer; text-align: left; }
+.inv-side-ship { background: rgba(255,255,255,0.05); font-weight: 600; }
+.inv-side-ship .ship-ico { height: 12px; }
+.inv-side-ship.open .mk-caret { transform: rotate(90deg); }
+.iss-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-side-c { padding-left: 24px; color: var(--text-dim); }
+.inv-side-c:hover, .inv-side-ship:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+.inv-side-c.active { color: var(--text); background: rgba(56,198,255,0.14); }
+.inv-side-c.drop { outline: 1px solid var(--cyan); background: rgba(56,198,255,0.18); }
+.inv-main { flex: 1; min-width: 0; }
+.inv-viewing { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.tab-rename { font: inherit; font-size: 11.5px; width: 90px; color: var(--text); background: rgba(0,0,0,0.4); border: 1px solid rgba(56,198,255,0.5); border-radius: 4px; padding: 1px 4px; }
+
+/* fleet bar */
+.win[data-id="fleet"] { min-width: 0; }
+.win[data-id="fleet"] .win-title { display: none; }
+.win[data-id="fleet"] .win-body { padding: 4px; display: flex; flex-direction: row; align-items: stretch; gap: 4px; overflow: hidden; }
+.win[data-id="fleet"].vertical .win-body { flex-direction: column; }
+.fleet-grip { flex: none; width: 8px; border-radius: 4px; cursor: move; touch-action: none; background: repeating-linear-gradient(0deg, rgba(150,165,190,0.35) 0 2px, transparent 2px 4px); opacity: .7; }
+.win[data-id="fleet"].vertical .fleet-grip { width: auto; height: 8px; background: repeating-linear-gradient(90deg, rgba(150,165,190,0.35) 0 2px, transparent 2px 4px); }
+.fleet-grip:hover { opacity: 1; }
+.fleet-list { flex: 1; min-width: 0; min-height: 0; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 4px; overflow: auto; }
+.win[data-id="fleet"].vertical .fleet-list { flex-direction: column; flex-wrap: nowrap; }
+.fleet-empty { font-size: 11px; color: var(--text-dim); padding: 6px; }
+.fleet-card { width: 66px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 3px 3px; border: none; border-radius: 6px; background: rgba(0,0,0,0.3); color: var(--text-dim); font: inherit; cursor: pointer; touch-action: manipulation; }
+.win[data-id="fleet"].vertical .fleet-card { width: 100%; }
+.fleet-card:hover { background: rgba(255,255,255,0.08); }
+.fleet-card.sel { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.95); color: var(--text); }
+.fleet-card.docked .fleet-img { opacity: .45; }
+.fleet-img { height: 26px; display: grid; place-items: center; }
+.fleet-ship { max-width: 58px; max-height: 26px; image-rendering: pixelated; }
+.fleet-bar { display: flex; gap: 1px; width: 56px; height: 5px; }
+.fb-half { flex: 1; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.fb-sh { height: 100%; background: #4a9dff; }
+.fb-hp { height: 100%; background: #e2914a; }
+.fleet-name { font-size: 9px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

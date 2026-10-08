@@ -8,7 +8,7 @@
   const statusEl = document.getElementById("status");
 
   let cfg = null, me = { id: null, name: "" };
-  let snap = { systems: [], gates: [] }; let belts = []; let invs = { ships: {}, hangar: null };
+  let snap = { systems: [], gates: [] }; let belts = []; let invs = { ships: {}, hangars: null };
   let ws = null, lastFrame = performance.now();
   let camInit = false;
   const confirming = new Set();
@@ -37,7 +37,7 @@
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
     else if (u.kind === "station") selectUnit(u);
   }
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null },
     // centre the camera on a ship (or the station it's docked at)
     locateShip: (id) => {
@@ -102,7 +102,7 @@
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
           if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = { kind: "station", id: "station" }; setTimeout(() => selectUnit({ kind: "station", id: "station" }), 0); }
         }
-        snap = m; snapAt = performance.now(); if (!selRestored && invs.hangar) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
+        snap = m; snapAt = performance.now(); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
