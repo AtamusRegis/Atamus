@@ -9,13 +9,18 @@ import {
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
 import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
-import { getState } from "../pilots.js";
+import { getState, useGameCredits } from "../pilots.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
 
 const world = new World();
+// Spending credits outside the game (a new pilot): online players' credits are in memory.
+useGameCredits({
+  take: (pid, n) => { const p = world.players.get(pid); if (!p) return null; if (p.credits < n) return false; p.credits -= n; p.invDirty = true; return true; },
+  give: (pid, n) => { const p = world.players.get(pid); if (p) { p.credits += n; p.invDirty = true; } },
+});
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 
 const CLIENT_CONFIG = {

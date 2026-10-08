@@ -1,0 +1,20 @@
+// Pilots: first is free, each extra costs the pilot price, 3 per account, charged from in-game credits.
+import { connect, suite, sleep, BASE } from "./lib.mjs";
+const t = suite("pilots");
+const c = await connect();
+const post = (name) => fetch(BASE + "/game/pilot/create", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ name }) }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
+const state = async () => (await fetch(BASE + "/game/state")).json();
+const st0 = await state(), price = st0.profile.pilotPrice, max = st0.profile.maxPilots;
+t.ok(price === 1_000_000 && max === 3, "price 1M, max 3", { price, max });
+t.ok(st0.pilots.length === 1, "PTR starts with one pilot (run cleanup if not)", st0.pilots.length);
+c.dev({ cmd: "credits", amount: price - 1 }); await sleep(400);
+let r = await post("Test Pilot A"); await sleep(300);
+t.ok(!r.ok && c.inv().credits === price - 1, "too few credits: refused, nothing charged", r);
+c.dev({ cmd: "credits", amount: price * 5 }); await sleep(400);
+const results = await Promise.all(["Test Pilot B", "Test Pilot C", "Test Pilot D"].map(post)); await sleep(500);
+const st1 = await state();
+t.ok(results.filter((x) => x.ok).length === 2 && st1.pilots.length === 3, "parallel requests never exceed 3 pilots", results.map((x) => x.ok));
+t.ok(c.inv().credits === price * 3, "in-game credits charged once per pilot", c.inv().credits);
+t.ok(st1.profile.credits === price * 3, "database credits match the game", st1.profile.credits);
+await c.close();
+t.done();

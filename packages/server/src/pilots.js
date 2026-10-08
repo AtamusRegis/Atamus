@@ -57,18 +57,38 @@ export async function listPilotRows(userId) {
 }
 
 export const MAX_PILOTS = 3;
+// The first pilot is free; each extra one costs PILOT_PRICE credits.
+export const PILOT_PRICE = 1_000_000;
+// While a player is in the game their credits live in memory (game/net.js registers these):
+// take() -> true (taken), false (not enough), null (not online: use the database).
+let gameCredits = { take: () => null, give: () => {} };
+export const useGameCredits = (hooks) => { gameCredits = hooks; };
 export async function createPilot(userId, nameRaw) {
   if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
   const name = nameRaw.replace(/\s+/g, " ").trim().slice(0, 24);
   if (!name) throw new Error("Pilot name required.");
-  const { rows: have } = await pool.query(`SELECT name FROM pilots WHERE user_id = $1`, [userId]);
-  if (have.length >= MAX_PILOTS) throw new Error(`An account can have at most ${MAX_PILOTS} pilots.`);
-  if (have.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new Error("You already have a pilot with that name.");
-  const { rows } = await pool.query(
-    `INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`,
-    [userId, name, freshData()]
-  );
-  return rows[0].id;
+  const c = await pool.connect(); let taken = false;
+  try {
+    await c.query("BEGIN");
+    const { rows: u } = await c.query(`SELECT credits FROM users WHERE id = $1 FOR UPDATE`, [userId]);   // one creation at a time per account
+    const { rows: have } = await c.query(`SELECT name FROM pilots WHERE user_id = $1`, [userId]);
+    if (have.length >= MAX_PILOTS) throw new Error(`An account can have at most ${MAX_PILOTS} pilots.`);
+    if (have.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw new Error("You already have a pilot with that name.");
+    const cost = have.length ? PILOT_PRICE : 0;
+    if (cost) {
+      const mem = gameCredits.take(String(userId), cost);
+      if (mem === false || (mem === null && Number(u[0]?.credits || 0) < cost)) throw new Error("A new pilot costs " + cost.toLocaleString("en-US") + " cr.");
+      taken = mem === true;
+      await c.query(`UPDATE users SET credits = credits - $1 WHERE id = $2`, [cost, userId]);
+    }
+    const { rows } = await c.query(`INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`, [userId, name, freshData()]);
+    await c.query("COMMIT");
+    return rows[0].id;
+  } catch (e) {
+    await c.query("ROLLBACK").catch(() => {});
+    if (taken) gameCredits.give(String(userId), PILOT_PRICE);
+    throw e;
+  } finally { c.release(); }
 }
 
 async function getOwnedPilot(userId, pilotId) {
@@ -186,7 +206,7 @@ export async function getState(userId) {
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, totalSkillLevel, credits: Number(user.credits || 0) },
+    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0) },
     pilots, serverTime: now,
   };
 }

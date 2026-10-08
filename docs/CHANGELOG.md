@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-08
 
+- **Pilots:** extra pilots cost 1,000,000 cr, up to 3 per account. Create them from "New pilot" in the pilot window's dropdown. Added `scripts/tests/pilots.mjs`.
+
 - **Project memory:** added `CLAUDE.md`, `docs/FEATURES.md` (the living spec) and this changelog.
   - `scripts/check.sh` syntax-checks everything.
   - `scripts/ptr-test.sh` runs the PTR regression and stress suite.

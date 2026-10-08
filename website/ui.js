@@ -347,6 +347,8 @@
     for (const p of state.pilots) {
       menu.append(el("div", { class: "dd-item" + (p.id === pilot.id ? " sel" : ""), onclick: (e) => { e.stopPropagation(); closeMenu(); if (p.id !== selectedPilotId) { selectedPilotId = p.id; renderPilot(body); } } }, p.name));
     }
+    const prof = state.profile || {};
+    if (state.pilots.length < (prof.maxPilots || 3)) menu.append(el("div", { class: "dd-item", onclick: (e) => { e.stopPropagation(); closeMenu(); newPilot(body); } }, "New pilot · ", cr(prof.pilotPrice || 1000000)));
     btn.addEventListener("click", (e) => { e.stopPropagation(); const show = menu.hidden; closeMenu(); if (show) { menu.hidden = false; openMenu = menu; } });
     wrap.append(btn, menu);
     return wrap;
@@ -388,6 +390,13 @@
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => openShipInfo(sh.type) }, "Ship info")));
   }
 
+  function newPilot(body) {
+    askText("New pilot", "", 24, async (name) => {
+      if (!name) return;
+      try { const r = await Api.post("/game/pilot/create", { name }); await refreshState(); if (r && r.id != null) selectedPilotId = r.id; renderPilot(body); }
+      catch (e) { flash(e.message); }
+    });
+  }
   function renderCreatePilot(body) {
     const input = el("input", { class: "text-input", maxlength: "24", placeholder: "First pilot name" });
     const err = el("div", { class: "form-err", hidden: "" });

@@ -26,7 +26,10 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 - **Website** (atamus.io): signup, login, password recovery, and `play.html` (the hub).
 - **First pilot:** named on the website (play.html), not in the game **(owner)**.
-- **Pilot limit:** up to `MAX_PILOTS = 3` per account, with no duplicate names (server enforced).
+- **Pilots (owner):** up to 3 per account (`MAX_PILOTS`), with no duplicate names.
+  - The first pilot is free. Each extra pilot costs **1,000,000 cr** (`PILOT_PRICE`), taken from your in-game credits if you're online, otherwise from the database.
+  - Creation runs in a locked transaction, so parallel requests can't get past the cap or skip the charge.
+  - Extra pilots are created from the pilot window's name dropdown: "New pilot · 1,000,000 cr" asks for a name. It's shown only while you're under the cap.
 - **One session per account (owner).** Opening the game in a new tab or device ends the old session:
   - the old connection closes with code 4002;
   - the old tab shows "Playing on another tab or device", then goes to play.html;

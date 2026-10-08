@@ -82,7 +82,7 @@ Changes under `docs/`, `CLAUDE.md` and `scripts/tests` trigger no deploy.
 
 **PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
 
-- `credits n`, `license key level`, `ship type`, `item item qty`
+- `credits amount`, `license key level`, `ship type`, `item item qty`
 - `belts` (spawn all belts)
 - `move ship x y`
 - `update seconds` (rehearse the countdown)
