@@ -447,18 +447,19 @@
     }
     return [{ owner: "ship", id: ref.id, inv: "ore" }, { owner: "ship", id: ref.id, inv: "cargo" }];
   }
+  function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (!wins[key].win.hidden) renderInventory(key, b); }).observe(b); }
   function openInventory(ref) {
     const key = ref.owner === "station" ? "inv:station" : "inv:" + ref.id;   // one window per holder; tabs switch inside
     if (!invWins[key]) {
-      createWindow(key, { left: 360, top: 160, width: 420, minW: 400, minH: 300, render: (b) => renderInventory(key, b) });
-      invWins[key] = { ref };
+      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b) });
+      invWins[key] = { ref }; watchInvResize(key);
     }
     invWins[key].ref = ref;
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
   function openInventoryAlone(ref) {           // shift-click a tab: its own window
     const key = "inv:" + invKey(ref);
-    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 400, minH: 300, render: (b) => renderInventory(key, b) }); invWins[key] = { ref, solo: true }; }
+    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b) }); invWins[key] = { ref, solo: true }; watchInvResize(key); }
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
   const dragPayload = (e) => { try { return JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return null; } };
@@ -467,8 +468,11 @@
     const A = window.Atamus, ref = st.ref, data = invData(ref);
     const items = (A.cfg && A.cfg.items) || {}, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
     const tabs = st.solo ? [] : invTabsFor(ref);
-    // rebuild only when the structure changes (tab set, which stacks exist); quantities update in place
-    const sig = [invKey(ref), tabs.map(invKey).join(","), data ? data.slots.map((x) => x.item).join(",") : "-"].join("|");
+    // slots flow into as many columns as the window fits; rows grow with the contents (plus one spare row)
+    const CELL = 44, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth + GAP) / (CELL + GAP)));
+    const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
+    // rebuild only when the structure changes (tab set, which stacks exist, column count); quantities update in place
+    const sig = [invKey(ref), tabs.map(invKey).join(","), data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
     if (sig !== st.sig) {
       st.sig = sig; st.live = { qty: [] };
       body.innerHTML = ""; w.slot.innerHTML = "";
@@ -489,18 +493,19 @@
       st.live.fill = fill; st.live.stat = stat;
       body.append(el("div", { class: "inv-head" }, el("div", { class: "inv-cap" }, fill), stat,
         el("button", { class: "qbtn minus inv-sort", title: "Sort", onclick: () => A.send({ t: "inv_sort", ref }) }, "⇅")));
-      const grid = el("div", { class: "inv-grid" });
-      for (let i = 0; i < maxStacks; i++) {
+      const grid = el("div", { class: "inv-grid", style: "grid-template-columns: repeat(" + cols + ", 1fr)" });
+      for (let i = 0; i < total; i++) {
         const stck = data.slots[i];
         const cell = el("div", { class: "inv-cell" + (stck ? " filled" : "") });
         if (stck) {
           const def = items[stck.item] || { name: stck.item, color: "#888" };
           const qty = el("span", { class: "inv-qty" });
-          const item = el("div", { class: "inv-item", style: "background:" + def.color }, el("span", { class: "inv-abbr" }, def.name.slice(0, 3)), qty);
+          const item = el("div", { class: "inv-item", style: "--c:" + def.color }, def.icon ? el("img", { class: "inv-icon", src: "assets/rocks/" + def.icon + ".webp", draggable: "false", alt: "" }) : el("span", { class: "inv-abbr" }, def.name.slice(0, 3)), qty);
           st.live.qty[i] = { qty, item, def };
           cell.append(item);
           cell.setAttribute("draggable", "true");
           cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ ref: { ...ref, slot: i } })); e.dataTransfer.effectAllowed = "move"; });
+          cell.addEventListener("contextmenu", (e) => { e.preventDefault(); openSell(ref, i); });
         }
         cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
         cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
@@ -515,7 +520,43 @@
     L.stat.textContent = Math.round(data.used).toLocaleString() + " / " + data.cap.toLocaleString() + " m³ · " + data.stacks + "/" + maxStacks;
     data.slots.forEach((stck, i) => { const c = L.qty[i]; if (!c) return; c.qty.textContent = stck.qty.toLocaleString(); c.item.title = c.def.name + " × " + stck.qty + " (" + (stck.qty * (c.def.unitM3 || 0)).toFixed(1) + " m³)"; });
   }
-  window.Atamus.bus.addEventListener("inv", () => { for (const key in invWins) if (wins[key] && !wins[key].win.hidden) renderInventory(key, wins[key].body); const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); });
+  // ---- sell (right-click / hold an ore stack) ----
+  let sell = null; // { ref, slot }
+  function openSell(ref, slot) {
+    const A = window.Atamus, data = invData(ref), stck = data && data.slots[slot]; if (!stck) return;
+    const def = (A.cfg.items || {})[stck.item]; if (!def || !def.price) return;
+    const holder = ref.owner === "station" ? null : A.ship(ref.id);
+    if (holder && !holder.docked) { flash("Dock to sell."); return; }
+    if (!wins.sell) createWindow("sell", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 90), width: 300, minW: 260, minH: 150, render: renderSell });
+    sell = { ref, slot }; wins.sell.sig = null;
+    toggleWindow("sell", true); renderSell(wins.sell.body);
+  }
+  function renderSell(body) {
+    const A = window.Atamus, w = wins.sell;
+    const data = sell && invData(sell.ref), stck = data && data.slots[sell.slot];
+    const def = stck && (A.cfg.items || {})[stck.item];
+    const sig = stck ? stck.item + ":" + stck.qty : "";
+    if (sig === w.sig && body.childElementCount) return;             // stack unchanged: keep the slider as it is
+    w.sig = sig; body.innerHTML = "";
+    if (!def) { w.slot.textContent = "Sell"; body.append(el("div", { class: "muted" }, "Nothing to sell.")); return; }
+    w.slot.textContent = "Sell " + def.name;
+    const qty = el("input", { type: "range", class: "sell-range", min: 1, max: stck.qty, value: stck.qty });
+    const num = el("input", { type: "number", class: "sell-num", min: 1, max: stck.qty, value: stck.qty });
+    const total = el("span", { class: "sheet-v" });
+    const upd = () => { const q = Math.max(1, Math.min(stck.qty, Math.round(+num.value || 1))); num.value = q; qty.value = q; total.textContent = (q * def.price).toLocaleString() + " cr"; };
+    qty.addEventListener("input", () => { num.value = qty.value; upd(); }); num.addEventListener("input", upd);
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), v.nodeType ? v : el("span", { class: "sheet-v" }, String(v)));
+    body.append(row("Price", def.price.toLocaleString() + " cr / unit"), row("Quantity", num), qty, row("You get", total),
+      el("div", { class: "unit-btns row2" },
+        el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("sell", false) }, "Cancel"),
+        el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "sell", ref: sell.ref, slot: sell.slot, qty: +num.value }); toggleWindow("sell", false); } }, "Confirm")));
+    upd();
+  }
+  window.Atamus.bus.addEventListener("inv", () => {
+    const A = window.Atamus;
+    if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && !wins.player.win.hidden) renderPlayer(wins.player.body); }
+    if (wins.sell && !wins.sell.win.hidden) renderSell(wins.sell.body);
+    for (const key in invWins) if (wins[key] && !wins[key].win.hidden) renderInventory(key, wins[key].body); const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); });
 
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";
