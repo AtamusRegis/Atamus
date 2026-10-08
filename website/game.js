@@ -340,6 +340,36 @@
 
   // ---- asteroid belts: beacon + crescent of rocks, sprites drawn at true size ----
   const oreRock = {}; const rockArt = {};
+  // per-sprite alpha masks so beams can stop on the visible rock surface
+  const alphaMasks = new Map();
+  function alphaMask(img) {
+    let m = alphaMasks.get(img); if (m) return m;
+    if (!img.naturalWidth) return null;
+    const c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, a = new Uint8Array(c.width * c.height);
+    for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3];
+    m = { w: c.width, h: c.height, a }; alphaMasks.set(img, m); return m;
+  }
+  // first opaque pixel of a rock's sprite along the screen ray (ox,oy)->(tx,ty); null if the ray misses
+  function rockHit(home, rk, ox, oy, tx, ty) {
+    const o = oreRock[rk.ore] || { rock: "cratered" }, img = rockImg(o.rock, rk.size), m = alphaMask(img); if (!m) return null;
+    const cx = gx2s(home.gx + rk.x), cy = gy2s(home.gy + rk.y), wPx = (rk.size / 1000) * scale(), hPx = wPx * (m.h / m.w);
+    if (wPx < 2.2) return { x: cx, y: cy };
+    const R = Math.hypot(wPx, hPx) / 2, dx = tx - ox, dy = ty - oy, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+    // enter / leave the sprite's bounding circle
+    const fx = ox - cx, fy = oy - cy, b = fx * ux + fy * uy, cc = fx * fx + fy * fy - R * R, disc = b * b - cc; if (disc < 0) return null;
+    const t0 = Math.max(0, -b - Math.sqrt(disc)), t1 = -b + Math.sqrt(disc); if (t1 < 0) return null;
+    const cos = Math.cos(-rk.rot), sin = Math.sin(-rk.rot), step = Math.max(0.5, (t1 - t0) / 240);
+    for (let t = t0; t <= t1; t += step) {
+      const px = ox + ux * t - cx, py = oy + uy * t - cy;
+      const u = px * cos - py * sin, v = px * sin + py * cos;          // into the sprite's unrotated frame
+      const ix = Math.floor((u / wPx + 0.5) * m.w), iy = Math.floor((v / hPx + 0.5) * m.h);
+      if (ix >= 0 && iy >= 0 && ix < m.w && iy < m.h && m.a[iy * m.w + ix] > 128) return { x: ox + ux * t, y: oy + uy * t };
+    }
+    return null;
+  }
+  function rockById(id) { for (const b of belts) { const r = b.rocks.find((q) => q.id === id); if (r) return r; } return null; }
   function rockImg(family, size) { const k = family + "_" + size; if (!rockArt[k]) { const i = new Image(); i.src = "assets/rocks/rock_" + k + ".webp"; rockArt[k] = i; } return rockArt[k]; }
   // selection marker: orange box, corners only
   function drawSelBox(cx, cy, half) {
@@ -404,7 +434,13 @@
       if (!l.on) continue;
       const hp = hps[l.hp] || hps[0];
       const ox = sx + (hp[0] * c - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * c) * L;
-      const ex = gx2s(pl.gx + l.ax) + (Math.random() - 0.5) * 1.5, ey = gy2s(pl.gy + l.ay) + (Math.random() - 0.5) * 1.5;
+      let ex = gx2s(pl.gx + l.ax), ey = gy2s(pl.gy + l.ay);
+      const rk = rockById(l.rock);
+      if (rk) {                                            // stop on the first solid pixel of the rock (aim point, else its centre)
+        const h = rockHit(pl, rk, ox, oy, ex, ey) || rockHit(pl, rk, ox, oy, gx2s(pl.gx + rk.x), gy2s(pl.gy + rk.y));
+        if (h) { ex = h.x; ey = h.y; }
+      }
+      ex += (Math.random() - 0.5) * 0.8; ey += (Math.random() - 0.5) * 0.8;
       const col = l.repeat ? "255,140,60" : "200,120,80";
       ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = `rgba(${col},0.35)`; ctx.lineWidth = 4; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.2; ctx.stroke();
