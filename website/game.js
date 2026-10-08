@@ -104,6 +104,7 @@
           if (!webComing) { reloadForUpdate("s" + m.build); return; }
         }
         serverBuild = m.build;
+        if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
       }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
       else if (m.t === "snap") {

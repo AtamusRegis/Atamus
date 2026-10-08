@@ -12,7 +12,7 @@ import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
 import { getState } from "../pilots.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
-import { SERVER_BUILD, onWebsiteUpdate, onCountdown } from "../build.js";
+import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
 
 const world = new World();
@@ -65,7 +65,7 @@ export function attachGameServer(httpServer) {
     };
     await refreshLicenses();
     const licTimer = setInterval(refreshLicenses, 60000);
-    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
+    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
     ws.on("message", (buf) => {

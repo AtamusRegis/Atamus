@@ -38,6 +38,8 @@ async function waitForUpdate() {
   history.replaceState(null, "", "play.html");
 }
 
+// always open the game fresh, never a cached copy of an older build
+document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); location.href = "game.html?cb=" + Date.now(); }));
 if (params.get("updating")) waitForUpdate();
 else showSteps().catch(() => { location.href = "index.html"; });
 
@@ -46,7 +48,7 @@ pilotForm.addEventListener("submit", async (e) => {
   const name = pilotForm.elements.name.value.trim();
   if (!name) { showMessage(pilotMsg, "Give your pilot a name."); return; }
   const btn = pilotForm.querySelector("button"); btn.disabled = true;
-  try { await Api.post("/game/pilot/create", { name }); location.href = "game.html"; }
+  try { await Api.post("/game/pilot/create", { name }); location.href = "game.html?cb=" + Date.now(); }
   catch (err) { showMessage(pilotMsg, err.message); btn.disabled = false; }
 });
 

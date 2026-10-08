@@ -35,7 +35,7 @@ jobs:
           path: website
       - name: Warn players (30 s countdown) before switching the live build
         run: |
-          curl -fsS -X POST "https://play.atamus.io/game/update-countdown?part=web" || true
+          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=web" -w "\nHTTP %{http_code}\n" || true
           sleep 30
       - id: deployment
         uses: actions/deploy-pages@v4

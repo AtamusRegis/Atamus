@@ -38,14 +38,21 @@ const mainHead = () => new Promise((res) => execFile("git", ["-C", REPO_DIR, "ls
 // part: "server" or "web" — which half of the game this deploy is about to switch
 export async function announceUpdate(part, seconds = 30) {
   part = part === "web" ? "web" : "server";
-  const head = await mainHead(); if (!head) return { ok: false, why: "cannot read main" };
+  const now = Date.now(), running = announced && now < announcedAt + 120_000;
+  let head = await mainHead();
+  if (!head) {                                            // can't reach GitHub: still warn, merging into a countdown that's already running
+    console.log("[build] could not read main; counting down anyway");
+    head = running ? announced : "unknown-" + now;
+  }
   if (head === announced) {                               // the other workflow for the same commit: same countdown, more parts
     if (!parts.has(part)) { parts.add(part); onCountdownFn(announcedAt, head, [...parts]); }
     return { ok: true, at: announcedAt, parts: [...parts] };
   }
   const serverCurrent = head.startsWith(SERVER_BUILD), webCurrent = webBuild && head === webBuild;
-  if (serverCurrent && webCurrent) return { ok: false, why: "nothing pending" };
-  announced = head; announcedAt = Date.now() + seconds * 1000; parts = new Set([part]);
+  if (serverCurrent && webCurrent) { console.log("[build] countdown refused: nothing pending"); return { ok: false, why: "nothing pending" }; }
+  announced = head; announcedAt = now + seconds * 1000; parts = new Set([part]);
   onCountdownFn(announcedAt, head, [...parts]);
   return { ok: true, at: announcedAt, parts: [...parts] };
 }
+// A countdown that's still running, for players who connect in the middle of it.
+export const activeCountdown = () => (announced && announcedAt > Date.now() ? { in: announcedAt - Date.now(), parts: [...parts] } : null);
