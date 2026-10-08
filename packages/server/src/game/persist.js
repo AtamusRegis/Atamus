@@ -13,11 +13,12 @@ export async function saveSystem(userId, data) {
   );
 }
 
-/** Systems whose owner is offline but still has an active stargate (restored on boot). */
-export async function loadActiveGateSystems() {
+/** Systems that should be awake on boot: a running gate, or a ship still carrying out an order. */
+export async function loadAwakeSystems() {
   const { rows } = await pool.query(
     `SELECT s.user_id, u.username, s.data FROM systems s JOIN users u ON u.id = s.user_id
-     WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(s.data->'gates') g WHERE g->>'state' = 'active')`
+     WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(s.data->'gates') g WHERE g->>'state' = 'active')
+        OR EXISTS (SELECT 1 FROM jsonb_array_elements(s.data->'ships') sh WHERE (sh->>'moving')::boolean)`
   );
   return rows;
 }

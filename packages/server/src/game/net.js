@@ -9,7 +9,7 @@ import {
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
-import { loadSystem, saveSystem, loadActiveGateSystems } from "./persist.js";
+import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 
 const world = new World();
 
@@ -58,10 +58,10 @@ export function attachGameServer(httpServer) {
   const persist = async (pid) => { if (!world.players.has(pid)) return; try { await saveSystem(pid, world.exportState(pid)); } catch (e) { console.error("saveSystem", e); } };
   world.onBeforePurge = (pid) => { const state = world.exportState(pid); saveSystem(pid, state).catch((e) => console.error("saveSystem(purge)", e)); };
   // On boot, bring back anyone whose gate was still running: timers and links keep going, logging off is not an escape.
-  loadActiveGateSystems().then((rows) => {
-    for (const r of rows) { const p = world.addPlayer(String(r.user_id), r.username, () => {}, r.data); p.offline = true; }
-    if (rows.length) console.log(`[world] restored ${rows.length} offline system(s) with active gates`);
-  }).catch((e) => console.error("loadActiveGateSystems", e));
+  loadAwakeSystems().then((rows) => {
+    for (const r of rows) { const p = world.addPlayer(String(r.user_id), r.username, () => {}, r.data); p.offline = true; p.offlineSince = Date.now(); }
+    if (rows.length) console.log(`[world] restored ${rows.length} offline system(s) awake (running gate or unfinished orders)`);
+  }).catch((e) => console.error("loadAwakeSystems", e));
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); }, 10000);
 
   let last = Date.now();

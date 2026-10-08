@@ -6,6 +6,7 @@ import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
 import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
 const homeSys = (pid) => `sys:${pid}`;
+const HIBERNATE_GRACE_MS = 60 * 1000;
 
 export class World {
   constructor() {
@@ -68,11 +69,16 @@ export class World {
     });
   }
 
+  // Logging off never drops the system immediately: it stays awake while a gate is
+  // running or a ship still has an order, then hibernates after a short grace period.
   removePlayer(id) {
-    const anyActive = [...this.gates.values()].some((g) => g.owner === id && g.state === "active");
-    const p = this.players.get(id);
-    if (p && anyActive) { p.offline = true; p.send = () => {}; return; }
-    this._purge(id);
+    const p = this.players.get(id); if (!p) return;
+    p.offline = true; p.offlineSince = Date.now(); p.send = () => {};
+  }
+  _busy(id) {
+    for (const g of this.gates.values()) if (g.owner === id && g.state === "active") return true;
+    for (const s of this.ships.values()) if (s.owner === id && s.moving) return true;
+    return false;
   }
   _purge(id) {
     if (this.onBeforePurge) { try { this.onBeforePurge(id); } catch (e) { console.error("onBeforePurge", e); } }
@@ -143,8 +149,21 @@ export class World {
   _connectToHub(g) { g.connToSys = HUB_SYS; g.connToGate = null; }
   _endConnection(g) {
     const partner = g.connToGate ? this.gates.get(g.connToGate) : null;
-    if (partner) { partner.connToSys = null; partner.connToGate = null; }
+    if (partner) { partner.connToSys = null; partner.connToGate = null; this._evictVisitors(partner.sys); }
+    this._evictVisitors(g.sys);
     g.connToSys = null; g.connToGate = null;
+  }
+  // When a gate link closes, any ship still in a system it doesn't own is destroyed
+  // (with its cargo) and its pilot respawns at their own station.
+  _evictVisitors(sysId) {
+    const ownerId = sysId.startsWith("sys:") ? sysId.slice(4) : null;
+    for (const sh of this.ships.values()) {
+      if (sh.sys !== sysId || sh.owner === ownerId) continue;
+      sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 4; sh.y = STATION_POS.y + 4; sh.tx = sh.x; sh.ty = sh.y;
+      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.cargo = null;
+      const o = this.players.get(sh.owner);
+      if (o && !o.offline) o.send(JSON.stringify({ t: "sys", text: "The gate closed on you. Your ship was destroyed; you respawn at your station." }));
+    }
   }
   _closeGate(g) {
     this._endConnection(g);
@@ -184,8 +203,7 @@ export class World {
 
     for (const p of [...this.players.values()]) {
       if (!p.offline) continue;
-      const stillActive = [...this.gates.values()].some((g) => g.owner === p.id && g.state === "active");
-      if (!stillActive) this._purge(p.id);
+      if (!this._busy(p.id) && now - (p.offlineSince || 0) > HIBERNATE_GRACE_MS) this._purge(p.id);   // hibernate
     }
   }
 
