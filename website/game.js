@@ -123,15 +123,10 @@
     if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); follow = false; e.preventDefault(); return; }
     if (k === "f") { follow = selected.size > 0; e.preventDefault(); return; }  // follow selected ship / group COM
     if (k === "x") { const id = [...selected][0]; const sh = id && (snap.ships || []).find((x) => x.id === id); if (sh) send({ t: "mine", ship: id, on: !sh.mining }); return; }
-    if (k === "1" || k === "2" || k === "3") toggleGateByIndex(+k - 1);
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
   canvas.addEventListener("wheel", (e) => { e.preventDefault(); viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); }, { passive: false });
-
-  function myGate(idx) { return snap.gates.find((g) => g.mine && g.id.endsWith(":" + idx)); }
-  function toggleGate(g) { if (!g) return; if (g.state !== "active") { send({ t: "gate", gate: g.id, open: true }); setStatus("Opening wormhole…", "ok"); } else { send({ t: "gate", gate: g.id, open: false }); } }
-  function toggleGateByIndex(i) { toggleGate(myGate(i)); }
 
   function eventPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   let curPlace = new Map();
@@ -501,7 +496,7 @@
       clampCameraCircle(place);
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
+      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
       window.SunFX.render(gx2s(0), gy2s(0), 1 - 0.45 * Math.max(0, Math.min(1, (cam.viewW - 20) / Math.max(1, curMaxW - 20))), now / 1000); // shader sun + lens flare at the system centre
       drawBelts(place);
       drawStations(place);

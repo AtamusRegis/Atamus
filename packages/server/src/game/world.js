@@ -410,8 +410,6 @@ export class World {
       if (mine) {
         entry.fuelMs = Math.max(0, Math.round(g.fuelMs));
         entry.sessionRemMs = g.state === "active" ? Math.max(0, Math.round(FUEL_SESSION_MAX_MS - g.sessionUsedMs)) : null;
-        entry.canClose = true;
-        entry.away = 0;
       }
       gates.push(entry);
     }
@@ -432,6 +430,6 @@ export class World {
       ships.push(entry);
     }
 
-    return { t: "snap", systems, gates, ships, enemies: false };
+    return { t: "snap", systems, gates, ships };
   }
 }

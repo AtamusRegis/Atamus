@@ -3,14 +3,12 @@ import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import {
-  TICK_MS, SNAPSHOT_MS,
-  CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, SHIP_HP, FUEL_SESSION_MAX_MS, FUEL_START_MS,
+  TICK_MS, SNAPSHOT_MS, CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
+  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
 import { ITEMS, MAX_STACKS } from "./inventory.js";
-import { DOCK_RADIUS_KM, SHIP_TYPES } from "./constants.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
 import { pool } from "../db.js";
 
@@ -24,7 +22,6 @@ const CLIENT_CONFIG = {
   cellCircumradius: CELL_CIRCUMRADIUS_KM,
   cellCornerRound: CELL_CORNER_ROUND_KM,
   transferRadius: GATE_TRANSFER_RADIUS_KM,
-  maxHp: SHIP_HP,
   fuelMaxMs: FUEL_SESSION_MAX_MS,
   fuelStartMs: FUEL_START_MS,
   ores: ORES,
