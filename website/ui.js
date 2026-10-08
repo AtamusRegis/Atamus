@@ -726,14 +726,14 @@
           const L = (sh.lasers || [])[it.i];
           if (L) {
             slot.classList.add("filled"); if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping");
-            slot.append(el("div", { class: "hb-icon laser" }, el("span", {}, "ML" + (it.i + 1))));
+            slot.append(el("img", { class: "hb-img", src: "assets/icons/mining_laser.png", alt: "", draggable: "false" }), el("span", { class: "hb-badge" }, String(it.i + 1)));
             slot.title = "Mining Laser " + (it.i + 1) + (L.on ? (L.repeat ? " — cycling" : " — finishing cycle") : "");
             slot.addEventListener("click", () => clickLaser(sh, it.i));
             hudLive.slots.push({ slot, laser: it.i });
           }
         } else if (it && it.k === "auto") {
           slot.classList.add("filled"); if (sh.auto && sh.auto.on) slot.classList.add("on");
-          slot.append(el("div", { class: "hb-icon auto" }, el("span", {}, "AM")));
+          slot.append(el("img", { class: "hb-img", src: "assets/icons/auto_miner.png", alt: "", draggable: "false" }));
           slot.title = "Auto Miner" + (sh.auto && sh.auto.on ? " — active" : "");
           slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
           hudLive.slots.push({ slot, auto: true });
@@ -969,7 +969,7 @@
         if (stck) {
           const def = items[stck.item] || { name: stck.item, color: "#888" };
           const qty = el("span", { class: "inv-qty" });
-          const item = el("div", { class: "inv-item", style: "--c:" + def.color }, def.icon ? el("img", { class: "inv-icon", src: "assets/rocks/" + def.icon + ".webp", draggable: "false", alt: "" }) : el("span", { class: "inv-abbr" }, def.name.slice(0, 3)), qty);
+          const item = el("div", { class: "inv-item", style: "--c:" + def.color }, def.icon ? el("img", { class: "inv-icon", src: def.icon, draggable: "false", alt: "" }) : el("span", { class: "inv-abbr" }, def.name.slice(0, 3)), qty);
           st.live.qty[i] = { qty, item, def };
           cell.append(item);
           cell.setAttribute("draggable", "true");
@@ -1068,7 +1068,7 @@
     w.slot.textContent = def.name;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
     const perM3 = def.unitM3 ? def.price / def.unitM3 : 0;
-    body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: "assets/rocks/" + def.icon + ".webp", alt: "" }) : null, el("span", {}, def.desc || "")),
+    body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
       row("Rarity", def.rarity || "—"), row("Weight", def.unitM3 + " m³ / unit"), row("Price", (def.price || 0).toLocaleString() + " cr / unit"),
       row("Price per m³", Math.round(perM3).toLocaleString() + " cr"), row("Stack", infoItem.qty.toLocaleString() + " × = " + (infoItem.qty * (def.price || 0)).toLocaleString() + " cr · " + (infoItem.qty * def.unitM3).toLocaleString() + " m³"));
   }
