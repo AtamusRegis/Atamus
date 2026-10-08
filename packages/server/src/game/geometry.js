@@ -28,8 +28,8 @@ for (let q = -SYSTEM_RINGS; q <= SYSTEM_RINGS; q++) {
   }
 }
 
-// No stargate for now.
-export const STARGATE_CELLS = [];
+// One stargate, off to the east side of the hex.
+export const STARGATE_CELLS = [{ x: 58, y: -44 }];
 
 // Station sits off-centre within the hex (apothem = 100 km).
 export const STATION_POS = { x: -52, y: 38 };

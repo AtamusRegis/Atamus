@@ -8,7 +8,7 @@
   const statusEl = document.getElementById("status");
 
   let cfg = null, me = { id: null, name: "" };
-  let snap = { systems: [], gates: [] };
+  let snap = { systems: [], gates: [] }; let belts = [];
   let ws = null, lastFrame = performance.now();
   let camInit = false;
   const confirming = new Set();
@@ -19,7 +19,8 @@
   window.Atamus = { send: (o) => send(o), bus, get me() { return me; } };
 
   const gateImg = new Image(); let gateImgReady = false;
-  gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.png";
+  gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
+  const GATE_LEN_KM = 1.656; // stargate ring, true size
 
   const bgImg = new Image(); let bgReady = false;
   bgImg.onload = () => (bgReady = true); bgImg.src = "assets/nebula_bg.webp";
@@ -67,7 +68,7 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === "hello") { cfg = m.cfg; me = m.you; computeSystemRadius(); }
+      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
       else if (m.t === "snap") snap = m;
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
@@ -191,15 +192,20 @@
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
   function hexCorners() { const R = cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
   function drawCell(cx, cy, round, stroke, fill) { const pts = hexCorners(); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
-  function systemTheme(s) { const fill = "rgba(0,0,0,0.05)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
+  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
 
   function drawGate(g, pl) {
-    const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly), rPx = Math.max(12, Math.min(160, cfg.transferRadius * scale()));
-    if (gateImgReady) { const dim = rPx * 2; ctx.save(); ctx.globalAlpha = g.state === "active" ? 1 : 0.65; ctx.drawImage(gateImg, sx - rPx, sy - rPx, dim, dim); ctx.restore(); }
-    else { ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 4); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.strokeRect(-rPx * 0.6, -rPx * 0.6, rPx * 1.2, rPx * 1.2); ctx.restore(); }
+    const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly);
+    const wPx = Math.max(3, GATE_LEN_KM * scale());
+    let topY = sy - wPx / 2;
+    if (gateImgReady && gateImg.naturalWidth) {
+      const hPx = wPx * (gateImg.naturalHeight / gateImg.naturalWidth); topY = sy - hPx / 2;
+      ctx.save(); ctx.globalAlpha = g.state === "active" ? 1 : 0.8; ctx.imageSmoothingEnabled = wPx > 300;
+      ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+    } else { ctx.save(); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, wPx / 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
     if (g.state === "active" && g.connToSys) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, cfg.transferRadius * scale(), 0, Math.PI * 2); ctx.strokeStyle = "rgba(255,160,70,0.4)"; ctx.setLineDash([5, 7]); ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); }
     if (g.mine) {
-      let y = sy - rPx - 12; const active = g.state === "active";
+      let y = Math.min(topY, sy - 14) - 10; const active = g.state === "active";
       y = button(active ? "CLOSE" : "OPEN", sx, y, active ? "#ff7a2a" : "#2ab6ff", g.id);
       const ms = active ? Math.min(g.fuelMs, g.sessionRemMs ?? g.fuelMs) : g.fuelMs;
       centerText("Fuel " + fmt(ms), sx, y - 8, active ? "#bfe8ff" : "#8d98a8");
@@ -220,6 +226,43 @@
 
   const SUN_RADIUS_KM = 4;   // stylised star disc; glow/flare scale off it
   function sunRadiusPx() { return Math.max(14, Math.min(0.28 * Math.min(innerWidth, innerHeight), SUN_RADIUS_KM * scale())); }
+
+  // ---- asteroid belts: beacon + crescent of rocks, drawn at true size ----
+  const oreColor = {}; const rockShape = new Map();
+  function shapeFor(rock) {
+    let sh = rockShape.get(rock.id); if (sh) return sh;
+    let a = rock.seed | 0; const rnd = () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const n = 7 + Math.floor(rnd() * 4), pts = [];
+    for (let i = 0; i < n; i++) { const ang = i / n * Math.PI * 2, r = 0.72 + rnd() * 0.33; pts.push([Math.cos(ang) * r, Math.sin(ang) * r]); }
+    sh = { pts, shade: 0.85 + rnd() * 0.3, rot: rnd() * Math.PI * 2 }; rockShape.set(rock.id, sh); return sh;
+  }
+  function shade(hex, k) { const n = parseInt(hex.slice(1), 16); const r = Math.min(255, ((n >> 16) & 255) * k) | 0, g = Math.min(255, ((n >> 8) & 255) * k) | 0, b = Math.min(255, (n & 255) * k) | 0; return `rgb(${r},${g},${b})`; }
+  function drawBelts(place) {
+    const home = place.get(mySys()); if (!home || !cfg) return;
+    if (!Object.keys(oreColor).length) for (const o of cfg.ores || []) oreColor[o.key] = o.color;
+    const s = scale();
+    for (const belt of belts) {
+      // rocks
+      for (const rk of belt.rocks) {
+        const rPx = Math.max(1.2, rk.r * s);
+        const x = gx2s(home.gx + rk.x), y = gy2s(home.gy + rk.y);
+        if (x < -20 || y < -20 || x > innerWidth + 20 || y > innerHeight + 20) continue;
+        const col = oreColor[rk.ore] || "#999";
+        if (rPx < 2.5) { ctx.fillStyle = col; ctx.fillRect(x - rPx / 2, y - rPx / 2, rPx, rPx); continue; }
+        const sh = shapeFor(rk);
+        ctx.save(); ctx.translate(x, y); ctx.rotate(sh.rot); ctx.beginPath();
+        sh.pts.forEach(([px, py], i) => i ? ctx.lineTo(px * rPx, py * rPx) : ctx.moveTo(px * rPx, py * rPx)); ctx.closePath();
+        ctx.fillStyle = shade(col, sh.shade); ctx.fill();
+        if (rPx > 6) { ctx.lineWidth = 1; ctx.strokeStyle = "rgba(0,0,0,0.55)"; ctx.stroke(); }
+        ctx.restore();
+      }
+      // beacon: small fixed-size marker at the belt centre
+      const bx = gx2s(home.gx + belt.x), by = gy2s(home.gy + belt.y);
+      ctx.save(); ctx.strokeStyle = "rgba(120,220,255,0.85)"; ctx.fillStyle = "rgba(120,220,255,0.9)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(bx, by - 7); ctx.lineTo(bx + 7, by); ctx.lineTo(bx, by + 7); ctx.lineTo(bx - 7, by); ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(bx, by, 1.6, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  }
 
   function drawStations(place) {
     for (const sE of snap.systems) {
@@ -301,8 +344,9 @@
       clampCameraCircle(place);
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
+      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
       window.SunFX.render(gx2s(0), gy2s(0), sunRadiusPx(), now / 1000); // shader sun + lens flare at the system centre
+      drawBelts(place);
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawShips(place);
