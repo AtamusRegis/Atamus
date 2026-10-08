@@ -1,7 +1,7 @@
 // License catalog. Static game design data, served to the client and used
 // to validate training. Times are per endorsement level, in milliseconds.
 
-// ---- real design train times (The Reach) ----
+// ---- real design train times (the Expanse design doc) ----
 // Authored in HOURS per level. DEV_TIME_SCALE compresses them so training is
 // testable during development; set it to 1 for the real multi-week timeline.
 const HOUR = 3600 * 1000;
@@ -51,11 +51,11 @@ export const LICENSES = [
     requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
   },
   // ============================================================
-  // Industry — Ostergaard hulls (fly at Lvl 3, next class at Lvl 5)
+  // Industry — Expanse Mining Operations hulls (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 8, free: true,
-    desc: "Pilot mining frigates. The start of every Ostergaard career.",
+    desc: "Pilot mining frigates. Where every mining career starts.",
     bonus: "efficiency flying Mining Frigates", hull: true,
     requirements: [], levelTimes: hrs(1, 2, 4, 7, 10, 10, 15, 25),
   },
@@ -90,24 +90,24 @@ export const LICENSES = [
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
   // ============================================================
-  // Combat — Corrigan escort line (fly at Lvl 3, next class at Lvl 5)
+  // Combat — Expanse Defense Industries hulls (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
-    key: "warden_frigate", name: "Escort Frigate", category: "combat", maxLevel: 8,
-    desc: "Pilot escort frigates.",
-    bonus: "efficiency flying Escort Frigates", hull: true, flies: { 3: ["Picket"] },
+    key: "warden_frigate", name: "Combat Frigate", category: "combat", maxLevel: 8,
+    desc: "Pilot combat frigates.",
+    bonus: "efficiency flying Combat Frigates", hull: true, flies: { 3: ["Picket"] },
     requirements: [], levelTimes: hrs(5, 10, 10, 15, 20, 15, 25, 35),
   },
   {
-    key: "warden_cruiser", name: "Escort Cruiser", category: "combat", maxLevel: 8,
-    desc: "Pilot escort cruisers.",
-    bonus: "efficiency flying Escort Cruisers", hull: true, flies: { 3: ["Sentry"] },
+    key: "warden_cruiser", name: "Combat Cruiser", category: "combat", maxLevel: 8,
+    desc: "Pilot combat cruisers.",
+    bonus: "efficiency flying Combat Cruisers", hull: true, flies: { 3: ["Sentry"] },
     requirements: reqLic(["warden_frigate", 5]), levelTimes: hrs(15, 30, 50, 65, 80, 30, 50, 65),
   },
   {
-    key: "warden_battleship", name: "Escort Battleship", category: "combat", maxLevel: 8,
-    desc: "Pilot escort battleships.",
-    bonus: "efficiency flying Escort Battleships", hull: true, flies: { 3: ["Bastion"] },
+    key: "warden_battleship", name: "Combat Battleship", category: "combat", maxLevel: 8,
+    desc: "Pilot combat battleships.",
+    bonus: "efficiency flying Combat Battleships", hull: true, flies: { 3: ["Bastion"] },
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
 ];
