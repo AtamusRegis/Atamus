@@ -89,6 +89,7 @@
   const panVel = { x: 0, y: 0 };
   function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
   addEventListener("resize", resize); resize();
+  if (window.SunFX) window.SunFX.init();
   const scale = () => innerWidth / cam.viewW;
   const gx2s = (gx) => innerWidth / 2 + (gx - cam.cx) * scale();
   const gy2s = (gy) => innerHeight / 2 - (gy - cam.cy) * scale();
@@ -189,8 +190,8 @@
   // ---- drawing ----
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
   function hexCorners() { const R = cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
-  function drawCell(cx, cy, round, stroke, fill) { const pts = hexCorners(); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 1; ctx.strokeStyle = stroke; ctx.stroke(); } }
-  function systemTheme(s) { if (s.mine) return { line: "rgba(120,170,255,0.5)", fill: "rgba(12,22,40,0.4)", glow: "rgba(14,30,55,0.5)" }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.55)", fill: "rgba(30,14,10,0.4)", glow: "rgba(60,20,20,0.45)" }; return { line: "rgba(255,90,90,0.5)", fill: "rgba(34,12,14,0.4)", glow: "rgba(55,15,20,0.45)" }; }
+  function drawCell(cx, cy, round, stroke, fill) { const pts = hexCorners(); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
+  function systemTheme(s) { const fill = "rgba(0,0,0,0.05)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
 
   function drawGate(g, pl) {
     const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly), rPx = Math.max(12, Math.min(160, cfg.transferRadius * scale()));
@@ -217,22 +218,8 @@
     ctx.save(); ctx.fillStyle = "rgba(4,6,12,0.55)"; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.restore(); // darken
   }
 
-  function drawSun(sx, sy) {
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    const R = 240;
-    let g = ctx.createRadialGradient(sx, sy, 0, sx, sy, R);
-    g.addColorStop(0, "rgba(255,246,224,0.9)"); g.addColorStop(0.08, "rgba(255,228,180,0.5)");
-    g.addColorStop(0.32, "rgba(255,180,120,0.16)"); g.addColorStop(1, "rgba(255,150,90,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, R, 0, Math.PI * 2); ctx.fill();
-    let c = ctx.createRadialGradient(sx, sy, 0, sx, sy, 24);
-    c.addColorStop(0, "rgba(255,255,255,1)"); c.addColorStop(1, "rgba(255,240,210,0)");
-    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(sx, sy, 24, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(255,238,205,0.3)";
-    for (const [dx, dy, len, w] of [[1, 0, R * 1.5, 2], [0, 1, R * 1.15, 2], [0.7, 0.7, R * 0.85, 1], [-0.7, 0.7, R * 0.85, 1]]) {
-      ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(sx - dx * len, sy - dy * len); ctx.lineTo(sx + dx * len, sy + dy * len); ctx.stroke();
-    }
-    ctx.restore();
-  }
+  const SUN_RADIUS_KM = 4;   // stylised star disc; glow/flare scale off it
+  function sunRadiusPx() { return Math.max(14, Math.min(0.28 * Math.min(innerWidth, innerHeight), SUN_RADIUS_KM * scale())); }
 
   function drawStations(place) {
     for (const sE of snap.systems) {
@@ -292,6 +279,7 @@
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height); gateButtons = [];
     drawBackground();
+    if (!(cfg && snap.systems.length) && window.SunFX) window.SunFX.clear();
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place; curMaxW = fitWidth(place);
       if (!camInit) { const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true; }
@@ -313,8 +301,8 @@
       clampCameraCircle(place);
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, R); gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
-      drawSun(gx2s(0), gy2s(0));                 // sun at the system centre
+      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
+      window.SunFX.render(gx2s(0), gy2s(0), sunRadiusPx(), now / 1000); // shader sun + lens flare at the system centre
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawShips(place);
