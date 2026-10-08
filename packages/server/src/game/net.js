@@ -16,7 +16,7 @@ import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../
 import { PTR, devCommand } from "../ptr.js";
 
 const world = new World();
-const conns = new Map();   // pid -> open sockets (a player may have the game open in more than one tab)
+const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 
 const CLIENT_CONFIG = {
   cells: CELLS,
@@ -53,8 +53,10 @@ export function attachGameServer(httpServer) {
     const pid = String(user.id);
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
     if (!conns.has(pid)) conns.set(pid, new Set());
-    const mine = conns.get(pid); mine.add(ws);
-    const sendAll = (s) => { for (const c of mine) if (c.readyState === c.OPEN) c.send(s); };
+    const mine = conns.get(pid);
+    for (const old of mine) { old.replaced = true; try { old.close(4002, "elsewhere"); } catch {} }   // signed in elsewhere: the old session ends
+    mine.add(ws);
+    const sendAll = (s) => { for (const c of mine) if (!c.replaced && c.readyState === c.OPEN) c.send(s); };
     const inMemory = world.players.has(pid);               // another tab, or a system still awake: memory is the truth
     let saved = null; if (!inMemory) try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
     if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }   // left while loading
@@ -62,7 +64,7 @@ export function attachGameServer(httpServer) {
     let licTimer = 0;
     ws.on("close", () => {
       clearInterval(licTimer); mine.delete(ws);
-      if (mine.size) return;                                 // still playing in another tab
+      if (mine.size) return;                                 // replaced by a newer session: it carries on
       conns.delete(pid); persist(pid).finally(() => { if (!conns.has(pid)) world.removePlayer(pid); });
     });
     if (!inMemory) try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
@@ -82,6 +84,7 @@ export function attachGameServer(httpServer) {
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
+      if (ws.replaced) return;                              // nothing from a session that's been replaced
       const now = Date.now(); budget = Math.min(40, budget + (now - budgetAt) * 0.04); budgetAt = now;
       if (budget < 1) return; budget--;
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }

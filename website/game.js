@@ -95,6 +95,7 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = (e) => {
       if (e.code === 4001) { location.href = "index.html"; return; }          // signed out (session expired): back to the website
+      if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
     };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
