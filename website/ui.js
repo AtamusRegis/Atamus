@@ -12,7 +12,15 @@
   let saved = (() => { try { return JSON.parse(localStorage.getItem(WKEY) || "{}"); } catch { return {}; } })();
   saved.win = saved.win || {};
   function persistAll() { try { localStorage.setItem(WKEY, JSON.stringify(saved)); } catch {} }
-  function persistWin(id) { const w = wins[id]; if (!w) return; const e = w.win; saved.win[id] = { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight, open: !e.hidden }; persistAll(); }
+  function persistWin(id) {
+    const w = wins[id]; if (!w) return; const e = w.win;
+    const prev = saved.win[id] || {};
+    // when hidden, offset* read 0 — keep the last known geometry and only flip `open`
+    saved.win[id] = e.hidden
+      ? { x: prev.x, y: prev.y, w: prev.w, h: prev.h, open: false }
+      : { x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight, open: true };
+    persistAll();
+  }
 
   // tiny DOM helper
   function el(tag, props, ...kids) {
@@ -47,10 +55,11 @@
     const win = el("div", { class: "win", hidden: "" }, bar, body);
     win.dataset.id = id;
     const s = saved.win[id] || {};
-    win.style.left = (s.x != null ? s.x : (opts.left || 120)) + "px";
-    win.style.top = (s.y != null ? s.y : (opts.top || 70)) + "px";
-    win.style.width = (s.w != null ? s.w : (opts.width || 260)) + "px";
-    if (s.h != null) win.style.height = s.h + "px";
+    const num = (v) => typeof v === "number" && isFinite(v);
+    win.style.left = (num(s.x) ? s.x : (opts.left || 120)) + "px";
+    win.style.top = (num(s.y) ? s.y : (opts.top || 70)) + "px";
+    win.style.width = (num(s.w) && s.w > 0 ? s.w : (opts.width || 260)) + "px";
+    if (num(s.h) && s.h > 0) win.style.height = s.h + "px";
     document.body.appendChild(win);
     win.addEventListener("mousedown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar, () => persistWin(id));
