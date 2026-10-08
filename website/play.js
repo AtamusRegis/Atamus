@@ -7,7 +7,6 @@ const pilotMsg = document.getElementById("pilot-msg");
 
 const params = new URLSearchParams(location.search);
 const updateStep = document.getElementById("update-step");
-const updateMsg = document.getElementById("update-msg");
 
 // Gate the page: if not logged in, go back to the login screen. A new account names
 // its first pilot here, on the website, before entering the game.

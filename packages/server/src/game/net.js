@@ -101,9 +101,14 @@ export function attachGameServer(httpServer) {
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
 
-  const persist = async (pid) => { if (!world.players.has(pid)) return; try { await saveSystem(pid, world.exportState(pid)); } catch (e) { console.error("saveSystem", e); } };
+  const lastSaved = new Map();                            // pid -> JSON last written: skip the write when nothing changed
+  const persist = async (pid) => {
+    if (!world.players.has(pid)) return;
+    const json = JSON.stringify(world.exportState(pid)); if (lastSaved.get(pid) === json) return;
+    try { await saveSystem(pid, json); lastSaved.set(pid, json); } catch (e) { console.error("saveSystem", e); }
+  };
   world.onCredits = (pid, delta) => { pool.query(`UPDATE users SET credits = credits + $1 WHERE id = $2`, [delta, pid]).catch((e) => console.error("credits", e)); };
-  world.onBeforePurge = (pid) => { const state = world.exportState(pid); saveSystem(pid, state).catch((e) => console.error("saveSystem(purge)", e)); };
+  world.onBeforePurge = (pid) => { lastSaved.delete(pid); const state = world.exportState(pid); saveSystem(pid, state).catch((e) => console.error("saveSystem(purge)", e)); };
   // On boot, bring back anyone whose gate was still running: timers and links keep going, logging off is not an escape.
   loadAwakeSystems().then((rows) => {
     for (const r of rows) { const p = world.addPlayer(String(r.user_id), r.username, () => {}, r.data); p.offline = true; p.offlineSince = Date.now(); }
@@ -120,6 +125,7 @@ export function attachGameServer(httpServer) {
 
   setInterval(() => {
     for (const p of world.players.values()) {
+      if (p.offline) continue;                              // nobody to send to
       p.send(JSON.stringify(world.snapshotFor(p)));
       if (p.invDirty) { p.invDirty = false; p.send(JSON.stringify(world.inventoriesFor(p.id))); }
       if (p.rockDirty && p.rockDirty.size) { p.send(JSON.stringify({ t: "rocks", rocks: [...p.rockDirty].map(([id, m3]) => ({ id, m3 })) })); p.rockDirty.clear(); }

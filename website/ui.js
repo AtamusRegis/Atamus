@@ -90,7 +90,6 @@
   const groups = {}; let gseq = 0;
   const persistableInGroup = (id) => ["player", "pilot", "chat", "unit", "market"].includes(id) || id.startsWith("inv:");
   const winLabel = (id) => (wins[id] && wins[id].label) || (META[id] && META[id].name) || id;
-  const groupOf = (elm) => { const f = elm && elm.closest(".win-group"); return f ? groups[f.dataset.group] : null; };
   function createGroupFrame(r) {
     const gid = "g" + (++gseq);
     const tabs = el("div", { class: "wg-tabs" });
@@ -601,7 +600,6 @@
       const L = w.live;
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); L[k] = { fill, txt }; return el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       if (u.kind === "ship") {
-        const st = u.stats || {};
         body.append(row("Type", u.name), row("Pilot", pilotName(u.pilot) || "No pilot"));
         const btns = el("div", { class: "unit-btns" });
         if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
@@ -968,7 +966,7 @@
         const side = el("div", { class: "inv-side" }, el("div", { class: "inv-side-h" }, "Ships"));
         if (!docked.length) side.append(el("div", { class: "inv-side-empty" }, "No ships docked"));
         for (const d of docked) {
-          const open = !!saved.invOpen[d.id], t = hullOf(d.type);
+          const open = !!saved.invOpen[d.id];
           const head = el("button", { class: "inv-side-ship" + (open ? " open" : ""), onclick: () => { saved.invOpen[d.id] = !open; persistAll(); renderInventory(key, body); } },
             el("span", { class: "mk-caret" }, "▸"), shipIcon(d.type), el("span", { class: "iss-name" }, shipName(d)));
           head.addEventListener("contextmenu", (e) => { e.preventDefault(); shipMenu(d, e.clientX, e.clientY); });

@@ -11,7 +11,6 @@
   let snap = { systems: [], gates: [] }; let belts = []; let invs = { ships: {}, hangars: null };
   let ws = null, lastFrame = performance.now();
   let camInit = false;
-  const confirming = new Set();
 
   // bridge for ui.js (chat)
   const bus = new EventTarget();
@@ -106,16 +105,16 @@
         serverBuild = m.build;
         if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
       }
-      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
+      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; indexRocks(); computeSystemRadius(); }
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
           if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = null; setTimeout(() => selectUnit(null), 0); }   // the selected ship docked: drop the selection
         }
         snap = m; snapAt = performance.now(); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
-      else if (m.t === "belts") belts = m.belts || [];
+      else if (m.t === "belts") { belts = m.belts || []; indexRocks(); }
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
-      else if (m.t === "rocks") { for (const u of m.rocks) for (const b of belts) { const i = b.rocks.findIndex((r) => r.id === u.id); if (i >= 0) { if (u.m3 <= 0) b.rocks.splice(i, 1); else b.rocks[i].m3 = u.m3; } } }
+      else if (m.t === "rocks") { for (const u of m.rocks) { const r = rockIdx.get(u.id); if (!r) continue; if (u.m3 > 0) { r.m3 = u.m3; continue; } for (const b of belts) { const i = b.rocks.indexOf(r); if (i >= 0) b.rocks.splice(i, 1); } rockIdx.delete(u.id); } }
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
     };
@@ -177,7 +176,6 @@
   setTimeout(checkVersion, 5000);
   function send(o) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o)); }
 
-  function fmt(ms) { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
   function placements() {
     const place = new Map(); const home = snap.systems.find((s) => s.mine);
@@ -406,8 +404,6 @@
       ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
     if (selectedUnit && selectedUnit.kind === "gate" && selectedUnit.id === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
   }
-  function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
-  function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
   function drawBackground() {   // static: redrawn on resize / image load only
     const dpr = window.devicePixelRatio || 1;
@@ -419,9 +415,6 @@
     } else { bgCtx.fillStyle = "#05080f"; bgCtx.fillRect(0, 0, innerWidth, innerHeight); }
     bgCtx.fillStyle = "rgba(4,6,12,0.55)"; bgCtx.fillRect(0, 0, innerWidth, innerHeight); // darken
   }
-
-  const SUN_RADIUS_KM = 4;   // stylised star disc; glow/flare scale off it
-  function sunRadiusPx() { return Math.max(14, Math.min(0.28 * Math.min(innerWidth, innerHeight), SUN_RADIUS_KM * scale())); }
 
   // ---- asteroid belts: beacon + crescent of rocks, sprites drawn at true size ----
   const oreRock = {}; const rockArt = {};
@@ -454,7 +447,9 @@
     }
     return null;
   }
-  function rockById(id) { for (const b of belts) { const r = b.rocks.find((q) => q.id === id); if (r) return r; } return null; }
+  const rockIdx = new Map();                                   // rock id -> rock, rebuilt whenever the belts arrive
+  function indexRocks() { rockIdx.clear(); for (const b of belts) for (const r of b.rocks) rockIdx.set(r.id, r); }
+  function rockById(id) { return rockIdx.get(id) || null; }
   function rockImg(family, size) { const k = family + "_" + size; if (!rockArt[k]) { const i = new Image(); i.src = "assets/rocks/rock_" + k + ".webp"; rockArt[k] = i; } return rockArt[k]; }
   // selection marker: orange box, corners only
   function drawSelBox(cx, cy, half) {
@@ -469,7 +464,7 @@
 
   // world position (home-system local, km) of a target
   function targetWorld(tg) {
-    if (tg.kind === "rock") { for (const b of belts) { const rk = b.rocks.find((r) => r.id === tg.id); if (rk) return { x: rk.x, y: rk.y, rock: rk }; } return null; }
+    if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: rk.x, y: rk.y, rock: rk } : null; }
     if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: g.lx, y: g.ly, gate: g } : null; }
     if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: st.x, y: st.y }; }
     if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const p = shipPos(o); return { x: p.x, y: p.y, ship: o }; }
@@ -489,7 +484,7 @@
   }
   function targetScreen(place, tg) {
     const pl = place.get(mySys()); if (!pl) return null;
-    if (tg.kind === "rock") { for (const b of belts) { const rk = b.rocks.find((r) => r.id === tg.id); if (rk) return { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) }; } return null; }
+    if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) } : null; }
     if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: gx2s(pl.gx + g.lx), y: gy2s(pl.gy + g.ly), r: Math.max(12, GATE_LEN_KM * scale() * 0.6) } : null; }
     if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: gx2s(pl.gx + st.x), y: gy2s(pl.gy + st.y), r: Math.max(14, STATION_LEN_KM * scale() * 0.55) }; }
     if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const sp = shipScreen(o); return sp ? { x: sp.x, y: sp.y, r: Math.max(10, hull(o.type).lengthKm * scale() * 0.62) } : null; }

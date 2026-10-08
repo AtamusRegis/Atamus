@@ -83,7 +83,6 @@ export class World {
   _ensureShips(id) {
     for (const s of this.ships.values()) if (s.owner === id) return;
     const sid = `${id}:ship:0`;
-    const t = SHIP_TYPES.chisel;
     const sx = STATION_POS.x + 2.2, sy = STATION_POS.y + 2.2; // spawn beside the station
     this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2 }));
   }
@@ -596,7 +595,8 @@ export class World {
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
         entry.lasers = s.lasers.map((l) => ({ on: l.on, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / (l.dur || MINING_CYCLE_MS)) : 0, dur: l.dur || MINING_CYCLE_MS }));
         entry.laserRange = +this._laserRange(s).toFixed(3);
-        entry.auto = { on: s.auto.on, cyc: this._autoCycleMs(s), p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / this._autoCycleMs(s)) : 0 };
+        const cyc = this._autoCycleMs(s);
+        entry.auto = { on: s.auto.on, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
         entry.mining = s.lasers.some((l) => l.on);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
         entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;
