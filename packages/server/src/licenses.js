@@ -56,37 +56,37 @@ export const LICENSES = [
   {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 8, free: true,
     desc: "Pilot mining frigates. The start of every Ironvein career.",
-    bonus: "+5% mining yield in Mining Frigates", per: 0.05,
+    bonus: "efficiency flying Mining Frigates", hull: true,
     requirements: [], levelTimes: hrs(1, 2, 4, 7, 10, 10, 15, 25),
   },
   {
     key: "barges", name: "Mining Barges", category: "industry", maxLevel: 8,
     desc: "Pilot the mining barges.",
-    bonus: "+5% mining yield in Mining Barges", per: 0.05,
+    bonus: "efficiency flying Mining Barges", hull: true,
     requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 15, 30, 60, 80, 20, 40, 60),
   },
   {
     key: "exumers", name: "Exhumers", category: "industry", maxLevel: 8,
     desc: "Pilot the exhumers, the fleet's peak extractors.",
-    bonus: "+5% mining yield in Exhumers", per: 0.05,
+    bonus: "efficiency flying Exhumers", hull: true,
     requirements: reqLic(["barges", 5]), levelTimes: hrs(10, 30, 55, 100, 140, 30, 55, 85),
   },
   {
     key: "gleaner", name: "Hauler", category: "industry", maxLevel: 8,
     desc: "Pilot haulers.",
-    bonus: "+5% cargo capacity in Haulers", per: 0.05, flies: { 3: ["Gleaner"] },
+    bonus: "efficiency flying Haulers", hull: true, flies: { 3: ["Gleaner"] },
     requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 10, 20, 35, 50, 15, 30, 50),
   },
   {
     key: "lodestar", name: "Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the compact industrial command ship.",
-    bonus: "+5% ore hold capacity in Industrial Command Ships", per: 0.05, flies: { 3: ["Lodestar"] },
+    bonus: "efficiency flying Industrial Command Ships", hull: true, flies: { 3: ["Lodestar"] },
     requirements: reqLic(["barges", 5], ["gleaner", 5]), levelTimes: hrs(10, 25, 50, 85, 120, 25, 50, 70),
   },
   {
     key: "motherlode", name: "Capital Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the flagship industrial command ship.",
-    bonus: "+5% ore hold capacity in Capital Industrial Command Ships", per: 0.05, flies: { 3: ["Motherlode"] },
+    bonus: "efficiency flying Capital Industrial Command Ships", hull: true, flies: { 3: ["Motherlode"] },
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
   // ============================================================
@@ -95,22 +95,28 @@ export const LICENSES = [
   {
     key: "warden_frigate", name: "Warden Frigate", category: "combat", maxLevel: 8,
     desc: "Pilot Warden frigates.",
-    bonus: "+5% weapon damage in Warden Frigates", per: 0.05, flies: { 3: ["Wick"] },
+    bonus: "efficiency flying Warden Frigates", hull: true, flies: { 3: ["Wick"] },
     requirements: [], levelTimes: hrs(5, 10, 10, 15, 20, 15, 25, 35),
   },
   {
     key: "warden_cruiser", name: "Warden Cruiser", category: "combat", maxLevel: 8,
     desc: "Pilot Warden cruisers.",
-    bonus: "+5% weapon damage in Warden Cruisers", per: 0.05, flies: { 3: ["Beacon"] },
+    bonus: "efficiency flying Warden Cruisers", hull: true, flies: { 3: ["Beacon"] },
     requirements: reqLic(["warden_frigate", 5]), levelTimes: hrs(15, 30, 50, 65, 80, 30, 50, 65),
   },
   {
     key: "warden_battleship", name: "Warden Battleship", category: "combat", maxLevel: 8,
     desc: "Pilot Warden battleships.",
-    bonus: "+5% weapon damage in Warden Battleships", per: 0.05, flies: { 3: ["Vigil"] },
+    bonus: "efficiency flying Warden Battleships", hull: true, flies: { 3: ["Vigil"] },
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
 ];
+
+// Hull licences scale how well you fly the hull: Lvl 1-5 add 20% each (Lvl 5 = 100% of the
+// hull's stats), Lvl 6-8 add 5% each above that (up to 115%).
+export const hullEfficiency = (lvl) => Math.min(lvl, 5) * 0.2 + Math.max(0, lvl - 5) * 0.05;
+for (const l of LICENSES) l.levelBonus = Array.from({ length: l.maxLevel }, (_, i) =>
+  l.hull ? (i < 5 ? "+20% " : "+5% ") + l.bonus : l.bonus);
 
 // What each endorsement level unlocks: hulls it lets you fly and licences it opens for training.
 for (const l of LICENSES) {

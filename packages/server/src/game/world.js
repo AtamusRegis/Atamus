@@ -4,7 +4,7 @@ import {
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
 } from "./constants.js";
 import * as Inv from "./inventory.js";
-import { getLicense } from "../licenses.js";
+import { getLicense, hullEfficiency } from "../licenses.js";
 import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
 import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
@@ -173,7 +173,8 @@ export class World {
   _cycleMs(sh) { return Math.round(MINING_CYCLE_MS * Math.max(0.5, 1 - this._per("laser_cycle") * this._lic(sh, "laser_cycle"))); }
   _yieldM3s(sh) {
     const t = SHIP_TYPES[sh.type] || {}, hullLic = Object.keys(t.req || {})[0];
-    return (t.laserM3s || LASER_M3_PER_S) * (1 + this._per("small_mining_laser") * this._lic(sh, "small_mining_laser")) * (1 + (hullLic ? this._per(hullLic) * this._lic(sh, hullLic) : 0));
+    // hull licence = how efficiently the pilot flies it (Lvl 5 = 100% of the hull's yield)
+    return (t.laserM3s || LASER_M3_PER_S) * (1 + this._per("small_mining_laser") * this._lic(sh, "small_mining_laser")) * (hullLic ? hullEfficiency(this._lic(sh, hullLic)) : 1);
   }
   // All lasers at once: on -> spread over the locked rocks in range; off -> stop repeating.
   cmdMine(pid, shipId, on) {
