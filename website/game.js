@@ -63,7 +63,7 @@
 
   // ---- ship art: each hull is drawn at true scale from its sprite (stats come from the server) ----
   // Own ships render blue, other players' ships red.
-  const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Chisel", sprite: "chisel", lengthKm: 0.128 };
+  const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Tarsus", sprite: "chisel", lengthKm: 0.128 };
   // station: one per system at its centre, drawn at true size (2766 m long)
   const STATION_LEN_KM = 2.766;
   const DOCK_RADIUS_KM = 4;   // ships within this of the station can dock / are anchored

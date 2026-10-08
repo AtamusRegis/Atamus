@@ -1,7 +1,7 @@
 import { pool } from "./db.js";
 import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 
-const CORP = "Delve Holdings";
+const CORP = "Meridian";
 
 function freshData() { return { licenses: { ...STARTING_LICENSES }, banked: {}, queue: [], activeStart: null, paused: false }; }
 const banked = (d, key, level) => (d.banked[key] && d.banked[key][level]) || 0;

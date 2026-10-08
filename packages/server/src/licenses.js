@@ -51,11 +51,11 @@ export const LICENSES = [
     requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
   },
   // ============================================================
-  // Industry — Ironvein hulls (fly at Lvl 3, next class at Lvl 5)
+  // Industry — Ostergaard hulls (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 8, free: true,
-    desc: "Pilot mining frigates. The start of every Ironvein career.",
+    desc: "Pilot mining frigates. The start of every Ostergaard career.",
     bonus: "efficiency flying Mining Frigates", hull: true,
     requirements: [], levelTimes: hrs(1, 2, 4, 7, 10, 10, 15, 25),
   },
@@ -74,40 +74,40 @@ export const LICENSES = [
   {
     key: "gleaner", name: "Hauler", category: "industry", maxLevel: 8,
     desc: "Pilot haulers.",
-    bonus: "efficiency flying Haulers", hull: true, flies: { 3: ["Gleaner"] },
+    bonus: "efficiency flying Haulers", hull: true, flies: { 3: ["Barrow"] },
     requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 10, 20, 35, 50, 15, 30, 50),
   },
   {
     key: "lodestar", name: "Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the compact industrial command ship.",
-    bonus: "efficiency flying Industrial Command Ships", hull: true, flies: { 3: ["Lodestar"] },
+    bonus: "efficiency flying Industrial Command Ships", hull: true, flies: { 3: ["Aldane"] },
     requirements: reqLic(["barges", 5], ["gleaner", 5]), levelTimes: hrs(10, 25, 50, 85, 120, 25, 50, 70),
   },
   {
     key: "motherlode", name: "Capital Industrial Command", category: "industry", maxLevel: 8,
     desc: "Pilot the flagship industrial command ship.",
-    bonus: "efficiency flying Capital Industrial Command Ships", hull: true, flies: { 3: ["Motherlode"] },
+    bonus: "efficiency flying Capital Industrial Command Ships", hull: true, flies: { 3: ["Hadrian"] },
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
   // ============================================================
-  // Combat — Lantern Wardens escort line (fly at Lvl 3, next class at Lvl 5)
+  // Combat — Corrigan escort line (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
-    key: "warden_frigate", name: "Warden Frigate", category: "combat", maxLevel: 8,
-    desc: "Pilot Warden frigates.",
-    bonus: "efficiency flying Warden Frigates", hull: true, flies: { 3: ["Wick"] },
+    key: "warden_frigate", name: "Escort Frigate", category: "combat", maxLevel: 8,
+    desc: "Pilot escort frigates.",
+    bonus: "efficiency flying Escort Frigates", hull: true, flies: { 3: ["Kite"] },
     requirements: [], levelTimes: hrs(5, 10, 10, 15, 20, 15, 25, 35),
   },
   {
-    key: "warden_cruiser", name: "Warden Cruiser", category: "combat", maxLevel: 8,
-    desc: "Pilot Warden cruisers.",
-    bonus: "efficiency flying Warden Cruisers", hull: true, flies: { 3: ["Beacon"] },
+    key: "warden_cruiser", name: "Escort Cruiser", category: "combat", maxLevel: 8,
+    desc: "Pilot escort cruisers.",
+    bonus: "efficiency flying Escort Cruisers", hull: true, flies: { 3: ["Tribune"] },
     requirements: reqLic(["warden_frigate", 5]), levelTimes: hrs(15, 30, 50, 65, 80, 30, 50, 65),
   },
   {
-    key: "warden_battleship", name: "Warden Battleship", category: "combat", maxLevel: 8,
-    desc: "Pilot Warden battleships.",
-    bonus: "efficiency flying Warden Battleships", hull: true, flies: { 3: ["Vigil"] },
+    key: "warden_battleship", name: "Escort Battleship", category: "combat", maxLevel: 8,
+    desc: "Pilot escort battleships.",
+    bonus: "efficiency flying Escort Battleships", hull: true, flies: { 3: ["Leonidas"] },
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
 ];
