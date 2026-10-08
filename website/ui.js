@@ -688,10 +688,12 @@
   }
   function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (isOpen(wins[key])) renderInventory(key, b); }).observe(b); }
   function openInventory(ref) {
-    const key = ref.owner === "station" ? "inv:station" : "inv:" + ref.id;   // one window per holder; tabs switch inside
+    const sh = ref.owner === "ship" ? window.Atamus.ship(ref.id) : null;
+    const viaStation = ref.owner === "station" || (sh && sh.docked);          // a docked ship's holds live under the station window
+    const key = viaStation ? "inv:station" : "inv:" + ref.id;                 // one window per holder; tabs switch inside
     if (!invWins[key]) {
-      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: ref.owner === "station" ? "Station" : "Inventory" });
-      invWins[key] = { ref, root: ref }; watchInvResize(key);
+      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: viaStation ? "Station" : "Inventory" });
+      invWins[key] = { ref, root: viaStation ? { owner: "station", inv: "hangar" } : ref }; watchInvResize(key);
     }
     invWins[key].ref = ref;
     toggleWindow(key, true); renderInventory(key, wins[key].body);
