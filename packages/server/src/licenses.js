@@ -17,7 +17,7 @@ export const CATEGORIES = [
 const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key, level }));
 
 // Licenses every new pilot already holds (key -> level).
-export const STARTING_LICENSES = { small_mining_laser: 1, auto_miner: 1 };
+export const STARTING_LICENSES = { mining_frigate: 1, small_mining_laser: 1, auto_miner: 1 };
 
 export const LICENSES = [
   // ============================================================

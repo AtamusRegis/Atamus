@@ -23,18 +23,59 @@ export const MINING_CYCLE_MS = 15_000;   // one laser cycle; the ore lands when 
 export const LASER_RANGE_KM = 5;         // a laser needs its rock within this
 export const AUTO_MINER_BASE_MS = 180_000, AUTO_MINER_STEP_MS = 30_000; // auto-miner cycle: 3:00, -30 s per license level
 export const STATION_HANGAR_M3 = 10_000_000;
-// Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
-// hardpoints: beam origins in ship lengths from the sprite centre (sprite faces +x,
-// +y is the sprite's "down" side); arms: which hardpoints each laser may fire from.
-// Barges/exhumers (later) fire from their circular hopper ports along the centreline.
+// Hulls (stats from The Reach design doc). radius drives spacing/collision; mass (1e6 kg)
+// drives who pushes whom. hardpoints: beam origins in ship lengths from the sprite centre
+// (sprite faces +x); arms: which hardpoints each laser may fire from. Barges and exhumers
+// fire their strip miners from the circular hopper ports along the centre line.
+// req: licence levels a pilot needs to crew the hull. price: station market (credits).
+const PORTS = { xs: [[0.021, 0]], s: [[-0.065, 0], [0.095, 0]], m: [[-0.107, 0], [0.016, 0], [0.148, 0]] };
+const ports = (k) => ({ hardpoints: PORTS[k], arms: [PORTS[k].map((_, i) => i), PORTS[k].map((_, i) => i)] });
 export const SHIP_TYPES = {
-  // Chisel: The Reach design doc — 335 m/s max velocity, 1,200,000 kg, 128 m.
   chisel: {
-    name: "Chisel", speedKmps: 0.335, lengthKm: 0.128, radiusKm: 0.09, mass: 1.2, hp: 350, shield: 200,
-    cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000,
-    lasers: 2, hardpoints: [[0.338, -0.184], [0.47, -0.14], [0.338, 0.184], [0.47, 0.14]], arms: [[0, 1], [2, 3]],
+    name: "Chisel", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
+    cargoM3: 50, oreM3: 5000, targetRangeKm: 15, maxTargets: 5, lockMs: 3000, lasers: 2, laserM3s: 2,
+    hardpoints: [[0.338, -0.184], [0.47, -0.14], [0.338, 0.184], [0.47, 0.14]], arms: [[0, 1], [2, 3]],
+    req: { mining_frigate: 1 }, price: 350_000,
+    desc: "Every Ironvein career starts in a Chisel: a small, nimble mining frigate with a modest ore hold.",
+  },
+  dragline: {
+    name: "Dragline", cls: "Mining Barge", sprite: "barge_s", lengthKm: 0.375, speedKmps: 0.150, radiusKm: 0.16, mass: 15, hp: 3000, shield: 3000,
+    cargoM3: 350, oreM3: 9000, targetRangeKm: 40, maxTargets: 6, lockMs: 5000, lasers: 2, laserM3s: 9, ...ports("s"),
+    req: { barges: 3 }, price: 18_000_000,
+    desc: "The yield barge. Strip miners, a thin hull and the best tons per hour in the barge line.",
+  },
+  bedrock: {
+    name: "Bedrock", cls: "Mining Barge", sprite: "barge_xs", lengthKm: 0.305, speedKmps: 0.100, radiusKm: 0.13, mass: 20, hp: 6000, shield: 6000,
+    cargoM3: 350, oreM3: 16000, targetRangeKm: 60, maxTargets: 6, lockMs: 5000, lasers: 2, laserM3s: 6, ...ports("xs"),
+    req: { barges: 3 }, price: 20_000_000,
+    desc: "The tough barge. Less yield than a Dragline, but shields and hull that can sit through a pirate's opening volley.",
+  },
+  hopper: {
+    name: "Hopper", cls: "Mining Barge", sprite: "barge_m", lengthKm: 0.411, speedKmps: 0.125, radiusKm: 0.17, mass: 17.5, hp: 4000, shield: 4000,
+    cargoM3: 450, oreM3: 27500, targetRangeKm: 40, maxTargets: 6, lockMs: 5000, lasers: 2, laserM3s: 7.5, ...ports("m"),
+    req: { barges: 3 }, price: 22_000_000,
+    desc: "The long-haul barge. A huge ore hold lets a Hopper pilot mine alone for hours without a hauler.",
+  },
+  bucketwheel: {
+    name: "Bucketwheel", cls: "Exhumer", sprite: "exhumer_s", lengthKm: 0.375, speedKmps: 0.160, radiusKm: 0.16, mass: 15, hp: 4500, shield: 4500,
+    cargoM3: 350, oreM3: 11500, targetRangeKm: 55, maxTargets: 8, lockMs: 5000, lasers: 2, laserM3s: 12, ...ports("s"),
+    req: { exumers: 3 }, price: 85_000_000,
+    desc: "The Dragline's exhumer: the highest yield in the Ironvein fleet and the softest target in any belt.",
+  },
+  keystone: {
+    name: "Keystone", cls: "Exhumer", sprite: "exhumer_xs", lengthKm: 0.305, speedKmps: 0.110, radiusKm: 0.13, mass: 20, hp: 6500, shield: 6500,
+    cargoM3: 350, oreM3: 18500, targetRangeKm: 67.5, maxTargets: 8, lockMs: 5000, lasers: 2, laserM3s: 8, ...ports("xs"),
+    req: { exumers: 3 }, price: 90_000_000,
+    desc: "The Bedrock's exhumer. Heavily tanked with a thick shield; it outlasts a pirate cruiser until help arrives.",
+  },
+  silo: {
+    name: "Silo", cls: "Exhumer", sprite: "exhumer_m", lengthKm: 0.411, speedKmps: 0.130, radiusKm: 0.17, mass: 17.5, hp: 5500, shield: 5500,
+    cargoM3: 450, oreM3: 31500, targetRangeKm: 45, maxTargets: 8, lockMs: 5000, lasers: 2, laserM3s: 10, ...ports("m"),
+    req: { exumers: 3 }, price: 95_000_000,
+    desc: "The Hopper's exhumer. An ore hold big enough to swallow a small asteroid, built for long shifts far from the station.",
   },
 };
+export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer"];
 
 // Stargates: 3 on the outer ring. They burn fuel while active.
 export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with

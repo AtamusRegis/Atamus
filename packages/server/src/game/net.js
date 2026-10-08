@@ -4,7 +4,7 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import {
   TICK_MS, SNAPSHOT_MS, CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, LASER_RANGE_KM, MINING_CYCLE_MS,
+  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
@@ -32,7 +32,7 @@ const CLIENT_CONFIG = {
   laserRange: LASER_RANGE_KM, cycleMs: MINING_CYCLE_MS,
   maxStacks: MAX_STACKS,
   dockRadius: DOCK_RADIUS_KM,
-  shipTypes: SHIP_TYPES,
+  shipTypes: SHIP_TYPES, shipClasses: SHIP_CLASSES,
 };
 
 export function attachGameServer(httpServer) {
@@ -50,7 +50,14 @@ export function attachGameServer(httpServer) {
     const player = world.addPlayer(pid, user.username, send, saved);
     try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
     // highest level of each license across the account's pilots drives module stats (auto-miner cycle etc.)
-    const refreshLicenses = async () => { try { const st = await getState(user.id); const lic = {}; for (const pl of st.pilots) for (const k in pl.licenses) lic[k] = Math.max(lic[k] || 0, pl.licenses[k]); player.licenses = lic; } catch (e) { console.error("licenses", e); } };
+    const refreshLicenses = async () => {
+      try {
+        const st = await getState(user.id); const lic = {};
+        for (const pl of st.pilots) for (const k in pl.licenses) lic[k] = Math.max(lic[k] || 0, pl.licenses[k]);
+        player.licenses = lic; player.pilots = st.pilots.map((pl) => ({ id: pl.id, name: pl.name, licenses: pl.licenses }));
+        world.assignDefaultPilots(pid);
+      } catch (e) { console.error("licenses", e); }
+    };
     await refreshLicenses();
     const licTimer = setInterval(refreshLicenses, 60000);
     send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
@@ -71,6 +78,8 @@ export function attachGameServer(httpServer) {
         case "buy": world.cmdBuy(pid, m.item, m.qty); break;
         case "read": if (world.cmdRead(pid, m.ref, m.slot)) persist(pid); break;
         case "licenses": refreshLicenses(); break;
+        case "crew": refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)); break;
+        case "decrew": world.cmdDecrew(pid, m.ship); break;
         case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;

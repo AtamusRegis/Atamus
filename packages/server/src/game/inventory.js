@@ -1,7 +1,8 @@
 // Slot-based inventories. A dense list of stacks [{item, qty}], limited by
 // unique stacks (100) and by volume (m3). Items are defined in ITEMS.
 import { ORES } from "./belts.js";
-import { LICENSES } from "../licenses.js";
+import { LICENSES, CATEGORIES } from "../licenses.js";
+import { SHIP_TYPES, SHIP_CLASSES } from "./constants.js";
 
 export const MAX_STACKS = 100;
 export const ITEMS = {};
@@ -9,8 +10,14 @@ for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", de
 // Training manuals: one per license that isn't granted at birth. Reading one unlocks training that license.
 export const MANUAL_PRICE = (lic) => { const hrs = lic.levelTimes.reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
 for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "manual:" + lic.key, name: lic.name + " Manual", kind: "manual", license: lic.key, desc: "Training manual. Read it to unlock the " + lic.name + " license for training. " + lic.desc, rarity: "restricted", unitM3: 0.1, price: MANUAL_PRICE(lic), color: "#c9b36a", icon: null };
-// What the station market sells (item key -> price).
-export const MARKET = Object.values(ITEMS).filter((it) => it.kind === "manual").map((it) => ({ key: it.key, price: it.price }));
+// What the station market sells, grouped for the market window: category -> sub-category.
+const catName = (k) => (CATEGORIES.find((c) => c.key === k) || {}).name || k;
+export const MARKET = [
+  ...Object.entries(SHIP_TYPES).sort((a, b) => SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
+    .map(([k, t]) => ({ key: "ship:" + k, name: t.name, price: t.price, cat: "Ships", sub: t.cls, ship: k })),
+  ...Object.values(ITEMS).filter((it) => it.kind === "manual")
+    .map((it) => ({ key: it.key, name: it.name, price: it.price, cat: "Training Manuals", sub: catName(LICENSES.find((l) => l.key === it.license).category) })),
+];
 
 export const makeInv = (cap) => ({ cap, slots: [] });
 export const usedM3 = (inv) => inv.slots.reduce((s, st) => s + st.qty * (ITEMS[st.item]?.unitM3 || 0), 0);

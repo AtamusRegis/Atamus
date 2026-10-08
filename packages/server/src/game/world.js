@@ -23,7 +23,7 @@ export class World {
     const now = Date.now();
     const beltField = saved && saved.beltField ? saved.beltField : createBeltField(id, now);
     if (saved && saved.beltField) tickBeltField(beltField, now);   // catch up while we were away
-    const p = { id, name, send, offline: false, beltField, hangar: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {} };
+    const p = { id, name, send, offline: false, beltField, hangar: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {}, pilots: [] };
     this.players.set(id, p);
     const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
     const downtime = saved && saved.savedAt ? Math.max(0, now - saved.savedAt) : 0; // the clock keeps running while you're gone
@@ -50,7 +50,7 @@ export class World {
 
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
     return { ships, gates, beltField: p ? p.beltField : null, hangar: p ? p.hangar : null, licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
@@ -63,7 +63,7 @@ export class World {
       ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
       docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: t.lasers || 0 }, (_, i) => ({ on: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
       auto: { on: false, next: 0, ...(sh.auto || {}) },
-      hp: Number.isFinite(sh.hp) ? sh.hp : t.hp, shield: Number.isFinite(sh.shield) ? sh.shield : t.shield,
+      hp: Number.isFinite(sh.hp) ? Math.min(sh.hp, t.hp) : t.hp, shield: Number.isFinite(sh.shield) ? Math.min(sh.shield, t.shield) : t.shield,
       targets: (sh.targets || []).map((tg) => ({ ...tg })),
       inv: { cargo: sh.inv?.cargo || Inv.makeInv(t.cargoM3), ore: sh.inv?.ore || Inv.makeInv(t.oreM3) },
     };
@@ -71,8 +71,8 @@ export class World {
 
   // Every pilot starts with a Chisel, parked just off the station at system center.
   _ensureShips(id) {
+    for (const s of this.ships.values()) if (s.owner === id) return;
     const sid = `${id}:ship:0`;
-    if (this.ships.has(sid)) return;
     const t = SHIP_TYPES.chisel;
     const sx = STATION_POS.x + 2.2, sy = STATION_POS.y + 2.2; // spawn beside the station
     this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2 }));
@@ -188,6 +188,7 @@ export class World {
       sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield;            // docked: repaired and recharged
     } else {
       if (!sh.docked) return;
+      if (!sh.pilot) { this._tell(pid, "That ship has no pilot. Crew it first."); return; }
       sh.docked = false; sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
     }
     this._markInv(pid);
@@ -230,10 +231,11 @@ export class World {
   cmdBuy(pid, itemKey, qty) {
     const p = this.players.get(pid); if (!p) return;
     const offer = Inv.MARKET.find((m) => m.key === itemKey); if (!offer) return;
-    const n = Math.max(1, Math.floor(+qty || 1)), cost = offer.price * n;
+    const n = offer.ship ? 1 : Math.max(1, Math.floor(+qty || 1)), cost = offer.price * n;
     if (p.credits < cost) { p.send(JSON.stringify({ t: "sys", text: "Not enough credits." })); return; }
-    if (Inv.canAdd(p.hangar, itemKey, n) < n) { p.send(JSON.stringify({ t: "sys", text: "No room in the hangar." })); return; }
-    Inv.add(p.hangar, itemKey, n); p.credits -= cost; this._markInv(pid);
+    if (offer.ship) { this._buyShip(p, offer.ship); this._tell(pid, `${offer.name} delivered to your station hangar. Crew it to fly.`); }
+    else { if (Inv.canAdd(p.hangar, itemKey, n) < n) { this._tell(pid, "No room in the hangar."); return; } Inv.add(p.hangar, itemKey, n); }
+    p.credits -= cost; this._markInv(pid);
     if (this.onCredits) { try { this.onCredits(pid, -cost); } catch (e) { console.error("onCredits", e); } }
   }
   // Read a training manual: consumes it and unlocks that license for training.
@@ -245,6 +247,42 @@ export class World {
     Inv.take(a.inv, +slot, 1); p.unlocked[def.license] = true; this._markInv(pid);
     p.send(JSON.stringify({ t: "sys", text: def.name.replace(" Manual", "") + " can now be trained." }));
     return true;
+  }
+  _tell(pid, text) { const p = this.players.get(pid); if (p) p.send(JSON.stringify({ t: "sys", text })); }
+  // A pilot can crew a docked ship if their licences cover the hull; a pilot already
+  // in another docked ship walks across the station. Ships in space keep their pilot.
+  cmdCrew(pid, shipId, pilotId) {
+    const p = this.players.get(pid), sh = this.ships.get(shipId); if (!p || !sh || sh.owner !== pid) return;
+    if (!sh.docked) { this._tell(pid, "Dock the ship to change its crew."); return; }
+    const pl = p.pilots.find((x) => String(x.id) === String(pilotId)); if (!pl) return;
+    const t = SHIP_TYPES[sh.type] || {};
+    const missing = Object.entries(t.req || {}).filter(([k, lvl]) => (pl.licenses[k] || 0) < lvl);
+    if (missing.length) { this._tell(pid, `${pl.name} can't fly the ${t.name}: needs ${missing.map(([k, l]) => k.replace(/_/g, " ") + " " + l).join(", ")}.`); return; }
+    for (const o of this.ships.values()) if (o.owner === pid && o !== sh && String(o.pilot) === String(pl.id)) {
+      if (!o.docked) { this._tell(pid, `${pl.name} is flying a ship in space.`); return; }
+      o.pilot = null;
+    }
+    sh.pilot = pl.id; this._markInv(pid);
+  }
+  cmdDecrew(pid, shipId) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    if (!sh.docked) { this._tell(pid, "Dock the ship to change its crew."); return; }
+    sh.pilot = null; this._markInv(pid);
+  }
+  // Ships the player had before crewing existed get their first free pilot.
+  assignDefaultPilots(pid) {
+    const p = this.players.get(pid); if (!p || !p.pilots.length) return;
+    const taken = new Set([...this.ships.values()].filter((s) => s.owner === pid && s.pilot != null).map((s) => String(s.pilot)));
+    for (const s of this.ships.values()) {
+      if (s.owner !== pid || s.pilot !== undefined) continue;
+      const free = p.pilots.find((x) => !taken.has(String(x.id)));
+      s.pilot = free ? free.id : null; if (free) taken.add(String(free.id));
+    }
+  }
+  _buyShip(p, type) {
+    let n = 0; while (this.ships.has(`${p.id}:ship:${n}`)) n++;
+    const id = `${p.id}:ship:${n}`, x = STATION_POS.x, y = STATION_POS.y;
+    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null }));
   }
   cmdInvSort(pid, ref) { const a = this._inv(pid, ref); if (a && a.inv) { Inv.sort(a.inv); this._markInv(pid); } }
   _markInv(pid) { const p = this.players.get(pid); if (p) p.invDirty = true; }
@@ -378,7 +416,7 @@ export class World {
         if (!f || !this._inLaserRange(sh, f)) { this._laserStop(L); continue; }
         if (now < L.until) continue;
         const def = Inv.ITEMS[f.rock.ore];
-        const units = Math.min(Math.floor(LASER_M3_PER_S * MINING_CYCLE_MS / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
+        const units = Math.min(Math.floor((t.laserM3s || LASER_M3_PER_S) * MINING_CYCLE_MS / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
         const got = units > 0 ? Inv.add(sh.inv.ore, f.rock.ore, units) : 0;
         if (got <= 0) { this._laserStop(L); continue; }                        // hold full: laser stops, target stays
         f.rock.m3 = Math.max(0, +(f.rock.m3 - got * def.unitM3).toFixed(3));
@@ -482,7 +520,7 @@ export class World {
       const entry = { id: s.id, sys: s.sys, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
-        entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
+        entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
         entry.lasers = s.lasers.map((l) => ({ on: l.on, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / MINING_CYCLE_MS) : 0 }));
         entry.auto = { on: s.auto.on, cyc: this._autoCycleMs(p.id), p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / this._autoCycleMs(p.id)) : 0 };
