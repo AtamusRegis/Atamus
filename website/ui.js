@@ -46,6 +46,7 @@
 
   // ---- windows ----
   const wins = {};
+  const isOpen = (w) => !!w && (w.group ? true : !w.win.hidden);
   function createWindow(id, opts) {
     opts = opts || {};
     const slot = el("div", { class: "win-title-slot" });
@@ -64,27 +65,149 @@
     win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar, () => persistWin(id));
     addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id));
-    wins[id] = { win, body, slot, render: opts.render };
+    wins[id] = { id, win, body, slot, bar, close, render: opts.render, label: opts.label, groupable: opts.groupable !== false, group: null };
     return wins[id];
   }
   function toggleWindow(id, force) {
     const w = wins[id]; if (!w) return;
-    const show = force != null ? force : w.win.hidden;
+    const show = force != null ? force : !isOpen(w);
+    if (w.group) {                                   // lives in a tab group
+      const g = groups[w.group];
+      if (show || id === "unit") { setActive(g, id); g.frame.style.zIndex = ++z; }   // the selection window stays in its group
+      else removeFromGroup(id, true);
+      updateBtnActive(); updateChatGlow(); return;
+    }
     w.win.hidden = !show;
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); }
     persistWin(id); updateBtnActive(); updateChatGlow();
   }
-  function renderOpen() { for (const id in wins) if (!wins[id].win.hidden && wins[id].render) wins[id].render(wins[id].body); }
+  function renderOpen() { for (const id in wins) if (isOpen(wins[id]) && wins[id].render) wins[id].render(wins[id].body); }
+
+  // ---- tab groups: drop a window's title bar onto another window to stack them ----
+  const groups = {}; let gseq = 0;
+  const PERSIST_GROUP_IDS = ["player", "pilot", "chat", "unit"];
+  const winLabel = (id) => (wins[id] && wins[id].label) || (META[id] && META[id].name) || id;
+  const groupOf = (elm) => { const f = elm && elm.closest(".win-group"); return f ? groups[f.dataset.group] : null; };
+  function createGroupFrame(r) {
+    const gid = "g" + (++gseq);
+    const tabs = el("div", { class: "wg-tabs" });
+    const close = el("button", { class: "win-close", "aria-label": "Close", onclick: () => { const g = groups[gid]; if (g && g.active) removeFromGroup(g.active, true); } }, "×");
+    const bar = el("div", { class: "win-title" }, close);
+    const frame = el("div", { class: "win win-group" }, tabs, bar);
+    frame.dataset.group = gid;
+    frame.style.left = r.left + "px"; frame.style.top = r.top + "px"; frame.style.width = r.width + "px"; frame.style.height = r.height + "px";
+    document.body.appendChild(frame);
+    frame.addEventListener("pointerdown", () => { frame.style.zIndex = ++z; });
+    dragMove(frame, bar, persistGroups); dragMove(frame, tabs, persistGroups);
+    addResize(frame, 220, 130, persistGroups);
+    frame.style.zIndex = ++z;
+    return (groups[gid] = { id: gid, frame, tabs, bar, members: [], active: null });
+  }
+  function addToGroup(g, id) {
+    const w = wins[id]; if (!w || !w.groupable || w.group === g.id) return;
+    if (w.group) removeFromGroup(id, false);
+    w.group = g.id; g.members.push(id);
+    w.win.hidden = true;
+    g.bar.insertBefore(w.slot, g.bar.lastChild); g.frame.append(w.body);
+    setActive(g, id); persistWin(id); persistGroups(); updateBtnActive(); updateChatGlow();
+  }
+  function removeFromGroup(id, hide) {
+    const w = wins[id], g = w && groups[w.group]; if (!g) return;
+    g.members = g.members.filter((m) => m !== id); w.group = null;
+    w.bar.insertBefore(w.slot, w.close); w.win.append(w.body); w.body.hidden = false; w.slot.hidden = false;
+    const r = g.frame.getBoundingClientRect();
+    w.win.style.left = r.left + "px"; w.win.style.top = r.top + "px"; w.win.style.width = r.width + "px"; w.win.style.height = r.height + "px";
+    w.win.hidden = !!hide; if (!hide) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); }
+    persistWin(id);
+    if (g.active === id) setActive(g, g.members[0] || null);
+    if (g.members.length < 2 && !g.dissolving) {        // one left: back to a plain window, frame goes away
+      g.dissolving = true; for (const m of [...g.members]) removeFromGroup(m, false);
+      g.frame.remove(); delete groups[g.id];
+    }
+    persistGroups(); updateBtnActive(); updateChatGlow();
+  }
+  function setActive(g, id) {
+    g.active = id;
+    for (const m of g.members) { const w = wins[m]; w.body.hidden = m !== id; w.slot.hidden = m !== id; }
+    renderTabs(g);
+    if (id && wins[id].render) wins[id].render(wins[id].body);
+  }
+  function renderTabs(g) {
+    g.tabs.innerHTML = "";
+    for (const m of g.members) {
+      const t = el("div", { class: "wg-tab" + (m === g.active ? " active" : "") }, winLabel(m));
+      t.addEventListener("pointerdown", (e) => {              // click = switch tab; drag away = pull the window out
+        if (e.button !== 0) return; e.preventDefault(); e.stopPropagation();
+        const sx = e.clientX, sy = e.clientY, pid = e.pointerId; let pulled = false;
+        const mv = (ev) => {
+          if (ev.pointerId !== pid || pulled) return;
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 26) return;
+          pulled = true; cleanup();
+          const w = wins[m]; removeFromGroup(m, false);
+          const r = w.win.getBoundingClientRect();
+          startDrag(w.win, ev, Math.min(r.width / 2, 80), 18, () => persistWin(m), true);
+        };
+        const up = (ev) => { if (ev.pointerId !== pid) return; cleanup(); if (!pulled) { setActive(g, m); g.frame.style.zIndex = ++z; } };
+        const cleanup = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); };
+        addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+      });
+      g.tabs.append(t);
+    }
+  }
+  // merge whatever `moving` is (a window or a group frame) into `target` (a window or a group frame)
+  function dropInto(moving, target) {
+    const ids = moving.dataset.group ? [...groups[moving.dataset.group].members] : [moving.dataset.id];
+    let g = target.dataset.group ? groups[target.dataset.group] : null;
+    if (!g) { const tid = target.dataset.id; if (!wins[tid] || !wins[tid].groupable) return; g = createGroupFrame(target.getBoundingClientRect()); addToGroup(g, tid); }
+    for (const id of ids) addToGroup(g, id);
+  }
+  function persistGroups() {
+    saved.groups = Object.values(groups).map((g) => { const r = g.frame.getBoundingClientRect(); return { members: g.members.filter((m) => PERSIST_GROUP_IDS.includes(m)), active: g.active, x: r.left, y: r.top, w: r.width, h: r.height }; }).filter((g) => g.members.length > 1);
+    persistAll();
+  }
+  function restoreGroups() {
+    for (const sg of saved.groups || []) {
+      const members = (sg.members || []).filter((m) => wins[m] && !wins[m].group);
+      if (members.length < 2) continue;
+      const g = createGroupFrame({ left: sg.x || 120, top: sg.y || 70, width: sg.w || 300, height: sg.h || 300 });
+      for (const m of members) addToGroup(g, m);
+      setActive(g, members.includes(sg.active) ? sg.active : members[0]);
+    }
+  }
 
   // pointer events so windows drag/resize with mouse, pen or finger alike
+  function startDrag(win, e, ox, oy, onEnd, canGroup) {
+    const id = e.pointerId; let target = null;
+    const groupable = canGroup && (win.dataset.group ? true : !!(wins[win.dataset.id] && wins[win.dataset.id].groupable));
+    win.style.pointerEvents = "none";
+    const place = (ev) => { win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
+    const mv = (ev) => {
+      if (ev.pointerId !== id) return; place(ev);
+      if (!groupable) return;
+      const under = document.elementFromPoint(ev.clientX, ev.clientY), f = under && under.closest(".win");
+      let t = null;
+      if (f && f !== win) {
+        const ok = f.dataset.group ? true : !!(wins[f.dataset.id] && wins[f.dataset.id].groupable);
+        const r = f.getBoundingClientRect(); if (ok && ev.clientY - r.top < 48) t = f;    // over its title / tab strip
+      }
+      if (t !== target) { if (target) target.classList.remove("drop-target"); target = t; if (target) target.classList.add("drop-target"); }
+    };
+    const up = (ev) => {
+      if (ev.pointerId !== id) return;
+      removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up);
+      win.style.pointerEvents = "";
+      if (target) { target.classList.remove("drop-target"); dropInto(win, target); }
+      if (onEnd) onEnd();
+    };
+    place(e);
+    addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+  }
   function dragMove(win, handle, onEnd) {
     handle.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || e.target.closest("select,button,input,textarea,option,.tab,.dd")) return;
+      if (e.button !== 0 || e.target.closest("select,button,input,textarea,option,.tab,.dd,.wg-tab")) return;
       e.preventDefault();
-      const r = win.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top, id = e.pointerId;
-      const mv = (ev) => { if (ev.pointerId !== id) return; win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
-      const up = (ev) => { if (ev.pointerId !== id) return; removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); if (onEnd) onEnd(); };
-      addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
+      const r = win.getBoundingClientRect();
+      startDrag(win, e, e.clientX - r.left, e.clientY - r.top, onEnd, true);
     });
   }
 
@@ -155,7 +278,7 @@
     updateBtnActive();
   }
   function reorderBtn(from, to) { order = order.filter((x) => x !== from); let i = order.indexOf(to); if (i < 1) i = 1; order.splice(i, 0, from); renderPanel(); }
-  function updateBtnActive() { for (const b of panel.children) { const w = wins[b.getAttribute("data-id")]; b.classList.toggle("open", !!(w && !w.win.hidden)); } }
+  function updateBtnActive() { for (const b of panel.children) { const w = wins[b.getAttribute("data-id")]; b.classList.toggle("open", !!(w && isOpen(w))); } }
 
   // ---- Player Sheet ----
   function renderPlayer(body) {
@@ -429,9 +552,9 @@
   window.Atamus.bus.addEventListener("select", () => { toggleWindow("unit", true); renderUnit(wins.unit.body); });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
   window.Atamus.bus.addEventListener("snap", () => {
-    const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body);
+    const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body);
     // a docked ship's holds are reached through the station inventory: close its own windows
-    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || wins[key].win.hidden) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
+    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
   });
 
 
@@ -545,11 +668,11 @@
     }
     return [{ owner: "ship", id: ref.id, inv: "ore" }, { owner: "ship", id: ref.id, inv: "cargo" }];
   }
-  function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (!wins[key].win.hidden) renderInventory(key, b); }).observe(b); }
+  function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (isOpen(wins[key])) renderInventory(key, b); }).observe(b); }
   function openInventory(ref) {
     const key = ref.owner === "station" ? "inv:station" : "inv:" + ref.id;   // one window per holder; tabs switch inside
     if (!invWins[key]) {
-      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b) });
+      createWindow(key, { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: ref.owner === "station" ? "Station" : "Inventory" });
       invWins[key] = { ref, root: ref }; watchInvResize(key);
     }
     invWins[key].ref = ref;
@@ -557,7 +680,7 @@
   }
   function openInventoryAlone(ref) {           // shift-click a tab: its own window
     const key = "inv:" + invKey(ref);
-    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b) }); invWins[key] = { ref, solo: true }; watchInvResize(key); }
+    if (!invWins[key]) { createWindow(key, { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), groupable: false }); invWins[key] = { ref, solo: true }; watchInvResize(key); }
     toggleWindow(key, true); renderInventory(key, wins[key].body);
   }
   const dragPayload = (e) => { try { return JSON.parse(e.dataTransfer.getData("text/plain")); } catch { return null; } };
@@ -664,7 +787,7 @@
     const def = (A.cfg.items || {})[stck.item]; if (!def || !def.price) return;
     const holder = ref.owner === "station" ? null : A.ship(ref.id);
     if (holder && !holder.docked) { flash("Dock to sell."); return; }
-    if (!wins.sell) createWindow("sell", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 90), width: 300, minW: 260, minH: 150, render: renderSell });
+    if (!wins.sell) createWindow("sell", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 90), width: 300, minW: 260, minH: 150, render: renderSell, groupable: false });
     sell = { ref, slot }; wins.sell.sig = null;
     toggleWindow("sell", true); renderSell(wins.sell.body);
   }
@@ -691,9 +814,9 @@
   }
   window.Atamus.bus.addEventListener("inv", () => {
     const A = window.Atamus;
-    if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && !wins.player.win.hidden) renderPlayer(wins.player.body); }
-    if (wins.sell && !wins.sell.win.hidden) renderSell(wins.sell.body);
-    for (const key in invWins) if (wins[key] && !wins[key].win.hidden) renderInventory(key, wins[key].body); const w = wins.unit; if (w && !w.win.hidden) renderUnit(w.body); });
+    if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
+    if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
+    for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });
 
   // ---- chat ----
   const chat = { local: [], corp: [] }; let chatTab = "local";
@@ -701,13 +824,13 @@
   const whisperPartners = [];              // names with an open whisper thread
   const myName = () => (window.Atamus.me && window.Atamus.me.name) || "";
   const wKey = (name) => "w:" + name;
-  function viewing(ch) { const w = wins.chat; return w && !w.win.hidden && chatTab === ch; }
+  function viewing(ch) { const w = wins.chat; return w && isOpen(w) && chatTab === ch; }
   function updateChatGlow() {
     const w = wins.chat;
-    if (w && !w.win.hidden && w.slot) { for (const b of w.slot.querySelectorAll(".tab")) { const k = b.dataset.ch; b.classList.toggle("unread", k !== chatTab && !!unread[k]); } }
+    if (w && isOpen(w) && w.slot) { for (const b of w.slot.querySelectorAll(".tab")) { const k = b.dataset.ch; b.classList.toggle("unread", k !== chatTab && !!unread[k]); } }
     const anyUnread = Object.values(unread).some(Boolean);
     const btn = panel.querySelector('.wbtn[data-id="chat"]');
-    if (btn) btn.classList.toggle("unread", (!w || w.win.hidden) && anyUnread);
+    if (btn) btn.classList.toggle("unread", (!w || !isOpen(w)) && anyUnread);
   }
   function pushChat(ch, msg) {
     if (!chat[ch]) chat[ch] = [];
@@ -727,7 +850,7 @@
     const i = whisperPartners.indexOf(name); if (i >= 0) whisperPartners.splice(i, 1);
     delete unread[wKey(name)];
     if (chatTab === wKey(name)) chatTab = "local";
-    if (wins.chat && !wins.chat.win.hidden) wins.chat.render(wins.chat.body);
+    if (wins.chat && isOpen(wins.chat)) wins.chat.render(wins.chat.body);
   }
   function appendChatLine(log, msg) {
     if (!log) return;
@@ -746,7 +869,7 @@
       const partner = (m.from === myName()) ? m.to : m.from;   // thread is keyed by the other person
       if (!whisperPartners.includes(partner)) whisperPartners.push(partner);
       pushChat(wKey(partner), { from: m.from, text: m.text });
-      if (wins.chat && !wins.chat.win.hidden && !viewing(wKey(partner))) wins.chat.render(wins.chat.body);
+      if (wins.chat && isOpen(wins.chat) && !viewing(wKey(partner))) wins.chat.render(wins.chat.body);
     } else {
       pushChat(m.ch === "corp" ? "corp" : "local", { from: m.from, text: m.text });
     }
@@ -802,7 +925,7 @@
     createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
-    createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit });
+    createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
     wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());
     renderPanel();
 
@@ -817,6 +940,7 @@
 
     // restore windows the user had open last session
     for (const id in wins) { if (id !== "unit" && saved.win[id] && saved.win[id].open) toggleWindow(id, true); }
+    restoreGroups();
 
     // clock inside the window panel (HH:MM)
     const tickClock = () => { const d = new Date(Date.now() + serverOffset); const p = (n) => String(n).padStart(2, "0"); clockEl.textContent = p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()); };
@@ -826,7 +950,7 @@
     if (state && !state.pilots.length) toggleWindow("pilot", true); // prompt first-pilot naming
     // live countdown refresh for the queue
     setInterval(() => {
-      const w = wins.pilot; if (!w || w.win.hidden || pilotTab !== "queue" || !state) return;
+      const w = wins.pilot; if (!w || !isOpen(w) || pilotTab !== "queue" || !state) return;
       const pilot = state.pilots.find((p) => p.id === selectedPilotId); if (!pilot || !pilot.active) return;
       pilot.active.remainingMs -= 1000;
       const t = w.body.querySelector('.q-time[data-active="1"]');
