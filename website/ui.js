@@ -418,6 +418,7 @@
       if (lv === learningLevel) cls += " learning";
       else if (lv <= tr) cls += " on";
       else if (lv <= eff) cls += " q";
+      if (l.unlocks && l.unlocks[lv]) cls += " unlock";
       pips.append(el("span", { class: cls }));
     }
     const btns = el("div", { class: "lic-btns" });
@@ -515,13 +516,16 @@
         else if (lv <= tr) cls += " learned";
         else if (lv <= eff) cls += " studying";
         if (lv === pLevel) cls += " sel";
+        if (l.unlocks && l.unlocks[lv]) cls += " unlock";
         boxes.append(el("div", { class: cls, onclick: () => { pLevel = lv; render(); } }, lv));
       }
       inner.append(boxes);
       const tabs = [["licensing", "Licensing"], ["requirements", "Requirements"], ["requiredFor", "Required For"]];
       inner.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pTab ? " active" : ""), onclick: () => { pTab = k; render(); } }, n))));
       const c = el("div", { class: "pop-content" }); inner.append(c);
-      if (pTab === "licensing") c.append(el("p", { class: "pop-desc" }, l.desc), el("p", { class: "pop-effect" }, l.effect), el("div", { class: "pop-traintime" }, "Train time (Lv " + pLevel + "): " + fmtTime(l.levelTimes[pLevel - 1])));
+      if (pTab === "licensing") c.append(el("p", { class: "pop-desc" }, l.desc), el("p", { class: "pop-bonus" }, l.bonus + " per level"),
+        ...(l.unlocks && l.unlocks[pLevel] ? [el("div", { class: "pop-unlocks" }, el("span", { class: "pop-unlocks-h" }, "Level " + pLevel + " unlocks"), ...l.unlocks[pLevel].map((t) => el("div", {}, t)))] : []),
+        el("div", { class: "pop-traintime" }, "Train time (Lv " + pLevel + "): " + fmtTime(l.levelTimes[pLevel - 1])));
       else if (pTab === "requirements") {
         if (!l.requirements.length) c.append(el("div", { class: "muted" }, "No requirements."));
         else c.append(el("ul", { class: "req-list" }, l.requirements.map((r) => {

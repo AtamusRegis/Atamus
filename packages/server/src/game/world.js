@@ -4,6 +4,7 @@ import {
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
 } from "./constants.js";
 import * as Inv from "./inventory.js";
+import { getLicense } from "../licenses.js";
 import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
 import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
@@ -158,10 +159,22 @@ export class World {
     L.on = true; L.repeat = true; L.rock = rockId; L.hp = arm[Math.floor(Math.random() * arm.length)];
     const d = f.rock.r * (0.15 + Math.random() * 0.3);   // sprites are irregular with transparent margins: stay well inside the visible rock
     L.ax = +(f.rock.x + Math.cos(a) * d).toFixed(4); L.ay = +(f.rock.y + Math.sin(a) * d).toFixed(4);
-    L.start = now; L.until = now + MINING_CYCLE_MS;
+    L.start = now; L.dur = this._cycleMs(sh); L.until = now + L.dur;
   }
   _lockedRock(sh, rockId) { return sh.targets.find((t) => t.kind === "rock" && t.locked && (rockId == null || t.id === rockId)); }
-  _inLaserRange(sh, f) { return Math.hypot(f.rock.x - sh.x, f.rock.y - sh.y) <= LASER_RANGE_KM; }
+  _inLaserRange(sh, f) { return Math.hypot(f.rock.x - sh.x, f.rock.y - sh.y) <= this._laserRange(sh); }
+  // ---- licence bonuses: they come from the pilot crewing the ship ----
+  _lic(sh, key) {
+    const p = this.players.get(sh.owner), pl = p && p.pilots.find((x) => String(x.id) === String(sh.pilot));
+    return (pl && pl.licenses[key]) || 0;
+  }
+  _per(key) { const l = getLicense(key); return (l && l.per) || 0; }
+  _laserRange(sh) { return LASER_RANGE_KM * (1 + this._per("laser_range") * this._lic(sh, "laser_range")); }
+  _cycleMs(sh) { return Math.round(MINING_CYCLE_MS * Math.max(0.5, 1 - this._per("laser_cycle") * this._lic(sh, "laser_cycle"))); }
+  _yieldM3s(sh) {
+    const t = SHIP_TYPES[sh.type] || {}, hullLic = Object.keys(t.req || {})[0];
+    return (t.laserM3s || LASER_M3_PER_S) * (1 + this._per("small_mining_laser") * this._lic(sh, "small_mining_laser")) * (1 + (hullLic ? this._per(hullLic) * this._lic(sh, hullLic) : 0));
+  }
   // All lasers at once: on -> spread over the locked rocks in range; off -> stop repeating.
   cmdMine(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
@@ -189,7 +202,7 @@ export class World {
     if (!this._lockedRock(sh)) return;
     sh.auto.on = true; sh.auto.next = 0;                       // fires on the next tick
   }
-  _autoCycleMs(pid) { const p = this.players.get(pid), lvl = Math.max(1, (p && p.licenses.auto_miner) || 1); return Math.max(30_000, AUTO_MINER_BASE_MS - AUTO_MINER_STEP_MS * (lvl - 1)); }
+  _autoCycleMs(sh) { const lvl = Math.max(1, this._lic(sh, "auto_miner")); return Math.max(30_000, AUTO_MINER_BASE_MS - AUTO_MINER_STEP_MS * (lvl - 1)); }
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
@@ -464,7 +477,7 @@ export class World {
       if (sh.auto.on && now >= sh.auto.next) {
         const cands = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(sh.owner, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
         if (!cands.length) sh.auto.on = false;
-        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (!L.on) this._laserStart(sh, L, i, r.tg.id, r.f, now); else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh.owner); }
+        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (!L.on) this._laserStart(sh, L, i, r.tg.id, r.f, now); else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;
       // the ore lands when the cycle completes, then the laser repeats (unless told not to)
@@ -474,7 +487,7 @@ export class World {
         if (!f || !this._inLaserRange(sh, f)) { this._laserStop(L); continue; }
         if (now < L.until) continue;
         const def = Inv.ITEMS[f.rock.ore];
-        const units = Math.min(Math.floor((t.laserM3s || LASER_M3_PER_S) * MINING_CYCLE_MS / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
+        const units = Math.min(Math.floor(this._yieldM3s(sh) * (L.dur || MINING_CYCLE_MS) / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
         const got = units > 0 ? Inv.add(sh.inv.ore, f.rock.ore, units) : 0;
         if (got <= 0) { this._laserStop(L); continue; }                        // hold full: laser stops, target stays
         f.rock.m3 = Math.max(0, +(f.rock.m3 - got * def.unitM3).toFixed(3));
@@ -580,8 +593,9 @@ export class World {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
-        entry.lasers = s.lasers.map((l) => ({ on: l.on, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / MINING_CYCLE_MS) : 0 }));
-        entry.auto = { on: s.auto.on, cyc: this._autoCycleMs(p.id), p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / this._autoCycleMs(p.id)) : 0 };
+        entry.lasers = s.lasers.map((l) => ({ on: l.on, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / (l.dur || MINING_CYCLE_MS)) : 0, dur: l.dur || MINING_CYCLE_MS }));
+        entry.laserRange = +this._laserRange(s).toFixed(3);
+        entry.auto = { on: s.auto.on, cyc: this._autoCycleMs(s), p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / this._autoCycleMs(s)) : 0 };
         entry.mining = s.lasers.some((l) => l.on);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
         entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;

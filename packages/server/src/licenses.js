@@ -14,88 +14,113 @@ export const CATEGORIES = [
 ];
 
 // Helper for the two ship licenses that gate off the previous class at level 5.
+import { SHIP_TYPES } from "./game/constants.js";
 const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key, level }));
 
 // Licenses every new pilot already holds (key -> level).
 export const STARTING_LICENSES = { mining_frigate: 1, small_mining_laser: 1, auto_miner: 1 };
 
+// One licence = one kind of upgrade. `bonus` is what each endorsement level adds; `per` is
+// its size (used by the game). `flies` lists hulls a level unlocks that aren't in the market yet.
 export const LICENSES = [
   // ============================================================
-  // Industry — Ironvein mining line (fly at Lvl 3, unlock next at Lvl 5; Lvl 6–8 deepen the hull)
+  // Industry — mining modules
   // ============================================================
   {
-    key: "auto_miner", name: "Automated Mining", category: "industry", maxLevel: 5, free: true,
-    desc: "Operate the auto-miner module: it keeps your lasers on your locked rocks, moving on as each one runs dry.",
-    effect: "Auto-miner cycle 3:00 at Lvl 1, −30 s per level (Lvl 1 is granted to every pilot)",
-    requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
-  },
-  {
-    key: "small_mining_laser", name: "Small Mining Laser", category: "industry", maxLevel: 5, free: true,
-    desc: "Operate small mining lasers — the frigate-class laser the Chisel carries two of.",
-    effect: "+5% mining laser yield per level · fit small mining lasers (Lvl 1 is granted to every pilot)",
+    key: "small_mining_laser", name: "Mining Laser Yield", category: "industry", maxLevel: 5, free: true,
+    desc: "Get more ore out of every mining laser cycle.",
+    bonus: "+5% mining laser yield", per: 0.05,
     requirements: [], levelTimes: hrs(1, 3, 6, 12, 20),
   },
   {
+    key: "laser_range", name: "Mining Laser Range", category: "industry", maxLevel: 5, free: true,
+    desc: "Reach rocks further from the ship with your mining lasers.",
+    bonus: "+5% mining laser range", per: 0.05,
+    requirements: [], levelTimes: hrs(1, 3, 6, 12, 20),
+  },
+  {
+    key: "laser_cycle", name: "Mining Laser Cycling", category: "industry", maxLevel: 5, free: true,
+    desc: "Run mining lasers through their cycles faster.",
+    bonus: "−3% mining laser cycle time", per: 0.03,
+    requirements: [], levelTimes: hrs(2, 4, 8, 14, 24),
+  },
+  {
+    key: "auto_miner", name: "Automated Mining", category: "industry", maxLevel: 5, free: true,
+    desc: "The auto-miner keeps your lasers on your locked rocks, moving on as each one runs dry.",
+    bonus: "−30 s auto-miner cycle", per: 30_000,
+    requirements: [], levelTimes: hrs(2, 5, 10, 20, 35),
+  },
+  // ============================================================
+  // Industry — Ironvein hulls (fly at Lvl 3, next class at Lvl 5)
+  // ============================================================
+  {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 8, free: true,
-    desc: "Pilot the Chisel mining frigate. The start of every Ironvein career.",
-    effect: "+5% mining yield per level · fly the Chisel (starts flyable at Lvl 1) · Lvl 6–8: deeper Mining Frigate",
+    desc: "Pilot mining frigates. The start of every Ironvein career.",
+    bonus: "+5% mining yield in Mining Frigates", per: 0.05,
     requirements: [], levelTimes: hrs(1, 2, 4, 7, 10, 10, 15, 25),
   },
   {
-    key: "gleaner", name: "Gleaner", category: "industry", maxLevel: 8,
-    desc: "Pilot the Gleaner — Ironvein's hauler and salvager.",
-    effect: "−5% tractor/salvager cycle, +60% tractor range & velocity per level · fly at Lvl 3 · Lvl 6–8: deeper Gleaner",
-    requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 10, 20, 35, 50, 15, 30, 50),
-  },
-  {
     key: "barges", name: "Mining Barges", category: "industry", maxLevel: 8,
-    desc: "Pilot the mining barges: Dragline (yield), Bedrock (tank), Hopper (hold).",
-    effect: "Strip-miner yield / shield / ore-hold per hull · fly a barge at Lvl 3 · Lvl 6–8: deeper Mining Barge; gates T2 strip miners",
+    desc: "Pilot the mining barges.",
+    bonus: "+5% mining yield in Mining Barges", per: 0.05,
     requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 15, 30, 60, 80, 20, 40, 60),
   },
   {
     key: "exumers", name: "Exhumers", category: "industry", maxLevel: 8,
-    desc: "Pilot the exhumers: Bucketwheel, Silo, Keystone — the fleet's peak extractors.",
-    effect: "+shield DR, strip/ice yield & cycle per level (stacks on Barge bonuses) · fly at Lvl 3 · Lvl 6–8: deeper Exhumer",
+    desc: "Pilot the exhumers, the fleet's peak extractors.",
+    bonus: "+5% mining yield in Exhumers", per: 0.05,
     requirements: reqLic(["barges", 5]), levelTimes: hrs(10, 30, 55, 100, 140, 30, 55, 85),
   },
   {
-    key: "lodestar", name: "Lodestar", category: "industry", maxLevel: 8,
-    desc: "Pilot the Lodestar — a compact industrial command ship for small crews.",
-    effect: "+ore hold, Mining Foreman Burst strength & range per level · fly at Lvl 3 · Lvl 6–8: deeper Lodestar command",
+    key: "gleaner", name: "Hauler", category: "industry", maxLevel: 8,
+    desc: "Pilot haulers.",
+    bonus: "+5% cargo capacity in Haulers", per: 0.05, flies: { 3: ["Gleaner"] },
+    requirements: reqLic(["mining_frigate", 5]), levelTimes: hrs(5, 10, 20, 35, 50, 15, 30, 50),
+  },
+  {
+    key: "lodestar", name: "Industrial Command", category: "industry", maxLevel: 8,
+    desc: "Pilot the compact industrial command ship.",
+    bonus: "+5% ore hold capacity in Industrial Command Ships", per: 0.05, flies: { 3: ["Lodestar"] },
     requirements: reqLic(["barges", 5], ["gleaner", 5]), levelTimes: hrs(10, 25, 50, 85, 120, 25, 50, 70),
   },
   {
-    key: "motherlode", name: "Motherlode", category: "industry", maxLevel: 8,
-    desc: "Pilot the Motherlode — the flagship industrial command ship.",
-    effect: "+cargo/ore hold, fleet command & mining bursts per level · fly at Lvl 3 · Lvl 6–8: deeper Motherlode command; gates T2 command bursts",
+    key: "motherlode", name: "Capital Industrial Command", category: "industry", maxLevel: 8,
+    desc: "Pilot the flagship industrial command ship.",
+    bonus: "+5% ore hold capacity in Capital Industrial Command Ships", per: 0.05, flies: { 3: ["Motherlode"] },
     requirements: reqLic(["lodestar", 5], ["exumers", 5]), levelTimes: hrs(15, 40, 80, 150, 200, 25, 50, 70),
   },
-
-
   // ============================================================
-  // Combat — Lantern Wardens escort line (fly at Lvl 3, unlock next at Lvl 5; Lvl 6–8 deepen the hull)
+  // Combat — Lantern Wardens escort line (fly at Lvl 3, next class at Lvl 5)
   // ============================================================
   {
     key: "warden_frigate", name: "Warden Frigate", category: "combat", maxLevel: 8,
-    desc: "Pilot the Wick — the Wardens' cloaky scout and first responder.",
-    effect: "+faction weapon tracking & armor DR per level · fly the Wick at Lvl 3 · Lvl 6–8: deeper Warden Frigate",
+    desc: "Pilot Warden frigates.",
+    bonus: "+5% weapon damage in Warden Frigates", per: 0.05, flies: { 3: ["Wick"] },
     requirements: [], levelTimes: hrs(5, 10, 10, 15, 20, 15, 25, 35),
   },
   {
     key: "warden_cruiser", name: "Warden Cruiser", category: "combat", maxLevel: 8,
-    desc: "Pilot the Beacon — the Wardens' standard barge escort.",
-    effect: "+medium faction weapon damage & range per level · fly the Beacon at Lvl 3 · Lvl 6–8: deeper Warden Cruiser",
+    desc: "Pilot Warden cruisers.",
+    bonus: "+5% weapon damage in Warden Cruisers", per: 0.05, flies: { 3: ["Beacon"] },
     requirements: reqLic(["warden_frigate", 5]), levelTimes: hrs(15, 30, 50, 65, 80, 30, 50, 65),
   },
   {
     key: "warden_battleship", name: "Warden Battleship", category: "combat", maxLevel: 8,
-    desc: "Pilot the Vigil — the Wardens' heavy anchor with remote shield repair.",
-    effect: "+large faction weapon, remote shield & tank per level · fly the Vigil at Lvl 3 · Lvl 6–8: deeper Warden Battleship",
+    desc: "Pilot Warden battleships.",
+    bonus: "+5% weapon damage in Warden Battleships", per: 0.05, flies: { 3: ["Vigil"] },
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
-
 ];
+
+// What each endorsement level unlocks: hulls it lets you fly and licences it opens for training.
+for (const l of LICENSES) {
+  const u = {};
+  const add = (lvl, text) => { (u[lvl] ||= []).push(text); };
+  for (const [lvl, names] of Object.entries(l.flies || {})) for (const n of names) add(lvl, "Fly the " + n);
+  for (const t of Object.values(SHIP_TYPES)) if (t.req && t.req[l.key]) add(t.req[l.key], "Fly the " + t.name);
+  for (const o of LICENSES) for (const r of o.requirements) if (r.type === "license" && r.key === l.key) add(r.level, "Train " + o.name);
+  l.unlocks = u;
+}
 
 const BY_KEY = new Map(LICENSES.map((l) => [l.key, l]));
 export const getLicense = (k) => BY_KEY.get(k);
