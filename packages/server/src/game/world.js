@@ -1,7 +1,7 @@
 import {
   FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
-  WARP_MULT, DOCK_RADIUS_KM, MINING_M3_PER_S, STATION_HANGAR_M3,
+  WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, STATION_HANGAR_M3,
 } from "./constants.js";
 import * as Inv from "./inventory.js";
 import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
@@ -50,7 +50,7 @@ export class World {
 
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, mining: s.mining, targets: s.targets, inv: s.inv }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, mining: s.mining, lasers: s.lasers, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
     return { ships, gates, beltField: p ? p.beltField : null, hangar: p ? p.hangar : null, savedAt: Date.now() };
@@ -61,7 +61,8 @@ export class World {
     const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
     return {
       ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
-      docked: !!sh.docked, warp: !!sh.warp, mining: sh.mining || null,
+      docked: !!sh.docked, warp: !!sh.warp, mining: !!sh.mining, lasers: Array.isArray(sh.lasers) ? sh.lasers : [],
+      hp: Number.isFinite(sh.hp) ? sh.hp : t.hp, shield: Number.isFinite(sh.shield) ? sh.shield : t.shield,
       targets: (sh.targets || []).map((tg) => ({ ...tg })),
       inv: { cargo: sh.inv?.cargo || Inv.makeInv(t.cargoM3), ore: sh.inv?.ore || Inv.makeInv(t.oreM3) },
     };
@@ -133,7 +134,7 @@ export class World {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
     const t = SHIP_TYPES[sh.type];
     const i = sh.targets.findIndex((tg) => tg.kind === kind && tg.id === id);
-    if (i >= 0) { if (sh.mining === id) sh.mining = null; sh.targets.splice(i, 1); return; }   // toggle off
+    if (i >= 0) { sh.targets.splice(i, 1); if (!sh.targets.some((tg) => tg.kind === "rock" && tg.locked)) sh.mining = false; return; }   // toggle off
     if (sh.targets.length >= t.maxTargets) return;
     const pos = this._targetPos(pid, { kind, id }); if (!pos) return;
     if (Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) return;                    // must be in range to begin a lock
@@ -141,15 +142,16 @@ export class World {
   }
   cmdMine(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
-    if (!on) { sh.mining = null; return; }
-    const tg = sh.targets.find((tg) => tg.kind === "rock" && tg.locked); if (!tg) return;
-    sh.mining = tg.id;
+    if (!on) { sh.mining = false; sh.lasers = []; return; }
+    if (!sh.targets.some((tg) => tg.kind === "rock" && tg.locked)) return;
+    sh.mining = true;
   }
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
       if (sh.docked || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
-      sh.docked = true; sh.moving = false; sh.warp = false; sh.mining = null; sh.targets = []; sh.vx = sh.vy = 0;
+      sh.docked = true; sh.moving = false; sh.warp = false; sh.mining = false; sh.lasers = []; sh.targets = []; sh.vx = sh.vy = 0;
+      sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield;            // docked: repaired and recharged
     } else {
       if (!sh.docked) return;
       sh.docked = false; sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
@@ -288,27 +290,34 @@ export class World {
       // locks: progress, and drop anything that left range or vanished
       for (let i = sh.targets.length - 1; i >= 0; i--) {
         const tg = sh.targets[i], pos = this._targetPos(sh.owner, tg);
-        if (!pos || Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) { sh.targets.splice(i, 1); if (sh.mining === tg.id) sh.mining = null; continue; }
+        if (!pos || Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) { sh.targets.splice(i, 1); continue; }
         if (!tg.locked && now >= tg.lockAt) tg.locked = true;
       }
-      // mining laser
-      if (sh.mining) {
-        const tg = sh.targets.find((x) => x.id === sh.mining && x.locked);
-        const f = tg ? this._rockOf(sh.owner, sh.mining) : null;
-        if (!tg || !f) { sh.mining = null; continue; }
+      // mining lasers: each laser works a locked rock, re-aiming at a new spot on its rim every cycle
+      if (!sh.mining) { if (sh.lasers.length) sh.lasers = []; continue; }
+      const rocks = sh.targets.filter((x) => x.kind === "rock" && x.locked);
+      if (!rocks.length) { sh.mining = false; sh.lasers = []; continue; }
+      sh.lasers.length = Math.min(sh.lasers.length, t.lasers);
+      for (let i = 0; i < t.lasers; i++) {
+        const tg = rocks[i % rocks.length], f = this._rockOf(sh.owner, tg.id); if (!f) continue;
+        let L = sh.lasers[i];
+        if (!L || L.rock !== tg.id || now >= L.until) {
+          const a = Math.random() * Math.PI * 2, arm = t.arms[i % t.arms.length];
+          L = sh.lasers[i] = { rock: tg.id, hp: arm[Math.floor(Math.random() * arm.length)], ax: +(f.rock.x + Math.cos(a) * f.rock.r).toFixed(4), ay: +(f.rock.y + Math.sin(a) * f.rock.r).toFixed(4), until: now + MINING_CYCLE_MS, carry: 0 };
+        }
         const def = Inv.ITEMS[f.rock.ore];
-        const wantM3 = Math.min(MINING_M3_PER_S * dtSec, f.rock.m3);
-        const units = Math.floor(wantM3 / def.unitM3 + (sh._mineCarry || 0));
-        sh._mineCarry = (wantM3 / def.unitM3 + (sh._mineCarry || 0)) - units;
-        if (units > 0) {
-          const got = Inv.add(sh.inv.ore, f.rock.ore, units);
-          if (got <= 0) { sh.mining = null; continue; }                   // hold full: lasers stop, target stays
-          f.rock.m3 = Math.max(0, f.rock.m3 - got * def.unitM3);
-          owner.invDirty = true; (owner.rockDirty ||= new Map()).set(f.rock.id, f.rock.m3);
-          if (f.rock.m3 <= 0) {                                             // rock mined out
-            f.belt.rocks = f.belt.rocks.filter((r) => r.id !== f.rock.id);
-            for (const o of this.ships.values()) { o.targets = o.targets.filter((x) => x.id !== f.rock.id); if (o.mining === f.rock.id) o.mining = null; }
-          }
+        const wantM3 = Math.min(LASER_M3_PER_S * dtSec, f.rock.m3);
+        const units = Math.floor(wantM3 / def.unitM3 + L.carry);
+        L.carry = (wantM3 / def.unitM3 + L.carry) - units;
+        if (units <= 0) continue;
+        const got = Inv.add(sh.inv.ore, f.rock.ore, units);
+        if (got <= 0) { sh.mining = false; sh.lasers = []; break; }           // hold full: lasers stop, targets stay
+        f.rock.m3 = Math.max(0, f.rock.m3 - got * def.unitM3);
+        owner.invDirty = true; (owner.rockDirty ||= new Map()).set(f.rock.id, f.rock.m3);
+        if (f.rock.m3 <= 0) {                                                  // rock mined out
+          f.belt.rocks = f.belt.rocks.filter((r) => r.id !== f.rock.id);
+          for (const o of this.ships.values()) { o.targets = o.targets.filter((x) => x.id !== f.rock.id); o.lasers = (o.lasers || []).filter((l) => l.rock !== f.rock.id); if (o.mining && !o.targets.some((x) => x.kind === "rock" && x.locked)) o.mining = false; }
+          break;
         }
       }
     }
@@ -404,7 +413,8 @@ export class World {
       const entry = { id: s.id, sys: s.sys, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
-        entry.docked = s.docked; entry.warp = s.warp; entry.mining = s.mining; entry.moving = s.moving;
+        entry.docked = s.docked; entry.warp = s.warp; entry.mining = s.mining; entry.moving = s.moving; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
+        if (s.mining) entry.lasers = s.lasers.map((l) => ({ rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay }));
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
         entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;
       }
