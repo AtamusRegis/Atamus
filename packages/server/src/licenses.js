@@ -16,10 +16,19 @@ export const CATEGORIES = [
 // Helper for the two ship licenses that gate off the previous class at level 5.
 const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key, level }));
 
+// Licenses every new pilot already holds (key -> level).
+export const STARTING_LICENSES = { small_mining_laser: 1 };
+
 export const LICENSES = [
   // ============================================================
   // Industry — Ironvein mining line (fly at Lvl 3, unlock next at Lvl 5)
   // ============================================================
+  {
+    key: "small_mining_laser", name: "Small Mining Laser", category: "industry", maxLevel: 5,
+    desc: "Operate small mining lasers — the frigate-class laser the Chisel carries two of.",
+    effect: "+5% mining laser yield per level · fit small mining lasers (Lvl 1 is granted to every pilot)",
+    requirements: [], levelTimes: hrs(1, 3, 6, 12, 20),
+  },
   {
     key: "mining_frigate", name: "Mining Frigate", category: "industry", maxLevel: 5,
     desc: "Pilot the Chisel mining frigate. The start of every Ironvein career.",

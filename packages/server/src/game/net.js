@@ -12,6 +12,7 @@ import { ORES, BELT, fieldBelts } from "./belts.js";
 import { ITEMS, MAX_STACKS } from "./inventory.js";
 import { DOCK_RADIUS_KM, SHIP_TYPES } from "./constants.js";
 import { loadSystem, saveSystem, loadAwakeSystems } from "./persist.js";
+import { pool } from "../db.js";
 
 const world = new World();
 
@@ -47,6 +48,7 @@ export function attachGameServer(httpServer) {
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
     let saved = null; try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
     const player = world.addPlayer(pid, user.username, send, saved);
+    try { const { rows } = await pool.query(`SELECT credits FROM users WHERE id = $1`, [user.id]); player.credits = Number(rows[0]?.credits || 0); } catch (e) { console.error("credits", e); }
     send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
@@ -62,6 +64,7 @@ export function attachGameServer(httpServer) {
         case "warp": world.cmdWarp(pid, m.ship); break;
         case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
         case "inv_sort": world.cmdInvSort(pid, m.ref); break;
+        case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty); break;
       }
     });
     ws.on("close", () => { persist(pid).finally(() => world.removePlayer(pid)); });
@@ -69,6 +72,7 @@ export function attachGameServer(httpServer) {
   });
 
   const persist = async (pid) => { if (!world.players.has(pid)) return; try { await saveSystem(pid, world.exportState(pid)); } catch (e) { console.error("saveSystem", e); } };
+  world.onCredits = (pid, delta) => { pool.query(`UPDATE users SET credits = credits + $1 WHERE id = $2`, [delta, pid]).catch((e) => console.error("credits", e)); };
   world.onBeforePurge = (pid) => { const state = world.exportState(pid); saveSystem(pid, state).catch((e) => console.error("saveSystem(purge)", e)); };
   // On boot, bring back anyone whose gate was still running: timers and links keep going, logging off is not an escape.
   loadAwakeSystems().then((rows) => {

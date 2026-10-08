@@ -23,7 +23,7 @@ export class World {
     const now = Date.now();
     const beltField = saved && saved.beltField ? saved.beltField : createBeltField(id, now);
     if (saved && saved.beltField) tickBeltField(beltField, now);   // catch up while we were away
-    const p = { id, name, send, offline: false, beltField, hangar: null, invDirty: false };
+    const p = { id, name, send, offline: false, beltField, hangar: null, invDirty: false, credits: 0 };
     this.players.set(id, p);
     const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
     const downtime = saved && saved.savedAt ? Math.max(0, now - saved.savedAt) : 0; // the clock keeps running while you're gone
@@ -175,13 +175,24 @@ export class World {
     if (!sameHolder && !(a.docked && b.docked)) return;
     if (Inv.move(a.inv, +from.slot, b.inv, to.slot == null ? null : +to.slot, qty) > 0) this._markInv(pid);
   }
+  // Sell ore straight out of the hangar or a docked ship's hold. Credits are kept on the
+  // user row; onCredits(pid, delta) persists the change.
+  cmdSell(pid, ref, slot, qty) {
+    const a = this._inv(pid, ref); if (!a || !a.inv || !a.docked) return;
+    const st = a.inv.slots[+slot]; if (!st) return;
+    const def = Inv.ITEMS[st.item]; if (!def || !def.price) return;
+    const n = Inv.take(a.inv, +slot, qty == null ? st.qty : +qty); if (n <= 0) return;
+    const p = this.players.get(pid), delta = n * def.price;
+    p.credits += delta; this._markInv(pid);
+    if (this.onCredits) { try { this.onCredits(pid, delta); } catch (e) { console.error("onCredits", e); } }
+  }
   cmdInvSort(pid, ref) { const a = this._inv(pid, ref); if (a && a.inv) { Inv.sort(a.inv); this._markInv(pid); } }
   _markInv(pid) { const p = this.players.get(pid); if (p) p.invDirty = true; }
   inventoriesFor(pid) {
     const p = this.players.get(pid); if (!p) return null;
     const ships = {};
     for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore) };
-    return { t: "inv", ships, hangar: Inv.summary(p.hangar) };
+    return { t: "inv", ships, hangar: Inv.summary(p.hangar), credits: p.credits };
   }
 
   cmdChat(pid, text, channel, to) {

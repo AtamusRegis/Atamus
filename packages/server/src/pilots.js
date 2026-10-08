@@ -1,15 +1,16 @@
 import { pool } from "./db.js";
-import { LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
+import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 
 const CORP = "Delve Holdings";
 
-function freshData() { return { licenses: {}, banked: {}, queue: [], activeStart: null, paused: false }; }
+function freshData() { return { licenses: { ...STARTING_LICENSES }, banked: {}, queue: [], activeStart: null, paused: false }; }
 const banked = (d, key, level) => (d.banked[key] && d.banked[key][level]) || 0;
 function setBanked(d, key, level, ms) { if (!d.banked[key]) d.banked[key] = {}; d.banked[key][level] = ms; }
 function clearBanked(d, key, level) { if (d.banked[key]) delete d.banked[key][level]; }
 
 /** Process completed training based on real elapsed time. Mutates data. */
 function advance(d, now) {
+  for (const k in STARTING_LICENSES) if ((d.licenses[k] || 0) < STARTING_LICENSES[k]) d.licenses[k] = STARTING_LICENSES[k]; // granted to existing pilots too
   if (d.paused) return;                 // training frozen
   if (!d.queue.length) { d.activeStart = null; return; }
   if (d.activeStart == null) d.activeStart = now;
