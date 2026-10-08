@@ -399,6 +399,10 @@
       if (h) body.append(row("Hangar", Math.round(h.used).toLocaleString() + " / " + h.cap.toLocaleString() + " m³"));
       const docked = (window.Atamus.snap.ships || []).filter((sh) => sh.mine && sh.docked);
       body.append(row("Docked ships", docked.length));
+      for (const sh of docked) {                                   // click a docked ship to select it (Undock / Inventory)
+        const t = (window.Atamus.cfg.shipTypes || {})[sh.type] || {};
+        body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, ""), el("button", { class: "btn-primary2 unit-btn off", onclick: () => window.Atamus.selectShip(sh.id) }, t.name || sh.type)));
+      }
       body.append(el("div", { class: "unit-btns" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar" }) }, "Inventory")));
     } else if (u.kind === "gate") {
       const active = u.state === "active";
