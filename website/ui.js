@@ -30,17 +30,19 @@
 
   // ---- windows ----
   const wins = {};
-  function createWindow(id, title, opts) {
+  function createWindow(id, opts) {
     opts = opts || {};
-    const body = el("div", { class: "win-body" });
+    const slot = el("div", { class: "win-title-slot" });
     const close = el("button", { class: "win-close", "aria-label": "Close", onclick: () => toggleWindow(id, false) }, "×");
-    const bar = el("div", { class: "win-title" }, el("span", {}, title), close);
+    const bar = el("div", { class: "win-title" }, slot, close);
+    const body = el("div", { class: "win-body" });
     const win = el("div", { class: "win", hidden: "" }, bar, body);
     win.style.left = (opts.left || 120) + "px"; win.style.top = (opts.top || 70) + "px"; if (opts.width) win.style.width = opts.width + "px";
     document.body.appendChild(win);
     win.addEventListener("mousedown", () => { win.style.zIndex = ++z; });
-    dragMove(win, bar, close);
-    wins[id] = { win, body, render: opts.render };
+    dragMove(win, bar);
+    addResize(win);
+    wins[id] = { win, body, slot, render: opts.render };
     return wins[id];
   }
   function toggleWindow(id, force) {
@@ -52,15 +54,39 @@
   }
   function renderOpen() { for (const id in wins) if (!wins[id].win.hidden && wins[id].render) wins[id].render(wins[id].body); }
 
-  function dragMove(win, handle, ignore) {
+  function dragMove(win, handle) {
     handle.addEventListener("mousedown", (e) => {
-      if (ignore && (e.target === ignore || ignore.contains(e.target))) return;
+      if (e.target.closest("select,button,input,textarea,option,.tab")) return;
       e.preventDefault();
       const r = win.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
-      const mv = (ev) => { win.style.left = Math.max(44, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
+      const mv = (ev) => { win.style.left = Math.max(48, Math.min(innerWidth - 60, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - 40, ev.clientY - oy)) + "px"; };
       const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); };
       addEventListener("mousemove", mv); addEventListener("mouseup", up);
     });
+  }
+
+  function addResize(win) {
+    const MIN_W = 220, MIN_H = 130;
+    for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+      const h = el("div", { class: "rz rz-" + dir });
+      h.addEventListener("mousedown", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const r = win.getBoundingClientRect(), sx = e.clientX, sy = e.clientY, sw = r.width, sh = r.height, sl = r.left, st = r.top;
+        win.style.maxHeight = "none";
+        const mv = (ev) => {
+          const dx = ev.clientX - sx, dy = ev.clientY - sy;
+          let w = sw, hh = sh, l = sl, t = st;
+          if (dir.includes("e")) w = Math.max(MIN_W, sw + dx);
+          if (dir.includes("s")) hh = Math.max(MIN_H, sh + dy);
+          if (dir.includes("w")) { w = Math.max(MIN_W, sw - dx); l = sl + (sw - w); }
+          if (dir.includes("n")) { hh = Math.max(MIN_H, sh - dy); t = st + (sh - hh); }
+          win.style.width = w + "px"; win.style.height = hh + "px"; win.style.left = l + "px"; win.style.top = t + "px";
+        };
+        const up = () => { removeEventListener("mousemove", mv); removeEventListener("mouseup", up); };
+        addEventListener("mousemove", mv); addEventListener("mouseup", up);
+      });
+      win.appendChild(h);
+    }
   }
 
   // ---- window-panel buttons ----
@@ -100,12 +126,14 @@
 
   // ---- Player Sheet ----
   function renderPlayer(body) {
+    const slot = wins.player && wins.player.slot;
     body.innerHTML = "";
-    if (!state) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    if (!state) { if (slot) slot.textContent = "Player Sheet"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
     const p = state.profile;
+    if (slot) slot.textContent = p.username;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    body.append(row("Name", p.username), row("Day Born", born), row("Pilots", p.pilotCount), row("Total Skill Level", p.totalSkillLevel), row("Corp", p.corp));
+    body.append(row("Day Born", born), row("Pilots", p.pilotCount), row("Total Skill Level", p.totalSkillLevel), row("Corp", p.corp));
   }
 
   // ---- Pilot window ----
@@ -116,16 +144,18 @@
   function prereqMet(pilot, key) { const l = licById(key); return l.requirements.every((r) => r.type !== "license" || trained(pilot, r.key) >= r.level); }
 
   function renderPilot(body) {
-    body.innerHTML = "";
-    if (!state || !catalog) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
-    if (!state.pilots.length) { renderCreatePilot(body); return; }
+    const slot = wins.pilot && wins.pilot.slot;
+    body.innerHTML = ""; if (slot) slot.innerHTML = "";
+    if (!state || !catalog) { if (slot) slot.textContent = "Pilot"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    if (!state.pilots.length) { if (slot) slot.textContent = "Pilot"; renderCreatePilot(body); return; }
     if (selectedPilotId == null) selectedPilotId = state.pilots[0].id;
     const pilot = state.pilots.find((p) => p.id === selectedPilotId) || state.pilots[0];
     selectedPilotId = pilot.id;
 
+    // pilot selector lives in the title bar
     const sel = el("select", { class: "pilot-select", onchange: (e) => { selectedPilotId = +e.target.value; renderPilot(body); } },
       state.pilots.map((p) => { const o = el("option", { value: p.id }, p.name); if (p.id === pilot.id) o.selected = true; return o; }));
-    body.append(el("div", { class: "pilot-head" }, el("span", { class: "pilot-head-label" }, "PILOTS:"), sel));
+    if (slot) slot.append(sel);
 
     const tabs = [["skills", "Skills"], ["queue", "Skill Queue"], ["ship", "Current Ship"], ["items", "Items"]];
     body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => {
@@ -263,9 +293,10 @@
   window.Atamus.bus.addEventListener("sys", (e) => pushChat("local", { sys: true, text: e.detail.text }));
 
   function renderChat(body) {
+    const slot = wins.chat && wins.chat.slot;
+    if (slot) { slot.innerHTML = ""; slot.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, n]) =>
+      el("button", { class: "tab" + (k === chatTab ? " active" : ""), onclick: () => { chatTab = k; renderChat(body); } }, n)))); }
     body.innerHTML = "";
-    body.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, n]) =>
-      el("button", { class: "tab" + (k === chatTab ? " active" : ""), onclick: () => { chatTab = k; renderChat(body); } }, n))));
     const log = el("div", { class: "chat-log" });
     for (const m of chat[chatTab]) appendChatLine(log, m);
     const input = el("input", { class: "text-input", maxlength: "240", placeholder: "Message " + (chatTab === "corp" ? "Delve Holdings" : "local") + "…" });
@@ -277,9 +308,9 @@
 
   // ---- init ----
   async function init() {
-    createWindow("player", "PLAYER SHEET", { left: 90, top: 70, width: 260, render: renderPlayer });
-    createWindow("pilot", "PILOT", { left: 170, top: 90, width: 440, render: renderPilot });
-    createWindow("chat", "CHAT", { left: 250, top: 140, width: 320, render: renderChat });
+    createWindow("player", { left: 90, top: 70, width: 260, render: renderPlayer });
+    createWindow("pilot", { left: 180, top: 90, width: 440, render: renderPilot });
+    createWindow("chat", { left: 280, top: 150, width: 320, render: renderChat });
     renderPanel();
     try { await ensureCatalog(); await refreshState(); } catch { /* not logged in handled by game.js */ }
     if (state && !state.pilots.length) toggleWindow("pilot", true); // prompt first-pilot naming

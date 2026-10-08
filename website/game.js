@@ -74,8 +74,6 @@
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
-  document.getElementById("btn-in").addEventListener("click", () => { viewWTarget = Math.max(ZOOM_MIN_W, viewWTarget / 1.3); });
-  document.getElementById("btn-out").addEventListener("click", () => { viewWTarget = Math.min(curMaxW, viewWTarget * 1.3); });
   canvas.addEventListener("wheel", (e) => { e.preventDefault(); viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); }, { passive: false });
 
   function myGate(idx) { return snap.gates.find((g) => g.mine && g.id.endsWith(":" + idx)); }
