@@ -50,6 +50,8 @@ function placeSlots(rnd) {
   return slots;
 }
 
+export function fieldRnd(field) { return mulberry32((field.seed ^ Math.imul(++field.step, 0x9E3779B1)) >>> 0)(); }
+
 function rollRarity(rnd) { let r = rnd() * RARITY_W.reduce((s, v) => s + v, 0); for (let i = 0; i < RARITY_W.length; i++) { r -= RARITY_W[i]; if (r <= 0) return i; } return 0; }
 
 function makeBelt(slot, seed, now) {
@@ -98,22 +100,24 @@ function makeBelt(slot, seed, now) {
 
 /** Create a system's belt field: fixed slots + an initial roll of which are populated. */
 export function createBeltField(ownerId, now = Date.now()) {
-  const rnd = mulberry32(seedOf("belts:" + ownerId));
-  const slots = placeSlots(rnd);
-  const field = { slots, rnd: mulberry32(seedOf("spawn:" + ownerId + ":" + now)), nextRoll: now + 60000 };
-  for (const s of slots) if (field.rnd() < BELT.initialChance) s.belt = makeBelt(s, Math.floor(field.rnd() * 1e9), now);
-  if (!slots.some((s) => s.belt) && slots.length) { const s = slots[Math.floor(field.rnd() * slots.length)]; s.belt = makeBelt(s, Math.floor(field.rnd() * 1e9), now); }
+  const slots = placeSlots(mulberry32(seedOf("belts:" + ownerId)));
+  // plain data only (it is persisted): the spawn RNG is seed + step counter
+  const field = { slots, seed: seedOf("spawn:" + ownerId + ":" + now), step: 0, nextRoll: now + 60000 };
+  const rnd = () => fieldRnd(field);
+  for (const s of slots) if (rnd() < BELT.initialChance) s.belt = makeBelt(s, Math.floor(rnd() * 1e9), now);
+  if (!slots.some((s) => s.belt) && slots.length) { const s = slots[Math.floor(rnd() * slots.length)]; s.belt = makeBelt(s, Math.floor(rnd() * 1e9), now); }
   return field;
 }
 
 /** Once a minute: expire old belts, maybe spawn into empty slots. Returns true if anything changed. */
 export function tickBeltField(field, now = Date.now()) {
-  if (now < field.nextRoll) return false;
-  field.nextRoll = now + 60000;
-  let changed = false;
-  for (const s of field.slots) {
-    if (s.belt && now >= s.belt.expiresAt) { s.belt = null; changed = true; }
-    if (!s.belt && field.rnd() < BELT.spawnChancePerMin) { s.belt = makeBelt(s, Math.floor(field.rnd() * 1e9), now); changed = true; }
+  let changed = false, guard = 0;
+  while (now >= field.nextRoll && guard++ < 2000) {       // catches up missed minutes (e.g. after being offline)
+    const at = field.nextRoll; field.nextRoll += 60000;
+    for (const s of field.slots) {
+      if (s.belt && at >= s.belt.expiresAt) { s.belt = null; changed = true; }
+      if (!s.belt && fieldRnd(field) < BELT.spawnChancePerMin) { s.belt = makeBelt(s, Math.floor(fieldRnd(field) * 1e9), at); changed = true; }
+    }
   }
   return changed;
 }

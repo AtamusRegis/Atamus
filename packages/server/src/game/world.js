@@ -14,20 +14,37 @@ export class World {
     this.ships = new Map();   // sid -> ship
   }
 
-  addPlayer(id, name, send) {
+  addPlayer(id, name, send, saved = null) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShips(id); return existing; }
-    const p = { id, name, send, offline: false, beltField: createBeltField(id) };
+    const now = Date.now();
+    const beltField = saved && saved.beltField ? saved.beltField : createBeltField(id, now);
+    if (saved && saved.beltField) tickBeltField(beltField, now);   // catch up while we were away
+    const p = { id, name, send, offline: false, beltField };
     this.players.set(id, p);
+    const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
     STARGATE_CELLS.forEach((cell, i) => {
-      this.gates.set(`${id}:${i}`, {
-        id: `${id}:${i}`, owner: id, sys: homeSys(id), lx: cell.x, ly: cell.y,
-        state: "closed", fuelMs: FUEL_START_MS, sessionUsedMs: 0, activatedAt: 0,
-        connToSys: null, connToGate: null, lastSeek: 0,
+      const gid = `${id}:${i}`, sg = savedGates.get(gid);
+      this.gates.set(gid, {
+        id: gid, owner: id, sys: homeSys(id), lx: cell.x, ly: cell.y,
+        state: sg ? sg.state : "closed", fuelMs: sg ? sg.fuelMs : FUEL_START_MS, sessionUsedMs: sg ? sg.sessionUsedMs : 0, activatedAt: sg ? sg.activatedAt : 0,
+        connToSys: null, connToGate: null, lastSeek: 0,            // links don't survive a reload; an active gate re-seeks
       });
     });
+    for (const sh of (saved && saved.ships) || []) {
+      const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
+      this.ships.set(sh.id, { ...sh, owner: id, sys: homeSys(id), vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass });
+    }
     this._ensureShips(id);
     return p;
+  }
+
+  /** Everything about a player's system worth keeping across reloads/restarts. */
+  exportState(id) {
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h }));
+    const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt }));
+    const p = this.players.get(id);
+    return { ships, gates, beltField: p ? p.beltField : null, savedAt: Date.now() };
   }
 
   // Every pilot starts with a Chisel, parked just off the station at system center.

@@ -9,6 +9,7 @@ import {
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
+import { loadSystem, saveSystem } from "./persist.js";
 
 const world = new World();
 
@@ -38,7 +39,8 @@ export function attachGameServer(httpServer) {
 
     const pid = String(user.id);
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
-    const player = world.addPlayer(pid, user.username, send);
+    let saved = null; try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
+    const player = world.addPlayer(pid, user.username, send, saved);
     send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
 
     ws.on("message", (buf) => {
@@ -49,9 +51,12 @@ export function attachGameServer(httpServer) {
         case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
       }
     });
-    ws.on("close", () => world.removePlayer(pid));
+    ws.on("close", () => { persist(pid).finally(() => world.removePlayer(pid)); });
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
+
+  const persist = async (pid) => { if (!world.players.has(pid)) return; try { await saveSystem(pid, world.exportState(pid)); } catch (e) { console.error("saveSystem", e); } };
+  setInterval(() => { for (const pid of world.players.keys()) persist(pid); }, 10000);
 
   let last = Date.now();
   setInterval(() => {
