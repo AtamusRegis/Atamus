@@ -720,6 +720,12 @@
     else A.hud.line = null;
   }
   window.Atamus.bus.addEventListener("snap", renderHud);
+  let pilotShipSig = "";                              // keep the pilot's Current Ship tab live (location changes)
+  window.Atamus.bus.addEventListener("snap", () => {
+    if (!wins.pilot || !isOpen(wins.pilot) || pilotTab !== "ship") return;
+    const sig = ((window.Atamus.snap.ships) || []).filter((x) => x.mine).map((x) => x.id + x.pilot + x.docked + x.warp + x.moving).join(",");
+    if (sig !== pilotShipSig) { pilotShipSig = sig; renderPilot(wins.pilot.body); }
+  });
   window.Atamus.bus.addEventListener("select", renderHud);
   window.Atamus.bus.addEventListener("deselect", renderHud);
   setInterval(renderHud, 500);                       // safety net: never leave the HUD up for a ship that's gone
