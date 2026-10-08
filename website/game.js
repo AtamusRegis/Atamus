@@ -90,6 +90,54 @@
   canvas.addEventListener("click", (e) => { const p = eventPos(e); for (const b of gateButtons) { if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { const g = snap.gates.find((x) => x.id === b.gateId); if (g) toggleGate(g); return; } } });
   function mySys() { const h = snap.systems.find((s) => s.mine); return h ? h.id : null; }
 
+  // ---- ship selection + movement (semi-RTS) ----
+  const selected = new Set();           // selected ship ids
+  let drag = null, selBox = null, deselectTimer = 0;
+  function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
+  function shipScreen(sh) { const pl = curPlace.get(sh.sys); if (!pl) return null; return { x: gx2s(pl.gx + sh.x), y: gy2s(pl.gy + sh.y) }; }
+  function gateButtonAt(p) { return gateButtons.some((b) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h); }
+  function shipAt(p) {
+    let best = null, bestD = Infinity;
+    for (const sh of snap.ships || []) { if (!sh.mine) continue; const s = shipScreen(sh); if (!s) continue; const r = Math.max(12, CHISEL_LEN_KM * scale() / 2 + 5); const d = Math.hypot(p.x - s.x, p.y - s.y); if (d <= r && d < bestD) { bestD = d; best = sh; } }
+    return best;
+  }
+  function commandMove(p) {
+    if (!selected.size) return;
+    const pl = curPlace.get(mySys()); if (!pl) return;
+    const w = screenToWorld(p.x, p.y);
+    send({ t: "move", ships: [...selected], x: w.x - pl.gx, y: w.y - pl.gy });
+  }
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    const p = eventPos(e);
+    if (gateButtonAt(p)) return;                 // let the gate click handler take it
+    drag = { x0: p.x, y0: p.y, moved: false, ship: shipAt(p), shift: e.shiftKey };
+  });
+  addEventListener("mousemove", (e) => {
+    if (!drag) return;
+    const p = eventPos(e);
+    if (Math.abs(p.x - drag.x0) > 4 || Math.abs(p.y - drag.y0) > 4) drag.moved = true;
+    if (drag.moved && !drag.ship) selBox = { x0: Math.min(drag.x0, p.x), y0: Math.min(drag.y0, p.y), x1: Math.max(drag.x0, p.x), y1: Math.max(drag.y0, p.y) };
+  });
+  addEventListener("mouseup", (e) => {
+    if (e.button !== 0 || !drag) return;
+    const p = eventPos(e); const d = drag; drag = null; selBox = null;
+    if (d.moved && !d.ship) {                     // box select
+      if (!d.shift) selected.clear();
+      const x0 = Math.min(d.x0, p.x), y0 = Math.min(d.y0, p.y), x1 = Math.max(d.x0, p.x), y1 = Math.max(d.y0, p.y);
+      for (const sh of snap.ships || []) { if (!sh.mine) continue; const s = shipScreen(sh); if (s && s.x >= x0 && s.x <= x1 && s.y >= y0 && s.y <= y1) selected.add(sh.id); }
+    } else if (!d.moved) {                          // a click
+      if (gateButtonAt(p)) return;
+      if (d.ship) { if (!d.shift) selected.clear(); if (d.shift && selected.has(d.ship.id)) selected.delete(d.ship.id); else selected.add(d.ship.id); }
+      else { clearTimeout(deselectTimer); deselectTimer = setTimeout(() => selected.clear(), 220); } // delay so dbl-click can move
+    }
+  });
+  canvas.addEventListener("dblclick", (e) => {
+    if (e.button !== 0) return; const p = eventPos(e);
+    clearTimeout(deselectTimer);                  // keep selection for the move order
+    if (!gateButtonAt(p) && !shipAt(p)) commandMove(p);
+  });
+
   // ---- drawing ----
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
   function hexCorners() { const R = cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
@@ -112,14 +160,32 @@
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
 
-  function drawShip(place) {
-    if (!shipImgReady || !shipImg.naturalWidth) return;
-    const home = place.get(mySys()); if (!home) return;
-    const wPx = CHISEL_LEN_KM * scale();
-    if (wPx < 0.4) return;                 // smaller than a pixel at this zoom
-    const hPx = wPx * (shipImg.naturalHeight / shipImg.naturalWidth);
-    const sx = gx2s(home.gx), sy = gy2s(home.gy);   // station at system center
-    ctx.save(); ctx.drawImage(shipImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+  function drawShips(place) {
+    for (const sh of snap.ships || []) {
+      const pl = place.get(sh.sys); if (!pl) continue;
+      const sx = gx2s(pl.gx + sh.x), sy = gy2s(pl.gy + sh.y);
+      // waypoint line for your own moving ships
+      if (sh.mine && sh.tx != null) {
+        const tx = gx2s(pl.gx + sh.tx), ty = gy2s(pl.gy + sh.ty);
+        ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
+        ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
+        ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
+      }
+      const wPx = Math.max(2, CHISEL_LEN_KM * scale());   // true 128 m scale (min 2px so it's never a dead pixel)
+      if (shipImgReady && shipImg.naturalWidth) {
+        const hPx = wPx * (shipImg.naturalHeight / shipImg.naturalWidth);
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(-(sh.h != null ? sh.h : Math.PI / 2)); // sprite faces +x; world +y is up
+        ctx.imageSmoothingEnabled = wPx > 24;             // keep the pixel art crisp when small
+        ctx.drawImage(shipImg, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
+      } else { ctx.save(); ctx.fillStyle = "#e3c15a"; ctx.fillRect(sx - wPx / 2, sy - wPx / 4, wPx, wPx / 2); ctx.restore(); }
+      // selection ring
+      if (sh.mine && selected.has(sh.id)) {
+        ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, Math.max(10, wPx * 0.75), 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(79,210,255,0.9)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+      }
+    }
+    // drag selection box
+    if (selBox) { ctx.save(); ctx.fillStyle = "rgba(79,210,255,0.08)"; ctx.strokeStyle = "rgba(79,210,255,0.7)"; ctx.lineWidth = 1; ctx.fillRect(selBox.x0, selBox.y0, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.strokeRect(selBox.x0 + 0.5, selBox.y0 + 0.5, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.restore(); }
   }
 
   function frame(now) {
@@ -138,7 +204,7 @@
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
       for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); const cx = gx2s(pl.gx), cy = gy2s(pl.gy), R = systemRadius * scale(); const gr = ctx.createRadialGradient(cx, cy, 10, cx, cy, R); gr.addColorStop(0, th.glow); gr.addColorStop(1, "rgba(5,8,15,0)"); ctx.fillStyle = gr; ctx.fillRect(cx - R, cy - R, R * 2, R * 2); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); centerText(sE.mine ? "YOUR SYSTEM" : (sE.id === "sys:hub" ? "PIRATE HUB" : "RIVAL SYSTEM"), cx, cy - R - 6, th.line); }
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
-      drawShip(place);
+      drawShips(place);
     }
     requestAnimationFrame(frame);
   }

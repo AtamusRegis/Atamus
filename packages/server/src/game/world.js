@@ -1,7 +1,8 @@
 import {
   FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
+  SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
 } from "./constants.js";
-import { STARGATE_CELLS } from "./geometry.js";
+import { STARGATE_CELLS, clampToSystem } from "./geometry.js";
 
 const homeSys = (pid) => `sys:${pid}`;
 
@@ -9,11 +10,12 @@ export class World {
   constructor() {
     this.players = new Map(); // pid -> {id,name,send,offline}
     this.gates = new Map();   // gid -> gate
+    this.ships = new Map();   // sid -> ship
   }
 
   addPlayer(id, name, send) {
     const existing = this.players.get(id);
-    if (existing) { existing.send = send; existing.offline = false; existing.name = name; return existing; }
+    if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShips(id); return existing; }
     const p = { id, name, send, offline: false };
     this.players.set(id, p);
     STARGATE_CELLS.forEach((cell, i) => {
@@ -23,7 +25,20 @@ export class World {
         connToSys: null, connToGate: null, lastSeek: 0,
       });
     });
+    this._ensureShips(id);
     return p;
+  }
+
+  // Every pilot starts with a Chisel, parked just off the station at system center.
+  _ensureShips(id) {
+    const sid = `${id}:ship:0`;
+    if (this.ships.has(sid)) return;
+    const t = SHIP_TYPES.chisel;
+    this.ships.set(sid, {
+      id: sid, owner: id, sys: homeSys(id), type: "chisel",
+      x: 0, y: 2, vx: 0, vy: 0, tx: 0, ty: 2, moving: false, h: Math.PI / 2,
+      speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
+    });
   }
 
   removePlayer(id) {
@@ -34,6 +49,7 @@ export class World {
   }
   _purge(id) {
     for (const [gid, g] of this.gates) if (g.owner === id) this.gates.delete(gid);
+    for (const [sid, s] of this.ships) if (s.owner === id) this.ships.delete(sid);
     this.players.delete(id);
   }
 
@@ -47,6 +63,16 @@ export class World {
       if (g.state !== "active") return;
       this._closeGate(g);
     }
+  }
+
+  cmdMove(pid, shipIds, x, y) {
+    if (!Array.isArray(shipIds)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    const owned = shipIds.map((sid) => this.ships.get(sid)).filter((s) => s && s.owner === pid);
+    if (!owned.length) return;
+    // clamp the destination into whatever system these ships are in (home for now)
+    const t = clampToSystem(x, y);
+    for (const s of owned) { s.tx = t.x; s.ty = t.y; s.moving = true; }
   }
 
   cmdChat(pid, text, channel, to) {
@@ -122,10 +148,62 @@ export class World {
         }
       }
     }
+    this._tickShips(dtSec);
+
     for (const p of [...this.players.values()]) {
       if (!p.offline) continue;
       const stillActive = [...this.gates.values()].some((g) => g.owner === p.id && g.state === "active");
       if (!stillActive) this._purge(p.id);
+    }
+  }
+
+  // Steering + mass-weighted separation. Ships steer toward their target, can't
+  // overlap, and bump each other apart (heavier wins ground); contact kills the
+  // inward velocity so they settle against each other instead of jittering.
+  _tickShips(dtSec) {
+    const ships = [...this.ships.values()];
+    const steer = 1 - Math.exp(-SHIP_STEER * dtSec);
+
+    // 1) steer velocities toward targets, integrate
+    for (const s of ships) {
+      if (s.moving) {
+        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
+        if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; }
+        else {
+          const spd = Math.min(s.speed, (d / SHIP_SLOW_RADIUS_KM) * s.speed); // ease to a stop
+          const dvx = (dx / d) * spd, dvy = (dy / d) * spd;
+          s.vx += (dvx - s.vx) * steer; s.vy += (dvy - s.vy) * steer;
+        }
+      }
+      if (!s.moving) { s.vx *= 0.6; s.vy *= 0.6; if (Math.hypot(s.vx, s.vy) < 1e-3) { s.vx = 0; s.vy = 0; } }
+      s.x += s.vx * dtSec; s.y += s.vy * dtSec;
+      if (Math.hypot(s.vx, s.vy) > 0.05) s.h = Math.atan2(s.vy, s.vx); // face travel direction
+
+    }
+
+    // 2) resolve overlaps pairwise (same system), position-corrected by mass
+    for (let i = 0; i < ships.length; i++) {
+      for (let j = i + 1; j < ships.length; j++) {
+        const a = ships[i], b = ships[j];
+        if (a.sys !== b.sys) continue;
+        let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+        const minD = a.radius + b.radius;
+        if (d >= minD) continue;
+        if (d < 1e-6) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d = Math.hypot(dx, dy) || 1; }
+        const nx = dx / d, ny = dy / d, overlap = minD - d;
+        const wa = b.mass / (a.mass + b.mass), wb = a.mass / (a.mass + b.mass); // lighter moves more
+        a.x -= nx * overlap * wa; a.y -= ny * overlap * wa;
+        b.x += nx * overlap * wb; b.y += ny * overlap * wb;
+        // kill the velocity component pushing each ship into the other → no ramming/jitter
+        const avn = a.vx * nx + a.vy * ny; if (avn > 0) { a.vx -= avn * nx; a.vy -= avn * ny; }
+        const bvn = b.vx * nx + b.vy * ny; if (bvn < 0) { b.vx -= bvn * nx; b.vy -= bvn * ny; }
+      }
+    }
+
+    // 3) keep inside the honeycomb, finalize arrivals
+    for (const s of ships) {
+      const c = clampToSystem(s.x, s.y); s.x = c.x; s.y = c.y;
+      if (s.moving && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) s.moving = false;
     }
   }
 
@@ -159,6 +237,15 @@ export class World {
       gates.push(entry);
     }
 
-    return { t: "snap", systems, gates, enemies: false };
+    const ships = [];
+    for (const s of this.ships.values()) {
+      if (!vis.has(s.sys)) continue;
+      const mine = s.owner === p.id;
+      const entry = { id: s.id, sys: s.sys, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
+      if (mine && s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
+      ships.push(entry);
+    }
+
+    return { t: "snap", systems, gates, ships, enemies: false };
   }
 }

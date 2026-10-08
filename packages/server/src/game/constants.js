@@ -16,6 +16,16 @@ export const SHIP_SPEED_KMPS = 1;
 export const SHIP_HP = 100;
 export const MAX_SHIPS_PER_PLAYER = 2;
 
+// ---- RTS ship movement (gameplay-tuned; speed is not the doc's realistic
+// 335 m/s, which would be far too slow to fly across these hexes) ----
+export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the target
+export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this range
+export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
+// Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
+export const SHIP_TYPES = {
+  chisel: { speedKmps: 3, radiusKm: 0.09, mass: 1.2 },
+};
+
 export const COMBAT_RANGE_KM = 8;      // enemy ships within this damage each other (in any system)
 export const COMBAT_DPS = 8;
 
