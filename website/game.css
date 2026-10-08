@@ -427,3 +427,13 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .win[data-id="fleet"].acts-left .fleet-acts { bottom: auto; top: 0; left: auto; right: 100%; margin: 0 5px 0 0; flex-direction: column; }
 
 .status.warn { color: #ffd59a; box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,190,110,0.45); }
+
+/* fleet action buttons: compact */
+.fleet-acts { padding: 2px; gap: 2px; border-radius: 5px; }
+.fleet-acts .hud-act { width: 18px; height: 18px; border-radius: 3px; }
+.fleet-acts .hud-act svg { width: 11px; height: 11px; stroke-width: 2; }
+@media (pointer: coarse) { .fleet-acts .hud-act { width: 24px; height: 24px; } .fleet-acts .hud-act svg { width: 14px; height: 14px; } }
+
+/* hull bars read red */
+.ubar-fill.hull { background: linear-gradient(90deg, #a8262b, #e0484a); }
+.fb-hp { background: #e0484a; }
