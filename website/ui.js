@@ -36,6 +36,7 @@
     for (const c of kids.flat()) { if (c == null || c === false) continue; e.append(c.nodeType ? c : document.createTextNode(String(c))); }
     return e;
   }
+  const cr = (n) => el("span", { class: "credits" }, Math.round(n || 0).toLocaleString() + " cr");   // credit amounts read gold
   const fmtTime = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0"); };
   const licById = (k) => catalog && catalog.licenses.find((l) => l.key === k);
   const catName = (k) => (catalog.categories.find((c) => c.key === k) || {}).name || k;
@@ -287,8 +288,12 @@
         btn.addEventListener("contextmenu", (e) => { e.preventDefault(); open(e.clientX, e.clientY); });
       }
       // tooltip
-      let t; btn.addEventListener("mouseenter", () => { t = setTimeout(() => { const r = btn.getBoundingClientRect(); tooltip.textContent = m.name; tooltip.hidden = false; tooltip.style.left = (r.right + 8) + "px"; tooltip.style.top = (r.top + r.height / 2) + "px"; }, 500); });
-      btn.addEventListener("mouseleave", () => { clearTimeout(t); tooltip.hidden = true; });
+      const showTip = () => { const r = btn.getBoundingClientRect(); tooltip.textContent = m.name; tooltip.hidden = false; tooltip.style.left = (r.right + 8) + "px"; tooltip.style.top = (r.top + r.height / 2) + "px"; };
+      let t;
+      btn.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") t = setTimeout(showTip, 500); });
+      btn.addEventListener("pointerleave", () => { clearTimeout(t); tooltip.hidden = true; });
+      btn.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse") { clearTimeout(t); t = setTimeout(showTip, 250); } });
+      for (const ev of ["pointerup", "pointercancel"]) btn.addEventListener(ev, (e) => { if (e.pointerType !== "mouse") { clearTimeout(t); tooltip.hidden = true; } });
       // drag-reorder (not the pinned one)
       if (!m.pinned) {
         btn.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", id); tooltip.hidden = true; });
@@ -310,9 +315,9 @@
     if (!state) { if (slot) slot.textContent = "Player Sheet"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
     const p = state.profile;
     if (slot) slot.textContent = p.username;
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    body.append(row("Day Born", born), row("Credits", (p.credits || 0).toLocaleString() + " cr"), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
+    body.append(row("Day Born", born), row("Credits", cr(p.credits)), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
   }
 
   // ---- Pilot window ----
@@ -364,7 +369,7 @@
     if (!sh) { content.append(el("div", { class: "muted" }, pilot.name + " isn't crewing a ship. Right-click a ship in your station hangar to crew it.")); return; }
     const t = hullOf(sh.type);
     const where = sh.docked ? "Docked at station" : sh.warp ? "Warping" : sh.moving ? "In space · moving" : "In space";
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     content.append(el("div", { class: "ship-hero" }, shipIcon(sh.type, "ship-hero-img")),
       row("Ship", shipName(sh)), row("Hull", t.name + " · " + (t.cls || "—")), row("Location", where),
       el("div", { class: "unit-btns" },
@@ -563,7 +568,7 @@
   }
   function renderShipInfo(body) {
     const w = wins.shipinfo, t = hullOf(shipInfoType); body.innerHTML = ""; w.slot.textContent = t.name || "Ship";
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const lic = (k) => { const l = catalog && catalog.licenses.find((x) => x.key === k); return l ? l.name : k; };
     body.append(el("div", { class: "ship-hero" }, shipIcon(shipInfoType, "ship-hero-img")),
       el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
@@ -572,14 +577,14 @@
       row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"),
       row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"), row("Mining lasers", (t.lasers || 0) + " × " + (t.laserM3s || 0) + " m³/s"),
       row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"),
-      row("Market price", (t.price || 0).toLocaleString() + " cr"));
+      row("Market price", cr(t.price)));
   }
 
   // The panel only rebuilds its DOM when the *structure* changes (unit, buttons);
   // numbers update in place so a button is never replaced mid-click.
   function renderUnit(body) {
     const A = window.Atamus, w = wins.unit, u = A.unit;
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const fmtM3 = (a, b) => Math.round(a).toLocaleString() + " / " + b.toLocaleString() + " m³";
     const docked = u && u.kind === "station" ? (A.snap.ships || []).filter((sh) => sh.mine && sh.docked) : [];
     const lockedRock = !!(u && (u.targets || []).some((t) => t.kind === "rock" && t.locked));
@@ -1107,11 +1112,11 @@
     const A = window.Atamus, w = wins.info; body.innerHTML = "";
     const def = infoItem && (A.cfg.items || {})[infoItem.key]; if (!def) { w.slot.textContent = "Info"; return; }
     w.slot.textContent = def.name;
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const perM3 = def.unitM3 ? def.price / def.unitM3 : 0;
     body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
-      row("Rarity", def.rarity || "—"), row("Weight", def.unitM3 + " m³ / unit"), row("Price", (def.price || 0).toLocaleString() + " cr / unit"),
-      row("Price per m³", Math.round(perM3).toLocaleString() + " cr"), row("Stack", infoItem.qty.toLocaleString() + " × = " + (infoItem.qty * (def.price || 0)).toLocaleString() + " cr · " + (infoItem.qty * def.unitM3).toLocaleString() + " m³"));
+      row("Rarity", def.rarity || "—"), row("Weight", def.unitM3 + " m³ / unit"), row("Price", el("span", {}, cr(def.price), " / unit")),
+      row("Price per m³", cr(perM3)), row("Stack", el("span", {}, infoItem.qty.toLocaleString() + " × = ", cr(infoItem.qty * (def.price || 0)), " · " + (infoItem.qty * def.unitM3).toLocaleString() + " m³")));
   }
 
   // ---- station market ----
@@ -1121,11 +1126,6 @@
     const A = window.Atamus, w = wins.market; w.slot.textContent = "Market";
     const items = A.cfg.items || {}, credits = A.inv.credits || 0, unlocked = A.inv.unlocked || {};
     const keep = body.scrollTop; body.innerHTML = "";
-    body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Credits"), el("span", { class: "sheet-v" }, credits.toLocaleString() + " cr")));
-    // purchases are delivered to a station's Deliveries container (only one station for now)
-    const stations = [{ id: "home", name: "Home Station" }];
-    const pick = el("select", { class: "mk-deliver", disabled: stations.length < 2 ? "" : null }, stations.map((st) => el("option", { value: st.id }, st.name)));
-    body.append(el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Deliver to"), pick));
     const groups = new Map();                          // cat -> sub -> [offers]
     for (const m of A.cfg.market || []) { if (!groups.has(m.cat)) groups.set(m.cat, new Map()); const g = groups.get(m.cat); if (!g.has(m.sub)) g.set(m.sub, []); g.get(m.sub).push(m); }
     const toggle = (k) => { saved.mkOpen[k] = !saved.mkOpen[k]; persistAll(); renderMarket(body); };
@@ -1144,12 +1144,43 @@
           if (m.ship) { name.style.cursor = "pointer"; name.addEventListener("click", () => openShipInfo(m.ship)); }
           if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
           body.append(el("div", { class: "mk-row" + (known ? " known" : "") }, name,
-            el("div", { class: "mk-price" + (credits < m.price ? " poor" : "") }, m.price.toLocaleString() + " cr"),
-            el("button", { class: "btn-primary2 unit-btn mk-buy", disabled: credits < m.price ? "" : null, onclick: () => A.send({ t: "buy", item: m.key, qty: 1 }) }, "Buy")));
+            el("div", { class: "mk-price" }, cr(m.price)),
+            el("button", { class: "btn-primary2 unit-btn mk-buy", onclick: () => openBuy(m) }, "Buy")));
         }
       }
     }
     body.scrollTop = keep;
+  }
+
+  // ---- market purchase popup: full info, quantity slider, your credits ----
+  let buyOffer = null;
+  function openBuy(m) {
+    if (!wins.buy) createWindow("buy", { left: Math.round(innerWidth / 2 - 170), top: 90, width: 340, minW: 280, minH: 220, render: renderBuy, groupable: false });
+    buyOffer = m; wins.buy.sig = null; toggleWindow("buy", true); renderBuy(wins.buy.body);
+  }
+  function renderBuy(body) {
+    const A = window.Atamus, w = wins.buy, m = buyOffer; if (!m) return;
+    const credits = A.inv.credits || 0, sig = m.key + ":" + credits;
+    if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
+    const def = (A.cfg.items || {})[m.key] || {}, t = m.ship ? hullOf(m.ship) : null;
+    w.slot.textContent = "Buy " + (m.name || def.name);
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
+    if (t) {
+      body.append(el("div", { class: "ship-hero" }, shipIcon(m.ship, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
+        row("Class", t.cls), row("Shield / Hull", t.shield.toLocaleString() + " / " + t.hp.toLocaleString()), row("Max speed", Math.round(t.speedKmps * 1000) + " m/s"),
+        row("Ore hold", t.oreM3.toLocaleString() + " m³"), row("Mining lasers", t.lasers + " × " + t.laserM3s + " m³/s"), row("Packaged", (def.unitM3 || 0).toLocaleString() + " m³"));
+    } else body.append(el("div", { class: "info-desc" }, el("span", {}, def.desc || "")), row("Category", m.sub || "—"));
+    const max = Math.max(1, Math.min(100, Math.floor(credits / m.price) || 1));
+    const range = el("input", { type: "range", class: "sell-range", min: 1, max, value: 1 });
+    const num = el("input", { type: "number", class: "sell-num", min: 1, max: 1000, value: 1 });
+    const total = el("span", { class: "credits" }), buyBtn = el("button", { class: "btn-primary2 unit-btn" }, "Buy");
+    const upd = () => { const q = Math.max(1, Math.min(1000, Math.round(+num.value || 1))); num.value = q; range.value = Math.min(q, max); total.textContent = (q * m.price).toLocaleString() + " cr"; total.classList.toggle("poor", q * m.price > credits); buyBtn.disabled = q * m.price > credits; };
+    range.addEventListener("input", () => { num.value = range.value; upd(); }); num.addEventListener("input", upd);
+    buyBtn.addEventListener("click", () => { A.send({ t: "buy", item: m.key, qty: +num.value }); toggleWindow("buy", false); });
+    body.append(row("Price", el("span", {}, cr(m.price), " each")), row("Quantity", num), range, row("Total", total), row("Your credits", cr(credits)),
+      row("Deliver to", "Home Station · Deliveries"),
+      el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("buy", false) }, "Cancel"), buyBtn));
+    upd();
   }
 
   // ---- sell (right-click / hold an ore stack) ----
@@ -1174,11 +1205,11 @@
     w.slot.textContent = "Sell " + def.name;
     const qty = el("input", { type: "range", class: "sell-range", min: 1, max: stck.qty, value: stck.qty });
     const num = el("input", { type: "number", class: "sell-num", min: 1, max: stck.qty, value: stck.qty });
-    const total = el("span", { class: "sheet-v" });
+    const total = el("span", { class: "sheet-v credits" });
     const upd = () => { const q = Math.max(1, Math.min(stck.qty, Math.round(+num.value || 1))); num.value = q; qty.value = q; total.textContent = (q * def.price).toLocaleString() + " cr"; };
     qty.addEventListener("input", () => { num.value = qty.value; upd(); }); num.addEventListener("input", upd);
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), v.nodeType ? v : el("span", { class: "sheet-v" }, String(v)));
-    body.append(row("Price", def.price.toLocaleString() + " cr / unit"), row("Quantity", num), qty, row("You get", total),
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), v.nodeType ? v : el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
+    body.append(row("Price", el("span", {}, cr(def.price), " / unit")), row("Quantity", num), qty, row("You get", total),
       el("div", { class: "unit-btns row2" },
         el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("sell", false) }, "Cancel"),
         el("button", { class: "btn-primary2 unit-btn", onclick: () => { A.send({ t: "sell", ref: sell.ref, slot: sell.slot, qty: +num.value }); toggleWindow("sell", false); } }, "Confirm")));
@@ -1189,6 +1220,7 @@
     if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
     if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
     if (wins.market && isOpen(wins.market)) renderMarket(wins.market.body);
+    if (wins.buy && isOpen(wins.buy)) renderBuy(wins.buy.body);
     if (wins.pilot && isOpen(wins.pilot) && pilotTab === "ship") renderPilot(wins.pilot.body);
     if (wins.split && isOpen(wins.split)) renderSplit(wins.split.body);
     for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });

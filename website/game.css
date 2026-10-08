@@ -458,3 +458,12 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 
 .ask-input { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
 .unit-btn.danger { background: linear-gradient(90deg, #a8262b, #e0484a); color: #fff; }
+
+/* credit amounts read gold */
+.credits { color: #f2c94c; font-weight: 600; }
+.credits.poor { color: #ff8a6a; }
+.mk-price .credits { font-weight: 600; }
+
+/* fleet actions centred on the side of the bar that faces the screen */
+.win[data-id="fleet"].acts-above .fleet-acts, .win[data-id="fleet"].acts-below .fleet-acts { left: 50%; transform: translateX(-50%); }
+.win[data-id="fleet"].acts-left .fleet-acts, .win[data-id="fleet"].acts-right .fleet-acts { top: 50%; transform: translateY(-50%); }

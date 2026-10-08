@@ -275,7 +275,7 @@ export class World {
   cmdBuy(pid, itemKey, qty) {
     const p = this.players.get(pid); if (!p) return;
     const offer = Inv.MARKET.find((m) => m.key === itemKey); if (!offer) return;
-    const n = offer.ship ? 1 : Math.max(1, Math.floor(+qty || 1)), cost = offer.price * n;
+    const n = Math.max(1, Math.min(1000, Math.floor(+qty || 1))), cost = offer.price * n;
     if (p.credits < cost) { p.send(JSON.stringify({ t: "sys", text: "Not enough credits." })); return; }
     { if (Inv.canAdd(p.delivery, itemKey, n) < n) { this._tell(pid, "The station's delivery container is full."); return; } Inv.add(p.delivery, itemKey, n); this._tell(pid, offer.name + " delivered to your station's Deliveries."); }
     p.credits -= cost; this._markInv(pid);

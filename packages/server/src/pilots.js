@@ -9,7 +9,24 @@ function setBanked(d, key, level, ms) { if (!d.banked[key]) d.banked[key] = {}; 
 function clearBanked(d, key, level) { if (d.banked[key]) delete d.banked[key][level]; }
 
 /** Process completed training based on real elapsed time. Mutates data. */
+// Specialization licences were folded into their base licence as levels 6-8.
+function migrateSpecs(d) {
+  for (const k of Object.keys(d.licenses)) if (k.endsWith("_spec")) {
+    const base = k.slice(0, -5), lvl = d.licenses[k];
+    if (lvl > 0) d.licenses[base] = Math.max(d.licenses[base] || 0, 5 + lvl);
+    delete d.licenses[k];
+  }
+  d.queue = d.queue.map((q) => q.key.endsWith("_spec") ? { key: q.key.slice(0, -5), level: 5 + q.level } : q)
+    .filter((q) => (d.licenses[q.key] || 0) < q.level);
+  for (const k of Object.keys(d.banked)) if (k.endsWith("_spec")) {
+    const base = k.slice(0, -5); d.banked[base] = d.banked[base] || {};
+    for (const lv in d.banked[k]) d.banked[base][5 + +lv] = d.banked[k][lv];
+    delete d.banked[k];
+  }
+}
+
 function advance(d, now) {
+  migrateSpecs(d);
   for (const k in STARTING_LICENSES) if ((d.licenses[k] || 0) < STARTING_LICENSES[k]) d.licenses[k] = STARTING_LICENSES[k]; // granted to existing pilots too
   if (d.paused) return;                 // training frozen
   if (!d.queue.length) { d.activeStart = null; return; }
