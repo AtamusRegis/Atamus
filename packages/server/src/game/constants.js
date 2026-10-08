@@ -23,7 +23,8 @@ export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this r
 export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
 // Per-type stats. radius drives spacing/collision; mass drives who pushes whom.
 export const SHIP_TYPES = {
-  chisel: { speedKmps: 3, radiusKm: 0.09, mass: 1.2 },
+  // Chisel: The Reach design doc — 335 m/s max velocity, 1,200,000 kg, 128 m.
+  chisel: { speedKmps: 0.335, radiusKm: 0.09, mass: 1.2 },
 };
 
 export const COMBAT_RANGE_KM = 8;      // enemy ships within this damage each other (in any system)
