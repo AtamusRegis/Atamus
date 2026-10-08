@@ -3,7 +3,7 @@ import {
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
 } from "./constants.js";
 import { STARGATE_CELLS, clampToSystem, STATION_POS } from "./geometry.js";
-import { generateBelts } from "./belts.js";
+import { createBeltField, tickBeltField, fieldBelts } from "./belts.js";
 
 const homeSys = (pid) => `sys:${pid}`;
 
@@ -17,7 +17,7 @@ export class World {
   addPlayer(id, name, send) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShips(id); return existing; }
-    const p = { id, name, send, offline: false, belts: generateBelts(id) };
+    const p = { id, name, send, offline: false, beltField: createBeltField(id) };
     this.players.set(id, p);
     STARGATE_CELLS.forEach((cell, i) => {
       this.gates.set(`${id}:${i}`, {
@@ -151,6 +151,9 @@ export class World {
       }
     }
     this._tickShips(dtSec);
+    for (const p of this.players.values()) {
+      if (tickBeltField(p.beltField, now) && !p.offline) p.send(JSON.stringify({ t: "belts", belts: fieldBelts(p.beltField) }));
+    }
 
     for (const p of [...this.players.values()]) {
       if (!p.offline) continue;

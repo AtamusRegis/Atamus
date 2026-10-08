@@ -8,7 +8,7 @@ import {
   GATE_TRANSFER_RADIUS_KM, SHIP_HP, FUEL_SESSION_MAX_MS, FUEL_START_MS,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
-import { ORES, BELT } from "./belts.js";
+import { ORES, BELT, fieldBelts } from "./belts.js";
 
 const world = new World();
 
@@ -39,7 +39,7 @@ export function attachGameServer(httpServer) {
     const pid = String(user.id);
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
     const player = world.addPlayer(pid, user.username, send);
-    send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: player.belts }));
+    send(JSON.stringify({ t: "hello", you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fieldBelts(player.beltField) }));
 
     ws.on("message", (buf) => {
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }

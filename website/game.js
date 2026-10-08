@@ -72,6 +72,7 @@
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
       else if (m.t === "snap") snap = m;
+      else if (m.t === "belts") belts = m.belts || [];
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
     };
@@ -210,9 +211,7 @@
     const rPx = cfg.transferRadius * scale();
     if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
       ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
-    if (selectedUnit && selectedUnit.kind === "gate" && selectedUnit.id === g.id) {
-      ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, Math.max(12, wPx * 0.62), 0, Math.PI * 2); ctx.strokeStyle = "rgba(79,210,255,0.9)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
-    }
+    if (selectedUnit && selectedUnit.kind === "gate" && selectedUnit.id === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
   }
   function centerText(text, cx, yBottom, color) { ctx.save(); ctx.font = "11px " + fontFamily(); ctx.textAlign = "center"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = color || "#fff"; ctx.fillText(text, cx, yBottom); ctx.restore(); }
   function fontFamily() { return getComputedStyle(document.body).fontFamily; }
@@ -232,6 +231,17 @@
   // ---- asteroid belts: beacon + crescent of rocks, sprites drawn at true size ----
   const oreRock = {}; const rockArt = {};
   function rockImg(family, size) { const k = family + "_" + size; if (!rockArt[k]) { const i = new Image(); i.src = "assets/rocks/rock_" + k + ".webp"; rockArt[k] = i; } return rockArt[k]; }
+  // selection marker: orange box, corners only
+  function drawSelBox(cx, cy, half) {
+    const L = Math.max(4, half * 0.45); const x0 = cx - half, y0 = cy - half, x1 = cx + half, y1 = cy + half;
+    ctx.save(); ctx.strokeStyle = "rgba(255,160,70,0.95)"; ctx.lineWidth = 1.5; ctx.beginPath();
+    ctx.moveTo(x0, y0 + L); ctx.lineTo(x0, y0); ctx.lineTo(x0 + L, y0);
+    ctx.moveTo(x1 - L, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + L);
+    ctx.moveTo(x1, y1 - L); ctx.lineTo(x1, y1); ctx.lineTo(x1 - L, y1);
+    ctx.moveTo(x0 + L, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - L);
+    ctx.stroke(); ctx.restore();
+  }
+
   function drawBelts(place) {
     const home = place.get(mySys()); if (!home || !cfg) return;
     if (!Object.keys(oreRock).length) for (const o of cfg.ores || []) oreRock[o.key] = { rock: o.rock, color: o.color };
@@ -251,7 +261,7 @@
       }
       // beacon: small fixed-size marker at the belt centre
       const bx = gx2s(home.gx + belt.x), by = gy2s(home.gy + belt.y);
-      ctx.save(); ctx.strokeStyle = "rgba(120,220,255,0.85)"; ctx.fillStyle = "rgba(120,220,255,0.9)"; ctx.lineWidth = 1;
+      const bc = belt.color || "#78dcff"; ctx.save(); ctx.strokeStyle = bc; ctx.fillStyle = bc; ctx.globalAlpha = 0.9; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(bx, by - 7); ctx.lineTo(bx + 7, by); ctx.lineTo(bx, by + 7); ctx.lineTo(bx - 7, by); ctx.closePath(); ctx.stroke();
       ctx.beginPath(); ctx.arc(bx, by, 1.6, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
@@ -301,11 +311,7 @@
         ctx.imageSmoothingEnabled = wPx > 48;             // keep the pixel art crisp when small
         ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
       } else { ctx.save(); ctx.fillStyle = sh.mine ? "#4fd2ff" : "#ff5a5a"; ctx.fillRect(sx - wPx / 2, sy - wPx / 4, wPx, wPx / 2); ctx.restore(); }
-      // selection ring
-      if (sh.mine && selected.has(sh.id)) {
-        ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, Math.max(10, wPx * 0.75), 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(79,210,255,0.9)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
-      }
+      if (sh.mine && selected.has(sh.id)) drawSelBox(sx, sy, Math.max(10, wPx * 0.62));
     }
     // drag selection box
     if (selBox) { ctx.save(); ctx.fillStyle = "rgba(79,210,255,0.08)"; ctx.strokeStyle = "rgba(79,210,255,0.7)"; ctx.lineWidth = 1; ctx.fillRect(selBox.x0, selBox.y0, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.strokeRect(selBox.x0 + 0.5, selBox.y0 + 0.5, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.restore(); }
