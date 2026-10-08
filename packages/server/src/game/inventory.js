@@ -2,7 +2,7 @@
 // unique stacks (100) and by volume (m3). Items are defined in ITEMS.
 import { ORES } from "./belts.js";
 import { LICENSES, CATEGORIES } from "../licenses.js";
-import { SHIP_TYPES, SHIP_CLASSES } from "./constants.js";
+import { SHIP_TYPES, SHIP_CLASSES, SHIP_ROLES } from "./constants.js";
 
 export const MAX_STACKS = 100;
 export const ITEMS = {};
@@ -13,13 +13,13 @@ for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "
 // Packaged ships: bought ships arrive as items in the station's Deliveries; Assemble turns one into a docked ship.
 const PACKAGED_M3 = { "Mining Frigate": 2500, "Mining Barge": 3750, "Exhumer": 3750 };
 for (const [k, t] of Object.entries(SHIP_TYPES)) ITEMS["ship:" + k] = { key: "ship:" + k, name: t.name, kind: "ship", ship: k, desc: t.desc + " Packaged: assemble it in a station to fly it.", rarity: t.cls, unitM3: PACKAGED_M3[t.cls] || 5000, price: t.price, color: "#6a7fa8", icon: "assets/ships/" + t.sprite + "_blue.webp" };
-// What the station market sells, grouped for the market window: category -> sub-category.
+// What the station market sells. path: the market window's nested groups (Ships > Industry > Mining Frigate).
 const catName = (k) => (CATEGORIES.find((c) => c.key === k) || {}).name || k;
 export const MARKET = [
-  ...Object.entries(SHIP_TYPES).sort((a, b) => SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
-    .map(([k, t]) => ({ key: "ship:" + k, name: t.name, price: t.price, cat: "Ships", sub: t.cls, ship: k })),
+  ...Object.entries(SHIP_TYPES).sort((a, b) => SHIP_ROLES.indexOf(a[1].role) - SHIP_ROLES.indexOf(b[1].role) || SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
+    .map(([k, t]) => ({ key: "ship:" + k, name: t.name, price: t.price, path: ["Ships", t.role, t.cls], ship: k })),
   ...Object.values(ITEMS).filter((it) => it.kind === "manual")
-    .map((it) => ({ key: it.key, name: it.name, price: it.price, cat: "Training Manuals", sub: catName(LICENSES.find((l) => l.key === it.license).category) })),
+    .map((it) => ({ key: it.key, name: it.name, price: it.price, path: ["Training Manuals", catName(LICENSES.find((l) => l.key === it.license).category)] })),
 ];
 
 export const makeInv = (cap) => ({ cap, slots: [] });

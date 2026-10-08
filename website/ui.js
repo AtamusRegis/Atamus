@@ -418,7 +418,6 @@
       if (lv === learningLevel) cls += " learning";
       else if (lv <= tr) cls += " on";
       else if (lv <= eff) cls += " q";
-      if (l.unlocks && l.unlocks[lv]) cls += " unlock";
       pips.append(el("span", { class: cls }));
     }
     const btns = el("div", { class: "lic-btns" });
@@ -650,11 +649,25 @@
     toggleWindow("unit", true); renderUnit(wins.unit.body);
   });
   window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
-  // a ship's inventory belongs to the selected ship: selecting something else (or nothing) closes it
-  const closeOtherShipInvs = (e) => {
-    const u = e.detail, keep = u && u.kind === "ship" ? u.id : null;
-    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || r.id === keep || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (sh && sh.docked) continue; toggleWindow(key, false); }   // docked holds belong to the station window
+  // inventories follow the selection: a ship in space shows only its own; the station's (and docked ships' holds)
+  // stay up only while the station or a docked ship is selected
+  const closeUnselectedInvs = (u) => {
+    const A = window.Atamus, keep = u && u.kind === "ship" ? u.id : null, keepShip = keep != null ? A.ship(keep) : null;
+    const stationKept = !!u && (u.kind === "station" || !!(keepShip && keepShip.docked));
+    for (const key in invWins) {
+      if (!isOpen(wins[key])) continue;
+      const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? A.ship(r.id) : null;
+      const atStation = r.owner === "station" || !!(sh && sh.docked);
+      if (atStation ? !stationKept : (r.owner === "ship" && r.id !== keep)) toggleWindow(key, false);
+    }
   };
+  const closeOtherShipInvs = (e) => closeUnselectedInvs(e.detail);
+  let selDocked = null;                                    // the selected ship just undocked: the station's windows go
+  window.Atamus.bus.addEventListener("snap", () => {
+    const u = window.Atamus.selectedUnit, sh = u && u.kind === "ship" ? window.Atamus.ship(u.id) : null;
+    const d = sh ? sh.id + ":" + sh.docked : null;
+    if (d !== selDocked) { const was = selDocked; selDocked = d; if (was && sh && was === sh.id + ":true" && !sh.docked) closeUnselectedInvs(u); }
+  });
   window.Atamus.bus.addEventListener("select", closeOtherShipInvs);
   window.Atamus.bus.addEventListener("deselect", closeOtherShipInvs);
   window.Atamus.bus.addEventListener("openstation", () => openInventory({ owner: "station", inv: "hangar", h: 0 }));
@@ -1135,31 +1148,33 @@
   saved.mkOpen = saved.mkOpen || {};                 // which market groups are expanded (remembered)
   function renderMarket(body) {
     const A = window.Atamus, w = wins.market; w.slot.textContent = "Market";
-    const items = A.cfg.items || {}, credits = A.inv.credits || 0, unlocked = A.inv.unlocked || {};
+    const items = A.cfg.items || {}, unlocked = A.inv.unlocked || {};
     const keep = body.scrollTop; body.innerHTML = "";
-    const groups = new Map();                          // cat -> sub -> [offers]
-    for (const m of A.cfg.market || []) { if (!groups.has(m.cat)) groups.set(m.cat, new Map()); const g = groups.get(m.cat); if (!g.has(m.sub)) g.set(m.sub, []); g.get(m.sub).push(m); }
-    const toggle = (k) => { saved.mkOpen[k] = !saved.mkOpen[k]; persistAll(); renderMarket(body); };
-    for (const [cat, subs] of groups) {
-      const open = !!saved.mkOpen[cat];
-      body.append(el("div", { class: "mk-cat" + (open ? " open" : ""), onclick: () => toggle(cat) }, el("span", { class: "mk-caret" }, "▸"), cat, el("span", { class: "mk-count" }, [...subs.values()].reduce((n, a) => n + a.length, 0))));
-      if (!open) continue;
-      for (const [sub, offers] of subs) {
-        const sk = cat + "/" + sub, sopen = !!saved.mkOpen[sk];
-        body.append(el("div", { class: "mk-sub-h" + (sopen ? " open" : ""), onclick: () => toggle(sk) }, el("span", { class: "mk-caret" }, "▸"), sub, el("span", { class: "mk-count" }, offers.length)));
-        if (!sopen) continue;
-        for (const m of offers) {
-          const def = items[m.key] || {};
-          const known = def.license && unlocked[def.license];
-          const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
-          if (m.ship) { name.style.cursor = "pointer"; name.addEventListener("click", () => openShipInfo(m.ship)); }
-          if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
-          body.append(el("div", { class: "mk-row" + (known ? " known" : "") }, name,
-            el("div", { class: "mk-price" }, cr(m.price)),
-            el("button", { class: "btn-primary2 unit-btn mk-buy", onclick: () => openBuy(m) }, "Buy")));
-        }
-      }
+    const tree = { kids: new Map(), offers: [], n: 0 };         // nested groups from each offer's path
+    for (const m of A.cfg.market || []) {
+      let node = tree; node.n++;
+      for (const name of m.path || ["Other"]) { if (!node.kids.has(name)) node.kids.set(name, { kids: new Map(), offers: [], n: 0 }); node = node.kids.get(name); node.n++; }
+      node.offers.push(m);
     }
+    const toggle = (k) => { saved.mkOpen[k] = !saved.mkOpen[k]; persistAll(); renderMarket(body); };
+    const offerRow = (m) => {
+      const def = items[m.key] || {}, known = def.license && unlocked[def.license];
+      const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
+      if (m.ship) { name.style.cursor = "pointer"; name.addEventListener("click", () => openShipInfo(m.ship)); }
+      if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
+      return el("div", { class: "mk-row" + (known ? " known" : "") }, name, el("div", { class: "mk-price" }, cr(m.price)),
+        el("button", { class: "btn-primary2 unit-btn mk-buy", onclick: () => openBuy(m) }, "Buy"));
+    };
+    const walk = (node, keyPath, depth) => {
+      for (const [name, kid] of node.kids) {
+        const k = keyPath ? keyPath + "/" + name : name, open = !!saved.mkOpen[k];
+        const h = el("div", { class: (depth ? "mk-sub-h" : "mk-cat") + (open ? " open" : ""), onclick: () => toggle(k) }, el("span", { class: "mk-caret" }, "▸"), name, el("span", { class: "mk-count" }, kid.n));
+        if (depth > 1) h.style.marginLeft = (10 + (depth - 1) * 12) + "px";
+        body.append(h);
+        if (open) { walk(kid, k, depth + 1); for (const m of kid.offers) body.append(offerRow(m)); }
+      }
+    };
+    walk(tree, "", 0);
     body.scrollTop = keep;
   }
 
@@ -1180,7 +1195,7 @@
       body.append(el("div", { class: "ship-hero" }, shipIcon(m.ship, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
         row("Class", t.cls), row("Shield / Hull", t.shield.toLocaleString() + " / " + t.hp.toLocaleString()), row("Max speed", Math.round(t.speedKmps * 1000) + " m/s"),
         row("Ore hold", t.oreM3.toLocaleString() + " m³"), row("Mining lasers", t.lasers + " × " + t.laserM3s + " m³/s"), row("Packaged", (def.unitM3 || 0).toLocaleString() + " m³"));
-    } else body.append(el("div", { class: "info-desc" }, el("span", {}, def.desc || "")), row("Category", m.sub || "—"));
+    } else body.append(el("div", { class: "info-desc" }, el("span", {}, def.desc || "")), row("Category", (m.path || []).slice(1).join(" · ") || "—"));
     const max = Math.max(1, Math.min(100, Math.floor(credits / m.price) || 1));
     const range = el("input", { type: "range", class: "sell-range", min: 1, max, value: 1 });
     const num = el("input", { type: "number", class: "sell-num", min: 1, max: 1000, value: 1 });

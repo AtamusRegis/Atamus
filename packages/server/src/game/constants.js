@@ -76,6 +76,10 @@ export const SHIP_TYPES = {
   },
 };
 export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer"];
+// What each class is for (the market groups hulls by this, then by class).
+export const SHIP_ROLES = ["Industry", "Combat"];
+const CLASS_ROLE = { "Mining Frigate": "Industry", "Mining Barge": "Industry", "Exhumer": "Industry" };
+for (const t of Object.values(SHIP_TYPES)) t.role = CLASS_ROLE[t.cls] || "Industry";
 
 // Stargates: 3 on the outer ring. They burn fuel while active.
 export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with
