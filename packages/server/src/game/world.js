@@ -146,7 +146,8 @@ export class World {
     const t = SHIP_TYPES[sh.type];
     const a = Math.atan2(sh.y - f.rock.y, sh.x - f.rock.x) + (Math.random() - 0.5) * Math.PI * 0.9, arm = t.arms[i % t.arms.length];
     L.on = true; L.repeat = true; L.rock = rockId; L.hp = arm[Math.floor(Math.random() * arm.length)];
-    L.ax = +(f.rock.x + Math.cos(a) * f.rock.r).toFixed(4); L.ay = +(f.rock.y + Math.sin(a) * f.rock.r).toFixed(4);
+    const d = f.rock.r * (0.15 + Math.random() * 0.3);   // sprites are irregular with transparent margins: stay well inside the visible rock
+    L.ax = +(f.rock.x + Math.cos(a) * d).toFixed(4); L.ay = +(f.rock.y + Math.sin(a) * d).toFixed(4);
     L.start = now; L.until = now + MINING_CYCLE_MS;
   }
   _lockedRock(sh, rockId) { return sh.targets.find((t) => t.kind === "rock" && t.locked && (rockId == null || t.id === rockId)); }
