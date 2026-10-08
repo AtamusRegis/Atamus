@@ -95,9 +95,16 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = () => { setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.t === "countdown") { startCountdown(m.at); return; }
+      if (m.t === "countdown") { pending = { at: m.at, parts: m.parts || ["server", "web"] }; startCountdown(m.at); return; }
       if (m.t === "update") { if (m.web !== BUILD) reloadForUpdate(m.web); return; }
-      if (m.t === "hello" && m.build) { if (serverBuild && m.build !== serverBuild) { reloadForUpdate("s" + m.build); return; } serverBuild = m.build; }
+      if (m.t === "hello" && m.build) {
+        if (serverBuild && m.build !== serverBuild) {
+          // new server is up; if the website is switching too, its push does the one reload
+          const webComing = pending && pending.parts.includes("web") && Date.now() < pending.at + 180_000;
+          if (!webComing) { reloadForUpdate("s" + m.build); return; }
+        }
+        serverBuild = m.build;
+      }
       if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; computeSystemRadius(); }
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
@@ -114,7 +121,7 @@
   }
   // ---- new build live? reload onto it (UI layout and selection are restored after the reload) ----
   const BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content;
-  let serverBuild = null, reloading = false;
+  let serverBuild = null, reloading = false, pending = null;
   // "Update in 0:30" — the live build switches at zero, then the reload below happens
   let cdTimer = 0;
   function startCountdown(at) {

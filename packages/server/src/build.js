@@ -32,16 +32,20 @@ if (process.env.ATAMUS_PTR !== "1") { checkWebsiteBuild(); setInterval(checkWebs
 // Only honoured when the repo's main really is ahead of what's live, and once per commit,
 // so a stray request can't spam players.
 const REPO_DIR = new URL("../../../", import.meta.url).pathname;
-let announced = null, onCountdownFn = () => {};
+let announced = null, announcedAt = 0, parts = new Set(), onCountdownFn = () => {};
 export const onCountdown = (fn) => { onCountdownFn = fn; };
 const mainHead = () => new Promise((res) => execFile("git", ["-C", REPO_DIR, "ls-remote", "origin", "refs/heads/main"], { timeout: 10_000 }, (err, out) => res(err ? null : String(out).split(/\s/)[0] || null)));
-export async function announceUpdate(seconds = 30) {
+// part: "server" or "web" — which half of the game this deploy is about to switch
+export async function announceUpdate(part, seconds = 30) {
+  part = part === "web" ? "web" : "server";
   const head = await mainHead(); if (!head) return { ok: false, why: "cannot read main" };
-  if (head === announced) return { ok: true, already: true };
+  if (head === announced) {                               // the other workflow for the same commit: same countdown, more parts
+    if (!parts.has(part)) { parts.add(part); onCountdownFn(announcedAt, head, [...parts]); }
+    return { ok: true, at: announcedAt, parts: [...parts] };
+  }
   const serverCurrent = head.startsWith(SERVER_BUILD), webCurrent = webBuild && head === webBuild;
   if (serverCurrent && webCurrent) return { ok: false, why: "nothing pending" };
-  announced = head;
-  const at = Date.now() + seconds * 1000;
-  onCountdownFn(at, head);
-  return { ok: true, at };
+  announced = head; announcedAt = Date.now() + seconds * 1000; parts = new Set([part]);
+  onCountdownFn(announcedAt, head, [...parts]);
+  return { ok: true, at: announcedAt, parts: [...parts] };
 }
