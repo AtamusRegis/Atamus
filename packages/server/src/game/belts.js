@@ -15,8 +15,8 @@ export const ORES = [
 
 export const BELT = {
   count: 5,
-  arcRadiusKm: 30,        // crescent line distance from the beacon
-  bandMinKm: 2.5, bandMaxKm: 5, // rocks sit this far off the line (either side)
+  arcRadiusKm: 15,        // crescent line distance from the beacon
+  bandMinKm: 0, bandMaxKm: 2.5, // rocks sit this far off the line (either side)
   rocksMin: 75, rocksMax: 150,
   oreMinM3: 400_000, oreMaxM3: 900_000,
 };
