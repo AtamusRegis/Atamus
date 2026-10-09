@@ -961,8 +961,8 @@
     if (invWins[key]) return;
     invWins[key] = st;
     createWindow(key, st.solo
-      ? { left: 400, top: 200, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), groupable: false }
-      : { left: 360, top: 160, width: 420, minW: 260, minH: 200, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory" });
+      ? { left: 400, top: 200, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), groupable: false }
+      : { left: 360, top: 160, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory" });   // as narrow as one slot
     watchInvResize(key);
   }
   function openInventory(ref) {
@@ -998,8 +998,8 @@
   function dropTarget(elm, to, A) {
     elm.addEventListener("dragover", (e) => { e.preventDefault(); elm.classList.add("drop"); });
     elm.addEventListener("dragleave", () => elm.classList.remove("drop"));
-    elm.addEventListener("drop", (e) => { e.preventDefault(); elm.classList.remove("drop"); const d = dragPayload(e); if (d && d.ref) A.send({ t: "inv_move", from: d.ref, to }); });
-    elm.addEventListener("touchdrop", (e) => { if (e.detail && e.detail.ref) A.send({ t: "inv_move", from: e.detail.ref, to }); });
+    elm.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); elm.classList.remove("drop"); const d = dragPayload(e); if (d && d.ref) A.send({ t: "inv_move", from: d.ref, to }); });
+    elm.addEventListener("touchdrop", (e) => { e.stopPropagation(); if (e.detail && e.detail.ref) A.send({ t: "inv_move", from: e.detail.ref, to }); });
   }
   function renderInventory(key, body) {
     const w = wins[key], st = invWins[key]; if (!w || !st) return;
@@ -1008,13 +1008,14 @@
     const root = st.root || ref, station = !st.solo && root.owner === "station";
     const tabs = st.solo ? [] : invTabsFor(root);              // tabs belong to the window's holder, not the tab being viewed
     const docked = station ? (A.snap.ships || []).filter((x) => x.mine && x.docked) : [];
-    // slots flow into as many columns as the grid area fits; rows grow with the contents (plus one spare row)
-    const SIDE = station ? 128 : 0, CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth - SIDE + GAP) / (CELL + GAP)));
-    const n = data ? data.slots.length : 0, total = Math.min(maxStacks, Math.max(cols * 2, (Math.ceil(n / cols) + 1) * cols));
+    // slots flow into as many columns as the grid area fits: one cell per stack plus one empty cell to drop into
+    const stacked = station && body.clientWidth < 230;           // too narrow for the ship list beside the grid: it goes above
+    const SIDE = station && !stacked ? 128 : 0, CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth - SIDE + GAP) / (CELL + GAP)));
+    const n = data ? data.slots.length : 0, total = Math.min(maxStacks, n + 1);
     // rebuild only when the structure changes; quantities update in place
     const deliv = A.inv.delivery;
     const sig = [invKey(ref), deliv ? deliv.stacks : 0, docked.map((d) => d.name || "").join(","), tabs.map((t) => invKey(t) + (t.owner === "station" ? hangarName(t.h) : "")).join(","), docked.map((d) => d.id + (saved.invOpen[d.id] ? 1 : 0) + shipHolds(d.id).join("")).join(","),
-      data ? data.slots.map((x) => x.item).join(",") : "-", cols, total].join("|");
+      data ? data.slots.map((x) => x.item).join(",") : "-", cols, total, stacked].join("|");
     if (sig !== st.sig) {
       st.sig = sig; st.live = { qty: [] };
       body.innerHTML = ""; w.slot.innerHTML = "";
@@ -1060,7 +1061,7 @@
         dl.addEventListener("contextmenu", (e) => { e.preventDefault(); showCtxMenu(e.clientX, e.clientY, [["Open in new window", () => openInventoryAlone(dref)]]); });
         side.append(el("div", { class: "inv-side-fill" }), el("div", { class: "inv-side-div" }), dl);
         main = el("div", { class: "inv-main" });
-        body.append(el("div", { class: "inv-split" }, side, main));
+        body.append(el("div", { class: "inv-split" + (stacked ? " stacked" : "") }, side, main));
         if (ref.owner === "ship" || ref.inv === "delivery") main.append(el("div", { class: "inv-viewing" }, invLabel(ref)));
       }
       if (!data) { main.append(el("div", { class: "muted" }, "No inventory.")); return; }
@@ -1069,6 +1070,7 @@
       main.append(el("div", { class: "inv-head" }, el("div", { class: "inv-cap" }, fill), stat,
         el("button", { class: "qbtn minus inv-sort", title: "Sort", onclick: () => A.send({ t: "inv_sort", ref }) }, "⇅")));
       const grid = el("div", { class: "inv-grid", style: "grid-template-columns: repeat(" + cols + ", " + CELL + "px)" });
+      dropTarget(grid, { ...ref, slot: null }, A);                // anywhere in the grid: add to this inventory
       for (let i = 0; i < total; i++) {
         const stck = data.slots[i];
         const cell = el("div", { class: "inv-cell" + (stck ? " filled" : "") });
@@ -1106,7 +1108,7 @@
         ev.preventDefault(); clearTimeout(hold);
         if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
         ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
-        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot");
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot, .inv-grid");
         if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
       };
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };

@@ -207,10 +207,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .unit-btns { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
 .unit-btns .unit-btn { margin-top: 0; }
 /* inventory */
-.inv-head { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+.inv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 7px; }
 .inv-cap { flex: 1; height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
 .inv-cap-fill { height: 100%; border-radius: 6px; background: var(--accent-grad); }
-.inv-stat { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.inv-stat { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .inv-sort { width: 22px; height: 20px; font-size: 12px; }
 .inv-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
 .inv-cell { aspect-ratio: 1; border-radius: 5px; background: rgba(0,0,0,0.28); position: relative; min-width: 0; }
@@ -475,3 +475,11 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .pop-bonus { margin: 0 0 10px; font-size: 12.5px; color: var(--text); font-weight: 600; }
 .pop-unlocks { margin: 0 0 10px; padding: 7px 9px; border-radius: 6px; background: rgba(255,255,255,0.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5); font-size: 12px; }
 .pop-unlocks-h { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 3px; }
+
+/* inventory windows can be as narrow as one slot */
+.win[data-id^="inv:"] { min-width: 0; }
+.win[data-id^="inv:"] .win-title-slot { overflow: hidden; }
+.win[data-id^="inv:"] .inv-cap { min-width: 24px; }
+.inv-split.stacked { flex-direction: column; }
+.inv-split.stacked .inv-side { width: auto; }
+.inv-split.stacked .inv-side-fill { display: none; }

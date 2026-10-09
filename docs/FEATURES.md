@@ -135,6 +135,9 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Windows:**
   - dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width);
   - resizing never squeezes a window narrower than its content. Inventory windows are the exception: their slot grid reflows to any width.
+- **Inventory grids (owner):** an inventory shows one cell per stack plus one empty cell to drop into, with no padding rows of fake slots. That holds for ship holds, hangars, Deliveries and cans.
+  - Every inventory window can shrink to one slot wide. The station window moves its ship list above the grid when it's too narrow to sit beside it.
+  - Dropping anywhere on the grid adds the item to that inventory.
   - **tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again;
   - layout, groups, open inventories (with their active tab) and the market are remembered in localStorage `atamus.ui`.
 - **The selection drives the inventories:**
