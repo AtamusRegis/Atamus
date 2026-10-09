@@ -483,3 +483,4 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .inv-split.stacked { flex-direction: column; }
 .inv-split.stacked .inv-side { width: auto; }
 .inv-split.stacked .inv-side-fill { display: none; }
+.win[data-id^="inv:"] .win-title-slot .tab { white-space: nowrap; flex: none; }

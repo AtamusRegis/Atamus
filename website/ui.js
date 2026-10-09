@@ -66,7 +66,7 @@
     document.body.appendChild(win);
     win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar, () => persistWin(id));
-    addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id));
+    addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id), opts.dynMin);
     wins[id] = { id, win, body, slot, bar, close, render: opts.render, label: opts.label, groupable: opts.groupable !== false, group: null };
     return wins[id];
   }
@@ -225,7 +225,7 @@
     });
   }
 
-  function addResize(win, MIN_W, MIN_H, onEnd) {
+  function addResize(win, MIN_W, MIN_H, onEnd, dynMin) {   // dynMin(): content-driven minimum {w, h}
     MIN_W = MIN_W || 220; MIN_H = MIN_H || 130;
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
       const h = el("div", { class: "rz rz-" + dir });
@@ -243,6 +243,11 @@
           if (dir.includes("s")) hh = Math.max(MIN_H, sh + dy);
           if (dir.includes("w")) { w = Math.max(MIN_W, sw - dx); l = sl + (sw - w); }
           if (dir.includes("n")) { hh = Math.max(MIN_H, sh - dy); t = st + (sh - hh); }
+          const dm = dynMin && dynMin();
+          if (dm) {
+            if (w < dm.w) { if (dir.includes("w")) l -= dm.w - w; w = dm.w; }
+            if (hh < dm.h) { if (dir.includes("n")) t -= dm.h - hh; hh = dm.h; }
+          }
           win.style.width = w + "px"; win.style.height = hh + "px"; win.style.left = l + "px"; win.style.top = t + "px";
           // never shrink horizontally past what the content needs
           if (content && (dir.includes("e") || dir.includes("w")) && !win.querySelector(".inv-grid")) {   // inventory grids reflow to any width
@@ -957,12 +962,31 @@
     input.addEventListener("click", (e) => e.stopPropagation());
   }
   function watchInvResize(key) { const b = wins[key].body; new ResizeObserver(() => { if (isOpen(wins[key])) renderInventory(key, b); }).observe(b); }
+  // An inventory window must keep its tabs (hangars / holds) and at least one slot in view.
+  function invMinSize(key) {
+    const w = wins[key]; if (!w) return null;
+    const win = w.win, wr = win.getBoundingClientRect(), body = w.body;
+    const tabs = w.slot.querySelector(".tab-row"), close = w.close;
+    const titlePad = 22 + 8 + (close ? close.offsetWidth : 20);
+    let minW = 66;
+    if (tabs) { const kids = [...tabs.children]; minW = Math.max(minW, kids.reduce((a, k) => a + k.offsetWidth, 0) + 3 * Math.max(0, kids.length - 1) + titlePad); }   // every tab at full width
+    let minH = 90;
+    const cell = body.querySelector(".inv-cell");
+    if (cell) minH = Math.max(minH, Math.ceil(cell.getBoundingClientRect().bottom - wr.top + body.scrollTop + 12));
+    return { w: Math.ceil(minW), h: minH };
+  }
+  function enforceInvMin(key) {
+    const w = wins[key], m = invMinSize(key); if (!w || !m || !isOpen(w)) return;
+    const win = w.win, r = win.getBoundingClientRect();
+    if (r.width < m.w - 0.5) win.style.width = m.w + "px";
+    if (win.style.height && r.height < m.h - 0.5) win.style.height = m.h + "px";
+  }
   function makeInvWindow(key, st) {
     if (invWins[key]) return;
     invWins[key] = st;
     createWindow(key, st.solo
-      ? { left: 400, top: 200, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), groupable: false }
-      : { left: 360, top: 160, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory" });   // as narrow as one slot
+      ? { left: 400, top: 200, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), groupable: false, dynMin: () => invMinSize(key) }
+      : { left: 360, top: 160, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory", dynMin: () => invMinSize(key) });   // down to tabs + one slot
     watchInvResize(key);
   }
   function openInventory(ref) {
@@ -1089,6 +1113,7 @@
         grid.append(cell);
       }
       main.append(grid);
+      requestAnimationFrame(() => enforceInvMin(key));             // a restored or rebuilt window never sits below its minimum
     }
     if (!data) return;
     const L = st.live;

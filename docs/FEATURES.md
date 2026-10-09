@@ -136,7 +136,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width);
   - resizing never squeezes a window narrower than its content. Inventory windows are the exception: their slot grid reflows to any width.
 - **Inventory grids (owner):** an inventory shows one cell per stack plus one empty cell to drop into, with no padding rows of fake slots. That holds for ship holds, hangars, Deliveries and cans.
-  - Every inventory window can shrink to one slot wide. The station window moves its ship list above the grid when it's too narrow to sit beside it.
+  - Inventory windows have content-driven minimums **(owner)**. A window can't get narrower than its full row of tabs (hangar or hold names) or one slot, and can't get shorter than its first slot. This is checked while resizing and after every rebuild.
+  - A tabless window (a single hold opened on its own) can be one slot wide. The station window moves its ship list above the grid if it's ever too narrow to sit beside it.
   - Dropping anywhere on the grid adds the item to that inventory.
   - **tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again;
   - layout, groups, open inventories (with their active tab) and the market are remembered in localStorage `atamus.ui`.
