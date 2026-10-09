@@ -85,6 +85,7 @@
   function toggleWindow(id, force) {
     const w = wins[id]; if (!w) return;
     const show = force != null ? force : !isOpen(w);
+    if (id === "unit" && !show && window.Atamus.hud) window.Atamus.hud.gate = null;   // closing the stargate window
     if (w.group) {                                   // lives in a tab group
       const g = groups[w.group];
       if (show || id === "unit") { setActive(g, id); g.frame.style.zIndex = ++z; if (show) fitOnScreen(g.frame); }   // the selection window stays in its group
@@ -346,62 +347,28 @@
   const effLevel = (pilot, key) => trained(pilot, key) + queuedCount(pilot, key);
   function prereqMet(pilot, key) { const l = licById(key); return l.requirements.every((r) => r.type !== "license" || trained(pilot, r.key) >= r.level); }
 
-  let openMenu = null;
-  function closeMenu() { if (openMenu) { openMenu.hidden = true; openMenu = null; } }
-  function pilotDropdown(pilot, body) {
-    const wrap = el("div", { class: "dd" });
-    const btn = el("button", { class: "dd-btn", type: "button" }, pilot.name);
-    const menu = el("div", { class: "dd-menu", hidden: "" });
-    for (const p of state.pilots) {
-      menu.append(el("div", { class: "dd-item" + (p.id === pilot.id ? " sel" : ""), onclick: (e) => { e.stopPropagation(); closeMenu(); if (p.id !== selectedPilotId) { selectedPilotId = p.id; renderPilot(body); } } }, p.name));
-    }
-    const prof = state.profile || {};
-    if (state.pilots.length < (prof.maxPilots || 3)) menu.append(el("div", { class: "dd-item", onclick: (e) => { e.stopPropagation(); closeMenu(); newPilot(body); } }, "New pilot · ", cr(prof.pilotPrice || 1000000)));
-    btn.addEventListener("click", (e) => { e.stopPropagation(); const show = menu.hidden; closeMenu(); if (show) { menu.hidden = false; openMenu = menu; } });
-    wrap.append(btn, menu);
-    return wrap;
-  }
-
   function renderPilot(body) {
     const slot = wins.pilot && wins.pilot.slot;
     body.innerHTML = ""; if (slot) slot.innerHTML = "";
     if (!state || !catalog) { if (slot) slot.textContent = "Pilot"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
     if (!state.pilots.length) { if (slot) slot.textContent = "Pilot"; renderCreatePilot(body); return; }
-    if (selectedPilotId == null) selectedPilotId = state.pilots[0].id;
-    const pilot = state.pilots.find((p) => p.id === selectedPilotId) || state.pilots[0];
+    // the pilot selected in the fleet window
+    const pilot = state.pilots.find((p) => String(p.id) === String(saved.selPilot)) || state.pilots[0];
     selectedPilotId = pilot.id;
+    if (slot) slot.textContent = pilot.name;
 
-    // pilot selector lives in the title bar — custom themed dropdown
-    if (slot) slot.append(pilotDropdown(pilot, body));
-
-    const tabs = [["skills", "Licenses"], ["queue", "Training Queue"], ["ship", "Current Ship"], ["items", "Items"]];
-    body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => {
-      const dis = k === "items";
-      return el("button", { class: "tab" + (k === pilotTab ? " active" : "") + (dis ? " disabled" : ""), onclick: () => { if (dis) return; pilotTab = k; renderPilot(body); } }, n);
-    })));
+    const tabs = [["skills", "Licenses"], ["queue", "Training Queue"]];
+    if (!tabs.some(([k]) => k === pilotTab)) pilotTab = "skills";
+    body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pilotTab ? " active" : ""), onclick: () => { pilotTab = k; renderPilot(body); } }, n))));
     const content = el("div", { class: "tab-content" }); body.append(content);
     if (pilotTab === "skills") renderSkills(content, pilot);
-    else if (pilotTab === "queue") renderQueue(content, pilot);
-    else if (pilotTab === "ship") renderPilotShip(content, pilot);
-    else content.append(el("div", { class: "muted" }, "Coming soon."));
+    else renderQueue(content, pilot);
   }
-  function renderPilotShip(content, pilot) {
-    const A = window.Atamus, sh = ((A.snap && A.snap.ships) || []).find((x) => x.mine && String(x.pilot) === String(pilot.id));
-    if (!sh) { content.append(el("div", { class: "muted" }, pilot.name + " isn't crewing a ship. Right-click a ship in your station hangar to crew it.")); return; }
-    const t = hullOf(sh.type);
-    const where = sh.docked ? "Docked at station" : sh.warp ? "Warping" : sh.moving ? "In space · moving" : "In space";
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    content.append(el("div", { class: "ship-hero" }, shipIcon(sh.type, "ship-hero-img")),
-      row("Ship", shipName(sh)), row("Hull", t.name + " · " + (t.cls || "—")), row("Location", where),
-      el("div", { class: "unit-btns" },
-        el("button", { class: "btn-primary2 unit-btn", onclick: () => A.locateShip(sh.id) }, "Locate"),
-        el("button", { class: "btn-primary2 unit-btn off", onclick: () => openShipInfo(sh.type) }, "Ship info")));
-  }
-
-  function newPilot(body) {
+  function pilotSelChanged() { if (wins.pilot && isOpen(wins.pilot) && String(selectedPilotId) !== String(saved.selPilot)) renderPilot(wins.pilot.body); }
+  function newPilot() {
     askText("New pilot", "", 24, async (name) => {
       if (!name) return;
-      try { const r = await Api.post("/game/pilot/create", { name }); await refreshState(); if (r && r.id != null) selectedPilotId = r.id; renderPilot(body); }
+      try { const r = await Api.post("/game/pilot/create", { name }); await refreshState(); if (r && r.id != null) selectPilot(r.id); }
       catch (e) { flash(e.message); }
     });
   }
@@ -703,8 +670,10 @@
 
   // The panel only rebuilds its DOM when the *structure* changes (unit, buttons);
   // numbers update in place so a button is never replaced mid-click.
+  // the stargate window: opened by clicking a gate (like the station), without changing the selection
+  const gateUnit = () => { const A = window.Atamus, g = A.hud.gate && (A.snap.gates || []).find((x) => x.id === A.hud.gate); return g ? { kind: "gate", name: "Stargate", ...g } : null; };
   function renderUnit(body) {
-    const A = window.Atamus, w = wins.unit, u = A.unit;
+    const A = window.Atamus, w = wins.unit, u = gateUnit() || A.unit;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const fmtM3 = (a, b) => Math.round(a).toLocaleString() + " / " + b.toLocaleString() + " m³";
     const docked = u && u.kind === "station" ? (A.snap.ships || []).filter((sh) => sh.mine && sh.docked) : [];
@@ -762,10 +731,11 @@
   window.Atamus.bus.addEventListener("select", (e) => {
     const kind = e.detail && e.detail.kind;
     if (kind === "station") { openInventory({ owner: "station", inv: "hangar", h: 0 }); toggleWindow("unit", false); return; }
-    if (kind === "ship" && !wins.unit.group) { toggleWindow("unit", false); return; }
+    if (kind === "ship" && !wins.unit.group) { if (!window.Atamus.hud.gate) toggleWindow("unit", false); return; }
     toggleWindow("unit", true); renderUnit(wins.unit.body);
   });
-  window.Atamus.bus.addEventListener("deselect", () => toggleWindow("unit", false));
+  window.Atamus.bus.addEventListener("deselect", () => { if (!window.Atamus.hud.gate) toggleWindow("unit", false); });
+  window.Atamus.bus.addEventListener("opengate", (e) => { window.Atamus.hud.gate = e.detail.id; wins.unit.sig = null; toggleWindow("unit", true); renderUnit(wins.unit.body); });
   // inventories follow the selection: a ship in space shows only its own; the station's (and docked ships' holds)
   // stay up only while the station or a docked ship is selected
   const closeUnselectedInvs = (u) => {
@@ -789,7 +759,9 @@
   window.Atamus.bus.addEventListener("deselect", closeOtherShipInvs);
   window.Atamus.bus.addEventListener("openstation", () => openInventory({ owner: "station", inv: "hangar", h: 0 }));
   window.Atamus.bus.addEventListener("snap", () => {
-    const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body);
+    const w = wins.unit;
+    if (window.Atamus.hud.gate && !gateUnit()) toggleWindow("unit", false);   // that gate is gone from view
+    if (w && isOpen(w)) renderUnit(w.body);
     // a docked ship's holds are reached through the station inventory: close its own windows
     for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
   });
@@ -959,7 +931,9 @@
       const mods = hbModules(sh);
       mods.forEach((m, idx) => {
         const it = m.mod.role === "laser" ? { k: "laser", i: m.laser, item: m.item } : m.mod.role === "auto" ? { k: "auto", item: m.item } : { k: "passive", item: m.item };
-        const slot = el("div", { class: "hb-slot filled" });
+        // module color by kind (owner): mining orange, combat red, automation / self blue, passive grey
+        const tone = it.k === "passive" ? "passive" : m.mod.cat === "mining" ? "c-mining" : m.mod.cat === "automation" ? "c-auto" : m.mod.cat === "combat" || /weapon|missile|beam|hybrid|projectile/.test(m.mod.cat || "") ? "c-combat" : "c-auto";
+        const slot = el("div", { class: "hb-slot filled " + tone });
         const icon = m.mod.icon ? el("img", { class: "hb-img", src: m.mod.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, m.mod.name.split(" ").map((w) => w[0]).join(""));
         slot.append(icon);
         if (it.k === "laser") {
@@ -1048,12 +1022,6 @@
   hudBar.addEventListener("dragover", (e) => { if (hud.classList.contains("docked")) e.preventDefault(); });
   hudBar.addEventListener("drop", (e) => { e.preventDefault(); hotbarFit(dragPayload(e)); });
   hudBar.addEventListener("touchdrop", (e) => hotbarFit(e.detail));
-  let pilotShipSig = "";                              // keep the pilot's Current Ship tab live (location changes)
-  window.Atamus.bus.addEventListener("snap", () => {
-    if (!wins.pilot || !isOpen(wins.pilot) || pilotTab !== "ship") return;
-    const sig = ((window.Atamus.snap.ships) || []).filter((x) => x.mine).map((x) => x.id + x.pilot + x.docked + x.warp + x.moving + (x.name || "")).join(",");
-    if (sig !== pilotShipSig) { pilotShipSig = sig; renderPilot(wins.pilot.body); }
-  });
   window.Atamus.bus.addEventListener("select", renderHud);
   window.Atamus.bus.addEventListener("deselect", renderHud);
   setInterval(renderHud, 500);                       // safety net: never leave the HUD up for a ship that's gone
@@ -1089,7 +1057,7 @@
   saved.selPilot = saved.selPilot ?? null;
   const pilotShip = (pid) => ((window.Atamus.snap && window.Atamus.snap.ships) || []).find((x) => x.mine && x.pilot != null && String(x.pilot) === String(pid)) || null;
   function selectPilot(pid) {
-    saved.selPilot = pid; persistAll();
+    saved.selPilot = pid; persistAll(); pilotSelChanged();
     const sh = pilotShip(pid), A = window.Atamus;
     if (sh) A.selectShip(sh.id); else A.deselectUnit();
     if (wins.fleet && isOpen(wins.fleet)) renderFleet(wins.fleet.body);
@@ -1098,14 +1066,21 @@
   function syncPilotSelection() {
     const A = window.Atamus, pilots = (state && state.pilots) || []; if (!pilots.length || !A.snap || !A.snap.ships) return;
     const u = A.unit;
-    if (u && u.kind === "ship" && u.pilot != null) { if (String(u.pilot) !== String(saved.selPilot)) { saved.selPilot = u.pilot; persistAll(); } return; }
-    if (!pilots.some((p) => String(p.id) === String(saved.selPilot))) saved.selPilot = pilots[0].id;
+    if (u && u.kind === "ship" && u.pilot != null) { if (String(u.pilot) !== String(saved.selPilot)) { saved.selPilot = u.pilot; persistAll(); pilotSelChanged(); } return; }
+    if (!pilots.some((p) => String(p.id) === String(saved.selPilot))) { saved.selPilot = pilots[0].id; pilotSelChanged(); }
     const sh = pilotShip(saved.selPilot);
     if (sh && !(A.selectedShips || []).length) A.selectShip(sh.id);
   }
   window.Atamus.bus.addEventListener("snap", syncPilotSelection);
   function renderFleet(body) {
     const A = window.Atamus, w = wins.fleet;
+    if (!w.bgMenu) {                                   // the bar's background: right-click / hold → New pilot (paid, up to the cap)
+      w.bgMenu = true; let onCard = false;
+      const menu = (x, y) => { const prof = (state && state.profile) || {}; if (!state || state.pilots.length >= (prof.maxPilots || 3)) return; showCtxMenu(x, y, [[el("span", {}, "New pilot · ", cr(prof.pilotPrice || 1000000)), newPilot]]); };
+      body.addEventListener("contextmenu", (e) => { if (e.target.closest(".fleet-card")) return; e.preventDefault(); menu(e.clientX, e.clientY); });
+      body.addEventListener("touchstart", (e) => { onCard = !!e.target.closest(".fleet-card"); }, { passive: true });
+      holdToOpen(body, () => { if (onCard) return; const r = body.getBoundingClientRect(); menu(r.left + r.width / 2, r.bottom); });
+    }
     const pilots = (state && state.pilots) || [];
     const rows = pilots.map((p) => ({ p, sh: pilotShip(p.id) }));
     const sig = rows.map(({ p, sh }) => p.id + ":" + p.name + ":" + (sh ? sh.id + sh.type + (sh.docked ? "d" : "") : "-")).join(",");
@@ -1618,7 +1593,6 @@
     if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
     if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
     if (wins.market && isOpen(wins.market)) renderMarket(wins.market.body);
-    if (wins.pilot && isOpen(wins.pilot) && pilotTab === "ship") renderPilot(wins.pilot.body);
     if (wins.split && isOpen(wins.split)) renderSplit(wins.split.body);
     for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });
 
@@ -1743,12 +1717,11 @@
     wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());
     renderPanel();
 
-    // close any open custom dropdown / context menu when clicking elsewhere
+    // close the context menu when clicking elsewhere
     document.addEventListener("pointerdown", (e) => {
-      if (openMenu && !(e.target instanceof Element && e.target.closest(".dd"))) closeMenu();
       if (ctxMenu && !(e.target instanceof Element && e.target.closest(".ctx-menu"))) closeCtxMenu();
     }, true);
-    addEventListener("keydown", (e) => { if (e.key === "Escape") { closeMenu(); closeCtxMenu(); } });
+    addEventListener("keydown", (e) => { if (e.key === "Escape") { closeCtxMenu(); } });
     // right-click is used in-game — suppress the browser's native context menu
     document.addEventListener("contextmenu", (e) => e.preventDefault());
 

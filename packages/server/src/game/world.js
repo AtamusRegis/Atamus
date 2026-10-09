@@ -1,5 +1,5 @@
 import {
-  FUEL_START_MS, FUEL_SESSION_MAX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
+  FUEL_START_MS, FUEL_SESSION_MAX_MS, FUEL_REGEN_RATE, WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
 } from "./constants.js";
@@ -45,6 +45,7 @@ export class World {
         state: sg ? sg.state : "closed", fuelMs: sg ? sg.fuelMs : FUEL_START_MS, sessionUsedMs: sg ? sg.sessionUsedMs : 0, activatedAt: sg ? sg.activatedAt : 0,
         connToSys: sg ? (sg.connToSys || null) : null, connToGate: sg ? (sg.connToGate || null) : null, lastSeek: 0,
       };
+      if (g.state !== "active" && downtime) g.fuelMs = Math.min(FUEL_START_MS, g.fuelMs + downtime * FUEL_REGEN_RATE);
       if (g.state === "active" && downtime) {
         g.fuelMs -= downtime; g.sessionUsedMs += downtime;
         if (g.fuelMs <= 0 || g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { g.fuelMs = Math.max(0, g.fuelMs); g.state = "closed"; g.sessionUsedMs = 0; g.connToSys = null; g.connToGate = null; }
@@ -82,7 +83,7 @@ export class World {
     const nLasers = fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     return {
       ...sh, vx: 0, vy: 0, speed: t.speedKmps, accel: t.accelKmps2 || 0.1, radius: t.radiusKm, mass: t.mass, fit,
-      docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: nLasers }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
+      docked: !!sh.docked, warp: false, wp: null, lasers: Array.from({ length: nLasers }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
       auto: { on: false, off: false, next: 0, ...(sh.auto || {}) },
       hp: Number.isFinite(sh.hp) ? Math.min(sh.hp, t.hp) : t.hp, shield: Number.isFinite(sh.shield) ? Math.min(sh.shield, t.shield) : t.shield,
       targets: (sh.targets || []).map((tg) => ({ ...tg })),
@@ -137,7 +138,7 @@ export class World {
     if (!owned.length) return;
     // clamp the destination into whatever system these ships are in (home for now)
     const t = clampToSystem(x, y);
-    for (const s of owned) { if (s.docked) continue; s.tx = t.x; s.ty = t.y; s.moving = true; s.warp = false; }
+    for (const s of owned) { if (s.docked || this._inWarp(s)) continue; s.tx = t.x; s.ty = t.y; s.moving = true; s.warp = false; s.wp = null; }
   }
 
   // ---- targeting / mining / docking / warp ----
@@ -316,8 +317,8 @@ export class World {
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
-      if (sh.docked || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
-      sh.docked = true; sh.moving = false; sh.warp = false; for (const L of sh.lasers) this._laserStop(L); sh.auto.on = false; sh.targets = []; sh.vx = sh.vy = 0;
+      if (sh.docked || this._inWarp(sh) || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
+      sh.docked = true; sh.moving = false; sh.warp = false; sh.wp = null; for (const L of sh.lasers) this._laserStop(L); sh.auto.on = false; sh.targets = []; sh.vx = sh.vy = 0;
       sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield; this._repairModules(sh);   // docked: repaired and recharged
     } else {
       if (!sh.docked) return;
@@ -326,9 +327,38 @@ export class World {
     }
     this._markInv(pid);
   }
+  // Warp: align (speed up toward the destination) → at full speed a warp window opens ahead → the ship goes
+  // through as a ball → comes out of a second window short of the destination at full speed → brakes to a stop.
   cmdWarp(pid, shipId) {
-    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked || !sh.moving) return;
-    sh.warp = true;
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked || !sh.moving || sh.warp) return;
+    sh.warp = true; sh.wp = { ph: "align" };
+  }
+  _inWarp(s) { return !!(s.wp && (s.wp.ph === "open" || s.wp.ph === "transit")); }
+  _warpTick(s, now) {
+    const w = s.wp; if (!w) return false;
+    if (w.ph === "align") {
+      const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = Math.hypot(s.vx, s.vy);
+      if (!s.moving || d < 1e-6) { s.wp = null; s.warp = false; return false; }
+      if (v < s.speed * 0.97 || (s.vx * dx + s.vy * dy) / (v * d) < 0.995) return false;   // not at full speed / not lined up yet
+      const ux = dx / d, uy = dy / d, lead = s.speed * WARP_OPEN_MS / 1000, brake = (s.speed * s.speed) / (2 * (s.accel || 0.1) * 0.9) + SHIP_ARRIVE_EPS_KM;
+      const L = d - lead - brake;
+      if (L < WARP_MIN_KM) { s.wp = null; s.warp = false; return false; }                   // too short a hop: just fly there
+      s.wp = { ph: "open", at: now, dir: Math.atan2(uy, ux), fx: s.x + ux * lead, fy: s.y + uy * lead, ex: s.tx - ux * brake, ey: s.ty - uy * brake,
+        dur: Math.max(1500, Math.round(L / (s.speed * WARP_MULT) * 1000)) };
+      return false;
+    }
+    if (w.ph === "open") {
+      if (now - w.at < WARP_OPEN_MS) return false;                                         // coasting into the window at full speed
+      w.ph = "transit"; w.at = now; s.x = w.fx; s.y = w.fy;
+    }
+    if (w.ph === "transit") {
+      const u = Math.min(1, (now - w.at) / w.dur), k = 0.95, e = u - k * Math.sin(2 * Math.PI * u) / (2 * Math.PI);   // eases in and out: slows right down nearing the exit
+      s.x = w.fx + (w.ex - w.fx) * e; s.y = w.fy + (w.ey - w.fy) * e; s.h = w.dir; s.vx = 0; s.vy = 0;
+      if (u >= 1) { w.ph = "exit"; w.at = now; s.x = w.ex; s.y = w.ey; s.vx = Math.cos(w.dir) * s.speed; s.vy = Math.sin(w.dir) * s.speed; s.warp = false; s.moving = true; }
+      return true;                                                                            // position is scripted this tick
+    }
+    if (w.ph === "exit" && now - w.at >= WARP_EXIT_FX_MS) s.wp = null;
+    return false;
   }
   _inv(pid, ref) {
     const p = this.players.get(pid); if (!p || !ref || typeof ref !== "object") return null;
@@ -536,7 +566,7 @@ export class World {
     for (const sh of this.ships.values()) {
       if (sh.sys !== sysId || sh.owner === ownerId) continue;
       sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
-      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.warp = false; sh.targets = []; sh.auto.on = false;
+      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.warp = false; sh.wp = null; sh.targets = []; sh.auto.on = false;
       for (const L of sh.lasers) this._laserStop(L);
       sh.inv.ore.slots = []; sh.inv.cargo.slots = [];           // destroyed with everything aboard
       const o = this.players.get(sh.owner);
@@ -561,7 +591,7 @@ export class World {
     const now = Date.now(), dtMs = dtSec * 1000;
     for (const c of this.cans.values()) if (now >= c.expiresAt) this._removeCan(c);
     for (const g of this.gates.values()) {
-      if (g.state !== "active") continue;
+      if (g.state !== "active") { if (g.fuelMs < FUEL_START_MS) g.fuelMs = Math.min(FUEL_START_MS, g.fuelMs + dtMs * FUEL_REGEN_RATE); continue; }
       if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (!partner || partner.state !== "active" || partner.connToGate !== g.id) { g.connToSys = null; g.connToGate = null; } }
       g.fuelMs -= dtMs; g.sessionUsedMs += dtMs;
       if (g.fuelMs <= 0) { g.fuelMs = 0; this._closeGate(g); continue; }
@@ -637,13 +667,15 @@ export class World {
     const ships = [...this.ships.values()];
 
     // 1) steer velocities toward targets, integrate
+    const now = Date.now();
     for (const s of ships) {
       if (s.docked) { s.vx = 0; s.vy = 0; continue; }
+      if (this._warpTick(s, now)) continue;
       if (s.moving) {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-        if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; }
+        if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; if (s.wp && s.wp.ph === "align") s.wp = null; }
         else {
-          const vmax = s.warp ? s.speed * WARP_MULT : s.speed, acc = (s.accel || 0.1) * (s.warp ? WARP_MULT : 1);
+          const vmax = s.speed, acc = s.accel || 0.1;
           const spd = Math.min(vmax, Math.sqrt(2 * acc * d) * 0.95);            // fast as it can while still able to brake in time
           const dvx = (dx / d) * spd - s.vx, dvy = (dy / d) * spd - s.vy, dv = Math.hypot(dvx, dvy), step = acc * dtSec;
           if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
@@ -659,7 +691,7 @@ export class World {
     for (let i = 0; i < ships.length; i++) {
       for (let j = i + 1; j < ships.length; j++) {
         const a = ships[i], b = ships[j];
-        if (a.sys !== b.sys || a.docked || b.docked) continue;
+        if (a.sys !== b.sys || a.docked || b.docked || (a.wp && a.wp.ph === "transit") || (b.wp && b.wp.ph === "transit")) continue;
         let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
         const minD = a.radius + b.radius;
         if (d >= minD) continue;
@@ -677,7 +709,7 @@ export class World {
     // 3) keep inside the honeycomb, finalize arrivals
     for (const s of ships) {
       const c = clampToSystem(s.x, s.y); s.x = c.x; s.y = c.y;
-      if (s.moving && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; }
+      if (s.moving && !this._inWarp(s) && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; if (s.wp && s.wp.ph === "align") s.wp = null; }
     }
   }
 
@@ -715,6 +747,11 @@ export class World {
       const mine = s.owner === p.id;
       if (s.docked && !mine) continue;                        // docked ships are out of sight
       const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
+      const w = s.wp;
+      if (w && w.ph !== "align") {   // the owner sees both windows; others see the exit window only seconds before landing
+        entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };
+        if (mine || w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS)) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
+      }
       if (mine) {
         if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);

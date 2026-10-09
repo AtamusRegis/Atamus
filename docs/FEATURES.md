@@ -8,6 +8,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, and up to 5 asteroid belt slots.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
 - **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
+  - **Fuel (owner, for now):** a gate that isn't active refuels by itself, from 0 to the 30-minute maximum in 10 minutes (also while you're offline).
+  - **Clicking a gate** opens the Stargate window (fuel, status, Turn On/Off) like the station opens its hangar: the selection doesn't change. Closing the window drops the gate's selection box.
 - **Factions** (`game/factions.js`, not used in gameplay yet):
 
   | Faction | Role |
@@ -35,7 +37,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Pilots (owner):** up to 3 per account (`MAX_PILOTS`), with no duplicate names.
   - The first pilot is free. Each extra pilot costs **1,000,000 cr** (`PILOT_PRICE`), taken from your in-game credits if you're online, otherwise from the database.
   - Creation runs in a locked transaction, so parallel requests can't get past the cap or skip the charge.
-  - Extra pilots are created from the pilot window's name dropdown: "New pilot · 1,000,000 cr" asks for a name. It's shown only while you're under the cap.
+  - Extra pilots are created by right-clicking (or holding) the fleet bar's background: "New pilot · 1,000,000 cr" asks for a name, and the new pilot becomes the selected one. It's offered only while you're under the cap.
 - **One session per account (owner).** Opening the game in a new tab or device ends the old session:
   - the old connection closes with code 4002;
   - the old tab shows "Playing on another tab or device", then goes to play.html;
@@ -83,7 +85,16 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - A pilot already sitting in another docked ship walks across the station.
 - **Buying:** bought ships arrive in **Deliveries** as packaged items. **Assemble** (in a station) turns one into a docked, uncrewed ship.
 - **Movement (owner):** each hull has an acceleration (Prospector 150 m/s², Dredger 50, Bulwark 40, Collier 45, Excavator 55, Rampart 45, Carrack 50). Ships speed up and brake at that rate and arrive without overshooting.
-- **Docking:** within 4 km of the station. Docking repairs the ship, clears its targets and stops its modules. If the docked ship was selected, the selection is cleared.
+- **Warp (owner):** the Warp action on a moving ship. All the effects are blue.
+  1. **Align:** the ship speeds up toward the destination at its normal acceleration.
+  2. **Window:** at full speed and lined up, a glowing rectangular warp window opens ahead of it, with particles streaming through it; the ship coasts into it (0.9 s).
+  3. **Transit:** the ship becomes a glowing ball with a trail, eased in and out (it slows right down nearing the exit). The average speed is 20× the hull's max speed. The course is locked: move and dock commands are ignored until it comes out.
+  4. **Exit:** it comes out of a second window placed exactly its braking distance short of the destination, at max speed, with a blue streak and particles dissipating behind it. It then brakes to a stop on the destination, with no overshoot.
+  - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
+  - **Other players** see the entry window when it opens, and the exit window only in the last 3 s before the ship lands.
+  - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
+  - A server restart drops any warp in progress; the ship keeps flying to its destination.
+- **Docking:** within 4 km of the station. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. If the docked ship was selected, the selection is cleared.
 
 ## Mining
 
@@ -103,11 +114,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots). The order can be rearranged by dragging and is remembered per ship.
   - **Keys 1–9, 0, −, =** fire the slots in order. Each slot shows only its key, in grey **(owner)**.
   - **States (owner):**
-    - powered: a colored (amber) outline;
+    - powered: an outline in the module's color **(owner)**: mining orange, combat red, automation / self blue, passive grey;
     - running: a fill timer in a lighter version of that color;
     - set to stop after this cycle: a grey outline and fill;
     - powered off: dark slate.
-  - **Running modules:** a bright glint circles the outline clockwise.
+  - **Running modules:** the outline dims and a brighter stretch of the same color sweeps slowly clockwise. No white glint or shine **(owner)**.
   - **Standby (owner):** a target module (laser) switched on with no locked rock blinks "Standby" and fires on the next rock lock; pressing it again cancels. Automation (the auto miner) runs its cycles with or without a target.
   - **Stopping (owner):** a module set to stop after its cycle can't be re-armed until the cycle ends. The next activation goes to the current primary target (the HUD's selected target, or the first locked rock).
   - **Hover (mouse):** a laser shows Cycle time, Yield (m³ / cycle), Range and Capacitor use, with all bonuses applied; the auto miner shows Cycle time and Capacitor use; a battery shows its +Capacitor.
@@ -237,7 +248,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - click a card to select that pilot; double-click locates their ship; right-click or hold opens the ship menu;
   - dragged by its background; hold or right-click the panel button to switch between horizontal and vertical;
   - auto-sized, wrapping instead of scrolling, no resize edges, 16 px end padding.
-- **Pilot window:** Licenses, Training Queue, Current Ship (with Locate) and Items.
+- **Pilot window (owner):** shows the pilot selected in the fleet window (name in the title, no dropdown), with two tabs: Licenses and Training Queue. Selecting another pilot in the fleet switches it.
 - **Persistence across reloads:** the selection (ship or station, in localStorage `atamus.sel`) and the camera (sessionStorage `atamus.view`).
 - **Settings window:** a Sound tab with All, Music and SFX sliders (themed: blue fill up to a round thumb), remembered. There are no sound effects yet; the SFX volume is ready for them.
 - **Music (owner):** "Soviet Wave" (`assets/audio/soviet_wave.mp3`) loops in the game at All × Music volume. It starts on the first click or key, since browsers block sound before that.

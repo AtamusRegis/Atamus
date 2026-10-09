@@ -74,6 +74,20 @@ t.ok(since(n).some((m) => m.includes("2.5 km")), "can transfers need a ship with
 c.send({ t: "destroy_can", can: myCan }); await sleep(400);
 t.ok(c.inv().jetUntil === 0, "destroying your can resets the jettison cooldown");
 
+// warp: align → window → transit (course locked) → exit at full speed → stops on the spot, no overshoot
+await resetShip(c);
+c.send({ t: "dock", ship: SHIP, dock: false }); await sleep(600);
+{ const s0 = c.ship(), tx = s0.x + 30, ty = s0.y - 8, seen = new Set(); let dodge = false;
+  c.send({ t: "move", ships: [SHIP], x: tx, y: ty }); await sleep(100); c.send({ t: "warp", ship: SHIP });
+  for (let i = 0; i < 300; i++) { await sleep(100); const s = c.ship(); if (s.wp) seen.add(s.wp.ph);
+    if (s.wp && s.wp.ph === "transit" && !dodge) { dodge = true; c.send({ t: "move", ships: [SHIP], x: s0.x, y: s0.y }); }
+    if (!s.moving && !s.wp && i > 5) break; }
+  await sleep(1200); const s = c.ship();
+  t.ok(["open", "transit", "exit"].every((p) => seen.has(p)), "warp goes window → transit → exit", [...seen]);
+  t.ok(Math.hypot(tx - s.x, ty - s.y) < 0.1 && !s.moving, "warp lands on the destination without overshooting", Math.hypot(tx - s.x, ty - s.y));
+}
+await resetShip(c);
+
 // crew rule
 await resetShip(c);
 c.send({ t: "decrew", ship: SHIP }); await sleep(400); n = c.msgs.length;

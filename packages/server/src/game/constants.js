@@ -16,7 +16,11 @@ export const CELL_CORNER_ROUND_KM = 5;
 export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the target
 export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this range
 export const SHIP_STEER = 9;             // velocity-approach rate (1/s), dt-smoothed
-export const WARP_MULT = 20;             // prototype warp: x speed until arrival
+export const WARP_MULT = 20;             // warp transit: average speed = this × the hull's max speed
+export const WARP_OPEN_MS = 900;         // the warp window opens ahead of an aligned ship; it coasts into it this long
+export const WARP_MIN_KM = 2;            // shorter hops than this (after aligning and braking room) just fly normally
+export const WARP_EXIT_SHOW_MS = 3000;   // other players see the exit window this long before the ship lands
+export const WARP_EXIT_FX_MS = 2000;     // the exit window and streak linger this long after the ship comes out
 export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
 export const LASER_M3_PER_S = 2;         // mining laser base yield (per laser), delivered at the end of each cycle; hulls add % bonuses
 export const MINING_CYCLE_MS = 15_000;   // one laser cycle; the ore lands when the cycle completes
@@ -93,6 +97,7 @@ for (const t of Object.values(SHIP_TYPES)) t.role = CLASS_ROLE[t.cls] || "Indust
 // Stargates: 3 on the outer ring. They burn fuel while active.
 export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with
 export const FUEL_SESSION_MAX_MS = 30 * 60 * 1000; // max fuel a single activation can burn
+export const FUEL_REGEN_RATE = 3;                 // a closed gate refuels by itself: 0 → 30 min of fuel in 10 min (owner, for now)
 export const HUB_MIN_WAIT_MS = 3 * 60 * 1000;    // give player-to-player links this long before trying the hub
 export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries the hub (after the wait)
 export const HUB_SEEK_CHANCE = 0.4;              // chance per try to find a hub entrance

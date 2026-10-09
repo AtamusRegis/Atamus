@@ -294,7 +294,7 @@
     const can = canAt(p);
     if (can) { bus.dispatchEvent(new CustomEvent("can", { detail: { id: can.id, x: p.x, y: p.y } })); return; }
     const gate = gateAt(p);
-    if (gate) { selected.clear(); selectUnit({ kind: "gate", id: gate.id }); return; }
+    if (gate) { bus.dispatchEvent(new CustomEvent("opengate", { detail: { id: gate.id } })); return; }   // like the station: opens its window, the selection stays
     const ship = shipAt(p);
     if (ship) {
       if (!shift) selected.clear(); if (shift && selected.has(ship.id)) selected.delete(ship.id); else selected.add(ship.id);
@@ -408,7 +408,7 @@
     const rPx = cfg.transferRadius * scale();
     if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
       ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
-    if (selectedUnit && selectedUnit.kind === "gate" && selectedUnit.id === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
+    if (window.Atamus.hud && window.Atamus.hud.gate === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
   }
 
   function drawBackground() {   // static: redrawn on resize / image load only
@@ -610,14 +610,70 @@
     }
   }
 
+  // ---- warp effects (all blue): a window ahead of the aligned ship, a glowing ball in transit, an exit window and a dissipating streak ----
+  const warpSeen = new Map();   // "shipId:entry|exit" -> when that window first showed (for its opening animation)
+  const hash = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  function warpWindow(key, x, y, dir, halfW, alpha, t) {
+    if (alpha <= 0.01) return;
+    const now = performance.now(); if (!warpSeen.has(key)) warpSeen.set(key, now);
+    const grow = Math.min(1, (now - warpSeen.get(key)) / 280), W = halfW * (0.15 + 0.85 * grow), T = Math.max(3, halfW * 0.3);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-dir); ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(70,160,255,0.95)"; ctx.shadowBlur = 16;
+    const g = ctx.createLinearGradient(-T, 0, T, 0); g.addColorStop(0, "rgba(60,140,255,0)"); g.addColorStop(0.5, "rgba(120,200,255,0.45)"); g.addColorStop(1, "rgba(60,140,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-T, -W, T * 2, W * 2);
+    ctx.strokeStyle = "rgba(160,220,255,0.95)"; ctx.lineWidth = 1.5; ctx.strokeRect(-T / 2, -W, T, W * 2);
+    ctx.shadowBlur = 0; ctx.fillStyle = "rgba(200,235,255,0.9)"; ctx.fillRect(-0.75, -W, 1.5, W * 2);
+    for (let i = 0; i < 16; i++) {                                          // particles stream in one side and out the other
+      const f = (t * 0.0011 + i / 16 + hash(i) * 0.3) % 1, px = (-1 + 2 * f) * W * 1.3, py = (hash(i + 7) - 0.5) * 1.8 * W;
+      ctx.globalAlpha = alpha * (1 - Math.abs(2 * f - 1)) * 0.9; ctx.fillStyle = "rgba(150,215,255,1)"; ctx.fillRect(px - 1, py - 1, 2, 2);
+    }
+    ctx.restore();
+  }
+  function drawWarp(pl, sh, p, sx, sy, halfW) {
+    const w = sh.wp; if (!w) { warpSeen.delete(sh.id + ":entry"); warpSeen.delete(sh.id + ":exit"); return; }
+    const el = w.el + (performance.now() - snapAt), t = performance.now();
+    const fx = gx2s(pl.gx + w.fx), fy = gy2s(pl.gy + w.fy), hasExit = w.ex != null, ex = hasExit ? gx2s(pl.gx + w.ex) : 0, ey = hasExit ? gy2s(pl.gy + w.ey) : 0;
+    // progress line for your selected ship: start window → exit window, lit up to where it is now
+    if (sh.mine && selected.has(sh.id) && hasExit && w.ph !== "exit") {
+      ctx.save(); ctx.lineWidth = 1; ctx.setLineDash([3, 5]); ctx.strokeStyle = "rgba(110,180,255,0.35)"; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(ex, ey); ctx.stroke();
+      if (w.ph === "transit") { ctx.setLineDash([]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(130,205,255,0.5)"; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(sx, sy); ctx.stroke(); }
+      ctx.restore();
+    }
+    const entryA = w.ph === "open" ? 1 : w.ph === "transit" ? 1 - el / 1200 : 0;
+    warpWindow(sh.id + ":entry", fx, fy, w.dir, halfW, entryA, t);
+    if (hasExit) warpWindow(sh.id + ":exit", ex, ey, w.dir, halfW, w.ph === "exit" ? 1 - el / 2000 : 1, t);
+    if (w.ph === "transit") {                                                 // the ship is a glowing ball between the windows
+      const R = Math.max(4, halfW * 0.45), back = Math.min(Math.hypot(sx - fx, sy - fy), R * 9), ux = Math.cos(w.dir), uy = -Math.sin(w.dir);
+      ctx.save();
+      const tg = ctx.createLinearGradient(sx, sy, sx - ux * back, sy - uy * back); tg.addColorStop(0, "rgba(140,210,255,0.8)"); tg.addColorStop(1, "rgba(60,140,255,0)");
+      ctx.strokeStyle = tg; ctx.lineWidth = R * 0.9; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - ux * back, sy - uy * back); ctx.stroke();
+      const rg = ctx.createRadialGradient(sx, sy, 0, sx, sy, R * 2.2); rg.addColorStop(0, "rgba(235,248,255,1)"); rg.addColorStop(0.3, "rgba(120,200,255,0.9)"); rg.addColorStop(1, "rgba(50,130,255,0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(sx, sy, R * 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (w.ph === "exit" && hasExit) {                                   // a blue streak and particles dissipating behind the ship
+      const k = Math.max(0, 1 - el / 1600), ux = Math.cos(w.dir), uy = -Math.sin(w.dir), px = -uy, py = ux;
+      ctx.save();
+      const sg = ctx.createLinearGradient(sx, sy, ex - ux * halfW * 2, ey - uy * halfW * 2); sg.addColorStop(0, "rgba(140,210,255," + 0.7 * k + ")"); sg.addColorStop(1, "rgba(60,140,255,0)");
+      ctx.strokeStyle = sg; ctx.lineWidth = Math.max(2, halfW * 0.35) * k; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex - ux * halfW * 2, ey - uy * halfW * 2); ctx.stroke();
+      for (let i = 0; i < 22; i++) {
+        const a = hash(i + 3), along = a * Math.hypot(sx - ex, sy - ey) + (hash(i + 11) - 0.3) * halfW, drift = (hash(i + 19) - 0.5) * halfW * 2.5 * (el / 1000 + 0.2);
+        ctx.globalAlpha = k * (0.4 + 0.6 * hash(i + 23)); ctx.fillStyle = "rgba(150,215,255,1)";
+        ctx.fillRect(ex + ux * along + px * drift - 1, ey + uy * along + py * drift - 1, 2, 2);
+      }
+      ctx.restore();
+    }
+  }
+
   function drawShips(place) {
     for (const sh of snap.ships || []) {
       if (sh.docked) continue;                                  // inside the station
       const pl = place.get(sh.sys); if (!pl) continue;
       const p = shipPos(sh);
       const sx = gx2s(pl.gx + p.x), sy = gy2s(pl.gy + p.y);
+      const inTransit = !!(sh.wp && sh.wp.ph === "transit");
+      drawWarp(pl, sh, p, sx, sy, Math.max(9, hull(sh.type).lengthKm * 1.6 * scale()));
       // waypoint line for your own moving ships
-      if (sh.mine && sh.tx != null) {
+      if (sh.mine && sh.tx != null && !inTransit) {
         const tx = gx2s(pl.gx + sh.tx), ty = gy2s(pl.gy + sh.ty);
         ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
@@ -627,7 +683,8 @@
       const lenKm = hull(type).lengthKm;
       const wPx = Math.max(2, lenKm * scale());           // true metre scale (min 2px so it's never a dead pixel)
       const img = sh.mine ? art(type).blue : art(type).red;
-      if (img && img.naturalWidth) {
+      if (inTransit) { /* drawn as the warp ball */ }
+      else if (img && img.naturalWidth) {
         const hPx = wPx * (img.naturalHeight / img.naturalWidth);
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); // sprite faces +x; world +y is up
         ctx.imageSmoothingEnabled = wPx > 48;             // keep the pixel art crisp when small

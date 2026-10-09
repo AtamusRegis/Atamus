@@ -4,6 +4,12 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Warp rework:** ships align to full speed, open a blue warp window, cross as a glowing ball, come out of a second window at full speed and brake to a stop on the destination, with no overshoot or bounce. Other players see the entry window, and the exit window seconds before landing. Your selected ship shows a progress line.
+- **Stargates:** clicking a gate opens its window without changing the selection (like the station). Inactive gates refuel by themselves, 0 → 30 min in 10 min.
+- **Pilot window:** shows the pilot selected in the fleet; the pilot dropdown and the Current Ship / Items tabs are gone. "New pilot" moved to the fleet bar's right-click / hold menu.
+- **Hotbar colors:** mining modules orange, combat red, automation blue, passive grey. The running animation is a soft sweep in the module's color, without the shine.
+- Added a warp check to `scripts/tests/gameplay.mjs`.
+
 - **Hull bonuses:** hulls no longer have their own yield or range. Modules have base stats, and each hull's Hull bonus adds % to the Mining Laser (shown in ship info's Description).
 - **Acceleration:** each hull has an acceleration stat; ships speed up and brake at that rate.
 - **HUD:**

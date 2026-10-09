@@ -151,15 +151,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .chat-form { flex: 0 0 auto; padding: 8px 12px 12px; border-top: 1px solid rgba(255,255,255,0.06); }
 
 /* ---- custom pilot dropdown (themed) ---- */
-.dd { position: relative; display: inline-block; max-width: 74%; }
-.dd-btn { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.25); border: none; border-radius: var(--radius-sm); padding: 5px 26px 5px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
-.dd-btn::after { content: ""; position: absolute; right: 10px; top: 50%; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--text-dim); transform: translateY(-50%); }
-.dd-btn:hover { background: rgba(255,255,255,0.08); }
-.dd-menu { position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%); min-width: 100%; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 70; }
-.dd-menu[hidden] { display: none; }
-.dd-item { padding: 7px 12px; font-size: 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; text-align: center; }
-.dd-item:hover { background: var(--sel); }
-.dd-item.sel { color: #06131f; background: var(--accent-grad); }
 
 /* right-click context menu */
 .ctx-menu { position: fixed; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 2000000000; min-width: 150px; }
@@ -556,15 +547,20 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fleet-name { font-size: 8.5px; max-width: 48px; }
 .fleet-noship { width: 18px; height: 12px; border: 1px dashed rgba(255,255,255,0.18); border-radius: 3px; }
 .fleet-card.no-ship .fleet-name { color: var(--text-faint); }
-/* hotbar module states (owner): powered = colored outline; running = fill timer in a lighter version of
-   that color; stopping after this cycle = grey; powered off = dark slate */
-.hb-slot.filled { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.85); background: rgba(0,0,0,0.35); }
-.hb-slot.filled.on { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.95); background: rgba(0,0,0,0.35); }
-.hb-slot.on::before { background: conic-gradient(rgba(255,160,70,0.3) var(--p, 0%), transparent 0); }
+/* hotbar module states (owner): powered = an outline in the module's color (mining orange, combat red,
+   automation / self blue, passive grey); running = fill timer in that color; stopping after this cycle = grey; powered off = dark slate */
+.hb-slot { --mc: 255,160,70; }
+.hb-slot.c-mining { --mc: 255,160,70; }
+.hb-slot.c-combat { --mc: 255,80,70; }
+.hb-slot.c-auto { --mc: 80,170,255; }
+.hb-slot.passive { --mc: 150,160,175; }
+.hb-slot.filled { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.85); background: rgba(0,0,0,0.35); }
+.hb-slot.filled.on { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.55); background: rgba(0,0,0,0.35); }
+.hb-slot.on::before { background: conic-gradient(rgba(var(--mc),0.3) var(--p, 0%), transparent 0); }
 .hb-slot.filled.stopping { box-shadow: inset 0 0 0 1.5px rgba(160,170,185,0.85); }
 .hb-slot.stopping::before { background: conic-gradient(rgba(160,170,185,0.25) var(--p, 0%), transparent 0); }
 .hb-slot.filled.off { background: #1b2430; box-shadow: none; }
-.hb-slot.filled.passive { box-shadow: inset 0 0 0 1.5px rgba(150,170,200,0.45); }
+.hb-slot.filled.passive { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.6); }
 .hb-slot.filled.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; }
 .hb-slot.filled.burnt { box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
 .hb-num { color: var(--text-faint) !important; }
@@ -589,12 +585,12 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .hud-act { padding: 0; }
 .hud-act svg { display: block; }
 .win[data-id="fitting"] .fit-list { margin-top: 14px; }
-/* running modules: a bright glint travels clockwise around the outline */
+/* running modules: the outline's own color sweeps slowly clockwise (no white glint, owner) */
 @property --hb-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .hb-slot.filled.on::after { content: ""; position: absolute; inset: 0; border-radius: 5px; padding: 1.5px; pointer-events: none;
-  background: conic-gradient(from var(--hb-a), transparent 0deg, transparent 250deg, rgba(255,226,170,0.95) 320deg, transparent 360deg);
+  background: conic-gradient(from var(--hb-a), rgba(var(--mc),0.15) 0deg, rgba(var(--mc),0.15) 180deg, rgba(var(--mc),0.95) 330deg, rgba(var(--mc),0.15) 360deg);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
-  animation: hbSpin 2.4s linear infinite; }
+  animation: hbSpin 3s linear infinite; }
 .hb-slot.filled.on.stopping::after { display: none; }
 @keyframes hbSpin { to { --hb-a: 360deg; } }
 .cat-row.cat-group-start { margin-top: 10px; }
