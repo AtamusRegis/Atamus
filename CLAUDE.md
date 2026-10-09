@@ -85,6 +85,7 @@ Changes under `docs/`, `CLAUDE.md` and `scripts/tests` trigger no deploy.
 - `credits amount`, `license key level`, `ship type`, `item item qty`
 - `belts` (spawn all belts)
 - `move ship x y`
+- `heat ship value`, `modhp ship value` (set a ship's heat / all its modules' integrity)
 - `update seconds` (rehearse the countdown)
 
 The single PTR pilot is "Vera Kestrel". Ships are `1:ship:N`, and the station is at (-52, 38).

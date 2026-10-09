@@ -4,6 +4,10 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-08
 
+- **Fitting:** hardpoints, disposition and capacitor per hull. Modules (Mining Laser, Auto Miner, Capacitor Battery) are market items, fitted while docked in a new Fitting window. New ships come empty, and existing ships kept 2 lasers plus an auto miner. Added a Capacitor Management license.
+- **Running hot:** going past the capacitor builds heat; at full heat the modules past capacity lose integrity and burn out; docking repairs them.
+- **HUD:** the hotbar has one slot per hardpoint. A ring shows disposition and power, with a capacity tick (blue, then yellow, then red); click it for fitting details. Added `scripts/tests/fitting.mjs`.
+
 - **Market:** the purchase view now opens inside the market window, and Buy or Cancel returns to the list.
 
 - **Buy window:** shows only the item's icon and description at the top, plus an Info button that opens the item info or ship info in its own window. The ship tabs moved out of the buy window.

@@ -526,7 +526,7 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fr-disp { stroke: #f2f5fa; stroke-dasharray: 0 100; transition: stroke-dasharray .25s; }
 .fr-cap { stroke: #5fb8ff; stroke-dasharray: 0 100; transition: stroke-dasharray .25s, stroke .4s; }
 .fr-cap.burning { animation: frBurn .6s ease-in-out infinite alternate; }
-@keyframes frBurn { from { stroke: #ff3b3b; } to { stroke: #ff9a6b; } }
+@keyframes frBurn { from { stroke: #ff1414; } to { stroke: #a80000; } }
 .fr-tick { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
 .fr-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
 .fit-key { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
@@ -542,3 +542,4 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .hb-slot.burnt { background: rgba(60,8,8,0.6); box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
 .hb-slot.burnt .hb-img { opacity: .25; filter: grayscale(1) sepia(1) hue-rotate(-30deg); }
 .fit-row.burnt { opacity: .6; box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
+.hb-slot.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; background: rgba(255,40,20,0.16); }

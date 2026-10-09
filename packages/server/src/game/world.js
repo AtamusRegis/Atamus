@@ -163,10 +163,11 @@ export class World {
     if (Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) return;                    // must be in range to begin a lock
     sh.targets.push({ kind, id, lockAt: Date.now() + t.lockMs, locked: false });
   }
-  _laserStop(L) { L.on = false; L.repeat = true; L.rock = null; L.start = 0; L.until = 0; }
+  _laserStop(L) { L.on = false; L.repeat = true; L.rock = null; L.start = 0; L.until = 0; L.poweredAt = 0; }
   _laserStart(sh, L, i, rockId, f, now) {
     const t = SHIP_TYPES[sh.type];
     const a = Math.atan2(sh.y - f.rock.y, sh.x - f.rock.x) + (Math.random() - 0.5) * Math.PI * 0.9, arm = t.arms[i % t.arms.length];
+    if (!L.on) L.poweredAt = now;                                    // when it took power (repeat cycles keep the original time)
     L.on = true; L.repeat = true; L.rock = rockId; L.hp = arm[Math.floor(Math.random() * arm.length)];
     const d = f.rock.r * (0.15 + Math.random() * 0.3);   // sprites are irregular with transparent margins: stay well inside the visible rock
     L.ax = +(f.rock.x + Math.cos(a) * d).toFixed(4); L.ay = +(f.rock.y + Math.sin(a) * d).toFixed(4);
@@ -217,6 +218,7 @@ export class World {
     if (!on) { sh.auto.on = false; return; }
     if (sh.auto.off || !this._hasAuto(sh) || !this._lockedRock(sh)) return;
     if (!this._canRun(sh, "auto", pid)) return;
+    if (!sh.auto.on) sh.auto.poweredAt = Date.now();
     sh.auto.on = true; sh.auto.next = 0;                       // fires on the next tick
   }
   // Power a module on or off. Powering off an active module stops it at once (the cycle yields nothing).
@@ -252,6 +254,18 @@ export class World {
     if (lic && this._lic(sh, lic[0]) < lic[1]) { if (tellPid) this._tell(tellPid, `${shipLabel(sh)}: the pilot needs ${(getLicense(lic[0]) || {}).name || lic[0]} ${lic[1]} to run a ${m.name}.`); return false; }
     return true;
   }
+  // The powered modules that take the ship past its capacitor: power is handed out in the order modules were
+  // switched on, so the ones switched on last (whose power doesn't fit under the capacity) are the overloaded ones.
+  _overloaded(sh) {
+    const laserDraw = Inv.MODULES["module:mining_laser"].draw, autoDraw = Inv.MODULES["module:auto_miner"].draw, max = this._capMax(sh);
+    const on = [];
+    sh.lasers.forEach((L, i) => { if (L.on) on.push({ which: i, at: L.poweredAt || 0, draw: laserDraw }); });
+    if (sh.auto.on) on.push({ which: "auto", at: sh.auto.poweredAt || 0, draw: autoDraw });
+    on.sort((a, b) => a.at - b.at);
+    let sum = 0; const over = [];
+    for (const m of on) { sum += m.draw; if (sum > max) over.push(m.which); }
+    return over;
+  }
   // Heat and integrity, every tick.
   _tickHeat(sh, dtSec) {
     const max = this._capMax(sh), used = this._capUsed(sh), over = max > 0 ? (used - max) / max : (used > 0 ? 1 : 0);
@@ -260,8 +274,11 @@ export class World {
     if (sh.heat < 100) return;
     const loss = Math.max(1, BURN_PER_S * over) * dtSec;
     const burn = (f) => { f.hp = Math.max(0, (f.hp ?? 100) - loss); if (f.hp <= 0 && !f.burnt) { f.burnt = true; return true; } return false; };
-    sh.lasers.forEach((L, i) => { if (!L.on) return; const f = this._modFit(sh, i); if (f && burn(f)) { this._laserStop(L); this._tell(sh.owner, `${shipLabel(sh)}: Mining Laser ${i + 1} burnt out.`); } });
-    if (sh.auto.on) { const f = this._modFit(sh, "auto"); if (f && burn(f)) { sh.auto.on = false; this._tell(sh.owner, `${shipLabel(sh)}: Auto Miner burnt out.`); } }
+    for (const which of this._overloaded(sh)) {                    // only the modules running past the capacity take damage
+      const f = this._modFit(sh, which); if (!f || !burn(f)) continue;
+      if (which === "auto") { sh.auto.on = false; this._tell(sh.owner, `${shipLabel(sh)}: Auto Miner burnt out.`); }
+      else { this._laserStop(sh.lasers[which]); this._tell(sh.owner, `${shipLabel(sh)}: Mining Laser ${which + 1} burnt out.`); }
+    }
   }
   _repairModules(sh) { sh.heat = 0; for (const f of sh.fit) { f.hp = 100; f.burnt = false; } }
   _refit(sh) {                                  // rebuild the live module state after the fit changed (always docked)
@@ -704,6 +721,7 @@ export class World {
         entry.yieldM3s = +this._yieldM3s(s).toFixed(3);
         entry.cap = { max: this._capMax(s), used: this._capUsed(s) };
         entry.heat = Math.round(s.heat || 0);
+        entry.over = this._overloaded(s).map((w) => s.fit.indexOf(this._modFit(s, w)));   // fit indices running past capacity
         entry.fitHp = s.fit.map((f) => (f.burnt ? -1 : Math.round(f.hp ?? 100)));   // integrity per fitted module, -1 = burnt out
         entry.auto = { fitted: this._hasAuto(s), on: s.auto.on, off: !!s.auto.off, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
         entry.mining = s.lasers.some((l) => l.on);

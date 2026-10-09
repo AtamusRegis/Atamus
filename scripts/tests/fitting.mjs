@@ -32,7 +32,9 @@ t.ok(running === hull.fitSlots && c.ship().cap.used > c.ship().cap.max, "all las
 await sleep(1500);
 t.ok(c.ship().heat > 0, "running past capacity builds heat", c.ship().heat);
 c.dev({ cmd: "heat", ship: SHIP, value: 100 }); c.dev({ cmd: "modhp", ship: SHIP, value: 3 }); await sleep(2500);
-t.ok((c.ship().fitHp || []).some((h) => h < 0) && since(n).some((m) => m.includes("burnt out")), "at full heat, powered modules burn out", c.ship().fitHp);
+t.ok((c.ship().fitHp || []).some((h) => h < 0) && since(n).some((m) => m.includes("burnt out")), "at full heat, overloaded modules burn out", c.ship().fitHp);
+const fits = Math.floor(c.ship().cap.max / c.last.hello.cfg.items["module:mining_laser"].draw);
+t.ok(c.ship().fitHp.filter((h) => h < 0).length === hull.fitSlots - fits && c.ship().fitHp.filter((h) => h === 3).length === fits, "only the modules past capacity take damage", c.ship().fitHp);
 const burntIdx = c.ship().fitHp.findIndex((h) => h < 0); n = c.msgs.length;
 c.send({ t: "laser", ship: SHIP, idx: burntIdx, on: true, rock: r.id }); await sleep(400);
 t.ok(since(n).some((m) => m.includes("burnt out")), "a burnt-out module can't be switched on");

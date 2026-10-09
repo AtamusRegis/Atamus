@@ -950,6 +950,7 @@
     for (const q of hudLive.mods || []) {                         // module integrity: a thin bar once damaged, dark when burnt out
       const hp = (sh.fitHp || [])[q.fi]; const v = hp == null ? 100 : hp;
       q.slot.classList.toggle("burnt", v < 0); q.hpBar.hidden = v >= 100 || v < 0; q.hpFill.style.width = Math.max(0, v) + "%";
+      q.slot.classList.toggle("overload", (sh.over || []).includes(q.fi));     // running past capacity: this one heats and burns
     }
     if (H.gDisp && sh.cap) {
       const items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
@@ -960,7 +961,7 @@
       const pw = Math.min(100, sh.cap.used / scale * 100), tickF = Math.min(1, sh.cap.max / scale), over = sh.cap.used > sh.cap.max, heat = sh.heat || 0;
       H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = pw + " 100";
       const hue = over ? Math.round(50 - 50 * Math.min(1, heat / 100)) : 0;
-      H.gCap.style.stroke = over ? "hsl(" + hue + ", 100%, 60%)" : "";
+      H.gCap.style.stroke = over ? "hsl(" + hue + ", 100%, " + Math.round(60 - 14 * Math.min(1, heat / 100)) + "%)" : "";
       H.gCap.classList.toggle("burning", over && heat >= 100);
       const ang = Math.PI / 2 - Math.PI * tickF, cx = Math.cos(ang), cy = Math.sin(ang);
       H.gTick.setAttribute("x1", (20 + 12 * cx).toFixed(2)); H.gTick.setAttribute("y1", (20 + 12 * cy).toFixed(2));
