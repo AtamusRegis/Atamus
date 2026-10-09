@@ -577,3 +577,30 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .set-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
 .set-val { color: var(--text); font-variant-numeric: tabular-nums; }
 .set-range { margin: 6px 0 0; }
+/* targets: tooltip only on hover; primary = leftmost, white bar under its circle; × drawn as two centered strokes */
+.tgt-tip { display: none; }
+.tgt.hover .tgt-tip { display: block; }
+.tgt.sel .tgt-ring { box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+.tgt-primary { width: 22px; height: 2px; margin-top: 2px; border-radius: 1px; background: #fff; box-shadow: 0 0 4px rgba(255,255,255,0.6); }
+.tgt-x { padding: 0; font-size: 0; }
+.tgt-x::before, .tgt-x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 1.5px; border-radius: 1px; background: currentColor; }
+.tgt-x::before { transform: translate(-50%, -50%) rotate(45deg); }
+.tgt-x::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.hud-act { padding: 0; }
+.hud-act svg { display: block; }
+.win[data-id="fitting"] .fit-list { margin-top: 14px; }
+/* running modules: a bright glint travels clockwise around the outline */
+@property --hb-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.hb-slot.filled.on::after { content: ""; position: absolute; inset: 0; border-radius: 5px; padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--hb-a), transparent 0deg, transparent 250deg, rgba(255,226,170,0.95) 320deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: hbSpin 2.4s linear infinite; }
+.hb-slot.filled.on.stopping::after { display: none; }
+@keyframes hbSpin { to { --hb-a: 360deg; } }
+.cat-row.cat-group-start { margin-top: 10px; }
+.q-total { margin-left: auto; margin-right: 8px; font-size: 11px; color: var(--text-dim); }
+.q-total b { color: var(--text); font-variant-numeric: tabular-nums; }
+/* standby: a target module switched on with nothing locked; fires on the next lock */
+.hb-slot.standby { animation: hbStandby 0.9s ease-in-out infinite; }
+.hb-slot.standby::after { content: "Standby"; position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 7px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #ffd27a; text-shadow: 0 1px 2px #000; pointer-events: none; animation: none; background: none; padding: 0; -webkit-mask: none; mask: none; }
+@keyframes hbStandby { 0%, 100% { box-shadow: inset 0 0 0 1.5px rgba(255,210,120,0.95); } 50% { box-shadow: inset 0 0 0 1.5px rgba(255,210,120,0.15); } }

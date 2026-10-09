@@ -216,7 +216,7 @@ export class World {
   cmdAuto(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
     if (!on) { sh.auto.on = false; return; }
-    if (sh.auto.off || !this._hasAuto(sh) || !this._lockedRock(sh)) return;
+    if (sh.auto.off || !this._hasAuto(sh)) return;             // automation runs its cycles with or without a target
     if (!this._canRun(sh, "auto", pid)) return;
     if (!sh.auto.on) sh.auto.poweredAt = Date.now();
     sh.auto.on = true; sh.auto.next = 0;                       // fires on the next tick
@@ -593,10 +593,10 @@ export class World {
         if (!pos || Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) { sh.targets.splice(i, 1); continue; }
         if (!tg.locked && now >= tg.lockAt) tg.locked = true;
       }
-      // auto-miner: each of its cycles, (re)activate idle lasers on the primary locked rock; off when nothing is left
+      // auto-miner: each of its cycles, (re)activate idle lasers on the first locked rock in range; with none it simply keeps cycling
       if (sh.auto.on && now >= sh.auto.next) {
         const cands = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(sh.owner, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
-        if (!cands.length) sh.auto.on = false;
+        if (!cands.length) sh.auto.next = now + this._autoCycleMs(sh);    // nothing to put the lasers on: just keep cycling
         else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on && this._canRun(sh, i)) this._laserStart(sh, L, i, r.tg.id, r.f, now); }); sh.auto.next = now + this._autoCycleMs(sh); }
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;

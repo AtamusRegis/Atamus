@@ -482,7 +482,7 @@
     const p = shipPos(sh), dist = Math.hypot(w.x - p.x, w.y - p.y);
     const scr = targetScreen(curPlace, tg);
     let name = tg.kind, sub = "";
-    if (w.rock) { const o = (cfg.ores || []).find((q) => q.key === w.rock.ore); name = (o ? o.name : w.rock.ore) + " " + w.rock.size + " m"; sub = Math.round(w.rock.m3).toLocaleString() + " m³ left"; }
+    if (w.rock) { const o = (cfg.ores || []).find((q) => q.key === w.rock.ore); name = o ? o.name : w.rock.ore; sub = Math.round(w.rock.m3).toLocaleString() + " m³ left"; }
     else if (tg.kind === "gate") { name = "Stargate"; }
     else if (tg.kind === "station") { name = "Station"; }
     else if (w.ship) { const t = hull(w.ship.type); name = w.ship.name || t.name || w.ship.type; sub = w.ship.hp != null ? Math.round(w.ship.hp) + " hp" : ""; }

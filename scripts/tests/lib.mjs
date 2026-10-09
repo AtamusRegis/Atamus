@@ -49,7 +49,7 @@ export async function atRock(c) {
   c.send({ t: "dock", ship: SHIP, dock: false }); await sleep(500);
   c.dev({ cmd: "belts" }); await sleep(600);
   const belts = c.last.belts?.belts || c.last.hello.belts, r = belts.find((b) => b.rocks.length).rocks[0];
-  c.dev({ cmd: "move", ship: SHIP, x: r.x + 1, y: r.y }); await sleep(400);
+  c.dev({ cmd: "move", ship: SHIP, x: r.x + 0.4, y: r.y }); await sleep(400);
   c.send({ t: "lock", ship: SHIP, kind: "rock", id: r.id }); await sleep(3600);
   return r;
 }

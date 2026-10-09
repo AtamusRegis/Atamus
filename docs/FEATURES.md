@@ -45,7 +45,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Licenses (skills)
 
-- **Training:** per pilot, through a queue you can add to, remove from, reorder, pause and cancel.
+- **Training:** per pilot, through a queue you can add to, remove from, reorder, pause and cancel. The queue shows its **total time left**.
+- **Categories (owner):**
+  - ships: Mining Ships (frigates, barges, exhumers, command ships), Combat Ships, Industry Ships (hauler);
+  - modules: Mining, Automation, Power, Missiles, Beams, Hybrid, Projectiles;
+  - categories without licenses yet (the weapon ones) are hidden in the pilot window.
   - **For now (owner): level N of every license takes N minutes** (`QUICK_TRAINING` in licenses.js). The design times are kept in `designTimes`, and manual prices still come from them.
 - **Starting licenses** (level 1 for every pilot): Mining Frigate, Mining Laser Yield, Automated Mining.
 - **Free vs. manual:** free licenses can be trained straight away. Every other license needs its **training manual** read first; manuals are bought from the market and are a **consumable**: they can't be sold **(owner)**.
@@ -82,7 +86,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Mining
 
-- **Lasers:** mining lasers are fitted modules (see Fitting); a ship has as many as it has fitted.
+- **Lasers:** mining lasers are fitted modules (see Fitting); a ship has as many as it has fitted. **Laser range is 1 km (owner, for now).**
+- **Targeting range (owner, for now):** Prospector 3 km; Dredger 8, Bulwark 12, Collier 8; Excavator 11, Rampart 13.5, Carrack 9 (the earlier ranges × 0.2).
   - The Prospector fires from 4 arm hardpoints. Barges and exhumers fire from the circular hopper ports on their centerline.
   - Range is 5 km, before bonuses.
 - **Cycle:** 15 s. Ore lands at the end of the cycle, and the cycle repeats until told otherwise.
@@ -100,6 +105,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
     - running: a fill timer in a lighter version of that color;
     - set to stop after this cycle: a grey outline and fill;
     - powered off: dark slate.
+  - **Running modules:** a bright glint circles the outline clockwise.
+  - **Standby (owner):** a target module (laser) switched on with no locked rock blinks "Standby" and fires on the next rock lock; pressing it again cancels. Automation (the auto miner) runs its cycles with or without a target.
   - **Stopping (owner):** a module set to stop after its cycle can't be re-armed until the cycle ends. The next activation goes to the current primary target (the HUD's selected target, or the first locked rock).
   - **Hover (mouse):** shows cycle time and m³ per cycle for a laser, cycle time for the auto miner, and capacitor for a battery.
   - A thin integrity bar appears on a damaged module; a burnt-out one is dark red; one running past capacity has a red outline.
@@ -213,10 +220,12 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - the station window stays only while the station or a docked ship is selected;
   - it closes on deselect, or when the selected ship undocks.
 - **Ships are run from the HUD** (no selection window for them):
-  - target lock icons: select, untarget, distance, a grey line to the target, a tooltip, reorder;
+  - target lock icons: untarget (a centered ×), distance under the circle, reorder by dragging **(owner)**:
+    - the **primary target is the leftmost**, with a small white bar under its circle; clicking a target makes it primary;
+    - hovering a target shows its tooltip (name, plus m³ left for rocks; no size, no distance) and the thin line to it on the map;
   - a shield, hull and speed row (hull bars are red);
   - the hotbar.
-- **Ship actions** (Inventory, Dock, Warp): anchored to the fleet bar, centered on its side facing the screen center, half size.
+- **Ship actions** (Inventory, Dock, Warp): always shown for the selected pilot's ship, docked or not (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center, half size.
 - **Selection (owner):** one pilot is always selected. Selecting a pilot selects their ship. Clicking empty space or an empty box-select never deselects, and a docked ship stays selected (its HUD just hides). Clicking the station opens its hangar without changing the selection.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);

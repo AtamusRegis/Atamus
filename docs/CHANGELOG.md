@@ -4,6 +4,14 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Targets:**
+  - the primary target is the leftmost, with a white bar under it, and clicking a target makes it primary;
+  - the tooltip and line to the target show on hover only;
+  - rock names lose their size; the × is centered.
+- **Hotbar:** a laser switched on with nothing locked waits on Standby (blinking) and fires on the next lock. Running modules have a glint circling their outline. The auto miner cycles without a target.
+- **Ranges:** Prospector targeting is 3 km and laser range 1 km; the others were scaled down to match.
+- **Licenses:** new categories (Mining / Combat / Industry Ships; Mining, Automation, Power and the weapon types). The training queue shows total time left.
+- **Fleet actions** always show and their icons are centered. The fitting table has more room below Heat.
 - **Fleet panel:** lists pilots with their ships, with smaller cards. One pilot is always selected, and clicks on empty space no longer deselect.
 - **Hotbar:**
   - keys 1–9, 0, −, = fire the slots, and each slot shows only its grey key label;

@@ -15,11 +15,11 @@ t.ok(c.inv().ships[SHIP].ore.used > 0, "ore lands at the end of the cycle");
 t.ok(c.ship().lasers[0].on, "laser repeats after a cycle");
 
 // out of range: laser stops, target stays
-c.dev({ cmd: "move", ship: SHIP, x: r.x + 7, y: r.y }); await sleep(600);
+c.dev({ cmd: "move", ship: SHIP, x: r.x + 2, y: r.y }); await sleep(600);
 t.ok(!c.ship().lasers[0].on && c.ship().targets.length === 1, "leaving laser range stops the laser and keeps the lock");
 
 // power off: active laser cut at once, can't be activated, auto-miner can't start
-c.dev({ cmd: "move", ship: SHIP, x: r.x + 1, y: r.y }); await sleep(400);
+c.dev({ cmd: "move", ship: SHIP, x: r.x + 0.4, y: r.y }); await sleep(400);
 c.send({ t: "laser", ship: SHIP, idx: 0, on: true, rock: r.id }); await sleep(500);
 c.send({ t: "power", ship: SHIP, mod: "laser", idx: 0, on: false }); await sleep(500);
 t.ok(!c.ship().lasers[0].on && c.ship().lasers[0].off, "powering off cuts an active laser");
