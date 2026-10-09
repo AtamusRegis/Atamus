@@ -2,7 +2,7 @@
 // unique stacks (100) and by volume (m3). Items are defined in ITEMS.
 import { ORES } from "./belts.js";
 import { LICENSES, CATEGORIES } from "../licenses.js";
-import { SHIP_TYPES, SHIP_CLASSES, SHIP_ROLES } from "./constants.js";
+import { SHIP_TYPES, SHIP_CLASSES, SHIP_ROLES, MODULE_CATEGORIES } from "./constants.js";
 
 export const MAX_STACKS = 100;
 export const ITEMS = {};
@@ -10,6 +10,17 @@ for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", de
 // Training manuals: one per license that isn't granted at birth. Reading one unlocks training that license.
 export const MANUAL_PRICE = (lic) => { const hrs = lic.levelTimes.reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
 for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "manual:" + lic.key, name: lic.name + " Manual", kind: "manual", license: lic.key, desc: "Training manual. Read it to unlock the " + lic.name + " license for training. " + lic.desc, rarity: "restricted", unitM3: 0.1, price: MANUAL_PRICE(lic), color: "#c9b36a", icon: null };
+// Modules: fitted to ships at a station. size counts against the hull's disposition; draw is the capacitor
+// a running module uses; cap is capacitor a passive module adds. license: [key, level] needed to activate.
+export const MODULES = {
+  "module:mining_laser": { name: "Mining Laser", cat: "mining", role: "laser", size: 10, draw: 10, license: ["small_mining_laser", 1], price: 60_000, icon: "assets/icons/mining_laser.png",
+    desc: "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes." },
+  "module:auto_miner": { name: "Auto Miner", cat: "automation", role: "auto", size: 15, draw: 5, license: ["auto_miner", 1], price: 250_000, icon: "assets/icons/auto_miner.png",
+    desc: "Each cycle, puts every idle mining laser on the first locked asteroid in range." },
+  "module:cap_battery": { name: "Capacitor Battery", cat: "power", role: "battery", size: 8, cap: 12, price: 120_000, icon: null,
+    desc: "Stores extra power for the ship's capacitor, so more modules can run at once." },
+};
+for (const [k, m] of Object.entries(MODULES)) ITEMS[k] = { key: k, kind: "module", ...m, rarity: "module", unitM3: 5, color: "#7f8fb0" };
 // Packaged ships: bought ships arrive as items in the station's Deliveries; Assemble turns one into a docked ship.
 const PACKAGED_M3 = { "Mining Frigate": 2500, "Mining Barge": 3750, "Exhumer": 3750 };
 for (const [k, t] of Object.entries(SHIP_TYPES)) ITEMS["ship:" + k] = { key: "ship:" + k, name: t.name, kind: "ship", ship: k, desc: t.desc + " Packaged: assemble it in a station to fly it.", rarity: t.cls, unitM3: PACKAGED_M3[t.cls] || 5000, price: t.price, color: "#6a7fa8", icon: "assets/ships/" + t.sprite + "_blue.webp" };
@@ -18,6 +29,7 @@ const catName = (k) => (CATEGORIES.find((c) => c.key === k) || {}).name || k;
 export const MARKET = [
   ...Object.entries(SHIP_TYPES).sort((a, b) => SHIP_ROLES.indexOf(a[1].role) - SHIP_ROLES.indexOf(b[1].role) || SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
     .map(([k, t]) => ({ key: "ship:" + k, name: t.name, price: t.price, path: ["Ships", t.role, t.cls], ship: k })),
+  ...Object.entries(MODULES).map(([k, m]) => ({ key: k, name: m.name, price: m.price, path: ["Modules", MODULE_CATEGORIES[m.cat]] })),
   ...Object.values(ITEMS).filter((it) => it.kind === "manual")
     .map((it) => ({ key: it.key, name: it.name, price: it.price, path: ["Training Manuals", catName(LICENSES.find((l) => l.key === it.license).category)] })),
 ];

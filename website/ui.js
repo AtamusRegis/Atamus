@@ -588,6 +588,7 @@
       if (sh.pilot != null) items.push(["Remove pilot (" + (pilotName(sh.pilot) || "pilot") + ")", () => A.send({ t: "decrew", ship: sh.id })]);
     } else items.push(["Locate", () => A.locateShip(sh.id)]);
     items.push(["Rename", () => askText("Rename ship", shipName(sh), 20, (name) => A.send({ t: "rename_ship", ship: sh.id, name }))]);
+    items.push(["Fitting", () => openFitting(sh.id)]);
     items.push(["Info", () => openShipInfo(sh.type)]);
     showCtxMenu(x, y, items);
   }
@@ -606,12 +607,54 @@
       row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Lock time", ((t.lockMs || 0) / 1000) + " s"),
       row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"));
     else if (shipTab === "fit") {
-      const mod = (icon, name, n) => el("div", { class: "fit-row" }, el("img", { class: "fit-ico", src: icon, alt: "", draggable: "false" }), el("span", {}, name), el("span", { class: "fit-n" }, "× " + n));
-      wrap.append(el("div", { class: "fit-list" }, mod("assets/icons/mining_laser.png", "Mining Laser", t.lasers || 0), mod("assets/icons/auto_miner.png", "Auto Miner", 1)));
+      const cats = (window.Atamus.cfg || {}).moduleCategories || {};
+      wrap.append(row("Hardpoints", t.fitSlots || 0), row("Disposition", t.disposition || 0), row("Capacitor", t.capacitor || 0),
+        row("Accepts", (t.accepts || []).map((c) => cats[c] || c).join(", ") || "—"));
     } else wrap.append(el("div", { class: "ship-hero" }, shipIcon(type, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
       row("Class", t.cls || "—"), row("Requires", Object.entries(t.req || {}).map(([k, l]) => lic(k) + " " + l).join(", ") || "—"));
     return wrap;
   }
+  // ---- fitting window: a ship's hardpoints / disposition / capacitor and its modules (changes need the ship docked) ----
+  let fitShip = null;
+  function openFitting(shipId) {
+    if (!wins.fitting) createWindow("fitting", { left: Math.round(innerWidth / 2 - 170), top: 110, width: 340, minW: 260, minH: 200, render: renderFitting, groupable: false });
+    fitShip = shipId; wins.fitting.sig = null; toggleWindow("fitting", true); renderFitting(wins.fitting.body);
+  }
+  function renderFitting(body) {
+    const A = window.Atamus, w = wins.fitting, sh = fitShip && A.ship(fitShip); if (!sh) return;
+    const t = hullOf(sh.type), items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
+    const sig = [sh.id, sh.docked, fit.join(","), sh.cap && sh.cap.max].join("|"); if (sig === w.sig && body.childElementCount) return; w.sig = sig;
+    body.innerHTML = ""; w.slot.textContent = "Fitting · " + shipName(sh);
+    const used = fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0);
+    const meter = (k, a, b) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" + (a > b ? " poor" : "") }, a + " / " + b));
+    body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0),
+      el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Capacitor"), el("span", { class: "sheet-v" }, String(sh.cap ? sh.cap.max : t.capacitor))));
+    // the same proportional strip as the hotbar
+    const strip = el("div", { class: "fit-strip" });
+    for (const k of fit) { const m = items[k] || {}; strip.append(el("div", { class: "fit-block", style: "flex:" + (m.size || 1) }, m.icon ? el("img", { src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, (m.name || "?").split(" ").map((x) => x[0]).join("")))); }
+    if (used < (t.disposition || 0)) strip.append(el("div", { class: "fit-block free", style: "flex:" + ((t.disposition || 0) - used) }));
+    body.append(strip);
+    const list = el("div", { class: "fit-list fit-drop" });
+    fit.forEach((k, i) => {
+      const m = items[k] || { name: k };
+      const r = el("div", { class: "fit-row" }, m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join("")),
+        el("span", {}, m.name), el("span", { class: "fit-n" }, m.size + (m.draw ? " · ⚡" + m.draw : m.cap ? " · +" + m.cap : "")));
+      const menu = (x, y) => showCtxMenu(x, y, [...(sh.docked ? [["Unfit", () => A.send({ t: "unfit", ship: sh.id, idx: i })]] : []), ["Info", () => openInfo(k, 1)]]);
+      r.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
+      holdToOpen(r, () => { const b = r.getBoundingClientRect(); menu(b.left + b.width / 2, b.bottom); });
+      list.append(r);
+    });
+    if (!fit.length) list.append(el("div", { class: "muted fit-empty" }, "No modules fitted."));
+    // drop a module from a station inventory to fit it
+    const drop = (from) => { if (from) A.send({ t: "fit", ship: sh.id, from }); };
+    list.addEventListener("dragover", (e) => { e.preventDefault(); list.classList.add("drop"); });
+    list.addEventListener("dragleave", () => list.classList.remove("drop"));
+    list.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); list.classList.remove("drop"); const d = dragPayload(e); drop(d && d.ref); });
+    list.addEventListener("touchdrop", (e) => { e.stopPropagation(); drop(e.detail && e.detail.ref); });
+    body.append(list);
+  }
+  window.Atamus.bus.addEventListener("snap", () => { const w = wins.fitting; if (w && isOpen(w)) renderFitting(w.body); });
+  window.Atamus.bus.addEventListener("inv", () => { const w = wins.fitting; if (w && isOpen(w)) renderFitting(w.body); });
   let shipInfoType = null;
   function openShipInfo(type) {
     if (!wins.shipinfo) createWindow("shipinfo", { left: Math.round(innerWidth / 2 - 170), top: 120, width: 340, minW: 280, minH: 200, render: renderShipInfo, groupable: false });
@@ -720,15 +763,24 @@
   const hud = el("div", { id: "hud", hidden: "" });
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   const hudAct = el("div", { class: "hud-actions", hidden: "" });   // fallback home for ship actions when the fleet bar is closed
-  hud.append(hudTargets, hudStatus, el("div", { class: "hud-row" }, hudBar, hudAct)); document.body.append(hud);
+  const hudCap = el("div", { class: "hud-cap" });
+  hud.append(hudTargets, hudStatus, hudCap, el("div", { class: "hud-row" }, hudBar, hudAct)); document.body.append(hud);
   const ICO = {
     inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
     dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
     warp: '<svg viewBox="0 0 24 24"><path d="M3 12h11M10 7l5 5-5 5"/><path d="M17 6v12M21 8v8"/></svg>',
   };
   const HB_SLOTS = 8;
-  saved.hotbar = Array.isArray(saved.hotbar) && saved.hotbar.length === HB_SLOTS ? saved.hotbar : [{ k: "laser", i: 0 }, { k: "laser", i: 1 }, { k: "auto" }, null, null, null, null, null];
-  if (!saved.hotbar.some((h) => h && h.k === "auto")) { const i = saved.hotbar.findIndex((h) => !h); if (i >= 0) saved.hotbar[i] = { k: "auto" }; }
+  saved.hbOrder = saved.hbOrder || {};   // shipId -> order of its fitted modules on the hotbar
+  // the selected ship's fitted modules in hotbar order; lasers are numbered in fitting order
+  function hbModules(sh) {
+    const A = window.Atamus, items = (A.cfg && A.cfg.items) || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
+    let li = 0; const laserOf = fit.map((k) => (items[k] && items[k].role === "laser" ? li++ : -1));
+    const order = (saved.hbOrder[sh.id] || []).filter((i) => i < fit.length && fit[i]);
+    for (let i = 0; i < fit.length; i++) if (!order.includes(i)) order.push(i);
+    saved.hbOrder[sh.id] = order;
+    return order.filter((i) => items[fit[i]]).map((i) => ({ fi: i, item: fit[i], mod: items[fit[i]], laser: laserOf[i] }));
+  }
   const tgKey = (tg) => tg.kind + ":" + tg.id;
   let hudShip = null, selTarget = null, hudSig = "", hudLive = {}, tgOrder = [];
   const H = {};  // status row live elements
@@ -758,6 +810,7 @@
   const modName = (it) => it.k === "auto" ? "Auto Miner" : "Mining Laser " + (it.i + 1);
   function moduleMenu(sh, it, x, y) {
     const A = window.Atamus, items = [];
+    if (it.k === "passive") { showCtxMenu(x, y, [["Info", () => openInfo(it.item, 1)]]); return; }
     if (it.k === "laser") {
       const L = (sh.lasers || [])[it.i]; if (!L) return;
       if (!L.off) {
@@ -811,7 +864,7 @@
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (selTarget && !targets.some((x) => x && tgKey(x) === tgKey(selTarget))) selTarget = null;
-    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.off ? "x" : "") + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, sh.auto && sh.auto.off ? 1 : 0, saved.hotbar.map((h) => h ? h.k + (h.i ?? "") : "-").join(",")].join("|");
+    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), selTarget && tgKey(selTarget), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.off ? "x" : "") + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, sh.auto && sh.auto.off ? 1 : 0, hbModules(sh).map((m) => m.item).join(","), (window.Atamus.inv.ships[sh.id] || {}).fit ? 1 : 0].join("|");
     if (sig !== hudSig) {
       hudSig = sig; hudLive = { dist: {}, tip: null };
       // targets
@@ -835,32 +888,37 @@
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); H[k] = { fill, txt }; return el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       H.speed = el("span", { class: "hud-speed" });
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
-      // hotbar
+      // hotbar = the ship's fitting: one block per fitted module, as wide as its share of the hull's disposition
       hudBar.innerHTML = ""; hudLive.slots = [];
-      saved.hotbar.forEach((it, idx) => {
-        const slot = el("div", { class: "hb-slot" });
-        if (it && it.k === "laser") {
+      const mods = hbModules(sh), BAR_W = 309, disp = t.disposition || 50;
+      let usedW = 0;
+      mods.forEach((m, idx) => {
+        const it = m.mod.role === "laser" ? { k: "laser", i: m.laser } : m.mod.role === "auto" ? { k: "auto" } : { k: "passive", item: m.item };
+        const wpx = Math.max(30, Math.round(m.mod.size / disp * BAR_W) - 3); usedW += wpx + 3;
+        const slot = el("div", { class: "hb-slot filled", style: "width:" + wpx + "px" });
+        const icon = m.mod.icon ? el("img", { class: "hb-img", src: m.mod.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, m.mod.name.split(" ").map((w) => w[0]).join(""));
+        slot.append(icon);
+        if (it.k === "laser") {
           const L = (sh.lasers || [])[it.i];
-          if (L) {
-            slot.classList.add("filled"); if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping"); if (L.off) slot.classList.add("off");
-            slot.append(el("img", { class: "hb-img", src: "assets/icons/mining_laser.png", alt: "", draggable: "false" }), el("span", { class: "hb-badge" }, String(it.i + 1)));
-            slot.title = "Mining Laser " + (it.i + 1) + (L.on ? (L.repeat ? " — cycling" : " — finishing cycle") : "");
-            slot.addEventListener("click", () => clickLaser(sh, it.i));
-            hudLive.slots.push({ slot, laser: it.i });
-          }
-        } else if (it && it.k === "auto") {
-          slot.classList.add("filled"); if (sh.auto && sh.auto.on) slot.classList.add("on"); if (sh.auto && sh.auto.off) slot.classList.add("off");
-          slot.append(el("img", { class: "hb-img", src: "assets/icons/auto_miner.png", alt: "", draggable: "false" }));
-          slot.title = "Auto Miner" + (sh.auto && sh.auto.on ? " — active" : "");
+          if (L) { if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping"); if (L.off) slot.classList.add("off"); }
+          slot.append(el("span", { class: "hb-badge" }, String(it.i + 1)));
+          slot.addEventListener("click", () => clickLaser(hudShipData() || sh, it.i));
+          hudLive.slots.push({ slot, laser: it.i });
+        } else if (it.k === "auto") {
+          if (sh.auto && sh.auto.on) slot.classList.add("on"); if (sh.auto && sh.auto.off) slot.classList.add("off");
           slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
           hudLive.slots.push({ slot, auto: true });
-        }
+        } else slot.classList.add("passive");
         slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
-        const menu = it && slot.classList.contains("filled") ? () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); } : null;
-        if (menu) slot.addEventListener("contextmenu", (e) => { e.preventDefault(); const live = hudShipData() || sh; moduleMenu(live, it, e.clientX, e.clientY); });
-        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const a = saved.hotbar; [a[from], a[to]] = [a[to], a[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
+        const menu = () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); };
+        slot.addEventListener("contextmenu", (e) => { e.preventDefault(); moduleMenu(hudShipData() || sh, it, e.clientX, e.clientY); });
+        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const o = saved.hbOrder[sh.id]; [o[from], o[to]] = [o[to], o[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
         hudBar.append(slot);
       });
+      if (usedW < BAR_W) hudBar.append(el("div", { class: "hb-free", style: "width:" + (BAR_W - usedW) + "px" }));   // unused disposition
+      // capacitor: power in use / total, just above the hotbar
+      hudCap.innerHTML = ""; H.capFill = el("div", { class: "cap-fill" }); H.capTxt = el("span", { class: "cap-txt" });
+      hudCap.append(el("span", { class: "hud-k" }, "Capacitor"), el("div", { class: "cap-bar" }, H.capFill, H.capTxt));
     }
     // live values
     for (const tg of targets) { const d = hudLive.dist[tgKey(tg)]; const info = A.targetInfo(sh, tg); if (d && info) d.textContent = info.dist < 10 ? info.dist.toFixed(1) + " km" : Math.round(info.dist) + " km"; }
@@ -868,6 +926,7 @@
     const setBar = (k, a, b, txt) => { const x = H[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
     const maxS = t.shield || 0, maxH = t.hp || 0;
     setBar("Shield", sh.shield ?? maxS, maxS, Math.round(sh.shield ?? maxS) + " / " + maxS); setBar("Hull", sh.hp ?? maxH, maxH, Math.round(sh.hp ?? maxH) + " / " + maxH);
+    if (H.capFill && sh.cap) { H.capFill.style.width = (sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0) + "%"; H.capTxt.textContent = sh.cap.used + " / " + sh.cap.max; }
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
     for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
     // line from the selected target's icon to the target on the map
@@ -1146,7 +1205,7 @@
         ev.preventDefault(); clearTimeout(hold);
         if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
         ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
-        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot, .inv-grid");
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot, .inv-grid, .fit-drop");
         if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
       };
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };
@@ -1250,6 +1309,14 @@
     w.slot.textContent = def.name;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const q = infoItem.qty || 1, m3 = (v) => (+v.toFixed(2)).toLocaleString() + " m³";
+    if (def.kind === "module") {
+      const cats = A.cfg.moduleCategories || {}, lic = def.license && catalog && catalog.licenses.find((x) => x.key === def.license[0]);
+      body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
+        row("Category", cats[def.cat] || def.cat), row("Disposition", def.size), def.draw ? row("Capacitor use", def.draw) : row("Capacitor", "+" + (def.cap || 0)),
+        ...(def.license ? [row("Requires", (lic ? lic.name : def.license[0]) + " " + def.license[1])] : []),
+        row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q))));
+      return;
+    }
     body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
       row("Weight", m3(def.unitM3) + " / " + m3(def.unitM3 * q)),
       row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q))));

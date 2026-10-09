@@ -75,6 +75,15 @@ export const SHIP_TYPES = {
     desc: "The Collier's exhumer. An ore hold big enough to swallow a small asteroid, built for long shifts far from the station.",
   },
 };
+// Fitting: hardpoints = how many modules fit, disposition = their total size, capacitor = shared power
+// for running them; accepts = module categories this hull can fit. (`hardpoints` above are beam origins.)
+const FIT = {
+  "Mining Frigate": { fitSlots: 5, disposition: 50, capacitor: 30 },
+  "Mining Barge": { fitSlots: 6, disposition: 90, capacitor: 60 },
+  "Exhumer": { fitSlots: 7, disposition: 120, capacitor: 90 },
+};
+for (const t of Object.values(SHIP_TYPES)) Object.assign(t, FIT[t.cls] || FIT["Mining Frigate"], { accepts: ["mining", "automation", "power"] });
+export const MODULE_CATEGORIES = { mining: "Mining", automation: "Automation", power: "Power" };
 export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer"];
 // What each class is for (the market groups hulls by this, then by class).
 export const SHIP_ROLES = ["Industry", "Combat"];
