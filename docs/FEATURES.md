@@ -188,6 +188,15 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Each connection is limited to about 40 commands a second, with a 64 KB message limit.
 - Autosave runs every 10 s but skips the database write when nothing changed. Offline players get no snapshots.
 
+## Decided, not built yet
+
+- **Fitting (owner):** no EVE-style high/mid/low slots and no CPU or powergrid. Each hull has:
+  - a **slot count** (e.g. 5);
+  - a **capacity budget** (e.g. 50). Every module has a size, and a fit must stay within both;
+  - **allowed module categories**, e.g. a Mining Frigate takes no missile modules.
+  - There are **no per-type counts**: a frigate may fit 8 mining lasers if its slots and capacity allow it. Slot counts and module sizes are the balance levers.
+  - Still open: the player-facing name of the budget ("disposition"?), docked-only fitting, starter fit vs. empty hulls, and module licenses.
+
 ## Rejected / removed (don't reintroduce)
 
 - Helper text and hint tooltips, e.g. "hold for options".
