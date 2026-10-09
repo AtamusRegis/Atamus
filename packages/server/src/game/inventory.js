@@ -17,7 +17,7 @@ export const MODULES = {
     desc: "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes." },
   "module:auto_miner": { name: "Auto Miner", cat: "automation", role: "auto", size: 15, draw: 5, license: ["auto_miner", 1], price: 250_000, icon: "assets/icons/auto_miner.png",
     desc: "Each cycle, puts every idle mining laser on the first locked asteroid in range." },
-  "module:cap_battery": { name: "Capacitor Battery", cat: "power", role: "battery", size: 8, cap: 12, price: 120_000, icon: null,
+  "module:cap_battery": { name: "Capacitor Battery", cat: "power", role: "battery", size: 8, cap: 12, price: 120_000, icon: "assets/icons/cap_battery.png",
     desc: "Stores extra power for the ship's capacitor, so more modules can run at once." },
 };
 for (const [k, m] of Object.entries(MODULES)) ITEMS[k] = { key: k, kind: "module", ...m, rarity: "module", unitM3: 5, color: "#7f8fb0" };

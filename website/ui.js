@@ -623,12 +623,18 @@
   function renderFitting(body) {
     const A = window.Atamus, w = wins.fitting, sh = fitShip && A.ship(fitShip); if (!sh) return;
     const t = hullOf(sh.type), items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
-    const sig = [sh.id, sh.docked, fit.join(","), sh.cap && sh.cap.max].join("|"); if (sig === w.sig && body.childElementCount) return; w.sig = sig;
+    const running = (sh.lasers || []).map((l) => l.on ? 1 : 0).join("") + (sh.auto && sh.auto.on ? "a" : "");
+    const sig = [sh.id, sh.docked, fit.join(","), sh.cap && sh.cap.max, sh.cap && sh.cap.used, running].join("|"); if (sig === w.sig && body.childElementCount) return; w.sig = sig;
     body.innerHTML = ""; w.slot.textContent = "Fitting · " + shipName(sh);
     const used = fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0);
-    const meter = (k, a, b) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" + (a > b ? " poor" : "") }, a + " / " + b));
-    body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0),
-      el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Capacitor"), el("span", { class: "sheet-v" }, String(sh.cap ? sh.cap.max : t.capacitor))));
+    const key = (cls) => el("span", { class: "fit-key " + cls });
+    const meter = (k, a, b, cls) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, cls ? key(cls) : null, k), el("span", { class: "sheet-v" + (a > b ? " poor" : "") }, a + " / " + b));
+    const capMax = sh.cap ? sh.cap.max : t.capacitor, capUsed = sh.cap ? sh.cap.used : 0;
+    const batt = fit.reduce((a, k) => a + ((items[k] || {}).cap || 0), 0), bonus = Math.max(0, capMax - (t.capacitor || 0) - batt);
+    const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
+    body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
+      meter("Capacitor in use", capUsed, capMax, "cap"),
+      sub("Hull", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []));
     // the same proportional strip as the hotbar
     const strip = el("div", { class: "fit-strip" });
     for (const k of fit) { const m = items[k] || {}; strip.append(el("div", { class: "fit-block", style: "flex:" + (m.size || 1) }, m.icon ? el("img", { src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, (m.name || "?").split(" ").map((x) => x[0]).join("")))); }
@@ -639,6 +645,8 @@
       const m = items[k] || { name: k };
       const r = el("div", { class: "fit-row" }, m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join("")),
         el("span", {}, m.name), el("span", { class: "fit-n" }, m.size + (m.draw ? " · ⚡" + m.draw : m.cap ? " · +" + m.cap : "")));
+      if (m.role === "laser") { const li = fit.slice(0, i).filter((x) => (items[x] || {}).role === "laser").length; if ((sh.lasers[li] || {}).on) r.classList.add("running"); }
+      if (m.role === "auto" && sh.auto && sh.auto.on) r.classList.add("running");
       const menu = (x, y) => showCtxMenu(x, y, [...(sh.docked ? [["Unfit", () => A.send({ t: "unfit", ship: sh.id, idx: i })]] : []), ["Info", () => openInfo(k, 1)]]);
       r.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
       holdToOpen(r, () => { const b = r.getBoundingClientRect(); menu(b.left + b.width / 2, b.bottom); });
@@ -763,12 +771,11 @@
   const hud = el("div", { id: "hud", hidden: "" });
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   const hudAct = el("div", { class: "hud-actions", hidden: "" });   // fallback home for ship actions when the fleet bar is closed
-  // fitting gauge: disposition used (white) and capacitor in use (yellow). Two looks being compared in the PTR:
-  // "line" = a split line under the hotbar, "circle" = a ring left of the hotbar with a crescent for each.
-  const hudGaugeLine = el("div", { class: "fg-line" }), hudGaugeRing = el("div", { class: "fg-ring" });
-  const hudRow = el("div", { class: "hud-row" }, hudGaugeRing, el("div", { class: "hb-col" }, hudBar, hudGaugeLine), hudAct);
+  // fitting ring left of the hotbar: white crescent = disposition used, yellow crescent = capacitor in use,
+  // hardpoints in the middle; click (tap) it for the fitting details
+  const hudGaugeRing = el("button", { class: "fg-ring", onclick: () => { const sh = hudShipData(); if (sh) openFitting(sh.id); } });
+  const hudRow = el("div", { class: "hud-row" }, hudGaugeRing, hudBar, hudAct);
   hud.append(hudTargets, hudStatus, hudRow); document.body.append(hud);
-  saved.fitGauge = saved.fitGauge || "line";
   const ICO = {
     inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
     dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
@@ -919,12 +926,8 @@
       });
       for (let i = mods.length; i < (t.fitSlots || 0); i++) hudBar.append(el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, String(i + 1))));   // free hardpoints
       // the gauge
-      const line = saved.fitGauge === "line";
-      hudGaugeLine.hidden = !line; hudGaugeRing.hidden = line; hudGaugeLine.innerHTML = ""; hudGaugeRing.innerHTML = "";
-      if (line) {
-        H.gDisp = el("div", { class: "fg-fill fg-disp" }); H.gCap = el("div", { class: "fg-fill fg-cap" });
-        hudGaugeLine.append(el("div", { class: "fg-half fg-left" }, H.gDisp), el("div", { class: "fg-half fg-right" }, H.gCap));
-      } else {
+      hudGaugeRing.innerHTML = "";
+      {
         const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 40 40");
         const arc = (cls, d) => { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("class", cls); p.setAttribute("pathLength", "100"); svg.append(p); return p; };
         const LEFT = "M20 36 A16 16 0 0 1 20 4", RIGHT = "M20 36 A16 16 0 0 0 20 4";        // both crescents grow from the bottom up
@@ -942,8 +945,7 @@
     if (H.gDisp && sh.cap) {
       const items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
       const dp = Math.min(100, fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0) / (t.disposition || 1) * 100), cp = sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0;
-      if (saved.fitGauge === "line") { H.gDisp.style.width = dp + "%"; H.gCap.style.width = cp + "%"; }
-      else { H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = cp + " 100"; if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0); }
+      H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = cp + " 100"; if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0);
     }
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
     for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
@@ -1362,7 +1364,7 @@
     const keep = body.scrollTop; list.innerHTML = "";
     const offerRow = (m) => {
       const def = items[m.key] || {}, known = def.license && unlocked[def.license];
-      const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
+      const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : def.icon ? el("img", { class: "mk-ico", src: def.icon, alt: "", draggable: "false" }) : null, el("span", {}, m.name || def.name || m.key));
       if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
       return el("div", { class: "mk-row" + (known ? " known" : ""), onclick: () => openBuy(m) }, name, el("div", { class: "mk-price" }, cr(m.price)));
     };
