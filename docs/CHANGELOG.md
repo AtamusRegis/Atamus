@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-08
 
+- **Phones:** the whole UI is about 30% smaller (viewport scaling on small touch screens), and the map shows more space.
+
 - **Pilots:** extra pilots cost 1,000,000 cr, up to 3 per account. Create them from "New pilot" in the pilot window's dropdown. Added `scripts/tests/pilots.mjs`.
 
 - **Project memory:** added `CLAUDE.md`, `docs/FEATURES.md` (the living spec) and this changelog.

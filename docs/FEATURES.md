@@ -155,6 +155,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Mobile:**
   - tap, double-tap, pan, pinch, hold-to-lock and box select;
   - text selection and the long-press callout are disabled.
+  - on phones (touch screen, shorter side < 600 px), game.html sets the viewport scale to the shorter side ÷ 540 (minimum 0.6). That lays the page out larger and shrinks the whole UI about 30%, and the map shows more space too. It's recomputed when the phone rotates.
 
 ## Live updates (owner)
 

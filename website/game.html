@@ -3,10 +3,26 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    // Phones: lay the page out on a larger canvas and scale it down, so the whole UI is ~30% smaller.
+    (function () {
+      var meta = document.querySelector('meta[name="viewport"]');
+      function fit() {
+        var sw = screen.width, sh = screen.height, small = Math.min(sw, sh);
+        var phone = window.matchMedia("(pointer: coarse)").matches && small < 600;
+        if (!phone) { meta.content = "width=device-width, initial-scale=1"; return; }
+        var s = Math.max(0.6, Math.min(1, small / 540));
+        var w = window.matchMedia("(orientation: landscape)").matches ? Math.max(sw, sh) : small;
+        meta.content = "width=" + Math.round(w / s) + ", initial-scale=" + s + ", minimum-scale=" + s + ", maximum-scale=" + s + ", user-scalable=no";
+      }
+      fit();
+      addEventListener("orientationchange", function () { setTimeout(fit, 150); });
+    })();
+  </script>
   <meta name="atamus-build" content="__BUILD__">
   <title>Atamus — System</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="game.css?v=1791499617">
+  <link rel="stylesheet" href="game.css?v=1791520031">
 </head>
 <body class="game-body">
   <canvas id="view"></canvas>
@@ -19,9 +35,9 @@
   <!-- windows + tooltip container injected by ui.js -->
   <div id="tooltip" class="tooltip" hidden></div>
 
-  <script src="api.js?v=1791499617"></script>
-  <script src="sun.js?v=1791499617"></script>
-  <script src="game.js?v=1791499617"></script>
-  <script src="ui.js?v=1791499617"></script>
+  <script src="api.js?v=1791520031"></script>
+  <script src="sun.js?v=1791520031"></script>
+  <script src="game.js?v=1791520031"></script>
+  <script src="ui.js?v=1791520031"></script>
 </body>
 </html>
