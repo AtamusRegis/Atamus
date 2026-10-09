@@ -634,7 +634,7 @@
     const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
     body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
       meter("Capacitor in use", capUsed, capMax, "cap"),
-      sub("Base", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),
+      ...(batt || bonus ? [sub("Base", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : [])] : []),   // breakdown only when something adds to the base
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
     // the same proportional strip as the hotbar
     const strip = el("div", { class: "fit-strip" });

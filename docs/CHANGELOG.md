@@ -4,7 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
-- **Fitting ring:** the capacity tick always shows; it sits at the top end when the fit can't run hot. The capacitor breakdown's "Hull" row is renamed "Base".
+- **Fitting ring:** the capacity tick always shows; it sits at the top end when the fit can't run hot. The capacitor breakdown (Base / Batteries / Capacitor Management) only shows when something adds to the base.
 
 ## 2026-10-08
 
