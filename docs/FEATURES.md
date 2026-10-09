@@ -190,12 +190,14 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Decided, not built yet
 
-- **Fitting (owner):** no EVE-style high/mid/low slots and no CPU or powergrid. Each hull has:
-  - a **slot count** (e.g. 5);
-  - a **capacity budget** (e.g. 50). Every module has a size, and a fit must stay within both;
-  - **allowed module categories**, e.g. a Mining Frigate takes no missile modules.
-  - There are **no per-type counts**: a frigate may fit 8 mining lasers if its slots and capacity allow it. Slot counts and module sizes are the balance levers.
-  - Still open: the player-facing name of the budget ("disposition"?), docked-only fitting, starter fit vs. empty hulls, and module licenses.
+- **Fitting (owner):** no EVE-style high/mid/low slots, and no separate CPU or powergrid. Each hull has three numbers:
+  - **Hardpoints:** how many modules can be fitted.
+  - **Disposition:** the total size of fitted modules. Every module has a size.
+  - **Capacitor:** shared power for *running* modules. Each active module draws from it, so a ship with 8 lasers fitted might only run 3 at once. Licenses and power modules raise it.
+  - Each hull also has **allowed module categories** (e.g. a Mining Frigate takes no missile modules). There are no per-type counts: 8 mining lasers is fine if hardpoints and disposition allow it.
+  - Activating a module also needs its license.
+  - Fitting is **docked only**. New ships come **empty**; a new player's first Prospector comes with 2 mining lasers.
+  - **Hotbar idea:** each hotbar slot is as wide as its module's disposition, relative to the ship's total, so the bar doubles as the fitting at a glance.
 
 ## Rejected / removed (don't reintroduce)
 
