@@ -85,7 +85,7 @@
   let systemRadius = 250, placeDist = 650;
   function computeSystemRadius() { let m = 0; for (const c of cfg.cells) m = Math.max(m, Math.hypot(c.x, c.y)); systemRadius = m + cfg.cellCircumradius; placeDist = systemRadius * 2.3; }
 
-  Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "index.html"; });
+  Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
 
   function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws"; }
   function setStatus(t, k) { statusEl.textContent = t; statusEl.className = "status" + (k ? " " + k : ""); if (k === "ok") setTimeout(() => statusEl.classList.add("hidden"), 1200); else statusEl.classList.remove("hidden"); }
@@ -94,7 +94,7 @@
     ws = new WebSocket(wsUrl());
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = (e) => {
-      if (e.code === 4001) { location.href = "index.html"; return; }          // signed out (session expired): back to the website
+      if (e.code === 4001) { location.href = "login.html"; return; }          // signed out (session expired): back to the website
       if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
     };

@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Atamus</title>
+  <title>Atamus — Log in</title>
+  <meta name="description" content="Atamus — a multiplayer space RTS. Own a solar system, mine, and raid through wormholes.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css?v=1791535000">
 </head>
@@ -28,32 +29,31 @@
 
   <main>
     <section class="card" aria-labelledby="title">
-      <h1 id="title" class="brand">Atamus</h1>
-      <div class="form">
-        <p class="welcome"><span id="hello">Welcome back</span>, <strong id="who">…</strong></p>
-        <div id="update-step" hidden>
-          <p class="update-title">Atamus is updating</p>
-          <p class="hint" id="update-msg">Back in a moment…</p>
-        </div>
-        <div id="pilot-step" hidden>
-          <form id="pilot-form" class="form" novalidate>
-            <label class="field">
-              <span>Pilot name</span>
-              <input name="name" type="text" required maxlength="24" spellcheck="false" autocomplete="off">
-            </label>
-            <p class="msg" id="pilot-msg" role="alert" hidden></p>
-            <button type="submit" class="btn btn-primary">Create pilot</button>
-          </form>
-        </div>
-        <div id="enter-step" hidden>
-          <a class="btn btn-primary" href="game.html">Enter System</a>
-        </div>
-        <button type="button" class="btn btn-ghost" id="logout">Log out</button>
-      </div>
+      <h1 id="title" class="brand">Log in</h1>
+
+      <form id="login-form" class="form" novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required
+                 minlength="3" maxlength="24" spellcheck="false">
+        </label>
+
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="current-password" required>
+        </label>
+
+        <p class="msg" id="msg" role="alert" hidden></p>
+
+        <button type="submit" class="btn btn-primary" id="submit">Log in</button>
+        <a class="btn btn-ghost" href="signup.html">Create account</a>
+
+        <a class="link-small" href="recover.html">Forgot your password?</a>
+      </form>
     </section>
   </main>
 
   <script src="api.js?v=1791535000"></script>
-  <script src="play.js?v=1791535000" defer></script>
+  <script src="login.js?v=1791535000" defer></script>
 </body>
 </html>

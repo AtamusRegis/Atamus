@@ -21,6 +21,7 @@ These docs are the project's memory between sessions. If they disagree with the 
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag.
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling that is saved in player data: leave it as it is.
 - **Test in the PTR before pushing to live.** Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown.
+- **Front-page updates.** When a major feature ships (not a fix), add an entry to the Updates list in `website/index.html`.
 - **Read the real game files.** Don't guess at behavior. Read the code, or ask when it's a design decision.
 
 ## Layout

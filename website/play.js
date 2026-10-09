@@ -16,6 +16,7 @@ async function showSteps() {
   const state = await Api.get("/game/state").catch(() => null);
   const hasPilot = state && state.pilots && state.pilots.length;
   pilotStep.hidden = !!hasPilot; enterStep.hidden = !hasPilot;
+  document.getElementById("hello").textContent = hasPilot ? "Welcome back" : "Welcome";   // a brand-new account is greeted, not welcomed back
   if (!hasPilot) pilotForm.elements.name.focus();
 }
 
@@ -40,7 +41,7 @@ async function waitForUpdate() {
 // always open the game fresh, never a cached copy of an older build
 document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); location.href = "game.html?cb=" + Date.now(); }));
 if (params.get("updating")) waitForUpdate();
-else showSteps().catch(() => { location.href = "index.html"; });
+else showSteps().catch(() => { location.href = "login.html"; });
 
 pilotForm.addEventListener("submit", async (e) => {
   e.preventDefault();

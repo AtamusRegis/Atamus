@@ -3,55 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Atamus — Log in</title>
-  <meta name="description" content="Atamus — a multiplayer space RTS. Own a solar system, mine, and raid through wormholes.">
+  <title>Atamus</title>
+  <meta name="description" content="Atamus is a multiplayer space mining game you play in your browser. Mine the Expanse, train your pilots, grow your fleet.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1791407710">
+  <link rel="stylesheet" href="style.css?v=1791535000">
+  <script>
+    // already signed in: straight to the welcome-back page
+    fetch((/(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin) + "/auth/me", { credentials: "include" })
+      .then((r) => { if (r.ok) location.replace("play.html"); }).catch(() => {});
+  </script>
 </head>
-<body>
+<body class="front">
   <div class="bg" aria-hidden="true">
     <div class="bg-gradient"></div>
-    <div class="bg-grid"></div>
-    <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
-      <filter id="noise">
-        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
-          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
-                   values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
-        </feTurbulence>
-        <feColorMatrix type="saturate" values="0"/>
-      </filter>
-      <rect width="100%" height="100%" filter="url(#noise)"/>
-    </svg>
     <div class="bg-vignette"></div>
   </div>
 
-  <main>
-    <section class="card" aria-labelledby="title">
-      <h1 id="title" class="brand">ATAMUS</h1>
+  <header class="site-head">
+    <a class="site-logo" href="index.html">ATAMUS</a>
+    <a class="btn btn-ghost btn-sm" href="login.html">Log in</a>
+  </header>
 
-      <form id="login-form" class="form" novalidate>
-        <label class="field">
-          <span>Username</span>
-          <input name="username" type="text" autocomplete="username" required
-                 minlength="3" maxlength="24" spellcheck="false">
-        </label>
+  <main class="front-main">
+    <section class="card front-about" aria-labelledby="about-title">
+      <h2 id="about-title" class="brand">The Expanse</h2>
+      <div class="front-body">
+        <p class="front-lead">Atamus is a multiplayer space mining game you play right in your browser.</p>
+        <p>Start with a single mining frigate and a station in your own corner of the Expanse. Lock onto asteroids, cut ore, sell it on the market, and train your pilots in new licenses.</p>
+        <p>Buy bigger hulls, fit them with lasers and modules, and grow from one ship into a mining fleet. Push your ships past their limits when it counts.</p>
+        <a class="btn btn-primary btn-play" href="signup.html">Play now</a>
+      </div>
+    </section>
 
-        <label class="field">
-          <span>Password</span>
-          <input name="password" type="password" autocomplete="current-password" required>
-        </label>
-
-        <p class="msg" id="msg" role="alert" hidden></p>
-
-        <button type="submit" class="btn btn-primary" id="submit">Log in</button>
-        <a class="btn btn-ghost" href="signup.html">Create account</a>
-
-        <a class="link-small" href="recover.html">Forgot your password?</a>
-      </form>
+    <section class="card front-updates" aria-labelledby="updates-title">
+      <h2 id="updates-title" class="brand">Updates</h2>
+      <div class="front-body">
+        <!-- major changes only, newest first -->
+        <article class="update">
+          <time datetime="2026-10-09">Oct 9, 2026</time>
+          <h3>Fitting and running hot</h3>
+          <p>Ships now have hardpoints, disposition and a capacitor. Buy modules on the market and fit them in your station. Run more modules than your capacitor can handle, but watch the heat.</p>
+        </article>
+        <article class="update">
+          <time datetime="2026-10-09">Oct 9, 2026</time>
+          <h3>A fresh start</h3>
+          <p>Every pilot has been reset so everyone starts on equal footing. Training is quick for now while we test.</p>
+        </article>
+        <article class="update">
+          <time datetime="2026-10-08">Oct 8, 2026</time>
+          <h3>Station market and pilots</h3>
+          <p>Buy ships and training manuals from the station market. Each account can now have up to three pilots.</p>
+        </article>
+        <article class="update">
+          <time datetime="2026-10-08">Oct 8, 2026</time>
+          <h3>Mining in the Expanse</h3>
+          <p>Mining lasers, the auto miner, station hangars and jettison cans. Mine ore, haul it home and sell it.</p>
+        </article>
+      </div>
     </section>
   </main>
-
-  <script src="api.js?v=1791407710"></script>
-  <script src="login.js?v=1791407710" defer></script>
 </body>
 </html>

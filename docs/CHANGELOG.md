@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Website:** a new front page (description, Play now and a major-updates list), restyled to match the game. Login moved to login.html, and signed-in visitors go straight to "Welcome back".
 - **Quick training:** level N of every license takes N minutes, for now.
 - **Player reset:** accounts were kept. Every pilot, ship, item, can and credit was wiped, so everyone starts as a new player.
 - **Fitting window:** the icon strip is gone, and modules are now a table: Module | Disposition | Capacitor.

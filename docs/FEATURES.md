@@ -26,7 +26,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 - **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**.
 
-- **Website** (atamus.io): signup, login, password recovery, and `play.html` (the hub).
+- **Website (owner):** styled like the game, with the same nebula backdrop, panels and buttons.
+  - **Front page** (`index.html`): a header with the logo and Log in on the right; a description card ("The Expanse") with **Play now**, which goes to account creation; and an **Updates** card.
+  - **Updates** lists **major changes only**, never small fixes. Edit the `<article class="update">` list in index.html, newest first.
+  - Signed-in visitors skip the front page and go straight to play.html: "Welcome back, name" (or "Welcome" before the first pilot exists), with Enter System and Log out.
+  - Pages: `login.html`, `signup.html`, `recover.html` and `play.html`. An expired session returns to login.html.
 - **First pilot:** named on the website (play.html), not in the game **(owner)**.
 - **Pilots (owner):** up to 3 per account (`MAX_PILOTS`), with no duplicate names.
   - The first pilot is free. Each extra pilot costs **1,000,000 cr** (`PILOT_PRICE`), taken from your in-game credits if you're online, otherwise from the database.

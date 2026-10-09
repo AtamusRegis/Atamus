@@ -48,7 +48,7 @@ stepAnswers.addEventListener("submit", async (e) => {
       password: v.password,
     });
     showMessage(msg2, "Password reset. Redirecting to log in…", "ok");
-    setTimeout(() => (location.href = "index.html"), 1200);
+    setTimeout(() => (location.href = "login.html"), 1200);
   } catch (err) {
     showMessage(msg2, err.message);
     setBusy(stepAnswers, false);

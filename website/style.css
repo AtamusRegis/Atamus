@@ -293,3 +293,47 @@ main {
 }
 
 .update-title { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .06em; color: #ffcf7a; text-shadow: 0 0 12px rgba(255,190,80,0.6); }
+
+
+/* ================================================================
+   Game look (2026-10-09): same panels, buttons and backdrop as the game.
+   ================================================================ */
+:root {
+  --panel-grad: linear-gradient(165deg, rgba(24,33,50,0.97) 0%, rgba(10,15,24,0.97) 100%);
+  --accent-grad: linear-gradient(135deg, #4fd2ff 0%, #2a7bff 100%);
+  --text: #e4ecf6; --text-dim: #93a0b4; --text-faint: #58667c; --cyan: #38c6ff;
+  --radius: 6px; --shadow: 0 20px 55px rgba(0,0,0,0.55);
+}
+.bg-gradient { background: #05080f url("assets/nebula_bg.webp") center / cover no-repeat; animation: none; }
+.bg-gradient::after { content: ""; position: absolute; inset: 0; background: rgba(4,6,12,0.55); }
+.bg-grid, .bg-noise { display: none; }
+.card { background: var(--panel-grad); border: none; border-radius: var(--radius); box-shadow: var(--shadow); backdrop-filter: none; padding: 0 20px 20px; }
+.brand { margin: 0 -20px 18px; padding: 9px 14px; background: transparent; border-bottom: 1px solid rgba(255,255,255,0.09);
+  font-size: 12px; font-weight: 600; letter-spacing: .08em; border-radius: var(--radius) var(--radius) 0 0; }
+.field input { border-radius: 5px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.3); }
+.field input:focus { border-color: transparent; box-shadow: 0 0 0 2px rgba(56,198,255,0.5); background: rgba(0,0,0,0.4); }
+.btn { border-radius: 5px; letter-spacing: .08em; font-size: 12px; font-weight: 600; }
+.btn-primary { color: #06131f; background: var(--accent-grad); border: none; box-shadow: none; }
+.btn-primary:hover { background: var(--accent-grad); filter: brightness(1.08); box-shadow: 0 0 18px rgba(56,198,255,0.3); }
+.btn-ghost { background: rgba(255,255,255,0.05); border: none; color: var(--text-dim); }
+.btn-ghost:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+.btn-sm { padding: 8px 14px; }
+.msg { border-radius: 5px; }
+
+/* ---------- front page ---------- */
+.site-head { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; max-width: 1040px; margin: 0 auto; padding: 18px 16px; }
+.site-logo { font-size: 20px; font-weight: 700; letter-spacing: .32em; color: var(--text); text-decoration: none; text-shadow: 0 0 18px rgba(56,198,255,0.35); }
+.front-main { position: relative; z-index: 1; min-height: auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: start; max-width: 1040px; margin: 0 auto; padding: 12px 16px 40px; place-items: start stretch; }
+.front-main .card { max-width: none; }
+.front-body { display: flex; flex-direction: column; gap: 12px; line-height: 1.6; color: var(--text-dim); font-size: 14px; }
+.front-body p { margin: 0; }
+.front-lead { color: var(--text) !important; font-size: 16px; }
+.btn-play { align-self: flex-start; margin-top: 8px; padding: 13px 34px; font-size: 14px; }
+.front-updates .front-body { gap: 0; }
+.update { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.update:first-child { padding-top: 0; }
+.update:last-child { border-bottom: none; padding-bottom: 0; }
+.update time { font-size: 11px; letter-spacing: .06em; color: var(--text-faint); }
+.update h3 { margin: 2px 0 4px; font-size: 14px; color: var(--text); }
+.update p { font-size: 13px; }
+@media (max-width: 760px) { .front-main { grid-template-columns: 1fr; } .btn-play { align-self: stretch; } }
