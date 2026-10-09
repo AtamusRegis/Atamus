@@ -637,16 +637,16 @@
         el("span", { class: "sheet-v" + (capUsed > capMax ? " poor" : "") }, capUsed + " / ", el("span", { class: batt || bonus ? "cap-boost" : "" }, String(capMax)))),   // green when boosted
       ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),   // what's adding to it
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
-    // the same proportional strip as the hotbar
-    const strip = el("div", { class: "fit-strip" });
-    for (const k of fit) { const m = items[k] || {}; strip.append(el("div", { class: "fit-block", style: "flex:" + (m.size || 1) }, m.icon ? el("img", { src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, (m.name || "?").split(" ").map((x) => x[0]).join("")))); }
-    if (used < (t.disposition || 0)) strip.append(el("div", { class: "fit-block free", style: "flex:" + ((t.disposition || 0) - used) }));
-    body.append(strip);
+    // modules as a table: Module | Disposition | Capacitor
     const list = el("div", { class: "fit-list fit-drop" });
+    list.append(el("div", { class: "fit-row fit-head" }, el("span", {}, "Module"), el("span", {}, "Disposition"), el("span", {}, "Capacitor")));
     fit.forEach((k, i) => {
-      const m = items[k] || { name: k };
-      const r = el("div", { class: "fit-row" }, m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join("")),
-        el("span", {}, m.name), el("span", { class: "fit-n" }, m.size + (m.draw ? " · ⚡" + m.draw : m.cap ? " · +" + m.cap : "") + (() => { const hp = (sh.fitHp || [])[i]; return hp == null || hp >= 100 ? "" : hp < 0 ? " · burnt out" : " · " + hp + "%"; })()));
+      const m = items[k] || { name: k }, hp = (sh.fitHp || [])[i];
+      const ico = m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join(""));
+      const state = hp == null || hp >= 100 ? null : el("span", { class: "fit-hp" }, hp < 0 ? "burnt out" : hp + "%");
+      const r = el("div", { class: "fit-row" }, el("span", { class: "fit-mod" }, ico, el("span", {}, m.name), state),
+        el("span", { class: "fit-col" }, key("disp"), String(m.size || 0)),
+        el("span", { class: "fit-col" + (m.cap ? " cap-boost" : "") }, m.draw ? key("cap") : null, m.draw ? String(m.draw) : "+" + (m.cap || 0)));
       if ((sh.fitHp || [])[i] < 0) r.classList.add("burnt");
       if (m.role === "laser") { const li = fit.slice(0, i).filter((x) => (items[x] || {}).role === "laser").length; if ((sh.lasers[li] || {}).on) r.classList.add("running"); }
       if (m.role === "auto" && sh.auto && sh.auto.on) r.classList.add("running");

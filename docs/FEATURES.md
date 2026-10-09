@@ -136,7 +136,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Overloaded modules simply let you run more; they don't perform better **(owner)**.
 - **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity; if everything fitted fits within the capacity, the tick sits at the crescent's top end, because that fit can't run hot.
   - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
-  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number turns green when batteries or Capacitor Management add to it, with green +rows for each addition), heat, and each module's integrity, with running modules highlighted.
+  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number turns green when batteries or Capacitor Management add to it, with green +rows for each addition), heat, then the modules as a table (Module | Disposition | Capacitor) showing each one's integrity, with running modules highlighted. There's no icon strip **(owner)**.
 
 ## Inventories and items
 
