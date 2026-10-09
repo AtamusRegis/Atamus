@@ -129,7 +129,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Search bar** at the top, which filters to a flat list by name or category.
 - Collapsible nested groups, remembered: Ships › Industry › class, and Training Manuals › category.
 - **Clicking a row opens the buy window.** There's no Buy button in the list **(owner)**.
-- **Buy window (owner):**
+- **Buy view (owner):** it opens **inside the market window**, replacing the list. Buy or Cancel returns to the list with your search kept, and closing the market drops an unfinished purchase.
   - the top shows the item's icon (a ship's sprite) and its description, plus an **Info** button that opens the full item info (or the ship info window with tabs) in its own window;
   - a divider separates the purchase section below it;
   - Price each; Quantity as [−][number][+], any whole number;

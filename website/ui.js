@@ -95,6 +95,7 @@
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
     persistWin(id); updateBtnActive(); updateChatGlow();
     if (id === "fleet" && typeof renderShipActions === "function") { actSig = ""; renderShipActions(); }
+    if (id === "market" && !show && buyOffer) { buyOffer = null; w.sig = null; w.body.innerHTML = ""; }   // closing the market drops an unfinished purchase
   }
   function renderOpen() { for (const id in wins) if (isOpen(wins[id]) && wins[id].render) wins[id].render(wins[id].body); }
 
@@ -1259,7 +1260,9 @@
   saved.mkOpen = saved.mkOpen || {};                 // which market groups are expanded (remembered)
   let mkQuery = "";
   function renderMarket(body) {
-    const A = window.Atamus, w = wins.market; w.slot.textContent = "Market";
+    const A = window.Atamus, w = wins.market;
+    if (buyOffer) { if (!body.querySelector(".buy-view")) { body.innerHTML = ""; w.sig = null; } return renderBuy(body); }   // buying: the purchase view replaces the list
+    w.slot.textContent = "Market";
     const items = A.cfg.items || {}, unlocked = A.inv.unlocked || {};
     // the search field is built once and never re-rendered (it keeps focus while typing); only the list below it rebuilds
     let list = body.querySelector(".mk-list");
@@ -1307,16 +1310,15 @@
 
   // ---- market purchase popup: full info, quantity slider, your credits ----
   let buyOffer = null;
-  function openBuy(m) {
-    if (!wins.buy) createWindow("buy", { left: Math.round(innerWidth / 2 - 170), top: 90, width: 340, minW: 280, minH: 220, render: renderBuy, groupable: false });
-    buyOffer = m; wins.buy.sig = null; toggleWindow("buy", true); renderBuy(wins.buy.body);
-  }
+  // The purchase view opens inside the market window; Buy or Cancel goes back to the list.
+  function openBuy(m) { buyOffer = m; const w = wins.market; w.sig = null; w.body.innerHTML = ""; toggleWindow("market", true); renderMarket(w.body); }
+  function closeBuy() { buyOffer = null; const w = wins.market; w.sig = null; w.body.innerHTML = ""; renderMarket(w.body); }
   function renderBuy(body) {
-    const A = window.Atamus, w = wins.buy, m = buyOffer; if (!m) return;
+    const A = window.Atamus, w = wins.market, m = buyOffer; if (!m) return;
     const credits = A.inv.credits || 0, sig = m.key + ":" + credits;
     if (sig === w.sig && body.childElementCount) return;
     const keepQ = w.sig && w.sig.split(":").slice(0, -1).join(":") === m.key ? w.q : 1;   // credits changed: keep the quantity being typed
-    w.sig = sig; body.innerHTML = "";
+    w.sig = sig; body.innerHTML = ""; body.append(el("div", { class: "buy-view" }));
     const def = (A.cfg.items || {})[m.key] || {};
     w.slot.textContent = "Buy " + (m.name || def.name);
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
@@ -1335,9 +1337,9 @@
     const qOf = () => Math.max(1, Math.floor(+num.value) || 1);
     const upd = () => { const q = qOf(); w.q = q; cost.textContent = (q * m.price).toLocaleString() + " cr"; const poor = q * m.price > credits; cost.classList.toggle("poor", poor); buyBtn.disabled = poor; buyBtn.classList.toggle("off", poor); };
     num.addEventListener("input", upd); num.addEventListener("blur", () => { num.value = qOf(); upd(); }); num.addEventListener("keydown", (e) => e.stopPropagation());
-    buyBtn.addEventListener("click", () => { if (buyBtn.disabled) return; A.send({ t: "buy", item: m.key, qty: qOf() }); toggleWindow("buy", false); });
+    buyBtn.addEventListener("click", () => { if (buyBtn.disabled) return; A.send({ t: "buy", item: m.key, qty: qOf() }); closeBuy(); });
     body.append(row("Price", el("span", {}, cr(m.price), " each")), row("Quantity", qty), row("Total", total), row("Deliver to", "Home Station · Deliveries"),
-      el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("buy", false) }, "Cancel"), buyBtn));
+      el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: closeBuy }, "Cancel"), buyBtn));
     upd();
   }
 
@@ -1380,7 +1382,6 @@
     if (state && A.inv.credits != null && state.profile.credits !== A.inv.credits) { state.profile.credits = A.inv.credits; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); }
     if (wins.sell && isOpen(wins.sell)) renderSell(wins.sell.body);
     if (wins.market && isOpen(wins.market)) renderMarket(wins.market.body);
-    if (wins.buy && isOpen(wins.buy)) renderBuy(wins.buy.body);
     if (wins.pilot && isOpen(wins.pilot) && pilotTab === "ship") renderPilot(wins.pilot.body);
     if (wins.split && isOpen(wins.split)) renderSplit(wins.split.body);
     for (const key in invWins) if (wins[key] && isOpen(wins[key])) renderInventory(key, wins[key].body); const w = wins.unit; if (w && isOpen(w)) renderUnit(w.body); });

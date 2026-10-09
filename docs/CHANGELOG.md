@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-08
 
+- **Market:** the purchase view now opens inside the market window, and Buy or Cancel returns to the list.
+
 - **Buy window:** shows only the item's icon and description at the top, plus an Info button that opens the item info or ship info in its own window. The ship tabs moved out of the buy window.
 
 - **Market:** a search bar; rows open the buy window, with no Buy buttons in the list. The buy window has [−][count][+] for any quantity, Total as "cost / your credits", Buy greyed out when you can't afford it, and a divider between the info and the purchase.
