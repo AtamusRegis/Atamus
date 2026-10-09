@@ -9,7 +9,7 @@ function setBanked(d, key, level, ms) { if (!d.banked[key]) d.banked[key] = {}; 
 function clearBanked(d, key, level) { if (d.banked[key]) delete d.banked[key][level]; }
 
 /** Process completed training based on real elapsed time. Mutates data. */
-// Specialization licences were folded into their base licence as levels 6-8.
+// Specialization licenses were folded into their base license as levels 6-8.
 function migrateSpecs(d) {
   for (const k of Object.keys(d.licenses)) if (k.endsWith("_spec")) {
     const base = k.slice(0, -5), lvl = d.licenses[k];

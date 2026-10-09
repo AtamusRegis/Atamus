@@ -4,6 +4,20 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Hull bonuses:** hulls no longer have their own yield or range. Modules have base stats, and each hull's Hull bonus adds % to the Mining Laser (shown in ship info's Description).
+- **Acceleration:** each hull has an acceleration stat; ships speed up and brake at that rate.
+- **HUD:**
+  - the status row reads "Speed: X"; hovering shows max speed and acceleration;
+  - module hover shows cycle time, yield, range and capacitor use;
+  - the HUD stays while docked with the pilot aboard, so modules drag between a hangar and the hotbar to fit or unfit them;
+  - a pilot without a ship gets a "Pilot not in a ship" box;
+  - dragging a target drags only that target.
+- **Fitting window:** the green capacity number shows its contributors on hover instead of extra rows.
+- **Ship info:** license requirements moved to the Fitting tab, in a collapsible section; Stats shows acceleration.
+- **Fleet actions:** Undock and Inventory show while the pilot sits in a docked ship.
+- **Settings:** sliders restyled to match the game.
+- **Spelling:** "licences" → "licenses".
+
 - **Targets:**
   - the primary target is the leftmost, with a white bar under it, and clicking a target makes it primary;
   - the tooltip and line to the target show on hover only;

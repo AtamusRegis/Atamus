@@ -1,7 +1,7 @@
 // PTR: a private test copy of Atamus that only runs in Claude's workspace (scripts/ptr.sh, scripts/ptr-run.mjs).
 // Enabled solely by ATAMUS_PTR=1, which the live server never sets. With it on there are
 // no accounts or passwords: every request is the single "PTR" tester, and dev commands
-// (credits, licences, ships, items, belts...) are accepted over the game socket.
+// (credits, licenses, ships, items, belts...) are accepted over the game socket.
 import { pool } from "./db.js";
 
 export const PTR = process.env.ATAMUS_PTR === "1";
@@ -26,7 +26,7 @@ export async function devCommand(world, pid, m, refresh) {
       const n = Math.max(0, Math.floor(+m.amount || 0));
       await pool.query(`UPDATE users SET credits = $1 WHERE id = $2`, [n, pid]); p.credits = n; p.invDirty = true; tell("credits = " + n); break;
     }
-    case "license": {                                  // every pilot gets this licence at this level
+    case "license": {                                  // every pilot gets this license at this level
       const lvl = Math.max(0, Math.min(5, +m.level || 0));
       const { rows } = await pool.query(`SELECT id, data FROM pilots WHERE user_id = $1`, [pid]);
       for (const r of rows) { r.data.licenses[m.key] = lvl; await pool.query(`UPDATE pilots SET data = $1 WHERE id = $2`, [r.data, r.id]); }

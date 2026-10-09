@@ -592,7 +592,7 @@
       for (const p of (state && state.pilots) || []) {
         if (String(p.id) === String(sh.pilot)) continue;
         const ok = canFly(p, sh.type);
-        items.push([(ok ? "Crew: " : "Can't crew: ") + p.name, () => { if (ok) A.send({ t: "crew", ship: sh.id, pilot: p.id }); else flash(p.name + " lacks the licences for the " + hullOf(sh.type).name + "."); }]);
+        items.push([(ok ? "Crew: " : "Can't crew: ") + p.name, () => { if (ok) A.send({ t: "crew", ship: sh.id, pilot: p.id }); else flash(p.name + " lacks the licenses for the " + hullOf(sh.type).name + "."); }]);
       }
       if (sh.pilot != null) items.push(["Remove pilot (" + (pilotName(sh.pilot) || "pilot") + ")", () => A.send({ t: "decrew", ship: sh.id })]);
     } else items.push(["Locate", () => A.locateShip(sh.id)]);
@@ -611,17 +611,33 @@
     wrap.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (shipTab === k ? " active" : ""), onclick: () => { shipTab = k; rerender(); } }, n))));
     if (shipTab === "stats") wrap.append(
       row("Shield / Hull", (t.shield || 0).toLocaleString() + " / " + (t.hp || 0).toLocaleString()),
-      row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"),
-      row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"), row("Mining yield", (t.laserM3s || 0) + " m³/s per laser"),
+      row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Acceleration", Math.round((t.accelKmps2 || 0) * 1000) + " m/s²"),
+      row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"), row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"),
       row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Lock time", ((t.lockMs || 0) / 1000) + " s"),
       row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"));
     else if (shipTab === "fit") {
       const cats = (window.Atamus.cfg || {}).moduleCategories || {};
       wrap.append(row("Hardpoints", t.fitSlots || 0), row("Disposition", t.disposition || 0), row("Capacitor", t.capacitor || 0),
         row("Accepts", (t.accepts || []).map((c) => cats[c] || c).join(", ") || "—"));
-    } else wrap.append(el("div", { class: "ship-hero" }, shipIcon(type, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
-      row("Class", t.cls || "—"), row("Requires", Object.entries(t.req || {}).map(([k, l]) => lic(k) + " " + l).join(", ") || "—"));
+      // license requirements, in a collapsible section (remembered)
+      const open = saved.reqOpen !== false, req = Object.entries(t.req || {});
+      wrap.append(el("div", { class: "mk-sub-h req-head" + (open ? " open" : ""), onclick: () => { saved.reqOpen = !open; persistAll(); rerender(); } }, el("span", { class: "mk-caret" }, "▸"), "License requirements", el("span", { class: "mk-count" }, req.length)));
+      if (open) wrap.append(...(req.length ? req.map(([k, l]) => row(lic(k), "Level " + l)) : [el("div", { class: "muted req-none" }, "None")]));
+    } else {
+      const items = (window.Atamus.cfg || {}).items || {}, stat = { yield: "Yield", range: "Range" };
+      const bonus = Object.entries(t.bonuses || {}).flatMap(([mod, b]) => Object.entries(b).map(([k, v]) => "+" + v + "% " + ((items[mod] || {}).name || mod) + " " + (stat[k] || k)));
+      wrap.append(el("div", { class: "ship-hero" }, shipIcon(type, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")), row("Class", t.cls || "—"),
+        ...(bonus.length ? [el("div", { class: "hull-bonus" }, el("div", { class: "hull-bonus-h" }, "Hull bonus"), ...bonus.map((b) => el("div", { class: "hull-bonus-row" }, b)))] : []));
+    }
     return wrap;
+  }
+  // the capacity number: green when something adds to it, with the contributors on hover (tap on touch)
+  function capBoost(text, rows) {
+    const e = el("span", { class: rows ? "cap-boost" : "" }, text); if (!rows) return e;
+    e.addEventListener("pointerenter", (ev) => { if (ev.pointerType === "mouse") showTip(e, rows); });
+    e.addEventListener("pointerleave", hideModTip);
+    e.addEventListener("click", () => { if (modTip.hidden) showTip(e, rows); else hideModTip(); });
+    return e;
   }
   // ---- fitting window: a ship's hardpoints / disposition / capacitor and its modules (changes need the ship docked) ----
   let fitShip = null;
@@ -643,8 +659,8 @@
     const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
     body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, key("cap"), "Capacitor in use"),
-        el("span", { class: "sheet-v" + (capUsed > capMax ? " poor" : "") }, capUsed + " / ", el("span", { class: batt || bonus ? "cap-boost" : "" }, String(capMax)))),   // green when boosted
-      ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),   // what's adding to it
+        el("span", { class: "sheet-v" + (capUsed > capMax ? " poor" : "") }, capUsed + " / ", capBoost(String(capMax), batt || bonus ? [["Base", String(t.capacitor || 0)], ...(batt ? [["Batteries", "+" + batt]] : []), ...(bonus ? [["Capacitor Management", "+" + bonus]] : [])] : null))),   // green when boosted; hover for what adds to it
+
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
     // modules as a table: Module | Disposition | Capacitor
     const list = el("div", { class: "fit-list fit-drop" });
@@ -787,10 +803,11 @@
   // hardpoints in the middle; click (tap) it for the fitting details
   const hudGaugeRing = el("button", { class: "fg-ring", onclick: () => { const sh = hudShipData(); if (sh) openFitting(sh.id); } });
   const hudRow = el("div", { class: "hud-row" }, hudGaugeRing, hudBar, hudAct);
-  hud.append(hudTargets, hudStatus, hudRow); document.body.append(hud);
+  hud.append(hudTargets, hudStatus, hudRow, el("div", { class: "hud-noship" }, "Pilot not in a ship")); document.body.append(hud);
   const ICO = {
     inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
     dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
+    undock: '<svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 17h16v3H4z"/></svg>',
     warp: '<svg viewBox="0 0 24 24"><path d="M3 12h11M10 7l5 5-5 5"/><path d="M17 6v12M21 8v8"/></svg>',
   };
   const HB_SLOTS = 8;
@@ -804,16 +821,24 @@
   });
   // hover a module: its cycle time and ore per cycle (with the pilot's bonuses)
   const modTip = el("div", { class: "mod-tip", hidden: "" }); document.body.append(modTip);
+  // range sliders: the track fills up to the thumb (--val), kept in sync on input and whenever sliders are added
+  const fillRange = (r) => { const lo = +r.min || 0, hi = r.max === "" ? 100 : +r.max; r.style.setProperty("--val", ((+r.value - lo) / ((hi - lo) || 1)) * 100 + "%"); };
+  document.addEventListener("input", (e) => { if (e.target.type === "range") fillRange(e.target); });
+  new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.type === "range") fillRange(n); else if (n.firstElementChild) n.querySelectorAll('input[type="range"]').forEach(fillRange); } }).observe(document.body, { childList: true, subtree: true });
+  function showTip(anchor, rows) {
+    modTip.innerHTML = ""; modTip.append(...rows.map(([k, v]) => el("div", { class: "mod-tip-row" }, el("span", {}, k), el("b", {}, v))));
+    modTip.hidden = !rows.length; const r = anchor.getBoundingClientRect();
+    modTip.style.left = (r.left + r.width / 2) + "px"; modTip.style.top = (r.top - 6) + "px";
+  }
   function showModTip(slot, it) {
     const A = window.Atamus, sh = hudShipData(); if (!sh) return;
     const items = A.cfg.items || {}, def = items[it.item] || {}, secs = (ms) => (ms >= 60000 ? Math.floor(ms / 60000) + ":" + String(Math.round(ms / 1000) % 60).padStart(2, "0") : (ms / 1000).toFixed(1) + " s");
     const rows = [];
-    if (it.k === "laser") { const dur = ((sh.lasers || [])[it.i] || {}).dur || A.cfg.cycleMs || 15000; rows.push(["Cycle time", secs(dur)], ["m³ per cycle", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1)]); }
-    else if (it.k === "auto") rows.push(["Cycle time", secs((sh.auto && sh.auto.cyc) || 180000)]);
+    if (it.k === "laser") { const dur = ((sh.lasers || [])[it.i] || {}).dur || A.cfg.cycleMs || 15000;
+      rows.push(["Cycle time", secs(dur)], ["Yield", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1) + " m³ / cycle"], ["Range", (sh.laserRange || 0).toFixed(2) + " km"], ["Capacitor use", String(def.draw || 0)]); }
+    else if (it.k === "auto") rows.push(["Cycle time", secs((sh.auto && sh.auto.cyc) || 180000)], ["Capacitor use", String(def.draw || 0)]);
     else if (def.cap) rows.push(["Capacitor", "+" + def.cap]);
-    modTip.innerHTML = ""; modTip.append(...rows.map(([k, v]) => el("div", { class: "mod-tip-row" }, el("span", {}, k), el("b", {}, v))));
-    modTip.hidden = !rows.length; const r = slot.getBoundingClientRect();
-    modTip.style.left = (r.left + r.width / 2) + "px"; modTip.style.top = (r.top - 6) + "px";
+    showTip(slot, rows);
   }
   function hideModTip() { modTip.hidden = true; }
   saved.hbOrder = saved.hbOrder || {};   // shipId -> order of its fitted modules on the hotbar
@@ -849,14 +874,22 @@
     A.send({ t: "laser", ship: sh.id, idx, on: true, rock: rock.id });
   }
   // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells
-  function reorderable(cell, kind, index, onDrop, onHold) {
+  function reorderable(cell, kind, index, onDrop, onHold, extra) {
     cell.setAttribute("draggable", "true");
-    cell.addEventListener("dragstart", (e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ [kind]: index })); e.dataTransfer.effectAllowed = "move"; });
+    const payload = { [kind]: index, ...(extra || {}) };
+    cell.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify(payload)); e.dataTransfer.effectAllowed = "move";
+      // drag only this icon: a detached copy, so neighbors and tooltips never end up in the drag image
+      const ring = cell.querySelector(".tgt-ring"), src = ring || cell, r = src.getBoundingClientRect();
+      const ghost = ring ? el("div", { class: cell.className.replace(/\b(drop|sel)\b/g, "") }, ring.cloneNode(true)) : cell.cloneNode(true);   // keeps the cell's state classes (locked) for the ring's look
+      Object.assign(ghost.style, { position: "fixed", left: "-1000px", top: "-1000px", width: r.width + "px", height: r.height + "px", margin: "0", padding: "0" });
+      document.body.append(ghost); e.dataTransfer.setDragImage(ghost, r.width / 2, r.height / 2); setTimeout(() => ghost.remove(), 0);
+    });
     cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("drop"); });
     cell.addEventListener("dragleave", () => cell.classList.remove("drop"));
     cell.addEventListener("drop", (e) => { e.preventDefault(); cell.classList.remove("drop"); const d = dragPayload(e); if (d && d[kind] != null) onDrop(d[kind], index); });
     cell.addEventListener("touchdrop", (e) => { const d = e.detail; if (d && d[kind] != null) onDrop(d[kind], index); });
-    touchDrag(cell, { [kind]: index }, onHold || (() => {}));
+    touchDrag(cell, payload, onHold || (() => {}));
   }
   // ---- hotbar module menu (right-click / hold): activate, power, info ----
   function moduleMenu(sh, it, x, y) {
@@ -881,9 +914,12 @@
   function renderHud() {
     const A = window.Atamus, sh = hudShipData();
     renderShipActions();
-    if (!sh || sh.docked) { if (!hud.hidden) { hud.hidden = true; A.hud.line = null; } hudShip = null; return; }
+    const noShip = (!sh || sh.pilot == null) && state && state.pilots && state.pilots.some((p) => String(p.id) === String(saved.selPilot)) && !pilotShip(saved.selPilot);
+    hud.classList.toggle("no-ship", !!noShip);
+    if (noShip) { hideModTip(); hud.hidden = false; A.hud.line = null; hudShip = null; hudSig = ""; return; }             // "Pilot not in a ship"
+    if (!sh || (sh.docked && sh.pilot == null)) { if (!hud.hidden) { hideModTip(); hud.hidden = true; A.hud.line = null; } hudShip = null; return; }
     if (hudShip !== sh.id) { hudShip = sh.id; hoverTg = null; tgOrder = []; }
-    hud.hidden = false;
+    hud.hidden = false; hud.classList.toggle("docked", !!sh.docked);   // docked: the hotbar stays so modules can be dragged in and out
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (hoverTg && !targets.some((x) => x && tgKey(x) === hoverTg)) hoverTg = null;
@@ -914,7 +950,10 @@
       hudStatus.innerHTML = "";
       const bar = (k, cls) => { const fill = el("div", { class: "ubar-fill " + cls }); const txt = el("span", { class: "ubar-txt" }); H[k] = { fill, txt }; return el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, k), el("div", { class: "ubar" }, fill, txt)); };
       H.speed = el("span", { class: "hud-speed" });
-      hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
+      const spd = el("div", { class: "hud-bar hud-spd" }, el("span", { class: "hud-k" }, "Speed"), H.speed);
+      spd.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") showTip(spd, [["Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"], ["Acceleration", Math.round((t.accelKmps2 || 0) * 1000) + " m/s²"]]); });
+      spd.addEventListener("pointerleave", hideModTip);
+      hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), spd);
       // hotbar = the ship's fitting: one block per fitted module, as wide as its share of the hull's disposition
       hudBar.innerHTML = ""; hudLive.slots = []; hudLive.mods = []; hudLive.keys = [];
       const mods = hbModules(sh);
@@ -942,7 +981,8 @@
         slot.addEventListener("pointerleave", hideModTip);
         const menu = () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); };
         slot.addEventListener("contextmenu", (e) => { e.preventDefault(); moduleMenu(hudShipData() || sh, it, e.clientX, e.clientY); });
-        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const o = saved.hbOrder[sh.id]; [o[from], o[to]] = [o[to], o[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
+        reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const o = saved.hbOrder[sh.id]; [o[from], o[to]] = [o[to], o[from]]; persistAll(); hudSig = ""; renderHud(); }, menu,
+          { unfit: { ship: sh.id, idx: m.fi } });                   // dragged onto a station inventory while docked: unfit it there
         hudBar.append(slot);
       });
       for (let i = mods.length; i < (t.fitSlots || 0); i++) hudBar.append(el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, HB_KEYS[i] || "")));   // free hardpoints
@@ -986,7 +1026,7 @@
       // (when everything fitted fits within the capacity, the tick sits at the crescent's end: this fit can't run hot)
       if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0);
     }
-    H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
+    H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " m/s";
     if (standby.size) {
       const rock = primaryRock(sh);
       for (const key of [...standby]) {
@@ -1003,6 +1043,11 @@
     else A.hud.line = null;
   }
   window.Atamus.bus.addEventListener("snap", renderHud);
+  // docked: drop a module from a station inventory onto the hotbar to fit it
+  const hotbarFit = (d) => { const sh = hudShipData(); if (sh && sh.docked && d && d.ref) window.Atamus.send({ t: "fit", ship: sh.id, from: d.ref }); };
+  hudBar.addEventListener("dragover", (e) => { if (hud.classList.contains("docked")) e.preventDefault(); });
+  hudBar.addEventListener("drop", (e) => { e.preventDefault(); hotbarFit(dragPayload(e)); });
+  hudBar.addEventListener("touchdrop", (e) => hotbarFit(e.detail));
   let pilotShipSig = "";                              // keep the pilot's Current Ship tab live (location changes)
   window.Atamus.bus.addEventListener("snap", () => {
     if (!wins.pilot || !isOpen(wins.pilot) || pilotTab !== "ship") return;
@@ -1019,7 +1064,7 @@
     const A = window.Atamus, u = A.unit, sh = u && u.kind === "ship" ? A.ship(u.id) : null;
     const fleetOpen = wins.fleet && isOpen(wins.fleet);
     const host = fleetOpen ? wins.fleet.acts : hudAct;
-    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.canDock, sh && sh.moving && !sh.warp].join("|");
+    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.pilot, sh && sh.canDock, sh && sh.moving && !sh.warp].join("|");
     if (sig === actSig) return; actSig = sig;
     for (const h of [hudAct, wins.fleet && wins.fleet.acts]) if (h) { h.innerHTML = ""; h.hidden = true; }
     if (!sh) return;                                                // a pilot is always selected: their ship's actions always show
@@ -1027,6 +1072,7 @@
     host.append(act("inv", "Inventory", () => { const cur = A.ship(sh.id) || sh, key = cur.docked ? "inv:station" : "inv:" + sh.id, w = wins[key];
       if (w && isOpen(w) && (!cur.docked || (invWins[key] && invWins[key].ref.id === sh.id))) toggleWindow(key, false); else openInventory({ owner: "ship", id: sh.id, inv: "ore" }); }));
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
+    if (sh.docked && sh.pilot != null) host.append(act("undock", "Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })));
     if (sh.moving && !sh.warp) host.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
     host.hidden = false;
   }
@@ -1187,8 +1233,9 @@
   function dropTarget(elm, to, A) {
     elm.addEventListener("dragover", (e) => { e.preventDefault(); elm.classList.add("drop"); });
     elm.addEventListener("dragleave", () => elm.classList.remove("drop"));
-    elm.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); elm.classList.remove("drop"); const d = dragPayload(e); if (d && d.ref) A.send({ t: "inv_move", from: d.ref, to }); });
-    elm.addEventListener("touchdrop", (e) => { e.stopPropagation(); if (e.detail && e.detail.ref) A.send({ t: "inv_move", from: e.detail.ref, to }); });
+    const take = (d) => { if (!d) return; if (d.ref) A.send({ t: "inv_move", from: d.ref, to }); else if (d.unfit) A.send({ t: "unfit", ship: d.unfit.ship, idx: d.unfit.idx, to }); };
+    elm.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); elm.classList.remove("drop"); take(dragPayload(e)); });
+    elm.addEventListener("touchdrop", (e) => { e.stopPropagation(); take(e.detail); });
   }
   function renderInventory(key, body) {
     const w = wins[key], st = invWins[key]; if (!w || !st) return;
@@ -1298,11 +1345,11 @@
         ev.preventDefault(); clearTimeout(hold);
         if (!moved) { moved = true; ghost = cell.firstChild.cloneNode(true); ghost.className += " inv-ghost"; document.body.append(ghost); }
         ghost.style.left = t.clientX + "px"; ghost.style.top = t.clientY + "px";
-        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot, .inv-grid, .fit-drop");
+        const under = document.elementFromPoint(t.clientX, t.clientY), tgt = under && under.closest(".inv-cell, .tab, .inv-side-c, .inv-side-deliv, .tgt, .hb-slot, .inv-grid, .fit-drop, .hud-hotbar");
         if (over && over !== tgt) over.classList.remove("drop"); over = tgt; if (over) over.classList.add("drop");
       };
       const done = () => { clearTimeout(hold); cell.removeEventListener("touchmove", mv); cell.removeEventListener("touchend", end); cell.removeEventListener("touchcancel", done); if (ghost) ghost.remove(); if (over) over.classList.remove("drop"); };
-      const end = () => { const tgt = over; done(); if (moved && tgt) tgt.dispatchEvent(new CustomEvent("touchdrop", { detail: payload })); };
+      const end = () => { const tgt = over; done(); if (moved && tgt) tgt.dispatchEvent(new CustomEvent("touchdrop", { detail: payload, bubbles: true })); };
       cell.addEventListener("touchmove", mv, { passive: false }); cell.addEventListener("touchend", end); cell.addEventListener("touchcancel", done);
     }, { passive: true });
   }

@@ -81,7 +81,7 @@ export class World {
       : [...Array(t.lasers || 0).fill("module:mining_laser"), "module:auto_miner"].map((item) => ({ item }));
     const nLasers = fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     return {
-      ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass, fit,
+      ...sh, vx: 0, vy: 0, speed: t.speedKmps, accel: t.accelKmps2 || 0.1, radius: t.radiusKm, mass: t.mass, fit,
       docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: nLasers }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
       auto: { on: false, off: false, next: 0, ...(sh.auto || {}) },
       hp: Number.isFinite(sh.hp) ? Math.min(sh.hp, t.hp) : t.hp, shield: Number.isFinite(sh.shield) ? Math.min(sh.shield, t.shield) : t.shield,
@@ -175,18 +175,21 @@ export class World {
   }
   _lockedRock(sh, rockId) { return sh.targets.find((t) => t.kind === "rock" && t.locked && (rockId == null || t.id === rockId)); }
   _inLaserRange(sh, f) { return Math.hypot(f.rock.x - sh.x, f.rock.y - sh.y) <= this._laserRange(sh); }
-  // ---- licence bonuses: they come from the pilot crewing the ship ----
+  // ---- license bonuses: they come from the pilot crewing the ship ----
   _lic(sh, key) {
     const p = this.players.get(sh.owner), pl = p && p.pilots.find((x) => String(x.id) === String(sh.pilot));
     return (pl && pl.licenses[key]) || 0;
   }
   _per(key) { const l = getLicense(key); return (l && l.per) || 0; }
-  _laserRange(sh) { return LASER_RANGE_KM * (1 + this._per("laser_range") * this._lic(sh, "laser_range")); }
+  // a hull's bonus to a module stat, in % (e.g. Prospector: Mining Laser yield +20, range +5)
+  _hullBonus(sh, item, stat) { const t = SHIP_TYPES[sh.type] || {}; return ((t.bonuses || {})[item] || {})[stat] || 0; }
+  _laserRange(sh) { const m = Inv.MODULES["module:mining_laser"]; return (m.range || LASER_RANGE_KM) * (1 + this._hullBonus(sh, "module:mining_laser", "range") / 100) * (1 + this._per("laser_range") * this._lic(sh, "laser_range")); }
   _cycleMs(sh) { return Math.round(MINING_CYCLE_MS * Math.max(0.5, 1 - this._per("laser_cycle") * this._lic(sh, "laser_cycle"))); }
   _yieldM3s(sh) {
     const t = SHIP_TYPES[sh.type] || {}, hullLic = Object.keys(t.req || {})[0];
-    // hull licence = how efficiently the pilot flies it (Lvl 5 = 100% of the hull's yield)
-    return (t.laserM3s || LASER_M3_PER_S) * (1 + this._per("small_mining_laser") * this._lic(sh, "small_mining_laser")) * (hullLic ? hullEfficiency(this._lic(sh, hullLic)) : 1);
+    // hull license = how efficiently the pilot flies it (Lvl 5 = 100% of the hull's yield)
+    const base = Inv.MODULES["module:mining_laser"].yield || LASER_M3_PER_S;   // the module's base yield, boosted by the hull bonus and licenses
+    return base * (1 + this._hullBonus(sh, "module:mining_laser", "yield") / 100) * (1 + this._per("small_mining_laser") * this._lic(sh, "small_mining_laser")) * (hullLic ? hullEfficiency(this._lic(sh, hullLic)) : 1);
   }
   // All lasers at once: on -> spread over the locked rocks in range; off -> stop repeating.
   cmdMine(pid, shipId, on) {
@@ -300,11 +303,13 @@ export class World {
     sh.fit.push({ item: key, hp: 100, burnt: false });
     this._refit(sh); this._markInv(pid);
   }
-  cmdUnfit(pid, shipId, idx) {
+  // to: optional station inventory (or this ship's own hold) to put the module in; default Hangar 1
+  cmdUnfit(pid, shipId, idx, to) {
     const p = this.players.get(pid), sh = this.ships.get(shipId); if (!p || !sh || sh.owner !== pid) return;
     if (!sh.docked) { this._tell(pid, "Dock to change a ship's fitting."); return; }
     const i = Math.floor(Number(idx)), f = sh.fit[i]; if (!f) return;
-    if (Inv.add(p.hangars[0].inv, f.item, 1) !== 1) { this._tell(pid, "No room in Hangar 1."); return; }
+    const dest = to ? this._inv(pid, to) : null, inv = dest && dest.inv && dest.docked && !dest.can ? dest.inv : p.hangars[0].inv;
+    if (Inv.add(inv, f.item, 1) !== 1) { this._tell(pid, "No room for the module there."); return; }
     sh.fit.splice(i, 1); this._refit(sh); this._markInv(pid);
   }
   _autoCycleMs(sh) { const lvl = Math.max(1, this._lic(sh, "auto_miner")); return Math.max(30_000, AUTO_MINER_BASE_MS - AUTO_MINER_STEP_MS * (lvl - 1)); }
@@ -421,7 +426,7 @@ export class World {
     return true;
   }
   _tell(pid, text) { const p = this.players.get(pid); if (p) p.send(JSON.stringify({ t: "sys", text })); }
-  // A pilot can crew a docked ship if their licences cover the hull; a pilot already
+  // A pilot can crew a docked ship if their licenses cover the hull; a pilot already
   // in another docked ship walks across the station. Ships in space keep their pilot.
   cmdCrew(pid, shipId, pilotId) {
     const p = this.players.get(pid), sh = this.ships.get(shipId); if (!p || !sh || sh.owner !== pid) return;
@@ -630,7 +635,6 @@ export class World {
   // inward velocity so they settle against each other instead of jittering.
   _tickShips(dtSec) {
     const ships = [...this.ships.values()];
-    const steer = 1 - Math.exp(-SHIP_STEER * dtSec);
 
     // 1) steer velocities toward targets, integrate
     for (const s of ships) {
@@ -639,13 +643,13 @@ export class World {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
         if (d <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; }
         else {
-          const vmax = s.warp ? s.speed * WARP_MULT : s.speed;
-          const spd = Math.min(vmax, (d / SHIP_SLOW_RADIUS_KM) * vmax); // ease to a stop
-          const dvx = (dx / d) * spd, dvy = (dy / d) * spd;
-          s.vx += (dvx - s.vx) * steer; s.vy += (dvy - s.vy) * steer;
+          const vmax = s.warp ? s.speed * WARP_MULT : s.speed, acc = (s.accel || 0.1) * (s.warp ? WARP_MULT : 1);
+          const spd = Math.min(vmax, Math.sqrt(2 * acc * d) * 0.95);            // fast as it can while still able to brake in time
+          const dvx = (dx / d) * spd - s.vx, dvy = (dy / d) * spd - s.vy, dv = Math.hypot(dvx, dvy), step = acc * dtSec;
+          if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
         }
       }
-      if (!s.moving) { s.vx *= 0.6; s.vy *= 0.6; if (Math.hypot(s.vx, s.vy) < 1e-3) { s.vx = 0; s.vy = 0; } }
+      if (!s.moving) { const v = Math.hypot(s.vx, s.vy), step = (s.accel || 0.1) * dtSec; if (v <= step) { s.vx = 0; s.vy = 0; } else { s.vx -= s.vx / v * step; s.vy -= s.vy / v * step; } }
       s.x += s.vx * dtSec; s.y += s.vy * dtSec;
       if (Math.hypot(s.vx, s.vy) > 0.05) s.h = Math.atan2(s.vy, s.vx); // face travel direction
 

@@ -33,7 +33,7 @@ const reqLic = (...pairs) => pairs.map(([key, level]) => ({ type: "license", key
 // Licenses every new pilot already holds (key -> level).
 export const STARTING_LICENSES = { mining_frigate: 1, small_mining_laser: 1, auto_miner: 1 };
 
-// One licence = one kind of upgrade. `bonus` is what each endorsement level adds; `per` is
+// One license = one kind of upgrade. `bonus` is what each endorsement level adds; `per` is
 // its size (used by the game). `flies` lists hulls a level unlocks that aren't in the market yet.
 export const LICENSES = [
   // ============================================================
@@ -133,13 +133,13 @@ export const LICENSES = [
 
 for (const l of LICENSES) { l.designTimes = l.levelTimes; if (QUICK_TRAINING) l.levelTimes = l.levelTimes.map((_, i) => (i + 1) * 60_000); }
 
-// Hull licences scale how well you fly the hull: Lvl 1-5 add 20% each (Lvl 5 = 100% of the
+// Hull licenses scale how well you fly the hull: Lvl 1-5 add 20% each (Lvl 5 = 100% of the
 // hull's stats), Lvl 6-8 add 5% each above that (up to 115%).
 export const hullEfficiency = (lvl) => Math.min(lvl, 5) * 0.2 + Math.max(0, lvl - 5) * 0.05;
 for (const l of LICENSES) l.levelBonus = Array.from({ length: l.maxLevel }, (_, i) =>
   l.hull ? (i < 5 ? "+20% " : "+5% ") + l.bonus : l.bonus);
 
-// What each endorsement level unlocks: hulls it lets you fly and licences it opens for training.
+// What each endorsement level unlocks: hulls it lets you fly and licenses it opens for training.
 for (const l of LICENSES) {
   const u = {};
   const add = (lvl, text) => { (u[lvl] ||= []).push(text); };

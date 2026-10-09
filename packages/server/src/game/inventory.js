@@ -13,7 +13,7 @@ for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "
 // Modules: fitted to ships at a station. size counts against the hull's disposition; draw is the capacitor
 // a running module uses; cap is capacitor a passive module adds. license: [key, level] needed to activate.
 export const MODULES = {
-  "module:mining_laser": { name: "Mining Laser", cat: "mining", role: "laser", size: 10, draw: 10, license: ["small_mining_laser", 1], price: 60_000, icon: "assets/icons/mining_laser.png",
+  "module:mining_laser": { name: "Mining Laser", cat: "mining", role: "laser", size: 10, draw: 10, yield: 2, range: 1, cycle: 15000, license: ["small_mining_laser", 1], price: 60_000, icon: "assets/icons/mining_laser.png",
     desc: "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes." },
   "module:auto_miner": { name: "Auto Miner", cat: "automation", role: "auto", size: 15, draw: 5, license: ["auto_miner", 1], price: 250_000, icon: "assets/icons/auto_miner.png",
     desc: "Each cycle, puts every idle mining laser on the first locked asteroid in range." },

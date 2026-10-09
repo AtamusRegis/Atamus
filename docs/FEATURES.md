@@ -82,6 +82,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Crew or decrew from the station hangar's right-click menu; it only works docked, and needs the right licenses.
   - A pilot already sitting in another docked ship walks across the station.
 - **Buying:** bought ships arrive in **Deliveries** as packaged items. **Assemble** (in a station) turns one into a docked, uncrewed ship.
+- **Movement (owner):** each hull has an acceleration (Prospector 150 m/s², Dredger 50, Bulwark 40, Collier 45, Excavator 55, Rampart 45, Carrack 50). Ships speed up and brake at that rate and arrive without overshooting.
 - **Docking:** within 4 km of the station. Docking repairs the ship, clears its targets and stops its modules. If the docked ship was selected, the selection is cleared.
 
 ## Mining
@@ -95,7 +96,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Hotbar clicks:**
   - clicking an active laser toggles whether it repeats; it never switches target mid-cycle;
   - clicking an idle laser starts it on the selected target.
-- **Yield:** per second = hull `laserM3s` × (1 + Mining Laser Yield bonus) × hull efficiency. Units are whole numbers; a rock with less than one unit left is mined out and removed.
+- **Hull bonuses (owner):** a hull has no yield or range of its own. Modules have base stats (Mining Laser: 2 m³/s, 1 km, 15 s), and a hull's **Hull bonus** adds % to specific modules: Prospector +20% yield / +5% range; Dredger +350/+10; Bulwark +200/+5; Collier +275/+10; Excavator +500/+15; Rampart +300/+10; Carrack +400/+15. Other modules keep their base stats unless something else boosts them.
+- **Yield:** per second = module base × (1 + hull bonus) × (1 + Mining Laser Yield license) × hull efficiency. Units are whole numbers; a rock with less than one unit left is mined out and removed.
 - **Beams:** they aim at points on the rock and stop on the first opaque pixel of the rock sprite (an alpha-mask raycast). A chunk animation travels along the beam.
 - **Auto Miner** (Automated Mining license): cycles every 3:00, −30 s per level. Each cycle it puts every idle, powered laser on the first locked rock in range.
 - **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots). The order can be rearranged by dragging and is remembered per ship.
@@ -108,7 +110,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Running modules:** a bright glint circles the outline clockwise.
   - **Standby (owner):** a target module (laser) switched on with no locked rock blinks "Standby" and fires on the next rock lock; pressing it again cancels. Automation (the auto miner) runs its cycles with or without a target.
   - **Stopping (owner):** a module set to stop after its cycle can't be re-armed until the cycle ends. The next activation goes to the current primary target (the HUD's selected target, or the first locked rock).
-  - **Hover (mouse):** shows cycle time and m³ per cycle for a laser, cycle time for the auto miner, and capacitor for a battery.
+  - **Hover (mouse):** a laser shows Cycle time, Yield (m³ / cycle), Range and Capacitor use, with all bonuses applied; the auto miner shows Cycle time and Capacitor use; a battery shows its +Capacitor.
   - A thin integrity bar appears on a damaged module; a burnt-out one is dark red; one running past capacity has a red outline.
 - **Module menu** (right-click, or hold on touch) has three options:
   - **Activate / Deactivate**. There's no re-arming once deactivated.
@@ -158,7 +160,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Overloaded modules simply let you run more; they don't perform better **(owner)**.
 - **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity; if everything fitted fits within the capacity, the tick sits at the crescent's top end, because that fit can't run hot.
   - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
-  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number turns green when batteries or Capacitor Management add to it, with green +rows for each addition), heat, then the modules as a table (Module | Disposition | Capacitor) showing each one's integrity, with running modules highlighted. There's no icon strip **(owner)**.
+  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number is white, and turns green when batteries or Capacitor Management add to it; hovering, or tapping on touch, the green number shows Base and each contributor), heat, then the modules as a table (Module | Disposition | Capacitor) showing each one's integrity, with running modules highlighted. There's no icon strip **(owner)**.
 
 ## Inventories and items
 
@@ -199,9 +201,9 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Buy is greyed out when you can't afford it, and the typed quantity is kept if your credits change;
   - purchases go to Deliveries; the server accepts up to 1,000,000 per order, subject to Deliveries capacity.
 - **Ship info (owner):** the ship info window uses three tabs:
-  - Description: image, text, class, requirements;
-  - Stats: shield/hull, speed, holds, yield, targeting, lock time, length;
-  - Fitting: the modules fitted (Mining Laser × n, Auto Miner × 1).
+  - Description: image, text, class, and a **Hull bonus** box (e.g. "+20% Mining Laser Yield");
+  - Stats: shield/hull, max speed, acceleration, holds, targeting, lock time, length (no yield: hulls have none);
+  - Fitting: hardpoints, disposition, capacitor, accepted categories, and a collapsible **License requirements** section (remembered).
 
 ## UI and HUD
 
@@ -223,9 +225,12 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - target lock icons: untarget (a centered ×), distance under the circle, reorder by dragging **(owner)**:
     - the **primary target is the leftmost**, with a small white bar under its circle; clicking a target makes it primary;
     - hovering a target shows its tooltip (name, plus m³ left for rocks; no size, no distance) and the thin line to it on the map;
-  - a shield, hull and speed row (hull bars are red);
+  - a shield, hull and **Speed** row (hull bars are red); hovering Speed shows Max speed and Acceleration;
   - the hotbar.
-- **Ship actions** (Inventory, Dock, Warp): always shown for the selected pilot's ship, docked or not (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center, half size.
+  - **Docked with the pilot aboard (owner):** the HUD stays, so modules can be dragged from a hangar onto the hotbar to fit them, and from the hotbar into a hangar to unfit them.
+  - **Pilot not in a ship (owner):** when the selected pilot crews no ship, the HUD becomes a small "Pilot not in a ship" box.
+  - Dragging a target shows only that target's circle.
+- **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center, half size.
 - **Selection (owner):** one pilot is always selected. Selecting a pilot selects their ship. Clicking empty space or an empty box-select never deselects, and a docked ship stays selected (its HUD just hides). Clicking the station opens its hangar without changing the selection.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
@@ -234,7 +239,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - auto-sized, wrapping instead of scrolling, no resize edges, 16 px end padding.
 - **Pilot window:** Licenses, Training Queue, Current Ship (with Locate) and Items.
 - **Persistence across reloads:** the selection (ship or station, in localStorage `atamus.sel`) and the camera (sessionStorage `atamus.view`).
-- **Settings window:** a Sound tab with All, Music and SFX sliders, remembered. There are no sound effects yet; the SFX volume is ready for them.
+- **Settings window:** a Sound tab with All, Music and SFX sliders (themed: blue fill up to a round thumb), remembered. There are no sound effects yet; the SFX volume is ready for them.
 - **Music (owner):** "Soviet Wave" (`assets/audio/soviet_wave.mp3`) loops in the game at All × Music volume. It starts on the first click or key, since browsers block sound before that.
 - **Context menu:** always renders above windows, and closes on any tap elsewhere.
 - **Mobile:**
