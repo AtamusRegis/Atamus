@@ -104,7 +104,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Inventories and items
 
-- **Inventory slots:** each inventory holds up to 100 stacks and is limited by volume (m³).
+- **Inventory slots:** each inventory holds up to 100 stacks and is limited by volume (m³). The header shows volume only, not the stack limit **(owner)**.
 - **Station:** 4 renameable hangars plus Deliveries, which is gold and anchored at the bottom. The sidebar lists docked ships with their holds. Clicking the station opens the hangar window; there's no station selection panel **(owner)**.
 - **Ship holds:** ore and cargo.
 - **Transfers:** allowed between two inventories that are both at the station, or between a ship in space and a jettison can within 2.5 km.
@@ -114,7 +114,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Sell:** **ore only**, at the station. Opens a popup with price, slider and confirm.
   - **Read:** manuals.
   - **Assemble:** packaged ships, at the station.
-  - **Info.**
+  - **Info:** description, Weight "unit / stack" and Price "unit / stack". There's no rarity row and no price per m³ **(owner)**.
 - **Commands name their item.** If the stacks shifted underneath, the server finds that item rather than acting on whatever now sits in the slot. Quantities are whole numbers only.
 - **Jettison cans (owner):**
   - hold 15,000 m³ and last 30 minutes;
@@ -126,8 +126,20 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 - Opened from its own left-panel button.
 - Sells mining hulls only for now **(owner)**, plus training manuals priced at 1M + 25k × the license's total training hours.
+- **Search bar** at the top, which filters to a flat list by name or category.
 - Collapsible nested groups, remembered: Ships › Industry › class, and Training Manuals › category.
-- **Buy popup:** full info, a quantity slider, the total and your credits. It keeps the typed quantity if your credits change. Purchases go to Deliveries.
+- **Clicking a row opens the buy window.** There's no Buy button in the list **(owner)**.
+- **Buy window (owner):**
+  - the info comes first; a ship gets the Description / Stats / Fitting tabs;
+  - a divider separates the purchase section below it;
+  - Price each; Quantity as [−][number][+], any whole number;
+  - Total reads "cost / your credits";
+  - Buy is greyed out when you can't afford it, and the typed quantity is kept if your credits change;
+  - purchases go to Deliveries; the server accepts up to 1,000,000 per order, subject to Deliveries capacity.
+- **Ship info (owner):** both the ship info window and the buy window use three tabs:
+  - Description: image, text, class, requirements;
+  - Stats: shield/hull, speed, holds, yield, targeting, lock time, length;
+  - Fitting: the modules fitted (Mining Laser × n, Auto Miner × 1).
 
 ## UI and HUD
 

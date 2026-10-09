@@ -4,6 +4,11 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-08
 
+- **Market:** a search bar; rows open the buy window, with no Buy buttons in the list. The buy window has [−][count][+] for any quantity, Total as "cost / your credits", Buy greyed out when you can't afford it, and a divider between the info and the purchase.
+- **Ship info:** Description / Stats / Fitting tabs, in the ship info window and the buy window.
+- **Item info:** Weight and Price shown as unit / stack. Rarity and price per m³ removed.
+- **Inventory header:** the stack limit is no longer shown.
+
 - **Inventory windows:** minimum sizes now follow their content. They can't be narrowed past their tabs or one slot, or shortened past their first slot.
 
 - **Inventories:** no more fake empty slots, just one spare cell to drop into. Every inventory window, the station hangar included, can shrink to one slot wide; the station's ship list moves above the grid when it's narrow.

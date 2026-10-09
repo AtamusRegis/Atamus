@@ -590,6 +590,27 @@
     items.push(["Info", () => openShipInfo(sh.type)]);
     showCtxMenu(x, y, items);
   }
+  // Ship info in three tabs: Description, Stats, Fitting. Used by the ship info window and the market buy window.
+  let shipTab = "desc";
+  function shipInfoTabs(type, rerender) {
+    const t = hullOf(type), wrap = el("div", { class: "ship-tabs" });
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
+    const lic = (k) => { const l = catalog && catalog.licenses.find((x) => x.key === k); return l ? l.name : k; };
+    const tabs = [["desc", "Description"], ["stats", "Stats"], ["fit", "Fitting"]];
+    wrap.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (shipTab === k ? " active" : ""), onclick: () => { shipTab = k; rerender(); } }, n))));
+    if (shipTab === "stats") wrap.append(
+      row("Shield / Hull", (t.shield || 0).toLocaleString() + " / " + (t.hp || 0).toLocaleString()),
+      row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"),
+      row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"), row("Mining yield", (t.laserM3s || 0) + " m³/s per laser"),
+      row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Lock time", ((t.lockMs || 0) / 1000) + " s"),
+      row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"));
+    else if (shipTab === "fit") {
+      const mod = (icon, name, n) => el("div", { class: "fit-row" }, el("img", { class: "fit-ico", src: icon, alt: "", draggable: "false" }), el("span", {}, name), el("span", { class: "fit-n" }, "× " + n));
+      wrap.append(el("div", { class: "fit-list" }, mod("assets/icons/mining_laser.png", "Mining Laser", t.lasers || 0), mod("assets/icons/auto_miner.png", "Auto Miner", 1)));
+    } else wrap.append(el("div", { class: "ship-hero" }, shipIcon(type, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
+      row("Class", t.cls || "—"), row("Requires", Object.entries(t.req || {}).map(([k, l]) => lic(k) + " " + l).join(", ") || "—"));
+    return wrap;
+  }
   let shipInfoType = null;
   function openShipInfo(type) {
     if (!wins.shipinfo) createWindow("shipinfo", { left: Math.round(innerWidth / 2 - 170), top: 120, width: 340, minW: 280, minH: 200, render: renderShipInfo, groupable: false });
@@ -597,16 +618,7 @@
   }
   function renderShipInfo(body) {
     const w = wins.shipinfo, t = hullOf(shipInfoType); body.innerHTML = ""; w.slot.textContent = t.name || "Ship";
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    const lic = (k) => { const l = catalog && catalog.licenses.find((x) => x.key === k); return l ? l.name : k; };
-    body.append(el("div", { class: "ship-hero" }, shipIcon(shipInfoType, "ship-hero-img")),
-      el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
-      row("Class", t.cls || "—"), row("Requires", Object.entries(t.req || {}).map(([k, l]) => lic(k) + " " + l).join(", ") || "—"),
-      row("Shield / Hull", (t.shield || 0).toLocaleString() + " / " + (t.hp || 0).toLocaleString()),
-      row("Max speed", Math.round((t.speedKmps || 0) * 1000) + " m/s"), row("Ore hold", (t.oreM3 || 0).toLocaleString() + " m³"),
-      row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"), row("Mining lasers", (t.lasers || 0) + " × " + (t.laserM3s || 0) + " m³/s"),
-      row("Targeting", (t.targetRangeKm || 0) + " km · " + (t.maxTargets || 0) + " targets"), row("Length", Math.round((t.lengthKm || 0) * 1000) + " m"),
-      row("Market price", cr(t.price)));
+    body.append(shipInfoTabs(shipInfoType, () => renderShipInfo(body)));
   }
 
   // The panel only rebuilds its DOM when the *structure* changes (unit, buttons);
@@ -1118,7 +1130,7 @@
     if (!data) return;
     const L = st.live;
     L.fill.style.width = Math.min(100, data.used / data.cap * 100) + "%";
-    L.stat.textContent = Math.round(data.used).toLocaleString() + " / " + data.cap.toLocaleString() + " m³ · " + data.stacks + "/" + maxStacks;
+    L.stat.textContent = Math.round(data.used).toLocaleString() + " / " + data.cap.toLocaleString() + " m³";
     data.slots.forEach((stck, i) => { const c = L.qty[i]; if (!c) return; c.qty.textContent = stck.qty.toLocaleString(); c.item.title = c.def.name + " × " + stck.qty + " (" + (stck.qty * (c.def.unitM3 || 0)).toFixed(1) + " m³)"; });
   }
   // Touch fallback for HTML5 drag/drop: move the finger to drag a stack (ghost follows), hold still to open the sell panel.
@@ -1236,19 +1248,43 @@
     const def = infoItem && (A.cfg.items || {})[infoItem.key]; if (!def) { w.slot.textContent = "Info"; return; }
     w.slot.textContent = def.name;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    const perM3 = def.unitM3 ? def.price / def.unitM3 : 0;
+    const q = infoItem.qty || 1, m3 = (v) => (+v.toFixed(2)).toLocaleString() + " m³";
     body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
-      row("Rarity", def.rarity || "—"), row("Weight", def.unitM3 + " m³ / unit"), row("Price", el("span", {}, cr(def.price), " / unit")),
-      row("Price per m³", cr(perM3)), row("Stack", el("span", {}, infoItem.qty.toLocaleString() + " × = ", cr(infoItem.qty * (def.price || 0)), " · " + (infoItem.qty * def.unitM3).toLocaleString() + " m³")));
+      row("Weight", m3(def.unitM3) + " / " + m3(def.unitM3 * q)),
+      row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q))));
   }
 
   // ---- station market ----
   function openMarket() { toggleWindow("market", true); }
   saved.mkOpen = saved.mkOpen || {};                 // which market groups are expanded (remembered)
+  let mkQuery = "";
   function renderMarket(body) {
     const A = window.Atamus, w = wins.market; w.slot.textContent = "Market";
     const items = A.cfg.items || {}, unlocked = A.inv.unlocked || {};
-    const keep = body.scrollTop; body.innerHTML = "";
+    // the search field is built once and never re-rendered (it keeps focus while typing); only the list below it rebuilds
+    let list = body.querySelector(".mk-list");
+    if (!list) {
+      body.innerHTML = "";
+      const search = el("input", { class: "text-input mk-search", type: "search", placeholder: "Search", value: mkQuery });
+      search.addEventListener("input", () => { mkQuery = search.value; renderMarket(body); });
+      search.addEventListener("keydown", (e) => e.stopPropagation());
+      list = el("div", { class: "mk-list" });
+      body.append(search, list);
+    }
+    const keep = body.scrollTop; list.innerHTML = "";
+    const offerRow = (m) => {
+      const def = items[m.key] || {}, known = def.license && unlocked[def.license];
+      const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
+      if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
+      return el("div", { class: "mk-row" + (known ? " known" : ""), onclick: () => openBuy(m) }, name, el("div", { class: "mk-price" }, cr(m.price)));
+    };
+    const q = mkQuery.trim().toLowerCase();
+    if (q) {                                                     // searching: a flat list of matches
+      const hits = (A.cfg.market || []).filter((m) => ((m.name || "") + " " + (m.path || []).join(" ")).toLowerCase().includes(q));
+      for (const m of hits) list.append(offerRow(m));
+      if (!hits.length) list.append(el("div", { class: "muted" }, "No matches."));
+      body.scrollTop = keep; return;
+    }
     const tree = { kids: new Map(), offers: [], n: 0 };         // nested groups from each offer's path
     for (const m of A.cfg.market || []) {
       let node = tree; node.n++;
@@ -1256,21 +1292,13 @@
       node.offers.push(m);
     }
     const toggle = (k) => { saved.mkOpen[k] = !saved.mkOpen[k]; persistAll(); renderMarket(body); };
-    const offerRow = (m) => {
-      const def = items[m.key] || {}, known = def.license && unlocked[def.license];
-      const name = el("div", { class: "mk-name" }, m.ship ? shipIcon(m.ship, "mk-ship") : null, el("span", {}, m.name || def.name || m.key));
-      if (m.ship) { name.style.cursor = "pointer"; name.addEventListener("click", () => openShipInfo(m.ship)); }
-      if (known) name.append(el("span", { class: "mk-sub" }, "Already read"));
-      return el("div", { class: "mk-row" + (known ? " known" : "") }, name, el("div", { class: "mk-price" }, cr(m.price)),
-        el("button", { class: "btn-primary2 unit-btn mk-buy", onclick: () => openBuy(m) }, "Buy"));
-    };
     const walk = (node, keyPath, depth) => {
       for (const [name, kid] of node.kids) {
         const k = keyPath ? keyPath + "/" + name : name, open = !!saved.mkOpen[k];
         const h = el("div", { class: (depth ? "mk-sub-h" : "mk-cat") + (open ? " open" : ""), onclick: () => toggle(k) }, el("span", { class: "mk-caret" }, "▸"), name, el("span", { class: "mk-count" }, kid.n));
         if (depth > 1) h.style.marginLeft = (10 + (depth - 1) * 12) + "px";
-        body.append(h);
-        if (open) { walk(kid, k, depth + 1); for (const m of kid.offers) body.append(offerRow(m)); }
+        list.append(h);
+        if (open) { walk(kid, k, depth + 1); for (const m of kid.offers) list.append(offerRow(m)); }
       }
     };
     walk(tree, "", 0);
@@ -1289,23 +1317,23 @@
     if (sig === w.sig && body.childElementCount) return;
     const keepQ = w.sig && w.sig.split(":").slice(0, -1).join(":") === m.key ? w.q : 1;   // credits changed: keep the quantity being typed
     w.sig = sig; body.innerHTML = "";
-    const def = (A.cfg.items || {})[m.key] || {}, t = m.ship ? hullOf(m.ship) : null;
+    const def = (A.cfg.items || {})[m.key] || {};
     w.slot.textContent = "Buy " + (m.name || def.name);
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    if (t) {
-      body.append(el("div", { class: "ship-hero" }, shipIcon(m.ship, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")),
-        row("Class", t.cls), row("Shield / Hull", t.shield.toLocaleString() + " / " + t.hp.toLocaleString()), row("Max speed", Math.round(t.speedKmps * 1000) + " m/s"),
-        row("Ore hold", t.oreM3.toLocaleString() + " m³"), row("Mining lasers", t.lasers + " × " + t.laserM3s + " m³/s"), row("Packaged", (def.unitM3 || 0).toLocaleString() + " m³"));
-    } else body.append(el("div", { class: "info-desc" }, el("span", {}, def.desc || "")), row("Category", (m.path || []).slice(1).join(" · ") || "—"));
-    const max = Math.max(1, Math.min(100, Math.floor(credits / m.price) || 1));
-    const range = el("input", { type: "range", class: "sell-range", min: 1, max, value: 1 });
-    const num = el("input", { type: "number", class: "sell-num", min: 1, max: 1000, value: keepQ || 1 });
-    const total = el("span", { class: "credits" }), buyBtn = el("button", { class: "btn-primary2 unit-btn" }, "Buy");
-    const upd = () => { const q = Math.max(1, Math.min(1000, Math.round(+num.value || 1))); num.value = q; w.q = q; range.value = Math.min(q, max); total.textContent = (q * m.price).toLocaleString() + " cr"; total.classList.toggle("poor", q * m.price > credits); buyBtn.disabled = q * m.price > credits; };
-    range.addEventListener("input", () => { num.value = range.value; upd(); }); num.addEventListener("input", upd);
-    buyBtn.addEventListener("click", () => { A.send({ t: "buy", item: m.key, qty: +num.value }); toggleWindow("buy", false); });
-    body.append(row("Price", el("span", {}, cr(m.price), " each")), row("Quantity", num), range, row("Total", total), row("Your credits", cr(credits)),
-      row("Deliver to", "Home Station · Deliveries"),
+    if (m.ship) { const box = el("div"); const draw = () => { box.innerHTML = ""; box.append(shipInfoTabs(m.ship, draw)); }; draw(); body.append(box); }
+    else body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")), row("Category", (m.path || []).slice(1).join(" · ") || "—"));
+    body.append(el("div", { class: "buy-div" }));
+    // quantity: [-] [count] [+], any whole number
+    const num = el("input", { type: "number", class: "sell-num buy-num", min: 1, step: 1, value: keepQ || 1, inputmode: "numeric" });
+    const step = (d) => { num.value = Math.max(1, (Math.floor(+num.value) || 1) + d); upd(); };
+    const qty = el("div", { class: "buy-qty" }, el("button", { class: "qbtn minus", onclick: () => step(-1) }, "−"), num, el("button", { class: "qbtn", onclick: () => step(1) }, "+"));
+    const cost = el("span", { class: "credits" }), total = el("span", {}, cost, " / ", cr(credits));
+    const buyBtn = el("button", { class: "btn-primary2 unit-btn" }, "Buy");
+    const qOf = () => Math.max(1, Math.floor(+num.value) || 1);
+    const upd = () => { const q = qOf(); w.q = q; cost.textContent = (q * m.price).toLocaleString() + " cr"; const poor = q * m.price > credits; cost.classList.toggle("poor", poor); buyBtn.disabled = poor; buyBtn.classList.toggle("off", poor); };
+    num.addEventListener("input", upd); num.addEventListener("blur", () => { num.value = qOf(); upd(); }); num.addEventListener("keydown", (e) => e.stopPropagation());
+    buyBtn.addEventListener("click", () => { if (buyBtn.disabled) return; A.send({ t: "buy", item: m.key, qty: qOf() }); toggleWindow("buy", false); });
+    body.append(row("Price", el("span", {}, cr(m.price), " each")), row("Quantity", qty), row("Total", total), row("Deliver to", "Home Station · Deliveries"),
       el("div", { class: "unit-btns row2" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => toggleWindow("buy", false) }, "Cancel"), buyBtn));
     upd();
   }
