@@ -58,8 +58,6 @@
   bgCanvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
   canvas.insertAdjacentElement("beforebegin", bgCanvas);
   const bgCtx = bgCanvas.getContext("2d");
-  const bgImg = new Image(); let bgReady = false;
-  bgImg.onload = () => { bgReady = true; drawBackground(); }; bgImg.src = "assets/nebula_bg.webp";
 
   // ---- ship art: each hull is drawn at true scale from its sprite (stats come from the server) ----
   // Own ships render blue, other players' ships red.
@@ -206,7 +204,7 @@
   let cam = { cx: 0, cy: 0, viewW: 600 }, curMaxW = 600, viewWTarget = 600;
   const panVel = { x: 0, y: 0 };
   function resize() { const dpr = window.devicePixelRatio || 1; canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
-  addEventListener("resize", () => { resize(); drawBackground(); }); resize(); drawBackground();
+  addEventListener("resize", resize); resize();
   if (window.SunFX) window.SunFX.init();
   const scale = () => innerWidth / cam.viewW;
   const gx2s = (gx) => innerWidth / 2 + (gx - cam.cx) * scale();
@@ -263,10 +261,17 @@
       shipRender.set(id, { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, h: a.h + dh * Math.min(1, u) });
     }
   }
+  function gateBall(sh) {
+    const w = sh.wp; if (!w || w.ph !== "gate") return null;
+    const a = curPlace.get(sh.sys), b = curPlace.get(w.dsys); if (!a) return null;
+    const u = Math.min(1, (w.el + (performance.now() - snapAt)) / (w.dur || 5000)), ax = a.gx + w.fx, ay = a.gy + w.fy;
+    if (!b) return { x: ax, y: ay, u, fade: true };                              // heading somewhere you can't see: it just vanishes into the gate
+    const bx = b.gx + w.ex, by = b.gy + w.ey; return { x: ax + (bx - ax) * u, y: ay + (by - ay) * u, u, ax, ay };
+  }
   function shipPos(sh) { return shipRender.get(sh.id) || { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }; }
   function followAnchor() {
     let n = 0, sx = 0, sy = 0;
-    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const pl = curPlace.get(sh.sys); if (!pl) continue; const p = shipPos(sh); sx += pl.gx + p.x; sy += pl.gy + p.y; n++; }
+    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const gb = gateBall(sh); if (gb) { sx += gb.x; sy += gb.y; n++; continue; } const pl = curPlace.get(sh.sys); if (!pl) continue; const p = shipPos(sh); sx += pl.gx + p.x; sy += pl.gy + p.y; n++; }
     return n ? { x: sx / n, y: sy / n } : null;
   }
   function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
@@ -472,16 +477,65 @@
     ctx.restore();
   }
 
-  function drawBackground() {   // static: redrawn on resize / image load only
-    const dpr = window.devicePixelRatio || 1;
-    bgCanvas.width = Math.floor(innerWidth * dpr); bgCanvas.height = Math.floor(innerHeight * dpr); bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (bgReady && bgImg.naturalWidth) {
-      const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight, s = Math.max(innerWidth / iw, innerHeight / ih);
-      const w = iw * s, h = ih * s;
-      bgCtx.drawImage(bgImg, (innerWidth - w) / 2, (innerHeight - h) / 2, w, h);
-    } else { bgCtx.fillStyle = "#05080f"; bgCtx.fillRect(0, 0, innerWidth, innerHeight); }
-    bgCtx.fillStyle = "rgba(4,6,12,0.55)"; bgCtx.fillRect(0, 0, innerWidth, innerHeight); // darken
+  // ---- space backdrop (owner): a dark gradient, slow drifting noise, a very thin world grid and three layers of
+  // parallax stars that dim and brighten. Redrawn every frame (so a GPU reset can never leave it blank). ----
+  const PARALLAX_PX_PER_KM = 3;                          // how far the backdrop drifts as the camera pans (depth-scaled)
+  function makeNoise(seed, tint) {                       // a tileable soft value-noise texture (low-res, drawn scaled up)
+    const N = 96, c = document.createElement("canvas"); c.width = c.height = N;
+    let a = seed; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+    const lat = (g) => { const v = []; for (let i = 0; i < g * g; i++) v.push(rnd()); return (x, y) => { const x0 = Math.floor(x) % g, y0 = Math.floor(y) % g, x1 = (x0 + 1) % g, y1 = (y0 + 1) % g, fx = x - Math.floor(x), fy = y - Math.floor(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); const top = v[y0 * g + x0] * (1 - sx) + v[y0 * g + x1] * sx, bot = v[y1 * g + x0] * (1 - sx) + v[y1 * g + x1] * sx; return top * (1 - sy) + bot * sy; }; };
+    const octs = [lat(4), lat(8), lat(16)], g = c.getContext("2d"), img = g.createImageData(N, N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const n = octs[0](x / N * 4, y / N * 4) * 0.55 + octs[1](x / N * 8, y / N * 8) * 0.3 + octs[2](x / N * 16, y / N * 16) * 0.15, v = Math.max(0, n - 0.42) / 0.58, k = (y * N + x) * 4;
+      img.data[k] = tint[0]; img.data[k + 1] = tint[1]; img.data[k + 2] = tint[2]; img.data[k + 3] = Math.round(v * v * 255);
+    }
+    g.putImageData(img, 0, 0); return c;
   }
+  const noiseA = makeNoise(1337, [70, 110, 200]), noiseB = makeNoise(4242, [110, 70, 170]);
+  const STAR_LAYERS = [{ depth: 0.12, n: 230, size: 0.9, a: 0.45 }, { depth: 0.3, n: 120, size: 1.3, a: 0.6 }, { depth: 0.6, n: 45, size: 1.9, a: 0.8 }].map((L, li) => {
+    let a = 97 + li * 7919; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+    return { ...L, stars: Array.from({ length: L.n }, () => ({ x: rnd() * 2048, y: rnd() * 2048, s: L.size * (0.6 + rnd() * 0.8), b: 0.4 + rnd() * 0.6, sp: 0.15 + rnd() * 0.6, ph: rnd() * 6.283, tint: rnd() })) };
+  });
+  const starGlow = (() => { const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d"), gr = g.createRadialGradient(8, 8, 0, 8, 8, 8); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(220,235,255,0.55)"); gr.addColorStop(1, "rgba(200,220,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 16, 16); return c; })();
+  function drawBackground() {
+    const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+    if (bgCanvas.width !== Math.floor(W * dpr) || bgCanvas.height !== Math.floor(H * dpr)) { bgCanvas.width = Math.floor(W * dpr); bgCanvas.height = Math.floor(H * dpr); }
+    bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const t = performance.now() / 1000, px = cam.cx * PARALLAX_PX_PER_KM, py = -cam.cy * PARALLAX_PX_PER_KM;
+    const gr = bgCtx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.hypot(W, H) * 0.7);   // deep blue centre to near black
+    gr.addColorStop(0, "#09111f"); gr.addColorStop(0.55, "#050912"); gr.addColorStop(1, "#010205");
+    bgCtx.fillStyle = gr; bgCtx.fillRect(0, 0, W, H);
+    // slow drifting noise: two layers moving different ways, barely there
+    bgCtx.imageSmoothingEnabled = true;
+    for (const [tex, sc, vx, vy, depth, al] of [[noiseA, 9, 3.2, 1.1, 0.05, 0.16], [noiseB, 13, -2.1, 1.7, 0.08, 0.11]]) {
+      const T = tex.width * sc, ox = (((t * vx - px * depth) % T) + T) % T, oy = (((t * vy - py * depth) % T) + T) % T;
+      bgCtx.globalAlpha = al * (0.85 + 0.15 * Math.sin(t * 0.07 + sc));
+      for (let x = ox - T; x < W; x += T) for (let y = oy - T; y < H; y += T) bgCtx.drawImage(tex, x, y, T, T);
+    }
+    bgCtx.globalAlpha = 1;
+    // parallax stars, each slowly dimming and brightening
+    for (const L of STAR_LAYERS) {
+      const ox = ((-px * L.depth) % 2048 + 2048) % 2048, oy = ((-py * L.depth) % 2048 + 2048) % 2048;
+      for (const st of L.stars) {
+        const a = L.a * st.b * (0.55 + 0.45 * Math.sin(t * st.sp + st.ph)); if (a < 0.04) continue;
+        for (let x = (st.x + ox) % 2048; x < W; x += 2048) for (let y = (st.y + oy) % 2048; y < H; y += 2048) {
+          bgCtx.globalAlpha = a;
+          if (st.s < 1.2) { bgCtx.fillStyle = st.tint > 0.8 ? "#ffe6c8" : st.tint < 0.2 ? "#c8dcff" : "#eef3ff"; bgCtx.fillRect(x, y, st.s, st.s); }
+          else { const d = st.s * 4; bgCtx.drawImage(starGlow, x - d / 2, y - d / 2, d, d); }
+        }
+      }
+    }
+    bgCtx.globalAlpha = 1;
+    // a very thin world grid (step chosen so lines sit ~70+ px apart; every 5th line a touch brighter)
+    if (cfg) {
+      const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200]; let step = steps.find((v) => v * sc >= 70) || 500;
+      const x0 = cam.cx - W / 2 / sc, x1 = cam.cx + W / 2 / sc, y0 = cam.cy - H / 2 / sc, y1 = cam.cy + H / 2 / sc;
+      bgCtx.lineWidth = 1;
+      for (let gx = Math.floor(x0 / step) * step; gx <= x1; gx += step) { const x = Math.round(gx2s(gx)) + 0.5; bgCtx.strokeStyle = Math.round(gx / step) % 5 === 0 ? "rgba(140,170,220,0.07)" : "rgba(140,170,220,0.035)"; bgCtx.beginPath(); bgCtx.moveTo(x, 0); bgCtx.lineTo(x, H); bgCtx.stroke(); }
+      for (let gy = Math.floor(y0 / step) * step; gy <= y1; gy += step) { const y = Math.round(gy2s(gy)) + 0.5; bgCtx.strokeStyle = Math.round(gy / step) % 5 === 0 ? "rgba(140,170,220,0.07)" : "rgba(140,170,220,0.035)"; bgCtx.beginPath(); bgCtx.moveTo(0, y); bgCtx.lineTo(W, y); bgCtx.stroke(); }
+    }
+  }
+
 
   // ---- asteroid belts: beacon + crescent of rocks, sprites drawn at true size ----
   const oreRock = {}; const rockArt = {};
@@ -630,8 +684,11 @@
     for (const b of snap.beacons || []) {
       const pl = place.get(b.sys); if (!pl) continue;
       const wx = pl.gx + b.x, wy = pl.gy + b.y, x = gx2s(wx), y = gy2s(wy);
-      const to = b.back ? homePl : b.to ? place.get(b.to) : null;
-      const ang = to ? Math.atan2(to.gy - wy, to.gx - wx) : Math.atan2(wy - pl.gy, wx - pl.gx);   // world angle (unlinked: pointing outward)
+      // the point faces the partner gate: a home gate faces its instance's gate; an instance's gate faces the gate home you came through
+      let tgt = null;
+      if (b.to) { const ip = place.get(b.to); if (ip) tgt = { x: ip.gx + (cfg.instReturn || { x: -14, y: 0 }).x, y: ip.gy + (cfg.instReturn || { x: -14, y: 0 }).y }; }
+      else if (b.back && homePl) { const se = snap.systems.find((x) => x.id === b.sys); tgt = se && se.fromGateLocal ? { x: homePl.gx + se.fromGateLocal.x, y: homePl.gy + se.fromGateLocal.y } : { x: homePl.gx, y: homePl.gy }; }
+      const ang = tgt ? Math.atan2(tgt.y - wy, tgt.x - wx) : Math.atan2(wy - pl.gy, wx - pl.gx);   // world angle (unlinked: pointing outward)
       const wPx = Math.max(16, ACCEL_LEN_KM * scale()), rr = (cfg.beaconRange || 2.5) * scale();
       ctx.save();
       if (rr > 10) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.setLineDash([4, 6]); ctx.lineWidth = 1; ctx.strokeStyle = b.linked ? "rgba(110,190,255,0.4)" : "rgba(170,180,195,0.2)"; ctx.stroke(); ctx.setLineDash([]); }
@@ -748,6 +805,17 @@
   }
   function drawWarp(pl, sh, p, sx, sy, halfW) {
     const w = sh.wp; if (!w) { warpSeen.delete(sh.id + ":entry"); warpSeen.delete(sh.id + ":exit"); return; }
+    if (w.ph === "gate") {                                                    // gate jump: a glowing ball streaking from gate to gate
+      const gb = gateBall(sh); if (!gb || (gb.fade && gb.u > 0.15)) return;
+      const x = gx2s(gb.x), y = gy2s(gb.y), R = Math.max(4, halfW * 0.45) * (gb.fade ? 1 - gb.u / 0.15 : 1);
+      ctx.save();
+      if (gb.ax != null) { const tx = gx2s(gb.ax), ty = gy2s(gb.ay), back = Math.min(Math.hypot(x - tx, y - ty), R * 14), d = Math.hypot(x - tx, y - ty) || 1;
+        const lg = ctx.createLinearGradient(x, y, x + (tx - x) / d * back, y + (ty - y) / d * back); lg.addColorStop(0, "rgba(140,210,255,0.8)"); lg.addColorStop(1, "rgba(60,140,255,0)");
+        ctx.strokeStyle = lg; ctx.lineWidth = R * 0.9; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (tx - x) / d * back, y + (ty - y) / d * back); ctx.stroke(); }
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2); rg.addColorStop(0, "rgba(235,248,255,1)"); rg.addColorStop(0.3, "rgba(120,200,255,0.9)"); rg.addColorStop(1, "rgba(50,130,255,0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, R * 2.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      return;
+    }
     const el = w.el + (performance.now() - snapAt), t = performance.now();
     const fx = gx2s(pl.gx + w.fx), fy = gy2s(pl.gy + w.fy), hasExit = w.ex != null, ex = hasExit ? gx2s(pl.gx + w.ex) : 0, ey = hasExit ? gy2s(pl.gy + w.ey) : 0;
     // progress line for your selected ship: start window → exit window, lit up to where it is now
@@ -758,7 +826,7 @@
     }
     const entryA = w.ph === "open" ? 1 : w.ph === "transit" ? 1 - el / 1200 : 0;
     warpWindow(sh.id + ":entry", fx, fy, w.dir, halfW, entryA, t);
-    const exitShown = w.ph === "exit" || (w.ph === "transit" && w.dur - el <= (cfg.warpExitShowMs || 1000));   // the exit window opens only in the last second (owner)
+    const exitShown = !w.g && (w.ph === "exit" || (w.ph === "transit" && w.dur - el <= (cfg.warpExitShowMs || 1000)));   // (a gate exit has the gate itself, no window)   // the exit window opens only in the last second (owner)
     if (hasExit && exitShown) warpWindow(sh.id + ":exit", ex, ey, w.dir, halfW, w.ph === "exit" ? 1 - el / 2000 : 1, t);
     if (w.ph === "transit") {                                                 // the ship is a glowing ball between the windows
       const R = Math.max(4, halfW * 0.45), back = Math.min(Math.hypot(sx - fx, sy - fy), R * 9), ux = Math.cos(w.dir), uy = -Math.sin(w.dir);
@@ -788,7 +856,7 @@
       const pl = place.get(sh.sys); if (!pl) continue;
       const p = shipPos(sh);
       const sx = gx2s(pl.gx + p.x), sy = gy2s(pl.gy + p.y);
-      const inTransit = !!(sh.wp && sh.wp.ph === "transit");
+      const inTransit = !!(sh.wp && (sh.wp.ph === "transit" || sh.wp.ph === "gate"));
       drawWarp(pl, sh, p, sx, sy, Math.max(9, hull(sh.type).lengthKm * 1.6 * scale()));
       // waypoint line for your own moving ships
       if (sh.mine && sh.tx != null && !inTransit) {
@@ -827,6 +895,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBackground();
     if (!(cfg && snap.systems.length) && window.SunFX) window.SunFX.clear();
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place; curMaxW = fitWidth(place);

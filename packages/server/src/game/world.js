@@ -2,7 +2,7 @@ import {
   FUEL_START_MS, FUEL_SESSION_MAX_MS, FUEL_REGEN_RATE, WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, WARP_STOP_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
-  INST_APOTHEM_KM, INST_RETURN_POS, INST_MAX_PLAYERS, INST_DECAY_HOURS, BEACON_RANGE_KM,
+  INST_APOTHEM_KM, INST_RETURN_POS, INST_MAX_PLAYERS, INST_DECAY_HOURS, BEACON_RANGE_KM, GATE_JUMP_MS, STATION_BAY, UNDOCK_STOP_KM,
 } from "./constants.js";
 import * as Inv from "./inventory.js";
 import { getLicense, hullEfficiency } from "../licenses.js";
@@ -369,7 +369,10 @@ export class World {
     } else {
       if (!sh.docked) return;
       if (!sh.pilot) { this._tell(pid, "That ship has no pilot. Crew it first."); return; }
-      sh.docked = false; sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
+      // undocking (owner): out of the docking bay's mouth, flying away until it stands still near the edge of the dock ring, facing away
+      const a = Math.PI + (Math.random() - 0.5) * 0.7, bx = STATION_POS.x + STATION_BAY.x, by = STATION_POS.y + STATION_BAY.y;
+      sh.docked = false; sh.x = bx; sh.y = by; sh.h = a; sh.vx = Math.cos(a) * sh.speed * 0.3; sh.vy = Math.sin(a) * sh.speed * 0.3;
+      sh.tx = +(bx + Math.cos(a) * UNDOCK_STOP_KM).toFixed(3); sh.ty = +(by + Math.sin(a) * UNDOCK_STOP_KM).toFixed(3); sh.moving = true;
     }
     this._markInv(pid);
   }
@@ -379,9 +382,24 @@ export class World {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked || !sh.moving || sh.warp) return;
     sh.warp = true; sh.wp = { ph: "align" };
   }
-  _inWarp(s) { return !!(s.wp && (s.wp.ph === "open" || s.wp.ph === "transit")); }
+  _inWarp(s) { return !!(s.wp && (s.wp.ph === "open" || s.wp.ph === "transit" || s.wp.ph === "gate")); }
   _warpTick(s, now) {
     const w = s.wp; if (!w) return false;
+    // acceleration gate jump: fly into the gate, cross to the other gate as a ball in GATE_JUMP_MS, drop out at warp speed and stop
+    if (w.ph === "gapp") {
+      if (Math.hypot(w.gx - s.x, w.gy - s.y) > 0.25) { s.tx = w.gx; s.ty = w.gy; s.moving = true; return false; }
+      w.ph = "gate"; w.at = now; this._stopShip(s); s.wp = w; s.x = w.gx; s.y = w.gy; s.warp = true;
+    }
+    if (w.ph === "gate") {
+      s.h = w.dir; s.vx = 0; s.vy = 0;
+      if (now - w.at < w.dur) return true;
+      if (isInst(w.dsys) && !this.instances.has(w.dsys)) { this._returnHome(s, "That asteroid field closed while you were jumping."); return true; }
+      const D = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3, cx = Math.cos(w.dir), cy = Math.sin(w.dir);
+      const end = this._clamp(w.dsys, w.ex + cx * D, w.ey + cy * D);
+      s.sys = w.dsys; s.via = w.via; s.x = w.ex; s.y = w.ey; s.tx = end.x; s.ty = end.y; s.warp = false;
+      s.wp = { ph: "exit", gate: true, at: now, dir: w.dir, fx: w.ex, fy: w.ey, ex: w.ex, ey: w.ey, tx: end.x, ty: end.y, stop: Math.hypot(end.x - w.ex, end.y - w.ey), dur: 0 };
+      this._markInv(s.owner); return true;
+    }
     if (w.ph === "align") {
       const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = Math.hypot(s.vx, s.vy);
       if (!s.moving || d < 1e-6) { s.wp = null; s.warp = false; return false; }
@@ -740,13 +758,17 @@ export class World {
     else { home = p.beacons.find((b) => b.id === beaconId); if (!home) return; sys = homeSys(pid); pos = home; inst = home.inst && this.instances.get(home.inst); if (!inst) { this._tell(pid, "That beacon isn't linked to an asteroid field yet."); return; } }
     const ships = [...new Set(shipIds)].slice(0, 50).map((id) => this.ships.get(id)).filter((s) => s && s.owner === pid && s.sys === sys && !s.docked && !this._inWarp(s) && Math.hypot(s.x - pos.x, s.y - pos.y) <= BEACON_RANGE_KM);
     if (!ships.length) { this._tell(pid, "Get within " + BEACON_RANGE_KM + " km of the beacon."); return; }
-    if (!home) { for (const s of ships) this._returnHome(s, null); return; }
-    if (!this._hasRoom(inst, pid)) { this._tell(pid, "That asteroid field is full."); home.inst = null; return; }
-    for (const s of ships) {
+    if (home && !this._hasRoom(inst, pid)) { this._tell(pid, "That asteroid field is full."); home.inst = null; return; }
+    ships.forEach((s, i) => {
+      // into the instance: out of its gate heading away from home; home: out of the beacon you came through, heading inward
+      const b = home || p.beacons.find((x) => x.id === s.via), out = home ? Math.atan2(home.y, home.x) : b ? Math.atan2(-b.y, -b.x) : 0;
+      const dsys = home ? inst.sys : homeSys(pid), dest = home ? INST_RETURN_POS : b ? { x: b.x, y: b.y } : this._nearBeacon(null);
+      const side = (i - (ships.length - 1) / 2) * 0.35;                        // a fleet comes out side by side
       this._stopShip(s);
-      const a = (Math.random() - 0.5) * Math.PI * 0.8, d = 1.5 + Math.random() * 1.5;   // arrive spread out on the field side of the beacon
-      s.sys = inst.sys; s.via = home.id; s.x = +(INST_RETURN_POS.x + Math.cos(a) * d).toFixed(3); s.y = +(INST_RETURN_POS.y + Math.sin(a) * d).toFixed(3); s.tx = s.x; s.ty = s.y; s.h = 0;
-    }
+      s.wp = { ph: "gapp", gx: pos.x, gy: pos.y, dir: out, dur: GATE_JUMP_MS, dsys, via: home ? home.id : null,
+        ex: dest.x - Math.sin(out) * side, ey: dest.y + Math.cos(out) * side };
+      s.tx = pos.x; s.ty = pos.y; s.moving = true;
+    });
     this._markInv(pid);
   }
   exportInstance(inst) { return { id: inst.id, field: inst.field, createdAt: inst.createdAt }; }
@@ -843,7 +865,7 @@ export class World {
     for (let i = 0; i < ships.length; i++) {
       for (let j = i + 1; j < ships.length; j++) {
         const a = ships[i], b = ships[j];
-        if (a.sys !== b.sys || a.docked || b.docked || (a.wp && a.wp.ph === "transit") || (b.wp && b.wp.ph === "transit")) continue;
+        if (a.sys !== b.sys || a.docked || b.docked || this._inWarp(a) || this._inWarp(b)) continue;
         let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
         const minD = a.radius + b.radius;
         if (d >= minD) continue;
@@ -910,8 +932,9 @@ export class World {
       if (s.docked && !mine) continue;                        // docked ships are out of sight
       const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       const w = s.wp;
-      if (w && w.ph !== "align") {   // the owner sees both windows; others see the exit window only seconds before landing
-        entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };
+      if (w && w.ph === "gate") entry.wp = { ph: "gate", el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: w.gx, fy: w.gy, dsys: w.dsys, ex: +w.ex.toFixed(4), ey: +w.ey.toFixed(4) };   // gate jump: a ball from gate to gate
+      else if (w && w.ph !== "align" && w.ph !== "gapp") {   // the owner sees both windows; others see the exit window only seconds before landing
+        entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4), g: w.gate ? 1 : 0 };
         if (mine || w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS)) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
       }
       if (mine) {

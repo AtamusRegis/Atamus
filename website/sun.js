@@ -52,8 +52,14 @@ void main(){
     cv.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;";
     const view = document.getElementById("view");
     view.insertAdjacentElement("beforebegin", cv);   // below the game canvas: objects + UI draw over the sun
+    // the GPU can drop the context (driver reset, memory pressure): wait for it to come back and rebuild
+    cv.addEventListener("webglcontextlost", (e) => { e.preventDefault(); ready = false; });
+    cv.addEventListener("webglcontextrestored", setup);
     gl = cv.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
-    if (!gl) return;
+    setup(); addEventListener("resize", resize);
+  }
+  function setup() {
+    if (!gl || gl.isContextLost()) return;
     const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(s)); return null; } return s; };
     const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, FRAG); if (!vs || !fs) return;
     prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
@@ -66,7 +72,7 @@ void main(){
     uT = gl.getUniformLocation(prog, "u_t"); uDim = gl.getUniformLocation(prog, "u_dim");
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR); // screen blend
     gl.clearColor(0, 0, 0, 0);
-    resize(); addEventListener("resize", resize);
+    resize();
     ready = true;
   }
   function resize() {

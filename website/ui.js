@@ -767,8 +767,8 @@
   // inventories follow the selection: a ship in space shows only its own; the station's (and docked ships' holds)
   // stay up only while the station or a docked ship is selected
   const closeUnselectedInvs = (u) => {
-    const A = window.Atamus, keep = u && u.kind === "ship" ? u.id : null, keepShip = keep != null ? A.ship(keep) : null;
-    const stationKept = !!u && (u.kind === "station" || !!(keepShip && keepShip.docked));
+    const A = window.Atamus, keep = u && u.kind === "ship" ? u.id : null;
+    const stationKept = pilotInStation();
     for (const key in invWins) {
       if (!isOpen(wins[key])) continue;
       const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? A.ship(r.id) : null;
@@ -791,6 +791,7 @@
     if (window.Atamus.hud.gate && !gateUnit()) toggleWindow("unit", false);   // that gate is gone from view
     if (w && isOpen(w)) renderUnit(w.body);
     // a docked ship's holds are reached through the station inventory: close its own windows
+    if (!pilotInStation()) for (const key in invWins) { if (!isOpen(wins[key])) continue; const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? window.Atamus.ship(r.id) : null; if (r.owner === "station" || (sh && sh.docked)) toggleWindow(key, false); }   // the selected pilot isn't in the station
     for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
   });
 
@@ -1220,9 +1221,15 @@
       : { left: 360, top: 160, width: 420, minW: 66, minH: 90, render: (b) => renderInventory(key, b), label: key === "inv:station" ? "Station" : "Inventory", dynMin: () => invMinSize(key) });   // down to tabs + one slot
     watchInvResize(key);
   }
+  // the station's windows only exist for a selected pilot who is inside the station: in a docked ship, or not in a ship (owner)
+  function pilotInStation() {
+    const A = window.Atamus; if (saved.selPilot == null || !state || !state.pilots || !A.snap || !A.snap.ships) return true;   // not loaded yet: decide on the next snapshot
+    const sh = pilotShip(saved.selPilot); return !sh || !!sh.docked;
+  }
   function openInventory(ref) {
     const sh = ref.owner === "ship" ? window.Atamus.ship(ref.id) : null;
     const viaStation = ref.owner === "station" || (sh && sh.docked);          // a docked ship's holds live under the station window
+    if (viaStation && !pilotInStation()) return;
     const key = viaStation ? "inv:station" : "inv:" + ref.id;                 // one window per holder; tabs switch inside
     makeInvWindow(key, { ref, root: viaStation ? { owner: "station", inv: "hangar", h: 0 } : ref });
     invWins[key].ref = ref; invWins[key].sig = null;

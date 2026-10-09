@@ -26,7 +26,9 @@ let r = await run(page, `closeAll(); if (!A.ship(ID).docked) { A.send({ t: "dock
   A.selectShip(ID); await s(300); const b = wins();
   A.send({ t: "dock", ship: ID, dock: false }); await s(1500); const c = wins();
   document.querySelector('.hud-act[title="Inventory"]').click(); await s(400); const d = wins();
-  A.deselectUnit(); await s(400); return { a, b, c, d, e: wins() };`);
+  A.bus.dispatchEvent(new CustomEvent("openstation")); await s(400); const f = wins();
+  A.deselectUnit(); await s(400); return { a, b, c, d, f, e: wins() };`);
+t.ok(!r.f.includes("inv:station"), "the station window won't open while the selected pilot is out in space", r.f);
 t.ok(r.a.includes("inv:station"), "clicking the station opens the hangar", r.a);
 t.ok(r.b.includes("inv:station"), "station window stays while a docked ship is selected", r.b);
 t.ok(!r.c.includes("inv:station"), "station window closes when the selected ship undocks", r.c);

@@ -1,5 +1,5 @@
 // Gameplay rules from docs/FEATURES.md, checked against the running PTR.
-import { connect, suite, sleep, resetShip, atRock, SHIP, H0 } from "./lib.mjs";
+import { connect, suite, sleep, resetShip, atRock, SHIP, H0, STATION } from "./lib.mjs";
 const t = suite("gameplay");
 const c = await connect();
 const ORE = { owner: "ship", id: SHIP, inv: "ore" }, CARGO = { owner: "ship", id: SHIP, inv: "cargo" };
@@ -87,6 +87,15 @@ c.send({ t: "dock", ship: SHIP, dock: false }); await sleep(600);
   t.ok(Math.hypot(tx - s.x, ty - s.y) < 0.1 && !s.moving, "warp lands on the destination without overshooting", Math.hypot(tx - s.x, ty - s.y));
 }
 await resetShip(c);
+
+// undocking: out of the bay, flies away and stands still near the edge of the dock ring, facing away
+await resetShip(c);
+c.send({ t: "dock", ship: SHIP, dock: false }); await sleep(400);
+t.ok(c.ship().moving && Math.hypot(c.ship().x - STATION.x, c.ship().y - STATION.y) < 1, "an undocking ship starts at the station, moving");
+for (let i = 0; i < 80 && c.ship().moving; i++) await sleep(150);
+{ const s = c.ship(), d = Math.hypot(s.x - STATION.x, s.y - STATION.y), away = Math.atan2(s.y - STATION.y, s.x - STATION.x), dh = Math.abs(Math.atan2(Math.sin(s.h - away), Math.cos(s.h - away)));
+  t.ok(!s.moving && d > 3 && d < 4, "it stops near the edge of the dock ring", d);
+  t.ok(dh < 0.5, "facing away from the station", dh); }
 
 // crew rule
 await resetShip(c);

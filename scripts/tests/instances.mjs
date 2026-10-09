@@ -12,6 +12,8 @@ const w = new World();
 const LIC = { mining_frigate: 5, small_mining_laser: 1, auto_miner: 1 };
 const mk = (id) => { const p = w.addPlayer(id, "P" + id, () => {}); p.pilots = [{ id: "pl" + id, name: "Pilot " + id, licenses: LIC }]; w.assignDefaultPilots(id); return p; };
 const shipOf = (id) => [...w.ships.values()].find((s) => s.owner === id);
+// a gate jump takes seconds in real time: fast-forward it (fly into the gate, cross, drop out, stop)
+const land = (s) => { for (let k = 0; k < 6 && s.wp; k++) { const now = Date.now(); if (s.wp.ph === "gapp") { s.x = s.wp.gx; s.y = s.wp.gy; } else s.wp.at = now - 60000; w._warpTick(s, now); } };
 const atBeacon = (p) => { const s = shipOf(p.id), b = p.beacons[0]; s.docked = false; s.x = b.x + 0.5; s.y = b.y; s.tx = s.x; s.ty = s.y; s.moving = false; return s; };
 
 const a = mk("a");
@@ -26,6 +28,8 @@ const inst = w.instances.get(a.beacons[0].inst), sa = shipOf("a");
 sa.docked = false; sa.x = a.beacons[0].x + 10; sa.y = a.beacons[0].y; w.cmdJump("a", a.beacons[0].id, [sa.id]);
 t.ok(sa.sys === "sys:a", "a ship out of beacon range can't jump");
 atBeacon(a); w.cmdJump("a", a.beacons[0].id, [sa.id]);
+t.ok(sa.wp && sa.wp.ph === "gapp" && sa.sys === "sys:a", "a jump starts by flying into the gate");
+land(sa);
 t.ok(sa.sys === inst.sys && sa.via === a.beacons[0].id, "a ship in range jumps into the linked instance", sa.sys);
 t.ok(w._visibleSystems("a").has(inst.sys), "the instance becomes visible to its player");
 w.cmdMove("a", [sa.id], 500, 0, inst.sys); w._tickShips(0.05);
@@ -35,7 +39,7 @@ w.cmdDock("a", sa.id, true); t.ok(!sa.docked, "no docking inside an instance");
 
 // cap: 5 players per instance, members always fit
 const others = ["b", "c", "d", "e", "f"].map(mk);
-for (const p of others) { p.beacons[0].inst = inst.id; atBeacon(p); w.cmdJump(p.id, p.beacons[0].id, [shipOf(p.id).id]); }
+for (const p of others) { p.beacons[0].inst = inst.id; atBeacon(p); w.cmdJump(p.id, p.beacons[0].id, [shipOf(p.id).id]); land(shipOf(p.id)); }
 t.ok(w._members(inst).size === INST_MAX_PLAYERS, "an instance holds " + INST_MAX_PLAYERS + " players", w._members(inst).size);
 t.ok(shipOf("f").sys === "sys:f" && others[4].beacons[0].inst === null, "a 6th player is refused and their beacon looks elsewhere");
 w._maintainInstances();
@@ -89,8 +93,12 @@ t.ok(bc && bc.linked, "your beacons show as linked", c.last.snap.beacons);
 t.ok(c.last.snap.systems.some((x) => x.id === bc.to && x.peek) && !(c.last.belts?.belts || c.last.hello.belts).some((f) => f.sys === bc.to), "a linked instance shows only as its hex until you go through");
 c.dev({ cmd: "move", ship: SHIP, x: bc.x + 0.6, y: bc.y }); await sleep(600);
 t.ok(c.ship().jump === bc.id, "a ship by a linked beacon can jump", c.ship().jump);
-c.send({ t: "jump", beacon: bc.id, ships: [SHIP] }); await sleep(800);
+c.send({ t: "jump", beacon: bc.id, ships: [SHIP] });
+const t0 = Date.now(); let sawGate = false;
+while (Date.now() - t0 < 20000 && !(c.ship().sys || "").startsWith("inst:")) { await sleep(100); if (c.ship().wp && c.ship().wp.ph === "gate") sawGate = true; }
+const took = Date.now() - t0; await sleep(1500);
 const isys = c.ship().sys;
+t.ok(sawGate && took >= 5000, "a gate jump crosses as a ball in about 5 s", took);
 t.ok(isys && isys.startsWith("inst:") && c.last.snap.systems.some((s) => s.id === isys && s.inst), "the ship lands in the instance, which shows on the map", isys);
 const fld = (c.last.belts?.belts || []).find((f) => f.sys === isys);
 t.ok(fld && fld.rocks.length > 20, "the instance's rocks arrive");
@@ -101,8 +109,9 @@ c.send({ t: "laser", ship: SHIP, idx: 0, on: true, rock: rk.id }); await sleep(8
 t.ok(c.ship().lasers[0].on, "lasers work on instance rocks");
 c.dev({ cmd: "move", ship: SHIP, x: INST_RETURN_POS.x + 0.5, y: INST_RETURN_POS.y, sys: isys }); await sleep(600);
 t.ok(c.ship().jump === isys + ":ret", "the instance's beacon leads home", c.ship().jump);
-c.send({ t: "jump", beacon: isys + ":ret", ships: [SHIP] }); await sleep(800);
-t.ok(c.ship().sys.startsWith("sys:") && Math.hypot(c.ship().x - bc.x, c.ship().y - bc.y) < 3, "jumping back lands beside the beacon you came through");
+c.send({ t: "jump", beacon: isys + ":ret", ships: [SHIP] });
+for (let k = 0; k < 200 && !c.ship().sys.startsWith("sys:"); k++) await sleep(100); await sleep(1500);
+t.ok(c.ship().sys.startsWith("sys:") && Math.hypot(c.ship().x - bc.x, c.ship().y - bc.y) < 4 && !c.ship().moving, "jumping back drops out beside the gate you came through and stops", Math.hypot(c.ship().x - bc.x, c.ship().y - bc.y));
 await resetShip(c);
 await c.close();
 t.done();

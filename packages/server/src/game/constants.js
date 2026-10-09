@@ -113,3 +113,6 @@ export const INST_RETURN_POS = { x: -14, y: 0 };   // its beacon home, where shi
 export const INST_MAX_PLAYERS = 5;                 // players (not pilots or ships) per instance
 export const INST_DECAY_HOURS = 24;                // rocks lose their ore passively: an untouched instance is gone within this
 export const BEACON_RANGE_KM = 2.5;                // ships this close to a linked beacon can jump through it
+export const GATE_JUMP_MS = 5000;                  // an acceleration gate jump takes this long, whatever the distance (owner)
+export const STATION_BAY = { x: -0.155, y: -0.213 }; // the station's docking-bay mouth, relative to the station (its open side faces -x)
+export const UNDOCK_STOP_KM = 3.6;                 // undocked ships fly out of the bay and stop this far out (just inside the dock ring)

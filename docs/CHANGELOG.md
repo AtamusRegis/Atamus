@@ -4,6 +4,12 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Backdrop:** the nebula is replaced by a dark gradient with slow drifting noise, a very thin world grid and parallax stars that dim and brighten.
+- **Fix:** a GPU hiccup could blank the background and the sun; both now recover.
+- **Station window:** opens only for a selected pilot inside the station.
+- **Undocking:** ships fly out of the docking bay and stop near the edge of the dock ring, facing away.
+- **Acceleration gate jumps:** fly into the gate, cross to the partner gate as a ball in 5 s (any distance), drop out and stop. Gates point at their partner gate.
+
 - **Acceleration gates** replace the asteroid beacons: the point faces the instance they lead to, they glow when linked, and light runs along the spine. Linked instances show as faint empty hexes until you go through.
 - **Stargate:** blinking lights, drifting light motes in the ring when powered, and a turning swirl when connected.
 - **Station:** the blinkers are slow and occasional, and the running lights are much slower.

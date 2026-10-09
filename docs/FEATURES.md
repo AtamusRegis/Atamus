@@ -30,7 +30,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 - **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**.
 
-- **Website (owner):** styled like the game, with the same nebula backdrop, panels and buttons.
+- **Website (owner):** styled like the game's panels and buttons, over a nebula backdrop. The game itself no longer uses the nebula.
   - **Front page** (`index.html`): a header with the logo and Log in on the right; a description card ("The Expanse") with **Play now**, which goes to account creation; and an **Updates** card.
   - **Updates** lists **major changes only**, never small fixes. Edit the `<article class="update">` list in index.html, newest first.
   - Signed-in visitors skip the front page and go straight to play.html: "Welcome back, name" (or "Welcome" before the first pilot exists), with Enter System and Log out.
@@ -97,6 +97,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
   - A server restart drops any warp in progress; the ship keeps flying to its destination.
 - **Smooth motion:** snapshots carry the server's simulation time (`st`), and ships are drawn 110 ms in the past, interpolated between the two snapshots around that moment (with brief extrapolation if one is late). The camera follows that smooth position, so it doesn't jitter, even at warp.
+- **Undocking (owner):** a ship comes out of the docking bay's mouth (the station's open side, facing −x, spread ±20°), flies away, and stands still 3.6 km out, near the edge of the dock ring, facing away from the station.
 - **Docking:** within 4 km of the station. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. A docked ship stays selected.
 
 ## Mining
@@ -186,10 +187,13 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - The field rolls a primary ore by rarity (like the old belts), with 70–120 rocks and 250k–600k m³ in all.
   - Rocks lose their ore passively: every rock loses its starting ore over 24 hours, so even an untouched instance ends within a day.
   - An instance stays alive until its rocks are gone (mined or decayed).
-- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). The pointy end faces the instance it leads to; unlinked, it points outward. An instance's own gate faces home. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
+- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). The pointy end faces the **partner gate**: a home gate faces its instance's gate, and an instance's gate faces the home gate you came through. Unlinked gates point outward. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
   - A player's beacons spread over different instances when they can.
   - A beacon linked to an instance that fills up (without you in it) looks for another.
-- **Jumping:** a ship within 2.5 km of a linked beacon gets a **Jump** action. It takes that ship and every other selected ship in range through, arriving spread out beside the instance's beacon.
+- **Jumping (owner):** a ship within 2.5 km of a linked gate gets a **Jump** action, which takes it and every other selected ship in range.
+  - Each ship flies into the gate, then crosses as a glowing blue ball to the partner gate in exactly **5 seconds, whatever the distance**; the camera follows it.
+  - It drops out at warp speed and brakes to a dead stop outside the gate, like a warp exit but with no window. A fleet comes out side by side.
+  - Move and dock commands are ignored during the crossing. Others see a ship heading somewhere they can't see vanish into the gate.
   - The instance's beacon leads home, landing beside the beacon the ship went through.
   - Targets, lasers and the auto miner reset on a jump.
   - There's no docking inside an instance.
@@ -255,6 +259,14 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Fitting: hardpoints, disposition, capacitor, accepted categories, and a collapsible **License requirements** section (remembered).
 
 ## UI and HUD
+
+- **Space backdrop (owner):** no nebula image in the game. It's built from these layers, redrawn every frame, so a GPU reset can't leave it blank:
+  - a dark radial gradient;
+  - two layers of soft noise drifting slowly in different directions;
+  - three layers of parallax stars (the nearer the layer, the more it moves as you pan), each star slowly dimming and brightening;
+  - a very thin world grid whose spacing steps (1, 2, 5, 10… km) so lines stay at least 70 px apart, with every 5th line slightly brighter.
+  - The sun's WebGL layer rebuilds itself if the browser drops its context; that drop was the cause of a flicker.
+- **Station windows (owner):** the station hangar (and docked ships' holds under it) only opens, and only stays open, while the selected pilot is inside the station, meaning in a docked ship or not in a ship.
 
 - **Left panel:** Player, Pilot, Chat, Fleet, Market and Settings buttons. A button's name shows only on hover, or while holding on touch.
 - **Windows:**
