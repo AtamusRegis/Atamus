@@ -4,6 +4,13 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Stars:** smaller, crisp points, and they no longer rubber-band at the pan limit. The sun is dimmer.
+- **Right-click menus:** centered above the press; below near the top; to the right near the left edge, to the left near the right edge.
+- **Item info:** Weight and Price show one value for a single item.
+- **Station window:** opens when a docked ship is selected or the selected ship docks.
+- **Acceleration gates:** they pivot on the spine, so the spine points at the partner gate.
+- **Phones:** forced landscape (fullscreen and orientation lock on the first tap; not iOS).
+
 - **Backdrop:** the nebula is replaced by a dark gradient with slow drifting noise, a very thin world grid and parallax stars that dim and brighten.
 - **Fix:** a GPU hiccup could blank the background and the sun; both now recover.
 - **Station window:** opens only for a selected pilot inside the station.

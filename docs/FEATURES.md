@@ -187,7 +187,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - The field rolls a primary ore by rarity (like the old belts), with 70–120 rocks and 250k–600k m³ in all.
   - Rocks lose their ore passively: every rock loses its starting ore over 24 hours, so even an untouched instance ends within a day.
   - An instance stays alive until its rocks are gone (mined or decayed).
-- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). The pointy end faces the **partner gate**: a home gate faces its instance's gate, and an instance's gate faces the home gate you came through. Unlinked gates point outward. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
+- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). It pivots on its spine (row 234 of 349), so the spine lines up with the partner gate **(owner)**. The pointy end faces the **partner gate**: a home gate faces its instance's gate, and an instance's gate faces the home gate you came through. Unlinked gates point outward. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
   - A player's beacons spread over different instances when they can.
   - A beacon linked to an instance that fills up (without you in it) looks for another.
 - **Jumping (owner):** a ship within 2.5 km of a linked gate gets a **Jump** action, which takes it and every other selected ship in range.
@@ -228,7 +228,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Assemble:** packaged ships, at the station.
   - **Info:** tabs like ship info **(owner)**:
     - Description;
-    - Stats: Weight "unit / stack", Price "unit / stack", plus category, disposition and capacitor for modules;
+    - Stats: Weight "unit / stack", Price "unit / stack" (just one value for a single item), plus category, disposition and capacitor for modules;
     - Fitting (modules only): which ship classes it fits, disposition, capacitor, required license.
     - No rarity row and no price per m³ **(owner)**. A packaged ship's Info opens the ship info.
 - **Commands name their item.** If the stacks shifted underneath, the server finds that item rather than acting on whatever now sits in the slot. Quantities are whole numbers only.
@@ -263,10 +263,10 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Space backdrop (owner):** no nebula image in the game. It's built from these layers, redrawn every frame, so a GPU reset can't leave it blank:
   - a dark radial gradient;
   - two layers of soft noise drifting slowly in different directions;
-  - three layers of parallax stars (the nearer the layer, the more it moves as you pan), each star slowly dimming and brightening;
+  - three layers of parallax stars (the nearer the layer, the more it moves as you pan), each star slowly dimming and brightening. They're crisp 1–2 device-pixel points (owner: no big blurry dots), drawn after the camera is clamped, so they never rubber-band at the pan limit;
   - a very thin world grid whose spacing steps (1, 2, 5, 10… km) so lines stay at least 70 px apart, with every 5th line slightly brighter.
   - The sun's WebGL layer rebuilds itself if the browser drops its context; that drop was the cause of a flicker.
-- **Station windows (owner):** the station hangar (and docked ships' holds under it) only opens, and only stays open, while the selected pilot is inside the station, meaning in a docked ship or not in a ship.
+- **Station windows (owner):** the station hangar (and docked ships' holds under it) only opens, and only stays open, while the selected pilot is inside the station, meaning in a docked ship or not in a ship. Selecting a docked ship, or the selected ship docking, opens it.
 
 - **Left panel:** Player, Pilot, Chat, Fleet, Market and Settings buttons. A button's name shows only on hover, or while holding on touch.
 - **Windows:**
@@ -303,9 +303,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Settings window:** a Sound tab with All, Music and SFX sliders (themed: blue fill up to a round thumb), remembered. There are no sound effects yet; the SFX volume is ready for them.
 - **Music (owner):** "Soviet Wave" (`assets/audio/soviet_wave.mp3`) loops in the game at All × Music volume. It starts on the first click or key, since browsers block sound before that.
 - **Context menu:** always renders above windows, and closes on any tap elsewhere.
+  - **Placement (owner):** centered above the press; below it if there's no room above; to the right of the press near the left edge, to the left of it near the right edge.
 - **Mobile:**
   - tap, double-tap, pan, pinch, hold-to-lock and box select;
   - text selection and the long-press callout are disabled.
+  - **phones play in landscape (owner):** on a phone (touch, shorter side < 600 px; not tablets), the first tap goes fullscreen and locks landscape, and again after leaving fullscreen. Browsers only allow the lock in fullscreen, and iOS Safari doesn't support it;
   - on phones (touch screen, shorter side < 600 px), game.html sets the viewport scale to the shorter side ÷ 540 (minimum 0.6). That lays the page out larger and shrinks the whole UI about 30%, and the map shows more space too. It's recomputed when the phone rotates.
 
 ## Live updates (owner)

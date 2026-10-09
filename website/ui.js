@@ -759,6 +759,7 @@
   window.Atamus.bus.addEventListener("select", (e) => {
     const kind = e.detail && e.detail.kind;
     if (kind === "station") { openInventory({ owner: "station", inv: "hangar", h: 0 }); toggleWindow("unit", false); return; }
+    if (kind === "ship") { const sh = window.Atamus.ship(e.detail.id); if (sh && sh.docked) openInventory({ owner: "station", inv: "hangar", h: 0 }); }   // a docked ship selected: its station's window shows (owner)
     if (kind === "ship" && !wins.unit.group) { if (!window.Atamus.hud.gate) toggleWindow("unit", false); return; }
     toggleWindow("unit", true); renderUnit(wins.unit.body);
   });
@@ -781,7 +782,11 @@
   window.Atamus.bus.addEventListener("snap", () => {
     const u = window.Atamus.selectedUnit, sh = u && u.kind === "ship" ? window.Atamus.ship(u.id) : null;
     const d = sh ? sh.id + ":" + sh.docked : null;
-    if (d !== selDocked) { const was = selDocked; selDocked = d; if (was && sh && was === sh.id + ":true" && !sh.docked) closeUnselectedInvs(u); }
+    if (d !== selDocked) {
+      const was = selDocked; selDocked = d;
+      if (was && sh && was === sh.id + ":true" && !sh.docked) closeUnselectedInvs(u);
+      else if (was && sh && was === sh.id + ":false" && sh.docked) openInventory({ owner: "station", inv: "hangar", h: 0 });   // the selected ship just docked: the station window shows
+    }
   });
   window.Atamus.bus.addEventListener("select", closeOtherShipInvs);
   window.Atamus.bus.addEventListener("deselect", closeOtherShipInvs);
@@ -1482,7 +1487,8 @@
     const tabs = [["desc", "Description"], ["stats", "Stats"], ...(mod ? [["fit", "Fitting"]] : [])];
     if (!tabs.some(([k]) => k === itemTab)) itemTab = "desc";
     body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (itemTab === k ? " active" : ""), onclick: () => { itemTab = k; renderInfo(body); } }, n))));
-    const weight = row("Weight", m3(def.unitM3) + " / " + m3(def.unitM3 * q)), price = row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q)));
+    // unit / stack, or just the one value for a single item (owner: don't say it twice)
+    const weight = row("Weight", q > 1 ? m3(def.unitM3) + " / " + m3(def.unitM3 * q) : m3(def.unitM3)), price = row("Price", q > 1 ? el("span", {}, cr(def.price), " / ", cr(def.price * q)) : cr(def.price));
     if (itemTab === "stats") {
       if (mod) { const cats = A.cfg.moduleCategories || {};
         body.append(row("Category", cats[def.cat] || def.cat), row("Disposition", def.size), def.draw ? row("Capacitor use", def.draw) : row("Capacitor", "+" + (def.cap || 0)), weight, price); }
@@ -1743,9 +1749,15 @@
     closeCtxMenu();
     ctxMenu = el("div", { class: "ctx-menu", style: "z-index:" + (z + 100000) }, items.map(([label, fn]) => el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label)));
     document.body.appendChild(ctxMenu);
-    const r = ctxMenu.getBoundingClientRect();
-    ctxMenu.style.left = Math.min(x, innerWidth - r.width - 6) + "px";
-    ctxMenu.style.top = Math.min(y, innerHeight - r.height - 6) + "px";
+    // placement (owner): centred above the press; below it if there's no room above; to the right of it near the
+    // left edge, to the left of it near the right edge
+    const r = ctxMenu.getBoundingClientRect(), M = 6, GAP = 8;
+    let left = x - r.width / 2;
+    if (left < M) left = x + GAP; else if (left + r.width > innerWidth - M) left = x - GAP - r.width;
+    left = Math.max(M, Math.min(innerWidth - r.width - M, left));
+    let top = y - GAP - r.height; if (top < M) top = y + GAP;
+    top = Math.max(M, Math.min(innerHeight - r.height - M, top));
+    ctxMenu.style.left = left + "px"; ctxMenu.style.top = top + "px";
   }
 
   function flash(text) { const s = document.getElementById("status"); if (!s) return; s.textContent = text; s.className = "status err"; setTimeout(() => s.classList.add("hidden"), 2500); }

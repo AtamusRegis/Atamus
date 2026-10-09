@@ -35,6 +35,15 @@ t.ok(!r.c.includes("inv:station"), "station window closes when the selected ship
 t.ok(r.d.includes("inv:" + SHIP), "ship inventory opens from its action button", r.d);
 t.ok(!r.e.includes("inv:" + SHIP), "ship inventory closes on deselect", r.e);
 
+// right-click menus (owner): centred above the press; below near the top; to the right near the left edge; to the left near the right edge
+r = await run(page, `A.selectShip(ID); await s(400);
+  const at = (x, y) => { document.querySelectorAll(".hb-slot")[0].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: x, clientY: y })); const b = document.querySelector(".ctx-menu").getBoundingClientRect(); document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+  return { mid: at(640, 400), top: at(640, 10), left: at(10, 400), right: at(1270, 400) };`);
+t.ok(r.mid.b <= 400 && Math.abs((r.mid.l + r.mid.r) / 2 - 640) < 2, "a menu shows centred above the press", r.mid);
+t.ok(r.top.t >= 10, "near the top it shows below the press", r.top);
+t.ok(r.left.l >= 10, "near the left edge it shows to the right of the press", r.left);
+t.ok(r.right.r <= 1270, "near the right edge it shows to the left of the press", r.right);
+
 // hotbar module menu
 r = await run(page, `A.selectShip(ID); await s(500);
   const menu = (i) => { document.querySelectorAll(".hb-slot")[i].dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 600, clientY: 650 })); return [...document.querySelectorAll(".ctx-menu *")].filter((x) => !x.children.length).map((x) => x.textContent); };

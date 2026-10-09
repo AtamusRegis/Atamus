@@ -17,12 +17,22 @@
       }
       fit();
       addEventListener("orientationchange", function () { setTimeout(fit, 150); });
+      // Phones (not tablets) play in landscape (owner). Browsers only allow an orientation lock in fullscreen, and
+      // fullscreen needs a tap: so the first tap goes fullscreen and locks landscape (again after leaving fullscreen).
+      function isPhone() { return window.matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 600; }
+      function lockLandscape() {
+        if (!isPhone() || !screen.orientation || !screen.orientation.lock) return;
+        var go = function () { screen.orientation.lock("landscape").catch(function () {}); };
+        if (document.fullscreenElement) go();
+        else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen({ navigationUI: "hide" }).then(go).catch(function () {});
+      }
+      addEventListener("touchend", function () { if (!document.fullscreenElement) lockLandscape(); }, { passive: true });
     })();
   </script>
   <meta name="atamus-build" content="__BUILD__">
   <title>Atamus — System</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="game.css?v=1791540186">
+  <link rel="stylesheet" href="game.css?v=1791556114">
 </head>
 <body class="game-body">
   <canvas id="view"></canvas>
@@ -35,9 +45,9 @@
   <!-- windows + tooltip container injected by ui.js -->
   <div id="tooltip" class="tooltip" hidden></div>
 
-  <script src="api.js?v=1791540186"></script>
-  <script src="sun.js?v=1791540186"></script>
-  <script src="game.js?v=1791540186"></script>
-  <script src="ui.js?v=1791540186"></script>
+  <script src="api.js?v=1791556114"></script>
+  <script src="sun.js?v=1791556114"></script>
+  <script src="game.js?v=1791556114"></script>
+  <script src="ui.js?v=1791556114"></script>
 </body>
 </html>

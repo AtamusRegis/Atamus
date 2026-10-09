@@ -479,6 +479,7 @@
 
   // ---- space backdrop (owner): a dark gradient, slow drifting noise, a very thin world grid and three layers of
   // parallax stars that dim and brighten. Redrawn every frame (so a GPU reset can never leave it blank). ----
+  const SUN_BRIGHTNESS = 0.55;                           // owner: the sun was too bright
   const PARALLAX_PX_PER_KM = 3;                          // how far the backdrop drifts as the camera pans (depth-scaled)
   function makeNoise(seed, tint) {                       // a tileable soft value-noise texture (low-res, drawn scaled up)
     const N = 96, c = document.createElement("canvas"); c.width = c.height = N;
@@ -492,11 +493,10 @@
     g.putImageData(img, 0, 0); return c;
   }
   const noiseA = makeNoise(1337, [70, 110, 200]), noiseB = makeNoise(4242, [110, 70, 170]);
-  const STAR_LAYERS = [{ depth: 0.12, n: 230, size: 0.9, a: 0.45 }, { depth: 0.3, n: 120, size: 1.3, a: 0.6 }, { depth: 0.6, n: 45, size: 1.9, a: 0.8 }].map((L, li) => {
+  const STAR_LAYERS = [{ depth: 0.12, n: 260, size: 1, a: 0.4 }, { depth: 0.3, n: 130, size: 1, a: 0.6 }, { depth: 0.6, n: 50, size: 2, a: 0.85 }].map((L, li) => {
     let a = 97 + li * 7919; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
-    return { ...L, stars: Array.from({ length: L.n }, () => ({ x: rnd() * 2048, y: rnd() * 2048, s: L.size * (0.6 + rnd() * 0.8), b: 0.4 + rnd() * 0.6, sp: 0.15 + rnd() * 0.6, ph: rnd() * 6.283, tint: rnd() })) };
+    return { ...L, stars: Array.from({ length: L.n }, () => ({ x: rnd() * 2048, y: rnd() * 2048, s: L.size === 2 && rnd() < 0.5 ? 1 : L.size, b: 0.4 + rnd() * 0.6, sp: 0.15 + rnd() * 0.6, ph: rnd() * 6.283, tint: rnd() })) };
   });
-  const starGlow = (() => { const c = document.createElement("canvas"); c.width = c.height = 16; const g = c.getContext("2d"), gr = g.createRadialGradient(8, 8, 0, 8, 8, 8); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.25, "rgba(220,235,255,0.55)"); gr.addColorStop(1, "rgba(200,220,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 16, 16); return c; })();
   function drawBackground() {
     const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
     if (bgCanvas.width !== Math.floor(W * dpr) || bgCanvas.height !== Math.floor(H * dpr)) { bgCanvas.width = Math.floor(W * dpr); bgCanvas.height = Math.floor(H * dpr); }
@@ -513,19 +513,19 @@
       for (let x = ox - T; x < W; x += T) for (let y = oy - T; y < H; y += T) bgCtx.drawImage(tex, x, y, T, T);
     }
     bgCtx.globalAlpha = 1;
-    // parallax stars, each slowly dimming and brightening
+    // parallax stars, each slowly dimming and brightening: crisp 1-2 device-pixel points (owner: no big blurry dots)
+    bgCtx.setTransform(1, 0, 0, 1, 0, 0);
     for (const L of STAR_LAYERS) {
       const ox = ((-px * L.depth) % 2048 + 2048) % 2048, oy = ((-py * L.depth) % 2048 + 2048) % 2048;
       for (const st of L.stars) {
         const a = L.a * st.b * (0.55 + 0.45 * Math.sin(t * st.sp + st.ph)); if (a < 0.04) continue;
         for (let x = (st.x + ox) % 2048; x < W; x += 2048) for (let y = (st.y + oy) % 2048; y < H; y += 2048) {
-          bgCtx.globalAlpha = a;
-          if (st.s < 1.2) { bgCtx.fillStyle = st.tint > 0.8 ? "#ffe6c8" : st.tint < 0.2 ? "#c8dcff" : "#eef3ff"; bgCtx.fillRect(x, y, st.s, st.s); }
-          else { const d = st.s * 4; bgCtx.drawImage(starGlow, x - d / 2, y - d / 2, d, d); }
+          bgCtx.globalAlpha = a; bgCtx.fillStyle = st.tint > 0.8 ? "#ffe6c8" : st.tint < 0.2 ? "#c8dcff" : "#eef3ff";
+          bgCtx.fillRect(Math.round(x * dpr), Math.round(y * dpr), st.s, st.s);
         }
       }
     }
-    bgCtx.globalAlpha = 1;
+    bgCtx.globalAlpha = 1; bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // a very thin world grid (step chosen so lines sit ~70+ px apart; every 5th line a touch brighter)
     if (cfg) {
       const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200]; let step = steps.find((v) => v * sc >= 70) || 500;
@@ -678,7 +678,7 @@
   // asteroid beacons are acceleration gates (owner): the pointy end faces the instance they lead to (the instance's
   // own gate faces home). Linked gates glow blue; ships in the dashed ring can jump.
   const accelImg = new Image(); accelImg.src = "assets/ships/accel_gate.webp";
-  const ACCEL_LEN_KM = 0.658;
+  const ACCEL_LEN_KM = 0.658, ACCEL_SPINE_Y = 234;      // the spine's row in the sprite (349 tall): the gate's axis
   function drawBeacons(place) {
     const t = performance.now() / 1000, homePl = place.get(mySys());
     for (const b of snap.beacons || []) {
@@ -700,9 +700,10 @@
       if (accelImg.naturalWidth) {
         const hPx = wPx * accelImg.naturalHeight / accelImg.naturalWidth;
         ctx.translate(x, y); ctx.rotate(-ang); ctx.imageSmoothingEnabled = wPx > 300; if (!b.linked) ctx.globalAlpha = 0.75;
-        ctx.drawImage(accelImg, -wPx / 2, -hPx / 2, wPx, hPx);
+        const k0 = wPx / accelImg.naturalWidth;
+        ctx.drawImage(accelImg, -wPx / 2, -ACCEL_SPINE_Y * k0, wPx, hPx);   // pivot on the spine: it lines up with the partner gate (owner)
         if (b.linked && wPx > 60) {                                   // the field: light streaming along the spine toward the pointy end
-          const k = wPx / accelImg.naturalWidth, sy = (234 - accelImg.naturalHeight / 2) * k; ctx.globalCompositeOperation = "lighter";
+          const k = wPx / accelImg.naturalWidth, sy = 0; ctx.globalCompositeOperation = "lighter";
           for (let i = 0; i < 6; i++) { const f = (t * 0.6 + i / 6) % 1, px = (-0.47 + f * 0.95) * wPx; ctx.globalAlpha = Math.sin(f * Math.PI) * 0.8; ctx.fillStyle = "rgba(150,215,255,1)"; ctx.fillRect(px - 3 * k * 4, sy - 1.5, 6 * k * 4, 3); }
         }
       }
@@ -895,8 +896,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
-    if (!(cfg && snap.systems.length) && window.SunFX) window.SunFX.clear();
+    if (!(cfg && snap.systems.length)) { if (window.SunFX) window.SunFX.clear(); drawBackground(); }
     if (cfg && snap.systems.length) {
       const place = placements(); curPlace = place; curMaxW = fitWidth(place);
       if (!camInit) {
@@ -919,11 +919,12 @@
         cam.cx += panVel.x * dt; cam.cy += panVel.y * dt;
       }
       clampCameraCircle(place);
+      drawBackground();                                // after the camera settled: the backdrop never runs past the pan limit
 
       for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy);
         if (sE.inst) { const rx = gx2s(foreign.gx + (cfg.instReturn || { x: -14 }).x), ry = gy2s(foreign.gy + 0); ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(rx, ry); ctx.strokeStyle = "rgba(110,190,255,0.45)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); continue; } if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
       for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); if (sE.inst) { drawCell(pl.gx, pl.gy, cfg.cellCornerRound * 0.25, th.line, th.fill, instR()); continue; } for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
-      window.SunFX.render(gx2s(0), gy2s(0), 1 - 0.45 * Math.max(0, Math.min(1, (cam.viewW - 20) / Math.max(1, curMaxW - 20))), now / 1000); // shader sun + lens flare at the system centre
+      window.SunFX.render(gx2s(0), gy2s(0), SUN_BRIGHTNESS * (1 - 0.45 * Math.max(0, Math.min(1, (cam.viewW - 20) / Math.max(1, curMaxW - 20)))), now / 1000); // shader sun + lens flare at the system centre
       drawBelts(place);
       drawBeacons(place);
       drawStations(place);
