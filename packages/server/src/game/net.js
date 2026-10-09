@@ -4,7 +4,7 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import {
   TICK_MS, SNAPSHOT_MS, CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS,
+  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS, MODULE_CATEGORIES,
 } from "./constants.js";
 import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
 import { ORES, BELT, fieldBelts } from "./belts.js";
@@ -40,7 +40,7 @@ const CLIENT_CONFIG = {
   laserRange: LASER_RANGE_KM, cycleMs: MINING_CYCLE_MS,
   maxStacks: MAX_STACKS,
   dockRadius: DOCK_RADIUS_KM,
-  shipTypes: SHIP_TYPES, shipClasses: SHIP_CLASSES,
+  shipTypes: SHIP_TYPES, shipClasses: SHIP_CLASSES, moduleCategories: MODULE_CATEGORIES,
 };
 
 export function attachGameServer(httpServer) {
@@ -106,6 +106,8 @@ export function attachGameServer(httpServer) {
         case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
         case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
         case "power": world.cmdPower(pid, m.ship, m.mod, m.idx, !!m.on); break;
+        case "fit": world.cmdFit(pid, m.ship, m.from); break;
+        case "unfit": world.cmdUnfit(pid, m.ship, m.idx); break;
         case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
         case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
         case "buy": world.cmdBuy(pid, m.item, m.qty); break;

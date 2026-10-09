@@ -45,6 +45,12 @@ export const LICENSES = [
     requirements: [], levelTimes: hrs(2, 4, 8, 14, 24),
   },
   {
+    key: "cap_management", name: "Capacitor Management", category: "industry", maxLevel: 5, free: true,
+    desc: "Get more power out of your ship's capacitor, to run more modules at once.",
+    bonus: "+5% capacitor", per: 0.05,
+    requirements: [], levelTimes: hrs(1, 3, 6, 12, 20),
+  },
+  {
     key: "auto_miner", name: "Automated Mining", category: "industry", maxLevel: 5, free: true,
     desc: "The auto-miner keeps your lasers on your locked rocks, moving on as each one runs dry.",
     bonus: "−30 s auto-miner cycle", per: 30_000,

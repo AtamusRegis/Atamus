@@ -12,6 +12,11 @@ const homeSys = (pid) => `sys:${pid}`;
 const HANGARS = 4;
 const CAN_LIFE_MS = 30 * 60 * 1000, CAN_COOLDOWN_MS = 30 * 60 * 1000, CAN_M3 = 15000, CAN_RANGE_KM = 2.5;
 const HIBERNATE_GRACE_MS = 60 * 1000;
+// Running hot: power past the capacitor builds heat (faster the further over); once heat is full, every
+// powered module loses integrity; at 0 it burns out (offline until the ship docks). Under the limit, heat cools.
+const HEAT_PER_S = 6;        // heat %/s at 100% over capacity (scales with how far over)
+const COOL_PER_S = 5;        // heat %/s lost while within capacity
+const BURN_PER_S = 4;        // integrity %/s per powered module at full heat and 100% over (min 1 %/s)
 
 const shipLabel = (sh) => sh.name || (SHIP_TYPES[sh.type] || {}).name || "Ship";
 
@@ -62,7 +67,7 @@ export class World {
 
   /** Everything about a player's system worth keeping across reloads/restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, fit: s.fit, heat: s.heat || 0, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name }));
     const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
     const p = this.players.get(id);
     return { ships, gates, beltField: p ? p.beltField : null, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
@@ -71,9 +76,13 @@ export class World {
   // Fill in live/derived ship fields from a saved or fresh record.
   _hydrateShip(sh) {
     const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
+    // ships from before fitting existed keep what they had: their lasers and an auto miner
+    const fit = Array.isArray(sh.fit) ? sh.fit.filter((f) => f && Inv.MODULES[f.item]).map((f) => ({ item: f.item, hp: Number.isFinite(f.hp) ? f.hp : 100, burnt: !!f.burnt }))
+      : [...Array(t.lasers || 0).fill("module:mining_laser"), "module:auto_miner"].map((item) => ({ item }));
+    const nLasers = fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     return {
-      ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass,
-      docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: t.lasers || 0 }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
+      ...sh, vx: 0, vy: 0, speed: t.speedKmps, radius: t.radiusKm, mass: t.mass, fit,
+      docked: !!sh.docked, warp: !!sh.warp, lasers: Array.from({ length: nLasers }, (_, i) => ({ on: false, off: false, repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0, ...((Array.isArray(sh.lasers) && sh.lasers[i]) || {}) })),
       auto: { on: false, off: false, next: 0, ...(sh.auto || {}) },
       hp: Number.isFinite(sh.hp) ? Math.min(sh.hp, t.hp) : t.hp, shield: Number.isFinite(sh.shield) ? Math.min(sh.shield, t.shield) : t.shield,
       targets: (sh.targets || []).map((tg) => ({ ...tg })),
@@ -86,7 +95,8 @@ export class World {
     for (const s of this.ships.values()) if (s.owner === id) return;
     const sid = `${id}:ship:0`;
     const sx = STATION_POS.x + 2.2, sy = STATION_POS.y + 2.2; // spawn beside the station
-    this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2 }));
+    this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2,
+      fit: [{ item: "module:mining_laser" }, { item: "module:mining_laser" }] }));   // a new player's first Prospector comes with 2 mining lasers
   }
 
   // Logging off never drops the system immediately: it stays awake while a gate is
@@ -153,10 +163,11 @@ export class World {
     if (Math.hypot(pos.x - sh.x, pos.y - sh.y) > t.targetRangeKm) return;                    // must be in range to begin a lock
     sh.targets.push({ kind, id, lockAt: Date.now() + t.lockMs, locked: false });
   }
-  _laserStop(L) { L.on = false; L.repeat = true; L.rock = null; L.start = 0; L.until = 0; }
+  _laserStop(L) { L.on = false; L.repeat = true; L.rock = null; L.start = 0; L.until = 0; L.poweredAt = 0; }
   _laserStart(sh, L, i, rockId, f, now) {
     const t = SHIP_TYPES[sh.type];
     const a = Math.atan2(sh.y - f.rock.y, sh.x - f.rock.x) + (Math.random() - 0.5) * Math.PI * 0.9, arm = t.arms[i % t.arms.length];
+    if (!L.on) L.poweredAt = now;                                    // when it took power (repeat cycles keep the original time)
     L.on = true; L.repeat = true; L.rock = rockId; L.hp = arm[Math.floor(Math.random() * arm.length)];
     const d = f.rock.r * (0.15 + Math.random() * 0.3);   // sprites are irregular with transparent margins: stay well inside the visible rock
     L.ax = +(f.rock.x + Math.cos(a) * d).toFixed(4); L.ay = +(f.rock.y + Math.sin(a) * d).toFixed(4);
@@ -185,7 +196,8 @@ export class World {
     const rocks = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(pid, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
     if (!rocks.length) return;
     if (!rocks.some((r) => Inv.canAdd(sh.inv.ore, r.f.rock.ore, 1) > 0)) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
-    sh.lasers.forEach((L, i) => { if (L.off) return; if (L.on) { L.repeat = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
+    let told = false;
+    sh.lasers.forEach((L, i) => { if (L.off) return; if (L.on) { L.repeat = true; return; } if (!this._canRun(sh, i, told ? null : pid)) { told = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
   }
   // One laser. Active: a click toggles whether it repeats after this cycle (the cycle itself
   // runs to completion; a laser can't be retargeted mid-cycle). Idle: start on the rock.
@@ -197,13 +209,16 @@ export class World {
     const tg = this._lockedRock(sh, rockId); if (!tg) return;
     const f = this._rockOf(pid, tg.id); if (!f || !this._inLaserRange(sh, f)) return;
     if (Inv.canAdd(sh.inv.ore, f.rock.ore, 1) <= 0) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
+    if (!this._canRun(sh, +idx, pid)) return;
     this._laserStart(sh, L, +idx, tg.id, f, Date.now());
   }
   // Auto-miner module: on each of its cycles it puts every idle laser on the primary (first locked) rock.
   cmdAuto(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
     if (!on) { sh.auto.on = false; return; }
-    if (sh.auto.off || !this._lockedRock(sh)) return;
+    if (sh.auto.off || !this._hasAuto(sh) || !this._lockedRock(sh)) return;
+    if (!this._canRun(sh, "auto", pid)) return;
+    if (!sh.auto.on) sh.auto.poweredAt = Date.now();
     sh.auto.on = true; sh.auto.next = 0;                       // fires on the next tick
   }
   // Power a module on or off. Powering off an active module stops it at once (the cycle yields nothing).
@@ -214,13 +229,91 @@ export class World {
     const L = sh.lasers[Math.floor(Number(idx))]; if (!L) return;
     L.off = !on; if (!on && L.on) this._laserStop(L);
   }
+  // ---- fitting & capacitor ----
+  _hasAuto(sh) { return sh.fit.some((f) => Inv.MODULES[f.item].role === "auto"); }
+  _capMax(sh) {
+    const t = SHIP_TYPES[sh.type] || {}, extra = sh.fit.reduce((a, f) => a + (Inv.MODULES[f.item].cap || 0), 0);
+    return Math.round((t.capacitor + extra) * (1 + this._per("cap_management") * this._lic(sh, "cap_management")));
+  }
+  _capUsed(sh) {
+    const laserDraw = Inv.MODULES["module:mining_laser"].draw, autoDraw = Inv.MODULES["module:auto_miner"].draw;
+    return sh.lasers.filter((L) => L.on).length * laserDraw + (sh.auto.on ? autoDraw : 0);
+  }
+  // The fit entry behind laser n (lasers are numbered in fitting order) or the auto miner ("auto").
+  _modFit(sh, which) {
+    if (which === "auto") return sh.fit.find((f) => Inv.MODULES[f.item].role === "auto") || null;
+    let n = -1; for (const f of sh.fit) if (Inv.MODULES[f.item].role === "laser" && ++n === which) return f;
+    return null;
+  }
+  // Can this ship switch the module on? Needs the pilot's license and a module that hasn't burnt out.
+  // The capacitor never refuses: power past it runs the ship hot.
+  _canRun(sh, which, tellPid) {
+    const f = this._modFit(sh, which), m = f && Inv.MODULES[f.item]; if (!m) return false;
+    if (f.burnt) { if (tellPid) this._tell(tellPid, `${shipLabel(sh)}: that ${m.name} has burnt out. Dock to repair it.`); return false; }
+    const lic = m.license;
+    if (lic && this._lic(sh, lic[0]) < lic[1]) { if (tellPid) this._tell(tellPid, `${shipLabel(sh)}: the pilot needs ${(getLicense(lic[0]) || {}).name || lic[0]} ${lic[1]} to run a ${m.name}.`); return false; }
+    return true;
+  }
+  // The powered modules that take the ship past its capacitor: power is handed out in the order modules were
+  // switched on, so the ones switched on last (whose power doesn't fit under the capacity) are the overloaded ones.
+  _overloaded(sh) {
+    const laserDraw = Inv.MODULES["module:mining_laser"].draw, autoDraw = Inv.MODULES["module:auto_miner"].draw, max = this._capMax(sh);
+    const on = [];
+    sh.lasers.forEach((L, i) => { if (L.on) on.push({ which: i, at: L.poweredAt || 0, draw: laserDraw }); });
+    if (sh.auto.on) on.push({ which: "auto", at: sh.auto.poweredAt || 0, draw: autoDraw });
+    on.sort((a, b) => a.at - b.at);
+    let sum = 0; const over = [];
+    for (const m of on) { sum += m.draw; if (sum > max) over.push(m.which); }
+    return over;
+  }
+  // Heat and integrity, every tick.
+  _tickHeat(sh, dtSec) {
+    const max = this._capMax(sh), used = this._capUsed(sh), over = max > 0 ? (used - max) / max : (used > 0 ? 1 : 0);
+    if (over <= 0) { sh.heat = Math.max(0, (sh.heat || 0) - COOL_PER_S * dtSec); return; }
+    sh.heat = Math.min(100, (sh.heat || 0) + HEAT_PER_S * over * dtSec);
+    if (sh.heat < 100) return;
+    const loss = Math.max(1, BURN_PER_S * over) * dtSec;
+    const burn = (f) => { f.hp = Math.max(0, (f.hp ?? 100) - loss); if (f.hp <= 0 && !f.burnt) { f.burnt = true; return true; } return false; };
+    for (const which of this._overloaded(sh)) {                    // only the modules running past the capacity take damage
+      const f = this._modFit(sh, which); if (!f || !burn(f)) continue;
+      if (which === "auto") { sh.auto.on = false; this._tell(sh.owner, `${shipLabel(sh)}: Auto Miner burnt out.`); }
+      else { this._laserStop(sh.lasers[which]); this._tell(sh.owner, `${shipLabel(sh)}: Mining Laser ${which + 1} burnt out.`); }
+    }
+  }
+  _repairModules(sh) { sh.heat = 0; for (const f of sh.fit) { f.hp = 100; f.burnt = false; } }
+  _refit(sh) {                                  // rebuild the live module state after the fit changed (always docked)
+    const n = sh.fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
+    sh.lasers = Array.from({ length: n }, (_, i) => ({ on: false, off: !!(sh.lasers[i] && sh.lasers[i].off), repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0 }));
+    if (!this._hasAuto(sh)) sh.auto.on = false;
+  }
+  cmdFit(pid, shipId, from) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    if (!sh.docked) { this._tell(pid, "Dock to change a ship's fitting."); return; }
+    const a = this._inv(pid, from); if (!a || !a.inv || !a.docked) return;
+    const slot = this._slotOf(a.inv, from.slot, from.item), st = a.inv.slots[slot], m = st && Inv.MODULES[st.item]; if (!m) return;
+    const t = SHIP_TYPES[sh.type];
+    if (!t.accepts.includes(m.cat)) { this._tell(pid, `The ${t.name} can't fit ${m.name}s.`); return; }
+    if (sh.fit.length >= t.fitSlots) { this._tell(pid, `No free hardpoints on ${shipLabel(sh)}.`); return; }
+    const used = sh.fit.reduce((s2, f) => s2 + Inv.MODULES[f.item].size, 0);
+    if (used + m.size > t.disposition) { this._tell(pid, `Not enough disposition on ${shipLabel(sh)} (${t.disposition - used} left, needs ${m.size}).`); return; }
+    const key = st.item; if (Inv.take(a.inv, slot, 1) !== 1) return;
+    sh.fit.push({ item: key, hp: 100, burnt: false });
+    this._refit(sh); this._markInv(pid);
+  }
+  cmdUnfit(pid, shipId, idx) {
+    const p = this.players.get(pid), sh = this.ships.get(shipId); if (!p || !sh || sh.owner !== pid) return;
+    if (!sh.docked) { this._tell(pid, "Dock to change a ship's fitting."); return; }
+    const i = Math.floor(Number(idx)), f = sh.fit[i]; if (!f) return;
+    if (Inv.add(p.hangars[0].inv, f.item, 1) !== 1) { this._tell(pid, "No room in Hangar 1."); return; }
+    sh.fit.splice(i, 1); this._refit(sh); this._markInv(pid);
+  }
   _autoCycleMs(sh) { const lvl = Math.max(1, this._lic(sh, "auto_miner")); return Math.max(30_000, AUTO_MINER_BASE_MS - AUTO_MINER_STEP_MS * (lvl - 1)); }
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
       if (sh.docked || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
       sh.docked = true; sh.moving = false; sh.warp = false; for (const L of sh.lasers) this._laserStop(L); sh.auto.on = false; sh.targets = []; sh.vx = sh.vy = 0;
-      sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield;            // docked: repaired and recharged
+      sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield; this._repairModules(sh);   // docked: repaired and recharged
     } else {
       if (!sh.docked) return;
       if (!sh.pilot) { this._tell(pid, "That ship has no pilot. Crew it first."); return; }
@@ -361,7 +454,7 @@ export class World {
   _buyShip(p, type) {
     let n = 0; while (this.ships.has(`${p.id}:ship:${n}`)) n++;
     const id = `${p.id}:ship:${n}`, x = STATION_POS.x, y = STATION_POS.y;
-    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null }));
+    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null, fit: [] }));   // new ships come with nothing fitted
   }
   // Unpack a packaged ship sitting in a station container into a docked, uncrewed ship.
   cmdAssemble(pid, ref, slot, item) {
@@ -381,7 +474,7 @@ export class World {
   inventoriesFor(pid) {
     const p = this.players.get(pid); if (!p) return null;
     const ships = {};
-    for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore) };
+    for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore), fit: sh.fit.map((f) => f.item) };
     const vis = this._visibleSystems(pid), cans = {};
     for (const c of this.cans.values()) if (vis.has(c.sys)) cans[c.id] = { ...Inv.summary(c.inv) };
     return { t: "inv", ships, cans, jetUntil: p.jetUntil, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), delivery: Inv.summary(p.delivery), credits: p.credits, unlocked: p.unlocked };
@@ -492,6 +585,7 @@ export class World {
   _tickTargeting(dtSec, now) {
     for (const sh of this.ships.values()) {
       if (sh.docked) continue;
+      this._tickHeat(sh, dtSec);
       const t = SHIP_TYPES[sh.type]; const owner = this.players.get(sh.owner); if (!owner) continue;
       // locks: progress, and drop anything that left range or vanished
       for (let i = sh.targets.length - 1; i >= 0; i--) {
@@ -503,7 +597,7 @@ export class World {
       if (sh.auto.on && now >= sh.auto.next) {
         const cands = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(sh.owner, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
         if (!cands.length) sh.auto.on = false;
-        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on) this._laserStart(sh, L, i, r.tg.id, r.f, now); else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
+        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on) { if (this._canRun(sh, i)) this._laserStart(sh, L, i, r.tg.id, r.f, now); } else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;
       // the ore lands when the cycle completes, then the laser repeats (unless told not to)
@@ -625,7 +719,11 @@ export class World {
         entry.laserRange = +this._laserRange(s).toFixed(3);
         const cyc = this._autoCycleMs(s);
         entry.yieldM3s = +this._yieldM3s(s).toFixed(3);
-        entry.auto = { on: s.auto.on, off: !!s.auto.off, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
+        entry.cap = { max: this._capMax(s), used: this._capUsed(s) };
+        entry.heat = Math.round(s.heat || 0);
+        entry.over = this._overloaded(s).map((w) => s.fit.indexOf(this._modFit(s, w)));   // fit indices running past capacity
+        entry.fitHp = s.fit.map((f) => (f.burnt ? -1 : Math.round(f.hp ?? 100)));   // integrity per fitted module, -1 = burnt out
+        entry.auto = { fitted: this._hasAuto(s), on: s.auto.on, off: !!s.auto.off, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
         entry.mining = s.lasers.some((l) => l.on);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
         entry.canDock = !s.docked && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;

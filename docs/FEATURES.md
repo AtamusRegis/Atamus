@@ -75,7 +75,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Mining
 
-- **Lasers:** 2 per ship.
+- **Lasers:** mining lasers are fitted modules (see Fitting); a ship has as many as it has fitted.
   - The Prospector fires from 4 arm hardpoints. Barges and exhumers fire from the circular hopper ports on their centerline.
   - Range is 5 km, before bonuses.
 - **Cycle:** 15 s. Ore lands at the end of the cycle, and the cycle repeats until told otherwise.
@@ -86,7 +86,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Yield:** per second = hull `laserM3s` × (1 + Mining Laser Yield bonus) × hull efficiency. Units are whole numbers; a rock with less than one unit left is mined out and removed.
 - **Beams:** they aim at points on the rock and stop on the first opaque pixel of the rock sprite (an alpha-mask raycast). A chunk animation travels along the beam.
 - **Auto Miner** (Automated Mining license): cycles every 3:00, −30 s per level. Each cycle it puts every idle, powered laser on the first locked rock in range.
-- **Hotbar:** 8 slots, rearranged by dragging. The defaults are ML1, ML2 and AM, with icons.
+- **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots). The order can be rearranged by dragging and is remembered per ship.
+  - A thin integrity bar appears on a damaged module; a burnt-out one is dark red; one running past capacity has a red outline.
 - **Module menu** (right-click, or hold on touch) has three options:
   - **Activate / Deactivate** (and **Keep cycling** once deactivated).
   - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
@@ -101,6 +102,41 @@ This is a living spec of the game. Read it before every patch, and update it in 
   | Cobaltine | rare | 30 | 0.3 m³ |
   | Iridite | very rare | 80 | 0.6 m³ |
   | Starglass | legendary | 220 | 1.2 m³ |
+
+## Fitting and power (owner)
+
+- No EVE-style high/mid/low slots and no CPU/powergrid. Each hull has three numbers:
+
+  | Hull class | Hardpoints | Disposition | Capacitor |
+  |---|---|---|---|
+  | Mining Frigate | 5 | 50 | 30 |
+  | Mining Barge | 6 | 90 | 60 |
+  | Exhumer | 7 | 120 | 90 |
+
+  - **Hardpoints:** how many modules fit. **Disposition:** the total size of fitted modules. **Capacitor:** shared power for *running* modules.
+  - Each hull lists **accepted module categories** (mining hulls: Mining, Automation, Power). There are no per-type counts: 8 lasers is fine if hardpoints and disposition allow it.
+- **Modules** are items, bought on the market (Modules › category):
+
+  | Module | Category | Size | Power | Price |
+  |---|---|---|---|---|
+  | Mining Laser | Mining | 10 | uses 10 | 60,000 |
+  | Auto Miner | Automation | 15 | uses 5 | 250,000 |
+  | Capacitor Battery | Power | 8 | +12 capacitor (passive) | 120,000 |
+
+  - Running a module needs its license (Mining Laser Yield 1, Automated Mining 1).
+  - Capacitor Management license: +5% capacitor per level.
+- **Fitting is docked only**, in the Fitting window (ship right-click menu → Fitting, or click the ring):
+  - drag a module in from a station inventory to fit it;
+  - right-click or hold a fitted module → Unfit (it goes to Hangar 1) or Info.
+- **New ships come empty.** A new player's first Prospector comes with 2 mining lasers. Ships from before fitting existed kept 2 lasers plus an auto miner.
+- **Running hot:** the capacitor never refuses; anything can be switched on.
+  - Power past capacity builds **heat**: 6%/s at 100% over, scaled by how far over. Within capacity, heat cools at 5%/s.
+  - At full heat, **only the modules running past capacity** lose integrity (4%/s at 100% over, minimum 1%/s). Power goes to modules in the order they were switched on, so the ones switched on last are the overloaded ones.
+  - At 0 integrity a module **burns out**: it switches off and can't be switched on until the ship docks. Docking repairs every module and clears heat.
+  - Overloaded modules simply let you run more; they don't perform better **(owner)**.
+- **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity.
+  - Within capacity the power crescent is blue. Past the tick it turns yellow, warming to red with heat; deep red and pulsing means overloaded modules are taking damage.
+  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (with a breakdown: hull, batteries, license), heat, and each module's integrity, with running modules highlighted.
 
 ## Inventories and items
 
@@ -187,17 +223,6 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Rejected promises are logged.
 - Each connection is limited to about 40 commands a second, with a 64 KB message limit.
 - Autosave runs every 10 s but skips the database write when nothing changed. Offline players get no snapshots.
-
-## Decided, not built yet
-
-- **Fitting (owner):** no EVE-style high/mid/low slots, and no separate CPU or powergrid. Each hull has three numbers:
-  - **Hardpoints:** how many modules can be fitted.
-  - **Disposition:** the total size of fitted modules. Every module has a size.
-  - **Capacitor:** shared power for *running* modules. Each active module draws from it, so a ship with 8 lasers fitted might only run 3 at once. Licenses and power modules raise it.
-  - Each hull also has **allowed module categories** (e.g. a Mining Frigate takes no missile modules). There are no per-type counts: 8 mining lasers is fine if hardpoints and disposition allow it.
-  - Activating a module also needs its license.
-  - Fitting is **docked only**. New ships come **empty**; a new player's first Prospector comes with 2 mining lasers.
-  - **Hotbar idea:** each hotbar slot is as wide as its module's disposition, relative to the ship's total, so the bar doubles as the fitting at a glance.
 
 ## Rejected / removed (don't reintroduce)
 

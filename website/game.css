@@ -499,3 +499,47 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fit-n { margin-left: auto; color: var(--text-dim); }
 .ship-tabs .tab-row { margin-bottom: 8px; }
 .buy-ship-ico { width: 56px; height: auto; object-fit: contain; image-rendering: pixelated; }
+/* fitting: proportional hotbar, capacitor bar, fitting window */
+.hud-hotbar { width: auto; }
+.hb-slot.passive { cursor: default; }
+.hb-abbr { font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: .04em; }
+.hb-free { height: 36px; border-radius: 5px; border: 1px dashed rgba(255,255,255,0.12); box-sizing: border-box; }
+@media (pointer: coarse) { .hb-free { height: 44px; } }
+.hud-cap { display: flex; align-items: center; gap: 6px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 2px 8px; box-shadow: var(--shadow); width: 300px; box-sizing: border-box; }
+.cap-bar { position: relative; flex: 1; height: 9px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.cap-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #c9a227, #ffe27a); transition: width .25s; }
+.cap-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
+.fit-strip { display: flex; gap: 3px; height: 34px; margin: 8px 0; }
+.fit-block { min-width: 22px; border-radius: 5px; background: rgba(0,0,0,0.35); display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+.fit-block img { width: 26px; height: 26px; image-rendering: pixelated; }
+.fit-block.free { background: none; border: 1px dashed rgba(255,255,255,0.14); box-shadow: none; }
+.fit-drop { min-height: 60px; border-radius: 6px; }
+.fit-drop.drop { outline: 1px solid var(--cyan); }
+.fit-empty { padding: 10px 4px; }
+/* fitting gauge (PTR comparison) */
+.hb-slot.hb-open { background: rgba(0,0,0,0.18); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
+.fg-ring { position: relative; width: 44px; height: 44px; padding: 0; border: none; cursor: pointer; align-self: center; background: rgba(14,19,30,0.82); border-radius: 50%; box-shadow: var(--shadow); touch-action: manipulation; }
+.fg-ring:hover { background: rgba(30,38,56,0.9); }
+.fg-ring svg { width: 100%; height: 100%; }
+.fg-ring path { fill: none; stroke-width: 4; stroke-linecap: round; }
+.fr-bg { stroke: rgba(255,255,255,0.1); }
+.fr-disp { stroke: #f2f5fa; stroke-dasharray: 0 100; transition: stroke-dasharray .25s; }
+.fr-cap { stroke: #5fb8ff; stroke-dasharray: 0 100; transition: stroke-dasharray .25s, stroke .4s; }
+.fr-cap.burning { animation: frBurn .6s ease-in-out infinite alternate; }
+@keyframes frBurn { from { stroke: #ff1414; } to { stroke: #a80000; } }
+.fr-tick { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
+.fr-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.fit-key { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.fit-key.disp { background: #f2f5fa; }
+.fit-key.cap { background: #5fb8ff; }
+.fit-sub .sheet-k { padding-left: 14px; font-size: 11px; }
+.fit-sub .sheet-v { font-size: 11px; color: var(--text-dim); }
+.fit-row.running { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.9); }
+.mk-ico { width: 22px; height: 22px; image-rendering: pixelated; margin-right: 6px; vertical-align: middle; }
+.hb-hp { position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px; border-radius: 2px; background: rgba(0,0,0,0.6); overflow: hidden; pointer-events: none; }
+.hb-hp[hidden] { display: none; }
+.hb-hp-fill { height: 100%; background: linear-gradient(90deg, #ff4b3b, #ffb04b); }
+.hb-slot.burnt { background: rgba(60,8,8,0.6); box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
+.hb-slot.burnt .hb-img { opacity: .25; filter: grayscale(1) sepia(1) hue-rotate(-30deg); }
+.fit-row.burnt { opacity: .6; box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
+.hb-slot.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; background: rgba(255,40,20,0.16); }
