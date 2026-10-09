@@ -763,8 +763,12 @@
   const hud = el("div", { id: "hud", hidden: "" });
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   const hudAct = el("div", { class: "hud-actions", hidden: "" });   // fallback home for ship actions when the fleet bar is closed
-  const hudCap = el("div", { class: "hud-cap" });
-  hud.append(hudTargets, hudStatus, hudCap, el("div", { class: "hud-row" }, hudBar, hudAct)); document.body.append(hud);
+  // fitting gauge: disposition used (white) and capacitor in use (yellow). Two looks being compared in the PTR:
+  // "line" = a split line under the hotbar, "circle" = a ring left of the hotbar with a crescent for each.
+  const hudGaugeLine = el("div", { class: "fg-line" }), hudGaugeRing = el("div", { class: "fg-ring" });
+  const hudRow = el("div", { class: "hud-row" }, hudGaugeRing, el("div", { class: "hb-col" }, hudBar, hudGaugeLine), hudAct);
+  hud.append(hudTargets, hudStatus, hudRow); document.body.append(hud);
+  saved.fitGauge = saved.fitGauge || "line";
   const ICO = {
     inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
     dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
@@ -890,12 +894,10 @@
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
       // hotbar = the ship's fitting: one block per fitted module, as wide as its share of the hull's disposition
       hudBar.innerHTML = ""; hudLive.slots = [];
-      const mods = hbModules(sh), BAR_W = 309, disp = t.disposition || 50;
-      let usedW = 0;
+      const mods = hbModules(sh);
       mods.forEach((m, idx) => {
         const it = m.mod.role === "laser" ? { k: "laser", i: m.laser } : m.mod.role === "auto" ? { k: "auto" } : { k: "passive", item: m.item };
-        const wpx = Math.max(30, Math.round(m.mod.size / disp * BAR_W) - 3); usedW += wpx + 3;
-        const slot = el("div", { class: "hb-slot filled", style: "width:" + wpx + "px" });
+        const slot = el("div", { class: "hb-slot filled" });
         const icon = m.mod.icon ? el("img", { class: "hb-img", src: m.mod.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, m.mod.name.split(" ").map((w) => w[0]).join(""));
         slot.append(icon);
         if (it.k === "laser") {
@@ -915,10 +917,21 @@
         reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const o = saved.hbOrder[sh.id]; [o[from], o[to]] = [o[to], o[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
         hudBar.append(slot);
       });
-      if (usedW < BAR_W) hudBar.append(el("div", { class: "hb-free", style: "width:" + (BAR_W - usedW) + "px" }));   // unused disposition
-      // capacitor: power in use / total, just above the hotbar
-      hudCap.innerHTML = ""; H.capFill = el("div", { class: "cap-fill" }); H.capTxt = el("span", { class: "cap-txt" });
-      hudCap.append(el("span", { class: "hud-k" }, "Capacitor"), el("div", { class: "cap-bar" }, H.capFill, H.capTxt));
+      for (let i = mods.length; i < (t.fitSlots || 0); i++) hudBar.append(el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, String(i + 1))));   // free hardpoints
+      // the gauge
+      const line = saved.fitGauge === "line";
+      hudGaugeLine.hidden = !line; hudGaugeRing.hidden = line; hudGaugeLine.innerHTML = ""; hudGaugeRing.innerHTML = "";
+      if (line) {
+        H.gDisp = el("div", { class: "fg-fill fg-disp" }); H.gCap = el("div", { class: "fg-fill fg-cap" });
+        hudGaugeLine.append(el("div", { class: "fg-half fg-left" }, H.gDisp), el("div", { class: "fg-half fg-right" }, H.gCap));
+      } else {
+        const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 40 40");
+        const arc = (cls, d) => { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("class", cls); p.setAttribute("pathLength", "100"); svg.append(p); return p; };
+        const LEFT = "M20 36 A16 16 0 0 1 20 4", RIGHT = "M20 36 A16 16 0 0 0 20 4";        // both crescents grow from the bottom up
+        arc("fr-bg", LEFT); arc("fr-bg", RIGHT); H.gDisp = arc("fr-disp", LEFT); H.gCap = arc("fr-cap", RIGHT);
+        H.gNum = el("span", { class: "fr-num" });
+        hudGaugeRing.append(svg, H.gNum);
+      }
     }
     // live values
     for (const tg of targets) { const d = hudLive.dist[tgKey(tg)]; const info = A.targetInfo(sh, tg); if (d && info) d.textContent = info.dist < 10 ? info.dist.toFixed(1) + " km" : Math.round(info.dist) + " km"; }
@@ -926,7 +939,12 @@
     const setBar = (k, a, b, txt) => { const x = H[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
     const maxS = t.shield || 0, maxH = t.hp || 0;
     setBar("Shield", sh.shield ?? maxS, maxS, Math.round(sh.shield ?? maxS) + " / " + maxS); setBar("Hull", sh.hp ?? maxH, maxH, Math.round(sh.hp ?? maxH) + " / " + maxH);
-    if (H.capFill && sh.cap) { H.capFill.style.width = (sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0) + "%"; H.capTxt.textContent = sh.cap.used + " / " + sh.cap.max; }
+    if (H.gDisp && sh.cap) {
+      const items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
+      const dp = Math.min(100, fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0) / (t.disposition || 1) * 100), cp = sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0;
+      if (saved.fitGauge === "line") { H.gDisp.style.width = dp + "%"; H.gCap.style.width = cp + "%"; }
+      else { H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = cp + " 100"; if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0); }
+    }
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
     for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
     // line from the selected target's icon to the target on the map
