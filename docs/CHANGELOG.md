@@ -4,6 +4,13 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Warp exit:** ships come out of the exit window at full speed and make a hard stop to dead still on the destination.
+- **Smooth camera:** ships are interpolated between server-timestamped snapshots (stamped with the simulation time, which fixed the 20 Hz / 15 Hz mismatch), so following a ship no longer jitters, even at warp.
+- **Fix:** closing the stargate window deselected your ship, hiding the HUD and fleet actions. The selected pilot's ship now always stays selected.
+- **Hotbar slots** are fixed per module: fitting or unfitting never reshuffles them, and only your drags (slot onto slot) move them. Drop a module on an empty slot to fit it there.
+- **Fitting window** rebuilt EVE-style: tabs for Fitting (ship image, current numbers, the slots below, 8 a row and centered), Fitting stats, Stats, Description and Requirements.
+- **Station:** a soft glow, blinking beacons and running lights chasing into the docking bay.
+
 - **Warp rework:** ships align to full speed, open a blue warp window, cross as a glowing ball, come out of a second window at full speed and brake to a stop on the destination, with no overshoot or bounce. Other players see the entry window, and the exit window seconds before landing. Your selected ship shows a progress line.
 - **Stargates:** clicking a gate opens its window without changing the selection (like the station). Inactive gates refuel by themselves, 0 → 30 min in 10 min.
 - **Pilot window:** shows the pilot selected in the fleet; the pilot dropdown and the Current Ship / Items tabs are gone. "New pilot" moved to the fleet bar's right-click / hold menu.

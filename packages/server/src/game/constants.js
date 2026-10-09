@@ -20,6 +20,7 @@ export const WARP_MULT = 20;             // warp transit: average speed = this Ã
 export const WARP_OPEN_MS = 900;         // the warp window opens ahead of an aligned ship; it coasts into it this long
 export const WARP_MIN_KM = 2;            // shorter hops than this (after aligning and braking room) just fly normally
 export const WARP_EXIT_SHOW_MS = 3000;   // other players see the exit window this long before the ship lands
+export const WARP_STOP_MS = 1100;         // out of the exit window at full speed, then a hard stop to dead still in this long (owner)
 export const WARP_EXIT_FX_MS = 2000;     // the exit window and streak linger this long after the ship comes out
 export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
 export const LASER_M3_PER_S = 2;         // mining laser base yield (per laser), delivered at the end of each cycle; hulls add % bonuses

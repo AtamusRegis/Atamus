@@ -116,7 +116,7 @@
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
           // (a docked ship stays selected: its pilot is still the selected pilot; the HUD just hides)
         }
-        snap = m; snapAt = performance.now(); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
+        snap = m; snapAt = performance.now(); recordSnap(m, snapAt); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") { belts = m.belts || []; indexRocks(); }
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) { const r = rockIdx.get(u.id); if (!r) continue; if (u.m3 > 0) { r.m3 = u.m3; continue; } for (const b of belts) { const i = b.rocks.indexOf(r); if (i >= 0) b.rocks.splice(i, 1); } rockIdx.delete(u.id); } }
@@ -223,18 +223,32 @@
   // ---- ship selection + movement (semi-RTS) ----
   const selected = new Set();           // selected ship ids
   let drag = null, selBox = null, deselectTimer = 0, follow = false;
-  // smoothed render positions so 15 Hz snapshots don't look skippy
-  const shipRender = new Map();         // id -> { x, y, h }
-  function updateShipRender(dt) {
-    const k = 1 - Math.exp(-16 * dt), kh = 1 - Math.exp(-12 * dt), live = new Set();
-    for (const sh of snap.ships || []) {
-      live.add(sh.id);
-      let r = shipRender.get(sh.id);
-      if (!r) { shipRender.set(sh.id, { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }); continue; }
-      r.x += (sh.x - r.x) * k; r.y += (sh.y - r.y) * k;
-      if (sh.h != null) r.h += Math.atan2(Math.sin(sh.h - r.h), Math.cos(sh.h - r.h)) * kh;
+  // Interpolated render positions: ships are drawn INTERP_MS in the past, between the two server snapshots
+  // around that moment (server timestamps, so network jitter doesn't show), so motion is smooth at any speed.
+  const INTERP_MS = 110;
+  const shipHist = new Map();           // id -> [{ t, x, y, h }] (server time, oldest first)
+  const shipRender = new Map();         // id -> { x, y, h } for this frame
+  let clockOff = null;                  // local time − server time, tracking the fastest-arriving snapshot
+  function recordSnap(m, at) {
+    if (m.st == null) return;
+    const o = at - m.st; clockOff = clockOff == null ? o : Math.min(o, clockOff + 0.5);   // creeps up slowly to follow clock drift
+    const live = new Set();
+    for (const sh of m.ships || []) {
+      live.add(sh.id); let h = shipHist.get(sh.id); if (!h) shipHist.set(sh.id, (h = []));
+      h.push({ t: m.st, x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }); if (h.length > 8) h.shift();
     }
-    for (const id of [...shipRender.keys()]) if (!live.has(id)) shipRender.delete(id);
+    for (const id of [...shipHist.keys()]) if (!live.has(id)) { shipHist.delete(id); shipRender.delete(id); }
+  }
+  function updateShipRender() {
+    const rt = performance.now() - (clockOff || 0) - INTERP_MS;
+    for (const [id, h] of shipHist) {
+      const n = h.length; let a, b, u;
+      if (n === 1 || rt <= h[0].t) { a = b = h[0]; u = 0; }
+      else if (rt >= h[n - 1].t) { a = h[n - 2]; b = h[n - 1]; u = 1 + Math.min(0.5, (rt - b.t) / Math.max(1, b.t - a.t)); }   // late snapshot: extrapolate a little
+      else { let i = 0; while (h[i + 1].t < rt) i++; a = h[i]; b = h[i + 1]; u = (rt - a.t) / Math.max(1, b.t - a.t); }
+      const dh = Math.atan2(Math.sin(b.h - a.h), Math.cos(b.h - a.h));
+      shipRender.set(id, { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, h: a.h + dh * Math.min(1, u) });
+    }
   }
   function shipPos(sh) { return shipRender.get(sh.id) || { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }; }
   function followAnchor() {
@@ -606,8 +620,35 @@
       if (!img.naturalWidth) continue;
       const wPx = STATION_LEN_KM * scale(); if (wPx < 3) continue;  // true 2766 m scale
       const hPx = wPx * (img.naturalHeight / img.naturalWidth);
+      // a soft glow behind the station
+      const gl = ctx.createRadialGradient(sx, sy, 0, sx, sy, wPx * 0.62), tint = sE.mine ? "90,160,255" : "255,110,90";
+      gl.addColorStop(0, "rgba(" + tint + ",0.16)"); gl.addColorStop(1, "rgba(" + tint + ",0)");
+      ctx.save(); ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(sx, sy, wPx * 0.62, hPx * 0.75, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
       ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(img, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+      if (wPx >= 70) drawStationLights(sx - wPx / 2, sy - hPx / 2, wPx / img.naturalWidth, sE.mine);
     }
+  }
+  // station lights, in sprite pixels (1475×879): blinking beacons on the masts and arm tips, and running lights chasing
+  // along both edges of the docking bay toward its back wall
+  const BEACONS = [[434, 150, "r", 0], [678, 156, "r", 0.5], [748, 2, "w", 0.25], [1145, 203, "r", 0.75], [10, 748, "w", 0.6], [1465, 748, "w", 0.1], [252, 338, "r", 0.35], [1318, 462, "r", 0.85], [1118, 850, "w", 0.4]];
+  function drawStationLights(ox, oy, k, mine) {
+    const t = performance.now() / 1000, r = Math.max(1.2, 5 * k);
+    const dot = (ix, iy, rgb, a, rad) => {
+      if (a <= 0.02) return; const x = ox + ix * k, y = oy + iy * k, R = rad * 3.2;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R); g.addColorStop(0, "rgba(" + rgb + "," + a + ")"); g.addColorStop(0.25, "rgba(" + rgb + "," + a * 0.6 + ")"); g.addColorStop(1, "rgba(" + rgb + ",0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+    };
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const [ix, iy, c, ph] of BEACONS) {                                       // short double-flash every 1.6 s
+      const f = (t / 1.6 + ph) % 1, on = f < 0.06 || (f > 0.12 && f < 0.18);
+      dot(ix, iy, c === "r" ? "255,70,60" : "235,245,255", on ? 1 : 0.12, r * 1.3);
+    }
+    const run = mine ? "120,200,255" : "255,150,90", N = 14, step = Math.floor(t * 7);   // running lights: a chase into the bay, every third light lit
+    for (let i = 0; i < N; i++) {
+      const ix = 290 + i * (740 / (N - 1)), lit = ((i - step) % 3 + 3) % 3 === 0, a = lit ? 0.95 : 0.15;
+      dot(ix, 398, run, a, r); dot(ix, 709, run, a, r);
+    }
+    ctx.restore();
   }
 
   // ---- warp effects (all blue): a window ahead of the aligned ship, a glowing ball in transit, an exit window and a dissipating streak ----
@@ -718,7 +759,7 @@
       }
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget));
       cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
-      updateShipRender(dt);
+      updateShipRender();
       const anchor = follow ? followAnchor() : null;
       if (anchor) {                                    // follow selected ship / group centroid
         const e = 1 - Math.exp(-12 * dt);

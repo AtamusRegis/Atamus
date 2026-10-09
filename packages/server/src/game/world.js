@@ -1,5 +1,5 @@
 import {
-  FUEL_START_MS, FUEL_SESSION_MAX_MS, FUEL_REGEN_RATE, WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
+  FUEL_START_MS, FUEL_SESSION_MAX_MS, FUEL_REGEN_RATE, WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, WARP_STOP_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
   SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
 } from "./constants.js";
@@ -78,8 +78,9 @@ export class World {
   _hydrateShip(sh) {
     const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
     // ships from before fitting existed keep what they had: their lasers and an auto miner
-    const fit = Array.isArray(sh.fit) ? sh.fit.filter((f) => f && Inv.MODULES[f.item]).map((f) => ({ item: f.item, hp: Number.isFinite(f.hp) ? f.hp : 100, burnt: !!f.burnt }))
+    const fit = Array.isArray(sh.fit) ? sh.fit.filter((f) => f && Inv.MODULES[f.item]).map((f) => ({ item: f.item, hp: Number.isFinite(f.hp) ? f.hp : 100, burnt: !!f.burnt, slot: Number.isInteger(f.slot) ? f.slot : -1 }))
       : [...Array(t.lasers || 0).fill("module:mining_laser"), "module:auto_miner"].map((item) => ({ item }));
+    this._fixSlots({ type: sh.type, fit });
     const nLasers = fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     return {
       ...sh, vx: 0, vy: 0, speed: t.speedKmps, accel: t.accelKmps2 || 0.1, radius: t.radiusKm, mass: t.mass, fit,
@@ -138,7 +139,7 @@ export class World {
     if (!owned.length) return;
     // clamp the destination into whatever system these ships are in (home for now)
     const t = clampToSystem(x, y);
-    for (const s of owned) { if (s.docked || this._inWarp(s)) continue; s.tx = t.x; s.ty = t.y; s.moving = true; s.warp = false; s.wp = null; }
+    for (const s of owned) { if (s.docked || this._inWarp(s)) continue; s.tx = t.x; s.ty = t.y; s.moving = true; s.warp = false; if (s.wp && s.wp.ph === "exit") s.wp.free = true; else s.wp = null; }
   }
 
   // ---- targeting / mining / docking / warp ----
@@ -285,7 +286,15 @@ export class World {
     }
   }
   _repairModules(sh) { sh.heat = 0; for (const f of sh.fit) { f.hp = 100; f.burnt = false; } }
+  // Every fitted module owns a hotbar slot (hardpoint) that never moves on its own: fitting or unfitting other
+  // modules leaves it where it is; only the player rearranges them (owner). Fixes missing / clashing slots.
+  _fixSlots(sh) {
+    const n = Math.max((SHIP_TYPES[sh.type] || {}).fitSlots || 0, sh.fit.length), used = new Set();
+    for (const f of sh.fit) { if (!Number.isInteger(f.slot) || f.slot < 0 || f.slot >= n || used.has(f.slot)) f.slot = -1; else used.add(f.slot); }
+    for (const f of sh.fit) if (f.slot < 0) { let k = 0; while (used.has(k)) k++; f.slot = k; used.add(k); }
+  }
   _refit(sh) {                                  // rebuild the live module state after the fit changed (always docked)
+    this._fixSlots(sh);
     const n = sh.fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     sh.lasers = Array.from({ length: n }, (_, i) => ({ on: false, off: !!(sh.lasers[i] && sh.lasers[i].off), repeat: true, rock: null, hp: 0, ax: 0, ay: 0, start: 0, until: 0 }));
     if (!this._hasAuto(sh)) sh.auto.on = false;
@@ -301,8 +310,17 @@ export class World {
     const used = sh.fit.reduce((s2, f) => s2 + Inv.MODULES[f.item].size, 0);
     if (used + m.size > t.disposition) { this._tell(pid, `Not enough disposition on ${shipLabel(sh)} (${t.disposition - used} left, needs ${m.size}).`); return; }
     const key = st.item; if (Inv.take(a.inv, slot, 1) !== 1) return;
-    sh.fit.push({ item: key, hp: 100, burnt: false });
+    const want = Math.floor(Number(from.at)), taken = new Set(sh.fit.map((f) => f.slot));   // optional: the hotbar slot it was dropped on
+    sh.fit.push({ item: key, hp: 100, burnt: false, slot: Number.isInteger(want) && want >= 0 && want < t.fitSlots && !taken.has(want) ? want : -1 });
     this._refit(sh); this._markInv(pid);
+  }
+  // rearrange the hotbar: swap what's in two slots (either may be empty); works anywhere
+  cmdFitSwap(pid, shipId, a, b) {
+    const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
+    const n = SHIP_TYPES[sh.type].fitSlots; a = Math.floor(Number(a)); b = Math.floor(Number(b));
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b) return;
+    for (const f of sh.fit) { if (f.slot === a) f.slot = b; else if (f.slot === b) f.slot = a; }
+    this._markInv(pid);
   }
   // to: optional station inventory (or this ship's own hold) to put the module in; default Hangar 1
   cmdUnfit(pid, shipId, idx, to) {
@@ -340,10 +358,10 @@ export class World {
       const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = Math.hypot(s.vx, s.vy);
       if (!s.moving || d < 1e-6) { s.wp = null; s.warp = false; return false; }
       if (v < s.speed * 0.97 || (s.vx * dx + s.vy * dy) / (v * d) < 0.995) return false;   // not at full speed / not lined up yet
-      const ux = dx / d, uy = dy / d, lead = s.speed * WARP_OPEN_MS / 1000, brake = (s.speed * s.speed) / (2 * (s.accel || 0.1) * 0.9) + SHIP_ARRIVE_EPS_KM;
+      const ux = dx / d, uy = dy / d, lead = s.speed * WARP_OPEN_MS / 1000, brake = s.speed * WARP_STOP_MS / 1000 / 3;   // the hard stop covers v·T/3 (cubic ease-out from full speed)
       const L = d - lead - brake;
       if (L < WARP_MIN_KM) { s.wp = null; s.warp = false; return false; }                   // too short a hop: just fly there
-      s.wp = { ph: "open", at: now, dir: Math.atan2(uy, ux), fx: s.x + ux * lead, fy: s.y + uy * lead, ex: s.tx - ux * brake, ey: s.ty - uy * brake,
+      s.wp = { ph: "open", at: now, dir: Math.atan2(uy, ux), fx: s.x + ux * lead, fy: s.y + uy * lead, ex: s.tx - ux * brake, ey: s.ty - uy * brake, tx: s.tx, ty: s.ty, stop: brake,
         dur: Math.max(1500, Math.round(L / (s.speed * WARP_MULT) * 1000)) };
       return false;
     }
@@ -354,10 +372,19 @@ export class World {
     if (w.ph === "transit") {
       const u = Math.min(1, (now - w.at) / w.dur), k = 0.95, e = u - k * Math.sin(2 * Math.PI * u) / (2 * Math.PI);   // eases in and out: slows right down nearing the exit
       s.x = w.fx + (w.ex - w.fx) * e; s.y = w.fy + (w.ey - w.fy) * e; s.h = w.dir; s.vx = 0; s.vy = 0;
-      if (u >= 1) { w.ph = "exit"; w.at = now; s.x = w.ex; s.y = w.ey; s.vx = Math.cos(w.dir) * s.speed; s.vy = Math.sin(w.dir) * s.speed; s.warp = false; s.moving = true; }
+      if (u >= 1) { w.ph = "exit"; w.at = now; s.x = w.ex; s.y = w.ey; s.warp = false; }
       return true;                                                                            // position is scripted this tick
     }
-    if (w.ph === "exit" && now - w.at >= WARP_EXIT_FX_MS) s.wp = null;
+    if (w.ph === "exit") {                                                                    // out at full speed, then a hard stop to dead still on the destination
+      const T = WARP_STOP_MS, t = now - w.at;
+      if (t < T && !w.free) {
+        const u = t / T, e = 1 - (1 - u) ** 3, v = s.speed * (1 - u) ** 2, cx = Math.cos(w.dir), cy = Math.sin(w.dir);
+        s.x = w.ex + cx * w.stop * e; s.y = w.ey + cy * w.stop * e; s.vx = cx * v; s.vy = cy * v; s.h = w.dir; s.moving = true;
+        return true;
+      }
+      if (!w.free) { w.free = true; s.x = w.tx; s.y = w.ty; s.vx = 0; s.vy = 0; s.moving = false; }
+      if (t >= WARP_EXIT_FX_MS) s.wp = null;
+    }
     return false;
   }
   _inv(pid, ref) {
@@ -509,7 +536,7 @@ export class World {
   inventoriesFor(pid) {
     const p = this.players.get(pid); if (!p) return null;
     const ships = {};
-    for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore), fit: sh.fit.map((f) => f.item) };
+    for (const sh of this.ships.values()) if (sh.owner === pid) ships[sh.id] = { cargo: Inv.summary(sh.inv.cargo), ore: Inv.summary(sh.inv.ore), fit: sh.fit.map((f) => f.item), slots: sh.fit.map((f) => f.slot) };
     const vis = this._visibleSystems(pid), cans = {};
     for (const c of this.cans.values()) if (vis.has(c.sys)) cans[c.id] = { ...Inv.summary(c.inv) };
     return { t: "inv", ships, cans, jetUntil: p.jetUntil, hangars: p.hangars.map((h) => ({ name: h.name, ...Inv.summary(h.inv) })), delivery: Inv.summary(p.delivery), credits: p.credits, unlocked: p.unlocked };
@@ -667,7 +694,7 @@ export class World {
     const ships = [...this.ships.values()];
 
     // 1) steer velocities toward targets, integrate
-    const now = Date.now();
+    const now = Date.now(); this.simAt = now;                 // the moment these positions are for (snapshots carry it)
     for (const s of ships) {
       if (s.docked) { s.vx = 0; s.vy = 0; continue; }
       if (this._warpTick(s, now)) continue;
@@ -774,6 +801,6 @@ export class World {
 
     const cans = [];
     for (const c of this.cans.values()) if (vis.has(c.sys)) cans.push({ id: c.id, sys: c.sys, x: c.x, y: c.y, mine: c.owner === p.id, owner: c.ownerName, left: Math.max(0, c.expiresAt - now), empty: !c.inv.slots.length });
-    return { t: "snap", systems, gates, ships, cans };
+    return { t: "snap", st: this.simAt || now, systems, gates, ships, cans };   // st: server time, for client-side interpolation
   }
 }

@@ -5,6 +5,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 ## World and setting
 
 - **Region:** the Expanse.
+- **Station lights:** a soft glow behind the station (blue for yours, red for others'). Red and white beacons on the masts and arm tips give a short double flash every 1.6 s. Running lights chase along both edges of the docking bay toward its back wall. The lights show once the station is at least 70 px wide on screen.
 - **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, and up to 5 asteroid belt slots.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
 - **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
@@ -89,12 +90,13 @@ This is a living spec of the game. Read it before every patch, and update it in 
   1. **Align:** the ship speeds up toward the destination at its normal acceleration.
   2. **Window:** at full speed and lined up, a glowing rectangular warp window opens ahead of it, with particles streaming through it; the ship coasts into it (0.9 s).
   3. **Transit:** the ship becomes a glowing ball with a trail, eased in and out (it slows right down nearing the exit). The average speed is 20× the hull's max speed. The course is locked: move and dock commands are ignored until it comes out.
-  4. **Exit:** it comes out of a second window placed exactly its braking distance short of the destination, at max speed, with a blue streak and particles dissipating behind it. It then brakes to a stop on the destination, with no overshoot.
+  4. **Exit (owner):** it comes out of a second window at max speed, with a blue streak and particles dissipating behind it, then makes a hard stop to dead still (1.1 s, cubic ease-out) exactly on the destination. That gives it a "came out of warp" feel, and there's no overshoot. The exit window sits that stopping distance (max speed × 1.1 s ÷ 3) short of the destination.
   - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
   - **Other players** see the entry window when it opens, and the exit window only in the last 3 s before the ship lands.
   - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
   - A server restart drops any warp in progress; the ship keeps flying to its destination.
-- **Docking:** within 4 km of the station. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. If the docked ship was selected, the selection is cleared.
+- **Smooth motion:** snapshots carry the server's simulation time (`st`), and ships are drawn 110 ms in the past, interpolated between the two snapshots around that moment (with brief extrapolation if one is late). The camera follows that smooth position, so it doesn't jitter, even at warp.
+- **Docking:** within 4 km of the station. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. A docked ship stays selected.
 
 ## Mining
 
@@ -111,7 +113,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Yield:** per second = module base × (1 + hull bonus) × (1 + Mining Laser Yield license) × hull efficiency. Units are whole numbers; a rock with less than one unit left is mined out and removed.
 - **Beams:** they aim at points on the rock and stop on the first opaque pixel of the rock sprite (an alpha-mask raycast). A chunk animation travels along the beam.
 - **Auto Miner** (Automated Mining license): cycles every 3:00, −30 s per level. Each cycle it puts every idle, powered laser on the first locked rock in range.
-- **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots). The order can be rearranged by dragging and is remembered per ship.
+- **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots).
+  - **Fixed slots (owner):** every fitted module owns its slot (the server stores `slot` per fitted module). Fitting or unfitting other modules never moves it; only the player does, by dragging one slot onto another, which swaps them (`fitswap`, works anywhere). A module dropped from a hangar onto an empty slot is fitted there; otherwise it takes the first free slot.
   - **Keys 1–9, 0, −, =** fire the slots in order. Each slot shows only its key, in grey **(owner)**.
   - **States (owner):**
     - powered: an outline in the module's color **(owner)**: mining orange, combat red, automation / self blue, passive grey;
@@ -160,9 +163,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
   - Running a module needs its license (Mining Laser Yield 1, Automated Mining 1).
   - Capacitor Management license: +5% capacitor per level.
-- **Fitting is docked only**, in the Fitting window (ship right-click menu → Fitting, or click the ring):
-  - drag a module in from a station inventory to fit it;
-  - right-click or hold a fitted module → Unfit (it goes to Hangar 1) or Info.
+- **Fitting is docked only.** Fit by dragging a module from a station inventory onto the Fitting window, the hotbar, or a specific empty slot. Unfit by dragging a slot onto a hangar, or by right-clicking (or holding) it → Unfit (it goes to Hangar 1). Info is in the same menu.
+- **Fitting window (owner):** EVE-like, a modified info page. Open it from the ship's right-click menu → Fitting, or by clicking the ring. Tabs:
+  - **Fitting:** the ship's image beside its current numbers (Hardpoints, Disposition, Capacitor with the green hover breakdown, Heat, Shield / Hull), with the hardpoint slots below, exactly as on the hotbar (same slots, keys, colors, hover stats, drag to rearrange). The slots are centered, 8 to a row, wrapping downward on bigger hulls;
+  - **Fitting stats:** what the fit does (Mining yield per cycle, laser range and cycle, auto miner cycle, capacitor need), then the module table (Module | Disposition | Capacitor) with integrity and running highlights;
+  - **Stats**, **Description** (with the Hull bonus), **Requirements**.
 - **New ships come empty.** A new player's first Prospector comes with 2 mining lasers. Ships from before fitting existed kept 2 lasers plus an auto miner.
 - **Running hot:** the capacitor never refuses; anything can be switched on.
   - Power past capacity builds **heat**: 6%/s at 100% over, scaled by how far over. Within capacity, heat cools at 5%/s.
@@ -171,7 +176,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Overloaded modules simply let you run more; they don't perform better **(owner)**.
 - **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity; if everything fitted fits within the capacity, the tick sits at the crescent's top end, because that fit can't run hot.
   - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
-  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number is white, and turns green when batteries or Capacitor Management add to it; hovering, or tapping on touch, the green number shows Base and each contributor), heat, then the modules as a table (Module | Disposition | Capacitor) showing each one's integrity, with running modules highlighted. There's no icon strip **(owner)**.
+  - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window. Its capacity number is white, and turns green when batteries or Capacitor Management add to it; hovering it (or tapping, on touch) shows Base and each contributor.
 
 ## Inventories and items
 
@@ -242,7 +247,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Pilot not in a ship (owner):** when the selected pilot crews no ship, the HUD becomes a small "Pilot not in a ship" box.
   - Dragging a target shows only that target's circle.
 - **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center, half size.
-- **Selection (owner):** one pilot is always selected. Selecting a pilot selects their ship. Clicking empty space or an empty box-select never deselects, and a docked ship stays selected (its HUD just hides). Clicking the station opens its hangar without changing the selection.
+- **Selection (owner):** one pilot is always selected, and that pilot's ship is always selected while they're in it; if anything clears the selection, the ship is reselected (a multi-ship box selection is left alone). Clicking empty space or an empty box-select never deselects. Clicking the station or a stargate opens its window without changing the selection, and closing that window doesn't deselect.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
   - click a card to select that pilot; double-click locates their ship; right-click or hold opens the ship menu;

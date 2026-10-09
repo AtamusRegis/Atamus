@@ -64,7 +64,20 @@ t.ok(c.ship().cap.max > cap0, "a capacitor battery raises the capacitor", { cap0
 // (module licenses: every current module needs a starting license, which every pilot always holds, so there is nothing to test yet)
 
 // restore the standard test fit
+// hotbar slots stay put (owner): unfitting one module doesn't move the others; fits fill a chosen or the first free slot; swaps move them
 await resetShip(c); await unfitAll();
+for (const it of ["module:mining_laser", "module:mining_laser", "module:auto_miner"]) await fit(it);
+const slots = () => c.inv().ships[SHIP].slots, autoSlot = () => slots()[fitOf().indexOf("module:auto_miner")];
+t.ok(slots().join(",") === "0,1,2", "fitted modules take slots in order", slots());
+c.send({ t: "unfit", ship: SHIP, idx: 0 }); await sleep(400);
+t.ok(autoSlot() === 2 && slots().join(",") === "1,2", "unfitting a module leaves the others in their slots", slots());
+c.send({ t: "fit", ship: SHIP, from: { ...H0, slot: slotOf("module:mining_laser"), item: "module:mining_laser", at: 4 } }); await sleep(400);
+t.ok(slots()[fitOf().length - 1] === 4, "a module dropped on a slot is fitted there", slots());
+c.send({ t: "fitswap", ship: SHIP, a: 2, b: 0 }); await sleep(400);
+t.ok(autoSlot() === 0, "fitswap moves a module to another slot", slots());
+c.send({ t: "fitswap", ship: SHIP, a: 0, b: 50 }); c.send({ t: "fitswap", ship: SHIP, a: "x", b: 1 }); await sleep(300);
+t.ok(autoSlot() === 0, "bad fitswap slots are ignored", slots());
+await unfitAll();
 for (const it of ["module:mining_laser", "module:mining_laser", "module:auto_miner"]) await fit(it);
 t.ok(fitOf().join(",") === "module:mining_laser,module:mining_laser,module:auto_miner", "test ship back to 2 lasers + auto miner", fitOf());
 await c.close();

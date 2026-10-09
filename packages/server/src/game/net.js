@@ -108,6 +108,7 @@ export function attachGameServer(httpServer) {
         case "power": world.cmdPower(pid, m.ship, m.mod, m.idx, !!m.on); break;
         case "fit": world.cmdFit(pid, m.ship, m.from); break;
         case "unfit": world.cmdUnfit(pid, m.ship, m.idx, m.to); break;
+        case "fitswap": world.cmdFitSwap(pid, m.ship, m.a, m.b); break;
         case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
         case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
         case "buy": world.cmdBuy(pid, m.item, m.qty); break;

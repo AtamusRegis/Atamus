@@ -619,3 +619,14 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none;
 .req-head { margin: 12px 0 4px; }
 .req-none { padding: 4px 8px; }
 .cap-boost:not(.fit-col) { cursor: help; text-decoration: underline dotted rgba(91,227,122,0.6); text-underline-offset: 3px; }
+/* fitting window (owner): tabs; Fitting tab = ship image + current numbers, hardpoint slots below (8 a row, centered) */
+.fit-tabs { flex-wrap: wrap; }
+.fit-tabs .tab { font-size: 11px; padding: 5px 7px 7px; }
+.fit-top { display: flex; gap: 12px; align-items: stretch; }
+.fit-ship { flex: 0 0 132px; min-height: 104px; display: grid; place-items: center; border-radius: 8px; background: radial-gradient(circle at 50% 55%, rgba(79,160,255,0.16), rgba(0,0,0,0.3) 70%); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
+.fit-ship-img { max-width: 116px; max-height: 92px; object-fit: contain; image-rendering: pixelated; }
+.fit-stats { flex: 1; min-width: 0; }
+.fit-stats .sheet-row { padding-top: 5px; padding-bottom: 5px; }
+.fit-slots { display: grid; justify-content: center; gap: 6px; margin: 14px 0 4px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.22); }
+.fit-slots .hb-slot { width: 40px; height: 40px; }
+@media (max-width: 480px) { .fit-top { flex-direction: column; } .fit-ship { flex-basis: auto; } }
