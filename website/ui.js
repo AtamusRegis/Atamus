@@ -634,7 +634,7 @@
     const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
     body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
       meter("Capacitor in use", capUsed, capMax, "cap"),
-      sub("Hull", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),
+      sub("Base", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
     // the same proportional strip as the hotbar
     const strip = el("div", { class: "fit-strip" });
@@ -966,7 +966,7 @@
       const ang = Math.PI / 2 - Math.PI * tickF, cx = Math.cos(ang), cy = Math.sin(ang);
       H.gTick.setAttribute("x1", (20 + 12 * cx).toFixed(2)); H.gTick.setAttribute("y1", (20 + 12 * cy).toFixed(2));
       H.gTick.setAttribute("x2", (20 + 20 * cx).toFixed(2)); H.gTick.setAttribute("y2", (20 + 20 * cy).toFixed(2));
-      H.gTick.style.display = tickF >= 1 ? "none" : "";
+      // (when everything fitted fits within the capacity, the tick sits at the crescent's end: this fit can't run hot)
       if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0);
     }
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";

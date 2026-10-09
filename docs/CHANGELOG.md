@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-09
+
+- **Fitting ring:** the capacity tick always shows; it sits at the top end when the fit can't run hot. The capacitor breakdown's "Hull" row is renamed "Base".
+
 ## 2026-10-08
 
 - **Fitting:** hardpoints, disposition and capacitor per hull. Modules (Mining Laser, Auto Miner, Capacitor Battery) are market items, fitted while docked in a new Fitting window. New ships come empty, and existing ships kept 2 lasers plus an auto miner. Added a Capacitor Management license.
