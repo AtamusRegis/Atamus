@@ -237,4 +237,5 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Unlock outlines on the main license list.
 - Playing in several tabs or on several devices at once.
 - Selling manuals or ships.
+- Overburdening disposition past 100% in exchange for a smaller heat buffer (considered, scrapped).
 - Names: "Expanse Excavations" and the "EMO" acronym; "Black Flag" for pirates; personal-sounding hull names.
