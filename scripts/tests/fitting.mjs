@@ -1,4 +1,4 @@
-// Fitting: hardpoints, disposition, capacitor and module licenses. Leaves the test ship fitted with
+// Fitting: hardpoints, disposition, capacitor, heat and burnout. Leaves the test ship fitted with
 // 2 mining lasers + an auto miner (what the other tests expect).
 import { connect, suite, sleep, resetShip, atRock, SHIP, H0 } from "./lib.mjs";
 const t = suite("fitting");
@@ -24,17 +24,29 @@ t.ok(((c.inv().hangars[0].slots.find((x) => x.item === "module:mining_laser") ||
 for (let i = 0; i < hull.fitSlots + 1; i++) await fit("module:mining_laser");
 t.ok(fitOf().length === hull.fitSlots, "can't fit more modules than hardpoints", fitOf().length);
 
-// capacitor: only as many lasers run as the capacitor powers
+// capacitor: everything can run, but past capacity the ship heats up, then powered modules burn
 let r = await atRock(c); let n = c.msgs.length;
 c.send({ t: "mine", ship: SHIP, on: true }); await sleep(800);
-const running = c.ship().lasers.filter((l) => l.on).length, laserDraw = c.last.hello.cfg.items["module:mining_laser"].draw;
-t.ok(running === Math.floor(c.ship().cap.max / laserDraw) && running < hull.fitSlots, "capacitor limits how many lasers run", { running, cap: c.ship().cap });
-t.ok(since(n).some((m) => m.includes("not enough capacitor")), "the pilot is told when the capacitor runs out");
-t.ok(c.ship().cap.used <= c.ship().cap.max, "capacitor in use never exceeds the maximum");
+const running = c.ship().lasers.filter((l) => l.on).length;
+t.ok(running === hull.fitSlots && c.ship().cap.used > c.ship().cap.max, "all lasers run, past the capacitor", { running, cap: c.ship().cap });
+await sleep(1500);
+t.ok(c.ship().heat > 0, "running past capacity builds heat", c.ship().heat);
+c.dev({ cmd: "heat", ship: SHIP, value: 100 }); c.dev({ cmd: "modhp", ship: SHIP, value: 3 }); await sleep(2500);
+t.ok((c.ship().fitHp || []).some((h) => h < 0) && since(n).some((m) => m.includes("burnt out")), "at full heat, powered modules burn out", c.ship().fitHp);
+const burntIdx = c.ship().fitHp.findIndex((h) => h < 0); n = c.msgs.length;
+c.send({ t: "laser", ship: SHIP, idx: burntIdx, on: true, rock: r.id }); await sleep(400);
+t.ok(since(n).some((m) => m.includes("burnt out")), "a burnt-out module can't be switched on");
+c.send({ t: "mine", ship: SHIP, on: false }); for (let i = 0; i < hull.fitSlots; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: false }); await sleep(1500);
+const h1 = c.ship().heat; await sleep(1200);
+t.ok(c.ship().heat < h1, "within capacity the ship cools down", { h1, h2: c.ship().heat });
+for (let i = 0; i < hull.fitSlots; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: true });
+c.send({ t: "laser", ship: SHIP, idx: 0, on: true, rock: r.id }); await sleep(300);
 
 // fitting needs the ship docked
 n = c.msgs.length; c.send({ t: "unfit", ship: SHIP, idx: 0 }); await sleep(300);
 t.ok(fitOf().length === hull.fitSlots && since(n).some((m) => m.includes("Dock")), "fitting changes need the ship docked");
+await resetShip(c); await sleep(300);
+t.ok((c.ship().fitHp || []).every((h) => h === 100) && !c.ship().heat, "docking repairs modules and clears heat", c.ship().fitHp);
 
 // disposition: 4 lasers + auto miner = 55 > 50
 await resetShip(c); await unfitAll();
@@ -47,12 +59,7 @@ await unfitAll(); await fit("module:mining_laser"); await sleep(300);
 const cap0 = c.ship().cap.max; await fit("module:cap_battery"); await sleep(400);
 t.ok(c.ship().cap.max > cap0, "a capacitor battery raises the capacitor", { cap0, cap1: c.ship().cap.max });
 
-// module licenses
-c.dev({ cmd: "license", key: "small_mining_laser", level: 0 }); c.send({ t: "licenses" }); await sleep(800);
-r = await atRock(c); n = c.msgs.length;
-c.send({ t: "laser", ship: SHIP, idx: 0, on: true, rock: r.id }); await sleep(500);
-t.ok(!c.ship().lasers[0].on && since(n).some((m) => m.includes("needs")), "running a module needs its license");
-c.dev({ cmd: "license", key: "small_mining_laser", level: 5 }); c.send({ t: "licenses" }); await sleep(800);
+// (module licenses: every current module needs a starting license, which every pilot always holds, so there is nothing to test yet)
 
 // restore the standard test fit
 await resetShip(c); await unfitAll();

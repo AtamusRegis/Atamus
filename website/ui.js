@@ -624,7 +624,7 @@
     const A = window.Atamus, w = wins.fitting, sh = fitShip && A.ship(fitShip); if (!sh) return;
     const t = hullOf(sh.type), items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
     const running = (sh.lasers || []).map((l) => l.on ? 1 : 0).join("") + (sh.auto && sh.auto.on ? "a" : "");
-    const sig = [sh.id, sh.docked, fit.join(","), sh.cap && sh.cap.max, sh.cap && sh.cap.used, running].join("|"); if (sig === w.sig && body.childElementCount) return; w.sig = sig;
+    const sig = [sh.id, sh.docked, fit.join(","), sh.cap && sh.cap.max, sh.cap && sh.cap.used, running, Math.round((sh.heat || 0) / 5), (sh.fitHp || []).join(",")].join("|"); if (sig === w.sig && body.childElementCount) return; w.sig = sig;
     body.innerHTML = ""; w.slot.textContent = "Fitting · " + shipName(sh);
     const used = fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0);
     const key = (cls) => el("span", { class: "fit-key " + cls });
@@ -634,7 +634,8 @@
     const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
     body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
       meter("Capacitor in use", capUsed, capMax, "cap"),
-      sub("Hull", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []));
+      sub("Hull", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),
+      el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
     // the same proportional strip as the hotbar
     const strip = el("div", { class: "fit-strip" });
     for (const k of fit) { const m = items[k] || {}; strip.append(el("div", { class: "fit-block", style: "flex:" + (m.size || 1) }, m.icon ? el("img", { src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, (m.name || "?").split(" ").map((x) => x[0]).join("")))); }
@@ -644,7 +645,8 @@
     fit.forEach((k, i) => {
       const m = items[k] || { name: k };
       const r = el("div", { class: "fit-row" }, m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join("")),
-        el("span", {}, m.name), el("span", { class: "fit-n" }, m.size + (m.draw ? " · ⚡" + m.draw : m.cap ? " · +" + m.cap : "")));
+        el("span", {}, m.name), el("span", { class: "fit-n" }, m.size + (m.draw ? " · ⚡" + m.draw : m.cap ? " · +" + m.cap : "") + (() => { const hp = (sh.fitHp || [])[i]; return hp == null || hp >= 100 ? "" : hp < 0 ? " · burnt out" : " · " + hp + "%"; })()));
+      if ((sh.fitHp || [])[i] < 0) r.classList.add("burnt");
       if (m.role === "laser") { const li = fit.slice(0, i).filter((x) => (items[x] || {}).role === "laser").length; if ((sh.lasers[li] || {}).on) r.classList.add("running"); }
       if (m.role === "auto" && sh.auto && sh.auto.on) r.classList.add("running");
       const menu = (x, y) => showCtxMenu(x, y, [...(sh.docked ? [["Unfit", () => A.send({ t: "unfit", ship: sh.id, idx: i })]] : []), ["Info", () => openInfo(k, 1)]]);
@@ -900,7 +902,7 @@
       H.speed = el("span", { class: "hud-speed" });
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
       // hotbar = the ship's fitting: one block per fitted module, as wide as its share of the hull's disposition
-      hudBar.innerHTML = ""; hudLive.slots = [];
+      hudBar.innerHTML = ""; hudLive.slots = []; hudLive.mods = [];
       const mods = hbModules(sh);
       mods.forEach((m, idx) => {
         const it = m.mod.role === "laser" ? { k: "laser", i: m.laser } : m.mod.role === "auto" ? { k: "auto" } : { k: "passive", item: m.item };
@@ -918,6 +920,8 @@
           slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
           hudLive.slots.push({ slot, auto: true });
         } else slot.classList.add("passive");
+        const hpFill = el("div", { class: "hb-hp-fill" }), hpBar = el("div", { class: "hb-hp" }, hpFill);
+        slot.append(hpBar); hudLive.mods = hudLive.mods || []; hudLive.mods.push({ slot, fi: m.fi, hpBar, hpFill });
         slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
         const menu = () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); };
         slot.addEventListener("contextmenu", (e) => { e.preventDefault(); moduleMenu(hudShipData() || sh, it, e.clientX, e.clientY); });
@@ -932,6 +936,7 @@
         const arc = (cls, d) => { const p = document.createElementNS(NS, "path"); p.setAttribute("d", d); p.setAttribute("class", cls); p.setAttribute("pathLength", "100"); svg.append(p); return p; };
         const LEFT = "M20 36 A16 16 0 0 1 20 4", RIGHT = "M20 36 A16 16 0 0 0 20 4";        // both crescents grow from the bottom up
         arc("fr-bg", LEFT); arc("fr-bg", RIGHT); H.gDisp = arc("fr-disp", LEFT); H.gCap = arc("fr-cap", RIGHT);
+        H.gTick = document.createElementNS(NS, "line"); H.gTick.setAttribute("class", "fr-tick"); svg.append(H.gTick);   // where the capacitor's capacity sits
         H.gNum = el("span", { class: "fr-num" });
         hudGaugeRing.append(svg, H.gNum);
       }
@@ -942,10 +947,26 @@
     const setBar = (k, a, b, txt) => { const x = H[k]; if (!x) return; x.fill.style.width = (b > 0 ? Math.max(0, Math.min(100, a / b * 100)) : 0) + "%"; x.txt.textContent = txt; };
     const maxS = t.shield || 0, maxH = t.hp || 0;
     setBar("Shield", sh.shield ?? maxS, maxS, Math.round(sh.shield ?? maxS) + " / " + maxS); setBar("Hull", sh.hp ?? maxH, maxH, Math.round(sh.hp ?? maxH) + " / " + maxH);
+    for (const q of hudLive.mods || []) {                         // module integrity: a thin bar once damaged, dark when burnt out
+      const hp = (sh.fitHp || [])[q.fi]; const v = hp == null ? 100 : hp;
+      q.slot.classList.toggle("burnt", v < 0); q.hpBar.hidden = v >= 100 || v < 0; q.hpFill.style.width = Math.max(0, v) + "%";
+    }
     if (H.gDisp && sh.cap) {
       const items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
       const dp = Math.min(100, fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0) / (t.disposition || 1) * 100), cp = sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0;
-      H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = cp + " 100"; if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0);
+      // power crescent: scaled to everything fitted running at once, with a tick at the capacitor's capacity.
+      // Within capacity it reads blue; past the tick it runs hot: yellow, warming to red as heat builds; red and pulsing = modules taking damage.
+      const draw = fit.reduce((a, k) => a + ((items[k] || {}).draw || 0), 0), scale = Math.max(sh.cap.max, draw, 1);
+      const pw = Math.min(100, sh.cap.used / scale * 100), tickF = Math.min(1, sh.cap.max / scale), over = sh.cap.used > sh.cap.max, heat = sh.heat || 0;
+      H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = pw + " 100";
+      const hue = over ? Math.round(50 - 50 * Math.min(1, heat / 100)) : 0;
+      H.gCap.style.stroke = over ? "hsl(" + hue + ", 100%, 60%)" : "";
+      H.gCap.classList.toggle("burning", over && heat >= 100);
+      const ang = Math.PI / 2 - Math.PI * tickF, cx = Math.cos(ang), cy = Math.sin(ang);
+      H.gTick.setAttribute("x1", (20 + 12 * cx).toFixed(2)); H.gTick.setAttribute("y1", (20 + 12 * cy).toFixed(2));
+      H.gTick.setAttribute("x2", (20 + 20 * cx).toFixed(2)); H.gTick.setAttribute("y2", (20 + 20 * cy).toFixed(2));
+      H.gTick.style.display = tickF >= 1 ? "none" : "";
+      if (H.gNum) H.gNum.textContent = fit.length + "/" + (t.fitSlots || 0);
     }
     H.speed.textContent = Math.round((sh.spd || 0) * 1000) + " / " + Math.round((t.speedKmps || 0) * 1000) + " m/s";
     for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
