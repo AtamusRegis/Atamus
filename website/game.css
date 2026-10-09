@@ -543,3 +543,5 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .hb-slot.burnt .hb-img { opacity: .25; filter: grayscale(1) sepia(1) hue-rotate(-30deg); }
 .fit-row.burnt { opacity: .6; box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
 .hb-slot.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; background: rgba(255,40,20,0.16); }
+.cap-boost { color: #5be37a; }
+.fit-sub .sheet-v { color: #5be37a; }

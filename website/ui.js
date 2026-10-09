@@ -633,8 +633,9 @@
     const batt = fit.reduce((a, k) => a + ((items[k] || {}).cap || 0), 0), bonus = Math.max(0, capMax - (t.capacitor || 0) - batt);
     const sub = (k, v) => el("div", { class: "sheet-row fit-sub" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v));
     body.append(meter("Hardpoints", fit.length, t.fitSlots || 0), meter("Disposition", used, t.disposition || 0, "disp"),
-      meter("Capacitor in use", capUsed, capMax, "cap"),
-      ...(batt || bonus ? [sub("Base", String(t.capacitor || 0)), ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : [])] : []),   // breakdown only when something adds to the base
+      el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, key("cap"), "Capacitor in use"),
+        el("span", { class: "sheet-v" + (capUsed > capMax ? " poor" : "") }, capUsed + " / ", el("span", { class: batt || bonus ? "cap-boost" : "" }, String(capMax)))),   // green when boosted
+      ...(batt ? [sub("Batteries", "+" + batt)] : []), ...(bonus ? [sub("Capacitor Management", "+" + bonus)] : []),   // what's adding to it
       el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Heat"), el("span", { class: "sheet-v" + ((sh.heat || 0) >= 100 ? " poor" : "") }, Math.round(sh.heat || 0) + "%")));
     // the same proportional strip as the hotbar
     const strip = el("div", { class: "fit-strip" });
