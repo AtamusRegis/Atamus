@@ -4,6 +4,16 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Asteroid instances (major):**
+  - belts are gone; mining moves to small shared instances reached through 2–3 asteroid beacons in your system, which glow when linked;
+  - Jump takes your selected ships in range;
+  - 5 players per instance; instances decay over 24 h and close when mined out, sending ships home beside their beacons;
+  - they survive restarts.
+- **Home rocks:** scattered across the system, with clusters at the beacons.
+- **Offline mining:** ships keep mining while you're offline until their targets are gone, holds full or lasers off/burnt; restarts carry on.
+- **Jettison cans:** owner-only for 30 min, then open to anyone for 10 min, then gone.
+- Added `scripts/tests/instances.mjs`.
+
 - **Warp field:** full warp speed all the way through the field, with no easing. Ships drop out of the exit window at warp speed and brake to a stop outside it, on the destination.
 - **Warp exit:** ships come out of the exit window at full speed and make a hard stop to dead still on the destination.
 - **Smooth camera:** ships are interpolated between server-timestamped snapshots (stamped with the simulation time, which fixed the 20 Hz / 15 Hz mismatch), so following a ship no longer jitters, even at warp.

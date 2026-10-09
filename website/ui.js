@@ -824,6 +824,7 @@
   const hudRow = el("div", { class: "hud-row" }, hudGaugeRing, hudBar, hudAct);
   hud.append(hudTargets, hudStatus, hudRow, el("div", { class: "hud-noship" }, "Pilot not in a ship")); document.body.append(hud);
   const ICO = {
+    jump: '<svg viewBox="0 0 24 24"><path d="M12 3l6 9-6 9-6-9z"/><path d="M12 8v8M9 12h6"/></svg>',
     inv: '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v8"/></svg>',
     dock: '<svg viewBox="0 0 24 24"><path d="M12 3v11M7 9l5 5 5-5"/><path d="M4 17h16v3H4z"/></svg>',
     undock: '<svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 17h16v3H4z"/></svg>',
@@ -1093,7 +1094,7 @@
     const A = window.Atamus, u = A.unit, sh = u && u.kind === "ship" ? A.ship(u.id) : null;
     const fleetOpen = wins.fleet && isOpen(wins.fleet);
     const host = fleetOpen ? wins.fleet.acts : hudAct;
-    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.pilot, sh && sh.canDock, sh && sh.moving && !sh.warp].join("|");
+    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.pilot, sh && sh.canDock, sh && sh.moving && !sh.warp, sh && sh.jump].join("|");
     if (sig === actSig) return; actSig = sig;
     for (const h of [hudAct, wins.fleet && wins.fleet.acts]) if (h) { h.innerHTML = ""; h.hidden = true; }
     if (!sh) return;                                                // a pilot is always selected: their ship's actions always show
@@ -1103,6 +1104,8 @@
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
     if (sh.docked && sh.pilot != null) host.append(act("undock", "Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })));
     if (sh.moving && !sh.warp) host.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
+    // near a linked asteroid beacon: jump this ship and every other selected ship in range (the server checks range)
+    if (sh.jump) host.append(act("jump", "Jump", () => A.send({ t: "jump", beacon: sh.jump, ships: [...new Set([sh.id, ...(A.selectedShips || [])])] })));
     host.hidden = false;
   }
   saved.fleetOrient = saved.fleetOrient === "v" ? "v" : "h";
@@ -1425,9 +1428,9 @@
   // clicking a jettison can in space
   window.Atamus.bus.addEventListener("can", (e) => {
     const A = window.Atamus, c = (A.snap.cans || []).find((x) => x.id === e.detail.id); if (!c) return;
-    const mins = Math.ceil(c.left / 60000), items = [["Open", () => openInventory({ owner: "can", id: c.id })]];
+    const mins = Math.ceil(c.left / 60000), locked = !c.mine && c.lockedFor > 0, items = locked ? [] : [["Open", () => openInventory({ owner: "can", id: c.id })]];   // others' cans open to all after 30 min
     if (c.mine || c.empty) items.push(["Destroy", () => c.empty ? A.send({ t: "destroy_can", can: c.id }) : confirmBox("Destroy can", "Destroy this jettison can and everything in it?", "Destroy", () => A.send({ t: "destroy_can", can: c.id }))]);
-    items.push([(c.mine ? "Your can" : c.owner + "'s can") + " · " + mins + " min left", () => {}]);
+    items.push([(c.mine ? "Your can" : c.owner + "'s can") + " · " + (locked ? "locked " + Math.ceil(c.lockedFor / 60000) + " min" : mins + " min left"), () => {}]);
     showCtxMenu(e.detail.x, e.detail.y, items);
   });
   // a can that's gone takes its window with it

@@ -182,12 +182,25 @@
   function send(o) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o)); }
 
 
+  const instR = () => (cfg.instApothem || 22) / Math.cos(Math.PI / 6);   // an asteroid instance's hex (circumradius)
   function placements() {
     const place = new Map(); const home = snap.systems.find((s) => s.mine);
-    if (home) place.set(home.id, { gx: 0, gy: 0 });
-    for (const s of snap.systems) { if (s.mine) continue; let dir = { x: 1, y: 0 }; if (s.fromGateLocal) { const d = Math.hypot(s.fromGateLocal.x, s.fromGateLocal.y) || 1; dir = { x: s.fromGateLocal.x / d, y: s.fromGateLocal.y / d }; } place.set(s.id, { gx: dir.x * placeDist, gy: dir.y * placeDist }); }
+    if (home) place.set(home.id, { gx: 0, gy: 0, r: systemRadius });
+    const used = [];
+    for (const s of snap.systems) {
+      if (s.mine) continue;
+      let a = s.fromGateLocal ? Math.atan2(s.fromGateLocal.y, s.fromGateLocal.x) : 0;
+      if (s.inst) {                                                     // asteroid instance: just outside home, off its beacon (nudged so two never overlap)
+        for (let k = 0; k < 12 && used.some((u) => Math.abs(Math.atan2(Math.sin(a - u), Math.cos(a - u))) < 0.32); k++) a += (k % 2 ? -1 : 1) * 0.34 * (k + 1);
+        used.push(a); const d = systemRadius + instR() * 1.9;
+        place.set(s.id, { gx: Math.cos(a) * d, gy: Math.sin(a) * d, r: instR(), inst: true }); continue;
+      }
+      place.set(s.id, { gx: Math.cos(a) * placeDist, gy: Math.sin(a) * placeDist, r: systemRadius });
+    }
     return place;
   }
+  // which system a world point falls in (the one it's most inside of, relative to each system's size)
+  function sysAtWorld(w) { let best = null, bd = Infinity; for (const [id, pl] of curPlace) { const d = Math.hypot(w.x - pl.gx, w.y - pl.gy) / (pl.r || systemRadius); if (d < bd) { bd = d; best = { id, pl }; } } return best; }
 
   const ZOOM_MIN_W = 3.75;  // smallest view width (km) = deepest zoom-in
   let cam = { cx: 0, cy: 0, viewW: 600 }, curMaxW = 600, viewWTarget = 600;
@@ -264,9 +277,8 @@
     return Math.hypot(p.x - sx, p.y - sy) <= Math.max(14, STATION_LEN_KM * scale() * 0.4);
   }
   function rockAt(p) {
-    const pl = curPlace.get(mySys()); if (!pl) return null;
     let best = null, bd = Infinity;
-    for (const b of belts) for (const rk of b.rocks) { const x = gx2s(pl.gx + rk.x), y = gy2s(pl.gy + rk.y); const r = Math.max(8, (rk.size / 1000) * scale() * 0.5 + 3); const d = Math.hypot(p.x - x, p.y - y); if (d <= r && d < bd) { bd = d; best = rk; } }
+    for (const b of belts) { const pl = curPlace.get(b.sys); if (!pl) continue; for (const rk of b.rocks) { const x = gx2s(pl.gx + rk.x), y = gy2s(pl.gy + rk.y); const r = Math.max(8, (rk.size / 1000) * scale() * 0.5 + 3); const d = Math.hypot(p.x - x, p.y - y); if (d <= r && d < bd) { bd = d; best = rk; } } }
     return best;
   }
   function anyShipAt(p) {   // any ship, not just mine (for targeting)
@@ -288,11 +300,12 @@
     if (selected.size === 1) selectUnit({ kind: "ship", id: [...selected][0] });
     else if (selectedUnit && selectedUnit.kind === "ship") selectUnit(null);
   }
+  // a move order goes to the selected ships in the system that was clicked (ships elsewhere stay put)
   function commandMove(p) {
     if (!selected.size) return;
-    const pl = curPlace.get(mySys()); if (!pl) return;
-    const w = screenToWorld(p.x, p.y);
-    send({ t: "move", ships: [...selected], x: w.x - pl.gx, y: w.y - pl.gy });
+    const w = screenToWorld(p.x, p.y), at = sysAtWorld(w); if (!at) return;
+    const ids = [...selected].filter((id) => { const sh = (snap.ships || []).find((x) => x.id === id); return sh && sh.sys === at.id; }); if (!ids.length) return;
+    send({ t: "move", ships: ids, x: w.x - at.pl.gx, y: w.y - at.pl.gy, sys: at.id });
   }
   // target lock (toggle) at a screen point for the first selected ship; true if something was there
   function lockAt(p) {
@@ -407,9 +420,9 @@
 
   // ---- drawing ----
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
-  function hexCorners() { const R = cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
-  function drawCell(cx, cy, round, stroke, fill) { const pts = hexCorners(); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
-  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
+  function hexCorners(R0) { const R = R0 || cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
+  function drawCell(cx, cy, round, stroke, fill, R) { const pts = hexCorners(R); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
+  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.inst) return { line: "rgba(110,205,255,0.5)", fill: "rgba(10,30,50,0.25)" }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
 
   function drawGate(g, pl) {
     const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly);
@@ -467,8 +480,8 @@
     }
     return null;
   }
-  const rockIdx = new Map();                                   // rock id -> rock, rebuilt whenever the belts arrive
-  function indexRocks() { rockIdx.clear(); for (const b of belts) for (const r of b.rocks) rockIdx.set(r.id, r); }
+  const rockIdx = new Map(), rockSys = new Map();              // rock id -> rock / its system, rebuilt whenever the fields arrive
+  function indexRocks() { rockIdx.clear(); rockSys.clear(); for (const b of belts) for (const r of b.rocks) { rockIdx.set(r.id, r); rockSys.set(r.id, b.sys); } }
   function rockById(id) { return rockIdx.get(id) || null; }
   function rockImg(family, size) { const k = family + "_" + size; if (!rockArt[k]) { const i = new Image(); i.src = "assets/rocks/rock_" + k + ".webp"; rockArt[k] = i; } return rockArt[k]; }
   // selection marker: orange box, corners only
@@ -503,7 +516,8 @@
     return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + hull(w.ship.type).sprite + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
   }
   function targetScreen(place, tg) {
-    const pl = place.get(mySys()); if (!pl) return null;
+    const sysOf = tg.kind === "rock" ? rockSys.get(tg.id) : tg.kind === "gate" ? (snap.gates.find((x) => x.id === tg.id) || {}).sys : mySys();
+    const pl = place.get(sysOf || mySys()); if (!pl) return null;
     if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) } : null; }
     if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: gx2s(pl.gx + g.lx), y: gy2s(pl.gy + g.ly), r: Math.max(12, GATE_LEN_KM * scale() * 0.6) } : null; }
     if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: gx2s(pl.gx + st.x), y: gy2s(pl.gy + st.y), r: Math.max(14, STATION_LEN_KM * scale() * 0.55) }; }
@@ -554,10 +568,11 @@
   }
 
   function drawBelts(place) {
-    const home = place.get(mySys()); if (!home || !cfg) return;
+    if (!cfg) return;
     if (!Object.keys(oreRock).length) for (const o of cfg.ores || []) oreRock[o.key] = { rock: o.rock, color: o.color };
     const s = scale();
     for (const belt of belts) {
+      const home = place.get(belt.sys); if (!home) continue;
       for (const rk of belt.rocks) {
         const x = gx2s(home.gx + rk.x), y = gy2s(home.gy + rk.y);
         const wPx = (rk.size / 1000) * s;                        // rock width at true scale
@@ -570,11 +585,26 @@
         ctx.save(); ctx.translate(x, y); ctx.rotate(rk.rot); ctx.imageSmoothingEnabled = wPx > 40;
         ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore();
       }
-      // beacon: small fixed-size marker at the belt centre
-      const bx = gx2s(home.gx + belt.x), by = gy2s(home.gy + belt.y);
-      const bc = belt.color || "#78dcff"; ctx.save(); ctx.strokeStyle = bc; ctx.fillStyle = bc; ctx.globalAlpha = 0.9; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(bx, by - 7); ctx.lineTo(bx + 7, by); ctx.lineTo(bx, by + 7); ctx.lineTo(bx - 7, by); ctx.closePath(); ctx.stroke();
-      ctx.beginPath(); ctx.arc(bx, by, 1.6, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  }
+  // asteroid beacons: a small ringed marker; linked ones glow blue and pulse (a ship in range can jump through)
+  function drawBeacons(place) {
+    const t = performance.now() / 1000;
+    for (const b of snap.beacons || []) {
+      const pl = place.get(b.sys); if (!pl) continue;
+      const x = gx2s(pl.gx + b.x), y = gy2s(pl.gy + b.y), s = Math.max(6, Math.min(26, 0.12 * scale())), rr = (cfg.beaconRange || 2.5) * scale();
+      ctx.save();
+      if (rr > 10) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.setLineDash([4, 6]); ctx.lineWidth = 1; ctx.strokeStyle = b.linked ? "rgba(110,190,255,0.4)" : "rgba(170,180,195,0.2)"; ctx.stroke(); ctx.setLineDash([]); }
+      if (b.linked) {
+        const pulse = 0.65 + 0.35 * Math.sin(t * 2.4), R = s * 3.2, g = ctx.createRadialGradient(x, y, 0, x, y, R);
+        g.addColorStop(0, "rgba(140,210,255," + 0.55 * pulse + ")"); g.addColorStop(1, "rgba(60,140,255,0)");
+        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill(); ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = "rgba(150,215,255,0.9)"; ctx.lineWidth = 1.5;
+        for (let k = 0; k < 3; k++) { const a0 = t * 0.9 + k * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(x, y, s * 1.5, a0, a0 + 1.2); ctx.stroke(); }   // turning ring
+      } else { ctx.strokeStyle = "rgba(170,180,195,0.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, s * 1.5, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.7, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.7, y); ctx.closePath();
+      ctx.fillStyle = b.linked ? "rgba(200,235,255,0.95)" : "rgba(120,130,145,0.8)"; ctx.fill();
+      ctx.restore();
     }
   }
 
@@ -604,7 +634,7 @@
   }
   function drawStations(place) {
     for (const sE of snap.systems) {
-      if (sE.id === "sys:hub") continue;                 // the pirate hub has no player station
+      if (sE.id === "sys:hub" || sE.inst) continue;      // the pirate hub and asteroid instances have no station
       const pl = place.get(sE.id); if (!pl) continue;
       const st = cfg.station || { x: 0, y: 0 };
       const sx = gx2s(pl.gx + st.x), sy = gy2s(pl.gy + st.y);
@@ -774,10 +804,12 @@
       }
       clampCameraCircle(place);
 
-      for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy); if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
+      for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy);
+        if (sE.inst) { const rx = gx2s(foreign.gx + (cfg.instReturn || { x: -14 }).x), ry = gy2s(foreign.gy + 0); ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(rx, ry); ctx.strokeStyle = "rgba(110,190,255,0.45)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); continue; } if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
+      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); if (sE.inst) { drawCell(pl.gx, pl.gy, cfg.cellCornerRound * 0.25, th.line, th.fill, instR()); continue; } for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
       window.SunFX.render(gx2s(0), gy2s(0), 1 - 0.45 * Math.max(0, Math.min(1, (cam.viewW - 20) / Math.max(1, curMaxW - 20))), now / 1000); // shader sun + lens flare at the system centre
       drawBelts(place);
+      drawBeacons(place);
       drawStations(place);
       for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawCans();

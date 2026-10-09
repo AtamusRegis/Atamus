@@ -59,6 +59,13 @@ export async function migrate() {
       data        JSONB NOT NULL DEFAULT '{}'::jsonb,
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- shared asteroid instances (their rock fields); they survive restarts and go when mined out
+    CREATE TABLE IF NOT EXISTS instances (
+      id          TEXT PRIMARY KEY,
+      data        JSONB NOT NULL,
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
   `);
 }
 

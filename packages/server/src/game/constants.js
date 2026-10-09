@@ -106,3 +106,10 @@ export const GATE_TRANSFER_RADIUS_KM = 4;        // a ship inside this ring can 
 export const ARRIVAL_OFFSET_KM = GATE_TRANSFER_RADIUS_KM + 6; // land clear of the partner gate
 
 export const HUB_SYS = "sys:hub";
+
+// ---- asteroid instances (owner): small shared hexes reached through asteroid beacons ----
+export const INST_APOTHEM_KM = 22;                 // an instance is one small hex, 44 km across
+export const INST_RETURN_POS = { x: -14, y: 0 };   // its beacon home, where ships arrive
+export const INST_MAX_PLAYERS = 5;                 // players (not pilots or ships) per instance
+export const INST_DECAY_HOURS = 24;                // rocks lose their ore passively: an untouched instance is gone within this
+export const BEACON_RANGE_KM = 2.5;                // ships this close to a linked beacon can jump through it

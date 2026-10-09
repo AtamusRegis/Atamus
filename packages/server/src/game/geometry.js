@@ -59,3 +59,14 @@ export function clampToSystem(x, y) {
   }
   return { x: c.x + lx, y: c.y + ly };
 }
+
+/** Clamp (x,y) into a single flat-top hex of apothem `apo` centred on the origin (asteroid instances). */
+export function clampToHex(x, y, apo) {
+  let lx = x, ly = y;
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const { nx, ny } of EDGE_NORMALS) { const d = lx * nx + ly * ny; if (d > apo) { lx -= (d - apo) * nx; ly -= (d - apo) * ny; moved = true; } }
+    if (!moved) break;
+  }
+  return { x: lx, y: ly };
+}

@@ -37,8 +37,8 @@ export function suite(name) {
   };
 }
 // Put the test pilot's ship docked at the station, crewed, with an empty ore hold.
-export async function resetShip(c) {
-  if (!c.ship().docked) { c.dev({ cmd: "move", ship: SHIP, x: STATION.x, y: STATION.y }); await sleep(300); c.send({ t: "dock", ship: SHIP, dock: true }); await sleep(600); }
+export async function resetShip(c) {   // (also brings the ship back from an asteroid instance)
+  if (!c.ship().docked) { c.dev({ cmd: "move", ship: SHIP, x: STATION.x, y: STATION.y, sys: "sys:" + c.last.hello.you.id }); await sleep(300); c.send({ t: "dock", ship: SHIP, dock: true }); await sleep(600); }
   if (c.ship().pilot == null) { c.send({ t: "crew", ship: SHIP, pilot: await firstPilotId() }); await sleep(800); }
   for (let k = 0; k < 6 && c.inv().ships[SHIP].ore.slots.length; k++) { c.send({ t: "inv_move", from: { owner: "ship", id: SHIP, inv: "ore", slot: 0 }, to: H0 }); await sleep(300); }
   for (const L of [0, 1]) c.send({ t: "power", ship: SHIP, mod: "laser", idx: L, on: true });

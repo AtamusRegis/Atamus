@@ -9,7 +9,7 @@ LOG="${PTR_DATA:-/var/tmp/atamus-ptr}/server.log"
 scripts/check.sh || exit 1
 scripts/ptr.sh start >/dev/null || exit 1
 before=$(grep -c "command \|unhandledRejection" "$LOG" 2>/dev/null || true)
-tests=("${@:-session fuzz fitting gameplay pilots ui}"); fail=0
+tests=("${@:-session fuzz fitting gameplay pilots ui instances}"); fail=0
 # keep the PTR to its single pilot so the pilot tests start from a known state
 cleanup() { su postgres -c "psql -h 127.0.0.1 -p 5433 atamus -tAc \"DELETE FROM pilots WHERE name <> 'Vera Kestrel'\"" >/dev/null 2>&1 || true; }
 cleanup; trap cleanup EXIT

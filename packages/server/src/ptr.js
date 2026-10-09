@@ -18,7 +18,7 @@ export async function ptrUser() {
 // Dev commands from the PTR client: Atamus.send({ t: "dev", cmd, ... })
 export async function devCommand(world, pid, m, refresh) {
   const Inv = await import("./game/inventory.js");
-  const { forceBelts } = await import("./game/belts.js");
+  const { fillHomeField } = await import("./game/belts.js");
   const p = world.players.get(pid); if (!p) return;
   const tell = (text) => p.send(JSON.stringify({ t: "sys", text: "[PTR] " + text }));
   switch (m.cmd) {
@@ -34,10 +34,12 @@ export async function devCommand(world, pid, m, refresh) {
     }
     case "ship": world._buyShip(p, m.type || "chisel"); p.invDirty = true; tell("ship " + (m.type || "chisel") + " docked"); break;
     case "item": { const n = Inv.add(p.hangars[0].inv, m.item, Math.max(1, +m.qty || 1)); p.invDirty = true; tell("+" + n + " " + m.item); break; }
-    case "belts": forceBelts(p.beltField, Date.now()); p.send(JSON.stringify({ t: "belts", belts: (await import("./game/belts.js")).fieldBelts(p.beltField) })); tell("all belts spawned"); break;
+    case "belts": fillHomeField(p.field); p.field.ver++; tell("home rocks filled"); break;
+    case "inst": { const inst = world._newInstance(); for (const b of p.beacons) b.inst = inst.id; tell("new instance " + inst.id + ", all beacons linked"); break; }   // a fresh instance, every beacon linked to it
+    case "offline": world.removePlayer(pid); tell("marked offline"); break;
     case "modhp": { const sh = world.ships.get(m.ship); if (sh && sh.owner === pid) { for (const f of sh.fit) f.hp = Math.max(1, Math.min(100, +m.value || 100)); tell("module integrity = " + m.value); } break; }
     case "heat": { const sh = world.ships.get(m.ship); if (sh && sh.owner === pid) { sh.heat = Math.max(0, Math.min(100, +m.value || 0)); tell("heat = " + sh.heat); } break; }
-    case "move": { const sh = world.ships.get(m.ship); if (sh && sh.owner === pid) { sh.docked = false; sh.x = +m.x; sh.y = +m.y; sh.tx = sh.x; sh.ty = sh.y; sh.moving = false; tell("moved"); } break; }
+    case "move": { const sh = world.ships.get(m.ship); if (sh && sh.owner === pid) { if (typeof m.sys === "string" && (m.sys === "sys:" + pid || world.instances.has(m.sys))) sh.sys = m.sys; sh.docked = false; sh.x = +m.x; sh.y = +m.y; sh.tx = sh.x; sh.ty = sh.y; sh.moving = false; tell("moved"); } break; }
     case "update": {                                     // rehearse a live update on this PTR client
       const ms = Math.max(1000, (+m.seconds || 5) * 1000);
       p.send(JSON.stringify({ t: "countdown", at: Date.now() + ms, in: ms, parts: ["web"] }));

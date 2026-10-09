@@ -41,9 +41,9 @@ packages/server/src/
     world.js      authoritative simulation (20 Hz): ships, mining, cans, inventories, crews
     constants.js  tunables + SHIP_TYPES / SHIP_CLASSES / SHIP_ROLES
     inventory.js  ITEMS, MARKET, slot inventories (move/split/take with input sanitizing)
-    belts.js      ores + asteroid belt spawning
+    belts.js      ores, home rock fields, asteroid beacons, instance fields (+ decay)
     geometry.js   hex cells, STATION_POS, stargates
-    persist.js    systems table (JSONB per player)
+    persist.js    systems table (JSONB per player), instances table (shared asteroid instances)
     factions.js   faction roster (not wired into gameplay yet)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer, input, socket, update/countdown handling
@@ -84,8 +84,10 @@ Changes under `docs/`, `CLAUDE.md` and `scripts/tests` trigger no deploy.
 **PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
 
 - `credits amount`, `license key level`, `ship type`, `item item qty`
-- `belts` (spawn all belts)
-- `move ship x y`
+- `belts` (fill the home rocks)
+- `inst` (a new asteroid instance, every beacon linked to it)
+- `offline` (mark yourself offline, to test offline rules)
+- `move ship x y [sys]`
 - `heat ship value`, `modhp ship value` (set a ship's heat / all its modules' integrity)
 - `update seconds` (rehearse the countdown)
 

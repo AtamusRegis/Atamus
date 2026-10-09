@@ -6,7 +6,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 - **Region:** the Expanse.
 - **Station lights:** a soft glow behind the station (blue for yours, red for others'). Red and white beacons on the masts and arm tips give a short double flash every 1.6 s. Running lights chase along both edges of the docking bay toward its back wall. The lights show once the station is at least 70 px wide on screen.
-- **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, and up to 5 asteroid belt slots.
+- **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, 2–3 asteroid beacons and scattered rocks. There are no belts any more **(owner)**.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
 - **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
   - **Fuel (owner, for now):** a gate that isn't active refuels by itself, from 0 to the 30-minute maximum in 10 minutes (also while you're offline).
@@ -130,7 +130,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Activate / Deactivate**. There's no re-arming once deactivated.
   - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
   - **Info:** opens the module's item info (Description / Stats / Fitting), with no ship or target details **(owner)**.
-- **Belts:** 5 slots per system and uncommon spawns, so usually 1–2 are up. Each belt has 75–150 rocks and drifts away after 60–120 minutes.
+- **Home rocks (owner):** no belts. A home system has about 24 rocks scattered across it (mostly Ironstone and Cuprite) plus clusters of about 7 richer rocks around each asteroid beacon, so beacons stay hotspots. Two rocks regrow a minute until the counts are back. Rock ids carry their system (`sys:12#5`, `inst:…#3`).
+- **Asteroid instances:** the main mining. See the section below.
 - **Ores:**
 
   | Ore | Rarity | Price | Volume |
@@ -178,6 +179,33 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
   - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window. Its capacity number is white, and turns green when batteries or Capacitor Management add to it; hovering it (or tapping, on touch) shows Base and each contributor.
 
+## Asteroid instances (owner)
+
+- **What they are:** small shared hexes (44 km across) made by the server, each holding one rich rock field next to its own beacon. They aren't part of anyone's system.
+  - The field rolls a primary ore by rarity (like the old belts), with 70–120 rocks and 250k–600k m³ in all.
+  - Rocks lose their ore passively: every rock loses its starting ore over 24 hours, so even an untouched instance ends within a day.
+  - An instance stays alive until its rocks are gone (mined or decayed).
+- **Asteroid beacons:** each player has 2 or 3 at fixed spots in their home system. A beacon links to an instance with room (chosen at random, no matchmaking with friends) and **glows blue** with a turning ring while linked; unlinked it's grey.
+  - A player's beacons spread over different instances when they can.
+  - A beacon linked to an instance that fills up (without you in it) looks for another.
+- **Jumping:** a ship within 2.5 km of a linked beacon gets a **Jump** action. It takes that ship and every other selected ship in range through, arriving spread out beside the instance's beacon.
+  - The instance's beacon leads home, landing beside the beacon the ship went through.
+  - Targets, lasers and the auto miner reset on a jump.
+  - There's no docking inside an instance.
+- **Cap: 5 players** (not pilots or ships) per instance. A player already inside can always bring more ships. Squatting is allowed **(owner)**: idle players, even online ones, are never kicked.
+- **Sharing:** players in the same instance see each other's ships, share the rocks (mining the same rock is fine) and can bump each other (ship collisions stay on). There are no combat modules yet, and boosts will be decided when a boost module exists.
+- **On the map:** an instance you have ships in is drawn as a small hex just outside your home system, off the beacon you came through, with a dashed blue line from that beacon to the instance's beacon. Move orders go to the selected ships in the system you clicked.
+- **Supply (owner):** the server keeps twice the room the loaded players need (instances = 2 × players ÷ 5, at least 2), and always at least 2 instances with space. It adds one every 5 s until that's true. Extra instances just decay away.
+- **Leaving:** when an instance closes, its ships are returned beside their beacons at home, never destroyed (unlike stargates), and cans in it are lost.
+- **Restarts:** instances are saved in their own `instances` table and kept across restarts. Beacons keep their links, and ships stay inside.
+- **Offline (owner):** see Offline mining below. An offline player's ship in an instance that has stopped working is sent home through its beacon.
+
+## Offline mining (owner)
+
+- A ship keeps working while its owner is offline, as long as it has something to do: lasers running, or an auto miner with a locked rock in range, room in the hold and a laser that can run. It stops when its targets are gone, its hold is full, or its lasers are off or burnt out. It's a light idle feel, not a full idle game.
+- While any ship is working (or moving, or a gate is open), the player's systems stay awake. Once nothing is left, they hibernate after 60 s.
+- Server restarts keep it going: on boot, systems with ships moving, mining, auto-mining or in an instance are loaded awake, with their pilots' licenses. After a restart the 60 s grace is 6 minutes, so players returning from an update don't find their idle ships sent home from instances.
+
 ## Inventories and items
 
 - **Inventory slots:** each inventory holds up to 100 stacks and is limited by volume (m³). The header shows volume only, not the stack limit **(owner)**.
@@ -197,9 +225,10 @@ This is a living spec of the game. Read it before every patch, and update it in 
     - No rarity row and no price per m³ **(owner)**. A packaged ship's Info opens the ship info.
 - **Commands name their item.** If the stacks shifted underneath, the server finds that item rather than acting on whatever now sits in the slot. Quantities are whole numbers only.
 - **Jettison cans (owner):**
-  - hold 15,000 m³ and last 30 minutes;
+  - hold 15,000 m³;
+  - **only the player who jettisoned a can can open it for 30 minutes**; then it's open to anyone for 10 minutes, then it's destroyed with whatever is inside. Others don't even receive a locked can's contents, and its menu reads "locked N min";
   - one jettison every 30 minutes per account, and destroying your own can resets that;
-  - anyone can loot a can, and anyone can destroy an empty one; the owner can destroy a full one, with confirmation;
+  - anyone can destroy an empty can; the owner can destroy a full one, with confirmation;
   - the can sprite blinks (2 frames) so it's easy to spot.
 
 ## Market
@@ -292,3 +321,6 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Selling manuals or ships.
 - Overburdening disposition past 100% in exchange for a smaller heat buffer (considered, scrapped).
 - Names: "Expanse Excavations" and the "EMO" acronym; "Black Flag" for pirates; personal-sounding hull names.
+- Asteroid belts in home systems (5 slots, spawning and drifting away). Replaced by scattered home rocks and asteroid instances.
+- Anyone looting a fresh jettison can. Cans are owner-only for 30 minutes now.
+- Kicking idle online players out of instances, and matchmaking with friends (instances are random for now).
