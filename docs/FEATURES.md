@@ -94,11 +94,19 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Beams:** they aim at points on the rock and stop on the first opaque pixel of the rock sprite (an alpha-mask raycast). A chunk animation travels along the beam.
 - **Auto Miner** (Automated Mining license): cycles every 3:00, −30 s per level. Each cycle it puts every idle, powered laser on the first locked rock in range.
 - **Hotbar:** one fixed-size slot per hardpoint of the selected ship, filled with its fitted modules (free hardpoints show as empty slots). The order can be rearranged by dragging and is remembered per ship.
+  - **Keys 1–9, 0, −, =** fire the slots in order. Each slot shows only its key, in grey **(owner)**.
+  - **States (owner):**
+    - powered: a colored (amber) outline;
+    - running: a fill timer in a lighter version of that color;
+    - set to stop after this cycle: a grey outline and fill;
+    - powered off: dark slate.
+  - **Stopping (owner):** a module set to stop after its cycle can't be re-armed until the cycle ends. The next activation goes to the current primary target (the HUD's selected target, or the first locked rock).
+  - **Hover (mouse):** shows cycle time and m³ per cycle for a laser, cycle time for the auto miner, and capacitor for a battery.
   - A thin integrity bar appears on a damaged module; a burnt-out one is dark red; one running past capacity has a red outline.
 - **Module menu** (right-click, or hold on touch) has three options:
-  - **Activate / Deactivate** (and **Keep cycling** once deactivated).
+  - **Activate / Deactivate**. There's no re-arming once deactivated.
   - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
-  - **Info:** status, target, cycle time, yield per cycle and range, including bonuses; it updates live.
+  - **Info:** opens the module's item info (Description / Stats / Fitting), with no ship or target details **(owner)**.
 - **Belts:** 5 slots per system and uncommon spawns, so usually 1–2 are up. Each belt has 75–150 rocks and drifts away after 60–120 minutes.
 - **Ores:**
 
@@ -157,7 +165,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Sell:** **ore only**, at the station. Opens a popup with price, slider and confirm.
   - **Read:** manuals.
   - **Assemble:** packaged ships, at the station.
-  - **Info:** description, Weight "unit / stack" and Price "unit / stack". There's no rarity row and no price per m³ **(owner)**.
+  - **Info:** tabs like ship info **(owner)**:
+    - Description;
+    - Stats: Weight "unit / stack", Price "unit / stack", plus category, disposition and capacitor for modules;
+    - Fitting (modules only): which ship classes it fits, disposition, capacitor, required license.
+    - No rarity row and no price per m³ **(owner)**. A packaged ship's Info opens the ship info.
 - **Commands name their item.** If the stacks shifted underneath, the server finds that item rather than acting on whatever now sits in the slot. Quantities are whole numbers only.
 - **Jettison cans (owner):**
   - hold 15,000 m³ and last 30 minutes;
@@ -186,7 +198,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## UI and HUD
 
-- **Left panel:** Player, Pilot, Chat, Fleet and Market buttons. A button's name shows only on hover, or while holding on touch.
+- **Left panel:** Player, Pilot, Chat, Fleet, Market and Settings buttons. A button's name shows only on hover, or while holding on touch.
 - **Windows:**
   - dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width);
   - resizing never squeezes a window narrower than its content. Inventory windows are the exception: their slot grid reflows to any width.
@@ -205,12 +217,16 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - a shield, hull and speed row (hull bars are red);
   - the hotbar.
 - **Ship actions** (Inventory, Dock, Warp): anchored to the fleet bar, centered on its side facing the screen center, half size.
+- **Selection (owner):** one pilot is always selected. Selecting a pilot selects their ship. Clicking empty space or an empty box-select never deselects, and a docked ship stays selected (its HUD just hides). Clicking the station opens its hangar without changing the selection.
 - **Fleet bar:**
-  - shows crewed ships, each with a split shield|hull bar;
+  - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
+  - click a card to select that pilot; double-click locates their ship; right-click or hold opens the ship menu;
   - dragged by its background; hold or right-click the panel button to switch between horizontal and vertical;
   - auto-sized, wrapping instead of scrolling, no resize edges, 16 px end padding.
 - **Pilot window:** Licenses, Training Queue, Current Ship (with Locate) and Items.
 - **Persistence across reloads:** the selection (ship or station, in localStorage `atamus.sel`) and the camera (sessionStorage `atamus.view`).
+- **Settings window:** a Sound tab with All, Music and SFX sliders, remembered. There are no sound effects yet; the SFX volume is ready for them.
+- **Music (owner):** "Soviet Wave" (`assets/audio/soviet_wave.mp3`) loops in the game at All × Music volume. It starts on the first click or key, since browsers block sound before that.
 - **Context menu:** always renders above windows, and closes on any tap elsewhere.
 - **Mobile:**
   - tap, double-tap, pan, pinch, hold-to-lock and box select;

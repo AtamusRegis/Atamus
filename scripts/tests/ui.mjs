@@ -39,10 +39,19 @@ r = await run(page, `A.selectShip(ID); await s(500);
   const pick = (txt) => [...document.querySelectorAll(".ctx-menu *")].find((x) => !x.children.length && x.textContent === txt).click();
   const m = menu(0); pick("Power off"); await s(600); const off = document.querySelectorAll(".hb-slot")[0].classList.contains("off");
   menu(0); pick("Power on"); await s(500); menu(1); pick("Info"); await s(400);
-  const info = document.querySelector('.win[data-id="modinfo"]'); return { m, off, info: info && !info.hidden && info.innerText.includes("Yield per cycle") };`);
+  const info = document.querySelector('.win[data-id="info"]'); return { m, off, info: info && !info.hidden && info.innerText.includes("Mining Laser") && info.innerText.includes("Fitting") };`);
 t.ok(["Activate", "Power off", "Info"].every((x) => r.m.includes(x)), "module menu offers Activate / Power off / Info", r.m);
 t.ok(r.off, "a powered-off module is greyed out");
-t.ok(r.info, "module info window shows its stats");
+t.ok(r.info, "module Info opens the item info with Description / Stats / Fitting tabs");
+
+// number keys fire hotbar modules; clicking empty space keeps the ship selected
+r = await run(page, `closeAll(); A.selectShip(ID); await s(300);
+  const before = A.unit && A.unit.id;
+  document.querySelector("#view").dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0, clientX: 900, clientY: 300 }));
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, button: 0, clientX: 900, clientY: 300 })); await s(500);
+  return { before, after: A.unit && A.unit.id, keyLabels: [...document.querySelectorAll(".hb-slot .hb-num")].slice(0, 3).map((x) => x.textContent), badges: document.querySelectorAll(".hb-badge").length };`);
+t.ok(r.before === SHIP && r.after === SHIP, "clicking empty space keeps the selected ship", r);
+t.ok(r.keyLabels.join("") === "123", "hotbar slots show their key", r.keyLabels);
 
 // market tree
 r = await run(page, `closeAll(); document.querySelector('.wbtn[data-id="market"]').click(); await s(300);

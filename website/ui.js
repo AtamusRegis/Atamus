@@ -270,14 +270,16 @@
     chat: '<svg viewBox="0 0 24 24"><path d="M4 4h16v11H9l-5 4z"/></svg>',
     fleet: '<svg viewBox="0 0 24 24"><path d="M3 12l5-3v6z"/><path d="M10 7l5-3v6z"/><path d="M10 17l5-3v6z"/><path d="M17 12l4-2.4v4.8z"/></svg>',
     market: '<svg viewBox="0 0 24 24"><path d="M4 10h16l-1.5-5h-13z"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>',
+    settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
   };
-  let order = ["player", "pilot", "chat", "fleet", "market"];
+  let order = ["player", "pilot", "chat", "fleet", "market", "settings"];
   const META = {
     player: { name: "Player Sheet", pinned: true },
     pilot: { name: "Pilot" },
     chat: { name: "Chat" },
     fleet: { name: "Fleet" },
     market: { name: "Market" },
+    settings: { name: "Settings" },
   };
   // press-and-hold (mouse or touch) → fn; the click that ends a hold is swallowed
   function holdPointer(elm, fn) {
@@ -577,6 +579,7 @@
   const shipIcon = (type, cls) => el("img", { class: cls || "ship-ico", src: "assets/ships/" + hullOf(type).sprite + "_blue.webp", alt: "", draggable: "false" });
   function shipMenu(sh, x, y) {
     const A = window.Atamus, items = [];
+    sh = A.ship(sh.id) || sh;                                      // always the live ship (callers may hold a stale copy)
     if (sh.docked) {
       if (sh.pilot != null) items.push(["Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })]);
       items.push(["Inventory", () => openInventory({ owner: "ship", id: sh.id, inv: "ore" })]);
@@ -785,6 +788,28 @@
     warp: '<svg viewBox="0 0 24 24"><path d="M3 12h11M10 7l5 5-5 5"/><path d="M17 6v12M21 8v8"/></svg>',
   };
   const HB_SLOTS = 8;
+  // hotbar keys: 1-9, 0, -, = (like the number row), shown grey in each slot
+  const HB_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+  addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const tg = e.target; if (tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName))) return;
+    const i = HB_KEYS.indexOf(e.key); if (i < 0 || hud.hidden) return;
+    const fn = hudLive.keys && hudLive.keys[i]; if (fn) { e.preventDefault(); fn(); }
+  });
+  // hover a module: its cycle time and ore per cycle (with the pilot's bonuses)
+  const modTip = el("div", { class: "mod-tip", hidden: "" }); document.body.append(modTip);
+  function showModTip(slot, it) {
+    const A = window.Atamus, sh = hudShipData(); if (!sh) return;
+    const items = A.cfg.items || {}, def = items[it.item] || {}, secs = (ms) => (ms >= 60000 ? Math.floor(ms / 60000) + ":" + String(Math.round(ms / 1000) % 60).padStart(2, "0") : (ms / 1000).toFixed(1) + " s");
+    const rows = [];
+    if (it.k === "laser") { const dur = ((sh.lasers || [])[it.i] || {}).dur || A.cfg.cycleMs || 15000; rows.push(["Cycle time", secs(dur)], ["m³ per cycle", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1)]); }
+    else if (it.k === "auto") rows.push(["Cycle time", secs((sh.auto && sh.auto.cyc) || 180000)]);
+    else if (def.cap) rows.push(["Capacitor", "+" + def.cap]);
+    modTip.innerHTML = ""; modTip.append(...rows.map(([k, v]) => el("div", { class: "mod-tip-row" }, el("span", {}, k), el("b", {}, v))));
+    modTip.hidden = !rows.length; const r = slot.getBoundingClientRect();
+    modTip.style.left = (r.left + r.width / 2) + "px"; modTip.style.top = (r.top - 6) + "px";
+  }
+  function hideModTip() { modTip.hidden = true; }
   saved.hbOrder = saved.hbOrder || {};   // shipId -> order of its fitted modules on the hotbar
   // the selected ship's fitted modules in hotbar order; lasers are numbered in fitting order
   function hbModules(sh) {
@@ -807,7 +832,7 @@
   function clickLaser(sh, idx) {
     const A = window.Atamus, L = sh.lasers && sh.lasers[idx]; if (!L || L.off) return;
     const rock = selTarget && selTarget.kind === "rock" ? selTarget.id : null;
-    if (L.on) { A.send({ t: "laser", ship: sh.id, idx, on: !L.repeat }); return; }   // active: toggle whether it repeats after this cycle
+    if (L.on) { if (L.repeat) A.send({ t: "laser", ship: sh.id, idx, on: false }); return; }   // active: stop after this cycle; once stopping, it can't be re-armed until the cycle ends
     A.send({ t: "laser", ship: sh.id, idx, on: true, rock });
   }
   // generic reorder drag (mouse via HTML5 DnD, touch via touchDrag) over a row of cells
@@ -821,15 +846,15 @@
     touchDrag(cell, { [kind]: index }, onHold || (() => {}));
   }
   // ---- hotbar module menu (right-click / hold): activate, power, info ----
-  const modName = (it) => it.k === "auto" ? "Auto Miner" : "Mining Laser " + (it.i + 1);
   function moduleMenu(sh, it, x, y) {
     const A = window.Atamus, items = [];
     if (it.k === "passive") { showCtxMenu(x, y, [["Info", () => openInfo(it.item, 1)]]); return; }
+    hideModTip();
     if (it.k === "laser") {
       const L = (sh.lasers || [])[it.i]; if (!L) return;
       if (!L.off) {
         if (!L.on) items.push(["Activate", () => clickLaser(sh, it.i)]);
-        else items.push([L.repeat ? "Deactivate" : "Keep cycling", () => A.send({ t: "laser", ship: sh.id, idx: it.i, on: !L.repeat })]);
+        else if (L.repeat) items.push(["Deactivate", () => A.send({ t: "laser", ship: sh.id, idx: it.i, on: false })]);
       }
       items.push([L.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: "laser", idx: it.i, on: !!L.off })]);
     } else {
@@ -837,38 +862,9 @@
       if (!au.off) items.push([au.on ? "Deactivate" : "Activate", () => A.send({ t: "auto", ship: sh.id, on: !au.on })]);
       items.push([au.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: "auto", on: !!au.off })]);
     }
-    items.push(["Info", () => openModuleInfo(sh.id, it)]);
+    items.push(["Info", () => openInfo(it.item || (it.k === "auto" ? "module:auto_miner" : "module:mining_laser"), 1)]);
     showCtxMenu(x, y, items);
   }
-  let modInfo = null;
-  function openModuleInfo(shipId, it) {
-    if (!wins.modinfo) createWindow("modinfo", { left: Math.round(innerWidth / 2 - 160), top: Math.round(innerHeight / 2 - 140), width: 320, minW: 260, minH: 160, render: renderModuleInfo, groupable: false });
-    modInfo = { shipId, it }; wins.modinfo.sig = null; toggleWindow("modinfo", true); renderModuleInfo(wins.modinfo.body);
-  }
-  function renderModuleInfo(body) {
-    const A = window.Atamus, w = wins.modinfo, sh = modInfo && A.ship(modInfo.shipId); if (!sh) return;
-    const it = modInfo.it, L = it.k === "laser" ? (sh.lasers || [])[it.i] : null, au = sh.auto || {};
-    const state = it.k === "laser" ? (!L ? "—" : L.off ? "Powered off" : L.on ? (L.repeat ? "Cycling" : "Finishing cycle") : "Idle")
-      : au.off ? "Powered off" : au.on ? "Active" : "Idle";
-    const rock = L && L.on && L.rock ? (A.targetInfo(sh, { kind: "rock", id: L.rock }) || {}).name : null;
-    const sig = [sh.id, it.k, it.i, state, rock, sh.yieldM3s, sh.laserRange, L && L.dur, au.cyc].join("|");
-    if (sig === w.sig && body.childElementCount) return; w.sig = sig; body.innerHTML = "";
-    w.slot.textContent = modName(it);
-    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
-    const secs = (ms) => (ms / 1000 >= 60 ? Math.floor(ms / 60000) + ":" + String(Math.round(ms / 1000) % 60).padStart(2, "0") : (ms / 1000).toFixed(1) + " s");
-    const icon = it.k === "auto" ? "assets/icons/auto_miner.png" : "assets/icons/mining_laser.png";
-    if (it.k === "laser") {
-      const dur = (L && L.dur) || A.cfg.cycleMs || 15000;
-      body.append(el("div", { class: "info-desc" }, el("img", { class: "info-icon", src: icon, alt: "" }), el("span", {}, "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes.")),
-        row("Ship", shipName(sh)), row("Status", state), ...(rock ? [row("Target", rock)] : []),
-        row("Cycle time", secs(dur)), row("Yield per cycle", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1) + " m³"),
-        row("Range", (sh.laserRange || A.cfg.laserRange || 0).toFixed(2) + " km"));
-    } else {
-      body.append(el("div", { class: "info-desc" }, el("img", { class: "info-icon", src: icon, alt: "" }), el("span", {}, "Each cycle, puts every idle mining laser on the first locked asteroid in range.")),
-        row("Ship", shipName(sh)), row("Status", state), row("Cycle time", secs(au.cyc || 180000)));
-    }
-  }
-  window.Atamus.bus.addEventListener("snap", () => { const w = wins.modinfo; if (w && isOpen(w)) renderModuleInfo(w.body); });
   function renderHud() {
     const A = window.Atamus, sh = hudShipData();
     renderShipActions();
@@ -903,33 +899,36 @@
       H.speed = el("span", { class: "hud-speed" });
       hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, "Speed"), H.speed));
       // hotbar = the ship's fitting: one block per fitted module, as wide as its share of the hull's disposition
-      hudBar.innerHTML = ""; hudLive.slots = []; hudLive.mods = [];
+      hudBar.innerHTML = ""; hudLive.slots = []; hudLive.mods = []; hudLive.keys = [];
       const mods = hbModules(sh);
       mods.forEach((m, idx) => {
-        const it = m.mod.role === "laser" ? { k: "laser", i: m.laser } : m.mod.role === "auto" ? { k: "auto" } : { k: "passive", item: m.item };
+        const it = m.mod.role === "laser" ? { k: "laser", i: m.laser, item: m.item } : m.mod.role === "auto" ? { k: "auto", item: m.item } : { k: "passive", item: m.item };
         const slot = el("div", { class: "hb-slot filled" });
         const icon = m.mod.icon ? el("img", { class: "hb-img", src: m.mod.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, m.mod.name.split(" ").map((w) => w[0]).join(""));
         slot.append(icon);
         if (it.k === "laser") {
           const L = (sh.lasers || [])[it.i];
           if (L) { if (L.on) slot.classList.add("on"); if (L.on && !L.repeat) slot.classList.add("stopping"); if (L.off) slot.classList.add("off"); }
-          slot.append(el("span", { class: "hb-badge" }, String(it.i + 1)));
           slot.addEventListener("click", () => clickLaser(hudShipData() || sh, it.i));
+          hudLive.keys[idx] = () => clickLaser(hudShipData() || sh, it.i);
           hudLive.slots.push({ slot, laser: it.i });
         } else if (it.k === "auto") {
           if (sh.auto && sh.auto.on) slot.classList.add("on"); if (sh.auto && sh.auto.off) slot.classList.add("off");
-          slot.addEventListener("click", () => A.send({ t: "auto", ship: sh.id, on: !(sh.auto && sh.auto.on) }));
+          const autoClick = () => { const cur = hudShipData() || sh; A.send({ t: "auto", ship: cur.id, on: !(cur.auto && cur.auto.on) }); };
+          slot.addEventListener("click", autoClick); hudLive.keys[idx] = autoClick;
           hudLive.slots.push({ slot, auto: true });
         } else slot.classList.add("passive");
         const hpFill = el("div", { class: "hb-hp-fill" }), hpBar = el("div", { class: "hb-hp" }, hpFill);
         slot.append(hpBar); hudLive.mods = hudLive.mods || []; hudLive.mods.push({ slot, fi: m.fi, hpBar, hpFill });
-        slot.append(el("span", { class: "hb-num" }, String(idx + 1)));
+        slot.append(el("span", { class: "hb-num" }, HB_KEYS[idx] || ""));
+        slot.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") showModTip(slot, it); });
+        slot.addEventListener("pointerleave", hideModTip);
         const menu = () => { const r = slot.getBoundingClientRect(); moduleMenu(hudShipData() || sh, it, r.left, r.top - 4); };
         slot.addEventListener("contextmenu", (e) => { e.preventDefault(); moduleMenu(hudShipData() || sh, it, e.clientX, e.clientY); });
         reorderable(slot, "hb", idx, (from, to) => { if (from === to) return; const o = saved.hbOrder[sh.id]; [o[from], o[to]] = [o[to], o[from]]; persistAll(); hudSig = ""; renderHud(); }, menu);
         hudBar.append(slot);
       });
-      for (let i = mods.length; i < (t.fitSlots || 0); i++) hudBar.append(el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, String(i + 1))));   // free hardpoints
+      for (let i = mods.length; i < (t.fitSlots || 0); i++) hudBar.append(el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, HB_KEYS[i] || "")));   // free hardpoints
       // the gauge
       hudGaugeRing.innerHTML = "";
       {
@@ -1011,41 +1010,64 @@
 
   // ---- fleet bar: every crewed ship, docked or not, with a split shield|hull bar ----
   // Resize it wide for a horizontal bar or tall for a vertical one; grips at both ends move it.
+  // The fleet panel lists pilots (with their ship, if they crew one). One pilot is always selected:
+  // selecting a pilot selects their ship; clicking the map never clears it.
+  saved.selPilot = saved.selPilot ?? null;
+  const pilotShip = (pid) => ((window.Atamus.snap && window.Atamus.snap.ships) || []).find((x) => x.mine && x.pilot != null && String(x.pilot) === String(pid)) || null;
+  function selectPilot(pid) {
+    saved.selPilot = pid; persistAll();
+    const sh = pilotShip(pid), A = window.Atamus;
+    if (sh) A.selectShip(sh.id); else A.deselectUnit();
+    if (wins.fleet && isOpen(wins.fleet)) renderFleet(wins.fleet.body);
+  }
+  // keep the selected pilot in step with the selection, and make sure one is always selected
+  function syncPilotSelection() {
+    const A = window.Atamus, pilots = (state && state.pilots) || []; if (!pilots.length || !A.snap || !A.snap.ships) return;
+    const u = A.unit;
+    if (u && u.kind === "ship" && u.pilot != null) { if (String(u.pilot) !== String(saved.selPilot)) { saved.selPilot = u.pilot; persistAll(); } return; }
+    if (!pilots.some((p) => String(p.id) === String(saved.selPilot))) saved.selPilot = pilots[0].id;
+    const sh = pilotShip(saved.selPilot);
+    if (sh && !(A.selectedShips || []).length) A.selectShip(sh.id);
+  }
+  window.Atamus.bus.addEventListener("snap", syncPilotSelection);
   function renderFleet(body) {
     const A = window.Atamus, w = wins.fleet;
-    const ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.pilot != null);
-    const sel = new Set(A.selectedShips || []);
-    const sig = ships.map((x) => x.id + x.type + x.pilot + (x.name || "") + (x.docked ? "d" : "")).join(",");
+    const pilots = (state && state.pilots) || [];
+    const rows = pilots.map((p) => ({ p, sh: pilotShip(p.id) }));
+    const sig = rows.map(({ p, sh }) => p.id + ":" + p.name + ":" + (sh ? sh.id + sh.type + (sh.docked ? "d" : "") : "-")).join(",");
     if (sig !== w.fsig) {
       w.fsig = sig; w.cards = {}; body.innerHTML = "";
       const list = el("div", { class: "fleet-list" });
-      if (!ships.length) list.append(el("div", { class: "fleet-empty" }, "No crewed ships"));
-      for (const sh of ships) {
-        const t = hullOf(sh.type), sf = el("div", { class: "fb-sh" }), hf = el("div", { class: "fb-hp" });
-        const card = el("button", { class: "fleet-card" },
-          el("div", { class: "fleet-img" }, shipIcon(sh.type, "fleet-ship")),
-          el("div", { class: "fleet-bar" }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
-          el("div", { class: "fleet-name" }, sh.name || pilotName(sh.pilot) || t.name));
-        card.addEventListener("click", () => { const cur = A.ship(sh.id); if (!cur) return; if (cur.docked) openInventory({ owner: "ship", id: cur.id, inv: "ore" }); else A.selectShip(sh.id); });
-        card.addEventListener("dblclick", () => A.locateShip(sh.id));
-        card.addEventListener("contextmenu", (e) => { e.preventDefault(); const cur = A.ship(sh.id); if (cur) shipMenu(cur, e.clientX, e.clientY); });
-        holdToOpen(card, () => { const cur = A.ship(sh.id), r = card.getBoundingClientRect(); if (cur) shipMenu(cur, r.left + r.width / 2, r.bottom); });
-        w.cards[sh.id] = { card, sf, hf };
+      for (const { p, sh } of rows) {
+        const sf = el("div", { class: "fb-sh" }), hf = el("div", { class: "fb-hp" });
+        const card = el("button", { class: "fleet-card" + (sh ? "" : " no-ship") },
+          el("div", { class: "fleet-img" }, sh ? shipIcon(sh.type, "fleet-ship") : el("span", { class: "fleet-noship" })),
+          el("div", { class: "fleet-bar" + (sh ? "" : " empty") }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
+          el("div", { class: "fleet-name" }, p.name));
+        card.addEventListener("click", () => selectPilot(p.id));
+        card.addEventListener("dblclick", () => { const cur = pilotShip(p.id); if (cur) A.locateShip(cur.id); });
+        const menu = (x, y) => { const cur = pilotShip(p.id); if (cur) shipMenu(cur, x, y); };
+        card.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
+        holdToOpen(card, () => { const r = card.getBoundingClientRect(); menu(r.left + r.width / 2, r.bottom); });
+        w.cards[p.id] = { card, sf, hf };
         list.append(card);
       }
+      if (!rows.length) list.append(el("div", { class: "fleet-empty" }, "No pilots"));
       body.append(list);
     }
-    for (const sh of ships) {
-      const c = w.cards[sh.id]; if (!c) continue; const t = hullOf(sh.type);
-      c.sf.style.width = (t.shield ? Math.max(0, Math.min(1, (sh.shield ?? t.shield) / t.shield)) * 100 : 0) + "%";
-      c.hf.style.width = (t.hp ? Math.max(0, Math.min(1, (sh.hp ?? t.hp) / t.hp)) * 100 : 0) + "%";
-      c.card.classList.toggle("sel", sel.has(sh.id)); c.card.classList.toggle("docked", !!sh.docked);
+    for (const { p, sh } of rows) {
+      const c = w.cards[p.id]; if (!c) continue;
+      if (sh) { const t = hullOf(sh.type);
+        c.sf.style.width = (t.shield ? Math.max(0, Math.min(1, (sh.shield ?? t.shield) / t.shield)) * 100 : 0) + "%";
+        c.hf.style.width = (t.hp ? Math.max(0, Math.min(1, (sh.hp ?? t.hp) / t.hp)) * 100 : 0) + "%"; }
+      c.card.classList.toggle("sel", String(p.id) === String(saved.selPilot)); c.card.classList.toggle("docked", !!(sh && sh.docked));
     }
+    const ships = rows;
     // the bar is exactly as big as its ships; it only wraps to a second row/column when it would leave the screen
     const vert = saved.fleetOrient === "v"; w.win.classList.toggle("vertical", vert);
     const list = body.querySelector(".fleet-list"), r = w.win.getBoundingClientRect(), n = Math.max(1, ships.length);
-    if (vert) { const fit = Math.max(1, Math.floor((innerHeight - r.top - 16) / 62)); list.style.gridAutoFlow = "column"; list.style.gridTemplateRows = "repeat(" + Math.min(n, fit) + ", auto)"; list.style.gridTemplateColumns = ""; }
-    else { const fit = Math.max(1, Math.floor((innerWidth - r.left - 16) / 70)); list.style.gridAutoFlow = "row"; list.style.gridTemplateColumns = "repeat(" + Math.min(n, fit) + ", 66px)"; list.style.gridTemplateRows = ""; }
+    if (vert) { const fit = Math.max(1, Math.floor((innerHeight - r.top - 16) / 50)); list.style.gridAutoFlow = "column"; list.style.gridTemplateRows = "repeat(" + Math.min(n, fit) + ", auto)"; list.style.gridTemplateColumns = ""; }
+    else { const fit = Math.max(1, Math.floor((innerWidth - r.left - 16) / 56)); list.style.gridAutoFlow = "row"; list.style.gridTemplateColumns = "repeat(" + Math.min(n, fit) + ", 52px)"; list.style.gridTemplateRows = ""; }
     w.win.style.width = "auto"; w.win.style.height = "auto";
     const b = w.win.getBoundingClientRect(), side = vert ? (b.left + b.width / 2 < innerWidth / 2 ? "right" : "left") : (b.top + b.height / 2 < innerHeight / 2 ? "below" : "above");
     for (const k of ["above", "below", "left", "right"]) w.win.classList.toggle("acts-" + k, k === side);
@@ -1346,23 +1368,52 @@
     if (!wins.info) createWindow("info", { left: Math.round(innerWidth / 2 - 160), top: Math.round(innerHeight / 2 - 120), width: 320, minW: 260, minH: 160, render: renderInfo, groupable: false });
     infoItem = { key, qty }; toggleWindow("info", true); renderInfo(wins.info.body);
   }
+  // Item info in tabs, like ship info: Description, Stats, and Fitting for modules.
+  let itemTab = "desc";
   function renderInfo(body) {
     const A = window.Atamus, w = wins.info; body.innerHTML = "";
     const def = infoItem && (A.cfg.items || {})[infoItem.key]; if (!def) { w.slot.textContent = "Info"; return; }
+    if (def.kind === "ship" && def.ship) { openShipInfo(def.ship); toggleWindow("info", false); return; }   // a packaged ship: the ship's own info
     w.slot.textContent = def.name;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    const q = infoItem.qty || 1, m3 = (v) => (+v.toFixed(2)).toLocaleString() + " m³";
-    if (def.kind === "module") {
-      const cats = A.cfg.moduleCategories || {}, lic = def.license && catalog && catalog.licenses.find((x) => x.key === def.license[0]);
-      body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
-        row("Category", cats[def.cat] || def.cat), row("Disposition", def.size), def.draw ? row("Capacitor use", def.draw) : row("Capacitor", "+" + (def.cap || 0)),
-        ...(def.license ? [row("Requires", (lic ? lic.name : def.license[0]) + " " + def.license[1])] : []),
-        row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q))));
-      return;
-    }
-    body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")),
-      row("Weight", m3(def.unitM3) + " / " + m3(def.unitM3 * q)),
-      row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q))));
+    const q = infoItem.qty || 1, m3 = (v) => (+v.toFixed(2)).toLocaleString() + " m³", mod = def.kind === "module";
+    const tabs = [["desc", "Description"], ["stats", "Stats"], ...(mod ? [["fit", "Fitting"]] : [])];
+    if (!tabs.some(([k]) => k === itemTab)) itemTab = "desc";
+    body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (itemTab === k ? " active" : ""), onclick: () => { itemTab = k; renderInfo(body); } }, n))));
+    const weight = row("Weight", m3(def.unitM3) + " / " + m3(def.unitM3 * q)), price = row("Price", el("span", {}, cr(def.price), " / ", cr(def.price * q)));
+    if (itemTab === "stats") {
+      if (mod) { const cats = A.cfg.moduleCategories || {};
+        body.append(row("Category", cats[def.cat] || def.cat), row("Disposition", def.size), def.draw ? row("Capacitor use", def.draw) : row("Capacitor", "+" + (def.cap || 0)), weight, price); }
+      else body.append(weight, price);
+    } else if (itemTab === "fit") {
+      const lic = def.license && catalog && catalog.licenses.find((x) => x.key === def.license[0]);
+      const classes = [...new Set(Object.values(A.cfg.shipTypes || {}).filter((t) => (t.accepts || []).includes(def.cat)).map((t) => t.cls))];
+      body.append(row("Fits", classes.join(", ") || "—"), row("Disposition", def.size), def.draw ? row("Capacitor use", def.draw) : row("Capacitor", "+" + (def.cap || 0)),
+        row("Requires", def.license ? (lic ? lic.name : def.license[0]) + " " + def.license[1] : "—"));
+    } else body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")));
+  }
+
+  // ---- settings: Sound (All / Music / SFX volumes, remembered) and the background music ----
+  saved.vol = Object.assign({ all: 0.8, music: 0.6, sfx: 0.8 }, saved.vol || {});
+  let setTab = "sound";
+  const music = new Audio("assets/audio/soviet_wave.mp3"); music.loop = true; music.preload = "auto";
+  const applyVolume = () => { music.volume = Math.max(0, Math.min(1, saved.vol.all * saved.vol.music)); };
+  applyVolume();
+  // browsers only allow sound after the player interacts, so the music starts on the first click, tap or key
+  const startMusic = () => { music.play().catch(() => {}); removeEventListener("pointerdown", startMusic, true); removeEventListener("keydown", startMusic, true); };
+  addEventListener("pointerdown", startMusic, true); addEventListener("keydown", startMusic, true);
+  window.Atamus.sfxVolume = () => saved.vol.all * saved.vol.sfx;   // for sound effects, once there are some
+  function renderSettings(body) {
+    const w = wins.settings; w.slot.textContent = "Settings"; body.innerHTML = "";
+    const tabs = [["sound", "Sound"]];
+    body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (setTab === k ? " active" : ""), onclick: () => { setTab = k; renderSettings(body); } }, n))));
+    const slider = (key, label) => {
+      const val = el("span", { class: "set-val" }, Math.round(saved.vol[key] * 100) + "%");
+      const input = el("input", { type: "range", class: "sell-range set-range", min: 0, max: 100, value: Math.round(saved.vol[key] * 100) });
+      input.addEventListener("input", () => { saved.vol[key] = +input.value / 100; val.textContent = input.value + "%"; applyVolume(); persistAll(); });
+      return el("div", { class: "set-row" }, el("div", { class: "set-head" }, el("span", {}, label), val), input);
+    };
+    body.append(slider("all", "All"), slider("music", "Music"), slider("sfx", "SFX"));
   }
 
   // ---- station market ----
@@ -1612,6 +1663,7 @@
     wins.fleet.win.addEventListener("pointerdown", () => { fleetAt = wins.fleet.win.style.left + "," + wins.fleet.win.style.top; });
     wins.fleet.win.addEventListener("pointerup", () => { if (wins.fleet.win.style.left + "," + wins.fleet.win.style.top === fleetAt) return; setTimeout(() => { actSig = ""; renderShipActions(); }, 0); });
     createWindow("market", { left: 300, top: 120, width: 380, minW: 300, minH: 200, render: renderMarket, label: "Market" });
+    createWindow("settings", { left: 320, top: 140, width: 300, minW: 260, minH: 180, render: renderSettings, label: "Settings" });
     createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
     wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());
     renderPanel();

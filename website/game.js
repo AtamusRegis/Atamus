@@ -114,7 +114,7 @@
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
-          if (was && !was.docked && now && now.docked) { selected.delete(now.id); selectedUnit = null; setTimeout(() => selectUnit(null), 0); }   // the selected ship docked: drop the selection
+          // (a docked ship stays selected: its pilot is still the selected pilot; the HUD just hides)
         }
         snap = m; snapAt = performance.now(); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") { belts = m.belts || []; indexRocks(); }
@@ -301,10 +301,11 @@
       syncShipSelection(); return;
     }
     if (stationAt(p)) { bus.dispatchEvent(new CustomEvent("openstation")); return; }   // clicking the station opens its hangar
-    if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // ships deselect on the timer below (dbl-click keeps them)
-    clearTimeout(deselectTimer); deselectTimer = setTimeout(() => { selected.clear(); syncShipSelection(); }, 260);
+    if (selectedUnit && selectedUnit.kind !== "ship") selectUnit(null); // a selected pilot's ship is never dropped by clicking empty space
   }
   function boxSelect(x0, y0, x1, y1, shift) {
+    const hit = (snap.ships || []).filter((sh) => { if (!sh.mine || sh.docked) return false; const s = shipScreen(sh); return s && s.x >= Math.min(x0, x1) && s.x <= Math.max(x0, x1) && s.y >= Math.min(y0, y1) && s.y <= Math.max(y0, y1); });
+    if (!hit.length) return;                                       // an empty box keeps the current selection
     if (!shift) selected.clear();
     for (const sh of snap.ships || []) { if (!sh.mine || sh.docked) continue; const s = shipScreen(sh); if (s && s.x >= Math.min(x0, x1) && s.x <= Math.max(x0, x1) && s.y >= Math.min(y0, y1) && s.y <= Math.max(y0, y1)) selected.add(sh.id); }
     syncShipSelection();

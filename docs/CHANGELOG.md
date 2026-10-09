@@ -4,6 +4,14 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Fleet panel:** lists pilots with their ships, with smaller cards. One pilot is always selected, and clicks on empty space no longer deselect.
+- **Hotbar:**
+  - keys 1–9, 0, −, = fire the slots, and each slot shows only its grey key label;
+  - new states: amber outline when powered, a fill timer while running, grey when stopping (no re-arming), dark slate when off;
+  - hovering shows cycle time and m³ per cycle.
+- **Item info:** Description / Stats / Fitting tabs. Module Info from the hotbar opens the item info.
+- **Settings window:** a Sound tab (All / Music / SFX). Background music added.
+- **Fix:** the hangar ship menu showed a stale crew state after crewing or removing a pilot.
 - **Fix:** the fleet bar's ship action buttons ignored mouse clicks, because a rebuild on pointerup swallowed the click. They now rebuild only after the bar is actually dragged.
 - **Website:** a new front page (description, Play now and a major-updates list), restyled to match the game. Login moved to login.html, and signed-in visitors go straight to "Welcome back".
 - **Quick training:** level N of every license takes N minutes, for now.

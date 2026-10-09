@@ -197,14 +197,14 @@ export class World {
     if (!rocks.length) return;
     if (!rocks.some((r) => Inv.canAdd(sh.inv.ore, r.f.rock.ore, 1) > 0)) { this._tell(pid, shipLabel(sh) + ": ore hold full."); return; }
     let told = false;
-    sh.lasers.forEach((L, i) => { if (L.off) return; if (L.on) { L.repeat = true; return; } if (!this._canRun(sh, i, told ? null : pid)) { told = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
+    sh.lasers.forEach((L, i) => { if (L.off || L.on) return; if (!this._canRun(sh, i, told ? null : pid)) { told = true; return; } const r = rocks[i % rocks.length]; this._laserStart(sh, L, i, r.tg.id, r.f, now); });
   }
   // One laser. Active: a click toggles whether it repeats after this cycle (the cycle itself
   // runs to completion; a laser can't be retargeted mid-cycle). Idle: start on the rock.
   cmdLaser(pid, shipId, idx, on, rockId) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked) return;
     const L = sh.lasers[+idx]; if (!L || L.off) return;                 // powered off: nothing to activate
-    if (L.on) { if (!on) L.repeat = false; else if (rockId == null || rockId === L.rock) L.repeat = true; return; }   // a different rock has to wait for the cycle
+    if (L.on) { if (!on) L.repeat = false; return; }   // active: can be told to stop after this cycle; a stopping laser can't be re-armed until the cycle ends
     if (!on) return;
     const tg = this._lockedRock(sh, rockId); if (!tg) return;
     const f = this._rockOf(pid, tg.id); if (!f || !this._inLaserRange(sh, f)) return;
@@ -597,7 +597,7 @@ export class World {
       if (sh.auto.on && now >= sh.auto.next) {
         const cands = sh.targets.filter((tg) => tg.kind === "rock" && tg.locked).map((tg) => ({ tg, f: this._rockOf(sh.owner, tg.id) })).filter((x) => x.f && this._inLaserRange(sh, x.f));
         if (!cands.length) sh.auto.on = false;
-        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on) { if (this._canRun(sh, i)) this._laserStart(sh, L, i, r.tg.id, r.f, now); } else L.repeat = true; }); sh.auto.next = now + this._autoCycleMs(sh); }
+        else { const r = cands[0]; sh.lasers.forEach((L, i) => { if (L.off) return; if (!L.on && this._canRun(sh, i)) this._laserStart(sh, L, i, r.tg.id, r.f, now); }); sh.auto.next = now + this._autoCycleMs(sh); }
       }
       // mining lasers: a cycle only breaks when its rock is gone / out of range or the hold is full;
       // the ore lands when the cycle completes, then the laser repeats (unless told not to)
