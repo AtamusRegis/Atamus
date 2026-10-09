@@ -1320,8 +1320,11 @@
     const def = (A.cfg.items || {})[m.key] || {};
     w.slot.textContent = "Buy " + (m.name || def.name);
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
-    if (m.ship) { const box = el("div"); const draw = () => { box.innerHTML = ""; box.append(shipInfoTabs(m.ship, draw)); }; draw(); body.append(box); }
-    else body.append(el("div", { class: "info-desc" }, def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null, el("span", {}, def.desc || "")), row("Category", (m.path || []).slice(1).join(" · ") || "—"));
+    // icon + description; the full info opens in its own window
+    const icon = m.ship ? shipIcon(m.ship, "info-icon buy-ship-ico") : def.icon ? el("img", { class: "info-icon", src: def.icon, alt: "" }) : null;
+    const desc = m.ship ? (hullOf(m.ship).desc || "") : (def.desc || "");
+    body.append(el("div", { class: "info-desc" }, icon, el("span", {}, desc)),
+      el("div", { class: "unit-btns" }, el("button", { class: "btn-primary2 unit-btn off", onclick: () => (m.ship ? openShipInfo(m.ship) : openInfo(m.key, 1)) }, "Info")));
     body.append(el("div", { class: "buy-div" }));
     // quantity: [-] [count] [+], any whole number
     const num = el("input", { type: "number", class: "sell-num buy-num", min: 1, step: 1, value: keepQ || 1, inputmode: "numeric" });

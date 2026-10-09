@@ -498,3 +498,4 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fit-ico { width: 26px; height: 26px; image-rendering: pixelated; }
 .fit-n { margin-left: auto; color: var(--text-dim); }
 .ship-tabs .tab-row { margin-bottom: 8px; }
+.buy-ship-ico { width: 56px; height: auto; object-fit: contain; image-rendering: pixelated; }

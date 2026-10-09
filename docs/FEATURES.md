@@ -130,13 +130,13 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Collapsible nested groups, remembered: Ships › Industry › class, and Training Manuals › category.
 - **Clicking a row opens the buy window.** There's no Buy button in the list **(owner)**.
 - **Buy window (owner):**
-  - the info comes first; a ship gets the Description / Stats / Fitting tabs;
+  - the top shows the item's icon (a ship's sprite) and its description, plus an **Info** button that opens the full item info (or the ship info window with tabs) in its own window;
   - a divider separates the purchase section below it;
   - Price each; Quantity as [−][number][+], any whole number;
   - Total reads "cost / your credits";
   - Buy is greyed out when you can't afford it, and the typed quantity is kept if your credits change;
   - purchases go to Deliveries; the server accepts up to 1,000,000 per order, subject to Deliveries capacity.
-- **Ship info (owner):** both the ship info window and the buy window use three tabs:
+- **Ship info (owner):** the ship info window uses three tabs:
   - Description: image, text, class, requirements;
   - Stats: shield/hull, speed, holds, yield, targeting, lock time, length;
   - Fitting: the modules fitted (Mining Laser × n, Auto Miner × 1).
