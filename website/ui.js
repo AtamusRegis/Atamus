@@ -245,7 +245,7 @@
           if (dir.includes("n")) { hh = Math.max(MIN_H, sh - dy); t = st + (sh - hh); }
           win.style.width = w + "px"; win.style.height = hh + "px"; win.style.left = l + "px"; win.style.top = t + "px";
           // never shrink horizontally past what the content needs
-          if (content && (dir.includes("e") || dir.includes("w"))) {
+          if (content && (dir.includes("e") || dir.includes("w")) && !win.querySelector(".inv-grid")) {   // inventory grids reflow to any width
             const over = content.scrollWidth - content.clientWidth;
             if (over > 0) { w += over; if (dir.includes("w")) l -= over; win.style.width = w + "px"; win.style.left = l + "px"; }
           }

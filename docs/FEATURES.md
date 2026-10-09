@@ -134,6 +134,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Left panel:** Player, Pilot, Chat, Fleet and Market buttons. A button's name shows only on hover, or while holding on touch.
 - **Windows:**
   - dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width);
+  - resizing never squeezes a window narrower than its content. Inventory windows are the exception: their slot grid reflows to any width.
   - **tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again;
   - layout, groups, open inventories (with their active tab) and the market are remembered in localStorage `atamus.ui`.
 - **The selection drives the inventories:**
