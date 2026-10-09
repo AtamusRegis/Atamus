@@ -89,8 +89,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Warp (owner):** the Warp action on a moving ship. All the effects are blue.
   1. **Align:** the ship speeds up toward the destination at its normal acceleration.
   2. **Window:** at full speed and lined up, a glowing rectangular warp window opens ahead of it, with particles streaming through it; the ship coasts into it (0.9 s).
-  3. **Transit:** the ship becomes a glowing ball with a trail, eased in and out (it slows right down nearing the exit). The average speed is 20× the hull's max speed. The course is locked: move and dock commands are ignored until it comes out.
-  4. **Exit (owner):** it comes out of a second window at max speed, with a blue streak and particles dissipating behind it, then makes a hard stop to dead still (1.1 s, cubic ease-out) exactly on the destination. That gives it a "came out of warp" feel, and there's no overshoot. The exit window sits that stopping distance (max speed × 1.1 s ÷ 3) short of the destination.
+  3. **Transit (owner):** the ship becomes a glowing ball with a trail, moving at constant **full warp speed** (20× the hull's max speed) the whole way through the field, with no acceleration or easing inside it. The course is locked: move and dock commands are ignored until it comes out.
+  4. **Exit (owner):** it leaves the exit window still at full warp speed and brakes to dead still **outside** the window (0.9 s, cubic ease-out), exactly on the destination. That gives it a fast-drop feel. A blue streak and particles dissipate behind it. The exit window sits that stopping distance (warp speed × 0.9 s ÷ 3, about 2 km for a Prospector) short of the destination.
   - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
   - **Other players** see the entry window when it opens, and the exit window only in the last 3 s before the ship lands.
   - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.

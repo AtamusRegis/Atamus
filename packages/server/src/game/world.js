@@ -358,11 +358,11 @@ export class World {
       const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = Math.hypot(s.vx, s.vy);
       if (!s.moving || d < 1e-6) { s.wp = null; s.warp = false; return false; }
       if (v < s.speed * 0.97 || (s.vx * dx + s.vy * dy) / (v * d) < 0.995) return false;   // not at full speed / not lined up yet
-      const ux = dx / d, uy = dy / d, lead = s.speed * WARP_OPEN_MS / 1000, brake = s.speed * WARP_STOP_MS / 1000 / 3;   // the hard stop covers v·T/3 (cubic ease-out from full speed)
+      const ux = dx / d, uy = dy / d, lead = s.speed * WARP_OPEN_MS / 1000, brake = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3;   // the drop-out stop covers v·T/3 (cubic ease-out from full warp speed)
       const L = d - lead - brake;
       if (L < WARP_MIN_KM) { s.wp = null; s.warp = false; return false; }                   // too short a hop: just fly there
       s.wp = { ph: "open", at: now, dir: Math.atan2(uy, ux), fx: s.x + ux * lead, fy: s.y + uy * lead, ex: s.tx - ux * brake, ey: s.ty - uy * brake, tx: s.tx, ty: s.ty, stop: brake,
-        dur: Math.max(1500, Math.round(L / (s.speed * WARP_MULT) * 1000)) };
+        dur: Math.max(1, Math.round(L / (s.speed * WARP_MULT) * 1000)) };   // constant warp speed inside the field
       return false;
     }
     if (w.ph === "open") {
@@ -370,15 +370,15 @@ export class World {
       w.ph = "transit"; w.at = now; s.x = w.fx; s.y = w.fy;
     }
     if (w.ph === "transit") {
-      const u = Math.min(1, (now - w.at) / w.dur), k = 0.95, e = u - k * Math.sin(2 * Math.PI * u) / (2 * Math.PI);   // eases in and out: slows right down nearing the exit
+      const u = Math.min(1, (now - w.at) / w.dur), e = u;                                                   // full warp speed the whole way through, no easing (owner)
       s.x = w.fx + (w.ex - w.fx) * e; s.y = w.fy + (w.ey - w.fy) * e; s.h = w.dir; s.vx = 0; s.vy = 0;
       if (u >= 1) { w.ph = "exit"; w.at = now; s.x = w.ex; s.y = w.ey; s.warp = false; }
       return true;                                                                            // position is scripted this tick
     }
     if (w.ph === "exit") {                                                                    // out at full speed, then a hard stop to dead still on the destination
       const T = WARP_STOP_MS, t = now - w.at;
-      if (t < T && !w.free) {
-        const u = t / T, e = 1 - (1 - u) ** 3, v = s.speed * (1 - u) ** 2, cx = Math.cos(w.dir), cy = Math.sin(w.dir);
+      if (t < T && !w.free) {   // out of the field at warp speed, braking to dead still outside it
+        const u = t / T, e = 1 - (1 - u) ** 3, v = s.speed * WARP_MULT * (1 - u) ** 2, cx = Math.cos(w.dir), cy = Math.sin(w.dir);
         s.x = w.ex + cx * w.stop * e; s.y = w.ey + cy * w.stop * e; s.vx = cx * v; s.vy = cy * v; s.h = w.dir; s.moving = true;
         return true;
       }

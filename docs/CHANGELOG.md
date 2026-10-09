@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Warp field:** full warp speed all the way through the field, with no easing. Ships drop out of the exit window at warp speed and brake to a stop outside it, on the destination.
 - **Warp exit:** ships come out of the exit window at full speed and make a hard stop to dead still on the destination.
 - **Smooth camera:** ships are interpolated between server-timestamped snapshots (stamped with the simulation time, which fixed the 20 Hz / 15 Hz mismatch), so following a ship no longer jitters, even at warp.
 - **Fix:** closing the stargate window deselected your ship, hiding the HUD and fleet actions. The selected pilot's ship now always stays selected.
