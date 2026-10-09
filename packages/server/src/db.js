@@ -62,6 +62,29 @@ export async function migrate() {
   `);
 }
 
+/**
+ * One-time wipes, run at startup before the game loads. Each tag runs once ever (recorded in the meta table).
+ * A wipe keeps accounts (logins, sessions, recovery) and removes every pilot, system (ships, items, cans,
+ * licenses unlocked) and credit, so everyone starts over as a new player.
+ */
+const WIPES = ["2026-10-09 quick-training reset"];
+export async function runWipes() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+  for (const tag of WIPES) {
+    const c = await pool.connect();
+    try {
+      await c.query("BEGIN");
+      const { rowCount } = await c.query(`INSERT INTO meta (key, value) VALUES ($1, 'done') ON CONFLICT (key) DO NOTHING`, ["wipe:" + tag]);
+      if (!rowCount) { await c.query("ROLLBACK"); continue; }          // already ran
+      const p = await c.query(`DELETE FROM pilots`), s = await c.query(`DELETE FROM systems`);
+      await c.query(`UPDATE users SET credits = 0`);
+      await c.query("COMMIT");
+      console.log(`[wipe] ${tag}: ${p.rowCount} pilots, ${s.rowCount} systems removed, credits reset`);
+    } catch (e) { await c.query("ROLLBACK").catch(() => {}); throw e; }
+    finally { c.release(); }
+  }
+}
+
 /** Delete expired sessions and recovery tokens. Called periodically. */
 export async function cleanupExpired() {
   await pool.query(`DELETE FROM sessions WHERE expires_at < now()`);

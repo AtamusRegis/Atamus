@@ -8,7 +8,7 @@ export const MAX_STACKS = 100;
 export const ITEMS = {};
 for (const o of ORES) ITEMS[o.key] = { key: o.key, name: o.name, kind: "ore", desc: o.desc, rarity: o.rarity, unitM3: o.unitM3, price: o.price, color: o.color, icon: "assets/icons/ore_" + o.rock + ".png" };
 // Training manuals: one per license that isn't granted at birth. Reading one unlocks training that license.
-export const MANUAL_PRICE = (lic) => { const hrs = lic.levelTimes.reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
+export const MANUAL_PRICE = (lic) => { const hrs = (lic.designTimes || lic.levelTimes).reduce((a, b) => a + b, 0) / 3600000; return Math.round(1_000_000 + hrs * 25_000); };
 for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "manual:" + lic.key, name: lic.name + " Manual", kind: "manual", license: lic.key, desc: "Training manual. Read it to unlock the " + lic.name + " license for training. " + lic.desc, rarity: "restricted", unitM3: 0.1, price: MANUAL_PRICE(lic), color: "#c9b36a", icon: null };
 // Modules: fitted to ships at a station. size counts against the hull's disposition; draw is the capacitor
 // a running module uses; cap is capacitor a passive module adds. license: [key, level] needed to activate.

@@ -24,6 +24,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Accounts, pilots and sessions
 
+- **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**.
+
 - **Website** (atamus.io): signup, login, password recovery, and `play.html` (the hub).
 - **First pilot:** named on the website (play.html), not in the game **(owner)**.
 - **Pilots (owner):** up to 3 per account (`MAX_PILOTS`), with no duplicate names.
@@ -39,7 +41,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Licenses (skills)
 
-- **Training:** real-time (`DEV_TIME_SCALE = 1`), per pilot, through a queue you can add to, remove from, reorder, pause and cancel.
+- **Training:** per pilot, through a queue you can add to, remove from, reorder, pause and cancel.
+  - **For now (owner): level N of every license takes N minutes** (`QUICK_TRAINING` in licenses.js). The design times are kept in `designTimes`, and manual prices still come from them.
 - **Starting licenses** (level 1 for every pilot): Mining Frigate, Mining Laser Yield, Automated Mining.
 - **Free vs. manual:** free licenses can be trained straight away. Every other license needs its **training manual** read first; manuals are bought from the market and are a **consumable**: they can't be sold **(owner)**.
 - **One bonus per license (owner):**

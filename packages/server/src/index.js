@@ -2,7 +2,7 @@ import http from "node:http";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
-import { migrate, cleanupExpired } from "./db.js";
+import { migrate, cleanupExpired, runWipes } from "./db.js";
 import { auth } from "./auth.js";
 import { game } from "./gamehttp.js";
 import { attachGameServer } from "./game/net.js";
@@ -41,6 +41,7 @@ app.use((err, _req, res, _next) => {
 
 async function main() {
   await migrate();
+  await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();
 

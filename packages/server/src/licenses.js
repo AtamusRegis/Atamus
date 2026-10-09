@@ -7,6 +7,9 @@
 const HOUR = 3600 * 1000;
 const DEV_TIME_SCALE = 1; // 1 = real design times. (1/3600 trains a design-hour per second for testing.)
 const hrs = (...perLevel) => perLevel.map((h) => Math.round(h * HOUR * DEV_TIME_SCALE));
+// For now (owner): every license trains fast: level N takes N minutes. The design times above are kept in
+// designTimes (manual prices still come from them); set QUICK_TRAINING = false to go back to them.
+const QUICK_TRAINING = true;
 
 export const CATEGORIES = [
   { key: "industry", name: "Industry" },
@@ -117,6 +120,8 @@ export const LICENSES = [
     requirements: reqLic(["warden_cruiser", 5]), levelTimes: hrs(25, 55, 100, 150, 200, 45, 75, 95),
   },
 ];
+
+for (const l of LICENSES) { l.designTimes = l.levelTimes; if (QUICK_TRAINING) l.levelTimes = l.levelTimes.map((_, i) => (i + 1) * 60_000); }
 
 // Hull licences scale how well you fly the hull: Lvl 1-5 add 20% each (Lvl 5 = 100% of the
 // hull's stats), Lvl 6-8 add 5% each above that (up to 115%).
