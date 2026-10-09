@@ -957,7 +957,7 @@
       const items = A.cfg.items || {}, fit = ((A.inv.ships || {})[sh.id] || {}).fit || [];
       const dp = Math.min(100, fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0) / (t.disposition || 1) * 100), cp = sh.cap.max ? Math.min(100, sh.cap.used / sh.cap.max * 100) : 0;
       // power crescent: scaled to everything fitted running at once, with a tick at the capacitor's capacity.
-      // Within capacity it reads blue; past the tick it runs hot: yellow, warming to red as heat builds; red and pulsing = modules taking damage.
+      // Capacitor is yellow (shields are blue); past the tick it runs hot: yellow → orange → red as heat builds; deep red and pulsing = modules taking damage.
       const draw = fit.reduce((a, k) => a + ((items[k] || {}).draw || 0), 0), scale = Math.max(sh.cap.max, draw, 1);
       const pw = Math.min(100, sh.cap.used / scale * 100), tickF = Math.min(1, sh.cap.max / scale), over = sh.cap.used > sh.cap.max, heat = sh.heat || 0;
       H.gDisp.style.strokeDasharray = dp + " 100"; H.gCap.style.strokeDasharray = pw + " 100";

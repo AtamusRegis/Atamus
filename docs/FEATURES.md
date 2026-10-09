@@ -135,7 +135,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - At 0 integrity a module **burns out**: it switches off and can't be switched on until the ship docks. Docking repairs every module and clears heat.
   - Overloaded modules simply let you run more; they don't perform better **(owner)**.
 - **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity; if everything fitted fits within the capacity, the tick sits at the crescent's top end, because that fit can't run hot.
-  - Within capacity the power crescent is blue. Past the tick it turns yellow, warming to red with heat; deep red and pulsing means overloaded modules are taking damage.
+  - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
   - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window, which shows hardpoints, disposition, capacitor in use (the capacity number turns green when batteries or Capacitor Management add to it, with green +rows for each addition), heat, and each module's integrity, with running modules highlighted.
 
 ## Inventories and items
