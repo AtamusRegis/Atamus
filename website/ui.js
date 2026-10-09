@@ -615,7 +615,7 @@
     return e;
   }
   // ---- fitting window (owner): EVE-like. Tabs: Fitting (ship image, current numbers, and the hardpoint slots below,
-  // 8 to a row, centered), Fitting stats (the module table and what the fit does), Stats, Description, Requirements ----
+  // 8 to a row, centered), Fitting stats (what the fit does), Ship stats, Description, Requirements ----
   let fitShip = null, fitTab = "fit";
   function openFitting(shipId) {
     if (!wins.fitting) createWindow("fitting", { left: Math.round(innerWidth / 2 - 220), top: 100, width: 440, minW: 340, minH: 220, render: renderFitting, groupable: false });
@@ -629,7 +629,7 @@
     if (sig === w.sig && body.childElementCount) return; w.sig = sig;
     body.innerHTML = ""; w.slot.textContent = "Fitting · " + shipName(sh);
     const rerender = () => { w.sig = null; renderFitting(body); };
-    const tabs = [["fit", "Fitting"], ["mods", "Fitting stats"], ["stats", "Stats"], ["desc", "Description"], ["req", "Requirements"]];
+    const tabs = [["fit", "Fitting"], ["mods", "Fitting stats"], ["stats", "Ship stats"], ["desc", "Description"], ["req", "Requirements"]];
     body.append(el("div", { class: "tab-row fit-tabs" }, tabs.map(([k, n]) => el("button", { class: "tab" + (fitTab === k ? " active" : ""), onclick: () => { fitTab = k; rerender(); } }, n))));
     const used = fit.reduce((a, k) => a + ((items[k] || {}).size || 0), 0);
     const key = (cls) => el("span", { class: "fit-key " + cls });
@@ -676,31 +676,12 @@
       });
       body.append(grid);
     } else if (fitTab === "mods") {
-      // what the fit does, then the modules as a table: Module | Disposition | Capacitor
+      // what the fit does (owner: no module table here)
       const lasers = fit.filter((k) => (items[k] || {}).role === "laser").length, dur = ((sh.lasers || [])[0] || {}).dur || A.cfg.cycleMs || 15000;
       if (lasers) body.append(row("Mining yield", ((sh.yieldM3s || 0) * dur / 1000 * lasers).toFixed(1) + " m³ / cycle (" + lasers + " × " + ((sh.yieldM3s || 0) * dur / 1000).toFixed(1) + ")"),
         row("Laser range", (sh.laserRange || 0).toFixed(2) + " km"), row("Laser cycle", (dur / 1000).toFixed(1) + " s"));
       if (sh.auto && sh.auto.fitted) body.append(row("Auto miner cycle", fmtClock(sh.auto.cyc || 180000)));
       body.append(row("Capacitor need", fit.reduce((a, k) => a + ((items[k] || {}).draw || 0), 0) + " / " + capMax));
-      const list = el("div", { class: "fit-list" });
-      list.append(el("div", { class: "fit-row fit-head" }, el("span", {}, "Module"), el("span", {}, "Disposition"), el("span", {}, "Capacitor")));
-      fit.forEach((k, i) => {
-        const m = items[k] || { name: k }, hp = (sh.fitHp || [])[i];
-        const ico = m.icon ? el("img", { class: "fit-ico", src: m.icon, alt: "", draggable: "false" }) : el("span", { class: "fit-ico hb-abbr" }, m.name.split(" ").map((x) => x[0]).join(""));
-        const state = hp == null || hp >= 100 ? null : el("span", { class: "fit-hp" }, hp < 0 ? "burnt out" : hp + "%");
-        const r = el("div", { class: "fit-row" }, el("span", { class: "fit-mod" }, ico, el("span", {}, m.name), state),
-          el("span", { class: "fit-col" }, key("disp"), String(m.size || 0)),
-          el("span", { class: "fit-col" + (m.cap ? " cap-boost" : "") }, m.draw ? key("cap") : null, m.draw ? String(m.draw) : "+" + (m.cap || 0)));
-        if (hp < 0) r.classList.add("burnt");
-        if (m.role === "laser") { const li = fit.slice(0, i).filter((x) => (items[x] || {}).role === "laser").length; if ((sh.lasers[li] || {}).on) r.classList.add("running"); }
-        if (m.role === "auto" && sh.auto && sh.auto.on) r.classList.add("running");
-        const menu = (x, y) => showCtxMenu(x, y, [...(sh.docked ? [["Unfit", () => A.send({ t: "unfit", ship: sh.id, idx: i })]] : []), ["Info", () => openInfo(k, 1)]]);
-        r.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
-        holdToOpen(r, () => { const b = r.getBoundingClientRect(); menu(b.left + b.width / 2, b.bottom); });
-        list.append(r);
-      });
-      if (!fit.length) list.append(el("div", { class: "muted fit-empty" }, "No modules fitted."));
-      body.append(list);
     } else body.append(...shipSection(sh.type, fitTab, rerender));
   }
   window.Atamus.bus.addEventListener("snap", () => { const w = wins.fitting; if (w && isOpen(w)) renderFitting(w.body); });

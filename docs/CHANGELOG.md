@@ -4,6 +4,12 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Acceleration gates** replace the asteroid beacons: the point faces the instance they lead to, they glow when linked, and light runs along the spine. Linked instances show as faint empty hexes until you go through.
+- **Stargate:** blinking lights, drifting light motes in the ring when powered, and a turning swirl when connected.
+- **Station:** the blinkers are slow and occasional, and the running lights are much slower.
+- **Warp:** the exit window only appears in the last second before the ship comes out.
+- **Fitting window:** Fitting stats drops the module table; Stats is renamed Ship stats.
+
 - **Asteroid instances (major):**
   - belts are gone; mining moves to small shared instances reached through 2–3 asteroid beacons in your system, which glow when linked;
   - Jump takes your selected ships in range;

@@ -5,11 +5,12 @@ This is a living spec of the game. Read it before every patch, and update it in 
 ## World and setting
 
 - **Region:** the Expanse.
-- **Station lights:** a soft glow behind the station (blue for yours, red for others'). Red and white beacons on the masts and arm tips give a short double flash every 1.6 s. Running lights chase along both edges of the docking bay toward its back wall. The lights show once the station is at least 70 px wide on screen.
+- **Station lights:** a soft glow behind the station (blue for yours, red for others'). Red and white beacons on the masts and arm tips give a short double flash now and then (every ~6 s, staggered). Running lights chase slowly (1.4 steps a second) along both edges of the docking bay toward its back wall **(owner: slow and occasional)**. The lights show once the station is at least 70 px wide on screen.
 - **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, 2–3 asteroid beacons and scattered rocks. There are no belts any more **(owner)**.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
 - **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
   - **Fuel (owner, for now):** a gate that isn't active refuels by itself, from 0 to the 30-minute maximum in 10 minutes (also while you're offline).
+  - **Looks (owner):** slow occasional blinking lights. Powered on, its 8 emitters glow and motes of light drift in the ring. Connected to another system, the ring becomes a turning blue swirl, with motes falling inward.
   - **Clicking a gate** opens the Stargate window (fuel, status, Turn On/Off) like the station opens its hangar: the selection doesn't change. Closing the window drops the gate's selection box.
 - **Factions** (`game/factions.js`, not used in gameplay yet):
 
@@ -92,7 +93,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   3. **Transit (owner):** the ship becomes a glowing ball with a trail, moving at constant **full warp speed** (20× the hull's max speed) the whole way through the field, with no acceleration or easing inside it. The course is locked: move and dock commands are ignored until it comes out.
   4. **Exit (owner):** it leaves the exit window still at full warp speed and brakes to dead still **outside** the window (0.9 s, cubic ease-out), exactly on the destination. That gives it a fast-drop feel. A blue streak and particles dissipate behind it. The exit window sits that stopping distance (warp speed × 0.9 s ÷ 3, about 2 km for a Prospector) short of the destination.
   - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
-  - **Other players** see the entry window when it opens, and the exit window only in the last 3 s before the ship lands.
+  - **The exit window** appears for everyone, the owner included, only in the last second before the ship comes out **(owner)**. Other players see the entry window when it opens.
   - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
   - A server restart drops any warp in progress; the ship keeps flying to its destination.
 - **Smooth motion:** snapshots carry the server's simulation time (`st`), and ships are drawn 110 ms in the past, interpolated between the two snapshots around that moment (with brief extrapolation if one is late). The camera follows that smooth position, so it doesn't jitter, even at warp.
@@ -167,8 +168,8 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Fitting is docked only.** Fit by dragging a module from a station inventory onto the Fitting window, the hotbar, or a specific empty slot. Unfit by dragging a slot onto a hangar, or by right-clicking (or holding) it → Unfit (it goes to Hangar 1). Info is in the same menu.
 - **Fitting window (owner):** EVE-like, a modified info page. Open it from the ship's right-click menu → Fitting, or by clicking the ring. Tabs:
   - **Fitting:** the ship's image beside its current numbers (Hardpoints, Disposition, Capacitor with the green hover breakdown, Heat, Shield / Hull), with the hardpoint slots below, exactly as on the hotbar (same slots, keys, colors, hover stats, drag to rearrange). The slots are centered, 8 to a row, wrapping downward on bigger hulls;
-  - **Fitting stats:** what the fit does (Mining yield per cycle, laser range and cycle, auto miner cycle, capacitor need), then the module table (Module | Disposition | Capacitor) with integrity and running highlights;
-  - **Stats**, **Description** (with the Hull bonus), **Requirements**.
+  - **Fitting stats:** what the fit does (Mining yield per cycle, laser range and cycle, auto miner cycle, capacitor need). No module table **(owner)**;
+  - **Ship stats**, **Description** (with the Hull bonus), **Requirements**.
 - **New ships come empty.** A new player's first Prospector comes with 2 mining lasers. Ships from before fitting existed kept 2 lasers plus an auto miner.
 - **Running hot:** the capacitor never refuses; anything can be switched on.
   - Power past capacity builds **heat**: 6%/s at 100% over, scaled by how far over. Within capacity, heat cools at 5%/s.
@@ -185,7 +186,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - The field rolls a primary ore by rarity (like the old belts), with 70–120 rocks and 250k–600k m³ in all.
   - Rocks lose their ore passively: every rock loses its starting ore over 24 hours, so even an untouched instance ends within a day.
   - An instance stays alive until its rocks are gone (mined or decayed).
-- **Asteroid beacons:** each player has 2 or 3 at fixed spots in their home system. A beacon links to an instance with room (chosen at random, no matchmaking with friends) and **glows blue** with a turning ring while linked; unlinked it's grey.
+- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). The pointy end faces the instance it leads to; unlinked, it points outward. An instance's own gate faces home. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
   - A player's beacons spread over different instances when they can.
   - A beacon linked to an instance that fills up (without you in it) looks for another.
 - **Jumping:** a ship within 2.5 km of a linked beacon gets a **Jump** action. It takes that ship and every other selected ship in range through, arriving spread out beside the instance's beacon.
@@ -194,7 +195,10 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - There's no docking inside an instance.
 - **Cap: 5 players** (not pilots or ships) per instance. A player already inside can always bring more ships. Squatting is allowed **(owner)**: idle players, even online ones, are never kicked.
 - **Sharing:** players in the same instance see each other's ships, share the rocks (mining the same rock is fine) and can bump each other (ship collisions stay on). There are no combat modules yet, and boosts will be decided when a boost module exists.
-- **On the map:** an instance you have ships in is drawn as a small hex just outside your home system, off the beacon you came through, with a dashed blue line from that beacon to the instance's beacon. Move orders go to the selected ships in the system you clicked.
+- **On the map:** each linked instance is drawn as a small hex just outside your home system, off its gate, with a dashed blue line from your gate to the instance's gate.
+  - **Until you go through (owner),** the hex is faint and empty: no rocks, ships, players or cans are sent. The server only shows that the connection is there.
+  - Once you have a ship inside, everything in it shows.
+  - Move orders go to the selected ships in the system you clicked.
 - **Supply (owner):** the server keeps twice the room the loaded players need (instances = 2 × players ÷ 5, at least 2), and always at least 2 instances with space. It adds one every 5 s until that's true. Extra instances just decay away.
 - **Leaving:** when an instance closes, its ships are returned beside their beacons at home, never destroyed (unlike stargates), and cans in it are lost.
 - **Restarts:** instances are saved in their own `instances` table and kept across restarts. Beacons keep their links, and ships stay inside.

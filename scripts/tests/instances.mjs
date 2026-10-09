@@ -86,6 +86,7 @@ c.send({ t: "dock", ship: SHIP, dock: false }); await sleep(500);
 c.dev({ cmd: "inst" }); await sleep(800);
 const bc = (c.last.snap.beacons || []).find((b) => !b.back);
 t.ok(bc && bc.linked, "your beacons show as linked", c.last.snap.beacons);
+t.ok(c.last.snap.systems.some((x) => x.id === bc.to && x.peek) && !(c.last.belts?.belts || c.last.hello.belts).some((f) => f.sys === bc.to), "a linked instance shows only as its hex until you go through");
 c.dev({ cmd: "move", ship: SHIP, x: bc.x + 0.6, y: bc.y }); await sleep(600);
 t.ok(c.ship().jump === bc.id, "a ship by a linked beacon can jump", c.ship().jump);
 c.send({ t: "jump", beacon: bc.id, ships: [SHIP] }); await sleep(800);

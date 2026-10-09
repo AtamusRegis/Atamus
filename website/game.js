@@ -422,7 +422,7 @@
   function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
   function hexCorners(R0) { const R = R0 || cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
   function drawCell(cx, cy, round, stroke, fill, R) { const pts = hexCorners(R); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
-  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.inst) return { line: "rgba(110,205,255,0.5)", fill: "rgba(10,30,50,0.25)" }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
+  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.inst) return s.peek ? { line: "rgba(110,205,255,0.28)", fill: "rgba(10,30,50,0.12)" } : { line: "rgba(110,205,255,0.5)", fill: "rgba(10,30,50,0.25)" }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
 
   function drawGate(g, pl) {
     const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly);
@@ -436,6 +436,40 @@
     if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
       ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
     if (window.Atamus.hud && window.Atamus.hud.gate === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
+    if (gateImg.naturalWidth && wPx >= 40) drawGateFx(sx, sy, wPx, g);
+  }
+  // stargate life (owner): slow blinking lights; powered = drifting motes of light in the ring; connected = a turning swirl
+  const GATE_BLINK = [[378, 20, "r", 0], [757, 36, "w", 0.4], [10, 403, "r", 0.7], [865, 465, "w", 0.2], [127, 785, "r", 0.55], [380, 775, "w", 0.85]];
+  const GATE_NODES = [[350, 187], [540, 187], [215, 322], [675, 322], [215, 512], [675, 512], [350, 648], [540, 648]];
+  function drawGateFx(sx, sy, wPx, g) {
+    const t = performance.now() / 1000, k = wPx / gateImg.naturalWidth, hPx = wPx * gateImg.naturalHeight / gateImg.naturalWidth;
+    const ox = sx - wPx / 2, oy = sy - hPx / 2, cx = ox + 445 * k, cy = oy + 417 * k, R = 243 * k;
+    const glow = (x, y, rgb, a, rad) => { const gr = ctx.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, "rgba(" + rgb + "," + a + ")"); gr.addColorStop(1, "rgba(" + rgb + ",0)"); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); };
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const [ix, iy, c, ph] of GATE_BLINK) { const f = (t / 5.5 + ph) % 1; if (f < 0.025 || (f > 0.06 && f < 0.085)) glow(ox + ix * k, oy + iy * k, c === "r" ? "255,70,60" : "235,245,255", 1, Math.max(3, 14 * k)); }
+    const powered = g.state === "active", linked = powered && !!g.connToSys;
+    if (powered) {
+      for (const [ix, iy] of GATE_NODES) glow(ox + ix * k, oy + iy * k, "120,200,255", 0.7 + 0.3 * Math.sin(t * 2 + ix), Math.max(3, 16 * k));
+      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+      glow(cx, cy, linked ? "90,170,255" : "80,150,255", linked ? 0.35 : 0.12, R);
+      if (linked) {                                                     // connected: spiral arms turning into the middle
+        ctx.lineCap = "round";
+        for (let arm = 0; arm < 5; arm++) {
+          ctx.beginPath();
+          for (let q = 0; q <= 40; q++) { const u = q / 40, r = R * (1 - u * 0.95), a = arm * Math.PI * 2 / 5 + u * 3.2 - t * 1.4; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; if (q) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+          ctx.strokeStyle = "rgba(130,200,255,0.22)"; ctx.lineWidth = R * 0.12; ctx.stroke(); ctx.strokeStyle = "rgba(210,240,255,0.35)"; ctx.lineWidth = R * 0.025; ctx.stroke();
+        }
+        glow(cx, cy, "235,248,255", 0.6, R * 0.3);
+      }
+      for (let i = 0; i < 46; i++) {                                    // motes: drifting round (and, connected, falling inward)
+        const h1 = Math.sin(i * 91.7) * 43758.5453 % 1, h2 = Math.abs(Math.sin(i * 12.9) * 9631.1 % 1);
+        const r = linked ? R * (1 - ((t * 0.12 + Math.abs(h1)) % 1)) : R * (0.25 + 0.7 * Math.abs(h2)), a = Math.abs(h1) * 6.283 + t * (linked ? 1.4 : 0.15) * (0.6 + Math.abs(h2));
+        ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(t * 1.3 + i)); ctx.fillStyle = "rgba(170,225,255,1)"; const d = Math.max(1.2, 3 * k * 3);
+        ctx.fillRect(cx + Math.cos(a) * r - d / 2, cy + Math.sin(a) * r - d / 2, d, d);
+      }
+      ctx.restore();
+    }
+    ctx.restore();
   }
 
   function drawBackground() {   // static: redrawn on resize / image load only
@@ -587,26 +621,38 @@
       }
     }
   }
-  // asteroid beacons: a small ringed marker; linked ones glow blue and pulse (a ship in range can jump through)
+  // asteroid beacons are acceleration gates (owner): the pointy end faces the instance they lead to (the instance's
+  // own gate faces home). Linked gates glow blue; ships in the dashed ring can jump.
+  const accelImg = new Image(); accelImg.src = "assets/ships/accel_gate.webp";
+  const ACCEL_LEN_KM = 0.658;
   function drawBeacons(place) {
-    const t = performance.now() / 1000;
+    const t = performance.now() / 1000, homePl = place.get(mySys());
     for (const b of snap.beacons || []) {
       const pl = place.get(b.sys); if (!pl) continue;
-      const x = gx2s(pl.gx + b.x), y = gy2s(pl.gy + b.y), s = Math.max(6, Math.min(26, 0.12 * scale())), rr = (cfg.beaconRange || 2.5) * scale();
+      const wx = pl.gx + b.x, wy = pl.gy + b.y, x = gx2s(wx), y = gy2s(wy);
+      const to = b.back ? homePl : b.to ? place.get(b.to) : null;
+      const ang = to ? Math.atan2(to.gy - wy, to.gx - wx) : Math.atan2(wy - pl.gy, wx - pl.gx);   // world angle (unlinked: pointing outward)
+      const wPx = Math.max(16, ACCEL_LEN_KM * scale()), rr = (cfg.beaconRange || 2.5) * scale();
       ctx.save();
       if (rr > 10) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.setLineDash([4, 6]); ctx.lineWidth = 1; ctx.strokeStyle = b.linked ? "rgba(110,190,255,0.4)" : "rgba(170,180,195,0.2)"; ctx.stroke(); ctx.setLineDash([]); }
       if (b.linked) {
-        const pulse = 0.65 + 0.35 * Math.sin(t * 2.4), R = s * 3.2, g = ctx.createRadialGradient(x, y, 0, x, y, R);
-        g.addColorStop(0, "rgba(140,210,255," + 0.55 * pulse + ")"); g.addColorStop(1, "rgba(60,140,255,0)");
+        const pulse = 0.6 + 0.4 * Math.sin(t * 1.6), R = wPx * 0.9, g = ctx.createRadialGradient(x, y, 0, x, y, R);
+        g.addColorStop(0, "rgba(140,210,255," + 0.45 * pulse + ")"); g.addColorStop(1, "rgba(60,140,255,0)");
         ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill(); ctx.globalCompositeOperation = "source-over";
-        ctx.strokeStyle = "rgba(150,215,255,0.9)"; ctx.lineWidth = 1.5;
-        for (let k = 0; k < 3; k++) { const a0 = t * 0.9 + k * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(x, y, s * 1.5, a0, a0 + 1.2); ctx.stroke(); }   // turning ring
-      } else { ctx.strokeStyle = "rgba(170,180,195,0.55)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, s * 1.5, 0, Math.PI * 2); ctx.stroke(); }
-      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.7, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.7, y); ctx.closePath();
-      ctx.fillStyle = b.linked ? "rgba(200,235,255,0.95)" : "rgba(120,130,145,0.8)"; ctx.fill();
+      }
+      if (accelImg.naturalWidth) {
+        const hPx = wPx * accelImg.naturalHeight / accelImg.naturalWidth;
+        ctx.translate(x, y); ctx.rotate(-ang); ctx.imageSmoothingEnabled = wPx > 300; if (!b.linked) ctx.globalAlpha = 0.75;
+        ctx.drawImage(accelImg, -wPx / 2, -hPx / 2, wPx, hPx);
+        if (b.linked && wPx > 60) {                                   // the field: light streaming along the spine toward the pointy end
+          const k = wPx / accelImg.naturalWidth, sy = (234 - accelImg.naturalHeight / 2) * k; ctx.globalCompositeOperation = "lighter";
+          for (let i = 0; i < 6; i++) { const f = (t * 0.6 + i / 6) % 1, px = (-0.47 + f * 0.95) * wPx; ctx.globalAlpha = Math.sin(f * Math.PI) * 0.8; ctx.fillStyle = "rgba(150,215,255,1)"; ctx.fillRect(px - 3 * k * 4, sy - 1.5, 6 * k * 4, 3); }
+        }
+      }
       ctx.restore();
     }
   }
+
 
   // jettison cans: a small crate glyph (own cans blue, others amber), always at least a few pixels
   function canScreen(c) { const pl = curPlace.get(c.sys); return pl ? { x: gx2s(pl.gx + c.x), y: gy2s(pl.gy + c.y) } : null; }
@@ -669,11 +715,11 @@
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
     };
     ctx.save(); ctx.globalCompositeOperation = "lighter";
-    for (const [ix, iy, c, ph] of BEACONS) {                                       // short double-flash every 1.6 s
-      const f = (t / 1.6 + ph) % 1, on = f < 0.06 || (f > 0.12 && f < 0.18);
+    for (const [ix, iy, c, ph] of BEACONS) {                                       // a short double flash now and then (every ~6 s, staggered)
+      const f = (t / 6 + ph) % 1, on = f < 0.02 || (f > 0.045 && f < 0.065);
       dot(ix, iy, c === "r" ? "255,70,60" : "235,245,255", on ? 1 : 0.12, r * 1.3);
     }
-    const run = mine ? "120,200,255" : "255,150,90", N = 14, step = Math.floor(t * 7);   // running lights: a chase into the bay, every third light lit
+    const run = mine ? "120,200,255" : "255,150,90", N = 14, step = Math.floor(t * 1.4);   // running lights: a chase into the bay, every third light lit
     for (let i = 0; i < N; i++) {
       const ix = 290 + i * (740 / (N - 1)), lit = ((i - step) % 3 + 3) % 3 === 0, a = lit ? 0.95 : 0.15;
       dot(ix, 398, run, a, r); dot(ix, 709, run, a, r);
@@ -712,7 +758,8 @@
     }
     const entryA = w.ph === "open" ? 1 : w.ph === "transit" ? 1 - el / 1200 : 0;
     warpWindow(sh.id + ":entry", fx, fy, w.dir, halfW, entryA, t);
-    if (hasExit) warpWindow(sh.id + ":exit", ex, ey, w.dir, halfW, w.ph === "exit" ? 1 - el / 2000 : 1, t);
+    const exitShown = w.ph === "exit" || (w.ph === "transit" && w.dur - el <= (cfg.warpExitShowMs || 1000));   // the exit window opens only in the last second (owner)
+    if (hasExit && exitShown) warpWindow(sh.id + ":exit", ex, ey, w.dir, halfW, w.ph === "exit" ? 1 - el / 2000 : 1, t);
     if (w.ph === "transit") {                                                 // the ship is a glowing ball between the windows
       const R = Math.max(4, halfW * 0.45), back = Math.min(Math.hypot(sx - fx, sy - fy), R * 9), ux = Math.cos(w.dir), uy = -Math.sin(w.dir);
       ctx.save();

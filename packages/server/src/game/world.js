@@ -886,7 +886,9 @@ export class World {
       systems.push({ id: sysId, mine: sysId === homeSys(p.id), fromGateLocal, partnerGateId });
     }
     // asteroid beacons: yours at home (glowing when linked to an instance with room), and each instance's way home
-    const beacons = p.beacons.map((b) => ({ id: b.id, sys: homeSys(p.id), x: b.x, y: b.y, linked: !!(b.inst && this.instances.has(b.inst)) }));
+    const beacons = p.beacons.map((b) => { const linked = !!(b.inst && this.instances.has(b.inst)); return { id: b.id, sys: homeSys(p.id), x: b.x, y: b.y, linked, to: linked ? b.inst : null }; });
+    // a linked instance you haven't gone into shows only as its empty hex off the beacon (owner): no rocks, ships or players until you jump
+    for (const b of beacons) if (b.to && !vis.has(b.to) && !systems.some((x) => x.id === b.to)) systems.push({ id: b.to, mine: false, inst: true, peek: true, fromGateLocal: { x: b.x, y: b.y } });
     for (const sysId of vis) if (isInst(sysId)) beacons.push({ id: sysId + ":ret", sys: sysId, x: INST_RETURN_POS.x, y: INST_RETURN_POS.y, linked: true, back: true });
 
     const gates = [];
