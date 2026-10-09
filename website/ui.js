@@ -1607,7 +1607,10 @@
     wins.fleet.acts = el("div", { class: "fleet-acts", hidden: "" }); wins.fleet.win.append(wins.fleet.acts);
     dragMove(wins.fleet.win, wins.fleet.body, () => { persistWin("fleet"); wins.fleet.fsig = null; renderFleet(wins.fleet.body); });   // drag the bar by its background
     addEventListener("resize", () => { if (isOpen(wins.fleet)) { wins.fleet.fsig = null; renderFleet(wins.fleet.body); } });
-    wins.fleet.win.addEventListener("pointerup", () => { actSig = ""; renderShipActions(); });
+    // after the bar is dragged, re-anchor its ship actions; a plain click must not rebuild them (the click would land on nothing)
+    let fleetAt = "";
+    wins.fleet.win.addEventListener("pointerdown", () => { fleetAt = wins.fleet.win.style.left + "," + wins.fleet.win.style.top; });
+    wins.fleet.win.addEventListener("pointerup", () => { if (wins.fleet.win.style.left + "," + wins.fleet.win.style.top === fleetAt) return; setTimeout(() => { actSig = ""; renderShipActions(); }, 0); });
     createWindow("market", { left: 300, top: 120, width: 380, minW: 300, minH: 200, render: renderMarket, label: "Market" });
     createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
     wins.unit.win.querySelector(".win-close").addEventListener("click", () => window.Atamus.deselectUnit());

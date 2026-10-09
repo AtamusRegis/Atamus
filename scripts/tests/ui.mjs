@@ -55,6 +55,13 @@ await run(page, `closeAll(); A.selectShip(ID); await s(300); document.querySelec
 await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.inv && window.Atamus.inv.hangars); await page.waitForTimeout(1500);
 r = await run(page, `return { sel: A.selectedUnit, w: wins() };`);
 t.ok(r.sel && r.sel.id === SHIP && r.w.includes("inv:" + SHIP), "reload restores the selected ship and its inventory", r);
+
+// fleet bar ship actions answer a real mouse click (a pointerup rebuild once swallowed every click)
+await run(page, `closeAll(); const fw = document.querySelector('.win[data-id="fleet"]'); if (!fw || fw.hidden) { document.querySelector('.wbtn[data-id="fleet"]').click(); await s(400); } A.selectShip(ID); await s(500);`);
+const fb = await page.locator('.fleet-acts .hud-act[title="Inventory"]').boundingBox();
+if (fb) { await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2); await page.waitForTimeout(400); }
+r = await run(page, `return wins();`);
+t.ok(fb && r.includes("inv:" + SHIP), "fleet bar Inventory button works with a mouse click", r);
 await page.close();
 
 // phone: every window fits on screen

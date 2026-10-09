@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Fix:** the fleet bar's ship action buttons ignored mouse clicks, because a rebuild on pointerup swallowed the click. They now rebuild only after the bar is actually dragged.
 - **Website:** a new front page (description, Play now and a major-updates list), restyled to match the game. Login moved to login.html, and signed-in visitors go straight to "Welcome back".
 - **Quick training:** level N of every license takes N minutes, for now.
 - **Player reset:** accounts were kept. Every pilot, ship, item, can and credit was wiped, so everyone starts as a new player.
