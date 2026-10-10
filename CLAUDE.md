@@ -6,13 +6,14 @@ Atamus is a browser-based, EVE-inspired multiplayer mining semi-RTS. Claude writ
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
+3. Read `docs/DESIGN.md`: the agreed redesign (zones, arcs, base surface, and a world built for 1,000 concurrent players) that the next phases build toward.
 
 **In the same commit as any change to behavior:**
 
 - Update `docs/FEATURES.md`. Add new rules, edit changed ones, and move anything removed to "Rejected / removed".
 - Add a dated entry to `docs/CHANGELOG.md`.
 
-These docs are the project's memory between sessions. If they disagree with the code, the code wins: fix the doc.
+These docs are the project's memory between sessions; DESIGN.md is the plan, FEATURES.md is what's live. If they disagree with the code, the code wins: fix the doc.
 
 ## Owner's standing rules
 
