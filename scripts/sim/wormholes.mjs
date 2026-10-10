@@ -30,7 +30,7 @@ const BASE = {
   follow: 1,            // minutes the friend window stays open (owner) (closing holes, holes into instanced empties)
   holeLife: [30, 90],   // minutes a hole lasts (without sizes)
   sizes: true,          // owner: holes come in sizes XS–XL; each takes 5 more crossings and lives 30 min longer
-  sizeW: [30, 30, 20, 12, 8], // how often each size spawns (XS, S, M, L, XL): a guess
+  sizeW: [30, 30, 20, 12, 8], // how often each size spawns (XS, S, M, L, XL): picked by sim comparison
   holesPerSystem: 2,    // an occupied nomad system keeps at least this many holes
   maxHoles: 4,          // and at most this many
   goNomad: 0.006,        // per minute, chance a group in the Expanse heads out (if a hole exists)
