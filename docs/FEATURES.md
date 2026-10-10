@@ -71,6 +71,7 @@ Phase 2 of DESIGN.md, first version: production. Recipes, costs and times are fi
 - **Arks** are hulls now (Mini 559 m, Small 1,532 m, Ark 5,646 m; huge holds; no license needed; not on the market). Carrying ships and pilots comes later.
 - **Offline (owner):** the base is the only thing that runs while you're away: it catches up when you log in (60 s steps, up to 31 days). Ships finished meanwhile wait docked at the home planet.
 - Iums and components are items (not sellable).
+- **Art:** shipyards use the owner's dock art. The Home Base, Storage Unit, Refinery and Factory have no art yet: they're drawn as dark steel frames in the docks' style (inset bay, corner bolts, a hazard strip in the building's colour) with an icon and their name.
 
 ## Accounts, pilots and sessions
 

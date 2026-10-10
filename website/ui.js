@@ -1888,11 +1888,16 @@
         }
         if (cranes.naturalWidth) g.drawImage(cranes, x, y, w, h);
       } else {
-        const col = { home: "#2b4a6b", storage: "#3b3f52", refinery: "#5a3e2b", factory: "#2f4f3a" }[q.type] || "#333";
-        g.fillStyle = col; g.fillRect(x + 1, y + 1, w - 2, h - 2); g.strokeStyle = "rgba(255,255,255,0.18)"; g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+        // (no art for these yet) a frame in the docks' style: dark steel plate, an inset bay, corner bolts, a hazard strip
+        const k = z / 64, r = 10 * k, accent = { home: "#c9a33a", storage: "#8a96a8", refinery: "#c8742e", factory: "#5fae6a" }[q.type] || "#8a96a8";
+        const rr = (x0, y0, ww, hh, rad) => { g.beginPath(); g.moveTo(x0 + rad, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + hh, rad); g.arcTo(x0 + ww, y0 + hh, x0, y0 + hh, rad); g.arcTo(x0, y0 + hh, x0, y0, rad); g.arcTo(x0, y0, x0 + ww, y0, rad); g.closePath(); };
+        rr(x + 2 * k, y + 2 * k, w - 4 * k, h - 4 * k, r); g.fillStyle = "#3a3e45"; g.fill(); g.lineWidth = Math.max(1, 3 * k); g.strokeStyle = "#1c1f24"; g.stroke();
+        rr(x + 12 * k, y + 12 * k, w - 24 * k, h - 24 * k, r * 0.6); g.fillStyle = "#24282e"; g.fill(); g.lineWidth = Math.max(1, 2 * k); g.strokeStyle = "#4b5059"; g.stroke();
+        g.fillStyle = "#5b616b"; for (const [bx, by] of [[7, 7], [w / k - 7, 7], [7, h / k - 7], [w / k - 7, h / k - 7]]) { g.beginPath(); g.arc(x + bx * k, y + by * k, Math.max(1, 2.5 * k), 0, Math.PI * 2); g.fill(); }
+        if (z >= 12) { const sw = Math.min(w * 0.4, 60 * k), sx0 = x + w / 2 - sw / 2, sy0 = y + 3 * k; g.save(); g.beginPath(); g.rect(sx0, sy0, sw, 5 * k); g.clip(); g.fillStyle = "#1c1f24"; g.fillRect(sx0, sy0, sw, 5 * k); g.fillStyle = accent; for (let i = -10; i < sw / k + 10; i += 8) { g.beginPath(); g.moveTo(sx0 + i * k, sy0 + 5 * k); g.lineTo(sx0 + (i + 4) * k, sy0); g.lineTo(sx0 + (i + 8) * k, sy0); g.lineTo(sx0 + (i + 4) * k, sy0 + 5 * k); g.fill(); } g.restore(); }
         const icon = q.type === "home" ? "assets/icons/map/asteroid_field.png" : q.type === "refinery" ? "assets/icons/ores/cratered.png" : q.type === "factory" ? (q.recipe ? itemIcon(q.recipe) : "assets/icons/components/structural_beam.png") : "assets/icons/components/steel_plate.png";
-        const im = icon && dockImgAbs(icon); if (im && im.naturalWidth && z >= 10) { const s = Math.min(w, h) * 0.55; g.imageSmoothingEnabled = false; g.drawImage(im, x + w / 2 - s / 2, y + h / 2 - s / 2 - (z >= 20 ? 6 : 0), s, s * im.naturalHeight / im.naturalWidth); }
-        if (z >= 20) { g.fillStyle = "rgba(230,236,245,0.9)"; g.font = "11px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(d.name, x + w / 2, y + h - 6); }
+        const im = icon && dockImgAbs(icon); if (im && im.naturalWidth && z >= 10) { const s = Math.min(w, h) * 0.4; g.imageSmoothingEnabled = false; g.drawImage(im, x + w / 2 - s / 2, y + h / 2 - s / 2 - (z >= 20 ? 5 : 0), s, s * im.naturalHeight / im.naturalWidth); }
+        if (z >= 20 && w >= 100) { g.fillStyle = "rgba(220,226,235,0.85)"; g.font = Math.round(Math.max(9, Math.min(12, 11 * k * 1.6))) + "px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(d.name, x + w / 2, y + h - 15 * k); }
         if (q.job) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(x + 4, y + h - 4, w - 8, 3); g.fillStyle = "#7fc4ff"; g.fillRect(x + 4, y + h - 4, (w - 8) * q.job.p, 3); }
       }
       if (q.net >= 0) { g.fillStyle = nets[q.net % nets.length]; g.beginPath(); g.arc(x + 6, y + 6, 3, 0, Math.PI * 2); g.fill(); }   // which pipe network it's on
