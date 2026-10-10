@@ -21,10 +21,9 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **Asteroid belts are POIs, and their number is set by population (owner):** belt POIs spawn and despawn with how many players are in the Expanse. More players means more belts, so belts stay workable at any player count. *Proposed:* about one belt per 10–15 players in the Expanse, minimum 3; a belt with players in it is never despawned. New players mine here until they own an arc.
 - **Spawned POIs (belts and other population-driven POIs) are temporary (owner):**
   - **Hidden lifetime:** like a wormhole, each gets a lifetime counter when it spawns, and players never see the exact time.
-  - **It ends** when its lifetime runs out, or earlier once its content is gone (mined out).
-  - **Players inside keep it alive:** once it has ended, it **disappears from the map** (no warp-in icon, so no new arrivals), but stays open for whoever is still inside. A belt can be "held hostage" for fun, or used as a private meeting spot for a fleet. It despawns when the last player leaves.
+  - **At timeout** (or once its content is gone), an empty POI despawns. If players are inside, **despawning is held off until they leave**: the POI disappears from the map (no warp-in icon, so no new arrivals) but stays open for whoever is inside. A belt can be "held hostage" for fun, or used as a private meeting spot for a fleet.
   - **A held POI doesn't count** toward the population-driven belt count, so a replacement belt spawns for everyone else.
-  - *Proposed:* logging out despawns your ships, so if you log back in after a held POI has gone, your arc warps in at the nearest POI instead.
+  - **Logging out in a POI (owner):** the player's presence ends, so the POI can expire while they're away. On login, the player respawns **wherever their arc is**. If the arc was in a POI that no longer exists, they spawn at a **random point in the system outside any POI**, and a **small 20 km POI is made around them**.
   - *Open:* whether fleet members (once fleets exist) can still warp to each other into a hidden POI.
   - **Fixed POIs** (the station, planets, stargates) never expire.
 - **POIs are 50–100 km across (owner).** *Proposed:* station 100 km (popular), planets 80 km, stargates 60 km, belts 50 km. Each POI is its own local space, with free flight inside its boundary.
