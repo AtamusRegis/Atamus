@@ -143,9 +143,9 @@ The world is a set of **systems**, and every system is a set of **points of inte
 | Frigate Shipyard | 2,000,000 | 3 × 5 | frigates |
 | Cruiser Shipyard | 25,000,000 | 5 × 8 | barges, exhumers, cruisers |
 | Battleship Shipyard | 150,000,000 | 7 × 12 | battleships (and smaller) |
-| Ark Yard: Mini / Small / Large | 100M / 1B / 5B | 6 × 10 / 9 × 16 / 14 × 28 | each builds its ark size |
+| Ark Yard: Light / Heavy / Capital | 100M / 1B / 5B | 6 × 10 / 9 × 16 / 14 × 28 | each builds its ark size |
 
-**Build times (owner):** frigate 2 h, cruiser 24 h, battleship 3 days; Mini Ark 3 days, Small Ark 10 days, Ark 30 days. Mining barges and exhumers count as cruisers.
+**Build times (owner):** frigate 2 h, cruiser 24 h, battleship 3 days; Light Ark 3 days, Heavy Ark 10 days, Ark 30 days. Mining barges and exhumers count as cruisers.
 
 **Components** (the owner's 18 icons, `assets/icons/components/`). *Proposed* recipes, per unit:
 
@@ -178,17 +178,17 @@ The world is a set of **systems**, and every system is a set of **points of inte
 | Mining barge (cruiser) | 60 Hull Plating, 40 Structural Beam, 200 Bolts, 20 Cable Spool, 10 Circuit Board, 4 Processor Chip, 6 Power Cell, 6 Thruster Nozzle, 3 Engine Assembly, 2 Sensor Dish, 8 Hydraulic Piston, 2 Gyroscope, 6 Coolant Canister, 4 Viewport Glass |
 | Exhumer | **the battleship bill and 3 days (owner)**, built in the cruiser yard |
 | Battleship | 400 Hull Plating, 250 Structural Beam, 1,000 Bolts, 80 Cable Spool, 40 Circuit Board, 20 Processor Chip, 4 Reactor Core, 16 Thruster Nozzle, 8 Engine Assembly, 8 Shield Emitter, 6 Sensor Dish, 30 Hydraulic Piston, 6 Gyroscope, 20 Coolant Canister, 10 Viewport Glass |
-| Mini Ark | 1 battleship bill, plus 1 Forcefield Generator |
-| Small Ark | 4 battleship bills, plus 4 Forcefield Generators |
-| Ark | 15 battleship bills, plus 20 Forcefield Generators |
+| Light Ark | 1 battleship bill, plus 1 Forcefield Generator |
+| Heavy Ark | 4 battleship bills, plus 4 Forcefield Generators |
+| Capital Ark | 15 battleship bills, plus 20 Forcefield Generators |
 
 *Sanity check:* a Prospector needs about 1,200 Cryonium, 170 Duranium, 100 Pyroxium and 40 Hexium (about 1,800 m³ of mixed ore, roughly a quarter of its own hold) and about 3 hours of factory time, then 2 h in the yard. Its market price (350,000 cr) is about twice the ore's sale value, so building pays.
 
 #### Arks as carriers (owner)
 
-- **Hangars by size (owner):** a Mini Ark carries frigates, a Small Ark cruisers (and frigates), an Ark battleships (and anything smaller). Space is limited. *Proposed:* 3 ships each.
+- **Hangars by size (owner):** a Light Ark carries frigates, a Heavy Ark cruisers (and frigates), a Capital Ark battleships (and anything smaller). Space is limited. *Proposed:* 3 ships each.
 - **Pilots (owner):** 5 pilots can dock in an ark and switch between the ships it carries.
-- **Holds (owner):** limited but large. *Proposed:* Mini Ark 50,000 m³ ore / 10,000 m³ cargo; Small Ark 250,000 / 50,000; Ark 1,000,000 / 250,000.
+- **Holds (owner):** limited but large. *Proposed:* Light Ark 50,000 m³ ore / 10,000 m³ cargo; Heavy Ark 250,000 / 50,000; Capital Ark 1,000,000 / 250,000.
 
 ## The arc
 

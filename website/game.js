@@ -85,7 +85,11 @@
 
   Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
 
-  function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws"; }
+  // the tutorial shard (testers only): ?shard=tutorial; &new=1 (from the website) starts it fresh, a reload rejoins it
+  const urlQ = new URLSearchParams(location.search), SHARD = urlQ.get("shard") === "tutorial" ? "tutorial" : null;
+  let shardNew = SHARD && urlQ.get("new") === "1";
+  if (shardNew) { urlQ.delete("new"); history.replaceState(null, "", location.pathname + "?" + urlQ.toString()); }
+  function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); const q = SHARD ? "?shard=" + SHARD + (shardNew ? "&new=1" : "") : ""; shardNew = false; return base.replace(/^http/, "ws") + "/ws" + q; }
   function setStatus(t, k) { statusEl.textContent = t; statusEl.className = "status" + (k ? " " + k : ""); if (k === "ok") setTimeout(() => statusEl.classList.add("hidden"), 1200); else statusEl.classList.remove("hidden"); }
   function connect() {
     setStatus("Connecting…");
@@ -93,6 +97,7 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = (e) => {
       if (e.code === 4001) { location.href = "login.html"; return; }          // signed out (session expired): back to the website
+      if (e.code === 4004) { location.href = "play.html"; return; }           // not allowed on that server
       if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
     };
@@ -108,7 +113,8 @@
         serverBuild = m.build;
         if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
       }
-      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; indexRocks(); pois = m.pois || []; poiById = new Map(pois.map((p) => [p.id, p])); sentView = undefined; }
+      if (m.t === "tut") { window.Atamus.tut = m; bus.dispatchEvent(new CustomEvent("tut")); return; }
+      if (m.t === "hello") { window.Atamus.shard = m.shard || null; window.Atamus.shardPilots = m.pilots || null; cfg = m.cfg; me = m.you; belts = m.belts || []; indexRocks(); pois = m.pois || []; poiById = new Map(pois.map((p) => [p.id, p])); sentView = undefined; }
       else if (m.t === "pois") { pois = m.pois || []; poiById = new Map(pois.map((p) => [p.id, p])); bus.dispatchEvent(new CustomEvent("pois")); }
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
@@ -315,11 +321,12 @@
     }
   }
   function shipPos(sh) { return shipRender.get(sh.id) || { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }; }
+  let warpView = null;                                 // the zoom to come back to after a warp
   function followAnchor() {
     let n = 0, sx = 0, sy = 0;
     let fast = false;
     for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const w = shipWorld(sh); if (!w) continue; sx += w.x; sy += w.y; n++; if (sh.wp && (sh.wp.ph === "poi" || sh.wp.ph === "transit")) fast = true; }
-    return n ? { x: sx / n, y: sy / n, fast } : null;
+    return n ? { x: sx / n, y: sy / n, fast } : null;   // fast: between POIs (the camera shows the whole map instead)
   }
   function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
   function shipScreen(sh) { const w = shipWorld(sh); return w ? { x: gx2s(w.x), y: gy2s(w.y) } : null; }
@@ -1064,9 +1071,13 @@
       place = placements(); curPlace = place;
       updateShipRender();
       const anchor = follow ? followAnchor() : null;
+      // (owner) while a followed ship is between POIs, zoom all the way out and hold the whole map still: the warp
+      // trail shows the trip. When it drops out, zoom back to where you were, onto the ship.
+      if (anchor && anchor.fast) { if (!warpView) warpView = { w: viewWTarget }; viewWTarget = curMaxW; }
+      else if (warpView) { if (anchor) viewWTarget = warpView.w; warpView = null; }
       if (anchor) {                                    // follow selected ship / group centroid
-        const e = anchor.fast ? 1 : 1 - Math.exp(-12 * dt);   // at warp the camera locks onto the ship (easing would leave it behind)
-        cam.cx += (anchor.x - cam.cx) * e; cam.cy += (anchor.y - cam.cy) * e;
+        const tx = anchor.fast ? 0 : anchor.x, ty = anchor.fast ? 0 : anchor.y, e = 1 - Math.exp(-(anchor.fast ? 6 : 12) * dt);
+        cam.cx += (tx - cam.cx) * e; cam.cy += (ty - cam.cy) * e;
         panVel.x = 0; panVel.y = 0;
       } else {
         follow = false;

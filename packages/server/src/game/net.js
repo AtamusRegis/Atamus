@@ -12,6 +12,8 @@ import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadHomeCounts } 
 import { pool } from "../db.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
+import { createTutorial } from "./tutorial.js";
+import { canTutorial } from "../testers.js";
 
 const world = new World();
 // Spending credits outside the game (a new pilot): online players' credits are in memory.
@@ -20,6 +22,65 @@ useGameCredits({
   give: (pid, n) => { const p = world.players.get(pid); if (p) { p.credits += n; p.invDirty = true; } },
 });
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
+// the tutorial shard (owner: testers only): pid -> { tut, socks, leftAt }. Each is its own throwaway World, never saved;
+// entering from the website starts a fresh one, a reload rejoins it, and it's dropped 10 minutes after you leave.
+const tutorials = new Map(), TUTORIAL_KEEP_MS = 10 * 60e3;
+
+// one command from a client, against the World it's playing in
+function dispatch(world, pid, m, ctx) {
+  switch (m.t) {
+    case "view": world.cmdView(pid, m.poi); break;
+    case "warpto": world.cmdWarpTo(pid, m.ships, m.poi); break;
+    case "prop": world.cmdProp(pid, m.ship, m.fi, !!m.on); break;
+    case "drones": world.cmdDrones(pid, m.ship, !!m.on); break;
+    case "base_open": world.cmdBaseOpen(pid, !!m.open); break;
+    case "base_place": world.cmdBasePlace(pid, m.type, m.x, m.y, m.rot); break;
+    case "base_pipes": world.cmdBasePipes(pid, m.tiles); break;
+    case "base_remove": world.cmdBaseRemove(pid, m.x, m.y); break;
+    case "base_set": world.cmdBaseSet(pid, m.id, m.cfg); break;
+    case "drones_engage": world.cmdDronesEngage(pid, m.ship, m.rock); break;
+    case "gatejump": world.cmdGateJump(pid, m.gate, m.ships); break;
+    case "move": world.cmdMove(pid, m.ships, +m.x, +m.y, m.sys); break;
+    case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
+    case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
+    case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
+    case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
+    case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
+    case "power": world.cmdPower(pid, m.ship, m.mod, m.idx, !!m.on); break;
+    case "fit": world.cmdFit(pid, m.ship, m.from); break;
+    case "unfit": world.cmdUnfit(pid, m.ship, m.idx, m.to); break;
+    case "fitswap": world.cmdFitSwap(pid, m.ship, m.a, m.b); break;
+    case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
+    case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
+    case "buy": world.cmdBuy(pid, m.item, m.qty); break;
+    case "read": if (world.cmdRead(pid, m.ref, m.slot, m.item)) ctx.persist(pid); break;
+    case "licenses": ctx.refreshLicenses(); break;
+    case "crew": ctx.refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)).catch((e) => console.error("crew", e)); break;
+    case "decrew": world.cmdDecrew(pid, m.ship); break;
+    case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
+    case "assemble": world.cmdAssemble(pid, m.ref, m.slot, m.item); break;
+    case "destroy_can": world.cmdDestroyCan(pid, m.can); break;
+    case "rename_ship": world.cmdRenameShip(pid, m.ship, m.name); break;
+    case "dev": if (PTR) devCommand(world, pid, m, ctx.refreshLicenses); break;
+    case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
+    case "warp": world.cmdWarp(pid, m.ship); break;
+    case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
+    case "inv_sort": world.cmdInvSort(pid, m.ref); break;
+    case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty, m.item); break;
+  }
+}
+// flood guard: ~40 commands a second, extras dropped
+function onCommands(ws, run) {
+  let budget = 40, budgetAt = Date.now();
+  ws.on("message", (buf) => {
+    if (ws.replaced) return;                              // nothing from a session that's been replaced
+    const now = Date.now(); budget = Math.min(40, budget + (now - budgetAt) * 0.04); budgetAt = now;
+    if (budget < 1) return; budget--;
+    let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+    if (!m || typeof m !== "object" || typeof m.t !== "string") return;
+    try { run(m); } catch (e) { console.error("command " + m.t, e); }
+  });
+}
 
 const CLIENT_CONFIG = {
   expanseApothemAu: EXPANSE_APOTHEM_AU, poiKinds: POI_KIND_NAMES,
@@ -48,6 +109,11 @@ export function attachGameServer(httpServer) {
 
     const pid = String(user.id);
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
+    let q = null; try { q = new URL(req.url, "http://x").searchParams; } catch {}
+    if (q && q.get("shard") === "tutorial") {
+      if (!canTutorial(user.username, PTR)) { ws.close(4004, "shard"); return; }
+      joinTutorial(ws, pid, user, q.get("new") === "1", send); return;
+    }
     if (!conns.has(pid)) conns.set(pid, new Set());
     const mine = conns.get(pid);
     for (const old of mine) { old.replaced = true; try { old.close(4002, "elsewhere"); } catch {} }   // signed in elsewhere: the old session ends
@@ -79,59 +145,26 @@ export function attachGameServer(httpServer) {
     send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fl.fields, pois: world.poisFor(player) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
-    let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
-    ws.on("message", (buf) => {
-      if (ws.replaced) return;                              // nothing from a session that's been replaced
-      const now = Date.now(); budget = Math.min(40, budget + (now - budgetAt) * 0.04); budgetAt = now;
-      if (budget < 1) return; budget--;
-      let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-      if (!m || typeof m !== "object" || typeof m.t !== "string") return;
-      try { handle(m); } catch (e) { console.error("command " + m.t, e); }
-    });
-    const handle = (m) => {
-      switch (m.t) {
-        case "view": world.cmdView(pid, m.poi); break;
-        case "warpto": world.cmdWarpTo(pid, m.ships, m.poi); break;
-        case "prop": world.cmdProp(pid, m.ship, m.fi, !!m.on); break;
-        case "drones": world.cmdDrones(pid, m.ship, !!m.on); break;
-        case "base_open": world.cmdBaseOpen(pid, !!m.open); break;
-        case "base_place": world.cmdBasePlace(pid, m.type, m.x, m.y, m.rot); break;
-        case "base_pipes": world.cmdBasePipes(pid, m.tiles); break;
-        case "base_remove": world.cmdBaseRemove(pid, m.x, m.y); break;
-        case "base_set": world.cmdBaseSet(pid, m.id, m.cfg); break;
-        case "drones_engage": world.cmdDronesEngage(pid, m.ship, m.rock); break;
-        case "gatejump": world.cmdGateJump(pid, m.gate, m.ships); break;
-        case "move": world.cmdMove(pid, m.ships, +m.x, +m.y, m.sys); break;
-        case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
-        case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
-        case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
-        case "laser": world.cmdLaser(pid, m.ship, m.idx, !!m.on, m.rock); break;
-        case "auto": world.cmdAuto(pid, m.ship, !!m.on); break;
-        case "power": world.cmdPower(pid, m.ship, m.mod, m.idx, !!m.on); break;
-        case "fit": world.cmdFit(pid, m.ship, m.from); break;
-        case "unfit": world.cmdUnfit(pid, m.ship, m.idx, m.to); break;
-        case "fitswap": world.cmdFitSwap(pid, m.ship, m.a, m.b); break;
-        case "inv_split": world.cmdInvSplit(pid, m.ref, m.slot, m.qty, m.item); break;
-        case "jettison": world.cmdJettison(pid, m.ref, m.slot, m.qty, m.item); break;
-        case "buy": world.cmdBuy(pid, m.item, m.qty); break;
-        case "read": if (world.cmdRead(pid, m.ref, m.slot, m.item)) persist(pid); break;
-        case "licenses": refreshLicenses(); break;
-        case "crew": refreshLicenses().then(() => world.cmdCrew(pid, m.ship, m.pilot)).catch((e) => console.error("crew", e)); break;
-        case "decrew": world.cmdDecrew(pid, m.ship); break;
-        case "rename_hangar": world.cmdRenameHangar(pid, m.h, m.name); break;
-        case "assemble": world.cmdAssemble(pid, m.ref, m.slot, m.item); break;
-        case "destroy_can": world.cmdDestroyCan(pid, m.can); break;
-        case "rename_ship": world.cmdRenameShip(pid, m.ship, m.name); break;
-        case "dev": if (PTR) devCommand(world, pid, m, refreshLicenses); break;
-        case "dock": world.cmdDock(pid, m.ship, !!m.dock); break;
-        case "warp": world.cmdWarp(pid, m.ship); break;
-        case "inv_move": world.cmdInvMove(pid, m.from, m.to, m.qty); break;
-        case "inv_sort": world.cmdInvSort(pid, m.ref); break;
-        case "sell": world.cmdSell(pid, m.ref, m.slot, m.qty, m.item); break;
-      }
-    };
+    onCommands(ws, (m) => dispatch(world, pid, m, { persist, refreshLicenses }));
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
+
+  function joinTutorial(ws, pid, user, fresh, send) {
+    let T = tutorials.get(pid);
+    if (!T || fresh) { T = { tut: createTutorial(), socks: new Set(), leftAt: 0 }; tutorials.set(pid, T); }
+    for (const old of T.socks) { old.replaced = true; try { old.close(4002, "elsewhere"); } catch {} }
+    T.socks.add(ws); T.leftAt = 0;
+    const W = T.tut.world, sendAll = (s) => { for (const c of T.socks) if (!c.replaced && c.readyState === c.OPEN) c.send(s); };
+    const player = T.tut.join(pid, user.username, sendAll);
+    ws.on("close", () => { T.socks.delete(ws); if (!T.socks.size) { T.leftAt = Date.now(); player.send = () => {}; } });
+    const fl = W.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = W.poiSig(player);
+    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), shard: "tutorial", pilots: player.pilots.map((pl) => ({ ...pl, banked: {}, queue: [], active: null, paused: false })), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fl.fields, pois: W.poisFor(player) }));
+    send(JSON.stringify(W.inventoriesFor(pid)));
+    const refreshLicenses = async () => { W.assignDefaultPilots(pid); };   // the tutorial's pilot is fixed
+    onCommands(ws, (m) => dispatch(W, pid, m, { persist: () => {}, refreshLicenses }));
+    ws.on("error", () => { try { ws.close(); } catch {} });
+  }
+  const worlds = () => [world, ...[...tutorials.values()].map((T) => T.tut.world)];
 
   const lastSaved = new Map();                            // pid -> JSON last written: skip the write when nothing changed
   const persist = async (pid) => {
@@ -155,10 +188,11 @@ export function attachGameServer(httpServer) {
   setInterval(() => {
     const now = Date.now();
     const dt = Math.min(0.25, (now - last) / 1000); last = now;
-    world.tick(dt);
+    for (const w of worlds()) w.tick(dt);
+    for (const [pid, T] of tutorials) if (T.leftAt && now - T.leftAt > TUTORIAL_KEEP_MS) tutorials.delete(pid);
   }, TICK_MS);
 
-  setInterval(() => {
+  const snapWorld = (world) => {
     const idx = world.snapshotIndex();                      // built once per round, shared by every player's snapshot
     for (const p of world.players.values()) {
       if (p.offline) continue;                              // nobody to send to
@@ -169,6 +203,10 @@ export function attachGameServer(httpServer) {
       if (world.fieldSig(p) !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); p.rockDirty && p.rockDirty.clear(); }   // a field came into view or regrew
       if (p.rockDirty && p.rockDirty.size) { p.send(JSON.stringify({ t: "rocks", rocks: [...p.rockDirty].map(([id, m3]) => ({ id, m3 })) })); p.rockDirty.clear(); }
     }
+  };
+  setInterval(() => {
+    snapWorld(world);
+    for (const [pid, T] of tutorials) { if (T.leftAt) continue; snapWorld(T.tut.world); const p = T.tut.world.players.get(pid); if (p) T.tut.tick(p); }
   }, SNAPSHOT_MS);
 
   return wss;

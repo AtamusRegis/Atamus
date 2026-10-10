@@ -79,9 +79,9 @@ const ARK = (name, sprite, lengthKm, speed, oreM3, cargoM3, hp, slots) => ({ nam
   cargoM3, oreM3, targetRangeKm: 10, maxTargets: 4, lockMs: 8000, lasers: 0, bonuses: {}, hardpoints: [[0, 0]], arms: [[0], [0]], req: {}, price: 0, fitSlots: slots, disposition: slots * 15, capacitor: slots * 15,
   desc: "A mobile base. Its holds are vast; its hangars and pilot quarters come later." });
 Object.assign(SHIP_TYPES, {
-  ark_mini: ARK("Mini Ark", "mini_ark", 0.559, 0.08, 50_000, 10_000, 30_000, 4),
-  ark_small: ARK("Small Ark", "small_ark", 1.532, 0.05, 250_000, 50_000, 120_000, 6),
-  ark: ARK("Ark", "ark", 5.646, 0.03, 1_000_000, 250_000, 500_000, 8),
+  ark_mini: ARK("Light Ark", "mini_ark", 0.559, 0.08, 50_000, 10_000, 30_000, 4),
+  ark_small: ARK("Heavy Ark", "small_ark", 1.532, 0.05, 250_000, 50_000, 120_000, 6),
+  ark: ARK("Capital Ark", "ark", 5.646, 0.03, 1_000_000, 250_000, 500_000, 8),
 });
 // Fitting: hardpoints = how many modules fit, disposition = their total size, capacitor = shared power
 // for running them; accepts = module categories this hull can fit. (`hardpoints` above are beam origins.)

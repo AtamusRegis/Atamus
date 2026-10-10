@@ -13,6 +13,7 @@ const updateStep = document.getElementById("update-step");
 async function showSteps() {
   const me = await Api.get("/auth/me");
   who.textContent = me.username;
+  document.getElementById("server-pick").hidden = !(me.servers && me.servers.includes("tutorial"));   // testers pick a server (owner)
   const state = await Api.get("/game/state").catch(() => null);
   const hasPilot = state && state.pilots && state.pilots.length;
   pilotStep.hidden = !!hasPilot; enterStep.hidden = !hasPilot;
@@ -39,7 +40,11 @@ async function waitForUpdate() {
 }
 
 // always open the game fresh, never a cached copy of an older build
-document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); location.href = "game.html?cb=" + Date.now(); }));
+document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => {
+  e.preventDefault();
+  const tut = !document.getElementById("server-pick").hidden && document.getElementById("server").value === "tutorial";
+  location.href = "game.html?cb=" + Date.now() + (tut ? "&shard=tutorial&new=1" : "");   // the tutorial starts fresh from here
+}));
 if (params.get("updating")) waitForUpdate();
 else showSteps().catch(() => { location.href = "login.html"; });
 

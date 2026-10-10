@@ -8,6 +8,8 @@ import {
   readCookie, setSessionCookie, clearSessionCookie,
 } from "./sessions.js";
 import { allow } from "./ratelimit.js";
+import { canTutorial } from "./testers.js";
+import { PTR } from "./ptr.js";
 
 export const auth = express.Router();
 
@@ -22,7 +24,7 @@ function fail(res, status, error) {
 
 // Shape a user row for the client. Never leak the password hash.
 function publicUser(u) {
-  return { username: u.username, email: u.email || null, hasRecovery: !!u.has_recovery };
+  return { username: u.username, email: u.email || null, hasRecovery: !!u.has_recovery, servers: canTutorial(u.username, PTR) ? ["live", "tutorial"] : ["live"] };
 }
 
 /** Who am I? Used by the pages to check login state. */

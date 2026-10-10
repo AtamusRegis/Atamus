@@ -654,3 +654,10 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none;
 .base-item { display: grid; grid-template-columns: 18px 1fr auto; gap: 5px; align-items: center; font-size: 12px; color: var(--text-dim); }
 .base-item b { color: var(--text); font-weight: 500; }
 @media (max-width: 600px) { .win-body.base-body { flex-direction: column; } .base-side { width: auto; max-height: 40%; } .base-canvas { min-height: 200px; } }
+
+/* the tutorial shard's step panel */
+.tut-panel { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40; width: min(440px, calc(100vw - 32px)); padding: 10px 14px; background: rgba(12, 18, 28, 0.92); border: 1px solid rgba(255, 179, 71, 0.45); border-radius: 8px; color: #dfe6f0; pointer-events: none; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
+.tut-count { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffb347; }
+.tut-title { font-size: 15px; font-weight: 600; margin: 2px 0 3px; }
+.tut-text { font-size: 13px; line-height: 1.4; color: #b9c3d2; }
+@media (max-width: 600px) { .tut-panel { left: 56px; transform: none; width: calc(100vw - 68px); } }

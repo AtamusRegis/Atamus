@@ -31,6 +31,7 @@ export class World {
     for (const p of fixedPois()) this.pois.set(p.id, p);
     this.poiVer = 1; this.nextBelts = 0;
     this.homeCounts = new Map();   // planet id -> players whose home it is (net.js fills it from the database at boot)
+    this.baseSpeed = 1;            // base production speed (the tutorial shard runs it faster)
   }
 
   addPlayer(id, name, send, saved = null) {
@@ -516,7 +517,7 @@ export class World {
     for (const p of this.players.values()) {
       if (p.offline || now - (p.baseAt || now) < 1000) continue;
       const dt = now - p.baseAt; p.baseAt = now;
-      Base.step(p.base, dt, { spawn: (type) => this._spawnBuilt(p, type) });
+      Base.step(p.base, dt * this.baseSpeed, { spawn: (type) => this._spawnBuilt(p, type) });
       if (p.baseOpen) p.baseDirty = true;
     }
   }

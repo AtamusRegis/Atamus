@@ -18,9 +18,9 @@ export const BUILDINGS = {
   dock_frigate:    { name: "Frigate Shipyard", w: 3, h: 2, cost: 2_000_000, rank: 1, art: "frigate", sockets: [["W", 1], ["E", 1], ["S", 1]] },
   dock_cruiser:    { name: "Cruiser Shipyard", w: 5, h: 4, cost: 25_000_000, rank: 2, art: "cruiser", sockets: [["W", 1], ["E", 1], ["S", 1], ["S", 3]] },
   dock_battleship: { name: "Battleship Shipyard", w: 14, h: 7, cost: 150_000_000, rank: 3, art: "battleship", sockets: [["W", 3], ["E", 3], ["S", 3], ["S", 10]] },
-  dock_large:      { name: "Mini Ark Yard", w: 4, h: 3, cost: 100_000_000, rank: 4, yard: "yard_mini", ark: "ark_mini", sockets: [["S", 1], ["S", 2], ["W", 1], ["E", 1]] },
-  dock_capital:    { name: "Small Ark Yard", w: 6, h: 4, cost: 1_000_000_000, rank: 5, yard: "yard_small", ark: "ark_small", sockets: [["S", 1], ["S", 4], ["W", 1], ["E", 1]] },
-  dock_ark:        { name: "Ark Yard", w: 8, h: 5, cost: 5_000_000_000, rank: 6, yard: "yard_ark", ark: "ark", sockets: [["S", 1], ["S", 6], ["W", 2], ["E", 2]] },
+  dock_large:      { name: "Light Ark Yard", w: 4, h: 3, cost: 100_000_000, rank: 4, yard: "yard_mini", ark: "ark_mini", sockets: [["S", 1], ["S", 2], ["W", 1], ["E", 1]] },
+  dock_capital:    { name: "Heavy Ark Yard", w: 6, h: 4, cost: 1_000_000_000, rank: 5, yard: "yard_small", ark: "ark_small", sockets: [["S", 1], ["S", 4], ["W", 1], ["E", 1]] },
+  dock_ark:        { name: "Capital Ark Yard", w: 8, h: 5, cost: 5_000_000_000, rank: 6, yard: "yard_ark", ark: "ark", sockets: [["S", 1], ["S", 6], ["W", 2], ["E", 2]] },
 };export const BUF_M3 = 2000;   // a refinery's / factory's own output buffer when nothing on its network has room
 
 // Factory recipes: component -> { in: {item: qty}, ms, out }
@@ -265,7 +265,7 @@ export function view(b) {
   const L = links(b);
   return {
     w: BASE_W, h: BASE_H, pipe: b.pipe,
-    buildings: b.buildings.map((q) => ({ id: q.id, type: q.type, x: q.x, y: q.y, rot: q.rot || 0, linked: L.up.get(q).size + L.down.get(q).size > 0, store: q.store, buf: q.buf, used: q.store ? Math.round(m3(q.store)) : undefined,
+    buildings: b.buildings.map((q) => ({ id: q.id, type: q.type, label: q.label, x: q.x, y: q.y, rot: q.rot || 0, linked: L.up.get(q).size + L.down.get(q).size > 0, store: q.store, buf: q.buf, used: q.store ? Math.round(m3(q.store)) : undefined,
       ore: q.ore, recipe: q.recipe, mode: q.mode, count: q.count, made: q.made || 0, idle: q.idle || null, job: q.job ? { item: q.job.item, p: +(1 - q.job.left / q.job.total).toFixed(4), left: Math.max(0, Math.round(q.job.left)) } : null })),
   };
 }

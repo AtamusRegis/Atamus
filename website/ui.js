@@ -44,7 +44,7 @@
   // ---- data ----
   let serverOffset = 0; // server epoch - client epoch
   async function ensureCatalog() { if (!catalog) catalog = await Api.get("/game/catalog"); }
-  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); if (selectedPilotId == null && state.pilots[0]) selectedPilotId = state.pilots[0].id; renderOpen(); }
+  async function refreshState() { state = await Api.get("/game/state"); if (window.Atamus.shardPilots) state = { ...state, pilots: window.Atamus.shardPilots }; if (state.serverTime) serverOffset = state.serverTime - Date.now(); if (selectedPilotId == null && state.pilots[0]) selectedPilotId = state.pilots[0].id; renderOpen(); }
 
   // ---- windows ----
   const wins = {};
@@ -1855,6 +1855,15 @@
   }
   window.Atamus.bus.addEventListener("worldready", () => { if (wins.base && isOpen(wins.base)) window.Atamus.send({ t: "base_open", open: true }); });
   window.Atamus.openBase = () => toggleWindow("base", true);
+  // the tutorial shard's current step (owner asked for a playable tutorial)
+  let tutEl = null;
+  window.Atamus.bus.addEventListener("tut", () => {
+    const t = window.Atamus.tut; if (!t) return;
+    if (!tutEl && window.Atamus.shardPilots) refreshState().catch(() => {});   // the tutorial's own pilot
+    if (!tutEl) { tutEl = el("div", { class: "tut-panel" }); document.body.append(tutEl); }
+    tutEl.innerHTML = "";
+    tutEl.append(el("div", { class: "tut-count" }, t.done ? "Tutorial" : "Tutorial · " + (t.i + 1) + " / " + t.n), el("div", { class: "tut-title" }, t.title), el("div", { class: "tut-text" }, t.text));
+  });
   window.Atamus.bus.addEventListener("base", () => { if (wins.base && isOpen(wins.base)) { renderBaseSide(); drawBase(); } });
   function renderBaseSide() {
     const A = window.Atamus, base = A.base; if (!B.side || !base) return;
@@ -1868,7 +1877,7 @@
       tool("remove", "Remove", null);
       B.side.append(pal);
       if (q) {
-        const d = bdef(q.type), box = el("div", { class: "base-info" }, el("div", { class: "base-info-h" }, d.name));
+        const d = bdef(q.type), box = el("div", { class: "base-info" }, el("div", { class: "base-info-h" }, q.label || d.name));
         B.live.status = el("div", { class: "base-status" });
         const set = (cfg) => A.send({ t: "base_set", id: q.id, cfg });
         if (q.type === "refinery") {

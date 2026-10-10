@@ -8,8 +8,8 @@ export const H0 = { owner: "station", inv: "hangar", h: 0 };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A game connection that keeps the latest message of each type plus all system lines.
-export async function connect() {
-  const ws = new WebSocket(BASE.replace("http", "ws") + "/ws", { headers: { origin: BASE } });
+export async function connect(query = "") {
+  const ws = new WebSocket(BASE.replace("http", "ws") + "/ws" + query, { headers: { origin: BASE } });
   const c = { ws, last: {}, msgs: [], snaps: 0, closeCode: null };
   ws.on("message", (b) => { const m = JSON.parse(b); if (m.t === "sys") c.msgs.push(m.text); else c.last[m.t] = m; if (m.t === "snap") c.snaps++; });
   ws.on("close", (code) => { c.closeCode = code; });

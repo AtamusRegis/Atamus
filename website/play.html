@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atamus</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1791535000">
+  <link rel="stylesheet" href="style.css?v=1791625448">
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -46,6 +46,10 @@
           </form>
         </div>
         <div id="enter-step" hidden>
+          <label class="field" id="server-pick" hidden>
+            <span>Server</span>
+            <select id="server"><option value="live">Atamus</option><option value="tutorial">Tutorial (test)</option></select>
+          </label>
           <a class="btn btn-primary" href="game.html">Enter System</a>
         </div>
         <button type="button" class="btn btn-ghost" id="logout">Log out</button>
@@ -53,7 +57,7 @@
     </section>
   </main>
 
-  <script src="api.js?v=1791535000"></script>
-  <script src="play.js?v=1791535000" defer></script>
+  <script src="api.js?v=1791625448"></script>
+  <script src="play.js?v=1791625448" defer></script>
 </body>
 </html>
