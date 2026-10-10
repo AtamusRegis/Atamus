@@ -4,6 +4,9 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
+- **Front page:** Updates scrolls inside its panel; "Help build Atamus" sits under the game description.
+- **Design:** the base production chain (home base, pipes, refineries, factories, storage, shipyards), 18 components and arks as carriers are written up in DESIGN.md with first-pass numbers. Component icons added (not used yet).
+
 - **Balance pass:** new hardpoints, disposition, capacitor and ore holds for every hull (Prospector 8 hardpoints), Prospector targeting 5 km, and role bonuses: Prospector drone yield, Bulwark / Rampart cheaper propulsion, Collier / Carrack stronger cargohold expansions.
 - **Space menu:** right-click (or hold) empty space for Recenter on ship and Planets / Stations / Stargates / Belts submenus that warp you there.
 - **Front page:** a "Help build Atamus" card (AI placeholder assets; how to get in touch).

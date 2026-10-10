@@ -120,6 +120,76 @@ The world is a set of **systems**, and every system is a set of **points of inte
 - **A full production system connected by pipes** (no conveyors). It's where arcs, ships and modules are made (arcs can also be bought).
 - **Offline:** the factory is the only thing that keeps going while you're away, and its output is calculated when you log in.
 
+#### Production chain (owner, 2026-10-10; numbers are Claude's first pass)
+
+**Flow:** ore → **Home Base** → pipes → **Refinery** (ore → "-ium") → pipes → **Factory** (iums → components) → pipes → **Shipyard** (components → ships and arks). **Storage Units** hold anything piped into them.
+
+- **Home Base (owner):** where a player unloads raw ore (ships docked at the home planet unload into it). Free; one per player. Holds 2,000,000 m³ of ore.
+- **Pipes (owner):** direct the flow. They carry finished output **instantly** from a building's output to whatever input needs it. A refinery or factory piped into a storage unit fills it; a storage unit piped onward feeds the next building.
+- **Buildings cost credits only (owner).**
+- **Refinery (owner):** refines ores into iums: Cryonite → Cryonium, Pyroxite → Pyroxium, Duranite → Duranium, Hexite → Hexium, Tantalite → Tantalium. *Proposed:* 10 ore units → 1 ium unit; 60 m³ of ore per minute, whatever the ore.
+- **Factory (owner):** the player picks what it makes, and sets it to **unlimited** or an **exact number**. It pulls iums and components from its inputs.
+- **Shipyard (owner):** turns components into ships and arks. Its size decides what it can build (sprites: the owner's build-stage art, 3 stages plus finished).
+
+**Buildings** (*proposed* costs and footprints on the base grid, 64 × 64 tiles):
+
+| Building | Cost (cr) | Footprint | Notes |
+|---|---|---|---|
+| Home Base | free (1) | 4 × 4 | 2,000,000 m³ ore |
+| Pipe | 500 per tile | 1 × 1 | instant |
+| Storage Unit | 250,000 | 2 × 2 | 50,000 m³ of iums / components |
+| Refinery | 750,000 | 3 × 3 | 60 m³ ore / min |
+| Factory | 1,500,000 | 3 × 3 | one recipe at a time |
+| Frigate Shipyard | 2,000,000 | 3 × 5 | frigates |
+| Cruiser Shipyard | 25,000,000 | 5 × 8 | barges, exhumers, cruisers |
+| Battleship Shipyard | 150,000,000 | 7 × 12 | battleships (and smaller) |
+| Ark Yard: Mini / Small / Large | 100M / 1B / 5B | 6 × 10 / 9 × 16 / 14 × 28 | each builds its ark size |
+
+**Build times (owner):** frigate 2 h, cruiser 24 h, battleship 3 days; Mini Ark 3 days, Small Ark 10 days, Ark 30 days. Mining barges and exhumers count as cruisers.
+
+**Components** (the owner's 18 icons, `assets/icons/components/`). *Proposed* recipes, per unit:
+
+| Component | Inputs | Time |
+|---|---|---|
+| Steel Plate | 20 Cryonium | 1 min |
+| Hull Plating | 4 Steel Plate, 10 Duranium | 4 min |
+| Structural Beam | 30 Cryonium, 5 Duranium | 2 min |
+| Bolts & Fasteners (×10) | 5 Cryonium | 30 s |
+| Cable Spool | 15 Pyroxium | 1 min |
+| Circuit Board | 10 Pyroxium, 2 Hexium | 3 min |
+| Processor Chip | 2 Circuit Board, 5 Hexium | 6 min |
+| Power Cell | 10 Pyroxium, 5 Duranium | 3 min |
+| Reactor Core | 4 Power Cell, 10 Hexium, 2 Tantalium | 20 min |
+| Thruster Nozzle | 15 Duranium, 5 Cryonium | 4 min |
+| Engine Assembly | 2 Thruster Nozzle, 1 Power Cell, 4 Bolts | 12 min |
+| Shield Emitter | 1 Circuit Board, 15 Duranium, 2 Hexium | 8 min |
+| Sensor Dish | 1 Processor Chip, 10 Cryonium | 8 min |
+| Hydraulic Piston | 10 Cryonium, 5 Pyroxium | 2 min |
+| Gyroscope | 5 Hexium, 2 Bolts | 5 min |
+| Coolant Canister | 10 Pyroxium, 3 Duranium | 2 min |
+| Viewport Glass | 6 Hexium | 3 min |
+| Forcefield Generator | 2 Shield Emitter, 1 Reactor Core, 5 Tantalium | 45 min |
+
+**Ship bills** (*proposed*; consumed when the shipyard starts):
+
+| Ship | Components |
+|---|---|
+| Prospector (frigate) | 10 Hull Plating, 8 Structural Beam, 40 Bolts, 4 Cable Spool, 2 Circuit Board, 1 Power Cell, 2 Thruster Nozzle, 1 Engine Assembly, 1 Sensor Dish, 1 Gyroscope, 1 Viewport Glass |
+| Mining barge (cruiser) | 60 Hull Plating, 40 Structural Beam, 200 Bolts, 20 Cable Spool, 10 Circuit Board, 4 Processor Chip, 6 Power Cell, 6 Thruster Nozzle, 3 Engine Assembly, 2 Sensor Dish, 8 Hydraulic Piston, 2 Gyroscope, 6 Coolant Canister, 4 Viewport Glass |
+| Exhumer (cruiser) | the barge bill, plus 1 Reactor Core, 4 Shield Emitter and 6 Processor Chip |
+| Battleship | 400 Hull Plating, 250 Structural Beam, 1,000 Bolts, 80 Cable Spool, 40 Circuit Board, 20 Processor Chip, 4 Reactor Core, 16 Thruster Nozzle, 8 Engine Assembly, 8 Shield Emitter, 6 Sensor Dish, 30 Hydraulic Piston, 6 Gyroscope, 20 Coolant Canister, 10 Viewport Glass |
+| Mini Ark | 1 battleship bill, plus 1 Forcefield Generator |
+| Small Ark | 4 battleship bills, plus 4 Forcefield Generators |
+| Ark | 15 battleship bills, plus 20 Forcefield Generators |
+
+*Sanity check:* a Prospector needs about 1,200 Cryonium, 170 Duranium, 100 Pyroxium and 40 Hexium (about 1,800 m³ of mixed ore, roughly a quarter of its own hold) and about 3 hours of factory time, then 2 h in the yard. Its market price (350,000 cr) is about twice the ore's sale value, so building pays.
+
+#### Arks as carriers (owner)
+
+- **Hangars by size (owner):** a Mini Ark carries frigates, a Small Ark cruisers (and frigates), an Ark battleships (and anything smaller). Space is limited. *Proposed:* 3 ships each.
+- **Pilots (owner):** 5 pilots can dock in an ark and switch between the ships it carries.
+- **Holds (owner):** limited but large. *Proposed:* Mini Ark 50,000 m³ ore / 10,000 m³ cargo; Small Ark 250,000 / 50,000; Ark 1,000,000 / 250,000.
+
 ## The arc
 
 - **A mobile base ship.** Before the arc, a player stays in the Expanse.

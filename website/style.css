@@ -329,8 +329,13 @@ main {
 .front-body p { margin: 0; }
 .front-lead { color: var(--text) !important; font-size: 16px; }
 .btn-play { align-self: flex-start; margin-top: 8px; padding: 13px 34px; font-size: 14px; }
-.front-updates .front-body { gap: 0; }
-.front-help { grid-column: 1 / -1; }   /* below the two main panels, full width */
+.front-updates .front-body { gap: 0; max-height: 560px; overflow-y: auto; padding-right: 8px; scrollbar-width: thin; scrollbar-color: rgba(140,170,220,0.35) transparent; }   /* scrolls instead of growing forever */
+.front-updates .front-body::-webkit-scrollbar { width: 6px; }
+.front-updates .front-body::-webkit-scrollbar-thumb { background: rgba(140,170,220,0.35); border-radius: 3px; }
+.front-main { grid-template-rows: auto 1fr; }   /* the tall Updates column stretches row 2, not the gap under the description */
+.front-about { grid-column: 1; grid-row: 1; }
+.front-help { grid-column: 1; grid-row: 2; }   /* under the game description */
+.front-updates { grid-column: 2; grid-row: 1 / span 2; }
 .front-help a { color: #7fc4ff; text-decoration: none; }
 .front-help a:hover { text-decoration: underline; }
 .update { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
@@ -339,4 +344,4 @@ main {
 .update time { font-size: 11px; letter-spacing: .06em; color: var(--text-faint); }
 .update h3 { margin: 2px 0 4px; font-size: 14px; color: var(--text); }
 .update p { font-size: 13px; }
-@media (max-width: 760px) { .front-main { grid-template-columns: 1fr; } .btn-play { align-self: stretch; } }
+@media (max-width: 760px) { .front-main { grid-template-columns: 1fr; grid-template-rows: none; } .front-about, .front-help, .front-updates { grid-column: 1; grid-row: auto; } .front-updates .front-body { max-height: 420px; } .btn-play { align-self: stretch; } }
