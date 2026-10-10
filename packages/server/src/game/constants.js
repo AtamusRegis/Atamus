@@ -5,13 +5,6 @@ export const TICK_MS = 1000 / TICK_HZ;
 export const SNAPSHOT_HZ = 15;
 export const SNAPSHOT_MS = 1000 / SNAPSHOT_HZ;
 
-// Each system is a honeycomb of flat-top hex cells, measured flat-to-flat.
-export const CELL_FLAT_TO_FLAT_KM = 200;
-export const CELL_APOTHEM_KM = CELL_FLAT_TO_FLAT_KM / 2;                 // 100
-export const CELL_CIRCUMRADIUS_KM = CELL_APOTHEM_KM / Math.cos(Math.PI / 6); // ~115.47
-export const SYSTEM_RINGS = 0;                                          // one big hexagon, 200 km wide
-export const CELL_CORNER_ROUND_KM = 5;
-
 // ---- RTS ship movement ----
 export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the target
 export const SHIP_SLOW_RADIUS_KM = 0.6;  // start easing to a stop within this range
@@ -95,24 +88,12 @@ export const SHIP_ROLES = ["Industry", "Combat"];
 const CLASS_ROLE = { "Mining Frigate": "Industry", "Mining Barge": "Industry", "Exhumer": "Industry" };
 for (const t of Object.values(SHIP_TYPES)) t.role = CLASS_ROLE[t.cls] || "Industry";
 
-// Stargates: 3 on the outer ring. They burn fuel while active.
-export const FUEL_START_MS = 30 * 60 * 1000;     // fuel each gate starts with
-export const FUEL_SESSION_MAX_MS = 30 * 60 * 1000; // max fuel a single activation can burn
-export const FUEL_REGEN_RATE = 3;                 // a closed gate refuels by itself: 0 → 30 min of fuel in 10 min (owner, for now)
-export const HUB_MIN_WAIT_MS = 3 * 60 * 1000;    // give player-to-player links this long before trying the hub
-export const HUB_SEEK_INTERVAL_MS = 4000;        // how often a searching gate tries the hub (after the wait)
-export const HUB_SEEK_CHANCE = 0.4;              // chance per try to find a hub entrance
-export const GATE_TRANSFER_RADIUS_KM = 4;        // a ship inside this ring can use the gate
-export const ARRIVAL_OFFSET_KM = GATE_TRANSFER_RADIUS_KM + 6; // land clear of the partner gate
-
-export const HUB_SYS = "sys:hub";
-
-// ---- asteroid instances (owner): small shared hexes reached through asteroid beacons ----
-export const INST_APOTHEM_KM = 22;                 // an instance is one small hex, 44 km across
-export const INST_RETURN_POS = { x: -14, y: 0 };   // its beacon home, where ships arrive
-export const INST_MAX_PLAYERS = 5;                 // players (not pilots or ships) per instance
-export const INST_DECAY_HOURS = 24;                // rocks lose their ore passively: an untouched instance is gone within this
-export const BEACON_RANGE_KM = 2.5;                // ships this close to a linked beacon can jump through it
-export const GATE_JUMP_MS = 5000;                  // an acceleration gate jump takes this long, whatever the distance (owner)
 export const STATION_BAY = { x: -0.155, y: -0.213 }; // the station's docking-bay mouth, relative to the station (its open side faces -x)
 export const UNDOCK_STOP_KM = 3.6;                 // undocked ships fly out of the bay and stop this far out (just inside the dock ring)
+
+// ---- the Expanse (docs/DESIGN.md) ----
+export const WARP_AU_PER_S = 0.25;                 // between POIs: the time off-POI is a base plus the map distance at this speed
+export const WARP_POI_BASE_MS = 2000;
+export const BELTS_MIN = 3, PLAYERS_PER_BELT = 12;  // belt POIs: one per this many players online, at least BELTS_MIN
+export const BELT_LIFE_MIN_MS = 60 * 60 * 1000, BELT_LIFE_MAX_MS = 120 * 60 * 1000;   // hidden lifetime of a spawned belt
+export const LOGOUT_GRACE_MS = 20 * 1000;          // a closed connection keeps the fleet in space this long (a reload), then it despawns

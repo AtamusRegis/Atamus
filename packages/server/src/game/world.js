@@ -1,20 +1,17 @@
 import {
-  FUEL_START_MS, FUEL_SESSION_MAX_MS, FUEL_REGEN_RATE, WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, WARP_STOP_MS, HUB_MIN_WAIT_MS, HUB_SEEK_INTERVAL_MS, HUB_SEEK_CHANCE, HUB_SYS,
-  SHIP_TYPES, SHIP_ARRIVE_EPS_KM, SHIP_SLOW_RADIUS_KM, SHIP_STEER,
+  WARP_OPEN_MS, WARP_MIN_KM, WARP_EXIT_SHOW_MS, WARP_EXIT_FX_MS, WARP_STOP_MS,
+  SHIP_TYPES, SHIP_ARRIVE_EPS_KM,
   WARP_MULT, DOCK_RADIUS_KM, LASER_M3_PER_S, MINING_CYCLE_MS, LASER_RANGE_KM, AUTO_MINER_BASE_MS, AUTO_MINER_STEP_MS, STATION_HANGAR_M3,
-  INST_APOTHEM_KM, INST_RETURN_POS, INST_MAX_PLAYERS, INST_DECAY_HOURS, BEACON_RANGE_KM, GATE_JUMP_MS, STATION_BAY, UNDOCK_STOP_KM,
+  STATION_BAY, UNDOCK_STOP_KM, WARP_AU_PER_S, WARP_POI_BASE_MS, BELTS_MIN, PLAYERS_PER_BELT, BELT_LIFE_MIN_MS, BELT_LIFE_MAX_MS, LOGOUT_GRACE_MS,
 } from "./constants.js";
 import * as Inv from "./inventory.js";
 import { getLicense, hullEfficiency } from "../licenses.js";
-import { STARGATE_CELLS, clampToSystem, clampToHex, STATION_POS } from "./geometry.js";
-import { placeBeacons, createHomeField, tickHomeField, createInstField, decayField } from "./belts.js";
+import { fixedPois, freeSpot, createBeltField, POI_SIZE_KM, auDist } from "./expanse.js";
 
-const homeSys = (pid) => `sys:${pid}`;
+const STATION = "station";                 // the station POI; the station itself sits at its centre
 const HANGARS = 4;
 // jettison cans (owner): only their owner can open them for 30 minutes, then anyone can for 10 more, then they're gone
 const CAN_PRIVATE_MS = 30 * 60 * 1000, CAN_PUBLIC_MS = 10 * 60 * 1000, CAN_LIFE_MS = CAN_PRIVATE_MS + CAN_PUBLIC_MS, CAN_COOLDOWN_MS = 30 * 60 * 1000, CAN_M3 = 15000, CAN_RANGE_KM = 2.5;
-const isInst = (sys) => typeof sys === "string" && sys.startsWith("inst:");
-const HIBERNATE_GRACE_MS = 60 * 1000;
 // Running hot: power past the capacitor builds heat (faster the further over); once heat is full, every
 // powered module loses integrity; at 0 it burns out (offline until the ship docks). Under the limit, heat cools.
 const HEAT_PER_S = 6;        // heat %/s at 100% over capacity (scales with how far over)
@@ -25,74 +22,60 @@ const shipLabel = (sh) => sh.name || (SHIP_TYPES[sh.type] || {}).name || "Ship";
 
 export class World {
   constructor() {
-    this.players = new Map(); // pid -> {id,name,send,offline}
-    this.gates = new Map();   // gid -> gate
-    this.ships = new Map();   // sid -> ship
-    this.cans = new Map();    // jettison cans floating in space: id -> { id, owner, ownerName, sys, x, y, inv, publicAt, expiresAt }
-    this.instances = new Map();   // asteroid instances: id (= its system id, "inst:…") -> { id, sys, field, createdAt }
-    this.nextMaint = 0; this.nextDecay = 0;
+    this.players = new Map(); // pid -> {id,name,send,offline,view}
+    this.ships = new Map();   // sid -> ship; ship.sys = the POI it's in (null while warping between POIs)
+    this.cans = new Map();    // jettison cans floating in a POI: id -> { id, owner, ownerName, sys, x, y, inv, publicAt, expiresAt }
+    this.pois = new Map();    // the Expanse's points of interest: id -> { id, kind, name, ax, ay (AU), r (km), fixed, field?, expiresAt?, hidden?, owner? }
+    for (const p of fixedPois()) this.pois.set(p.id, p);
+    this.poiVer = 1; this.nextBelts = 0;
   }
 
   addPlayer(id, name, send, saved = null) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShips(id); return existing; }
     const now = Date.now();
-    // asteroid beacons: fixed spots per player; each keeps its link to an instance across reloads and restarts
-    const savedLinks = new Map(((saved && saved.beacons) || []).map((b) => [b.id, b.inst]));
-    const beacons = placeBeacons(id).map((b) => ({ ...b, inst: this.instances.has(savedLinks.get(b.id)) ? savedLinks.get(b.id) : null }));
-    const field = saved && saved.field && saved.field.kind === "home" ? saved.field : createHomeField(homeSys(id), beacons, now);   // (old belt fields are dropped)
-    field.beacons = beacons.map((b) => ({ id: b.id, x: b.x, y: b.y }));
-    const p = { id, name, send, offline: false, field, beacons, hangars: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {}, pilots: [] };
+    const p = { id, name, send, offline: false, view: null, hangars: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {}, pilots: [] };
     this.players.set(id, p);
-    const savedGates = new Map((saved && saved.gates || []).map((g) => [g.id, g]));
-    const downtime = saved && saved.savedAt ? Math.max(0, now - saved.savedAt) : 0; // the clock keeps running while you're gone
-    STARGATE_CELLS.forEach((cell, i) => {
-      const gid = `${id}:${i}`, sg = savedGates.get(gid);
-      const g = {
-        id: gid, owner: id, sys: homeSys(id), lx: cell.x, ly: cell.y,
-        state: sg ? sg.state : "closed", fuelMs: sg ? sg.fuelMs : FUEL_START_MS, sessionUsedMs: sg ? sg.sessionUsedMs : 0, activatedAt: sg ? sg.activatedAt : 0,
-        connToSys: sg ? (sg.connToSys || null) : null, connToGate: sg ? (sg.connToGate || null) : null, lastSeek: 0,
-      };
-      if (g.state !== "active" && downtime) g.fuelMs = Math.min(FUEL_START_MS, g.fuelMs + downtime * FUEL_REGEN_RATE);
-      if (g.state === "active" && downtime) {
-        g.fuelMs -= downtime; g.sessionUsedMs += downtime;
-        if (g.fuelMs <= 0 || g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { g.fuelMs = Math.max(0, g.fuelMs); g.state = "closed"; g.sessionUsedMs = 0; g.connToSys = null; g.connToGate = null; }
-      }
-      this.gates.set(gid, g);
-      // re-link with the partner gate if it's loaded (either side loading completes the link)
-      if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (partner && partner.state === "active") { partner.connToSys = g.sys; partner.connToGate = g.id; } }
-    });
+    // Logging in (owner): ships come back where they were. One whose POI is gone arrives at a random point outside
+    // any POI, inside a small unmarked POI made around them.
+    let spawn = null;
     for (const sh of (saved && saved.ships) || []) {
-      if (isInst(sh.sys) && this.instances.has(sh.sys)) { this.ships.set(sh.id, this._hydrateShip({ ...sh, owner: id })); continue; }   // still in its asteroid instance
-      const rec = { ...sh, owner: id, sys: homeSys(id) };
-      if (isInst(sh.sys)) { const b = beacons.find((x) => x.id === sh.via), at = this._nearBeacon(b); Object.assign(rec, at, { tx: at.x, ty: at.y, moving: false, targets: [], lasers: [], via: null }); }   // that instance is gone: back at its beacon
+      const rec = { ...sh, owner: id, wp: null, warp: false };
+      const poi = rec.docked ? this.pois.get(STATION) : this.pois.get(rec.sys);
+      if (rec.docked) rec.sys = STATION;
+      else if (!poi || poi.retired) {
+        spawn ||= this._newPoi("spawn", { owner: id });
+        const a = Math.random() * Math.PI * 2, d = Math.random() * spawn.r * 0.5;
+        Object.assign(rec, { sys: spawn.id, x: +(Math.cos(a) * d).toFixed(3), y: +(Math.sin(a) * d).toFixed(3), moving: false, targets: [], lasers: [] });
+        rec.tx = rec.x; rec.ty = rec.y;
+      } else { const c = this._clamp(rec.sys, rec.x, rec.y); rec.x = c.x; rec.y = c.y; if (!Number.isFinite(rec.tx)) { rec.tx = rec.x; rec.ty = rec.y; } }
       this.ships.set(sh.id, this._hydrateShip(rec));
     }
-    // four renameable station hangars; a save from before hangars existed becomes Hangar 1
+    // four renameable station hangars
     p.jetUntil = (saved && saved.jetUntil) || 0;
-    for (const c of (saved && saved.cans) || []) if (c.expiresAt > now && (!isInst(c.sys) || this.instances.has(c.sys))) this.cans.set(c.id, { ...c, owner: id, sys: c.sys || homeSys(id), publicAt: c.publicAt || c.expiresAt - CAN_PUBLIC_MS });
+    for (const c of (saved && saved.cans) || []) if (c.expiresAt > now && this.pois.has(c.sys)) this.cans.set(c.id, { ...c, owner: id, publicAt: c.publicAt || c.expiresAt - CAN_PUBLIC_MS });
     p.hangars = (saved && Array.isArray(saved.hangars) && saved.hangars.length) ? saved.hangars
-      : [0, 1, 2, 3].map((i) => ({ name: "Hangar " + (i + 1), inv: (i === 0 && saved && saved.hangar) || Inv.makeInv(STATION_HANGAR_M3) }));
+      : [0, 1, 2, 3].map((i) => ({ name: "Hangar " + (i + 1), inv: Inv.makeInv(STATION_HANGAR_M3) }));
     p.delivery = (saved && saved.delivery) || Inv.makeInv(STATION_HANGAR_M3);   // market purchases land here
     while (p.hangars.length < HANGARS) p.hangars.push({ name: "Hangar " + (p.hangars.length + 1), inv: Inv.makeInv(STATION_HANGAR_M3) });
     this._ensureShips(id);
     return p;
   }
 
-  /** Everything about a player's system worth keeping across reloads/restarts. */
+  /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
-    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => ({ id: s.id, type: s.type, x: s.x, y: s.y, tx: s.tx, ty: s.ty, moving: s.moving, h: s.h, docked: s.docked, warp: s.warp, sys: s.sys, via: s.via || null, fit: s.fit, heat: s.heat || 0, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name }));
-    const gates = [...this.gates.values()].filter((g) => g.owner === id).map((g) => ({ id: g.id, state: g.state, fuelMs: g.fuelMs, sessionUsedMs: g.sessionUsedMs, activatedAt: g.activatedAt, connToSys: g.connToSys, connToGate: g.connToGate }));
+    const ships = [...this.ships.values()].filter((s) => s.owner === id).map((s) => {
+      const poiWarp = s.wp && s.wp.ph === "poi";            // logging out mid-warp: it arrives where it was going
+      return { id: s.id, type: s.type, x: poiWarp ? 0 : s.x, y: poiWarp ? 0 : s.y, tx: s.tx, ty: s.ty, moving: false, h: s.h, docked: s.docked, sys: poiWarp ? s.wp.to : s.sys, fit: s.fit, heat: s.heat || 0, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name };
+    });
     const p = this.players.get(id);
-    return { ships, gates, field: p ? p.field : null, beacons: p ? p.beacons.map((b) => ({ id: b.id, inst: b.inst })) : [], hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
+    return { ships, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
   }
 
   // Fill in live/derived ship fields from a saved or fresh record.
   _hydrateShip(sh) {
     const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel;
-    // ships from before fitting existed keep what they had: their lasers and an auto miner
-    const fit = Array.isArray(sh.fit) ? sh.fit.filter((f) => f && Inv.MODULES[f.item]).map((f) => ({ item: f.item, hp: Number.isFinite(f.hp) ? f.hp : 100, burnt: !!f.burnt, slot: Number.isInteger(f.slot) ? f.slot : -1 }))
-      : [...Array(t.lasers || 0).fill("module:mining_laser"), "module:auto_miner"].map((item) => ({ item }));
+    const fit = Array.isArray(sh.fit) ? sh.fit.filter((f) => f && Inv.MODULES[f.item]).map((f) => ({ item: f.item, hp: Number.isFinite(f.hp) ? f.hp : 100, burnt: !!f.burnt, slot: Number.isInteger(f.slot) ? f.slot : -1 })) : [];
     this._fixSlots({ type: sh.type, fit });
     const nLasers = fit.filter((f) => Inv.MODULES[f.item].role === "laser").length;
     return {
@@ -105,55 +88,32 @@ export class World {
     };
   }
 
-  // Every pilot starts with a Chisel, parked just off the station at system center.
+  // A new player starts with a Prospector docked at the Expanse's station.
   _ensureShips(id) {
     for (const s of this.ships.values()) if (s.owner === id) return;
     const sid = `${id}:ship:0`;
-    const sx = STATION_POS.x + 2.2, sy = STATION_POS.y + 2.2; // spawn beside the station
-    this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: homeSys(id), type: "chisel", x: sx, y: sy, tx: sx, ty: sy, moving: false, h: Math.PI / 2,
+    this.ships.set(sid, this._hydrateShip({ id: sid, owner: id, sys: STATION, type: "chisel", x: 0, y: 0, tx: 0, ty: 0, moving: false, h: Math.PI / 2, docked: true,
       fit: [{ item: "module:mining_laser" }, { item: "module:mining_laser" }] }));   // a new player's first Prospector comes with 2 mining lasers
   }
 
-  // Logging off never drops the system immediately: it stays awake while a gate is
-  // running or a ship still has an order, then hibernates after a short grace period.
+  // Logging off (owner: no logged-off presence): after a short grace for reloads the player's fleet leaves the world.
   removePlayer(id) {
     const p = this.players.get(id); if (!p) return;
     p.offline = true; p.offlineSince = Date.now(); p.send = () => {};
   }
-  // Offline mining (owner): a ship keeps working while its owner is away until its targets are gone, its hold is
-  // full, or its lasers are off / burnt out. Until then it (and its system) stays awake.
-  _shipBusy(s) {
-    if (s.docked) return false;
-    if (s.moving || s.wp || s.lasers.some((L) => L.on)) return true;
-    if (!s.auto.on || s.auto.off) return false;
-    const runnable = s.lasers.some((L, i) => !L.off && this._canRun(s, i)); if (!runnable) return false;
-    return s.targets.some((tg) => { if (tg.kind !== "rock" || !tg.locked) return false; const f = this._rockOf(s.sys, tg.id); return f && this._inLaserRange(s, f) && Inv.canAdd(s.inv.ore, f.rock.ore, 1) > 0; });
-  }
-  _busy(id) {
-    for (const g of this.gates.values()) if (g.owner === id && g.state === "active") return true;
-    for (const s of this.ships.values()) if (s.owner === id && this._shipBusy(s)) return true;
-    return false;
-  }
   _purge(id) {
     if (this.onBeforePurge) { try { this.onBeforePurge(id); } catch (e) { console.error("onBeforePurge", e); } }
-    for (const [gid, g] of this.gates) if (g.owner === id) this.gates.delete(gid);
     for (const [sid, s] of this.ships) if (s.owner === id) this.ships.delete(sid);
     for (const [cid, c] of this.cans) if (c.owner === id) this.cans.delete(cid);
     this.players.delete(id);
   }
 
   // ---- commands ----
-  cmdGate(pid, gateId, open) {
-    const g = this.gates.get(gateId);
-    if (!g || g.owner !== pid) return;
-    if (open) {
-      if (g.state === "closed" && g.fuelMs > 0) { g.state = "active"; g.sessionUsedMs = 0; g.lastSeek = 0; g.activatedAt = Date.now(); }
-    } else {
-      if (g.state !== "active") return;
-      this._closeGate(g);
-    }
+  // which POI the player's camera is on: they get full updates for it (and their own ships everywhere)
+  cmdView(pid, poiId) {
+    const p = this.players.get(pid); if (!p) return;
+    p.view = typeof poiId === "string" && this._poiVisibleTo(this.pois.get(poiId), pid) ? poiId : null;
   }
-
   // sys: the system the order was given in (ships elsewhere ignore it); the point is local to that system
   cmdMove(pid, shipIds, x, y, sys) {
     if (!Array.isArray(shipIds)) return;
@@ -164,23 +124,22 @@ export class World {
   }
 
   // ---- targeting / mining / docking / warp ----
-  // the rock field of a system: a home system's scattered rocks, or an asteroid instance's field
-  _fieldOf(sys) {
-    if (isInst(sys)) { const i = this.instances.get(sys); return i ? i.field : null; }
-    const p = typeof sys === "string" && sys.startsWith("sys:") ? this.players.get(sys.slice(4)) : null;
-    return p ? p.field : null;
-  }
+  _fieldOf(sys) { const poi = this.pois.get(sys); return poi ? poi.field || null : null; }
   _rockOf(sys, rockId) {
     const field = this._fieldOf(sys); if (!field || typeof rockId !== "string") return null;
     const r = field.rocks.find((x) => x.id === rockId); return r ? { rock: r, field } : null;
   }
-  _clamp(sys, x, y) { return isInst(sys) ? clampToHex(x, y, INST_APOTHEM_KM) : clampToSystem(x, y); }
-  // where a ship's target is, in the ship's own system (targets in another system don't exist for it)
+  // inside a POI's boundary circle
+  _clamp(sys, x, y) {
+    const poi = this.pois.get(sys), R = poi ? poi.r : 25, d = Math.hypot(x, y);
+    return d <= R ? { x, y } : { x: x / d * R, y: y / d * R };
+  }
+  // where a ship's target is, in the ship's own POI (targets elsewhere don't exist for it)
   _targetPos(sh, tg) {
     if (tg.kind === "rock") { const f = this._rockOf(sh.sys, tg.id); return f ? { x: f.rock.x, y: f.rock.y } : null; }
-    if (tg.kind === "gate") { const g = this.gates.get(tg.id); return g && g.sys === sh.sys ? { x: g.lx, y: g.ly } : null; }
-    if (tg.kind === "ship") { const o = this.ships.get(tg.id); return o && o.sys === sh.sys && !o.docked ? { x: o.x, y: o.y } : null; }
-    if (tg.kind === "station") return isInst(sh.sys) || sh.sys === "sys:hub" ? null : { x: STATION_POS.x, y: STATION_POS.y };
+    if (tg.kind === "ship") { const o = this.ships.get(tg.id); return o && o.sys && o.sys === sh.sys && !o.docked ? { x: o.x, y: o.y } : null; }
+    if (tg.kind === "station") return sh.sys === STATION ? { x: 0, y: 0 } : null;
+    if (tg.kind === "gate") { const poi = this.pois.get(sh.sys); return poi && poi.kind === "gate" && tg.id === poi.id ? { x: 0, y: 0 } : null; }
     return null;
   }
   cmdLock(pid, shipId, kind, id) {
@@ -363,15 +322,15 @@ export class World {
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
-      if (sh.docked || this._inWarp(sh) || sh.sys !== homeSys(pid) || Math.hypot(sh.x - STATION_POS.x, sh.y - STATION_POS.y) > DOCK_RADIUS_KM) return;
+      if (sh.docked || this._inWarp(sh) || sh.sys !== STATION || Math.hypot(sh.x, sh.y) > DOCK_RADIUS_KM) return;
       sh.docked = true; sh.moving = false; sh.warp = false; sh.wp = null; for (const L of sh.lasers) this._laserStop(L); sh.auto.on = false; sh.targets = []; sh.vx = sh.vy = 0;
       sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield; this._repairModules(sh);   // docked: repaired and recharged
     } else {
       if (!sh.docked) return;
       if (!sh.pilot) { this._tell(pid, "That ship has no pilot. Crew it first."); return; }
       // undocking (owner): out of the docking bay's mouth, flying away until it stands still near the edge of the dock ring, facing away
-      const a = Math.PI + (Math.random() - 0.5) * 0.7, bx = STATION_POS.x + STATION_BAY.x, by = STATION_POS.y + STATION_BAY.y;
-      sh.docked = false; sh.x = bx; sh.y = by; sh.h = a; sh.vx = Math.cos(a) * sh.speed * 0.3; sh.vy = Math.sin(a) * sh.speed * 0.3;
+      const a = Math.PI + (Math.random() - 0.5) * 0.7, bx = STATION_BAY.x, by = STATION_BAY.y;
+      sh.docked = false; sh.sys = STATION; sh.x = bx; sh.y = by; sh.h = a; sh.vx = Math.cos(a) * sh.speed * 0.3; sh.vy = Math.sin(a) * sh.speed * 0.3;
       sh.tx = +(bx + Math.cos(a) * UNDOCK_STOP_KM).toFixed(3); sh.ty = +(by + Math.sin(a) * UNDOCK_STOP_KM).toFixed(3); sh.moving = true;
     }
     this._markInv(pid);
@@ -382,23 +341,39 @@ export class World {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid || sh.docked || !sh.moving || sh.warp) return;
     sh.warp = true; sh.wp = { ph: "align" };
   }
-  _inWarp(s) { return !!(s.wp && (s.wp.ph === "open" || s.wp.ph === "transit" || s.wp.ph === "gate")); }
+  // Warp to another POI: align toward it on the map → a warp window opens ahead → the ship leaves the POI and is
+  // off-POI (nothing simulated) for a time set by the map distance → it drops out at a scattered point in the target.
+  cmdWarpTo(pid, shipIds, poiId) {
+    if (!Array.isArray(shipIds) || typeof poiId !== "string") return;
+    const dst = this.pois.get(poiId); if (!dst || !this._poiVisibleTo(dst, pid)) return;
+    for (const sid of [...new Set(shipIds)].slice(0, 50)) {
+      const s = this.ships.get(sid); if (!s || s.owner !== pid || s.docked || !s.sys || s.sys === poiId || this._inWarp(s)) continue;
+      const src = this.pois.get(s.sys); if (!src) continue;
+      for (const L of s.lasers) this._laserStop(L); s.auto.on = false; s.targets = [];
+      s.warp = true; s.wp = { ph: "palign", to: poiId, dir: Math.atan2(dst.ay - src.ay, dst.ax - src.ax) };
+    }
+    this._markInv(pid);
+  }
+  _arrive(s, w, now) {
+    let dst = this.pois.get(w.to);
+    if (!dst || dst.retired) dst = this._newPoi("spawn", { owner: s.owner });   // it closed while you were on the way
+    const a = Math.random() * Math.PI * 2, d = dst.r * (0.15 + Math.random() * 0.35), tx = Math.cos(a) * d, ty = Math.sin(a) * d;
+    const brake = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3, ex = tx - Math.cos(w.dir) * brake, ey = ty - Math.sin(w.dir) * brake;
+    s.sys = dst.id; s.x = ex; s.y = ey; s.tx = tx; s.ty = ty; s.vx = 0; s.vy = 0; s.warp = false; s.moving = true;
+    s.wp = { ph: "exit", at: now, dir: w.dir, fx: ex, fy: ey, ex, ey, tx, ty, stop: brake, dur: 0, arrived: true };
+    this._markInv(s.owner);
+  }
+  _inWarp(s) { return !!(s.wp && (s.wp.ph === "open" || s.wp.ph === "transit" || s.wp.ph === "poi")); }
   _warpTick(s, now) {
     const w = s.wp; if (!w) return false;
-    // acceleration gate jump: fly into the gate, cross to the other gate as a ball in GATE_JUMP_MS, drop out at warp speed and stop
-    if (w.ph === "gapp") {
-      if (Math.hypot(w.gx - s.x, w.gy - s.y) > 0.25) { s.tx = w.gx; s.ty = w.gy; s.moving = true; return false; }
-      w.ph = "gate"; w.at = now; this._stopShip(s); s.wp = w; s.x = w.gx; s.y = w.gy; s.warp = true;
-    }
-    if (w.ph === "gate") {
-      s.h = w.dir; s.vx = 0; s.vy = 0;
-      if (now - w.at < w.dur) return true;
-      if (isInst(w.dsys) && !this.instances.has(w.dsys)) { this._returnHome(s, "That asteroid field closed while you were jumping."); return true; }
-      const D = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3, cx = Math.cos(w.dir), cy = Math.sin(w.dir);
-      const end = this._clamp(w.dsys, w.ex + cx * D, w.ey + cy * D);
-      s.sys = w.dsys; s.via = w.via; s.x = w.ex; s.y = w.ey; s.tx = end.x; s.ty = end.y; s.warp = false;
-      s.wp = { ph: "exit", gate: true, at: now, dir: w.dir, fx: w.ex, fy: w.ey, ex: w.ex, ey: w.ey, tx: end.x, ty: end.y, stop: Math.hypot(end.x - w.ex, end.y - w.ey), dur: 0 };
-      this._markInv(s.owner); return true;
+    if (w.ph === "poi") { if (now - w.at >= w.dur) this._arrive(s, w, now); return true; }   // off-POI: not simulated
+    if (w.ph === "palign") {                                                   // speeding up toward the target POI's bearing
+      const ux = Math.cos(w.dir), uy = Math.sin(w.dir), v = Math.hypot(s.vx, s.vy);
+      s.tx = s.x + ux * 50; s.ty = s.y + uy * 50; s.moving = true;
+      if (v < s.speed * 0.97 || (s.vx * ux + s.vy * uy) / v < 0.995) return false;
+      const lead = s.speed * WARP_OPEN_MS / 1000;
+      s.wp = { ph: "open", to: w.to, at: now, dir: w.dir, fx: s.x + ux * lead, fy: s.y + uy * lead };
+      return false;
     }
     if (w.ph === "align") {
       const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), v = Math.hypot(s.vx, s.vy);
@@ -413,6 +388,12 @@ export class World {
     }
     if (w.ph === "open") {
       if (now - w.at < WARP_OPEN_MS) return false;                                         // coasting into the window at full speed
+      if (w.to) {                                                                          // into the window: gone from this POI
+        const src = this.pois.get(s.sys), dst = this.pois.get(w.to), d = src && dst ? auDist(src, dst) : 0.3;
+        s.wp = { ph: "poi", from: s.sys, to: w.to, at: now, dur: Math.round(WARP_POI_BASE_MS + d / WARP_AU_PER_S * 1000), dir: w.dir };
+        s.sys = null; s.x = 0; s.y = 0; s.vx = 0; s.vy = 0; s.moving = false; s.targets = [];
+        this._markInv(s.owner); return true;
+      }
       w.ph = "transit"; w.at = now; s.x = w.fx; s.y = w.fy;
     }
     if (w.ph === "transit") {
@@ -481,7 +462,7 @@ export class World {
   // account (destroying your can lifts that), cans hold 15,000 m³ and drift away after 30 minutes.
   cmdJettison(pid, ref, slot, qty, item) {
     const p = this.players.get(pid), a = this._inv(pid, ref); if (!p || !a || !a.inv || !a.ship) return;
-    const sh = a.ship; if (sh.docked) { this._tell(pid, "Undock to jettison."); return; }
+    const sh = a.ship; if (sh.docked) { this._tell(pid, "Undock to jettison."); return; } if (!sh.sys || this._inWarp(sh)) return;
     slot = this._slotOf(a.inv, slot, item); const st = a.inv.slots[slot]; if (!st) return;
     const now = Date.now();
     if (now < p.jetUntil) { const m = Math.ceil((p.jetUntil - now) / 60000); this._tell(pid, `You can jettison again in ${m} min. Open your can to add more, or destroy it.`); return; }
@@ -563,8 +544,8 @@ export class World {
   }
   _buyShip(p, type) {
     let n = 0; while (this.ships.has(`${p.id}:ship:${n}`)) n++;
-    const id = `${p.id}:ship:${n}`, x = STATION_POS.x, y = STATION_POS.y;
-    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: homeSys(p.id), type, x, y, tx: x, ty: y, moving: false, h: Math.PI / 2, docked: true, pilot: null, fit: [] }));   // new ships come with nothing fitted
+    const id = `${p.id}:ship:${n}`;
+    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: STATION, type, x: 0, y: 0, tx: 0, ty: 0, moving: false, h: Math.PI / 2, docked: true, pilot: null, fit: [] }));   // new ships come with nothing fitted
   }
   // Unpack a packaged ship sitting in a station container into a docked, uncrewed ship.
   cmdAssemble(pid, ref, slot, item) {
@@ -615,164 +596,82 @@ export class World {
     if (ch === "corp") {
       // Everyone is in Delve Holdings for now, so corp chat reaches all online players.
       for (const other of this.players.values()) if (!other.offline) other.send(msg);
-    } else {
-      const vis = this._visibleSystems(pid);
-      for (const other of this.players.values()) {
-        if (other.offline) continue;
-        const ov = this._visibleSystems(other.id);
-        for (const s of ov) if (vis.has(s)) { other.send(msg); break; }
-      }
+    } else {                                            // local: the whole Expanse
+      for (const other of this.players.values()) if (!other.offline) other.send(msg);
     }
   }
 
-  // ---- connections ----
-  _connectGates(a, b) { a.connToSys = b.sys; a.connToGate = b.id; b.connToSys = a.sys; b.connToGate = a.id; }
-  _connectToHub(g) { g.connToSys = HUB_SYS; g.connToGate = null; }
-  _endConnection(g) {
-    const partner = g.connToGate ? this.gates.get(g.connToGate) : null;
-    if (partner) { partner.connToSys = null; partner.connToGate = null; this._evictVisitors(partner.sys); }
-    this._evictVisitors(g.sys);
-    g.connToSys = null; g.connToGate = null;
+  // ---- POIs (docs/DESIGN.md › The Expanse) ----
+  // A hidden POI (a spawn-in POI, or a belt held open by players after its time ran out) has no map marker:
+  // only players with ships inside see it.
+  _hasShipsIn(poiId, pid) { for (const s of this.ships.values()) if (s.sys === poiId && (pid == null || s.owner === pid)) return true; return false; }
+  _poiVisibleTo(poi, pid) { return !!poi && (!poi.hidden || this._hasShipsIn(poi.id, pid)); }
+  _newPoi(kind, extra = {}) {
+    const now = Date.now(), id = kind + ":" + now.toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    const spot = kind === "belt" ? freeSpot(this.pois.values(), 0.12, 0.44) : freeSpot(this.pois.values(), 0.06, 0.45);
+    const poi = { id, kind, name: kind === "belt" ? "Asteroid Belt " + id.slice(-3).toUpperCase() : "Deep Space", ...spot, r: POI_SIZE_KM[kind] / 2, fixed: false, createdAt: now, ...extra };
+    if (kind === "belt") { poi.field = createBeltField(id, poi.r); poi.expiresAt = now + BELT_LIFE_MIN_MS + Math.random() * (BELT_LIFE_MAX_MS - BELT_LIFE_MIN_MS); }
+    if (kind === "spawn") poi.hidden = true;
+    this.pois.set(id, poi); this.poiVer++;
+    return poi;
   }
-  // When a gate link closes, any ship still in a system it doesn't own is destroyed
-  // (with its cargo) and its pilot respawns at their own station.
-  _evictVisitors(sysId) {
-    const ownerId = sysId.startsWith("sys:") ? sysId.slice(4) : null;
-    for (const sh of this.ships.values()) {
-      if (sh.sys !== sysId || sh.owner === ownerId) continue;
-      sh.sys = homeSys(sh.owner); sh.x = STATION_POS.x + 2.2; sh.y = STATION_POS.y + 2.2; sh.tx = sh.x; sh.ty = sh.y;
-      sh.vx = 0; sh.vy = 0; sh.moving = false; sh.warp = false; sh.wp = null; sh.targets = []; sh.auto.on = false;
-      for (const L of sh.lasers) this._laserStop(L);
-      sh.inv.ore.slots = []; sh.inv.cargo.slots = [];           // destroyed with everything aboard
-      const o = this.players.get(sh.owner);
-      if (o && !o.offline) o.send(JSON.stringify({ t: "sys", text: "The gate closed on you. Your ship was destroyed; you respawn at your station." }));
+  _removePoi(poi) {
+    for (const c of [...this.cans.values()]) if (c.sys === poi.id) this.cans.delete(c.id);
+    this.pois.delete(poi.id); this.poiVer++;
+    if (this.onPoiClosed) { try { this.onPoiClosed(poi); } catch (e) { console.error("onPoiClosed", e); } }
+  }
+  // Belts by population (owner): one per PLAYERS_PER_BELT online, at least BELTS_MIN. A belt whose hidden lifetime ran
+  // out (or that's mined out) leaves the map at once but stays open until nobody is inside; it no longer counts, so a
+  // replacement spawns. A spawn-in POI goes once its player has left it.
+  _maintainPois(now = Date.now()) {
+    for (const poi of [...this.pois.values()]) {
+      if (poi.fixed) continue;
+      if (poi.kind === "belt" && !poi.retired && (now >= poi.expiresAt || !poi.field.rocks.length)) { poi.retired = true; poi.hidden = true; this.poiVer++; }
+      if ((poi.retired || poi.kind === "spawn") && now - (poi.createdAt || 0) > 5000 && !this._hasShipsIn(poi.id)) this._removePoi(poi);
     }
+    let online = 0; for (const p of this.players.values()) if (!p.offline) online++;
+    const want = Math.max(BELTS_MIN, Math.ceil(online / PLAYERS_PER_BELT));
+    let have = 0; for (const poi of this.pois.values()) if (poi.kind === "belt" && !poi.retired) have++;
+    for (; have < want; have++) this._newPoi("belt");
   }
-  _closeGate(g) {
-    this._endConnection(g);
-    g.state = "closed"; g.sessionUsedMs = 0;
-    const owner = this.players.get(g.owner);
-    if (owner && !owner.offline) owner.send(JSON.stringify({ t: "sys", text: "Wormhole closed." }));
+  // the POI list one player's map shows; sig changes when it does
+  poiSig(p) { let sig = String(this.poiVer); for (const poi of this.pois.values()) if (poi.hidden && this._hasShipsIn(poi.id, p.id)) sig += "," + poi.id; return sig; }
+  poisFor(p) {
+    const out = [];
+    for (const poi of this.pois.values()) {
+      if (!this._poiVisibleTo(poi, p.id)) continue;
+      const e = { id: poi.id, kind: poi.kind, name: poi.name, ax: poi.ax, ay: poi.ay, r: poi.r };
+      if (poi.hidden) e.hidden = true;
+      if (poi.state) e.state = poi.state;
+      if (poi.seed != null) e.seed = poi.seed;
+      out.push(e);
+    }
+    return out;
   }
-
+  // belts survive restarts (they're shared); a player's own spawn-in POI is rebuilt at login instead
+  exportPoi(poi) { return { id: poi.id, kind: poi.kind, name: poi.name, ax: poi.ax, ay: poi.ay, r: poi.r, field: poi.field, expiresAt: poi.expiresAt, createdAt: poi.createdAt, retired: !!poi.retired }; }
+  loadPoi(d) {
+    if (!d || d.kind !== "belt" || typeof d.id !== "string" || !d.field || !Array.isArray(d.field.rocks) || d.retired) return;
+    this.pois.set(d.id, { ...d, fixed: false, hidden: false, retired: false }); this.poiVer++;
+  }
   _visibleSystems(pid) {
-    const set = new Set([homeSys(pid)]);
-    for (const g of this.gates.values()) if (g.owner === pid && g.state === "active" && g.connToSys) set.add(g.connToSys);
-    for (const s of this.ships.values()) if (s.owner === pid && isInst(s.sys)) set.add(s.sys);   // asteroid instances you have ships in
+    const p = this.players.get(pid), set = new Set();
+    if (p && p.view) set.add(p.view);
+    for (const s of this.ships.values()) if (s.owner === pid && s.sys) set.add(s.sys);
     return set;
   }
+  _stopShip(s) { s.vx = 0; s.vy = 0; s.moving = false; s.warp = false; s.wp = null; s.targets = []; s.auto.on = false; for (const L of s.lasers) this._laserStop(L); }
 
   // ---- tick ----
   tick(dtSec) {
-    const now = Date.now(), dtMs = dtSec * 1000;
+    const now = Date.now();
     for (const c of this.cans.values()) if (now >= c.expiresAt) this._removeCan(c);
-    for (const g of this.gates.values()) {
-      if (g.state !== "active") { if (g.fuelMs < FUEL_START_MS) g.fuelMs = Math.min(FUEL_START_MS, g.fuelMs + dtMs * FUEL_REGEN_RATE); continue; }
-      if (g.connToGate) { const partner = this.gates.get(g.connToGate); if (!partner || partner.state !== "active" || partner.connToGate !== g.id) { g.connToSys = null; g.connToGate = null; } }
-      g.fuelMs -= dtMs; g.sessionUsedMs += dtMs;
-      if (g.fuelMs <= 0) { g.fuelMs = 0; this._closeGate(g); continue; }
-      if (g.sessionUsedMs >= FUEL_SESSION_MAX_MS) { this._closeGate(g); continue; }
-      if (!g.connToSys) {
-        for (const o of this.gates.values()) {
-          if (o !== g && o.state === "active" && !o.connToSys && o.owner !== g.owner) { this._connectGates(g, o); break; }
-        }
-        if (!g.connToSys && now - g.activatedAt >= HUB_MIN_WAIT_MS && now - g.lastSeek >= HUB_SEEK_INTERVAL_MS) {
-          g.lastSeek = now; if (Math.random() < HUB_SEEK_CHANCE) this._connectToHub(g);
-        }
-      }
-    }
     this._tickShips(dtSec);
     this._tickTargeting(dtSec, now);
-    for (const p of this.players.values()) tickHomeField(p.field, now);   // home rocks regrow (viewers get the new field)
-    if (now >= this.nextDecay) { const dt = this.nextDecay ? now - this.nextDecay + 60000 : 60000; this.nextDecay = now + 60000; this._decayInstances(dt); }
-    if (now >= this.nextMaint) { this.nextMaint = now + 5000; this._maintainInstances(); }
-
-    for (const p of [...this.players.values()]) {
-      if (!p.offline || now - (p.offlineSince || 0) <= HIBERNATE_GRACE_MS) continue;
-      // offline: a ship in an asteroid instance that has stopped working goes home through its beacon
-      for (const s of this.ships.values()) if (s.owner === p.id && isInst(s.sys) && !this._shipBusy(s)) this._returnHome(s, null);
-      if (!this._busy(p.id)) this._purge(p.id);   // hibernate
-    }
+    if (now >= this.nextBelts) { this.nextBelts = now + 2000; this._maintainPois(now); }
+    for (const p of [...this.players.values()]) if (p.offline && now - (p.offlineSince || 0) > LOGOUT_GRACE_MS) this._purge(p.id);   // logged off: the fleet leaves the world
   }
 
-  // ---- asteroid instances (owner) ----
-  // Small shared hexes, made by the server. Each player's asteroid beacons link to instances with room
-  // (5 players each; returning members always fit); ships near a linked beacon can jump through.
-  _members(inst) { const set = new Set(); for (const s of this.ships.values()) if (s.sys === inst.sys) set.add(s.owner); return set; }
-  _hasRoom(inst, pid) { const m = this._members(inst); return m.has(pid) || m.size < INST_MAX_PLAYERS; }
-  _newInstance() {
-    const id = "inst:" + Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
-    const inst = { id, sys: id, field: createInstField(id, INST_APOTHEM_KM, INST_RETURN_POS), createdAt: Date.now() };
-    this.instances.set(id, inst); return inst;
-  }
-  // keep twice the room the loaded players need (at least two instances with space), then link idle beacons
-  _maintainInstances() {
-    const need = Math.max(2, Math.ceil(2 * this.players.size / INST_MAX_PLAYERS));
-    const free = () => [...this.instances.values()].filter((i) => this._members(i).size < INST_MAX_PLAYERS).length;
-    if (this.instances.size < need || free() < 2) this._newInstance();
-    for (const p of this.players.values()) {
-      for (const b of p.beacons) {
-        const cur = b.inst && this.instances.get(b.inst);
-        if (cur && this._hasRoom(cur, p.id)) continue;
-        b.inst = null;
-        const taken = new Set(p.beacons.map((x) => x.inst)), cands = [...this.instances.values()].filter((i) => this._hasRoom(i, p.id));
-        const fresh = cands.filter((i) => !taken.has(i.id)), pool = fresh.length ? fresh : cands;   // spread a player's beacons over different instances when possible
-        if (pool.length) b.inst = pool[Math.floor(Math.random() * pool.length)].id;
-      }
-    }
-  }
-  // passive ore loss; an instance with no rocks left closes
-  _decayInstances(dtMs) {
-    for (const inst of [...this.instances.values()]) {
-      const f = inst.field;
-      for (const r of decayField(f, dtMs, INST_DECAY_HOURS)) { if (r.m3 < (Inv.ITEMS[r.ore] || {}).unitM3) this._removeRock(f, r); else this._rockChanged(f, r); }
-      if (!f.rocks.length) this._closeInstance(inst);
-    }
-  }
-  _closeInstance(inst) {
-    for (const s of [...this.ships.values()]) if (s.sys === inst.sys) this._returnHome(s, "The asteroid field is mined out. Your ship returned to its beacon.");
-    for (const c of [...this.cans.values()]) if (c.sys === inst.sys) this.cans.delete(c.id);
-    for (const p of this.players.values()) for (const b of p.beacons) if (b.inst === inst.id) b.inst = null;
-    this.instances.delete(inst.id);
-    if (this.onInstanceClosed) { try { this.onInstanceClosed(inst.id); } catch (e) { console.error("onInstanceClosed", e); } }
-  }
-  // a spot just off a beacon (or the station if it's unknown)
-  _nearBeacon(b) {
-    const a = Math.random() * Math.PI * 2, d = 1.2 + Math.random() * 0.8;
-    return b ? { x: +(b.x + Math.cos(a) * d).toFixed(3), y: +(b.y + Math.sin(a) * d).toFixed(3) } : { x: STATION_POS.x + 2.2, y: STATION_POS.y + 2.2 };
-  }
-  _stopShip(s) { s.vx = 0; s.vy = 0; s.moving = false; s.warp = false; s.wp = null; s.targets = []; s.auto.on = false; for (const L of s.lasers) this._laserStop(L); }
-  // back to the owner's home system, beside the beacon it went through (owner: never destroyed, unlike gates)
-  _returnHome(s, text) {
-    const p = this.players.get(s.owner), b = p && p.beacons.find((x) => x.id === s.via), at = this._nearBeacon(b);
-    this._stopShip(s); s.sys = homeSys(s.owner); s.x = at.x; s.y = at.y; s.tx = at.x; s.ty = at.y; s.via = null;
-    if (text) this._tell(s.owner, shipLabel(s) + ": " + text);
-    this._markInv(s.owner);
-  }
-  // Jump the given ships through a beacon: a linked home beacon into its instance, or an instance's beacon home.
-  // Every ship must be the sender's, in that beacon's system, within range of it.
-  cmdJump(pid, beaconId, shipIds) {
-    const p = this.players.get(pid); if (!p || typeof beaconId !== "string" || !Array.isArray(shipIds)) return;
-    let sys, pos, inst = null, home = null;
-    if (beaconId.endsWith(":ret")) { inst = this.instances.get(beaconId.slice(0, -4)); if (!inst) return; sys = inst.sys; pos = INST_RETURN_POS; }
-    else { home = p.beacons.find((b) => b.id === beaconId); if (!home) return; sys = homeSys(pid); pos = home; inst = home.inst && this.instances.get(home.inst); if (!inst) { this._tell(pid, "That beacon isn't linked to an asteroid field yet."); return; } }
-    const ships = [...new Set(shipIds)].slice(0, 50).map((id) => this.ships.get(id)).filter((s) => s && s.owner === pid && s.sys === sys && !s.docked && !this._inWarp(s) && Math.hypot(s.x - pos.x, s.y - pos.y) <= BEACON_RANGE_KM);
-    if (!ships.length) { this._tell(pid, "Get within " + BEACON_RANGE_KM + " km of the beacon."); return; }
-    if (home && !this._hasRoom(inst, pid)) { this._tell(pid, "That asteroid field is full."); home.inst = null; return; }
-    ships.forEach((s, i) => {
-      // into the instance: out of its gate heading away from home; home: out of the beacon you came through, heading inward
-      const b = home || p.beacons.find((x) => x.id === s.via), out = home ? Math.atan2(home.y, home.x) : b ? Math.atan2(-b.y, -b.x) : 0;
-      const dsys = home ? inst.sys : homeSys(pid), dest = home ? INST_RETURN_POS : b ? { x: b.x, y: b.y } : this._nearBeacon(null);
-      const side = (i - (ships.length - 1) / 2) * 0.35;                        // a fleet comes out side by side
-      this._stopShip(s);
-      s.wp = { ph: "gapp", gx: pos.x, gy: pos.y, dir: out, dur: GATE_JUMP_MS, dsys, via: home ? home.id : null,
-        ex: dest.x - Math.sin(out) * side, ey: dest.y + Math.cos(out) * side };
-      s.tx = pos.x; s.ty = pos.y; s.moving = true;
-    });
-    this._markInv(pid);
-  }
-  exportInstance(inst) { return { id: inst.id, field: inst.field, createdAt: inst.createdAt }; }
-  loadInstance(d) { if (d && isInst(d.id) && d.field && Array.isArray(d.field.rocks) && d.field.rocks.length) this.instances.set(d.id, { id: d.id, sys: d.id, field: d.field, createdAt: d.createdAt || Date.now() }); }
   // a rock changed / went: everyone looking at its system hears about it
   _rockChanged(field, rock) {
     for (const p of this.players.values()) if (!p.offline && this._visibleSystems(p.id).has(field.sys)) (p.rockDirty ||= new Map()).set(rock.id, rock.m3);
@@ -861,84 +760,55 @@ export class World {
 
     }
 
-    // 2) resolve overlaps pairwise (same system), position-corrected by mass
-    for (let i = 0; i < ships.length; i++) {
-      for (let j = i + 1; j < ships.length; j++) {
-        const a = ships[i], b = ships[j];
-        if (a.sys !== b.sys || a.docked || b.docked || this._inWarp(a) || this._inWarp(b)) continue;
-        let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-        const minD = a.radius + b.radius;
-        if (d >= minD) continue;
-        if (d < 1e-6) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d = Math.hypot(dx, dy) || 1; }
-        const nx = dx / d, ny = dy / d, overlap = minD - d;
-        const wa = b.mass / (a.mass + b.mass), wb = a.mass / (a.mass + b.mass); // lighter moves more
-        a.x -= nx * overlap * wa; a.y -= ny * overlap * wa;
-        b.x += nx * overlap * wb; b.y += ny * overlap * wb;
-        // kill the velocity component pushing each ship into the other → no ramming/jitter
-        const avn = a.vx * nx + a.vy * ny; if (avn > 0) { a.vx -= avn * nx; a.vy -= avn * ny; }
-        const bvn = b.vx * nx + b.vy * ny; if (bvn < 0) { b.vx -= bvn * nx; b.vy -= bvn * ny; }
+    // 2) resolve overlaps pairwise, per POI (ships in different POIs never meet)
+    const byPoi = new Map();
+    for (const s of ships) { if (!s.sys || s.docked || this._inWarp(s)) continue; let a = byPoi.get(s.sys); if (!a) byPoi.set(s.sys, (a = [])); a.push(s); }
+    for (const list of byPoi.values()) {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i], b = list[j];
+          let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+          const minD = a.radius + b.radius;
+          if (d >= minD) continue;
+          if (d < 1e-6) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d = Math.hypot(dx, dy) || 1; }
+          const nx = dx / d, ny = dy / d, overlap = minD - d;
+          const wa = b.mass / (a.mass + b.mass), wb = a.mass / (a.mass + b.mass); // lighter moves more
+          a.x -= nx * overlap * wa; a.y -= ny * overlap * wa;
+          b.x += nx * overlap * wb; b.y += ny * overlap * wb;
+          // kill the velocity component pushing each ship into the other → no ramming/jitter
+          const avn = a.vx * nx + a.vy * ny; if (avn > 0) { a.vx -= avn * nx; a.vy -= avn * ny; }
+          const bvn = b.vx * nx + b.vy * ny; if (bvn < 0) { b.vx -= bvn * nx; b.vy -= bvn * ny; }
+        }
       }
     }
 
-    // 3) keep inside the honeycomb, finalize arrivals
+    // 3) keep inside the POI's boundary, finalize arrivals
     for (const s of ships) {
-      if (s.docked) continue;
+      if (s.docked || !s.sys) continue;
       const c = this._clamp(s.sys, s.x, s.y); s.x = c.x; s.y = c.y;
       if (s.moving && !this._inWarp(s) && Math.hypot(s.tx - s.x, s.ty - s.y) <= SHIP_ARRIVE_EPS_KM) { s.moving = false; s.warp = false; if (s.wp && s.wp.ph === "align") s.wp = null; }
     }
   }
 
   // ---- snapshot ----
+  // Every ship in the POI the player's camera is on, plus their own ships wherever they are (docs/DESIGN.md › Engine).
   snapshotFor(p) {
-    const vis = this._visibleSystems(p.id);
-    const myGates = [...this.gates.values()].filter((g) => g.owner === p.id);
-    const now = Date.now();
-
-    const systems = [];
-    for (const sysId of vis) {
-      let fromGateLocal = null, partnerGateId = null;
-      if (sysId !== homeSys(p.id)) {
-        const g = myGates.find((x) => x.state === "active" && x.connToSys === sysId);
-        if (g) { fromGateLocal = { x: g.lx, y: g.ly }; partnerGateId = g.connToGate; }
-      }
-      if (isInst(sysId)) {   // an asteroid instance: drawn off the beacon your ships went through
-        const s0 = [...this.ships.values()].find((s) => s.owner === p.id && s.sys === sysId), b = s0 && p.beacons.find((x) => x.id === s0.via);
-        systems.push({ id: sysId, mine: false, inst: true, fromGateLocal: b ? { x: b.x, y: b.y } : null, players: this._members(this.instances.get(sysId)).size }); continue;
-      }
-      systems.push({ id: sysId, mine: sysId === homeSys(p.id), fromGateLocal, partnerGateId });
-    }
-    // asteroid beacons: yours at home (glowing when linked to an instance with room), and each instance's way home
-    const beacons = p.beacons.map((b) => { const linked = !!(b.inst && this.instances.has(b.inst)); return { id: b.id, sys: homeSys(p.id), x: b.x, y: b.y, linked, to: linked ? b.inst : null }; });
-    // a linked instance you haven't gone into shows only as its empty hex off the beacon (owner): no rocks, ships or players until you jump
-    for (const b of beacons) if (b.to && !vis.has(b.to) && !systems.some((x) => x.id === b.to)) systems.push({ id: b.to, mine: false, inst: true, peek: true, fromGateLocal: { x: b.x, y: b.y } });
-    for (const sysId of vis) if (isInst(sysId)) beacons.push({ id: sysId + ":ret", sys: sysId, x: INST_RETURN_POS.x, y: INST_RETURN_POS.y, linked: true, back: true });
-
-    const gates = [];
-    for (const g of this.gates.values()) {
-      if (!vis.has(g.sys)) continue;
-      const mine = g.owner === p.id;
-      const entry = { id: g.id, sys: g.sys, lx: g.lx, ly: g.ly, mine, state: g.state, connToSys: g.connToSys };
-      if (mine) {
-        entry.fuelMs = Math.max(0, Math.round(g.fuelMs));
-        entry.sessionRemMs = g.state === "active" ? Math.max(0, Math.round(FUEL_SESSION_MAX_MS - g.sessionUsedMs)) : null;
-      }
-      gates.push(entry);
-    }
-
+    const now = Date.now(), view = p.view, vis = this._visibleSystems(p.id);
     const ships = [];
     for (const s of this.ships.values()) {
-      if (!vis.has(s.sys)) continue;
       const mine = s.owner === p.id;
-      if (s.docked && !mine) continue;                        // docked ships are out of sight
+      if (!mine && (s.docked || !s.sys || s.sys !== view)) continue;
       const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       const w = s.wp;
-      if (w && w.ph === "gate") entry.wp = { ph: "gate", el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: w.gx, fy: w.gy, dsys: w.dsys, ex: +w.ex.toFixed(4), ey: +w.ey.toFixed(4) };   // gate jump: a ball from gate to gate
-      else if (w && w.ph !== "align" && w.ph !== "gapp") {   // the owner sees both windows; others see the exit window only seconds before landing
-        entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4), g: w.gate ? 1 : 0 };
-        if (mine || w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS)) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
+      if (w && w.ph === "poi") entry.wp = { ph: "poi", from: w.from, to: w.to, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4) };
+      else if (w && w.ph === "palign") { if (mine) entry.wp = { ph: "palign", to: w.to }; }
+      else if (w && w.ph !== "align") {   // the owner sees both windows; others see the exit window only seconds before landing
+        entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur || 0, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };
+        if (w.to) entry.wp.to = w.to;
+        if (w.ex != null && (mine || w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS))) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
       }
       if (mine) {
-        if (s.moving) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
+        if (s.moving && !(w && w.ph === "palign")) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
         entry.lasers = s.lasers.map((l) => ({ on: l.on, off: !!l.off, repeat: l.repeat, rock: l.rock, hp: l.hp, ax: l.ax, ay: l.ay, p: l.on ? Math.min(1, (now - l.start) / (l.dur || MINING_CYCLE_MS)) : 0, dur: l.dur || MINING_CYCLE_MS }));
@@ -952,15 +822,13 @@ export class World {
         entry.auto = { fitted: this._hasAuto(s), on: s.auto.on, off: !!s.auto.off, cyc, p: s.auto.on ? Math.max(0, 1 - (s.auto.next - now) / cyc) : 0 };
         entry.mining = s.lasers.some((l) => l.on);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
-        entry.canDock = !s.docked && s.sys === homeSys(p.id) && Math.hypot(s.x - STATION_POS.x, s.y - STATION_POS.y) <= DOCK_RADIUS_KM;
-        const jb = !s.docked && !this._inWarp(s) && beacons.find((b) => b.sys === s.sys && b.linked && Math.hypot(s.x - b.x, s.y - b.y) <= BEACON_RANGE_KM);
-        entry.jump = jb ? jb.id : null;                                // a beacon it can jump through right now
+        entry.canDock = !s.docked && s.sys === STATION && !this._inWarp(s) && Math.hypot(s.x, s.y) <= DOCK_RADIUS_KM;
       }
       ships.push(entry);
     }
 
     const cans = [];
     for (const c of this.cans.values()) if (vis.has(c.sys)) cans.push({ id: c.id, sys: c.sys, x: c.x, y: c.y, mine: c.owner === p.id, owner: c.ownerName, left: Math.max(0, c.expiresAt - now), lockedFor: c.owner === p.id ? 0 : Math.max(0, (c.publicAt || 0) - now), empty: !c.inv.slots.length });
-    return { t: "snap", st: this.simAt || now, systems, gates, ships, cans, beacons };   // st: server time, for client-side interpolation
+    return { t: "snap", st: this.simAt || now, view, ships, cans };   // st: server time, for client-side interpolation
   }
 }

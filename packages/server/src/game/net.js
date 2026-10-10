@@ -2,16 +2,12 @@ import { WebSocketServer } from "ws";
 import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
-import {
-  TICK_MS, SNAPSHOT_MS, CELL_APOTHEM_KM, CELL_CIRCUMRADIUS_KM, CELL_CORNER_ROUND_KM,
-  GATE_TRANSFER_RADIUS_KM, FUEL_SESSION_MAX_MS, FUEL_START_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS, MODULE_CATEGORIES,
-  INST_APOTHEM_KM, INST_MAX_PLAYERS, BEACON_RANGE_KM, INST_RETURN_POS, WARP_EXIT_SHOW_MS,
-} from "./constants.js";
-import { CELLS, STARGATE_CELLS, STATION_POS } from "./geometry.js";
+import { TICK_MS, SNAPSHOT_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS, MODULE_CATEGORIES, WARP_EXIT_SHOW_MS } from "./constants.js";
+import { EXPANSE_APOTHEM_AU, POI_KIND_NAMES } from "./expanse.js";
 import { ORES } from "./belts.js";
 import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
 import { getState, useGameCredits } from "../pilots.js";
-import { loadSystem, saveSystem, loadAwakeSystems, loadInstances, saveInstance, deleteInstance } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
 import { pool } from "../db.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
@@ -25,17 +21,9 @@ useGameCredits({
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 
 const CLIENT_CONFIG = {
-  cells: CELLS,
-  stargates: STARGATE_CELLS,
-  station: STATION_POS,
-  cellApothem: CELL_APOTHEM_KM,
-  cellCircumradius: CELL_CIRCUMRADIUS_KM,
-  cellCornerRound: CELL_CORNER_ROUND_KM,
-  transferRadius: GATE_TRANSFER_RADIUS_KM,
-  fuelMaxMs: FUEL_SESSION_MAX_MS,
-  fuelStartMs: FUEL_START_MS,
+  expanseApothemAu: EXPANSE_APOTHEM_AU, poiKinds: POI_KIND_NAMES,
   ores: ORES,
-  warpExitShowMs: WARP_EXIT_SHOW_MS, instApothem: INST_APOTHEM_KM, instReturn: INST_RETURN_POS, instMaxPlayers: INST_MAX_PLAYERS, beaconRange: BEACON_RANGE_KM,
+  warpExitShowMs: WARP_EXIT_SHOW_MS,
   items: ITEMS,
   market: MARKET,
   laserRange: LASER_RANGE_KM, cycleMs: MINING_CYCLE_MS,
@@ -45,7 +33,7 @@ const CLIENT_CONFIG = {
 };
 
 export function attachGameServer(httpServer) {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 64 * 1024 });
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 64 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });   // compressed sockets (docs/DESIGN.md › Engine)
   onCountdown((at, head, parts) => { const msg = JSON.stringify({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
   // a new website build is live: tell every connected client to reload now
   onWebsiteUpdate((v) => { const msg = JSON.stringify({ t: "update", web: v }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
@@ -85,8 +73,8 @@ export function attachGameServer(httpServer) {
     };
     await refreshLicenses();
     licTimer = setInterval(refreshLicenses, 60000);
-    const fl = world.fieldsFor(player); player.fieldSig = fl.sig;
-    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fl.fields }));
+    const fl = world.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = world.poiSig(player);
+    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, belts: fl.fields, pois: world.poisFor(player) }));
     send(JSON.stringify(world.inventoriesFor(pid)));
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
@@ -100,9 +88,9 @@ export function attachGameServer(httpServer) {
     });
     const handle = (m) => {
       switch (m.t) {
-        case "gate": world.cmdGate(pid, m.gate, !!m.open); break;
+        case "view": world.cmdView(pid, m.poi); break;
+        case "warpto": world.cmdWarpTo(pid, m.ships, m.poi); break;
         case "move": world.cmdMove(pid, m.ships, +m.x, +m.y, m.sys); break;
-        case "jump": world.cmdJump(pid, m.beacon, m.ships); break;
         case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
         case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
         case "mine": world.cmdMine(pid, m.ship, !!m.on); break;
@@ -142,25 +130,14 @@ export function attachGameServer(httpServer) {
   };
   world.onCredits = (pid, delta) => { pool.query(`UPDATE users SET credits = credits + $1 WHERE id = $2`, [delta, pid]).catch((e) => console.error("credits", e)); };
   world.onBeforePurge = (pid) => { lastSaved.delete(pid); const state = world.exportState(pid); saveSystem(pid, state).catch((e) => console.error("saveSystem(purge)", e)); };
-  // asteroid instances persist on their own (shared by many players); a closed one is deleted
-  const instSaved = new Map();
-  const persistInstances = () => { for (const inst of world.instances.values()) { const json = JSON.stringify(world.exportInstance(inst)); if (instSaved.get(inst.id) === json) continue; instSaved.set(inst.id, json); saveInstance(inst.id, json).catch((e) => console.error("saveInstance", e)); } };
-  world.onInstanceClosed = (id) => { instSaved.delete(id); deleteInstance(id).catch((e) => console.error("deleteInstance", e)); };
-  // On boot: the instances first (ships may be in them), then anyone who should still be awake: a running gate,
-  // unfinished orders, offline mining, or ships in an instance. Their pilots come too (licenses drive mining).
+  // belt POIs persist on their own (shared by everyone); a closed one is deleted
+  const poiSaved = new Map();
+  const persistPois = () => { for (const poi of world.pois.values()) { if (poi.kind !== "belt") continue; const json = JSON.stringify(world.exportPoi(poi)); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
+  world.onPoiClosed = (poi) => { if (poiSaved.delete(poi.id) || poi.kind === "belt") deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
   (async () => {
-    try { for (const d of await loadInstances()) world.loadInstance(d); if (world.instances.size) console.log(`[world] restored ${world.instances.size} asteroid instance(s)`); } catch (e) { console.error("loadInstances", e); }
-    try {
-      const rows = await loadAwakeSystems();
-      for (const r of rows) {
-        const pid = String(r.user_id); if (world.players.has(pid)) continue;
-        const p = world.addPlayer(pid, r.username, () => {}, r.data); p.offline = true; p.offlineSince = Date.now() + 5 * 60000;   // 6 min grace after a restart: players coming back from an update keep their idle ships in place
-        try { const st = await getState(r.user_id); const lic = {}; for (const pl of st.pilots) for (const k in pl.licenses) lic[k] = Math.max(lic[k] || 0, pl.licenses[k]); p.licenses = lic; p.pilots = st.pilots.map((pl) => ({ id: pl.id, name: pl.name, licenses: pl.licenses })); } catch (e) { console.error("pilots(awake)", e); }
-      }
-      if (rows.length) console.log(`[world] restored ${rows.length} offline system(s) awake`);
-    } catch (e) { console.error("loadAwakeSystems", e); }
+    try { for (const d of await loadPois()) world.loadPoi(d); } catch (e) { console.error("loadPois", e); }
   })();
-  setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistInstances(); }, 10000);
+  setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);
 
   let last = Date.now();
   setInterval(() => {
@@ -172,6 +149,7 @@ export function attachGameServer(httpServer) {
   setInterval(() => {
     for (const p of world.players.values()) {
       if (p.offline) continue;                              // nobody to send to
+      const ps = world.poiSig(p); if (ps !== p.poiSig) { p.poiSig = ps; p.send(JSON.stringify({ t: "pois", pois: world.poisFor(p) })); }   // the map's POIs changed
       p.send(JSON.stringify(world.snapshotFor(p)));
       if (p.invDirty) { p.invDirty = false; p.send(JSON.stringify(world.inventoriesFor(p.id))); }
       if (world.fieldSig(p) !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); p.rockDirty && p.rockDirty.clear(); }   // a field came into view or regrew
