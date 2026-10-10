@@ -18,8 +18,8 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **Caps by popularity:** popular POIs (trading stations, NPC stations, home planets) get higher player caps; lower-priority ones (asteroid belts and the like) get lower caps.
   - **Bigger POIs** can contain **acceleration gates** to smaller capped instances.
 - **Wormholes** spawn and despawn in the Expanse and lead to nomad space. The Expanse's job is to **balance nomad space (owner)**:
-  - it only connects to **low and mid** nomad systems (1–15 players, see the tiers below);
-  - when a system it connects to reaches **25**, that wormhole is cut and a new one opens to a low or mid system;
+  - **new connections only go to low and mid** nomad systems (1–15 players, see the tiers below), never to a high one;
+  - **an existing connection survives into high** (a system that grew to 16–25 while connected), but it's **cut the moment the system becomes overcrowded** (26+). The Expanse is **never** connected to an overcrowded or past-50 system (owner);
   - a wormhole that gets too much traffic also closes and reopens elsewhere.
 - **Stargates** only arrive if there's ever a second hub world. They're skipped for now.
 
@@ -67,7 +67,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
 - **Safety rules:**
   - **Every occupied system always has at least one exit.** An empty system that someone arrives in starts spawning exits by the rules above.
   - **Residents can always get home:** the arc has a **home jump (owner)**, a direct jump to your home nomad system on a long cooldown, whatever the wormholes are doing.
-  - **The Expanse is reachable:** nomad space gets regular wormholes back to it (where bases and selling are), biased to appear in busy nomad systems, which also drains them.
+  - **The Expanse is reachable:** nomad space gets regular wormholes back to it (where bases and selling are). They follow the Expanse's own rules (low and mid systems, plus high ones already connected), so crowds return home by spreading out to quieter systems first. The return holes need to roughly match how fast the Expanse feeds players in (to tune).
 - **Unloading:** world nomad systems with nobody in them are unloaded and reloaded from save, so a large pool costs nothing until it's used.
 
 ### Instances (behind acceleration gates)
