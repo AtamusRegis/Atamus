@@ -18,30 +18,50 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **Caps by popularity:** popular POIs (trading stations, NPC stations, home planets) get higher player caps; lower-priority ones (asteroid belts and the like) get lower caps.
   - **Bigger POIs** can contain **acceleration gates** to smaller capped instances.
 - **Wormholes** spawn and despawn in the Expanse and lead to nomad space. The Expanse's job is to **balance nomad space (owner)**:
-  - it **only connects to nomad systems with 25 players or fewer**;
-  - when one of its wormholes gets too much traffic, it closes and a new one opens to a quieter system.
+  - it only connects to **low and mid** nomad systems (1–15 players, see the tiers below);
+  - when a system it connects to reaches **25**, that wormhole is cut and a new one opens to a low or mid system;
+  - a wormhole that gets too much traffic also closes and reopens elsewhere.
 - **Stargates** only arrive if there's ever a second hub world. They're skipped for now.
 
 ### Nomad space (wormhole systems)
 
 - **Many smaller systems** (0.5 AU) with planets, belts and their own acceleration gate instances where needed. This is where better resources are.
 - **No stable connections.** Wormholes open and close all the time, which is both the exploration and the **load balancing**.
-- **Population flow (owner):** wormholes are chosen by the population of the system they open from. In short, lone players drift toward groups, and big groups spread out.
-  - **Under 25 players:** new connections go to low- up to mid-population nomad systems, so solo players find company.
-  - **Over 25 players:** new connections go to **empty systems when available**, otherwise to lower-population ones.
-  - **The threshold is 50 players.** Population can grow past it. At 50 the system cuts its connections to other high-population systems and only connects to empty space.
-  - **Reopening has a gap so it doesn't flicker:** connections to busier systems come back only once the population falls to about 30. Between 30 and 50 the system keeps whichever rule it last had.
-- **Overflow systems (owner):** a few nomad systems (say 5) are reserved for population control.
-  - They only get connected to drain high-population systems.
-  - Once empty, they cut all connections and sit dark until needed again, or until a player logs into one (it can be their home).
+- **Population tiers (owner):**
+
+  | Tier | Players |
+  |---|---|
+  | Empty | 0 |
+  | Low | 1–5 |
+  | Mid | 6–15 |
+  | High | 16–25 |
+  | Overcrowded | 26–50 |
+  | Past 50 | over 50 (population can keep growing) |
+
+- **Population flow (owner):** a system's new wormholes depend on its tier. In short, lone players drift toward groups, and big groups spread out.
+
+  | From | Connects to |
+  |---|---|
+  | Low | Mid (draws lone players toward groups) |
+  | Mid | Anything |
+  | High | Low |
+  | Overcrowded | Low or empty |
+  | Past 50 | **Empty only**, and the server spawns new empty systems if all are in use |
+
+  - A system only changes tier after it has been in the new range for a short while, so one player hopping in and out doesn't flip its connections.
+- **Empty systems (owner):** the server's dispersal tool, as **non-world** nomad systems made on demand.
+  - **Creation:** whenever the flow needs empty space and none is free (for example, every system is overcrowded), the server instantiates new ones.
+  - **They have no planets,** so nobody can set home there. That keeps players from setting up camp and making them useless for dispersal.
+  - **Unused ones go away:** once empty and unneeded, they cut all connections and are dropped.
+  - **Logging out in one:** on login, the player arrives in a freshly spawned empty system with a wormhole out to a low or mid system, which closes behind them.
 - **The follow window:** a wormhole stays open behind a traveller for a while (a set time or number of crossings), so friends can follow. It closes early if it's at its limit.
 - **No backtracking into crowds:** an unconnected system that fills up grows new exits of its own, but players can't backtrack to pile more people into it.
-- **Home nomad system:** a player can have one. On login they're put back there **even if it's over its threshold**; nomad space scales as needed.
+- **Home nomad system:** a player can have one (a world nomad system with a planet, never an empty system). On login they're put back there **even if it's overcrowded**; nomad space scales as needed.
 - **Safety rules:**
-  - **Every occupied system always has at least one exit.** A fresh unconnected system starts spawning exits once someone is in it.
+  - **Every occupied system always has at least one exit.** An empty system that someone arrives in starts spawning exits by the rules above.
   - **Residents can always get home:** the arc has a **home jump (owner)**, a direct jump to your home nomad system on a long cooldown, whatever the wormholes are doing.
   - **The Expanse is reachable:** nomad space gets regular wormholes back to it (where bases and selling are), biased to appear in busy nomad systems, which also drains them.
-- **Unloading:** empty systems with no residents are unloaded and reloaded from save, so a large pool of nomad systems costs nothing until it's used.
+- **Unloading:** world nomad systems with nobody in them are unloaded and reloaded from save, so a large pool costs nothing until it's used.
 
 ### Instances (behind acceleration gates)
 
@@ -149,4 +169,4 @@ Ships and hulls, fitting (hardpoints, disposition, capacitor, running hot), the 
 - **Where the market lives:** stations, the base, or both.
 - **Base surface:** grid size, building list, pipe rules (throughput, mixing) and catch-up limits.
 - **Nomad home:** how a player sets their home nomad system, and the home jump's cooldown.
-- **Wormhole numbers:** set by the owner, to tune: the Expanse feeds systems with 25 or fewer, the split is 25, the threshold 50 and the reopen level about 30, with about 5 overflow systems. Still to set: what counts as low and mid population, the follow-window length and crossing count, and how often wormholes spawn.
+- **Wormhole numbers:** the tiers and rules above are set by the owner. Still to set: the follow-window length and crossing count, how often wormholes spawn, how many world nomad systems exist, and how long a tier change takes to settle.
