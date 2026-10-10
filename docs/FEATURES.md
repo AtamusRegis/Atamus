@@ -33,17 +33,18 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **Asteroid belts (owner)** are POIs 50 km across, spawned by population: one per 12 players online, at least 3. Each holds one rich field (70–110 rocks, 250k–600k m³, a primary ore rolled by rarity plus up to two lower ores) and has a **hidden lifetime** of 60–120 minutes.
   - **When a belt's time runs out or it's mined out (owner),** it leaves the map at once (no icon, nobody new can warp to it or look into it), but stays open for whoever is inside until the last ship leaves. A held belt doesn't count toward the population number, so a replacement spawns. Belts are saved (in the `instances` table) and survive restarts.
 - **Map and zoom (owner):** one continuous zoom from POI scale out to the whole system (1 AU is drawn as 20,000 km; the wheel takes bigger steps once zoomed out).
-  - Zoomed in, the POI is at true scale with a dashed boundary circle.
-  - Zoomed out, POIs are icons: the station, a planet sphere, the stargate, a small rock cluster for belts. Hovering an icon shows its name.
+  - **Only POIs you have a ship in (docked counts) show their zone and contents (owner):** zoomed in, such a POI is at true scale with a dashed boundary circle, its rocks, structures and other players' ships. Every other POI is only ever its icon, at any zoom, and the server sends nothing from inside it.
+  - Icons (owner's pixel art in `assets/map/`, drawn crisp at their own size): the station, the stargate, an asteroid field for belts; planets are a small procedural sphere. Hovering an icon shows its name.
   - A POI your ships are in keeps a visible boundary at any zoom, with your ships as dots inside it.
   - Move orders go to the selected ships in the POI you clicked, and stay inside its boundary.
 - **Warp to a POI (owner):** right-click (or hold, on touch) a POI's icon on the zoomed-out map → **Warp to *name*** for the selected ships.
   1. The ship aligns toward the target's bearing on the map, speeding up at its normal acceleration.
   2. At full speed and lined up, the warp window opens ahead; it coasts in (0.9 s) and leaves the POI.
-  3. **Off-POI** it's a glowing ball crossing the map for 2 s + 4 s per AU (`WARP_POI_BASE_MS`, `WARP_AU_PER_S` = 0.25; tunable). Nothing is simulated meanwhile, and move and dock orders are ignored.
-  4. It drops out of an exit window at a scattered point 15–50% of the way out from the target's centre, braking to a stop like a normal warp exit.
+  3. **Off-POI** it's a glowing ball crossing the map at constant speed for 2 s + 28 s per AU, so **crossing the 1 AU system takes 30 s (owner)** (`WARP_POI_BASE_MS`, `WARP_AU_PER_S`). Nothing is simulated meanwhile, and move and dock orders are ignored. The ball runs from the entry window straight to the exit window.
+  4. It drops out of an exit window at a scattered point 15–50% of the way out from the target's centre (picked when it leaves), braking to a stop like a normal warp exit.
+  - **Camera (owner):** following a ship at warp (in-POI transit or between POIs), the camera locks onto it instead of easing, so it never falls behind.
   - Targets, lasers and the auto miner reset when a warp-to starts. A warp in progress at logout lands in the target POI.
-- **What you receive (owner):** every ship in the POI your camera is on (the client tells the server with `view`), plus your own ships wherever they are. Rocks and cans come for those POIs too. The POI list comes on its own (`pois`) whenever it changes. Sockets are compressed (permessage-deflate).
+- **What you receive (owner):** every ship in the POI your camera is on (the client tells the server with `view`; only a POI where you have a ship counts), plus your own ships wherever they are. Rocks and cans come for those POIs too. The POI list comes on its own (`pois`) whenever it changes. Sockets are compressed (permessage-deflate).
 - **Ships in different POIs** never see, target or bump each other.
 - **Local chat** reaches everyone online in the Expanse.
 - **Logging off (owner):** no logged-off presence. 20 s after the last connection closes (a reload fits in that), the player's fleet leaves the world.

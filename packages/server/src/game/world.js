@@ -109,10 +109,11 @@ export class World {
   }
 
   // ---- commands ----
-  // which POI the player's camera is on: they get full updates for it (and their own ships everywhere)
+  // which POI the player's camera is on: they get full updates for it (and their own ships everywhere). Only a POI
+  // where they have a ship counts (owner): nobody sees into a POI from outside.
   cmdView(pid, poiId) {
     const p = this.players.get(pid); if (!p) return;
-    p.view = typeof poiId === "string" && this._poiVisibleTo(this.pois.get(poiId), pid) ? poiId : null;
+    p.view = typeof poiId === "string" && this.pois.has(poiId) && this._hasShipsIn(poiId, pid) ? poiId : null;
   }
   // sys: the system the order was given in (ships elsewhere ignore it); the point is local to that system
   cmdMove(pid, shipIds, x, y, sys) {
@@ -357,8 +358,9 @@ export class World {
   _arrive(s, w, now) {
     let dst = this.pois.get(w.to);
     if (!dst || dst.retired) dst = this._newPoi("spawn", { owner: s.owner });   // it closed while you were on the way
-    const a = Math.random() * Math.PI * 2, d = dst.r * (0.15 + Math.random() * 0.35), tx = Math.cos(a) * d, ty = Math.sin(a) * d;
-    const brake = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3, ex = tx - Math.cos(w.dir) * brake, ey = ty - Math.sin(w.dir) * brake;
+    const brake = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3;
+    let { tx, ty } = w; if (!Number.isFinite(tx) || Math.hypot(tx, ty) > dst.r) { const a = Math.random() * Math.PI * 2, d = dst.r * (0.15 + Math.random() * 0.35); tx = Math.cos(a) * d; ty = Math.sin(a) * d; }
+    const ex = tx - Math.cos(w.dir) * brake, ey = ty - Math.sin(w.dir) * brake;
     s.sys = dst.id; s.x = ex; s.y = ey; s.tx = tx; s.ty = ty; s.vx = 0; s.vy = 0; s.warp = false; s.moving = true;
     s.wp = { ph: "exit", at: now, dir: w.dir, fx: ex, fy: ey, ex, ey, tx, ty, stop: brake, dur: 0, arrived: true };
     this._markInv(s.owner);
@@ -390,7 +392,10 @@ export class World {
       if (now - w.at < WARP_OPEN_MS) return false;                                         // coasting into the window at full speed
       if (w.to) {                                                                          // into the window: gone from this POI
         const src = this.pois.get(s.sys), dst = this.pois.get(w.to), d = src && dst ? auDist(src, dst) : 0.3;
-        s.wp = { ph: "poi", from: s.sys, to: w.to, at: now, dur: Math.round(WARP_POI_BASE_MS + d / WARP_AU_PER_S * 1000), dir: w.dir };
+        // the drop-out point is picked now, so the ball's path across the map ends exactly at the exit window
+        const a = Math.random() * Math.PI * 2, r = (dst ? dst.r : 25) * (0.15 + Math.random() * 0.35), tx = Math.cos(a) * r, ty = Math.sin(a) * r;
+        const brake = s.speed * WARP_MULT * WARP_STOP_MS / 1000 / 3, ex = tx - Math.cos(w.dir) * brake, ey = ty - Math.sin(w.dir) * brake;
+        s.wp = { ph: "poi", from: s.sys, to: w.to, at: now, dur: Math.round(WARP_POI_BASE_MS + d / WARP_AU_PER_S * 1000), dir: w.dir, fx: w.fx, fy: w.fy, tx, ty, ex, ey };
         s.sys = null; s.x = 0; s.y = 0; s.vx = 0; s.vy = 0; s.moving = false; s.targets = [];
         this._markInv(s.owner); return true;
       }
@@ -655,8 +660,7 @@ export class World {
     this.pois.set(d.id, { ...d, fixed: false, hidden: false, retired: false }); this.poiVer++;
   }
   _visibleSystems(pid) {
-    const p = this.players.get(pid), set = new Set();
-    if (p && p.view) set.add(p.view);
+    const set = new Set();
     for (const s of this.ships.values()) if (s.owner === pid && s.sys) set.add(s.sys);
     return set;
   }
@@ -813,17 +817,17 @@ export class World {
     return entry;
   }
   snapshotFor(p, idx = this.snapshotIndex()) {
-    const now = idx.now, view = p.view, ships = [];
+    const now = idx.now, own = idx.byOwner.get(p.id) || [], view = p.view && own.some((s) => s.sys === p.view) ? p.view : null, ships = [];
     for (const s of (view && idx.byPoi.get(view)) || []) {
       if (s.owner === p.id) continue;
       let e = idx.pub.get(s.id); if (!e) idx.pub.set(s.id, (e = this._pubEntry(s, now)));
       ships.push(e);
     }
     const vis = new Set(view ? [view] : []);
-    for (const s of idx.byOwner.get(p.id) || []) {
+    for (const s of own) {
       if (s.sys) vis.add(s.sys);
       const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine: true }, w = s.wp;
-      if (w && w.ph === "poi") entry.wp = { ph: "poi", from: w.from, to: w.to, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4) };
+      if (w && w.ph === "poi") entry.wp = { ph: "poi", from: w.from, to: w.to, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(3), fy: +w.fy.toFixed(3), ex: +w.ex.toFixed(3), ey: +w.ey.toFixed(3) };
       else if (w && w.ph === "palign") entry.wp = { ph: "palign", to: w.to };
       else if (w && w.ph !== "align") {                       // the owner sees both windows
         entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur || 0, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };

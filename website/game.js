@@ -185,29 +185,30 @@
   // where each POI sits on the map (km); k > 1 enlarges a POI your ships are in when zoomed out, so its boundary and
   // your ships stay visible at solar scale (owner)
   function placements() {
-    const place = new Map(), sc = scale(), mineIn = new Set();
-    for (const sh of snap.ships || []) if (sh.mine && sh.sys && !sh.docked) mineIn.add(sh.sys);
+    const place = new Map(), sc = scale(), mineIn = new Set(), active = new Set();
+    for (const sh of snap.ships || []) if (sh.mine && sh.sys) { active.add(sh.sys); if (!sh.docked) mineIn.add(sh.sys); }
     for (const poi of pois) {
       const rPx = poi.r * sc, k = mineIn.has(poi.id) && rPx < RING_MIN_PX ? RING_MIN_PX / Math.max(1e-6, rPx) : 1;
-      place.set(poi.id, { gx: poi.ax * AU_KM, gy: poi.ay * AU_KM, r: poi.r, k, poi });
+      place.set(poi.id, { gx: poi.ax * AU_KM, gy: poi.ay * AU_KM, r: poi.r, k, poi, active: active.has(poi.id) });   // active: you have a ship there (owner: only then are its zone and contents shown)
     }
     return place;
   }
   // which POI a map point falls in (inside its boundary)
-  function sysAtWorld(w) { let best = null, bd = Infinity; for (const [id, pl] of curPlace) { const d = Math.hypot(w.x - pl.gx, w.y - pl.gy) / (pl.r * pl.k); if (d <= 1 && d < bd) { bd = d; best = { id, pl }; } } return best; }
+  function sysAtWorld(w) { let best = null, bd = Infinity; for (const [id, pl] of curPlace) { if (!pl.active) continue; const d = Math.hypot(w.x - pl.gx, w.y - pl.gy) / (pl.r * pl.k); if (d <= 1 && d < bd) { bd = d; best = { id, pl }; } } return best; }
   // a ship's map position: in its POI, or (warping between POIs) on its way across the map
   function shipWorld(sh) {
     if (sh.sys) { const pl = curPlace.get(sh.sys); if (!pl) { const poi = poiById.get(sh.sys); if (!poi) return null; return { x: poi.ax * AU_KM + (sh.docked ? 0 : sh.x), y: poi.ay * AU_KM + (sh.docked ? 0 : sh.y) }; } if (sh.docked) return { x: pl.gx, y: pl.gy }; const p = shipPos(sh); return { x: pl.gx + p.x * pl.k, y: pl.gy + p.y * pl.k }; }
     const w = sh.wp; if (!w || w.ph !== "poi") return null;
     const a = poiById.get(w.from), b = poiById.get(w.to); if (!a || !b) return null;
-    const u = Math.min(1, (w.el + (performance.now() - snapAt)) / (w.dur || 1)), e = u * u * (3 - 2 * u);
-    return { x: (a.ax + (b.ax - a.ax) * e) * AU_KM, y: (a.ay + (b.ay - a.ay) * e) * AU_KM, u, ball: true };
+    // constant warp speed from the entry window in the source POI to the exit window in the target
+    const u = Math.min(1, (w.el + (performance.now() - snapAt)) / (w.dur || 1)), ax = a.ax * AU_KM + (w.fx || 0), ay = a.ay * AU_KM + (w.fy || 0), bx = b.ax * AU_KM + (w.ex || 0), by = b.ay * AU_KM + (w.ey || 0);
+    return { x: ax + (bx - ax) * u, y: ay + (by - ay) * u, u, ball: true };
   }
   // the POI the camera is looking at: the server sends every ship in it (plus your own everywhere)
   let camPoi = null, sentView;
   function updateCamPoi() {
     let best = null, bd = Infinity;
-    for (const pl of curPlace.values()) { const d = Math.hypot(cam.cx - pl.gx, cam.cy - pl.gy) / (pl.r * pl.k); if (d < 1.5 && d < bd && pl.r * 2 * scale() > 40) { bd = d; best = pl.poi.id; } }
+    for (const pl of curPlace.values()) { if (!pl.active) continue; const d = Math.hypot(cam.cx - pl.gx, cam.cy - pl.gy) / (pl.r * pl.k); if (d < 1.5 && d < bd && pl.r * 2 * scale() > 40) { bd = d; best = pl.poi.id; } }
     camPoi = best;
     if (camPoi !== sentView && ws && ws.readyState === WebSocket.OPEN) { sentView = camPoi; send({ t: "view", poi: camPoi }); }
   }
@@ -222,7 +223,7 @@
   // a POI's map icon under a screen point (only drawn as an icon while the POI is small on screen)
   function poiAt(p) {
     let best = null, bd = ICON_PX;
-    for (const pl of curPlace.values()) { if (pl.poi.hidden || pl.r * scale() >= 40) continue; const d = Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)); if (d < bd) { bd = d; best = pl.poi; } }
+    for (const pl of curPlace.values()) { if (pl.poi.hidden || (pl.active && pl.r * scale() >= 40)) continue; const d = Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)); if (d < bd) { bd = d; best = pl.poi; } }
     return best;
   }
 
@@ -290,14 +291,15 @@
   function shipPos(sh) { return shipRender.get(sh.id) || { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }; }
   function followAnchor() {
     let n = 0, sx = 0, sy = 0;
-    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const w = shipWorld(sh); if (!w) continue; sx += w.x; sy += w.y; n++; }
-    return n ? { x: sx / n, y: sy / n } : null;
+    let fast = false;
+    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const w = shipWorld(sh); if (!w) continue; sx += w.x; sy += w.y; n++; if (sh.wp && (sh.wp.ph === "poi" || sh.wp.ph === "transit")) fast = true; }
+    return n ? { x: sx / n, y: sy / n, fast } : null;
   }
   function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
   function shipScreen(sh) { const w = shipWorld(sh); return w ? { x: gx2s(w.x), y: gy2s(w.y) } : null; }
   // the station structure (in the station POI), only while zoomed in far enough to see it
   function stationAt(p) {
-    const pl = curPlace.get("station"); if (!pl || !cfg || STATION_LEN_KM * scale() < 3) return false;
+    const pl = curPlace.get("station"); if (!pl || !pl.active || !cfg || STATION_LEN_KM * scale() < 3) return false;
     return Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)) <= Math.max(14, STATION_LEN_KM * scale() * 0.4);
   }
   function rockAt(p) {
@@ -312,7 +314,7 @@
   }
   function gateAt(p) {
     if (GATE_LEN_KM * scale() < 3) return null;                                // only while zoomed in on a gate POI
-    for (const g of snap.gates) { const pl = curPlace.get(g.sys); if (!pl) continue; const sx = gx2s(pl.gx + g.lx * pl.k), sy = gy2s(pl.gy + g.ly * pl.k); const r = Math.max(14, GATE_LEN_KM * scale() / 2); if (Math.hypot(p.x - sx, p.y - sy) <= r) return g; }
+    for (const g of snap.gates) { const pl = curPlace.get(g.sys); if (!pl || !pl.active) continue; const sx = gx2s(pl.gx + g.lx * pl.k), sy = gy2s(pl.gy + g.ly * pl.k); const r = Math.max(14, GATE_LEN_KM * scale() / 2); if (Math.hypot(p.x - sx, p.y - sy) <= r) return g; }
     return null;
   }
   function shipAt(p) {
@@ -679,7 +681,7 @@
     if (!Object.keys(oreRock).length) for (const o of cfg.ores || []) oreRock[o.key] = { rock: o.rock, color: o.color };
     const s = scale();
     for (const belt of belts) {
-      const home = place.get(belt.sys); if (!home) continue;
+      const home = place.get(belt.sys); if (!home || !home.active) continue;
       for (const rk of belt.rocks) {
         const x = gx2s(home.gx + rk.x * home.k), y = gy2s(home.gy + rk.y * home.k);
         const wPx = (rk.size / 1000) * s;                        // rock width at true scale
@@ -720,7 +722,7 @@
   }
   // the Expanse station, at the centre of its POI (true 2766 m scale)
   function drawStations(place) {
-    const pl = place.get("station"); if (!pl) return;
+    const pl = place.get("station"); if (!pl || !pl.active) return;
     const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
     const rPx = DOCK_RADIUS_KM * scale();                     // dock ring
     if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(120,170,255,0.35)"; ctx.stroke(); ctx.restore(); }
@@ -820,20 +822,19 @@
     for (const pl of place.values()) {
       const poi = pl.poi, x = gx2s(pl.gx), y = gy2s(pl.gy), rPx = pl.r * sc * pl.k, col = POI_COL[poi.kind] || POI_COL.spawn;
       if (x < -rPx - 60 || y < -rPx - 60 || x > innerWidth + rPx + 60 || y > innerHeight + rPx + 60) continue;
-      if (rPx >= 10) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.setLineDash(rPx > 200 ? [10, 10] : [4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(" + col + "," + (rPx > 200 ? 0.25 : 0.45) + ")"; ctx.stroke(); ctx.restore(); }
-      if (poi.kind === "planet") drawPlanet(x, y, Math.max(ICON_PX * 0.5, PLANET_R_KM * sc * pl.k), poi);
-      const small = pl.r * sc < 40;
+      if (pl.active && rPx >= 10) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.setLineDash(rPx > 200 ? [10, 10] : [4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(" + col + "," + (rPx > 200 ? 0.25 : 0.45) + ")"; ctx.stroke(); ctx.restore(); }
+      if (poi.kind === "planet") drawPlanet(x, y, pl.active ? Math.max(ICON_PX * 0.5, PLANET_R_KM * sc * pl.k) : ICON_PX * 0.5, poi);
+      const small = !pl.active || pl.r * sc < 40;                // a POI without your ships is only ever its icon (owner)
       if (small && !poi.hidden) drawPoiIcon(poi, x, y);
       if (small && !poi.hidden && hoverAt && Math.hypot(hoverAt.x - x, hoverAt.y - y) < ICON_PX) hover = { poi, x, y };
     }
     if (hover) { ctx.save(); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(225,232,245,0.9)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 4; ctx.fillText(hover.poi.name, hover.x, hover.y + ICON_PX + 8); ctx.restore(); }
   }
+  // map icons (owner's pixel art, drawn crisp at their own size)
+  const mapIcon = {}; for (const k of ["belt", "gate", "station"]) { mapIcon[k] = new Image(); mapIcon[k].src = "assets/map/" + k + ".png"; }
   function drawPoiIcon(poi, x, y) {
-    ctx.save();
-    if (poi.kind === "station" && stationArt.blue.naturalWidth) { const w = 20, h = w * stationArt.blue.naturalHeight / stationArt.blue.naturalWidth; ctx.drawImage(stationArt.blue, x - w / 2, y - h / 2, w, h); }
-    else if (poi.kind === "gate" && gateImg.naturalWidth) { const w = 15, h = w * gateImg.naturalHeight / gateImg.naturalWidth; ctx.globalAlpha = 0.9; ctx.drawImage(gateImg, x - w / 2, y - h / 2, w, h); }
-    else if (poi.kind === "belt") { for (let i = 0; i < 6; i++) { const a = hash(i + poi.id.length) * 6.283, d = 1.5 + hash(i * 3 + 1) * 5, r = 1 + hash(i + 9) * 1.6; ctx.fillStyle = i % 3 ? "#a89580" : "#d6a05a"; ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r, 0, Math.PI * 2); ctx.fill(); } }
-    ctx.restore();
+    const img = mapIcon[poi.kind]; if (!img || !img.naturalWidth) return;
+    ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(img, Math.round(x - img.naturalWidth / 2), Math.round(y - img.naturalHeight / 2)); ctx.restore();
   }
   // procedural planets: a texture per planet (its seed picks the kind and colours), lit from the sun at the map's centre
   const planetTex = new Map();
@@ -947,7 +948,7 @@
       updateShipRender();
       const anchor = follow ? followAnchor() : null;
       if (anchor) {                                    // follow selected ship / group centroid
-        const e = 1 - Math.exp(-12 * dt);
+        const e = anchor.fast ? 1 : 1 - Math.exp(-12 * dt);   // at warp the camera locks onto the ship (easing would leave it behind)
         cam.cx += (anchor.x - cam.cx) * e; cam.cy += (anchor.y - cam.cy) * e;
         panVel.x = 0; panVel.y = 0;
       } else {
@@ -966,7 +967,7 @@
       drawPois(place);
       drawBelts(place);
       drawStations(place);
-      if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
+      if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl && pl.active) drawGate(g, pl); }
       drawCans();
       drawShips(place);
       const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target

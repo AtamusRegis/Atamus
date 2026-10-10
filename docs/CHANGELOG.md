@@ -4,6 +4,11 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **Warp between POIs:** crossing the system takes 30 s (2 s + 28 s per AU); the ball flies straight from the entry window to the exit window.
+- **Camera:** locks onto a followed ship at warp instead of trailing behind.
+- **POIs:** a POI's zone and contents (rocks, structures, other ships) only show, and are only sent, while you have a ship in it; otherwise it's just its icon at any zoom.
+- **Map icons:** new pixel-art icons for the station, stargates and asteroid belts.
+
 - **The Expanse (major, needs a wipe):** one shared home system replaces personal systems.
   - A 1 AU hexagon with the sun at its centre, made of points of interest: 4 procedural planets, the Expanse Station, 6 offline stargates on the edges, and asteroid belts spawned by population (one per 12 players online, at least 3) with hidden lifetimes; an expired belt is held open, unmarked, until the last ship leaves.
   - One zoom from true km scale out to the whole system map; right-click or hold a POI icon to **Warp to** it (align, window, a ball across the map, drop out inside).

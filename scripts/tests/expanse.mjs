@@ -50,8 +50,13 @@ const b = mk("b"), sb = shipOf("b"); undock(sb);
 w.cmdView("b", "station");
 t.ok(!w.snapshotFor(b).ships.some((s) => s.id === sa.id), "ships in other POIs aren't sent");
 w.cmdView("b", belt.id);
-t.ok(w.snapshotFor(b).ships.some((s) => s.id === sa.id) && w.snapshotFor(b).ships.some((s) => s.id === sb.id), "the POI the camera is on is sent in full, and your own ships always");
+t.ok(w.players.get("b").view === null && !w.snapshotFor(b).ships.some((s) => s.id === sa.id) && !w.fieldsFor(b).fields.some((f) => f.sys === belt.id), "nobody sees into a POI without a ship of theirs in it (owner)");
+w._buyShip(b, "chisel"); const sb2 = [...w.ships.values()].find((s) => s.owner === "b" && s !== sb); Object.assign(sb2, { docked: false, sys: belt.id, x: -5, y: 5, tx: -5, ty: 5 });
+w.cmdView("b", belt.id);
+t.ok(w.snapshotFor(b).ships.some((s) => s.id === sa.id) && w.snapshotFor(b).ships.some((s) => s.id === sb.id), "with a ship there, the POI the camera is on is sent in full, and your own ships always");
 t.ok(w.fieldsFor(b).fields.some((f) => f.sys === belt.id), "its rocks come with it");
+sb2.sys = "station"; sb2.docked = true;
+t.ok(!w.snapshotFor(b).ships.some((s) => s.id === sa.id), "once your ships leave, it stops");
 // ships in different POIs never collide
 sb.x = sa.x; sb.y = sa.y; const bx = sb.x; w._tickShips(0.05); t.ok(Math.abs(sb.x - bx) < 1e-9, "ships in different POIs don't push each other");
 

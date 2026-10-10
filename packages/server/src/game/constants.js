@@ -92,8 +92,8 @@ export const STATION_BAY = { x: -0.155, y: -0.213 }; // the station's docking-ba
 export const UNDOCK_STOP_KM = 3.6;                 // undocked ships fly out of the bay and stop this far out (just inside the dock ring)
 
 // ---- the Expanse (docs/DESIGN.md) ----
-export const WARP_AU_PER_S = 0.25;                 // between POIs: the time off-POI is a base plus the map distance at this speed
-export const WARP_POI_BASE_MS = 2000;
+export const WARP_AU_PER_S = 1 / 28;               // between POIs: the time off-POI is a base plus the map distance at this speed
+export const WARP_POI_BASE_MS = 2000;              // (owner: crossing the 1 AU system takes 30 s)
 export const BELTS_MIN = 3, PLAYERS_PER_BELT = 12;  // belt POIs: one per this many players online, at least BELTS_MIN
 export const BELT_LIFE_MIN_MS = 60 * 60 * 1000, BELT_LIFE_MAX_MS = 120 * 60 * 1000;   // hidden lifetime of a spawned belt
 export const LOGOUT_GRACE_MS = 20 * 1000;          // a closed connection keeps the fleet in space this long (a reload), then it despawns
