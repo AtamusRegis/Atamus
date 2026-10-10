@@ -662,10 +662,9 @@
         if (hp < 0) cell.classList.add("burnt");
         else if (hp != null && hp < 100) cell.append(el("div", { class: "hb-hp" }, Object.assign(el("div", { class: "hb-hp-fill" }), { style: "width:" + hp + "%" })));
         if ((sh.over || []).includes(m.fi)) cell.classList.add("overload");
-        const on = m.mod.role === "laser" ? ((sh.lasers || [])[m.laser] || {}).on : m.mod.role === "auto" ? sh.auto && sh.auto.on : false;
-        const off = m.mod.role === "laser" ? ((sh.lasers || [])[m.laser] || {}).off : m.mod.role === "auto" ? sh.auto && sh.auto.off : false;
-        if (on) cell.classList.add("on"); if (off) cell.classList.add("off");
-        const it = m.mod.role === "laser" ? { k: "laser", i: m.laser, item: m.item } : m.mod.role === "auto" ? { k: "auto", item: m.item } : { k: "passive", item: m.item };
+        const st = modState(sh, m);
+        if (st.on) cell.classList.add("on"); if (st.off) cell.classList.add("off");
+        const it = modIt(m);
         cell.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") showModTip(cell, it); });
         cell.addEventListener("pointerleave", hideModTip);
         const menu = (x, y) => { hideModTip(); showCtxMenu(x, y, [...(sh.docked ? [["Unfit", () => A.send({ t: "unfit", ship: sh.id, idx: m.fi })]] : []), ["Info", () => openInfo(m.item, 1)]]); };
@@ -718,7 +717,6 @@
       if (u.kind === "ship") {
         body.append(row("Type", u.name), row("Pilot", pilotName(u.pilot) || "No pilot"));
         const btns = el("div", { class: "unit-btns" });
-        if (u.moving && !u.warp && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "warp", ship: u.id }) }, "Warp"));
         if (lockedRock && !u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn" + (u.mining ? " off" : ""), onclick: () => A.send({ t: "mine", ship: u.id, on: !u.mining }) }, u.mining ? "Stop Mining" : "Mine (X)"));
         if (u.docked) btns.append(el("button", { class: "btn-primary2 unit-btn off", onclick: () => A.send({ t: "dock", ship: u.id, dock: false }) }, "Undock"));
         else if (u.canDock) btns.append(el("button", { class: "btn-primary2 unit-btn", onclick: () => A.send({ t: "dock", ship: u.id, dock: true }) }, "Dock"));
@@ -840,6 +838,9 @@
     if (it.k === "laser") { const dur = ((sh.lasers || [])[it.i] || {}).dur || A.cfg.cycleMs || 15000;
       rows.push(["Cycle time", secs(dur)], ["Yield", ((sh.yieldM3s || 0) * dur / 1000).toFixed(1) + " m³ / cycle"], ["Range", (sh.laserRange || 0).toFixed(2) + " km"], ["Capacitor use", String(def.draw || 0)]); }
     else if (it.k === "auto") rows.push(["Cycle time", secs((sh.auto && sh.auto.cyc) || 180000)], ["Capacitor use", String(def.draw || 0)]);
+    else if (it.k === "drones") rows.push(["Cycle time", secs(def.cycle || 20000)], ["Yield", ((sh.drones && sh.drones.ym) || 0).toFixed(1) + " m³ / cycle"], ["Range", (def.range || 0).toFixed(1) + " km"], ["Capacitor use", String(def.draw || 0)]);
+    else if (it.k === "prop") rows.push(["Max speed", "+" + Math.round((def.speed || 0) * 100) + "%"], ["Capacitor use", String(def.draw || 0)]);
+    else if (def.role === "upgrade") rows.push([def.stat === "hold" ? "Cargo and ore holds" : "Mining laser yield", "+" + Math.round(def.bonus * 100) + "%"]);
     else if (def.cap) rows.push(["Capacitor", "+" + def.cap]);
     showTip(slot, rows);
   }
@@ -857,7 +858,23 @@
     for (const m of mods) out[m.slot] = m;
     return out;
   }
-  const modTone = (m) => (m.mod.role !== "laser" && m.mod.role !== "auto" ? "passive" : m.mod.cat === "mining" ? "c-mining" : m.mod.cat === "combat" || /weapon|missile|beam|hybrid|projectile/.test(m.mod.cat || "") ? "c-combat" : "c-auto");   // owner: mining orange, combat red, automation / self blue, passive grey
+  // a fitted module's hotbar kind and live state
+  function modIt(m) { const r = m.mod.role; return r === "laser" ? { k: "laser", i: m.laser, item: m.item } : r === "auto" ? { k: "auto", item: m.item } : r === "drones" ? { k: "drones", fi: m.fi, item: m.item } : r === "prop" ? { k: "prop", fi: m.fi, item: m.item } : { k: "passive", item: m.item }; }
+  function modState(sh, m) {
+    const r = m.mod.role, L = r === "laser" ? (sh.lasers || [])[m.laser] || {} : null, off = (sh.fitOff || []).includes(m.fi);
+    if (r === "laser") return { on: !!L.on, off: !!L.off, stopping: !!(L.on && !L.repeat), p: L.p || 0 };
+    if (r === "auto") return { on: !!(sh.auto && sh.auto.on), off: !!(sh.auto && sh.auto.off), p: sh.auto ? sh.auto.p : 0 };
+    if (r === "drones") return { on: !!(sh.drones && sh.drones.on), off, p: (sh.drones && sh.drones.p) || 0 };
+    if (r === "prop") return { on: !!(sh.prop && sh.prop.fi === m.fi), off, p: sh.prop && sh.prop.fi === m.fi ? sh.prop.p : 0 };
+    return { on: false, off: false, p: 0 };
+  }
+  // clicking a drones / propulsion slot switches it on or off
+  function toggleMod(sh, it) {
+    const A = window.Atamus, cur = A.ship(sh.id) || sh;
+    if (it.k === "drones") A.send({ t: "drones", ship: cur.id, on: !(cur.drones && cur.drones.on) });
+    else if (it.k === "prop") A.send({ t: "prop", ship: cur.id, fi: it.fi, on: !(cur.prop && cur.prop.fi === it.fi) });
+  }
+  const modTone = (m) => (!["laser", "auto", "drones", "prop"].includes(m.mod.role) ? "passive" : m.mod.cat === "mining" || m.mod.cat === "drones" ? "c-mining" : m.mod.cat === "combat" || /weapon|missile|beam|hybrid|projectile/.test(m.mod.cat || "") ? "c-combat" : "c-auto");   // owner: mining orange, combat red, automation / self blue, passive grey
   // an empty slot takes a module dragged from a hangar (fits it there, docked) or another slot (moves it there)
   function slotDropTarget(cell, sh, k) {
     const A = window.Atamus;
@@ -923,6 +940,10 @@
         else if (L.repeat) items.push(["Deactivate", () => A.send({ t: "laser", ship: sh.id, idx: it.i, on: false })]);
       }
       items.push([L.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: "laser", idx: it.i, on: !!L.off })]);
+    } else if (it.k === "drones" || it.k === "prop") {
+      const m = { mod: (A.cfg.items || {})[it.item] || {}, fi: it.fi, laser: -1 }, st = modState(sh, m);
+      if (!st.off) items.push([st.on ? "Deactivate" : "Activate", () => toggleMod(sh, it)]);
+      items.push([st.off ? "Power on" : "Power off", () => A.send({ t: "power", ship: sh.id, mod: it.k, idx: it.fi, on: !!st.off })]);
     } else {
       const au = sh.auto || {};
       if (!au.off) items.push([au.on ? "Deactivate" : "Activate", () => A.send({ t: "auto", ship: sh.id, on: !au.on })]);
@@ -943,7 +964,7 @@
     const t = (A.cfg.shipTypes || {})[sh.type] || {};
     const targets = orderedTargets(sh);
     if (hoverTg && !targets.some((x) => x && tgKey(x) === hoverTg)) hoverTg = null;
-    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.off ? "x" : "") + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, sh.auto && sh.auto.off ? 1 : 0, hbModules(sh).map((m) => m.slot + m.item).join(","), (window.Atamus.inv.ships[sh.id] || {}).fit ? 1 : 0].join("|");
+    const sig = [sh.id, sh.canDock, sh.moving && !sh.warp, targets.map((x) => tgKey(x) + (x.locked ? 1 : 0)).join(","), (sh.lasers || []).map((l) => (l.on ? 1 : 0) + (l.repeat ? 1 : 0) + (l.off ? "x" : "") + (l.rock || "")).join(","), sh.auto && sh.auto.on ? 1 : 0, sh.auto && sh.auto.off ? 1 : 0, sh.drones && sh.drones.on ? 1 : 0, sh.prop ? sh.prop.fi : -1, (sh.fitOff || []).join("."), hbModules(sh).map((m) => m.slot + m.item).join(","), (window.Atamus.inv.ships[sh.id] || {}).fit ? 1 : 0].join("|");
     if (sig !== hudSig) {
       hudSig = sig; hudLive = { dist: {}, tips: {}, cells: {} };
       // targets
@@ -978,7 +999,7 @@
       hudBar.innerHTML = ""; hudLive.slots = []; hudLive.mods = []; hudLive.keys = [];
       hbSlots(sh).forEach((m, idx) => {
         if (!m) { const open = el("div", { class: "hb-slot hb-open" }, el("span", { class: "hb-num" }, HB_KEYS[idx] || "")); slotDropTarget(open, sh, idx); hudBar.append(open); return; }   // free hardpoint
-        const it = m.mod.role === "laser" ? { k: "laser", i: m.laser, item: m.item } : m.mod.role === "auto" ? { k: "auto", item: m.item } : { k: "passive", item: m.item };
+        const it = modIt(m);
         const slot = el("div", { class: "hb-slot filled " + modTone(m) });
         const icon = m.mod.icon ? el("img", { class: "hb-img", src: m.mod.icon, alt: "", draggable: "false" }) : el("span", { class: "hb-abbr" }, m.mod.name.split(" ").map((w) => w[0]).join(""));
         slot.append(icon);
@@ -993,6 +1014,11 @@
           const autoClick = () => { const cur = hudShipData() || sh; A.send({ t: "auto", ship: cur.id, on: !(cur.auto && cur.auto.on) }); };
           slot.addEventListener("click", autoClick); hudLive.keys[idx] = autoClick;
           hudLive.slots.push({ slot, auto: true });
+        } else if (it.k === "drones" || it.k === "prop") {
+          const st = modState(sh, m); if (st.on) slot.classList.add("on"); if (st.off) slot.classList.add("off");
+          const click = () => toggleMod(hudShipData() || sh, it);
+          slot.addEventListener("click", click); hudLive.keys[idx] = click;
+          hudLive.slots.push({ slot, m });
         } else slot.classList.add("passive");
         const hpFill = el("div", { class: "hb-hp-fill" }), hpBar = el("div", { class: "hb-hp" }, hpFill);
         slot.append(hpBar); hudLive.mods = hudLive.mods || []; hudLive.mods.push({ slot, fi: m.fi, hpBar, hpFill });
@@ -1055,13 +1081,19 @@
       }
     }
     for (const q of hudLive.slots || []) { if (q.laser != null) q.slot.classList.toggle("standby", standby.has(sh.id + ":" + q.laser)); }
-    for (const q of hudLive.slots || []) { const p = q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
+    for (const q of hudLive.slots || []) { const p = q.m ? modState(sh, q.m).p : q.auto ? (sh.auto ? sh.auto.p : 0) : ((sh.lasers[q.laser] || {}).p || 0); q.slot.style.setProperty("--p", (p * 100).toFixed(1) + "%"); }
     // line from the selected target's icon to the target on the map
     const hc = hoverTg && hudLive.cells && hudLive.cells[hoverTg], htg = hc && targets.find((x) => tgKey(x) === hoverTg);
     if (htg) { const r = hc.querySelector(".tgt-ring").getBoundingClientRect(); A.hud.line = { x: r.left + r.width / 2, y: r.top + r.height / 2, tg: { kind: htg.kind, id: htg.id } }; }
     else A.hud.line = null;
   }
   window.Atamus.bus.addEventListener("snap", renderHud);
+  // F (owner): the selected ship's drones go for its current (primary) target
+  addEventListener("keydown", (e) => {
+    const tag = document.activeElement && document.activeElement.tagName; if (tag === "INPUT" || tag === "TEXTAREA" || e.key.toLowerCase() !== "f") return;
+    const sh = hudShipData(), rock = sh && primaryRock(sh); if (!sh || !rock || !(sh.drones && sh.drones.on)) return;
+    e.preventDefault(); window.Atamus.send({ t: "drones_engage", ship: sh.id, rock: rock.id });
+  });
   // docked: drop a module from a station inventory onto the hotbar to fit it
   const hotbarFit = (d) => { const sh = hudShipData(); if (sh && sh.docked && d && d.ref) window.Atamus.send({ t: "fit", ship: sh.id, from: d.ref }); };
   hudBar.addEventListener("dragover", (e) => { if (hud.classList.contains("docked")) e.preventDefault(); });
@@ -1086,7 +1118,6 @@
       if (w && isOpen(w) && (!cur.docked || (invWins[key] && invWins[key].ref.id === sh.id))) toggleWindow(key, false); else openInventory({ owner: "ship", id: sh.id, inv: "ore" }); }));
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
     if (sh.docked && sh.pilot != null) host.append(act("undock", "Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })));
-    if (sh.moving && !sh.warp) host.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
     host.hidden = false;
   }
   saved.fleetOrient = saved.fleetOrient === "v" ? "v" : "h";
@@ -1138,7 +1169,7 @@
           el("div", { class: "fleet-img" }, sh ? shipIcon(sh.type, "fleet-ship") : el("span", { class: "fleet-noship" })),
           el("div", { class: "fleet-bar" + (sh ? "" : " empty") }, el("div", { class: "fb-half" }, sf), el("div", { class: "fb-half" }, hf)),
           el("div", { class: "fleet-name" }, p.name));
-        card.addEventListener("click", () => selectPilot(p.id));
+        card.addEventListener("click", () => { selectPilot(p.id); const cur = pilotShip(p.id); if (cur) A.followShip(cur.id); });   // (owner) clicking a pilot centers the camera on their ship
         card.addEventListener("dblclick", () => { const cur = pilotShip(p.id); if (cur) A.locateShip(cur.id); });
         const menu = (x, y) => { const cur = pilotShip(p.id); if (cur) shipMenu(cur, x, y); };
         card.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });

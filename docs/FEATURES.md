@@ -47,7 +47,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   2. At full speed and lined up, the warp window opens ahead; it coasts in (0.9 s) and leaves the POI.
   3. **Off-POI** it's a glowing ball crossing the map at constant speed for 2 s + 28 s per AU, so **crossing the 1 AU system takes 30 s (owner)** (`WARP_POI_BASE_MS`, `WARP_AU_PER_S`). Nothing is simulated meanwhile, and move and dock orders are ignored. The ball runs from the entry window straight to the exit window.
   4. It drops out of an exit window at a scattered point 15–50% of the way out from the target's centre (picked when it leaves), braking to a stop like a normal warp exit.
-  - **Camera (owner):** following a ship at warp (in-POI transit or between POIs), the camera locks onto it instead of easing, so it never falls behind.
+  - **Camera (owner):** following a ship warping between POIs, the camera locks onto it instead of easing, so it never falls behind.
   - Targets, lasers and the auto miner reset when a warp-to starts. A warp in progress at logout lands in the target POI.
 - **What you receive (owner):** every ship in the POI your camera is on (the client tells the server with `view`; only a POI where you have a ship counts), plus your own ships wherever they are. Rocks and cans come for those POIs too. The POI list comes on its own (`pois`) whenever it changes. Sockets are compressed (permessage-deflate).
 - **Ships in different POIs** never see, target or bump each other.
@@ -117,16 +117,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - A pilot already sitting in another docked ship walks across the station.
 - **Buying:** bought ships arrive in **Deliveries** as packaged items. **Assemble** (in a station) turns one into a docked, uncrewed ship.
 - **Movement (owner):** each hull has an acceleration (Prospector 150 m/s², Dredger 50, Bulwark 40, Collier 45, Excavator 55, Rampart 45, Carrack 50). Ships speed up and brake at that rate and arrive without overshooting.
-- **Warp (owner):** the Warp action on a moving ship. All the effects are blue.
-  1. **Align:** the ship speeds up toward the destination at its normal acceleration.
-  2. **Window:** at full speed and lined up, a glowing rectangular warp window opens ahead of it, with particles streaming through it; the ship coasts into it (0.9 s).
-  3. **Transit (owner):** the ship becomes a glowing ball with a trail, moving at constant **full warp speed** (20× the hull's max speed) the whole way through the field, with no acceleration or easing inside it. The course is locked: move and dock commands are ignored until it comes out.
-  4. **Exit (owner):** it leaves the exit window still at full warp speed and brakes to dead still **outside** the window (0.9 s, cubic ease-out), exactly on the destination. That gives it a fast-drop feel. A blue streak and particles dissipate behind it. The exit window sits that stopping distance (warp speed × 0.9 s ÷ 3, about 2 km for a Prospector) short of the destination.
-  - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
-  - **The exit window** appears for everyone, the owner included, only in the last second before the ship comes out **(owner)**. Other players see the entry window when it opens.
-  - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
-  - **Between POIs:** see **Warp to a POI** under The Expanse.
-  - A server restart drops any warp in progress; the ship keeps flying to its destination.
+- **No warping inside a POI (owner):** the old point-to-point warp (align, window, ball, exit) is gone; afterburners and microwarpdrives do that job. Warp exists only between POIs (see **Warp to a POI** under The Expanse), with the same blue windows, ball and drop-out.
 - **Smooth motion:** snapshots carry the server's simulation time (`st`), and ships are drawn 110 ms in the past, interpolated between the two snapshots around that moment (with brief extrapolation if one is late). The camera follows that smooth position, so it doesn't jitter, even at warp.
 - **Undocking (owner):** a ship comes out of the docking bay's mouth (the station's open side, facing −x, spread ±20°), flies away, and stands still 3.6 km out, near the edge of the dock ring, facing away from the station.
 - **Docking:** within 4 km of the station, in the station POI only. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. A docked ship stays selected.
@@ -197,6 +188,17 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   | Mining Laser | Mining | 10 | uses 10 | 60,000 |
   | Auto Miner | Automation | 15 | uses 5 | 250,000 |
   | Capacitor Battery | Power | 8 | +12 capacitor (passive) | 120,000 |
+  | Mining Drones | Drones | 20 | uses 8 while out | 400,000 |
+  | Afterburner | Propulsion | 10 | uses 6 | 150,000 |
+  | Microwarpdrive | Propulsion | 25 | uses 18 | 900,000 |
+  | Cargohold Expansion | Upgrades | 8 | passive | 100,000 |
+  | Mining Laser Upgrade | Upgrades | 10 | passive | 300,000 |
+
+  Fitting numbers for the new modules are placeholders for now **(owner)**. Mining hulls accept Mining, Drones, Automation, Propulsion, Upgrades and Power.
+  - **Mining Drones (owner):** activating the module is a one-time launch: two drones (64 m, owner's sprites) fly out and wait in a tight orbit around the ship, and they stay out, drawing power, while the module is on. **F** sends them at the selected ship's current (primary) target, up to 5 km away: they orbit it nose-in and cut it with their own lasers, 20 s cycles, yield 1 m³/s (both drones together) × hull efficiency, ore landing in the ore hold each cycle. They stop and wait by the ship when the rock is gone, out of range or the hold is full. Switching the module off recalls them (they fly home); docking, warping and logging off recall them too. Everyone sees them.
+  - **Afterburner / Microwarpdrive (owner, like EVE):** while running, top speed +75% / +400% (acceleration rises half as much). Only one propulsion module runs at a time: switching one on switches the other off. Docking or warping stops it.
+  - **Cargohold Expansion (owner):** +50% to the cargo and ore holds. **Mining Laser Upgrade (owner):** +10% mining laser yield (not drones). Both have **diminishing returns**: the nth of the same kind counts at EVE's stacking penalty (100%, 87%, 57%, 28%…).
+  - Icons are the owner's pixel art (`assets/icons/modules/`).
 
   - Running a module needs its license (Mining Laser Yield 1, Automated Mining 1).
   - Capacitor Management license: +5% capacitor per level.
@@ -292,11 +294,11 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **Docked with the pilot aboard (owner):** the HUD stays, so modules can be dragged from a hangar onto the hotbar to fit them, and from the hotbar into a hangar to unfit them.
   - **Pilot not in a ship (owner):** when the selected pilot crews no ship, the HUD becomes a small "Pilot not in a ship" box.
   - Dragging a target shows only that target's circle.
-- **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center: 24 px buttons (32 px on touch) **(owner: a third bigger)**.
+- **Ship actions** (Inventory, Dock; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center: 24 px buttons (32 px on touch) **(owner: a third bigger)**.
 - **Selection (owner):** one pilot is always selected, and that pilot's ship is always selected while they're in it; if anything clears the selection, the ship is reselected (a multi-ship box selection is left alone). Clicking empty space or an empty box-select never deselects. Clicking the station opens its window without changing the selection, and closing that window doesn't deselect.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
-  - click a card to select that pilot; double-click locates their ship; right-click or hold opens the ship menu;
+  - click a card to select that pilot and center the camera on their ship (owner: this replaced F); double-click locates (and zooms to) their ship; right-click or hold opens the ship menu;
   - dragged by its background; hold or right-click the panel button to switch between horizontal and vertical;
   - auto-sized, wrapping instead of scrolling, no resize edges, 16 px end padding.
 - **Pilot window (owner):** shows the pilot selected in the fleet window (name in the title, no dropdown), with two tabs: Licenses and Training Queue. Selecting another pilot in the fleet switches it.

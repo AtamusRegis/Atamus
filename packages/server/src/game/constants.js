@@ -80,8 +80,10 @@ const FIT = {
   "Mining Barge": { fitSlots: 6, disposition: 90, capacitor: 60 },
   "Exhumer": { fitSlots: 7, disposition: 120, capacitor: 90 },
 };
-for (const t of Object.values(SHIP_TYPES)) Object.assign(t, FIT[t.cls] || FIT["Mining Frigate"], { accepts: ["mining", "automation", "power"] });
-export const MODULE_CATEGORIES = { mining: "Mining", automation: "Automation", power: "Power" };
+for (const t of Object.values(SHIP_TYPES)) Object.assign(t, FIT[t.cls] || FIT["Mining Frigate"], { accepts: ["mining", "drones", "automation", "propulsion", "upgrades", "power"] });
+export const MODULE_CATEGORIES = { mining: "Mining", drones: "Drones", automation: "Automation", propulsion: "Propulsion", upgrades: "Upgrades", power: "Power" };
+// Stacking penalty (owner: diminishing returns): the nth module of the same kind is this effective (EVE's curve)
+export const stackPenalty = (n) => Math.exp(-((n / 2.67) ** 2));
 export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer"];
 // What each class is for (the market groups hulls by this, then by class).
 export const SHIP_ROLES = ["Industry", "Combat"];

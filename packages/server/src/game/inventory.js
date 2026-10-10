@@ -19,6 +19,17 @@ export const MODULES = {
     desc: "Each cycle, puts every idle mining laser on the first locked asteroid in range." },
   "module:cap_battery": { name: "Capacitor Battery", cat: "power", role: "battery", size: 8, cap: 12, price: 120_000, icon: "assets/icons/cap_battery.png",
     desc: "Stores extra power for the ship's capacitor, so more modules can run at once." },
+  // (owner) drones, propulsion and upgrades. Fitting numbers are placeholders for now.
+  "module:mining_drones": { name: "Mining Drones", cat: "drones", role: "drones", size: 20, draw: 8, yield: 1, range: 5, cycle: 20000, price: 400_000, icon: "assets/icons/modules/mining_drones.png",
+    desc: "Activate to launch two mining drones; they stay out while the module is on. Send them at a locked asteroid within 5 km and they orbit it, cutting ore with their own lasers. The ore lands in the ore hold when each cycle completes." },
+  "module:afterburner": { name: "Afterburner", cat: "propulsion", role: "prop", size: 10, draw: 6, speed: 0.75, price: 150_000, icon: "assets/icons/modules/afterburner.png",
+    desc: "Raises the ship's top speed by 75% while it runs. Only one propulsion module runs at a time." },
+  "module:microwarpdrive": { name: "Microwarpdrive", cat: "propulsion", role: "prop", size: 25, draw: 18, speed: 4, price: 900_000, icon: "assets/icons/modules/microwarpdrive.png",
+    desc: "Raises the ship's top speed by 400% while it runs: the way to cross a POI quickly. Only one propulsion module runs at a time." },
+  "module:cargo_expansion": { name: "Cargohold Expansion", cat: "upgrades", role: "upgrade", stat: "hold", bonus: 0.5, size: 8, price: 100_000, icon: "assets/icons/modules/cargohold_expansion.png",
+    desc: "Adds 50% to the cargo and ore holds. Each extra one is less effective than the last." },
+  "module:laser_upgrade": { name: "Mining Laser Upgrade", cat: "upgrades", role: "upgrade", stat: "yield", bonus: 0.1, size: 10, price: 300_000, icon: "assets/icons/modules/mining_laser_upgrade.png",
+    desc: "Adds 10% to mining laser yield. Each extra one is less effective than the last." },
 };
 for (const [k, m] of Object.entries(MODULES)) ITEMS[k] = { key: k, kind: "module", ...m, rarity: "module", unitM3: 5, color: "#7f8fb0" };
 // Packaged ships: bought ships arrive as items in the station's Deliveries; Assemble turns one into a docked ship.

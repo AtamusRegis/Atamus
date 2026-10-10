@@ -90,6 +90,9 @@ export function attachGameServer(httpServer) {
       switch (m.t) {
         case "view": world.cmdView(pid, m.poi); break;
         case "warpto": world.cmdWarpTo(pid, m.ships, m.poi); break;
+        case "prop": world.cmdProp(pid, m.ship, m.fi, !!m.on); break;
+        case "drones": world.cmdDrones(pid, m.ship, !!m.on); break;
+        case "drones_engage": world.cmdDronesEngage(pid, m.ship, m.rock); break;
         case "gatejump": world.cmdGateJump(pid, m.gate, m.ships); break;
         case "move": world.cmdMove(pid, m.ships, +m.x, +m.y, m.sys); break;
         case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;

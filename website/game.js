@@ -36,14 +36,14 @@
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
     else if (u.kind === "station") selectUnit(u);
   }
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get pois() { return pois; }, get camPoi() { return camPoi; }, warpTo: (poiId, ids) => warpTo(poiId, ids), get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, followShip: (id) => { if (!(snap.ships || []).some((x) => x.id === id)) return; selected.clear(); selected.add(id); syncShipSelection(); follow = true; zoomAt = null; }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get pois() { return pois; }, get camPoi() { return camPoi; }, warpTo: (poiId, ids) => warpTo(poiId, ids), get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null }, get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3) }; },
     // centre the camera on a ship (or the station it's docked at)
     locateShip: (id) => {
       const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
       const w = shipWorld(sh); if (!w) return false;
       panVel.x = panVel.y = 0; zoomAt = null; cam.cx = w.x; cam.cy = w.y; viewWTarget = sh.docked ? 14 : 6;
-      if (!sh.docked) { selected.clear(); selected.add(sh.id); syncShipSelection(); follow = true; }   // in space: select it and keep it centred, like [F]
+      if (!sh.docked) { selected.clear(); selected.add(sh.id); syncShipSelection(); follow = true; }   // in space: select it and keep it centred
       else follow = false;
       return true;
     } };
@@ -248,7 +248,6 @@
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     const k = e.key.toLowerCase();
     if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); follow = false; zoomAt = null; e.preventDefault(); return; }
-    if (k === "f") { follow = selected.size > 0; e.preventDefault(); return; }  // follow selected ship / group COM
     if (k === "x") { const id = [...selected][0]; const sh = id && (snap.ships || []).find((x) => x.id === id); if (sh) send({ t: "mine", ship: id, on: !sh.mining }); return; }
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
@@ -935,6 +934,40 @@
     ctx.restore();
   }
 
+  // mining drones (owner): two per module; they launch from the ship and wait in a tight orbit around it, fly to the
+  // asteroid they're sent at and orbit it nose-in, cutting it with their lasers, and fly home when recalled
+  const droneArt = { blue: new Image(), red: new Image() }; droneArt.blue.src = "assets/ships/drone_blue.webp"; droneArt.red.src = "assets/ships/drone_red.webp";
+  const DRONE_KM = 0.064, DRONE_MOVE_MS = 1500, droneVis = new Map();   // shipId -> { anchor, from: [{x,y}], at, last: [{x,y,h}] }
+  function drawDrones(place, sh, p) {
+    const d = sh.drones, pl = place.get(sh.sys), now = performance.now();
+    let v = droneVis.get(sh.id);
+    const want = !d || !d.on || sh.docked || !sh.sys ? "home" : d.rock && rockById(d.rock) ? d.rock : "ship";
+    if (!v) { if (want === "home" || !pl) return; v = { anchor: "home", from: [{ x: p.x, y: p.y }, { x: p.x, y: p.y }], at: now, last: null }; droneVis.set(sh.id, v); }
+    if (v.anchor !== want) { v.from = v.last ? v.last.map((q) => ({ x: q.x, y: q.y })) : [{ x: p.x, y: p.y }, { x: p.x, y: p.y }]; v.at = now; v.anchor = want; }
+    const u = Math.min(1, (now - v.at) / DRONE_MOVE_MS), e = u * u * (3 - 2 * u);
+    if (want === "home" && u >= 1) { droneVis.delete(sh.id); return; }
+    if (!pl || sh.docked) return;
+    const rk = want !== "home" && want !== "ship" ? rockById(want) : null, t = now / 1000;
+    const cx = rk ? rk.x : p.x, cy = rk ? rk.y : p.y, R = rk ? rk.size / 2000 + 0.12 : want === "ship" ? 0.25 : 0, w = rk ? 0.35 : 0.6;
+    const img = sh.mine ? droneArt.blue : droneArt.red, wPx = Math.max(4, DRONE_KM * scale()), hPx = img.naturalWidth ? wPx * img.naturalHeight / img.naturalWidth : wPx / 2;
+    v.last = [0, 1].map((k) => {
+      const a = t * w + k * Math.PI + sh.id.length, ox = cx + Math.cos(a) * R, oy = cy + Math.sin(a) * R;
+      const x = v.from[k].x + (ox - v.from[k].x) * e, y = v.from[k].y + (oy - v.from[k].y) * e;
+      const h = u < 1 ? Math.atan2(oy - v.from[k].y, ox - v.from[k].x) : rk ? Math.atan2(cy - y, cx - x) : a + Math.PI / 2;   // flying: along its path; at a rock: nose in; by the ship: along the orbit
+      return { x, y, h };
+    });
+    ctx.save();
+    for (const q of v.last) {
+      const sx = gx2s(pl.gx + q.x * pl.k), sy = gy2s(pl.gy + q.y * pl.k);
+      if (rk && u >= 1 && d && d.on) {                               // mining: a thin beam to the rock's surface
+        const ex0 = gx2s(pl.gx + rk.x * pl.k), ey0 = gy2s(pl.gy + rk.y * pl.k), hit = rockHit(pl, rk, sx, sy, ex0, ey0) || { x: ex0, y: ey0 };
+        ctx.globalCompositeOperation = "lighter"; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hit.x + (Math.random() - 0.5) * 0.6, hit.y + (Math.random() - 0.5) * 0.6);
+        ctx.strokeStyle = "rgba(255,150,70,0.35)"; ctx.lineWidth = 3; ctx.stroke(); ctx.strokeStyle = "rgba(255,230,180,0.85)"; ctx.lineWidth = 1; ctx.stroke(); ctx.globalCompositeOperation = "source-over";
+      }
+      if (img.naturalWidth) { ctx.save(); ctx.translate(sx, sy); ctx.rotate(-q.h); ctx.imageSmoothingEnabled = false; ctx.drawImage(img, -wPx / 2, -hPx / 2, wPx, hPx); ctx.restore(); }
+    }
+    ctx.restore();
+  }
   function drawShips(place) {
     for (const sh of snap.ships || []) {
       if (sh.docked) continue;                                  // inside the station
@@ -975,6 +1008,7 @@
       }
       if (sh.mine && sh.targets && selected.has(sh.id)) for (const tg of sh.targets) drawTarget(place, sh, sx, sy, tg);
       if (sh.mine) drawLasers(place, sh, sx, sy, p.h);
+      drawDrones(place, sh, p);
     }
     // drag selection box
     if (selBox) { ctx.save(); ctx.fillStyle = "rgba(79,210,255,0.08)"; ctx.strokeStyle = "rgba(79,210,255,0.7)"; ctx.lineWidth = 1; ctx.fillRect(selBox.x0, selBox.y0, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.strokeRect(selBox.x0 + 0.5, selBox.y0 + 0.5, selBox.x1 - selBox.x0, selBox.y1 - selBox.y0); ctx.restore(); }
