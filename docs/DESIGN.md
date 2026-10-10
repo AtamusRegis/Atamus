@@ -38,22 +38,29 @@ The world is a set of **systems**, and every system is a set of **points of inte
   | Overcrowded | 26–50 |
   | Past 50 | over 50 (population can keep growing) |
 
-- **Population flow (owner):** a system's new wormholes depend on its tier. In short, lone players drift toward groups, and big groups spread out.
+- **Population flow (owner):** a system's new wormholes depend on its tier. Each system can have **several wormholes at once**. The choices are **preferences**: if the preferred tier doesn't exist, the next one is used. In short, lone players drift toward groups, and big groups spread out.
 
-  | From | Connects to |
+  | From | Prefers, in order |
   |---|---|
-  | Low | Mid (draws lone players toward groups) |
-  | Mid | Anything |
-  | High | Low |
-  | Overcrowded | Low or empty |
-  | Past 50 | **Empty only**, and the server spawns new empty systems if all are in use |
+  | Low | Mid, then high (high systems want to send people out) |
+  | Mid | Anything except overcrowded or past 50 |
+  | High | Lower tiers (low, then mid) |
+  | Overcrowded | Empty, then low |
+  | Past 50 | **Empty instanced systems only** (spawned if none are free) |
 
+  - **Last resort:** if a system has no valid partner, the server spawns an empty instanced system for it. Nobody is ever stuck.
+  - **Holes are checked when someone arrives:** after each arrival, the system's tier is recomputed and any of its holes that now break the rules close, after the friend delay. For example, 10 players entering a system of 20 make it 30 (overcrowded), so its holes are checked at once.
+  - **Jump limits:** holes from overcrowded systems to low ones let only about 10 players through, so a group of 40 can't swamp a system of 3. Holes between empty instanced systems are unlimited, so big groups move freely there.
   - A system only changes tier after it has been in the new range for a short while, so one player hopping in and out doesn't flip its connections.
-- **Empty systems (owner):** the server's dispersal tool, as **non-world** nomad systems made on demand.
-  - **Creation:** whenever the flow needs empty space and none is free (for example, every system is overcrowded), the server instantiates new ones.
-  - **They have no planets,** so nobody can set home there. That keeps players from setting up camp and making them useless for dispersal.
-  - **Unused ones go away:** once empty and unneeded, they cut all connections and are dropped.
+- **Empty instanced systems (owner):** the server's dispersal tool, as **non-world** nomad systems made on demand.
+  - **They have no planets,** so nobody can set home or camp there.
+  - **They start with no connections.** A crowded system's group goes in, friends get a short delay to follow, then the hole **closes behind them**. The new system then connects only by its own tier (overcrowded: to empty or low; past 50: to empty only).
+  - **A big group that won't split** just keeps hopping between empty systems, which is fine and never crushes a low system.
+  - **Unused ones go away:** once empty, they're dropped.
   - **Logging out in one:** on login, the player arrives in a freshly spawned empty system with a wormhole out to a low or mid system, which closes behind them.
+- **How many world nomad systems (owner):**
+  - **At 1,000 players:** with a third to half in the Expanse, about 500–670 are in nomad space at peak. At about 10 per system that's 50–65 occupied, so plan **about 80–100 world nomad systems** so that low and mid partners exist, plus empty instanced systems on demand.
+  - **At launch (about 100 players):** about 10–15. Unoccupied systems are unloaded, so the count costs nothing.
 - **The follow window:** a wormhole stays open behind a traveller for a while (a set time or number of crossings), so friends can follow. It closes early if it's at its limit.
 - **No backtracking into crowds:** an unconnected system that fills up grows new exits of its own, but players can't backtrack to pile more people into it.
 - **Home nomad system:** a player can have one (a world nomad system with a planet, never an empty system). On login they're put back there **even if it's overcrowded**; nomad space scales as needed.
