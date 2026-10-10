@@ -423,9 +423,9 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 
 /* fleet action buttons: compact */
 .fleet-acts { padding: 2px; gap: 2px; border-radius: 5px; }
-.fleet-acts .hud-act { width: 18px; height: 18px; border-radius: 3px; }
-.fleet-acts .hud-act svg { width: 11px; height: 11px; stroke-width: 2; }
-@media (pointer: coarse) { .fleet-acts .hud-act { width: 24px; height: 24px; } .fleet-acts .hud-act svg { width: 14px; height: 14px; } }
+.fleet-acts .hud-act { width: 24px; height: 24px; border-radius: 4px; }   /* owner: a third bigger */
+.fleet-acts .hud-act svg { width: 15px; height: 15px; stroke-width: 2; }
+@media (pointer: coarse) { .fleet-acts .hud-act { width: 32px; height: 32px; } .fleet-acts .hud-act svg { width: 19px; height: 19px; } }
 
 /* hull bars read red */
 .ubar-fill.hull { background: linear-gradient(90deg, #a8262b, #e0484a); }

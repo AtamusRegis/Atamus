@@ -42,7 +42,7 @@
     locateShip: (id) => {
       const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
       const w = shipWorld(sh); if (!w) return false;
-      panVel.x = panVel.y = 0; cam.cx = w.x; cam.cy = w.y; viewWTarget = sh.docked ? 14 : 6;
+      panVel.x = panVel.y = 0; zoomAt = null; cam.cx = w.x; cam.cy = w.y; viewWTarget = sh.docked ? 14 : 6;
       if (!sh.docked) { selected.clear(); selected.add(sh.id); syncShipSelection(); follow = true; }   // in space: select it and keep it centred, like [F]
       else follow = false;
       return true;
@@ -247,13 +247,18 @@
     const tag = document.activeElement && document.activeElement.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     const k = e.key.toLowerCase();
-    if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); follow = false; e.preventDefault(); return; }
+    if (k === "w" || k === "a" || k === "s" || k === "d") { keys.add(k); follow = false; zoomAt = null; e.preventDefault(); return; }
     if (k === "f") { follow = selected.size > 0; e.preventDefault(); return; }  // follow selected ship / group COM
     if (k === "x") { const id = [...selected][0]; const sh = id && (snap.ships || []).find((x) => x.id === id); if (sh) send({ t: "mine", ship: id, on: !sh.mining }); return; }
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); const f = viewWTarget > 300 ? 1.3 : 1.12; viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? f : 1 / f))); }, { passive: false });   // bigger steps out at map scale
+  // wheel zoom: bigger steps out at map scale; toward the point under the mouse unless the camera follows a ship (owner)
+  let zoomAt = null;
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault(); const f = viewWTarget > 300 ? 1.3 : 1.12; viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? f : 1 / f)));
+    if (!follow) { const p = eventPos(e), w = screenToWorld(p.x, p.y); zoomAt = { px: p.x, py: p.y, wx: w.x, wy: w.y }; } else zoomAt = null;
+  }, { passive: false });
 
   function eventPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   let curPlace = new Map();
@@ -411,7 +416,7 @@
       }, 450);
     } else if (touch.pts.size === 2) {
       const [a, b] = [...touch.pts.values()];
-      touch.mode = "pinch"; selBox = null; follow = false;
+      touch.mode = "pinch"; selBox = null; follow = false; zoomAt = null;
       touch.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), viewW: viewWTarget, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, cam: { cx: cam.cx, cy: cam.cy } };
     }
   }, { passive: false });
@@ -426,7 +431,7 @@
       return;
     }
     const p = [...touch.pts.values()][0]; if (!p) return; touch.cur = p;
-    if (touch.mode === "tap" && Math.hypot(p.x - touch.start.x, p.y - touch.start.y) > 10) { touch.mode = "pan"; clearTimeout(touch.hold); follow = false; }
+    if (touch.mode === "tap" && Math.hypot(p.x - touch.start.x, p.y - touch.start.y) > 10) { touch.mode = "pan"; clearTimeout(touch.hold); follow = false; zoomAt = null; }
     if (touch.mode === "pan") { const sc = scale(); cam.cx = touch.cam.cx - (p.x - touch.start.x) / sc; cam.cy = touch.cam.cy + (p.y - touch.start.y) / sc; panVel.x = panVel.y = 0; }
     else if (touch.mode === "box") selBox = { x0: Math.min(touch.start.x, p.x), y0: Math.min(touch.start.y, p.y), x1: Math.max(touch.start.x, p.x), y1: Math.max(touch.start.y, p.y) };
   }, { passive: false });
@@ -687,7 +692,8 @@
         const wPx = (rk.size / 1000) * s;                        // rock width at true scale
         if (x < -wPx || y < -wPx || x > innerWidth + wPx || y > innerHeight + wPx) continue;
         const o = oreRock[rk.ore] || { rock: "cratered", color: "#999" };
-        if (wPx < 2.2) { ctx.fillStyle = o.color; const d = Math.max(1.2, wPx); ctx.fillRect(x - d / 2, y - d / 2, d, d); continue; }
+        if (home.k > 1) continue;                                // a POI shrunk to a ring on the map: no rocks
+        if (wPx < 6) { const ic = oreIconImg(o.rock); if (ic.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(rk.rot); ctx.drawImage(ic, -5, -5 * ic.naturalHeight / ic.naturalWidth, 10, 10 * ic.naturalHeight / ic.naturalWidth); ctx.restore(); } else { ctx.fillStyle = o.color; ctx.fillRect(x - 1, y - 1, 2, 2); } continue; }
         const img = rockImg(o.rock, rk.size);
         if (!img.naturalWidth) continue;
         const hPx = wPx * (img.naturalHeight / img.naturalWidth);
@@ -831,7 +837,19 @@
     if (hover) { ctx.save(); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(225,232,245,0.9)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 4; ctx.fillText(hover.poi.name, hover.x, hover.y + ICON_PX + 8); ctx.restore(); }
   }
   // map icons (owner's pixel art, drawn crisp at their own size)
-  const mapIcon = {}; for (const k of ["belt", "gate", "station"]) { mapIcon[k] = new Image(); mapIcon[k].src = "assets/map/" + k + ".png"; }
+  const mapIcon = {}; for (const [k, f] of [["belt", "asteroid_field"], ["gate", "stargate"], ["station", "station"]]) { mapIcon[k] = new Image(); mapIcon[k].src = "assets/icons/map/" + f + "_s.png"; }
+  // zoomed out (owner): rocks become their ore family's icon, ships their class icon (tinted blue for yours, red for others)
+  const ORE_ICON = { bubble: "rubble" }, oreIcon = {};
+  function oreIconImg(family) { const f = ORE_ICON[family] || family; if (!oreIcon[f]) { oreIcon[f] = new Image(); oreIcon[f].src = "assets/icons/ores/" + f + "_s.png"; } return oreIcon[f]; }
+  const CLASS_ICON = { "Mining Frigate": "frigate", "Mining Barge": "cruiser", "Exhumer": "cruiser" }, classIcon = {}, classTint = new Map();
+  function classIconFor(type, mine) {
+    const k = CLASS_ICON[hull(type).cls] || "frigate";
+    if (!classIcon[k]) { classIcon[k] = new Image(); classIcon[k].src = "assets/icons/classes/" + k + "_s.png"; }
+    const img = classIcon[k]; if (!img.naturalWidth) return null;
+    const key = k + (mine ? ":b" : ":r"); let c = classTint.get(key);
+    if (!c) { c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight; const g2 = c.getContext("2d"); g2.drawImage(img, 0, 0); g2.globalCompositeOperation = "source-atop"; g2.fillStyle = mine ? "rgba(80,170,255,0.55)" : "rgba(255,80,80,0.55)"; g2.fillRect(0, 0, c.width, c.height); classTint.set(key, c); }
+    return c;
+  }
   function drawPoiIcon(poi, x, y) {
     const img = mapIcon[poi.kind]; if (!img || !img.naturalWidth) return;
     ctx.save(); ctx.imageSmoothingEnabled = false; ctx.drawImage(img, Math.round(x - img.naturalWidth / 2), Math.round(y - img.naturalHeight / 2)); ctx.restore();
@@ -907,7 +925,8 @@
       const wPx = Math.max(2, lenKm * scale());           // true metre scale (min 2px so it's never a dead pixel)
       const img = sh.mine ? art(type).blue : art(type).red;
       if (inTransit) { /* drawn as the warp ball */ }
-      else if (pl.k > 1) { ctx.save(); ctx.fillStyle = sh.mine ? "#6fc3ff" : "#ff6a6a"; ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3); ctx.restore(); }   // a POI enlarged on the zoomed-out map: ships as dots
+      else if ((pl.k > 1 || wPx < 8) && classIconFor(type, sh.mine)) {   // zoomed out: the hull's class icon instead of a speck
+        const ic = classIconFor(type, sh.mine); ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); ctx.drawImage(ic, -ic.width / 2, -ic.height / 2); ctx.restore(); }
       else if (img && img.naturalWidth) {
         const hPx = wPx * (img.naturalHeight / img.naturalWidth);
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); // sprite faces +x; world +y is up
@@ -944,6 +963,10 @@
       }
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget));
       cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
+      if (zoomAt && !follow) {                         // keep the world point under the mouse where it was while the zoom eases
+        const sc = scale(); cam.cx = zoomAt.wx - (zoomAt.px - innerWidth / 2) / sc; cam.cy = zoomAt.wy + (zoomAt.py - innerHeight / 2) / sc;
+        if (Math.abs(viewWTarget - cam.viewW) < viewWTarget * 0.002) zoomAt = null;
+      } else zoomAt = null;
       place = placements(); curPlace = place;
       updateShipRender();
       const anchor = follow ? followAnchor() : null;

@@ -2,6 +2,13 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-10
+
+- **Ores renamed:** Cryonite, Pyroxite, Duranite, Hexite, Tantalite (refined later into "-iums").
+- **Zoomed out:** ships show as their class icon (blue yours, red others') and rocks as their ore icon.
+- **Wheel zoom** goes toward the mouse when the camera isn't following a ship.
+- **Fleet bar actions** are a third bigger.
+
 ## 2026-10-09
 
 - **Warp between POIs:** crossing the system takes 30 s (2 s + 28 s per AU); the ball flies straight from the entry window to the exit window.

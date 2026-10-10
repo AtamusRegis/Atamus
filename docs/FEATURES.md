@@ -34,7 +34,10 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **When a belt's time runs out or it's mined out (owner),** it leaves the map at once (no icon, nobody new can warp to it or look into it), but stays open for whoever is inside until the last ship leaves. A held belt doesn't count toward the population number, so a replacement spawns. Belts are saved (in the `instances` table) and survive restarts.
 - **Map and zoom (owner):** one continuous zoom from POI scale out to the whole system (1 AU is drawn as 20,000 km; the wheel takes bigger steps once zoomed out).
   - **Only POIs you have a ship in (docked counts) show their zone and contents (owner):** zoomed in, such a POI is at true scale with a dashed boundary circle, its rocks, structures and other players' ships. Every other POI is only ever its icon, at any zoom, and the server sends nothing from inside it.
-  - Icons (owner's pixel art in `assets/map/`, drawn crisp at their own size): the station, the stargate, an asteroid field for belts; planets are a small procedural sphere. Hovering an icon shows its name.
+  - Icons (owner's pixel art in `assets/icons/`, drawn crisp at their own size): the station, the stargate, an asteroid field for belts; planets are a small procedural sphere. Hovering an icon shows its name.
+  - **Zoomed out (owner):** a ship smaller than 8 px on screen (or in a POI shrunk to its ring) is drawn as its class icon, tinted blue for yours and red for others' (Mining Frigate: frigate; barges and exhumers: cruiser; arcs will use the ark). A rock smaller than 6 px is drawn as its ore family's icon (10 px).
+  - The marker icons (question, exclamation, circle, square, diamond) and the waypoint are kept in `assets/icons/` for temporary markers later **(owner)**.
+  - **Wheel zoom (owner)** goes toward the point under the mouse, unless the camera is following a ship.
   - A POI your ships are in keeps a visible boundary at any zoom, with your ships as dots inside it.
   - Move orders go to the selected ships in the POI you clicked, and stay inside its boundary.
 - **Warp to a POI (owner):** right-click (or hold, on touch) a POI's icon on the zoomed-out map → **Warp to *name*** for the selected ships.
@@ -163,11 +166,13 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 
   | Ore | Rarity | Price | Volume |
   |---|---|---|---|
-  | Ironstone | common | 5 | 0.1 m³ |
-  | Cuprite | uncommon | 12 | 0.15 m³ |
-  | Cobaltine | rare | 30 | 0.3 m³ |
-  | Iridite | very rare | 80 | 0.6 m³ |
-  | Starglass | legendary | 220 | 1.2 m³ |
+  | Cryonite | common | 5 | 0.1 m³ |
+  | Pyroxite | uncommon | 12 | 0.15 m³ |
+  | Duranite | rare | 30 | 0.3 m³ |
+  | Hexite | very rare | 80 | 0.6 m³ |
+  | Tantalite | legendary | 220 | 1.2 m³ |
+
+  - **Names (owner):** Cryonite, Pyroxite, Duranite, Hexite, Tantalite are the raw ores; refining (later, in refineries) turns each into its "-ium". The item keys are still the old names (`ironstone`, `cuprite`, `cobaltine`, `iridite`, `starglass`) because they're saved in player data.
 
 ## Fitting and power (owner)
 
@@ -283,7 +288,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **Docked with the pilot aboard (owner):** the HUD stays, so modules can be dragged from a hangar onto the hotbar to fit them, and from the hotbar into a hangar to unfit them.
   - **Pilot not in a ship (owner):** when the selected pilot crews no ship, the HUD becomes a small "Pilot not in a ship" box.
   - Dragging a target shows only that target's circle.
-- **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center, half size.
+- **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center: 24 px buttons (32 px on touch) **(owner: a third bigger)**.
 - **Selection (owner):** one pilot is always selected, and that pilot's ship is always selected while they're in it; if anything clears the selection, the ship is reselected (a multi-ship box selection is left alone). Clicking empty space or an empty box-select never deselects. Clicking the station or a stargate opens its window without changing the selection, and closing that window doesn't deselect.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
