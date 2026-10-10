@@ -75,12 +75,20 @@ export const SHIP_TYPES = {
 };
 // Fitting: hardpoints = how many modules fit, disposition = their total size, capacitor = shared power
 // for running them; accepts = module categories this hull can fit. (`hardpoints` above are beam origins.)
-const FIT = {
-  "Mining Frigate": { fitSlots: 5, disposition: 50, capacitor: 30 },
-  "Mining Barge": { fitSlots: 6, disposition: 90, capacitor: 60 },
-  "Exhumer": { fitSlots: 7, disposition: 120, capacitor: 90 },
+// Per-hull balance pass (owner, 2026-10-10): hardpoints / disposition / capacitor cap a hull's realistic laser count,
+// ore holds take about 20 min to fill with a typical fit (about 40 for the haul hulls), and each hull gets a role bonus.
+const PROP = { "module:afterburner": { draw: -50 }, "module:microwarpdrive": { draw: -50 } }, HOLD = { "module:cargo_expansion": { bonus: 50 } };
+const BALANCE = {
+  chisel:      { fitSlots: 8,  disposition: 70,  capacitor: 40, oreM3: 8000,   targetRangeKm: 5, bonuses: { "module:mining_drones": { yield: 50 } } },
+  dragline:    { fitSlots: 9,  disposition: 110, capacitor: 60, oreM3: 55000 },
+  bedrock:     { fitSlots: 9,  disposition: 105, capacitor: 55, oreM3: 40000,  bonuses: PROP },
+  hopper:      { fitSlots: 9,  disposition: 110, capacitor: 55, oreM3: 90000,  bonuses: HOLD },
+  bucketwheel: { fitSlots: 10, disposition: 140, capacitor: 85, oreM3: 90000 },
+  keystone:    { fitSlots: 10, disposition: 135, capacitor: 75, oreM3: 60000,  bonuses: PROP },
+  silo:        { fitSlots: 10, disposition: 140, capacitor: 80, oreM3: 150000, bonuses: HOLD },
 };
-for (const t of Object.values(SHIP_TYPES)) Object.assign(t, FIT[t.cls] || FIT["Mining Frigate"], { accepts: ["mining", "drones", "automation", "propulsion", "upgrades", "power"] });
+for (const [k, b] of Object.entries(BALANCE)) { const t = SHIP_TYPES[k]; const { bonuses, ...rest } = b; Object.assign(t, rest); if (bonuses) t.bonuses = { ...t.bonuses, ...bonuses }; }
+for (const t of Object.values(SHIP_TYPES)) Object.assign(t, { accepts: ["mining", "drones", "automation", "propulsion", "upgrades", "power"] });
 export const MODULE_CATEGORIES = { mining: "Mining", drones: "Drones", automation: "Automation", propulsion: "Propulsion", upgrades: "Upgrades", power: "Power" };
 // Stacking penalty (owner: diminishing returns): the nth module of the same kind is this effective (EVE's curve)
 export const stackPenalty = (n) => Math.exp(-((n / 2.67) ** 2));

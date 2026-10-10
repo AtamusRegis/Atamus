@@ -31,7 +31,7 @@ c.send({ t: "power", ship: SHIP, mod: "laser", idx: 0, on: true }); c.send({ t: 
 
 // full ore hold refuses to start
 await resetShip(c);
-c.dev({ cmd: "item", item: "ironstone", qty: 60000 }); await sleep(500);
+c.dev({ cmd: "item", item: "ironstone", qty: 200000 }); await sleep(500);
 const ii = c.inv().hangars[0].slots.findIndex((x) => x.item === "ironstone");
 c.send({ t: "inv_move", from: { ...H0, slot: ii, item: "ironstone" }, to: ORE }); await sleep(500);
 r = await atRock(c); let n = c.msgs.length;

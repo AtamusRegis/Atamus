@@ -156,6 +156,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .ctx-menu { position: fixed; background: #121a28; border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; z-index: 2000000000; min-width: 150px; }
 .ctx-item { padding: 6px 10px; font-size: 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; color: var(--text); }
 .ctx-item:hover { background: var(--sel); }
+.ctx-has-sub::after { content: "›"; float: right; margin-left: 14px; color: var(--text-dim); }
+.ctx-sub { position: fixed; }
+.ctx-empty { color: var(--text-dim); cursor: default; }
 .who { cursor: context-menu; }
 .tab-x { margin-left: 7px; font-size: 12px; opacity: .55; }
 .tab-x:hover { opacity: 1; color: #ff9a6a; }

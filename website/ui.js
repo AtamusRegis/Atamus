@@ -592,8 +592,8 @@
       out.push(el("div", { class: "mk-sub-h req-head" + (open ? " open" : ""), onclick: () => { saved.reqOpen = !open; persistAll(); rerender(); } }, el("span", { class: "mk-caret" }, "▸"), "License requirements", el("span", { class: "mk-count" }, Object.keys(t.req || {}).length)));
       if (open) out.push(...reqRows());
     } else {
-      const items = (window.Atamus.cfg || {}).items || {}, stat = { yield: "Yield", range: "Range" };
-      const bonus = Object.entries(t.bonuses || {}).flatMap(([mod, b]) => Object.entries(b).map(([k, v]) => "+" + v + "% " + ((items[mod] || {}).name || mod) + " " + (stat[k] || k)));
+      const items = (window.Atamus.cfg || {}).items || {}, stat = { yield: "Yield", range: "Range", draw: "Capacitor use", bonus: "Strength" };
+      const bonus = Object.entries(t.bonuses || {}).flatMap(([mod, b]) => Object.entries(b).map(([k, v]) => (v > 0 ? "+" : "−") + Math.abs(v) + "% " + ((items[mod] || {}).name || mod) + " " + (stat[k] || k)));
       out.push(el("div", { class: "ship-hero" }, shipIcon(type, "ship-hero-img")), el("div", { class: "info-desc" }, el("span", {}, t.desc || "")), row("Class", t.cls || "—"),
         ...(bonus.length ? [el("div", { class: "hull-bonus" }, el("div", { class: "hull-bonus-h" }, "Hull bonus"), ...bonus.map((b) => el("div", { class: "hull-bonus-row" }, b)))] : []));
     }
@@ -1774,7 +1774,22 @@
   function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   function showCtxMenu(x, y, items) {
     closeCtxMenu();
-    ctxMenu = el("div", { class: "ctx-menu", style: "z-index:" + (z + 100000) }, items.map(([label, fn]) => el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label)));
+    // an item is [label, fn] or [label, [subitems]]: a submenu opens beside it on hover or tap
+    let sub = null;
+    const openSub = (row, list) => {
+      if (sub) sub.remove();
+      sub = el("div", { class: "ctx-menu ctx-sub" }, list.length ? list.map(([l, f]) => el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); f(); } }, l)) : [el("div", { class: "ctx-item ctx-empty" }, "—")]);
+      ctxMenu.append(sub);
+      const r = row.getBoundingClientRect(), s = sub.getBoundingClientRect(), M = 6;
+      let left = r.right + 2; if (left + s.width > innerWidth - M) left = r.left - 2 - s.width;
+      sub.style.left = Math.max(M, left) + "px"; sub.style.top = Math.max(M, Math.min(innerHeight - s.height - M, r.top - 4)) + "px";
+    };
+    ctxMenu = el("div", { class: "ctx-menu", style: "z-index:" + (z + 100000) }, items.map(([label, fn]) => {
+      if (Array.isArray(fn)) { const row = el("div", { class: "ctx-item ctx-has-sub" }, label); row.addEventListener("mouseenter", () => openSub(row, fn)); row.addEventListener("click", (e) => { e.stopPropagation(); openSub(row, fn); }); return row; }
+      const row = el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label);
+      row.addEventListener("mouseenter", () => { if (sub) { sub.remove(); sub = null; } });
+      return row;
+    }));
     document.body.appendChild(ctxMenu);
     // placement (owner): centred above the press; below it if there's no room above; to the right of it near the
     // left edge, to the left of it near the right edge

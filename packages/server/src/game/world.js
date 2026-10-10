@@ -90,7 +90,7 @@ export class World {
     return out;
   }
   // Upgrades (owner: diminishing returns): the total bonus of every fitted upgrade of one kind, stacking-penalized
-  _upgrade(sh, stat) { let n = 0, sum = 0; for (const f of sh.fit) { const m = Inv.MODULES[f.item]; if (m.role === "upgrade" && m.stat === stat) sum += m.bonus * stackPenalty(n++); } return sum; }
+  _upgrade(sh, stat) { let n = 0, sum = 0; for (const f of sh.fit) { const m = Inv.MODULES[f.item]; if (m.role === "upgrade" && m.stat === stat) sum += m.bonus * (1 + this._hullBonus(sh, f.item, "bonus") / 100) * stackPenalty(n++); } return sum; }
   _applyHolds(sh) { const t = SHIP_TYPES[sh.type] || SHIP_TYPES.chisel, k = 1 + this._upgrade(sh, "hold"); sh.inv.cargo.cap = Math.round(t.cargoM3 * k); sh.inv.ore.cap = Math.round(t.oreM3 * k); }
 
   // A new player starts with a Prospector docked at the Expanse's station.
@@ -246,7 +246,7 @@ export class World {
   }
   _capUsed(sh) {
     const autoDraw = Inv.MODULES["module:auto_miner"].draw, pf = sh.prop.fi >= 0 && sh.fit[sh.prop.fi];
-    return sh.lasers.reduce((a, L, i) => a + (L.on ? this._lmod(sh, i).draw : 0), 0) + (sh.auto.on ? autoDraw : 0) + (pf ? Inv.MODULES[pf.item].draw : 0) + (sh.drones.on ? Inv.MODULES["module:mining_drones"].draw : 0);
+    return sh.lasers.reduce((a, L, i) => a + (L.on ? this._lmod(sh, i).draw : 0), 0) + (sh.auto.on ? autoDraw : 0) + (pf ? this._propDraw(sh, pf.item) : 0) + (sh.drones.on ? Inv.MODULES["module:mining_drones"].draw : 0);
   }
   // The fit entry behind laser n (lasers are numbered in fitting order) or the auto miner ("auto").
   _modFit(sh, which) {
@@ -273,7 +273,7 @@ export class World {
     sh.lasers.forEach((L, i) => { if (L.on) on.push({ which: i, at: L.poweredAt || 0, draw: this._lmod(sh, i).draw }); });
     if (sh.auto.on) on.push({ which: "auto", at: sh.auto.poweredAt || 0, draw: autoDraw });
     if (sh.drones.on) on.push({ which: "drones", at: sh.drones.poweredAt || 0, draw: Inv.MODULES["module:mining_drones"].draw });
-    if (sh.prop.fi >= 0 && sh.fit[sh.prop.fi]) on.push({ which: "prop", at: sh.prop.poweredAt || 0, draw: Inv.MODULES[sh.fit[sh.prop.fi].item].draw });
+    if (sh.prop.fi >= 0 && sh.fit[sh.prop.fi]) on.push({ which: "prop", at: sh.prop.poweredAt || 0, draw: this._propDraw(sh, sh.fit[sh.prop.fi].item) });
     on.sort((a, b) => a.at - b.at);
     let sum = 0; const over = [];
     for (const m of on) { sum += m.draw; if (sum > max) over.push(m.which); }
@@ -314,7 +314,7 @@ export class World {
   // on. F sends them at the current target: they orbit it and mine in cycles until it's gone, out of range, or the hold
   // is full, then wait by the ship. Switching the module off (or docking, warping, logging off) recalls them. ----
   _droneFit(sh) { return sh.fit.find((f) => Inv.MODULES[f.item].role === "drones") || null; }
-  _droneYield(sh) { const t = SHIP_TYPES[sh.type] || {}, hullLic = Object.keys(t.req || {})[0], m = Inv.MODULES["module:mining_drones"]; return m.yield * (hullLic ? hullEfficiency(this._lic(sh, hullLic)) : 1); }
+  _droneYield(sh) { const t = SHIP_TYPES[sh.type] || {}, hullLic = Object.keys(t.req || {})[0], m = Inv.MODULES["module:mining_drones"]; return m.yield * (1 + this._hullBonus(sh, "module:mining_drones", "yield") / 100) * (hullLic ? hullEfficiency(this._lic(sh, hullLic)) : 1); }
   _dronesRecall(sh) { sh.drones = { on: false }; }
   cmdDrones(pid, shipId, on) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
@@ -347,6 +347,7 @@ export class World {
     d.start = now; d.until = now + d.dur;
   }
   // ---- propulsion (owner, like EVE): an afterburner or microwarpdrive raises top speed while it runs; one at a time ----
+  _propDraw(sh, item) { return Inv.MODULES[item].draw * Math.max(0, 1 + this._hullBonus(sh, item, "draw") / 100); }   // tank hulls: half the capacitor
   _propStop(sh) { sh.prop = { fi: -1, poweredAt: 0 }; }
   _propBonus(s) { const f = s.prop && s.prop.fi >= 0 && s.fit[s.prop.fi]; return f ? Inv.MODULES[f.item].speed || 0 : 0; }
   cmdProp(pid, shipId, fi, on) {

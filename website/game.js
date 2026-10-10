@@ -220,6 +220,18 @@
     window.Atamus.ctxMenu(x, y, [["Warp to " + poi.name, () => warpTo(poi.id)]]);
     return true;
   }
+  // right-click (or hold) empty space (owner): recenter on the selected ship, or go to a planet, station, stargate or
+  // belt: the selected ships warp there; with none able to, the camera goes there instead
+  function spaceMenu(x, y) {
+    if (!window.Atamus.ctxMenu) return;
+    const go = (poi) => () => { if (warpTo(poi.id)) return; follow = false; zoomAt = null; cam.cx = poi.ax * AU_KM; cam.cy = poi.ay * AU_KM; };
+    const list = (kind) => pois.filter((p) => p.kind === kind && !p.hidden).sort((a, b) => a.name.localeCompare(b.name)).map((p) => [p.name, go(p)]);
+    const items = [];
+    const sh = (snap.ships || []).find((s) => s.id === [...selected][0] && s.mine);
+    if (sh) items.push(["Recenter on ship", () => { follow = true; zoomAt = null; }]);
+    items.push(["Planets", list("planet")], ["Stations", list("station")], ["Stargates", list("gate")], ["Belts", list("belt")]);
+    window.Atamus.ctxMenu(x, y, items);
+  }
   // a POI's map icon under a screen point (only drawn as an icon while the POI is small on screen)
   function poiAt(p) {
     let best = null, bd = ICON_PX;
@@ -422,7 +434,8 @@
     e.preventDefault(); const p = eventPos(e);
     const rk = rockAt(p); if (rk) { rockMenu(rk, e.clientX, e.clientY); return; }
     const gate = gateAt(p); if (gate) { gateMenu(gate, e.clientX, e.clientY); return; }
-    poiMenu(poiAt(p), e.clientX, e.clientY);
+    if (poiMenu(poiAt(p), e.clientX, e.clientY)) return;
+    spaceMenu(e.clientX, e.clientY);
   });
   canvas.addEventListener("mousemove", (e) => { hoverAt = eventPos(e); });
   canvas.addEventListener("mouseleave", () => { hoverAt = null; });
@@ -479,7 +492,11 @@
     if (touch.pts.size) { if (touch.mode === "pinch" && touch.pts.size === 1) { touch.mode = "done"; } return; }
     clearTimeout(touch.hold);
     const mode = touch.mode; touch.mode = null;
-    if (mode === "box") { boxSelect(selBox.x0, selBox.y0, selBox.x1, selBox.y1, false); selBox = null; return; }
+    if (mode === "box") {
+      const small = Math.abs(selBox.x1 - selBox.x0) < 10 && Math.abs(selBox.y1 - selBox.y0) < 10;
+      if (small) { const r = canvas.getBoundingClientRect(); selBox = null; spaceMenu(touch.start.x + r.left, touch.start.y + r.top); return; }   // hold without dragging = right-click
+      boxSelect(selBox.x0, selBox.y0, selBox.x1, selBox.y1, false); selBox = null; return;
+    }
     if (mode !== "tap") return;
     const p = touch.cur, now = performance.now();
     if (touch.lastTapAt && now - touch.lastTap < 320 && Math.hypot(p.x - touch.lastTapAt.x, p.y - touch.lastTapAt.y) < 24) {

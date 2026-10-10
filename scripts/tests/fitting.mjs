@@ -20,39 +20,43 @@ await unfitAll();
 t.ok(fitOf().length === 0, "unfit empties the fit");
 t.ok(((c.inv().hangars[0].slots.find((x) => x.item === "module:mining_laser") || {}).qty || 0) === before + n0, "unfitted modules go back to Hangar 1");
 
-// hardpoints
-for (let i = 0; i < hull.fitSlots + 1; i++) await fit("module:mining_laser");
+// hardpoints (small batteries, so disposition isn't the limit)
+c.dev({ cmd: "item", item: "module:cap_battery", qty: hull.fitSlots + 1 }); await sleep(400);
+for (let i = 0; i < hull.fitSlots + 1; i++) await fit("module:cap_battery");
 t.ok(fitOf().length === hull.fitSlots, "can't fit more modules than hardpoints", fitOf().length);
+await unfitAll();
+const NL = Math.min(hull.fitSlots, Math.floor(hull.disposition / c.last.hello.cfg.items["module:mining_laser"].size));   // as many lasers as fit
+for (let i = 0; i < NL; i++) await fit("module:mining_laser");
 
 // capacitor: everything can run, but past capacity the ship heats up, then powered modules burn
 let r = await atRock(c); let n = c.msgs.length;
 c.send({ t: "mine", ship: SHIP, on: true }); await sleep(800);
 const running = c.ship().lasers.filter((l) => l.on).length;
-t.ok(running === hull.fitSlots && c.ship().cap.used > c.ship().cap.max, "all lasers run, past the capacitor", { running, cap: c.ship().cap });
+t.ok(running === NL && c.ship().cap.used > c.ship().cap.max, "all lasers run, past the capacitor", { running, cap: c.ship().cap });
 await sleep(1500);
 t.ok(c.ship().heat > 0, "running past capacity builds heat", c.ship().heat);
 c.dev({ cmd: "heat", ship: SHIP, value: 100 }); c.dev({ cmd: "modhp", ship: SHIP, value: 3 }); await sleep(2500);
 t.ok((c.ship().fitHp || []).some((h) => h < 0) && since(n).some((m) => m.includes("burnt out")), "at full heat, overloaded modules burn out", c.ship().fitHp);
 const fits = Math.floor(c.ship().cap.max / c.last.hello.cfg.items["module:mining_laser"].draw);
-t.ok(c.ship().fitHp.filter((h) => h < 0).length === hull.fitSlots - fits && c.ship().fitHp.filter((h) => h === 3).length === fits, "only the modules past capacity take damage", c.ship().fitHp);
+t.ok(c.ship().fitHp.filter((h) => h < 0).length === NL - fits && c.ship().fitHp.filter((h) => h === 3).length === fits, "only the modules past capacity take damage", c.ship().fitHp);
 const burntIdx = c.ship().fitHp.findIndex((h) => h < 0); n = c.msgs.length;
 c.send({ t: "laser", ship: SHIP, idx: burntIdx, on: true, rock: r.id }); await sleep(400);
 t.ok(since(n).some((m) => m.includes("burnt out")), "a burnt-out module can't be switched on");
-c.send({ t: "mine", ship: SHIP, on: false }); for (let i = 0; i < hull.fitSlots; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: false }); await sleep(1500);
+c.send({ t: "mine", ship: SHIP, on: false }); for (let i = 0; i < NL; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: false }); await sleep(1500);
 const h1 = c.ship().heat; await sleep(1200);
 t.ok(c.ship().heat < h1, "within capacity the ship cools down", { h1, h2: c.ship().heat });
-for (let i = 0; i < hull.fitSlots; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: true });
+for (let i = 0; i < NL; i++) c.send({ t: "power", ship: SHIP, mod: "laser", idx: i, on: true });
 c.send({ t: "laser", ship: SHIP, idx: 0, on: true, rock: r.id }); await sleep(300);
 
 // fitting needs the ship docked
 n = c.msgs.length; c.send({ t: "unfit", ship: SHIP, idx: 0 }); await sleep(300);
-t.ok(fitOf().length === hull.fitSlots && since(n).some((m) => m.includes("Dock")), "fitting changes need the ship docked");
+t.ok(fitOf().length === NL && since(n).some((m) => m.includes("Dock")), "fitting changes need the ship docked");
 await resetShip(c); await sleep(300);
 t.ok((c.ship().fitHp || []).every((h) => h === 100) && !c.ship().heat, "docking repairs modules and clears heat", c.ship().fitHp);
 
-// disposition: 4 lasers + auto miner = 55 > 50
+// disposition: lasers up to the hull's disposition, then an auto miner doesn't fit
 await resetShip(c); await unfitAll();
-for (let i = 0; i < 4; i++) await fit("module:mining_laser");
+for (let i = 0; i < Math.floor((hull.disposition - 10) / 10) + 1; i++) await fit("module:mining_laser");
 n = c.msgs.length; await fit("module:auto_miner");
 t.ok(!fitOf().includes("module:auto_miner") && since(n).some((m) => m.includes("disposition")), "can't exceed the hull's disposition");
 

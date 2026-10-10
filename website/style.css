@@ -330,6 +330,9 @@ main {
 .front-lead { color: var(--text) !important; font-size: 16px; }
 .btn-play { align-self: flex-start; margin-top: 8px; padding: 13px 34px; font-size: 14px; }
 .front-updates .front-body { gap: 0; }
+.front-help { grid-column: 1 / -1; }   /* below the two main panels, full width */
+.front-help a { color: #7fc4ff; text-decoration: none; }
+.front-help a:hover { text-decoration: underline; }
 .update { padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .update:first-child { padding-top: 0; }
 .update:last-child { border-bottom: none; padding-bottom: 0; }

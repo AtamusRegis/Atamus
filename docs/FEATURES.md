@@ -125,7 +125,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 ## Mining
 
 - **Lasers:** mining lasers are fitted modules (see Fitting); a ship has as many as it has fitted. **Laser range is 1 km (owner, for now).**
-- **Targeting range (owner, for now):** Prospector 3 km; Dredger 8, Bulwark 12, Collier 8; Excavator 11, Rampart 13.5, Carrack 9 (the earlier ranges × 0.2).
+- **Targeting range (owner, for now):** Prospector 5 km (owner, balance pass: so it can lock at full drone range); Dredger 8, Bulwark 12, Collier 8; Excavator 11, Rampart 13.5, Carrack 9 (the earlier ranges × 0.2).
   - The Prospector fires from 4 arm hardpoints. Barges and exhumers fire from the circular hopper ports on their centerline.
   - Range is 5 km, before bonuses.
 - **Cycle:** 15 s. Ore lands at the end of the cycle, and the cycle repeats until told otherwise.
@@ -173,11 +173,17 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 
 - No EVE-style high/mid/low slots and no CPU/powergrid. Each hull has three numbers:
 
-  | Hull class | Hardpoints | Disposition | Capacitor |
-  |---|---|---|---|
-  | Mining Frigate | 5 | 50 | 30 |
-  | Mining Barge | 6 | 90 | 60 |
-  | Exhumer | 7 | 120 | 90 |
+  **Balance pass (owner, 2026-10-10):** capacitor caps each hull's realistic laser count, and ore holds take about 20 min to fill with a typical fit at full licenses (about 40 min for the haul hulls).
+
+  | Hull | Hardpoints | Disposition | Capacitor | Ore hold (m³) | Role bonus (besides laser yield / range) |
+  |---|---|---|---|---|---|
+  | Prospector | 8 | 70 | 40 | 8,000 | +50% Mining Drones yield |
+  | Dredger | 9 | 110 | 60 | 55,000 | (pure yield) |
+  | Bulwark | 9 | 105 | 55 | 40,000 | −50% Afterburner / Microwarpdrive capacitor use |
+  | Collier | 9 | 110 | 55 | 90,000 | Cargohold Expansions +50% stronger |
+  | Excavator | 10 | 140 | 85 | 90,000 | (pure yield) |
+  | Rampart | 10 | 135 | 75 | 60,000 | −50% Afterburner / Microwarpdrive capacitor use |
+  | Carrack | 10 | 140 | 80 | 150,000 | Cargohold Expansions +50% stronger |
 
   - **Hardpoints:** how many modules fit. **Disposition:** the total size of fitted modules. **Capacitor:** shared power for *running* modules.
   - Each hull lists **accepted module categories** (mining hulls: Mining, Automation, Power). There are no per-type counts: 8 lasers is fine if hardpoints and disposition allow it.
@@ -306,6 +312,8 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 - **Settings window:** a Sound tab with All, Music and SFX sliders (themed: blue fill up to a round thumb), remembered. There are no sound effects yet; the SFX volume is ready for them.
 - **Music (owner):** "Soviet Wave" (`assets/audio/soviet_wave.mp3`) loops in the game at All × Music volume. It starts on the first click or key, since browsers block sound before that.
 - **Context menu:** always renders above windows, and closes on any tap elsewhere.
+  - **Submenus:** an item with › opens its list beside it on hover or tap.
+- **Space menu (owner):** right-click empty space (or hold it on touch without dragging) → **Recenter on ship** (the selected ship, camera follows it), then **Planets ›**, **Stations ›**, **Stargates ›** and **Belts ›**, each listing those POIs by name. Picking one warps the selected ships there; if none of them can warp (docked, already there), the camera goes there instead.
   - **Placement (owner):** centered above the press; below it if there's no room above; to the right of the press near the left edge, to the left of it near the right edge.
 - **Mobile:**
   - tap, double-tap, pan, pinch, hold-to-lock and box select;

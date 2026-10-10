@@ -4,6 +4,10 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
+- **Balance pass:** new hardpoints, disposition, capacitor and ore holds for every hull (Prospector 8 hardpoints), Prospector targeting 5 km, and role bonuses: Prospector drone yield, Bulwark / Rampart cheaper propulsion, Collier / Carrack stronger cargohold expansions.
+- **Space menu:** right-click (or hold) empty space for Recenter on ship and Planets / Stations / Stargates / Belts submenus that warp you there.
+- **Front page:** a "Help build Atamus" card (AI placeholder assets; how to get in touch).
+
 - **New modules (major):** Mining Drones (launch once, press F to send them at your target: they orbit it and mine), Afterburner and Microwarpdrive (more top speed while running, one at a time), Cargohold Expansion (+50% holds) and Mining Laser Upgrade (+10% laser yield), both with diminishing returns. Fitting numbers are placeholders.
 - **No more warping inside a POI;** use propulsion modules. Warp is only between POIs.
 - **F** now sends drones; clicking a pilot in the fleet bar centers the camera on their ship.
