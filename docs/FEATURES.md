@@ -7,7 +7,9 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Region:** the Expanse, one persistent home system for everyone. See **The Expanse** below.
 - **Station lights:** a soft blue glow behind the station. Red and white beacons on the masts and arm tips give a short double flash now and then (every ~6 s, staggered). Running lights chase slowly (1.4 steps a second) along both edges of the docking bay toward its back wall **(owner: slow and occasional)**. The lights show once the station is at least 70 px wide on screen.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances inside a POI are in km; map positions are in AU.
-- **Stargates (owner):** players don't control them. Each sits at the centre of its gate POI. Nomad space doesn't exist yet, so every stargate is **offline**: slow occasional blinking lights only. **Clicking a gate** opens the Stargate window (Status: Offline) without changing the selection.
+- **Stargates (owner):** players don't control them. Each sits at the centre of its gate POI: the owner's bar design (`assets/ships/stargate.webp`), 2379 m long, standing upright, with two glowing blue rings. Nomad space doesn't exist yet, so every stargate is **offline**. **Clicking a gate** opens the Stargate window (Status: Offline) without changing the selection.
+- **Defense turrets (owner):** placed around high-security POIs: 4 on the diagonals around the station (6 km out) and around each stargate (3.5 km out). Owner's art: a 425 m base and a 459 m head that pivots on its dome. They aren't armed yet; the heads face outward and sweep slowly (±50°). Only drawn in POIs you have a ship in, like everything else inside a POI.
+- **Arks:** sprites are in `assets/ships/` for when arcs arrive: Ark 5646 m, Small Ark 1532 m, Mini Ark 559 m, each in blue and red.
 - **Factions** (`game/factions.js`, not used in gameplay yet):
 
   | Faction | Role |
@@ -342,6 +344,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 - Overburdening disposition past 100% in exchange for a smaller heat buffer (considered, scrapped).
 - Names: "Expanse Excavations" and the "EMO" acronym; "Black Flag" for pirates; personal-sounding hull names.
 - Asteroid belts in home systems (5 slots, spawning and drifting away). Replaced by scattered home rocks and asteroid instances.
+- The round stargate ring and its effects (blinking lights, motes, swirl when connected). Replaced by the bar design.
 - Anyone looting a fresh jettison can. Cans are owner-only for 30 minutes now.
 - Kicking idle online players out of instances, and matchmaking with friends (instances are random for now).
 - **Replaced by the Expanse (docs/DESIGN.md phase 1):** personal home systems; fuel stargates linking players' systems and the pirate hub; asteroid beacons, acceleration-gate jumps and asteroid instances (they'll return as the "small belt" instance type behind acceleration gates); scattered home rocks; offline mining and systems staying awake while offline.

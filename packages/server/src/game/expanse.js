@@ -20,6 +20,9 @@ export function fixedPois() {
   out.push({ id: "station", kind: "station", name: "Expanse Station", ...at(PLANETS[1][0], PLANETS[1][1] + 9) });
   for (let k = 0; k < 6; k++) out.push({ id: "gate:" + (k + 1), kind: "gate", name: "Stargate " + GATE_DIRS[k], ...at(EXPANSE_APOTHEM_AU * 0.96, 90 + 60 * k), state: "offline" });
   for (const p of out) { p.r = POI_SIZE_KM[p.kind] / 2; p.fixed = true; }
+  // defense turrets around high-security POIs (owner): 4 on the diagonals around the station and each stargate. Not armed yet.
+  const ring = (d) => [45, 135, 225, 315].map((a) => ({ x: +(Math.cos(deg(a)) * d).toFixed(3), y: +(Math.sin(deg(a)) * d).toFixed(3) }));
+  for (const p of out) if (p.kind === "station") p.turrets = ring(6); else if (p.kind === "gate") p.turrets = ring(3.5);
   return out;
 }
 

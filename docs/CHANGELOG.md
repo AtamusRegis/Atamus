@@ -4,9 +4,9 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
-- **Rocks:** hover or click one to see its ore name and distance; right-click for Lock / Unlock and Info.
+- **Stargates:** new art, a 2.4 km bar with two glowing rings (the round ring and its effects are gone). Ark sprites added for later.
+- **Defense turrets** stand around the station and every stargate (not armed yet; their heads sweep slowly).
 - **Zoomed out:** ships use their own hull icons (blue yours, red others').
-
 - **Rocks:** hover or click one to see its ore name and distance; right-click for Lock / Unlock and Info.
 
 - **Ores renamed:** Cryonite, Pyroxite, Duranite, Hexite, Tantalite (refined later into "-iums").

@@ -649,6 +649,7 @@ export class World {
       if (poi.hidden) e.hidden = true;
       if (poi.state) e.state = poi.state;
       if (poi.seed != null) e.seed = poi.seed;
+      if (poi.turrets) e.turrets = poi.turrets;
       out.push(e);
     }
     return out;

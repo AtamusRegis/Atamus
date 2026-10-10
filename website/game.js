@@ -49,8 +49,8 @@
     } };
 
   const gateImg = new Image(); let gateImgReady = false;
-  gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
-  const GATE_LEN_KM = 1.656; // stargate ring, true size
+  gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/ships/stargate.webp";
+  const GATE_LEN_KM = 2.379; // stargate, true length (its long axis stands upright)
   // The Expanse's map: POI positions come in AU; the map draws 1 AU as AU_KM km, so zooming out from a POI (true km
   // scale) reaches the whole system. Inside a POI everything is local km around its centre.
   const AU_KM = 20000, PLANET_R_KM = 8, ICON_PX = 14, RING_MIN_PX = 16;
@@ -480,48 +480,34 @@
   canvas.addEventListener("touchcancel", touchEnd, { passive: false });
 
   // ---- drawing ----
+  // defense turrets (owner's art: a 425 m base, a 459 m head) around high-security POIs; unarmed, the heads sweep slowly
+  const turretArt = { base: new Image(), head: new Image() };
+  turretArt.base.src = "assets/ships/turret_base.webp"; turretArt.head.src = "assets/ships/turret_head.webp";
+  const TURRET_BASE_KM = 0.425, TURRET_HEAD_KM = 0.459;
+  function drawTurrets(place) {
+    if (!turretArt.base.naturalWidth || !turretArt.head.naturalWidth) return;
+    const sc = scale(), t = performance.now() / 1000;
+    for (const pl of place.values()) {
+      if (!pl.active || !pl.poi.turrets || pl.k > 1) continue;
+      pl.poi.turrets.forEach((tr, i) => {
+        const x = gx2s(pl.gx + tr.x), y = gy2s(pl.gy + tr.y), bw = Math.max(2, TURRET_BASE_KM * sc); if (bw < 2.5) return;
+        const bh = bw * turretArt.base.naturalHeight / turretArt.base.naturalWidth, hw = TURRET_HEAD_KM * sc, hh = hw * turretArt.head.naturalHeight / turretArt.head.naturalWidth;
+        const out = Math.atan2(tr.y, tr.x), a = out + Math.sin(t * 0.15 + i * 1.7) * 0.9;   // facing outward, sweeping ±50°
+        ctx.save(); ctx.imageSmoothingEnabled = bw > turretArt.base.naturalWidth; ctx.drawImage(turretArt.base, x - bw / 2, y - bh / 2, bw, bh);
+        ctx.translate(x, y); ctx.rotate(-a);   // the head pivots on its dome (34% along it); the barrels point +x
+        ctx.drawImage(turretArt.head, -hw * 0.34, -hh / 2, hw, hh); ctx.restore();
+      });
+    }
+  }
+  // the stargate (owner's art: a 2379 m bar standing upright, with two glowing rings)
   function drawGate(g, pl) {
     const sx = gx2s(pl.gx + g.lx * pl.k), sy = gy2s(pl.gy + g.ly * pl.k);
-    const wPx = Math.max(3, GATE_LEN_KM * scale());
+    const hPx = Math.max(6, GATE_LEN_KM * scale());
     if (gateImgReady && gateImg.naturalWidth) {
-      const hPx = wPx * (gateImg.naturalHeight / gateImg.naturalWidth);
-      ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
-    } else { ctx.save(); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, wPx / 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-    if (window.Atamus.hud && window.Atamus.hud.gate === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
-    if (gateImg.naturalWidth && wPx >= 40) drawGateFx(sx, sy, wPx, g);
-  }
-  // stargate life (owner): slow blinking lights; powered = drifting motes of light in the ring; connected = a turning swirl
-  const GATE_BLINK = [[378, 20, "r", 0], [757, 36, "w", 0.4], [10, 403, "r", 0.7], [865, 465, "w", 0.2], [127, 785, "r", 0.55], [380, 775, "w", 0.85]];
-  const GATE_NODES = [[350, 187], [540, 187], [215, 322], [675, 322], [215, 512], [675, 512], [350, 648], [540, 648]];
-  function drawGateFx(sx, sy, wPx, g) {
-    const t = performance.now() / 1000, k = wPx / gateImg.naturalWidth, hPx = wPx * gateImg.naturalHeight / gateImg.naturalWidth;
-    const ox = sx - wPx / 2, oy = sy - hPx / 2, cx = ox + 445 * k, cy = oy + 417 * k, R = 243 * k;
-    const glow = (x, y, rgb, a, rad) => { const gr = ctx.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, "rgba(" + rgb + "," + a + ")"); gr.addColorStop(1, "rgba(" + rgb + ",0)"); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill(); };
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    for (const [ix, iy, c, ph] of GATE_BLINK) { const f = (t / 5.5 + ph) % 1; if (f < 0.025 || (f > 0.06 && f < 0.085)) glow(ox + ix * k, oy + iy * k, c === "r" ? "255,70,60" : "235,245,255", 1, Math.max(3, 14 * k)); }
-    const powered = g.state === "active", linked = powered && !!g.connToSys;
-    if (powered) {
-      for (const [ix, iy] of GATE_NODES) glow(ox + ix * k, oy + iy * k, "120,200,255", 0.7 + 0.3 * Math.sin(t * 2 + ix), Math.max(3, 16 * k));
-      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      glow(cx, cy, linked ? "90,170,255" : "80,150,255", linked ? 0.35 : 0.12, R);
-      if (linked) {                                                     // connected: spiral arms turning into the middle
-        ctx.lineCap = "round";
-        for (let arm = 0; arm < 5; arm++) {
-          ctx.beginPath();
-          for (let q = 0; q <= 40; q++) { const u = q / 40, r = R * (1 - u * 0.95), a = arm * Math.PI * 2 / 5 + u * 3.2 - t * 1.4; const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; if (q) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-          ctx.strokeStyle = "rgba(130,200,255,0.22)"; ctx.lineWidth = R * 0.12; ctx.stroke(); ctx.strokeStyle = "rgba(210,240,255,0.35)"; ctx.lineWidth = R * 0.025; ctx.stroke();
-        }
-        glow(cx, cy, "235,248,255", 0.6, R * 0.3);
-      }
-      for (let i = 0; i < 46; i++) {                                    // motes: drifting round (and, connected, falling inward)
-        const h1 = Math.sin(i * 91.7) * 43758.5453 % 1, h2 = Math.abs(Math.sin(i * 12.9) * 9631.1 % 1);
-        const r = linked ? R * (1 - ((t * 0.12 + Math.abs(h1)) % 1)) : R * (0.25 + 0.7 * Math.abs(h2)), a = Math.abs(h1) * 6.283 + t * (linked ? 1.4 : 0.15) * (0.6 + Math.abs(h2));
-        ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(t * 1.3 + i)); ctx.fillStyle = "rgba(170,225,255,1)"; const d = Math.max(1.2, 3 * k * 3);
-        ctx.fillRect(cx + Math.cos(a) * r - d / 2, cy + Math.sin(a) * r - d / 2, d, d);
-      }
-      ctx.restore();
+      const wPx = hPx * (gateImg.naturalWidth / gateImg.naturalHeight);
+      ctx.save(); ctx.imageSmoothingEnabled = hPx > gateImg.naturalHeight; ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
     }
-    ctx.restore();
+    if (window.Atamus.hud && window.Atamus.hud.gate === g.id) drawSelBox(sx, sy, Math.max(12, hPx * 0.52));
   }
 
   // ---- space backdrop (owner): a dark gradient, slow drifting noise, a very thin world grid and three layers of
@@ -1020,6 +1006,7 @@
       drawPois(place);
       drawBelts(place);
       drawStations(place);
+      drawTurrets(place);
       if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl && pl.active) drawGate(g, pl); }
       drawCans();
       drawShips(place);
