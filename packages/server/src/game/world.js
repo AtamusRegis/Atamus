@@ -355,6 +355,11 @@ export class World {
     }
     this._markInv(pid);
   }
+  // Jump through a stargate (right-click it → Jump). Nomad space doesn't exist yet, so every gate is offline.
+  cmdGateJump(pid, gateId, shipIds) {
+    const poi = typeof gateId === "string" && this.pois.get(gateId); if (!poi || poi.kind !== "gate" || !Array.isArray(shipIds)) return;
+    if (poi.state !== "active") { this._tell(pid, poi.name + " is offline."); return; }
+  }
   _arrive(s, w, now) {
     let dst = this.pois.get(w.to);
     if (!dst || dst.retired) dst = this._newPoi("spawn", { owner: s.owner });   // it closed while you were on the way

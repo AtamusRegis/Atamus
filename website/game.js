@@ -357,6 +357,18 @@
     items.push(["Info", () => window.Atamus.openItemInfo && window.Atamus.openItemInfo(rk.ore)]);
     window.Atamus.ctxMenu(x, y, items);
   }
+  // stargates aren't selectable (owner): right-click (hold) → Jump (the selected ships) / Info (its window)
+  function gateMenu(g, x, y) {
+    if (!window.Atamus.ctxMenu) return;
+    window.Atamus.ctxMenu(x, y, [["Jump", () => send({ t: "gatejump", gate: g.id, ships: [...selected] })], ["Info", () => bus.dispatchEvent(new CustomEvent("opengate", { detail: { id: g.id } }))]]);
+  }
+  let pinnedGate = null;
+  function drawGateLabel() {
+    const g = pinnedGate && snap.gates.find((x) => x.id === pinnedGate), pl = g && curPlace.get(g.sys); if (!pl || !pl.active) return;
+    const x = gx2s(pl.gx), y = gy2s(pl.gy) + Math.max(10, GATE_LEN_KM * scale() * 0.5) + 14;
+    ctx.save(); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(225,232,245,0.92)"; ctx.shadowColor = "rgba(0,0,0,0.85)"; ctx.shadowBlur = 4;
+    ctx.fillText(g.name + " - " + (g.state === "active" ? "Online" : "Offline"), x, y); ctx.restore();
+  }
   function drawRockLabel() {
     const rk = (hoverAt && rockAt(hoverAt)) || (pinnedRock && rockById(pinnedRock)); if (!rk) return;
     const pl = curPlace.get(rockSys.get(rk.id)); if (!pl) return;
@@ -370,10 +382,10 @@
   // a click/tap on the map: select what's there, or (empty) deselect after a beat so a double can still move
   function clickAt(p, shift) {
     const rk = rockAt(p); pinnedRock = rk ? rk.id : null;            // clicking a rock pins its name and distance
+    const gt = gateAt(p); pinnedGate = gt ? gt.id : null;            // clicking a stargate pins "name - status"
+    if (gt) return;
     const can = canAt(p);
     if (can) { bus.dispatchEvent(new CustomEvent("can", { detail: { id: can.id, x: p.x, y: p.y } })); return; }
-    const gate = gateAt(p);
-    if (gate) { bus.dispatchEvent(new CustomEvent("opengate", { detail: { id: gate.id } })); return; }   // like the station: opens its window, the selection stays
     const ship = shipAt(p);
     if (ship) {
       if (!shift) selected.clear(); if (shift && selected.has(ship.id)) selected.delete(ship.id); else selected.add(ship.id);
@@ -410,6 +422,7 @@
   canvas.addEventListener("contextmenu", (e) => {                     // right-click: a rock → Lock / Info; a POI on the map → Warp to
     e.preventDefault(); const p = eventPos(e);
     const rk = rockAt(p); if (rk) { rockMenu(rk, e.clientX, e.clientY); return; }
+    const gate = gateAt(p); if (gate) { gateMenu(gate, e.clientX, e.clientY); return; }
     poiMenu(poiAt(p), e.clientX, e.clientY);
   });
   canvas.addEventListener("mousemove", (e) => { hoverAt = eventPos(e); });
@@ -435,6 +448,8 @@
         if (touch.mode !== "tap") return;
         const poi = poiAt(touch.start);                                  // hold a POI on the map = right-click: warp to it
         if (poi) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); poiMenu(poi, touch.start.x + r.left, touch.start.y + r.top); return; }
+        const gt = gateAt(touch.start);                                  // hold a stargate = right-click: its menu
+        if (gt) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); gateMenu(gt, touch.start.x + r.left, touch.start.y + r.top); return; }
         if (lockAt(touch.start)) { touch.mode = "done"; if (navigator.vibrate) navigator.vibrate(15); }
         else { touch.mode = "box"; selBox = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; }
       }, 450);
@@ -1010,7 +1025,7 @@
       if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl && pl.active) drawGate(g, pl); }
       drawCans();
       drawShips(place);
-      drawRockLabel();
+      drawRockLabel(); drawGateLabel();
       const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target
       if (hl) { const t = targetScreen(place, hl.tg); if (t) { ctx.save(); ctx.beginPath(); ctx.moveTo(hl.x, hl.y); ctx.lineTo(t.x, t.y); ctx.strokeStyle = "rgba(200,205,215,0.22)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); } }
     }

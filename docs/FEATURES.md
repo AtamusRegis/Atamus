@@ -7,7 +7,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **Region:** the Expanse, one persistent home system for everyone. See **The Expanse** below.
 - **Station lights:** a soft blue glow behind the station. Red and white beacons on the masts and arm tips give a short double flash now and then (every ~6 s, staggered). Running lights chase slowly (1.4 steps a second) along both edges of the docking bay toward its back wall **(owner: slow and occasional)**. The lights show once the station is at least 70 px wide on screen.
 - **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances inside a POI are in km; map positions are in AU.
-- **Stargates (owner):** players don't control them. Each sits at the centre of its gate POI: the owner's bar design (`assets/ships/stargate.webp`), 2379 m long, standing upright, with two glowing blue rings. Nomad space doesn't exist yet, so every stargate is **offline**. **Clicking a gate** opens the Stargate window (Status: Offline) without changing the selection.
+- **Stargates (owner):** players don't control them. Each sits at the centre of its gate POI: the owner's bar design (`assets/ships/stargate.webp`), 2379 m long, standing upright, with two glowing blue rings. Nomad space doesn't exist yet, so every stargate is **offline**. **Stargates aren't selectable (owner):** left-click shows "*name* - *status*" under the gate (until the next click); right-click (hold, on touch) → **Jump** (the selected ships; the server answers "*name* is offline." for now) and **Info** (the Stargate window, Status: Offline).
 - **Defense turrets (owner):** placed around high-security POIs: 4 on the diagonals around the station (6 km out) and around each stargate (3.5 km out). Owner's art: a 425 m base and a 459 m head that pivots on its dome. They aren't armed yet; the heads face outward and sweep slowly (±50°). Only drawn in POIs you have a ship in, like everything else inside a POI.
 - **Arks:** sprites are in `assets/ships/` for when arcs arrive: Ark 5646 m, Small Ark 1532 m, Mini Ark 559 m, each in blue and red.
 - **Factions** (`game/factions.js`, not used in gameplay yet):
@@ -166,8 +166,6 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 - **Rocks** are in belt POIs (see The Expanse). Rock ids carry their POI (`belt:…#3`).
 - **Rock labels (owner):** hovering a rock, or clicking it (pinned until the next click), shows its ore name under it, plus its distance from the selected ship in "X.X km" when that ship is in the same POI.
 - **Rock menu (owner):** right-click a rock → **Lock** / **Unlock** (for the selected ship, when it's in that POI) and **Info** (the ore's item info). Ctrl-click and hold (touch) still lock directly.
-- **Rock labels (owner):** hovering a rock, or clicking it (pinned until the next click), shows its ore name under it, plus its distance from the selected ship in "X.X km" when that ship is in the same POI.
-- **Rock menu (owner):** right-click a rock → **Lock** / **Unlock** (for the selected ship, when it's in that POI) and **Info** (the ore's item info). Ctrl-click and hold (touch) still lock directly.
 - **Ores:**
 
   | Ore | Rarity | Price | Volume |
@@ -295,7 +293,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **Pilot not in a ship (owner):** when the selected pilot crews no ship, the HUD becomes a small "Pilot not in a ship" box.
   - Dragging a target shows only that target's circle.
 - **Ship actions** (Inventory, Dock, Warp; Undock and Inventory while docked with the pilot aboard): always shown for the selected pilot's ship (docked: Inventory opens the station view of its holds). Anchored to the fleet bar, centered on its side facing the screen center: 24 px buttons (32 px on touch) **(owner: a third bigger)**.
-- **Selection (owner):** one pilot is always selected, and that pilot's ship is always selected while they're in it; if anything clears the selection, the ship is reselected (a multi-ship box selection is left alone). Clicking empty space or an empty box-select never deselects. Clicking the station or a stargate opens its window without changing the selection, and closing that window doesn't deselect.
+- **Selection (owner):** one pilot is always selected, and that pilot's ship is always selected while they're in it; if anything clears the selection, the ship is reselected (a multi-ship box selection is left alone). Clicking empty space or an empty box-select never deselects. Clicking the station opens its window without changing the selection, and closing that window doesn't deselect.
 - **Fleet bar:**
   - lists **pilots** (owner), each with their ship (sprite and split shield|hull bar) or an empty marker if they don't crew one. Cards are small (52 px);
   - click a card to select that pilot; double-click locates their ship; right-click or hold opens the ship menu;
