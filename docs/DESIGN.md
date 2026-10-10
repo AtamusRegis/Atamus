@@ -67,6 +67,23 @@ Today's engine (measured 2026-10-09): one system is good for 50–100 players, a
 6. **Time dilation:** an overloaded system slows its own simulation clock instead of lagging or dropping players.
 7. **Client level of detail:** the number of drawn ships is capped, and dots replace sprites beyond it, so phones survive crowds.
 
+### Scaling path (owner: start small, grow to 100, 500, 1,000 and beyond)
+
+Node runs the simulation on one core, so a bigger server only helps once systems run in parallel. Phase 1 builds the seams for that, so each step up is a configuration and hardware change, not a rewrite.
+
+| Stage | Players | Setup |
+|---|---|---|
+| A | ~100 | One process: the front door (sockets, sessions, routing) and every system together. Today's server size is fine. |
+| B | ~500 | One machine with more cores. The front door stays on the main thread; systems are spread over worker threads (system groups), with the busy hubs on their own workers. |
+| C | ~1,000 | A bigger machine (8–16 cores), or two. Same workers; the front door routes each player to the worker running the system they're in. |
+| D | 1,000+ | Several machines. Workers become separate processes on any machine, the front door stays in front, and the database (Postgres) is shared. |
+
+What makes the steps cheap:
+- **Each system is a self-contained unit.** It owns its state and tick, and talks to the rest only by messages: a player entering or leaving, chat, market orders, saves. In stage A those messages are function calls; in B–D they go to other threads or machines.
+- **Players are routed by system.** Gate travel and logging in are a handoff from one system's worker to another. The client never knows where a system runs.
+- **Shared things never sit in a system's tick:** accounts, pilots, the market, chat channels, base surfaces (not simulated in the world tick) and the database.
+- **Every step is load-tested:** before each stage, the bot harness runs at that stage's player count on the target hardware.
+
 ### Load test (required before launch)
 
 A headless bot client (a websocket bot) that logs in, launches, warps between points of interest, enters instances, mines, travels by gate and logs out.
@@ -79,7 +96,7 @@ A headless bot client (a websocket bot) that logs in, launches, warps between po
 
 Each phase leaves the game playable, and is built and load-tested in the PTR before it goes live.
 
-1. **World engine (wipe):**
+1. **World engine (wipe), at stage A with the stage B–D seams in place:**
    - AU-scale shared high-security systems with points of interest and warp-to;
    - system isolation, the spatial hash and interest-managed changes-only snapshots;
    - logging off despawns everything; the system cap, queue and time dilation;
