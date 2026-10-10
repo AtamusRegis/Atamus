@@ -18,7 +18,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **Caps by popularity:** popular POIs (trading stations, NPC stations, home planets) get higher player caps; lower-priority ones (asteroid belts and the like) get lower caps.
   - **Bigger POIs** can contain **acceleration gates** to smaller capped instances.
 - **Wormholes** spawn and despawn in the Expanse and lead to nomad space. The Expanse's job is to **balance nomad space (owner)**:
-  - it only connects to nomad systems that are below their target population, never to busy ones;
+  - it can connect to populated nomad systems, busy ones included, but **not to systems near their population threshold** (their upper limit, e.g. 100);
   - when one of its wormholes gets too much traffic, it closes and a new one opens to a quieter system.
 - **Stargates** only arrive if there's ever a second hub world. They're skipped for now.
 
