@@ -19,7 +19,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **Bigger POIs** can contain **acceleration gates** to smaller capped instances.
 - **Wormholes** spawn and despawn in the Expanse and lead to nomad space. The Expanse's job is to **balance nomad space (owner)**:
   - **new connections prefer low and mid** nomad systems (1–15 players, see the tiers below). They **can go to empty** world nomad systems, but only as a fallback, and **never to a high one**;
-  - **an existing connection survives into high** (a system that grew to 16–25 while connected), but it's **cut the moment the system becomes overcrowded** (26+). The Expanse is **never** connected to an overcrowded or past-50 system (owner);
+  - **an existing connection survives into high** (a system that grew to 16–25 while connected), but it's **cut the moment the system becomes overcrowded** (26+), after the 1-minute friend window. The Expanse is **never** connected to an overcrowded or past-50 system (owner);
   - a wormhole that gets too much traffic also closes and reopens elsewhere.
 - **Stargates** only arrive if there's ever a second hub world. They're skipped for now.
 
@@ -50,11 +50,15 @@ The world is a set of **systems**, and every system is a set of **points of inte
 
   - **Last resort:** if a system has no valid partner, the server spawns an empty instanced system for it. Nobody is ever stuck.
   - **Holes are checked when someone arrives:** after each arrival, the system's tier is recomputed and any of its holes that now break the rules close, after the friend delay. For example, 10 players entering a system of 20 make it 30 (overcrowded), so its holes are checked at once.
-  - **Jump limits:** **every hole into a low system** (from any tier, the Expanse included) lets only about 10 players through, so a big group can't swamp a system of 3. *(sim: limiting only overcrowded-to-low holes missed most cases. Groups of 15–20 leaving high systems, which high's rules send to low, caused 31 of 38 such arrivals in 42 h.)* Holes between empty instanced systems are unlimited, so big groups move freely there.
+  - **Hole sizes (owner):** every hole spawns as **XS, S, M, L or XL**, letting through **5, 10, 15, 20 or 25 players**, and lives **30 minutes per size** (XS 30 min to XL 150 min).
+    - **Life counts down from the moment it spawns,** and players never see the exact time.
+    - **Every 5 crossings,** entering or leaving, **drop it one size**. Crossings shrink only the size, never the time, so an XS that started as an XL can still have 149 minutes left.
+    - **A group already going through always makes it,** even 100 at once. When a hole is used up it stays open **1 minute** for friends, then collapses.
+    - *(sim, 1,000 players: holes collapse from use about 24 times an hour. Nomad space stays healthy (56% of players in mid, 33% high, 4% overcrowded, none past 50), and the 80-player group stays in empty instanced systems. The cost is that a whole group sometimes swamps a low system, about once every 3 hours, mostly groups leaving high systems as the rules intend; the tier rules spread them out again on the next hop. Two alternatives were rejected: refusing groups bigger than what's left of a hole traps any group over 25 forever, and making holes into low systems XS/S only barely helps.)*
   - **Settling is one-way:** a system that gets **busier switches tier immediately** (at the moment of arrival, so stricter rules apply at once); only **calming down** waits a few minutes, so one player hopping in and out doesn't flip its connections. *(sim: a two-way delay let an 80-player group keep slipping into world systems during the delay, reaching 111 players in one system. With one-way settling it stays in empty instanced systems.)*
 - **Empty instanced systems (owner):** the server's dispersal tool, as **non-world** nomad systems made on demand.
   - **They have no planets,** so nobody can set home or camp there.
-  - **They start with no connections.** A crowded system's group goes in, friends get a short delay to follow, then the hole **closes behind them**. The new system then connects only by its own tier (overcrowded: to empty or low; past 50: to empty only).
+  - **They start with no connections.** A crowded system's group goes in, friends get **1 minute** to follow, then the hole **closes behind them**. The new system then connects only by its own tier (overcrowded: to empty or low; past 50: to empty only).
   - **A big group that won't split** just keeps hopping between empty systems, which is fine and never crushes a low system.
   - **Unused ones go away:** once empty, they're dropped.
   - **Logging out in one:** on login, the player arrives in a freshly spawned empty system with a wormhole out to a low or mid system, which closes behind them.
@@ -65,7 +69,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **At launch (about 100 players):** about 12. With 8, high grows to 41%.
   - Unoccupied systems are unloaded, so the count costs nothing.
 - **Expanse wormholes (sim):** keep about **one per 60 players online**. That gives about 37% of players in the Expanse (your third to half). With one per 120 it falls to about 20%, because players can't find a way back.
-- **The follow window:** a wormhole stays open behind a traveller for a while (a set time or number of crossings), so friends can follow. It closes early if it's at its limit.
+- **The follow window is 1 minute (owner):** when a hole is used up, cut by the rules, or leads into an empty instanced system, it stays open 1 minute for friends, then closes. That includes Expanse holes cut because their system became overcrowded.
 - **No backtracking into crowds:** an unconnected system that fills up grows new exits of its own, but players can't backtrack to pile more people into it.
 - **Home nomad system:** a player can have one (a world nomad system with a planet, never an empty system). On login they're put back there **even if it's overcrowded**; nomad space scales as needed.
 - **Safety rules:**
@@ -180,4 +184,4 @@ Ships and hulls, fitting (hardpoints, disposition, capacitor, running hot), the 
 - **Where the market lives:** stations, the base, or both.
 - **Base surface:** grid size, building list, pipe rules (throughput, mixing) and catch-up limits.
 - **Nomad home:** how a player sets their home nomad system, and the home jump's cooldown.
-- **Wormhole numbers:** the tiers and rules above are set by the owner. Still to set: the follow-window length and crossing count, how often wormholes spawn, how many world nomad systems exist, and how long a tier change takes to settle.
+- **Wormhole numbers:** the tiers, rules and hole sizes are set by the owner. Still to tune: how often each size spawns (the sim guesses XS 30%, S 30%, M 20%, L 12%, XL 8%), how often wormholes spawn, and how long calming down takes to settle.

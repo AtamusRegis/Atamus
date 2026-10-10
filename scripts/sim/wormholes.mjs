@@ -11,17 +11,26 @@ const SC = {
   few1000:      { peak: 1000, worlds: 40, hours: 48, note: "too few world systems" },
   blob:         { peak: 1000, worlds: 90, hours: 48, blob: 80, note: "plus one 80-player group that never splits and keeps hopping" },
   launch8:      { peak: 100,  worlds: 8,  hours: 48, note: "fewer systems at launch" },
+  // owner's hole sizes: XS–XL (5–25 crossings, 30–150 min), whole groups always get through, 1 min friend window, no separate jump limit
+  sized1000:    { peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, note: "hole sizes" },
+  sizedBlob:    { peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, blob: 80, note: "hole sizes, plus the 80-group" },
+  sizedSmallLow:{ peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, note: "hole sizes, holes into low systems only XS or S" },
+  sizedRefuse:  { peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, refuseOversize: true, note: "hole sizes, XS/S into low, and a group bigger than what's left of a hole can't start through it" },
+  sizedRefuseBlob:{ peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, refuseOversize: true, blob: 80, note: "the refuse variant, plus the 80-group" },
+  sized100:     { peak: 100,  worlds: 12, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, note: "hole sizes at launch" },
   // the original rules, for comparison: the settling delay works both ways and only overcrowded-to-low holes are limited
   blobOld:      { peak: 1000, worlds: 90, hours: 48, blob: 80, settleUpOnly: false, lowCapAll: false, note: "the 80-group under the original rules" },
   peakOld:      { peak: 1000, worlds: 90, hours: 48, settleUpOnly: false, lowCapAll: false, note: "the original rules" },
 };
 const BASE = {
-  jumpLimit: 10,        // players a hole from an overcrowded system to a low one lets through
+  jumpLimit: Infinity,  // (superseded by hole sizes) a hard per-hole player limit
   settle: 3,            // minutes a system must sit in a new tier before it counts
   settleUpOnly: true,   // getting busier counts at once; only calming down waits (sim finding, adopted)
-  lowCapAll: true,      // every hole into a low system has the jump limit (sim finding, adopted)
-  follow: 2,            // minutes the friend window stays open (closing holes, holes into instanced empties)
-  holeLife: [30, 90],   // minutes a hole lasts
+  lowCapAll: false,     // (superseded by hole sizes) every hole into a low system has a hard jump limit
+  follow: 1,            // minutes the friend window stays open (owner) (closing holes, holes into instanced empties)
+  holeLife: [30, 90],   // minutes a hole lasts (without sizes)
+  sizes: true,          // owner: holes come in sizes XS–XL; each takes 5 more crossings and lives 30 min longer
+  sizeW: [30, 30, 20, 12, 8], // how often each size spawns (XS, S, M, L, XL): a guess
   holesPerSystem: 2,    // an occupied nomad system keeps at least this many holes
   maxHoles: 4,          // and at most this many
   goNomad: 0.006,        // per minute, chance a group in the Expanse heads out (if a hole exists)
@@ -78,6 +87,7 @@ function run(name, sc) {
   if (P.blob) { const ms = []; for (let i = 0; i < P.blob; i++) { const p = { id: players.length, online: true, loc: expanse.id, group: -1, home: null, homeJumpAt: -1e9, blobber: true }; players.push(p); ms.push(p); } newGroup(ms).blob = true; expanse.pop += P.blob; }
 
   const stats = { samples: 0, tierPlayerMin: Object.fromEntries(TIERS.map((t) => [t, 0])), instPlayerMin: 0, nomadPlayerMin: 0, expansePlayerMin: 0, onlineMin: 0,
+    sizeSpawn: [0, 0, 0, 0, 0], collapsedByUse: 0, overshoot: 0,
     stranded: 0, crushFrom: {}, strandCause: {}, crush: 0, crushNoLimit: 0, instSpawned: 0, instMax: 0, maxPop: 0, lonelyMin: 0, soloMin: 0, reconnects: 0, holesMade: 0, blobSplits: 0, expanseHolesCut: 0, homeJumps: 0, homeOver: 0 };
 
   const groupOf = (p) => groups.get(p.group);
@@ -86,6 +96,11 @@ function run(name, sc) {
   const closeHole = (h) => { holes.delete(h.id); systems.get(h.a)?.holes.delete(h.id); systems.get(h.b)?.holes.delete(h.id); };
   const mkHole = (a, b, now, creator, opts = {}) => {
     const h = { id: nextHole++, a: a.id, b: b.id, creator: creator.id, created: now, expires: now + between(...P.holeLife), closeAt: null, cap: opts.cap ?? Infinity, entry: !!opts.entry };
+    if (P.sizes) {                                                 // sized hole: 5 crossings and 30 min per size, from the moment it spawns
+      let r = rnd() * P.sizeW.reduce((x, y) => x + y, 0), size = 1; for (let i = 0; i < 5; i++) { r -= P.sizeW[i]; if (r <= 0) { size = i + 1; break; } }
+      if (P.smallIntoLow && (a.tier === "low" || b.tier === "low") && a.pop > 0 && b.pop > 0) size = Math.min(size, 2);   // into a low system: XS or S only
+      h.size = size; h.size0 = size; h.used = 0; h.expires = now + size * 30; h.cap = Infinity; stats.sizeSpawn[size - 1]++;
+    }
     holes.set(h.id, h); a.holes.add(h.id); b.holes.add(h.id); stats.holesMade++;
     const key = a.id < b.id ? a.id + "|" + b.id : b.id + "|" + a.id, last = creator.lastPartners.get(key);
     if (last != null && now - last < 30) stats.reconnects++;
@@ -128,6 +143,11 @@ function run(name, sc) {
     for (const p of ms) { p.loc = to.id; } from.pop -= ms.length; to.pop += ms.length;
     if (ms.length >= 15 && before > 0 && before <= 5) { stats.crush++; const src = from.kind === "expanse" ? "Expanse" : from.kind === "instanced" ? "instanced " + tierOf(from.pop + ms.length) : tierOf(from.pop + ms.length); stats.crushFrom[src] = (stats.crushFrom[src] || 0) + 1; }
     if (via && via.entry && via.closeAt == null) via.closeAt = now + P.follow;   // into an instanced empty: closes behind them
+    if (via && P.sizes) {                                          // every 5 crossings (either way) drop it a size; a group already going through all makes it
+      via.used += ms.length; const left = via.size0 - Math.floor(via.used / 5);
+      if (left < via.size) via.size = Math.max(0, left);           // crossings shrink the size only, never the time (owner: an XS can have 149 min left)
+      if (via.size <= 0 && via.closeAt == null) { via.closeAt = now + P.follow; stats.collapsedByUse++; if (ms.length > via.size0 * 5) stats.overshoot++; }
+    }
     if (P.settleUpOnly && TIERS.indexOf(tierOf(to.pop)) > TIERS.indexOf(to.tier)) { to.tier = tierOf(to.pop); to.pend = null; }
     checkOnArrival(to, now); checkOnArrival(from, now);
     const tier = tierOf(to.pop);
@@ -187,7 +207,7 @@ function run(name, sc) {
       if (!g.blob && p0.home && now - p0.homeJumpAt > P.homeJumpCdMin && p0.loc !== p0.home && rnd() < P.homeJumpChance) { // home jump
         const home = systems.get(p0.home); for (const p of g.members) p.homeJumpAt = now; stats.homeJumps++; if (tierOf(home.pop) === "over" || tierOf(home.pop) === "past50") stats.homeOver++; move(g, home, null, now); continue;
       }
-      const hs = [...s.holes].map((id) => holes.get(id)).filter((h) => holeOpen(h, now)); if (!hs.length) continue;
+      const hs = [...s.holes].map((id) => holes.get(id)).filter((h) => holeOpen(h, now) && (!P.refuseOversize || !h.size0 || g.members.size <= h.size0 * 5 - h.used)); if (!hs.length) continue;   // refuseOversize: a group bigger than what's left can't start through
       const exp = hs.filter((h) => other(h, s.id) === expanse.id), away = hs.filter((h) => other(h, s.id) !== expanse.id);
       const h = !g.blob && exp.length && rnd() < P.goHome ? pick(exp) : pick(g.blob && away.length ? away : hs);   // the never-splitting group stays out in nomad space
       move(g, systems.get(other(h, s.id)), h, now);
@@ -215,6 +235,7 @@ function run(name, sc) {
   console.log(`  biggest system seen: ${stats.maxPop} players · instanced empties: ${(stats.instSpawned / (P.hours)).toFixed(1)} spawned/h, ${stats.instMax} alive at most`);
   console.log(`  stranded (occupied, no open exit): ${stats.stranded} system-minutes · big arrivals (15+) into a low system: ${stats.crush} · same-pair reconnects within 30 min: ${(stats.reconnects / hrs).toFixed(1)}/h`);
   console.log(`  big arrivals came from: ${JSON.stringify(stats.crushFrom)} · stranded because: ${JSON.stringify(stats.strandCause)}`);
+  if (P.sizes) console.log(`  hole sizes spawned (XS–XL): ${stats.sizeSpawn.join(" / ")} · collapsed from use: ${(stats.collapsedByUse / P.hours).toFixed(1)}/h · a group went through bigger than the whole hole: ${stats.overshoot}`);
   console.log(`  holes made: ${(stats.holesMade / P.hours).toFixed(0)}/h · Expanse holes cut by the rules: ${(stats.expanseHolesCut / P.hours).toFixed(1)}/h · home jumps: ${(stats.homeJumps / P.hours).toFixed(1)}/h (${pct(stats.homeOver, stats.homeJumps)} into an overcrowded home)` + (P.blob ? ` · the 80-group was split by jump limits ${stats.blobSplits} times` : ""));
 }
 
