@@ -6,22 +6,22 @@ import { ITEMS, IUMS } from "./inventory.js";
 
 export const BASE_W = 64, BASE_H = 64, PIPE_COST = 500, REFUND = 0.5;
 const H = 3600e3;
-// footprints in tiles (64 px art tiles); the frigate / cruiser / battleship docks only connect at their ports
+// footprints in tiles (64 px art tiles). Pipes only join a building at its sockets (owner): [side, tile along that
+// side], read off the stubs in the owner's art (docks: the ports in the dock art). Buildings turn in 90° steps.
 export const BUILDINGS = {
-  home:      { name: "Home Base", w: 4, h: 4, cost: 0, cap: 2_000_000 },
-  storage_s: { name: "Small Storage Depot", w: 1, h: 1, cost: 60_000, cap: 10_000 },
-  storage:   { name: "Medium Storage Depot", w: 2, h: 2, cost: 250_000, cap: 50_000 },
-  storage_l: { name: "Large Storage Depot", w: 3, h: 3, cost: 1_000_000, cap: 250_000 },
-  refinery:  { name: "Refinery", w: 3, h: 3, cost: 750_000, rate: 1 },                    // m³ of ore per second
-  factory:   { name: "Factory", w: 3, h: 3, cost: 1_500_000 },
-  dock_frigate:    { name: "Frigate Shipyard", w: 3, h: 2, cost: 2_000_000, rank: 1, art: "frigate", ports: [["W", 1], ["E", 1], ["S", 1]] },
-  dock_cruiser:    { name: "Cruiser Shipyard", w: 5, h: 4, cost: 25_000_000, rank: 2, art: "cruiser", ports: [["W", 1], ["E", 1], ["S", 1], ["S", 3]] },
-  dock_battleship: { name: "Battleship Shipyard", w: 14, h: 7, cost: 150_000_000, rank: 3, art: "battleship", ports: [["W", 3], ["E", 3], ["S", 3], ["S", 10]] },
-  dock_large:      { name: "Mini Ark Yard", w: 4, h: 3, cost: 100_000_000, rank: 4, yard: "yard_mini", ark: "ark_mini" },
-  dock_capital:    { name: "Small Ark Yard", w: 6, h: 4, cost: 1_000_000_000, rank: 5, yard: "yard_small", ark: "ark_small" },
-  dock_ark:        { name: "Ark Yard", w: 8, h: 5, cost: 5_000_000_000, rank: 6, yard: "yard_ark", ark: "ark" },
-};
-export const BUF_M3 = 2000;   // a refinery's / factory's own output buffer when nothing on its network has room
+  home:      { name: "Home Base", w: 4, h: 4, cost: 0, cap: 2_000_000, sockets: [["N", 2], ["S", 1], ["W", 1], ["E", 1]] },
+  storage_s: { name: "Small Storage Depot", w: 1, h: 1, cost: 60_000, cap: 10_000, sockets: [["W", 0], ["E", 0]] },
+  storage:   { name: "Medium Storage Depot", w: 2, h: 2, cost: 250_000, cap: 50_000, sockets: [["N", 1], ["E", 0]] },
+  storage_l: { name: "Large Storage Depot", w: 3, h: 3, cost: 1_000_000, cap: 250_000, sockets: [["N", 1], ["S", 0], ["W", 1]] },
+  refinery:  { name: "Refinery", w: 3, h: 3, cost: 750_000, rate: 1, sockets: [["S", 1], ["W", 1], ["E", 1]] },   // rate: m³ of ore per second
+  factory:   { name: "Factory", w: 3, h: 3, cost: 1_500_000, sockets: [["N", 0], ["S", 1], ["W", 1], ["E", 1]] },
+  dock_frigate:    { name: "Frigate Shipyard", w: 3, h: 2, cost: 2_000_000, rank: 1, art: "frigate", sockets: [["W", 1], ["E", 1], ["S", 1]] },
+  dock_cruiser:    { name: "Cruiser Shipyard", w: 5, h: 4, cost: 25_000_000, rank: 2, art: "cruiser", sockets: [["W", 1], ["E", 1], ["S", 1], ["S", 3]] },
+  dock_battleship: { name: "Battleship Shipyard", w: 14, h: 7, cost: 150_000_000, rank: 3, art: "battleship", sockets: [["W", 3], ["E", 3], ["S", 3], ["S", 10]] },
+  dock_large:      { name: "Mini Ark Yard", w: 4, h: 3, cost: 100_000_000, rank: 4, yard: "yard_mini", ark: "ark_mini", sockets: [["S", 1], ["S", 2], ["W", 1], ["E", 1]] },
+  dock_capital:    { name: "Small Ark Yard", w: 6, h: 4, cost: 1_000_000_000, rank: 5, yard: "yard_small", ark: "ark_small", sockets: [["S", 1], ["S", 4], ["W", 1], ["E", 1]] },
+  dock_ark:        { name: "Ark Yard", w: 8, h: 5, cost: 5_000_000_000, rank: 6, yard: "yard_ark", ark: "ark", sockets: [["S", 1], ["S", 6], ["W", 2], ["E", 2]] },
+};export const BUF_M3 = 2000;   // a refinery's / factory's own output buffer when nothing on its network has room
 
 // Factory recipes: component -> { in: {item: qty}, ms, out }
 export const RECIPES = {
@@ -80,20 +80,27 @@ export function normalize(b) {
   return b;
 }
 export const homeOf = (b) => b.buildings.find((x) => x.type === "home");
-const rectHas = (q, x, y) => x >= q.x && y >= q.y && x < q.x + BUILDINGS[q.type].w && y < q.y + BUILDINGS[q.type].h;
+// a building's footprint as placed (rot = quarter turns clockwise)
+export const dims = (q) => { const d = BUILDINGS[q.type]; return (q.rot || 0) % 2 ? { w: d.h, h: d.w } : { w: d.w, h: d.h }; };
+const rectHas = (q, x, y) => { const d = dims(q); return x >= q.x && y >= q.y && x < q.x + d.w && y < q.y + d.h; };
 export const buildingAt = (b, x, y) => b.buildings.find((q) => rectHas(q, x, y)) || null;
-
-// the tiles a building's pipes must touch: its ports (docks) or any tile around it
-function portTiles(q) {
+export const DIRS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
+const OPP = { N: "S", S: "N", E: "W", W: "E" }, CW = { N: "E", E: "S", S: "W", W: "N" };
+/** The tiles just outside a building's sockets: [x, y, the side it faces]. Only a pipe there can join the building. */
+export function sockets(q) {
   const d = BUILDINGS[q.type], out = [];
-  if (d.ports) for (const [side, i] of d.ports) out.push(side === "W" ? [q.x - 1, q.y + i, "W"] : side === "E" ? [q.x + d.w, q.y + i, "E"] : side === "S" ? [q.x + i, q.y + d.h, "S"] : [q.x + i, q.y - 1, "N"]);
-  else { for (let i = 0; i < d.w; i++) out.push([q.x + i, q.y - 1, "N"], [q.x + i, q.y + d.h, "S"]); for (let i = 0; i < d.h; i++) out.push([q.x - 1, q.y + i, "W"], [q.x + d.w, q.y + i, "E"]); }
+  for (const [side, i] of d.sockets || []) {
+    let w = d.w, h = d.h, dir = side, [cx, cy] = side === "N" ? [i, 0] : side === "S" ? [i, h - 1] : side === "W" ? [0, i] : [w - 1, i];
+    for (let r = 0; r < (q.rot || 0) % 4; r++) { [cx, cy] = [h - 1 - cy, cx]; [w, h] = [h, w]; dir = CW[dir]; }
+    out.push([q.x + cx + DIRS[dir][0], q.y + cy + DIRS[dir][1], dir]);
+  }
   return out;
 }
-export const DIRS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };
-const OPP = { N: "S", S: "N", E: "W", W: "E" };
+const portTiles = sockets;
 const dirTo = (a, c) => (c[0] === a[0] + 1 ? "E" : c[0] === a[0] - 1 ? "W" : c[1] === a[1] + 1 ? "S" : "N");
-const hasPort = (q, x, y) => portTiles(q).some(([px, py]) => px === x && py === y);
+const hasPort = (q, x, y) => sockets(q).some(([px, py]) => px === x && py === y);
+/** The socket a pipe tile at x, y faces in direction `dir` (into a building), if there is one. */
+function socketTo(b, x, y, dir) { const nb = buildingAt(b, x + DIRS[dir][0], y + DIRS[dir][1]); return nb && sockets(nb).some(([px, py, f]) => px === x && py === y && f === OPP[dir]) ? nb : null; }
 /** Where each building's output can go: the buildings its pipes lead into (cached until the layout changes). */
 export function links(b) {
   if (b._net && b._net.ver === b.ver) return b._net;
@@ -181,13 +188,14 @@ export function step(b, dt, ctx) {
 export function catchUp(b, ms, ctx) { ms = Math.min(ms, 31 * 24 * H); while (ms > 0) { const d = Math.min(60e3, ms); step(b, d, ctx); ms -= d; } }
 
 // ---- editing (validated by the caller: credits, ownership) ----
-export function canPlace(b, type, x, y) {
-  const d = BUILDINGS[type]; if (!d || type === "home" || d.hidden) return false;
+export function canPlace(b, type, x, y, rot = 0) {
+  if (!BUILDINGS[type] || type === "home" || ![0, 1, 2, 3].includes(rot)) return false;
+  const d = dims({ type, rot });
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x + d.w > BASE_W || y + d.h > BASE_H) return false;
   for (let i = 0; i < d.w; i++) for (let j = 0; j < d.h; j++) if (buildingAt(b, x + i, y + j) || b.pipe[(x + i) + "," + (y + j)]) return false;
   return true;
 }
-export function place(b, type, x, y) { const q = { id: b.nextId++, type, x, y }; if (isStore(q)) q.store = {}; b.buildings.push(q); b.ver++; return q; }
+export function place(b, type, x, y, rot = 0) { const q = { id: b.nextId++, type, x, y }; if (rot) q.rot = rot; if (isStore(q)) q.store = {}; b.buildings.push(q); b.ver++; return q; }
 const inGrid = (x, y) => Number.isInteger(x) && Number.isInteger(y) && x >= 0 && y >= 0 && x < BASE_W && y < BASE_H;
 /** A drag, sanitized: whole in-grid tiles, each next to the one before (a jump starts a new run). Returns the runs
  *  and how many new pipe tiles they'd lay. */
@@ -200,28 +208,37 @@ export function planPath(b, tiles) {
     if (!last || Math.abs(last[0] - x) + Math.abs(last[1] - y) !== 1) { run = []; runs.push(run); }
     run.push([x, y]);
   }
-  const fresh = new Set(); for (const r of runs) for (const [x, y] of r) if (!b.pipe[x + "," + y] && !buildingAt(b, x, y)) fresh.add(x + "," + y);
-  return { runs, fresh: fresh.size };
+  // (owner) no pipes in the middle of nowhere: a run has to touch an existing pipe or a building's socket
+  const anchored = (r) => r.some(([x, y]) => !buildingAt(b, x, y) && (b.pipe[x + "," + y] || Object.keys(DIRS).some((d) => socketTo(b, x, y, d))));
+  const ok = runs.filter(anchored);
+  const fresh = new Set(); for (const r of ok) for (const [x, y] of r) if (!b.pipe[x + "," + y] && !buildingAt(b, x, y)) fresh.add(x + "," + y);
+  return { runs: ok, fresh: fresh.size };
 }
 const strip = (s, d) => s.replace(d, "");
 const addDir = (s, d) => (s.includes(d) ? s : s + d);
-/** Lay the runs, at most `budget` new tiles (the run stops where the money does). Each tile flows on toward the next
- *  one; a straight run across a perpendicular straight pipe crosses it instead of joining it. */
+/** Lay the runs, at most `budget` new tiles. Each tile flows on toward the next one; a straight run across a
+ *  perpendicular straight pipe crosses it instead of joining it. A pipe only turns into a building at a socket, and
+ *  a new pipe that starts or ends beside a socket turns to meet it (in from it at the start, out into it at the end). */
 export function applyPath(b, runs, budget) {
   let laid = 0;
+  const hz = (d) => d === "E" || d === "W";
   for (const r of runs) {
     for (let k = 0; k < r.length; k++) {
       const [x, y] = r[k], key = x + "," + y; if (buildingAt(b, x, y)) continue;
-      let t = b.pipe[key];
-      if (!t) { if (laid >= budget) return laid; t = b.pipe[key] = { o: "", i: "" }; laid++; }
-      const din = k > 0 ? dirTo(r[k], r[k - 1]) : null, dout = k < r.length - 1 ? dirTo(r[k], r[k + 1]) : null;
+      let t = b.pipe[key], isNew = false;
+      if (!t) { if (laid >= budget) return laid; t = b.pipe[key] = { o: "", i: "" }; laid++; isNew = true; }
+      let din = k > 0 ? dirTo(r[k], r[k - 1]) : null, dout = k < r.length - 1 ? dirTo(r[k], r[k + 1]) : null;
+      const intoB = (d) => d && buildingAt(b, x + DIRS[d][0], y + DIRS[d][1]);
+      if (intoB(din) && !socketTo(b, x, y, din)) din = null;            // dragged out of a building away from a socket
+      if (intoB(dout) && !socketTo(b, x, y, dout)) dout = null;
+      if (isNew && !din && k === 0) din = Object.keys(DIRS).find((d) => d !== dout && socketTo(b, x, y, d)) || null;
+      if (isNew && !dout && k === r.length - 1 && k > 0) dout = Object.keys(DIRS).find((d) => d !== din && socketTo(b, x, y, d)) || null;
       if (t.u) { t.o = ""; t.i = ""; delete t.u; }
-      const straight = din && dout && OPP[din] === dout, horiz = (d) => d === "E" || d === "W";
+      const straight = din && dout && OPP[din] === dout;
       const tStraight = !t.c && t.o.length === 1 && t.i.length === 1 && OPP[t.i] === t.o;
-      if (straight && (t.c || (tStraight && horiz(dout) !== horiz(t.o)))) {
+      if (straight && (t.c || (tStraight && hz(dout) !== hz(t.o)))) {
         // crossing: keep the other axis, (re)set this one
-        const keepO = [...t.o].filter((d) => horiz(d) !== horiz(dout)).join(""), keepI = [...t.i].filter((d) => horiz(d) !== horiz(dout)).join("");
-        t.o = keepO + dout; t.i = keepI + din; t.c = 1;
+        t.o = [...t.o].filter((d) => hz(d) !== hz(dout)).join("") + dout; t.i = [...t.i].filter((d) => hz(d) !== hz(dout)).join("") + din; t.c = 1;
         continue;
       }
       if (t.c) delete t.c;
@@ -248,7 +265,7 @@ export function view(b) {
   const L = links(b);
   return {
     w: BASE_W, h: BASE_H, pipe: b.pipe,
-    buildings: b.buildings.map((q) => ({ id: q.id, type: q.type, x: q.x, y: q.y, linked: L.up.get(q).size + L.down.get(q).size > 0, store: q.store, buf: q.buf, used: q.store ? Math.round(m3(q.store)) : undefined,
+    buildings: b.buildings.map((q) => ({ id: q.id, type: q.type, x: q.x, y: q.y, rot: q.rot || 0, linked: L.up.get(q).size + L.down.get(q).size > 0, store: q.store, buf: q.buf, used: q.store ? Math.round(m3(q.store)) : undefined,
       ore: q.ore, recipe: q.recipe, mode: q.mode, count: q.count, made: q.made || 0, idle: q.idle || null, job: q.job ? { item: q.job.item, p: +(1 - q.job.left / q.job.total).toFixed(4), left: Math.max(0, Math.round(q.job.left)) } : null })),
   };
 }

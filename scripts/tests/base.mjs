@@ -31,7 +31,8 @@ w.cmdBasePlace("a", "refinery", 30, 30); t.ok(a.base.buildings.length === 1, "no
 w.cmdBasePlace("a", "refinery", 35, 30); w.cmdBasePlace("a", "storage", 35, 39); w.cmdBasePlace("a", "factory", 35, 35); w.cmdBasePlace("a", "dock_frigate", 35, 42);
 t.ok(a.base.buildings.length === 5 && a.credits === 10_000_000 - 750_000 - 250_000 - 1_500_000 - 2_000_000, "buildings cost credits", a.credits);
 w.cmdBasePlace("a", "dock_ark", 5, 5); t.ok(a.base.buildings.length === 5, "nothing you can't afford");
-// pipes run one way: home → refinery → (down x = 38, past the factory) → storage → factory → storage → shipyard
+// pipes run one way, socket to socket: home → refinery → (down x = 38, past the factory's east socket) → storage →
+// factory (which merges its output back into that line) and on to the shipyard
 const path = (...pts) => w.cmdBasePipes("a", pts);
 const col = (x, y0, y1) => { const o = []; for (let y = y0; y0 <= y1 ? y <= y1 : y >= y1; y += y0 <= y1 ? 1 : -1) o.push([x, y]); return o; };
 const c0 = a.credits;
@@ -39,11 +40,27 @@ path([33, 31], [34, 31], [35, 31]);
 t.ok(a.credits === c0 - Base.PIPE_COST && a.base.pipe["34,31"].o === "E" && a.base.pipe["34,31"].i === "W", "a dragged pipe flows from where the drag started; only new tiles cost", a.base.pipe["34,31"]);
 path([37, 31], [38, 31], ...col(38, 32, 39), [37, 39], [36, 39]);
 path([36, 39], [36, 38], [36, 37]);
-path([35, 37], [34, 37], [34, 38], [34, 39], [35, 39]);
-path([35, 40], [34, 40], [34, 41], [34, 42], [34, 43], [35, 43]);
+path([37, 36], [38, 36], [38, 37]);
+path([36, 38], [35, 38], [34, 38], ...col(34, 39, 43), [35, 43]);
 const L = Base.links(a.base), byT = (k) => a.base.buildings.find((q) => q.type === k), dn = (k) => [...L.down.get(byT(k))].map((q) => q.type).sort();
 t.ok(dn("home").join() === "refinery" && dn("refinery").join() === "storage" && dn("storage").join() === "dock_frigate,factory" && dn("factory").join() === "storage", "output goes where the pipes lead, and nowhere else", ["home", "refinery", "storage", "factory"].map(dn));
-t.ok(!L.down.get(byT("refinery")).has(byT("factory")), "a pipe running past a building doesn't feed it");
+t.ok(!L.down.get(byT("refinery")).has(byT("factory")), "a pipe running past a building's socket doesn't feed it");
+// sockets only (owner): no pipes in the middle of nowhere, none into a building's wall
+{ const c1 = a.credits; path([50, 50], [51, 50]); t.ok(!a.base.pipe["50,50"] && a.credits === c1, "a pipe touching no pipe or socket can't be laid"); }
+path([36, 30], [36, 29], [37, 29]); t.ok(!a.base.pipe["36,29"], "a refinery has no socket on its north side");
+path([33, 33], [34, 33], [34, 32], [34, 31]); t.ok(a.base.pipe["34,33"] && !a.base.pipe["34,33"].i && a.base.pipe["34,33"].o === "N", "dragging out of a building's wall doesn't connect to it", a.base.pipe["34,33"]);
+w.cmdBaseRemove("a", 34, 33); w.cmdBaseRemove("a", 34, 32);
+t.ok(a.base.pipe["34,31"].i === "W" && Base.links(a.base).down.get(byT("home")).has(byT("refinery")), "and removing it leaves the line as it was", a.base.pipe["34,31"]);
+// turning a building turns its sockets; a new pipe beside a socket turns to meet it
+w.cmdBasePlace("a", "storage_s", 45, 30, 1);
+const ss = a.base.buildings.find((q) => q.type === "storage_s");
+t.ok(ss.rot === 1 && JSON.stringify(Base.sockets(ss)) === JSON.stringify([[45, 29, "N"], [45, 31, "S"]]), "a turned building's sockets turn with it", Base.sockets(ss));
+w.cmdBasePlace("a", "storage_s", 47, 30, 7); t.ok(!a.base.buildings.some((q) => q.x === 47), "a turn is 0-3 quarter turns");
+path([45, 29], [45, 28]); t.ok(a.base.pipe["45,29"].i === "S" && a.base.pipe["45,29"].o === "N", "a pipe starting beside a socket takes from it", a.base.pipe["45,29"]);
+path([44, 28], [44, 29], [44, 30], [44, 31], [45, 31]); t.ok(a.base.pipe["45,31"].i === "W" && a.base.pipe["45,31"].o === "N", "and one ending beside a socket feeds it", a.base.pipe["45,31"]);
+{ const L3 = Base.links(a.base); t.ok(L3.down.get(ss).size === 0 && [...L3.up.get(ss)].length === 0, "a loop back into itself isn't a link"); }
+for (const k of ["45,29", "45,28", "44,28", "44,29", "44,30", "44,31", "45,31"]) w.cmdBaseRemove("a", ...k.split(",").map(Number));
+w.cmdBaseRemove("a", 45, 30);
 // a straight run across a straight pipe crosses it
 path([39, 33], [38, 33], [37, 33]);
 t.ok(a.base.pipe["38,33"].c === 1 && Base.links(a.base).down.get(byT("refinery")).size === 1, "crossing a pipe at right angles doesn't join it", a.base.pipe["38,33"]);
@@ -52,7 +69,7 @@ t.ok(!a.base.pipe["38,33"] && a.base.pipe["38,32"].o === "" && !Base.links(a.bas
 path(...col(38, 32, 34));
 t.ok(Base.links(a.base).down.get(byT("refinery")).size === 1, "and redrawing mends it");
 // bases saved before pipes had a direction: their pipes carry both ways
-{ const old = { ver: 1, nextId: 3, buildings: [{ id: 1, type: "home", x: 0, y: 0, store: {} }, { id: 2, type: "refinery", x: 5, y: 0 }], pipes: ["4,1"] };
+{ const old = { ver: 1, nextId: 3, buildings: [{ id: 1, type: "home", x: 0, y: 0, store: {} }, { id: 2, type: "refinery", x: 5, y: 0 }], pipes: ["4,1"] };   // home's east socket, the refinery's west
   Base.normalize(old); const L2 = Base.links(old);
   t.ok(old.pipe["4,1"].u && L2.down.get(old.buildings[0]).has(old.buildings[1]) && L2.down.get(old.buildings[1]).has(old.buildings[0]), "old two-way pipes still connect both ways"); }
 w.cmdBaseSet("a", a.base.buildings.find((q) => q.type === "factory").id, { recipe: "steel_plate", mode: "count", count: 5 });

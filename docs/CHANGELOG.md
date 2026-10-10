@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
+- **Base sockets and turning:** pipes only connect at the sockets in each building's art and turn to meet a socket they start or end beside; pipes must start from a pipe or a socket. Buildings turn 90° (R, right-click or hold while placing) and show as a half-transparent preview; pipe drags preview at half opacity.
+- **Balance (owner):** Mining Laser 10 m³ per 15 s cycle; Mining Drones 25 m³ per 60 s cycle; Cargohold Expansion +15%; Mining Laser Upgrade +5%; Prospector ore hold 5,000 m³.
 - **Base art and directional pipes:** buildings, storage and ark yards use the owner's art; pipes flow the way you drag them (branch, merge, cross) and are drawn with the directional pipe tiles. New Small (1 × 1) and Large (3 × 3) Storage Depots; ark yards shrink to 4 × 3, 6 × 4 and 8 × 5. Old pipes stay two-way until redrawn.
 
 - **Base:** the Home Base, storage, refineries and factories are drawn as steel frames in the docks' style instead of flat coloured boxes (placeholder until their art exists).

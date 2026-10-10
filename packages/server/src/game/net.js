@@ -95,7 +95,7 @@ export function attachGameServer(httpServer) {
         case "prop": world.cmdProp(pid, m.ship, m.fi, !!m.on); break;
         case "drones": world.cmdDrones(pid, m.ship, !!m.on); break;
         case "base_open": world.cmdBaseOpen(pid, !!m.open); break;
-        case "base_place": world.cmdBasePlace(pid, m.type, m.x, m.y); break;
+        case "base_place": world.cmdBasePlace(pid, m.type, m.x, m.y, m.rot); break;
         case "base_pipes": world.cmdBasePipes(pid, m.tiles); break;
         case "base_remove": world.cmdBaseRemove(pid, m.x, m.y); break;
         case "base_set": world.cmdBaseSet(pid, m.id, m.cfg); break;

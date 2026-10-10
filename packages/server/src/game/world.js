@@ -360,7 +360,7 @@ export class World {
     if (!f || Math.hypot(f.rock.x - sh.x, f.rock.y - sh.y) > m.range) return idle();
     if (Inv.canAdd(sh.inv.ore, f.rock.ore, 1) <= 0) { this._tell(sh.owner, shipLabel(sh) + ": ore hold full."); return idle(); }
     if (now < d.until) return;
-    const def = Inv.ITEMS[f.rock.ore], units = Math.min(Math.floor(this._droneYield(sh) * d.dur / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
+    const def = Inv.ITEMS[f.rock.ore], units = Math.min(Math.floor(this._droneYield(sh) * d.dur / 1000 / def.unitM3 + 1e-9), Math.ceil(f.rock.m3 / def.unitM3));
     const got = units > 0 ? Inv.add(sh.inv.ore, f.rock.ore, units) : 0;
     if (got <= 0) return idle();
     f.rock.m3 = Math.max(0, +(f.rock.m3 - got * def.unitM3).toFixed(3)); if (f.rock.m3 < def.unitM3) f.rock.m3 = 0;
@@ -473,19 +473,19 @@ export class World {
     p.credits -= cost; this._markInv(p.id); if (this.onCredits) { try { this.onCredits(p.id, -cost); } catch (e) { console.error("onCredits", e); } }
     return true;
   }
-  cmdBasePlace(pid, type, x, y) {
+  cmdBasePlace(pid, type, x, y, rot) {
     const p = this.players.get(pid); if (!p || typeof type !== "string" || !Object.hasOwn(Base.BUILDINGS, type)) return;
-    x = Math.floor(Number(x)); y = Math.floor(Number(y));
-    if (!Base.canPlace(p.base, type, x, y)) return;
+    x = Math.floor(Number(x)); y = Math.floor(Number(y)); rot = rot == null ? 0 : Number(rot);
+    if (!Base.canPlace(p.base, type, x, y, rot)) return;
     if (!this._spend(p, Base.BUILDINGS[type].cost)) return;
-    Base.place(p.base, type, x, y); p.baseDirty = true;
+    Base.place(p.base, type, x, y, rot); p.baseDirty = true;
   }
   cmdBasePipes(pid, tiles) {
     const p = this.players.get(pid); if (!p || !Array.isArray(tiles)) return;
     const plan = Base.planPath(p.base, tiles); if (!plan.runs.length) return;
-    const n = Math.min(plan.fresh, Math.floor(p.credits / Base.PIPE_COST)); if (plan.fresh && n <= 0) { this._tell(pid, "Not enough credits."); return; }
-    if (n > 0 && !this._spend(p, n * Base.PIPE_COST)) return;
-    Base.applyPath(p.base, plan.runs, n); this._baseEdit(p);
+    const cost = plan.fresh * Base.PIPE_COST; if (cost > p.credits) { this._tell(pid, "Not enough credits."); return; }
+    if (cost > 0 && !this._spend(p, cost)) return;
+    Base.applyPath(p.base, plan.runs, plan.fresh); this._baseEdit(p);
   }
   cmdBaseRemove(pid, x, y) {
     const p = this.players.get(pid); if (!p) return;
@@ -898,7 +898,7 @@ export class World {
         if (Inv.canAdd(sh.inv.ore, f.rock.ore, 1) <= 0) { this._laserStop(L); if (!told) this._tell(sh.owner, shipLabel(sh) + ": ore hold full."); told = true; continue; }   // hold full: breaks the cycle now
         if (now < L.until) continue;
         const def = Inv.ITEMS[f.rock.ore];
-        const units = Math.min(Math.floor(this._yieldM3s(sh, i) * (L.dur || MINING_CYCLE_MS) / 1000 / def.unitM3), Math.ceil(f.rock.m3 / def.unitM3));
+        const units = Math.min(Math.floor(this._yieldM3s(sh, i) * (L.dur || MINING_CYCLE_MS) / 1000 / def.unitM3 + 1e-9), Math.ceil(f.rock.m3 / def.unitM3));
         const got = units > 0 ? Inv.add(sh.inv.ore, f.rock.ore, units) : 0;
         if (got <= 0) { this._laserStop(L); continue; }
         f.rock.m3 = Math.max(0, +(f.rock.m3 - got * def.unitM3).toFixed(3));

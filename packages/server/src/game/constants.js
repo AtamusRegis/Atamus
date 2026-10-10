@@ -16,7 +16,7 @@ export const WARP_EXIT_SHOW_MS = 1000;   // the exit window appears only in the 
 export const WARP_STOP_MS = 900;          // out of the exit window at full warp speed, then a hard stop to dead still in this long (owner: a fast drop)
 export const WARP_EXIT_FX_MS = 2000;     // the exit window and streak linger this long after the ship comes out
 export const DOCK_RADIUS_KM = 4;         // inside this of the station: dock / anchored
-export const LASER_M3_PER_S = 2;         // mining laser base yield (per laser), delivered at the end of each cycle; hulls add % bonuses
+export const LASER_M3_PER_S = 10 / 15;        // mining laser base yield (per laser), delivered at the end of each cycle; hulls add % bonuses
 export const MINING_CYCLE_MS = 15_000;   // one laser cycle; the ore lands when the cycle completes
 export const LASER_RANGE_KM = 1;         // a laser needs its rock within this (owner: 1 km for now)
 export const AUTO_MINER_BASE_MS = 180_000, AUTO_MINER_STEP_MS = 30_000; // auto-miner cycle: 3:00, -30 s per license level
@@ -89,7 +89,7 @@ Object.assign(SHIP_TYPES, {
 // ore holds take about 20 min to fill with a typical fit (about 40 for the haul hulls), and each hull gets a role bonus.
 const PROP = { "module:afterburner": { draw: -50 }, "module:microwarpdrive": { draw: -50 } }, HOLD = { "module:cargo_expansion": { bonus: 50 } };
 const BALANCE = {
-  chisel:      { fitSlots: 8,  disposition: 70,  capacitor: 40, oreM3: 8000,   targetRangeKm: 5, bonuses: { "module:mining_drones": { yield: 50 } } },
+  chisel:      { fitSlots: 8,  disposition: 70,  capacitor: 40, oreM3: 5000,   targetRangeKm: 5, bonuses: { "module:mining_drones": { yield: 50 } } },
   dragline:    { fitSlots: 9,  disposition: 110, capacitor: 60, oreM3: 55000 },
   bedrock:     { fitSlots: 9,  disposition: 105, capacitor: 55, oreM3: 40000,  bonuses: PROP },
   hopper:      { fitSlots: 9,  disposition: 110, capacitor: 55, oreM3: 90000,  bonuses: HOLD },

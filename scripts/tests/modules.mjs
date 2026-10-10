@@ -13,10 +13,10 @@ const fit = (...items) => { s.fit = s.fit.filter((f) => Inv.MODULES[f.item].role
 const y0 = w._yieldM3s(s);
 fit("module:laser_upgrade"); const y1 = w._yieldM3s(s);
 fit("module:laser_upgrade", "module:laser_upgrade"); const y2 = w._yieldM3s(s);
-t.ok(Math.abs(y1 / y0 - 1.1) < 1e-9, "a mining laser upgrade adds 10% yield", y1 / y0);
-t.ok(Math.abs(y2 / y0 - (1 + 0.1 + 0.1 * stackPenalty(1))) < 1e-9 && y2 / y0 < 1.2, "a second one adds less", y2 / y0);
-fit("module:cargo_expansion"); t.ok(s.inv.cargo.cap === Math.round(T.cargoM3 * 1.5) && s.inv.ore.cap === Math.round(T.oreM3 * 1.5), "a cargohold expansion adds 50% to both holds", [s.inv.cargo.cap, s.inv.ore.cap]);
-fit("module:cargo_expansion", "module:cargo_expansion"); t.ok(s.inv.ore.cap === Math.round(T.oreM3 * (1.5 + 0.5 * stackPenalty(1))), "a second one adds less", s.inv.ore.cap);
+t.ok(Math.abs(y1 / y0 - 1.05) < 1e-9, "a mining laser upgrade adds 5% yield", y1 / y0);
+t.ok(Math.abs(y2 / y0 - (1 + 0.05 + 0.05 * stackPenalty(1))) < 1e-9 && y2 / y0 < 1.1, "a second one adds less", y2 / y0);
+fit("module:cargo_expansion"); t.ok(s.inv.cargo.cap === Math.round(T.cargoM3 * 1.15) && s.inv.ore.cap === Math.round(T.oreM3 * 1.15), "a cargohold expansion adds 15% to both holds", [s.inv.cargo.cap, s.inv.ore.cap]);
+fit("module:cargo_expansion", "module:cargo_expansion"); t.ok(s.inv.ore.cap === Math.round(T.oreM3 * (1.15 + 0.15 * stackPenalty(1))), "a second one adds less", s.inv.ore.cap);
 fit(); t.ok(s.inv.ore.cap === T.oreM3, "unfitting them restores the holds");
 
 // propulsion: one at a time, raises top speed, draws power

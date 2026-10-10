@@ -13,23 +13,23 @@ for (const lic of LICENSES) if (!lic.free) ITEMS["manual:" + lic.key] = { key: "
 // Modules: fitted to ships at a station. size counts against the hull's disposition; draw is the capacitor
 // a running module uses; cap is capacitor a passive module adds. license: [key, level] needed to activate.
 export const MODULES = {
-  "module:mining_laser": { name: "Mining Laser", cat: "mining", role: "laser", size: 10, draw: 10, yield: 2, range: 1, cycle: 15000, license: ["small_mining_laser", 1], price: 60_000, icon: "assets/icons/mining_laser.png",
+  "module:mining_laser": { name: "Mining Laser", cat: "mining", role: "laser", size: 10, draw: 10, yield: 10 / 15, range: 1, cycle: 15000, license: ["small_mining_laser", 1], price: 60_000, icon: "assets/icons/mining_laser.png",
     desc: "Cuts ore from a locked asteroid. The ore lands in the ore hold when each cycle completes." },
   "module:auto_miner": { name: "Auto Miner", cat: "automation", role: "auto", size: 15, draw: 5, license: ["auto_miner", 1], price: 250_000, icon: "assets/icons/auto_miner.png",
     desc: "Each cycle, puts every idle mining laser on the first locked asteroid in range." },
   "module:cap_battery": { name: "Capacitor Battery", cat: "power", role: "battery", size: 8, cap: 12, price: 120_000, icon: "assets/icons/cap_battery.png",
     desc: "Stores extra power for the ship's capacitor, so more modules can run at once." },
   // (owner) drones, propulsion and upgrades. Fitting numbers are placeholders for now.
-  "module:mining_drones": { name: "Mining Drones", cat: "drones", role: "drones", size: 20, draw: 8, yield: 1, range: 5, cycle: 20000, price: 400_000, icon: "assets/icons/modules/mining_drones.png",
+  "module:mining_drones": { name: "Mining Drones", cat: "drones", role: "drones", size: 20, draw: 8, yield: 25 / 60, range: 5, cycle: 60000, price: 400_000, icon: "assets/icons/modules/mining_drones.png",
     desc: "Activate to launch two mining drones; they stay out while the module is on. Send them at a locked asteroid within 5 km and they orbit it, cutting ore with their own lasers. The ore lands in the ore hold when each cycle completes." },
   "module:afterburner": { name: "Afterburner", cat: "propulsion", role: "prop", size: 10, draw: 6, speed: 0.75, price: 150_000, icon: "assets/icons/modules/afterburner.png",
     desc: "Raises the ship's top speed by 75% while it runs. Only one propulsion module runs at a time." },
   "module:microwarpdrive": { name: "Microwarpdrive", cat: "propulsion", role: "prop", size: 25, draw: 18, speed: 4, price: 900_000, icon: "assets/icons/modules/microwarpdrive.png",
     desc: "Raises the ship's top speed by 400% while it runs: the way to cross a POI quickly. Only one propulsion module runs at a time." },
-  "module:cargo_expansion": { name: "Cargohold Expansion", cat: "upgrades", role: "upgrade", stat: "hold", bonus: 0.5, size: 8, price: 100_000, icon: "assets/icons/modules/cargohold_expansion.png",
-    desc: "Adds 50% to the cargo and ore holds. Each extra one is less effective than the last." },
-  "module:laser_upgrade": { name: "Mining Laser Upgrade", cat: "upgrades", role: "upgrade", stat: "yield", bonus: 0.1, size: 10, price: 300_000, icon: "assets/icons/modules/mining_laser_upgrade.png",
-    desc: "Adds 10% to mining laser yield. Each extra one is less effective than the last." },
+  "module:cargo_expansion": { name: "Cargohold Expansion", cat: "upgrades", role: "upgrade", stat: "hold", bonus: 0.15, size: 8, price: 100_000, icon: "assets/icons/modules/cargohold_expansion.png",
+    desc: "Adds 15% to the cargo and ore holds. Each extra one is less effective than the last." },
+  "module:laser_upgrade": { name: "Mining Laser Upgrade", cat: "upgrades", role: "upgrade", stat: "yield", bonus: 0.05, size: 10, price: 300_000, icon: "assets/icons/modules/mining_laser_upgrade.png",
+    desc: "Adds 5% to mining laser yield. Each extra one is less effective than the last." },
 };
 for (const [k, m] of Object.entries(MODULES)) ITEMS[k] = { key: k, kind: "module", ...m, rarity: "module", unitM3: 5, color: "#7f8fb0" };
 // Base production (DESIGN.md › The base surface): refined "-iums" and the 18 ship components. They live in base
