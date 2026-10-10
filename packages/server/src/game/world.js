@@ -792,22 +792,45 @@ export class World {
 
   // ---- snapshot ----
   // Every ship in the POI the player's camera is on, plus their own ships wherever they are (docs/DESIGN.md › Engine).
-  snapshotFor(p) {
-    const now = Date.now(), view = p.view, vis = this._visibleSystems(p.id);
-    const ships = [];
+  // One index per snapshot round: ships by POI and by owner, and each ship's public entry built once for every viewer.
+  snapshotIndex() {
+    const byPoi = new Map(), byOwner = new Map(), cansByPoi = new Map();
     for (const s of this.ships.values()) {
-      const mine = s.owner === p.id;
-      if (!mine && (s.docked || !s.sys || s.sys !== view)) continue;
-      const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
-      const w = s.wp;
+      let o = byOwner.get(s.owner); if (!o) byOwner.set(s.owner, (o = [])); o.push(s);
+      if (s.docked || !s.sys) continue;
+      let a = byPoi.get(s.sys); if (!a) byPoi.set(s.sys, (a = [])); a.push(s);
+    }
+    for (const c of this.cans.values()) { let a = cansByPoi.get(c.sys); if (!a) cansByPoi.set(c.sys, (a = [])); a.push(c); }
+    return { now: Date.now(), byPoi, byOwner, cansByPoi, pub: new Map() };
+  }
+  _pubEntry(s, now) {
+    const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine: false };
+    const w = s.wp;
+    if (w && w.ph !== "align" && w.ph !== "palign" && w.ph !== "poi") {   // others see the entry window, and the exit window only seconds before landing
+      entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur || 0, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };
+      if (w.ex != null && (w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS))) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
+    }
+    return entry;
+  }
+  snapshotFor(p, idx = this.snapshotIndex()) {
+    const now = idx.now, view = p.view, ships = [];
+    for (const s of (view && idx.byPoi.get(view)) || []) {
+      if (s.owner === p.id) continue;
+      let e = idx.pub.get(s.id); if (!e) idx.pub.set(s.id, (e = this._pubEntry(s, now)));
+      ships.push(e);
+    }
+    const vis = new Set(view ? [view] : []);
+    for (const s of idx.byOwner.get(p.id) || []) {
+      if (s.sys) vis.add(s.sys);
+      const entry = { id: s.id, sys: s.sys, type: s.type, name: s.name || null, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine: true }, w = s.wp;
       if (w && w.ph === "poi") entry.wp = { ph: "poi", from: w.from, to: w.to, el: now - w.at, dur: w.dur, dir: +w.dir.toFixed(4) };
-      else if (w && w.ph === "palign") { if (mine) entry.wp = { ph: "palign", to: w.to }; }
-      else if (w && w.ph !== "align") {   // the owner sees both windows; others see the exit window only seconds before landing
+      else if (w && w.ph === "palign") entry.wp = { ph: "palign", to: w.to };
+      else if (w && w.ph !== "align") {                       // the owner sees both windows
         entry.wp = { ph: w.ph, el: now - w.at, dur: w.dur || 0, dir: +w.dir.toFixed(4), fx: +w.fx.toFixed(4), fy: +w.fy.toFixed(4) };
         if (w.to) entry.wp.to = w.to;
-        if (w.ex != null && (mine || w.ph === "exit" || (w.ph === "transit" && w.dur - (now - w.at) <= WARP_EXIT_SHOW_MS))) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
+        if (w.ex != null) { entry.wp.ex = +w.ex.toFixed(4); entry.wp.ey = +w.ey.toFixed(4); }
       }
-      if (mine) {
+      {
         if (s.moving && !(w && w.ph === "palign")) { entry.tx = +s.tx.toFixed(4); entry.ty = +s.ty.toFixed(4); }
         entry.docked = s.docked; entry.warp = s.warp; entry.moving = s.moving; entry.pilot = s.pilot ?? null; entry.hp = +s.hp.toFixed(1); entry.shield = +s.shield.toFixed(1);
         entry.spd = +Math.hypot(s.vx, s.vy).toFixed(4);
@@ -828,7 +851,7 @@ export class World {
     }
 
     const cans = [];
-    for (const c of this.cans.values()) if (vis.has(c.sys)) cans.push({ id: c.id, sys: c.sys, x: c.x, y: c.y, mine: c.owner === p.id, owner: c.ownerName, left: Math.max(0, c.expiresAt - now), lockedFor: c.owner === p.id ? 0 : Math.max(0, (c.publicAt || 0) - now), empty: !c.inv.slots.length });
+    for (const sys of vis) for (const c of idx.cansByPoi.get(sys) || []) cans.push({ id: c.id, sys: c.sys, x: c.x, y: c.y, mine: c.owner === p.id, owner: c.ownerName, left: Math.max(0, c.expiresAt - now), lockedFor: c.owner === p.id ? 0 : Math.max(0, (c.publicAt || 0) - now), empty: !c.inv.slots.length });
     return { t: "snap", st: this.simAt || now, view, ships, cans };   // st: server time, for client-side interpolation
   }
 }

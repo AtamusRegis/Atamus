@@ -39,12 +39,12 @@ packages/server/src/
   ptr.js          PTR flag, PTR user, dev commands
   game/
     net.js        websocket server: one session per account, command dispatch, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): ships, mining, cans, inventories, crews
+    world.js      authoritative simulation (20 Hz): POIs, warp-to, ships, mining, cans, inventories, crews
     constants.js  tunables + SHIP_TYPES / SHIP_CLASSES / SHIP_ROLES
     inventory.js  ITEMS, MARKET, slot inventories (move/split/take with input sanitizing)
-    belts.js      ores, home rock fields, asteroid beacons, instance fields (+ decay)
-    geometry.js   hex cells, STATION_POS, stargates
-    persist.js    systems table (JSONB per player), instances table (shared asteroid instances)
+    belts.js      ores
+    expanse.js    the Expanse: fixed POIs (planets, station, stargates), belt fields, map helpers
+    persist.js    systems table (JSONB per player), instances table (belt POIs)
     factions.js   faction roster (not wired into gameplay yet)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer, input, socket, update/countdown handling
@@ -86,14 +86,14 @@ Changes under `docs/`, `CLAUDE.md` and `scripts/tests` trigger no deploy.
 **PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
 
 - `credits amount`, `license key level`, `ship type`, `item item qty`
-- `belts` (fill the home rocks)
-- `inst` (a new asteroid instance, every beacon linked to it)
+- `belts` (spawn one more belt POI; replies with its id)
+- `expire poi` (end a belt's lifetime now)
 - `offline` (mark yourself offline, to test offline rules)
-- `move ship x y [sys]`
+- `move ship x y [poi]` (local km inside a POI id such as `station`, `planet:2`, `gate:1`, `belt:…`)
 - `heat ship value`, `modhp ship value` (set a ship's heat / all its modules' integrity)
 - `update seconds` (rehearse the countdown)
 
-The single PTR pilot is "Vera Kestrel". Ships are `1:ship:N`, and the station is at (-52, 38).
+The single PTR pilot is "Vera Kestrel". Ships are `1:ship:N`, and the station is at (0, 0) in the `station` POI.
 
 ## Code conventions
 

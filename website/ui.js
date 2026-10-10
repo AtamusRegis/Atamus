@@ -708,7 +708,7 @@
     const lockedRock = !!(u && (u.targets || []).some((t) => t.kind === "rock" && t.locked));
     const sig = !u ? "" : u.kind === "ship" ? ["ship", u.id, u.docked, u.warp, u.mining, u.moving, u.canDock, lockedRock, u.pilot].join("|")
       : u.kind === "station" ? ["station", docked.map((d) => d.id + ":" + d.pilot).join(","), state ? state.pilots.length : 0].join("|")
-      : ["gate", u.id, u.state, u.mine].join("|");
+      : ["gate", u.id, u.state].join("|");
     if (sig !== w.sig) {
       w.sig = sig; w.live = {}; body.innerHTML = "";
       if (!u) { w.slot.textContent = "Selection"; body.append(el("div", { class: "muted" }, "Nothing selected.")); return; }
@@ -739,10 +739,8 @@
           el("button", { class: "btn-primary2 unit-btn off", onclick: () => openInventory({ owner: "station", inv: "hangar", h: 0 }) }, "Inventory"),
           el("button", { class: "btn-primary2 unit-btn off", onclick: openMarket }, "Market")));
       } else if (u.kind === "gate") {
-        const fuel = row("Fuel", ""), status = row("Status", ""); L.fuel = fuel.lastChild; L.status = status.lastChild;
-        body.append(fuel, status);
-        const active = u.state === "active";
-        if (u.mine) body.append(el("button", { class: "btn-primary2 unit-btn" + (active ? " off" : ""), onclick: () => A.send({ t: "gate", gate: u.id, open: !active }) }, active ? "Turn Off" : "Turn On"));
+        const status = row("Status", ""); L.status = status.lastChild;
+        body.append(status);
       }
     }
     if (!u) return;
@@ -750,9 +748,7 @@
     if (u.kind === "station") {
       const hs = A.inv.hangars || []; if (hs.length) { const used = hs.reduce((a, h) => a + h.used, 0), cap = hs.reduce((a, h) => a + h.cap, 0); setBar("Hangar", used, cap, fmtM3(used, cap)); }
     } else if (u.kind === "gate") {
-      const active = u.state === "active";
-      const fuel = active ? Math.min(u.fuelMs, u.sessionRemMs ?? u.fuelMs) : u.fuelMs;
-      L.fuel.textContent = fmtClock(fuel); L.status.textContent = active ? (u.connToSys ? "Connected" : "Searching…") : "Offline";
+      L.status.textContent = u.state === "active" ? "Connected" : "Offline";   // nomad space doesn't exist yet: every stargate is offline
     }
   }
   // ships are run from the HUD (targets / hotbar / action buttons) — the selection window is for structures
@@ -1081,7 +1077,7 @@
     const A = window.Atamus, u = A.unit, sh = u && u.kind === "ship" ? A.ship(u.id) : null;
     const fleetOpen = wins.fleet && isOpen(wins.fleet);
     const host = fleetOpen ? wins.fleet.acts : hudAct;
-    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.pilot, sh && sh.canDock, sh && sh.moving && !sh.warp, sh && sh.jump].join("|");
+    const sig = [fleetOpen, sh && sh.id, sh && sh.docked, sh && sh.pilot, sh && sh.canDock, sh && sh.moving && !sh.warp].join("|");
     if (sig === actSig) return; actSig = sig;
     for (const h of [hudAct, wins.fleet && wins.fleet.acts]) if (h) { h.innerHTML = ""; h.hidden = true; }
     if (!sh) return;                                                // a pilot is always selected: their ship's actions always show
@@ -1091,8 +1087,6 @@
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
     if (sh.docked && sh.pilot != null) host.append(act("undock", "Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })));
     if (sh.moving && !sh.warp) host.append(act("warp", "Warp", () => A.send({ t: "warp", ship: sh.id })));
-    // near a linked asteroid beacon: jump this ship and every other selected ship in range (the server checks range)
-    if (sh.jump) host.append(act("jump", "Jump", () => A.send({ t: "jump", beacon: sh.jump, ships: [...new Set([sh.id, ...(A.selectedShips || [])])] })));
     host.hidden = false;
   }
   saved.fleetOrient = saved.fleetOrient === "v" ? "v" : "h";
@@ -1744,6 +1738,7 @@
 
   // ---- custom right-click context menu ----
   let ctxMenu = null;
+  window.Atamus.ctxMenu = (x, y, items) => showCtxMenu(x, y, items);   // the map's POI menu (game.js)
   function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   function showCtxMenu(x, y, items) {
     closeCtxMenu();

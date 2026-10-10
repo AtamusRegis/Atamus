@@ -4,6 +4,13 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-09
 
+- **The Expanse (major, needs a wipe):** one shared home system replaces personal systems.
+  - A 1 AU hexagon with the sun at its centre, made of points of interest: 4 procedural planets, the Expanse Station, 6 offline stargates on the edges, and asteroid belts spawned by population (one per 12 players online, at least 3) with hidden lifetimes; an expired belt is held open, unmarked, until the last ship leaves.
+  - One zoom from true km scale out to the whole system map; right-click or hold a POI icon to **Warp to** it (align, window, a ball across the map, drop out inside).
+  - You receive the POI your camera is on plus your own ships; collisions are per POI; sockets are compressed; local chat is Expanse-wide.
+  - Logging off despawns your fleet after 20 s; logging in puts it back, or into a fresh unmarked 20 km POI if its POI is gone. New players start docked at the station.
+  - Removed: home systems, fuel stargates, asteroid beacons and instances, home rocks, offline mining.
+
 - **Stars:** smaller, crisp points, and they no longer rubber-band at the pan limit. The sun is dimmer.
 - **Right-click menus:** centered above the press; below near the top; to the right near the left edge, to the left near the right edge.
 - **Item info:** Weight and Price show one value for a single item.

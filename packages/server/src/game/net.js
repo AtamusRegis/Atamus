@@ -147,10 +147,11 @@ export function attachGameServer(httpServer) {
   }, TICK_MS);
 
   setInterval(() => {
+    const idx = world.snapshotIndex();                      // built once per round, shared by every player's snapshot
     for (const p of world.players.values()) {
       if (p.offline) continue;                              // nobody to send to
       const ps = world.poiSig(p); if (ps !== p.poiSig) { p.poiSig = ps; p.send(JSON.stringify({ t: "pois", pois: world.poisFor(p) })); }   // the map's POIs changed
-      p.send(JSON.stringify(world.snapshotFor(p)));
+      p.send(JSON.stringify(world.snapshotFor(p, idx)));
       if (p.invDirty) { p.invDirty = false; p.send(JSON.stringify(world.inventoriesFor(p.id))); }
       if (world.fieldSig(p) !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); p.rockDirty && p.rockDirty.clear(); }   // a field came into view or regrew
       if (p.rockDirty && p.rockDirty.size) { p.send(JSON.stringify({ t: "rocks", rocks: [...p.rockDirty].map(([id, m3]) => ({ id, m3 })) })); p.rockDirty.clear(); }

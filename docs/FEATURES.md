@@ -4,14 +4,10 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## World and setting
 
-- **Region:** the Expanse.
-- **Station lights:** a soft glow behind the station (blue for yours, red for others'). Red and white beacons on the masts and arm tips give a short double flash now and then (every ~6 s, staggered). Running lights chase slowly (1.4 steps a second) along both edges of the docking bay toward its back wall **(owner: slow and occasional)**. The lights show once the station is at least 70 px wide on screen.
-- **Systems:** every player owns a home system. It's a single flat-top hex 200 km across, holding a station at (-52, 38), stargates, 2–3 asteroid beacons and scattered rocks. There are no belts any more **(owner)**.
-- **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances are in km.
-- **Stargates:** they use fuel and open timed links to other players' gates or to a hub. If a link closes while your ship is in someone else's system, the ship is destroyed with everything aboard and you respawn at your station. This code is older and lightly used.
-  - **Fuel (owner, for now):** a gate that isn't active refuels by itself, from 0 to the 30-minute maximum in 10 minutes (also while you're offline).
-  - **Looks (owner):** slow occasional blinking lights. Powered on, its 8 emitters glow and motes of light drift in the ring. Connected to another system, the ring becomes a turning blue swirl, with motes falling inward.
-  - **Clicking a gate** opens the Stargate window (fuel, status, Turn On/Off) like the station opens its hangar: the selection doesn't change. Closing the window drops the gate's selection box.
+- **Region:** the Expanse, one persistent home system for everyone. See **The Expanse** below.
+- **Station lights:** a soft blue glow behind the station. Red and white beacons on the masts and arm tips give a short double flash now and then (every ~6 s, staggered). Running lights chase slowly (1.4 steps a second) along both edges of the docking bay toward its back wall **(owner: slow and occasional)**. The lights show once the station is at least 70 px wide on screen.
+- **Simulation:** the server ticks at 20 Hz and sends snapshots at 15 Hz. Distances inside a POI are in km; map positions are in AU.
+- **Stargates (owner):** players don't control them. Each sits at the centre of its gate POI. Nomad space doesn't exist yet, so every stargate is **offline**: slow occasional blinking lights only. **Clicking a gate** opens the Stargate window (Status: Offline) without changing the selection.
 - **Factions** (`game/factions.js`, not used in gameplay yet):
 
   | Faction | Role |
@@ -25,6 +21,34 @@ This is a living spec of the game. Read it before every patch, and update it in 
   | Helios Resource Group | Aggressive competitor (lasers) |
 
   Names are in DarkOrbit style: plain and corporate, nothing "on the nose" **(owner)**.
+
+## The Expanse (owner)
+
+The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates, asteroid beacons, asteroid instances, home rocks and offline mining are gone.
+
+- **Shape:** a flat-top hexagon 1 AU across with the sun at its centre (a backdrop and landmark, not a POI). The map draws its edge.
+- **Points of interest (POIs):** every ship is always in exactly one POI (or warping between two). A POI is its own local space: a circle you fly freely inside, with everything at true km scale around its centre. Nothing exists between POIs.
+  - **Fixed POIs** never expire: 4 **planets** (Expanse I–IV, 80 km, at 0.10, 0.18, 0.27 and 0.38 AU), the **Expanse Station** (100 km, beside Expanse II; the market, fitting and hangars, docking within 4 km of the station), and 6 **stargates** (60 km, the middle of each edge, offline for now).
+  - **Planets** are procedural (one of ocean, desert, ice or gas giant per planet), drawn as a 16 km sphere at the POI centre and lit from the sun. Landing comes with the base surface (DESIGN.md phase 2).
+  - **Asteroid belts (owner)** are POIs 50 km across, spawned by population: one per 12 players online, at least 3. Each holds one rich field (70–110 rocks, 250k–600k m³, a primary ore rolled by rarity plus up to two lower ores) and has a **hidden lifetime** of 60–120 minutes.
+  - **When a belt's time runs out or it's mined out (owner),** it leaves the map at once (no icon, nobody new can warp to it or look into it), but stays open for whoever is inside until the last ship leaves. A held belt doesn't count toward the population number, so a replacement spawns. Belts are saved (in the `instances` table) and survive restarts.
+- **Map and zoom (owner):** one continuous zoom from POI scale out to the whole system (1 AU is drawn as 20,000 km; the wheel takes bigger steps once zoomed out).
+  - Zoomed in, the POI is at true scale with a dashed boundary circle.
+  - Zoomed out, POIs are icons: the station, a planet sphere, the stargate, a small rock cluster for belts. Hovering an icon shows its name.
+  - A POI your ships are in keeps a visible boundary at any zoom, with your ships as dots inside it.
+  - Move orders go to the selected ships in the POI you clicked, and stay inside its boundary.
+- **Warp to a POI (owner):** right-click (or hold, on touch) a POI's icon on the zoomed-out map → **Warp to *name*** for the selected ships.
+  1. The ship aligns toward the target's bearing on the map, speeding up at its normal acceleration.
+  2. At full speed and lined up, the warp window opens ahead; it coasts in (0.9 s) and leaves the POI.
+  3. **Off-POI** it's a glowing ball crossing the map for 2 s + 4 s per AU (`WARP_POI_BASE_MS`, `WARP_AU_PER_S` = 0.25; tunable). Nothing is simulated meanwhile, and move and dock orders are ignored.
+  4. It drops out of an exit window at a scattered point 15–50% of the way out from the target's centre, braking to a stop like a normal warp exit.
+  - Targets, lasers and the auto miner reset when a warp-to starts. A warp in progress at logout lands in the target POI.
+- **What you receive (owner):** every ship in the POI your camera is on (the client tells the server with `view`), plus your own ships wherever they are. Rocks and cans come for those POIs too. The POI list comes on its own (`pois`) whenever it changes. Sockets are compressed (permessage-deflate).
+- **Ships in different POIs** never see, target or bump each other.
+- **Local chat** reaches everyone online in the Expanse.
+- **Logging off (owner):** no logged-off presence. 20 s after the last connection closes (a reload fits in that), the player's fleet leaves the world.
+- **Logging in (owner):** ships come back where they were. A ship whose POI no longer exists arrives at a random point outside any POI, inside a **new 20 km spawn-in POI** made around it. A spawn-in POI has **no map marker**, so nobody else can see it or warp to it, and it goes away once its player has left.
+- **New players** start with their Prospector docked at the Expanse Station.
 
 ## Accounts, pilots and sessions
 
@@ -95,10 +119,11 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - Hops too short for a window (under 2 km of transit after aligning and braking room) just fly normally.
   - **The exit window** appears for everyone, the owner included, only in the last second before the ship comes out **(owner)**. Other players see the entry window when it opens.
   - **Progress line:** the selected pilot's ship shows a dashed line from window to window, lit up to the ball's position.
+  - **Between POIs:** see **Warp to a POI** under The Expanse.
   - A server restart drops any warp in progress; the ship keeps flying to its destination.
 - **Smooth motion:** snapshots carry the server's simulation time (`st`), and ships are drawn 110 ms in the past, interpolated between the two snapshots around that moment (with brief extrapolation if one is late). The camera follows that smooth position, so it doesn't jitter, even at warp.
 - **Undocking (owner):** a ship comes out of the docking bay's mouth (the station's open side, facing −x, spread ±20°), flies away, and stands still 3.6 km out, near the edge of the dock ring, facing away from the station.
-- **Docking:** within 4 km of the station. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. A docked ship stays selected.
+- **Docking:** within 4 km of the station, in the station POI only. Refused mid-warp. Docking repairs the ship, clears its targets and stops its modules. A docked ship stays selected.
 
 ## Mining
 
@@ -132,8 +157,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
   - **Activate / Deactivate**. There's no re-arming once deactivated.
   - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
   - **Info:** opens the module's item info (Description / Stats / Fitting), with no ship or target details **(owner)**.
-- **Home rocks (owner):** no belts. A home system has about 24 rocks scattered across it (mostly Ironstone and Cuprite) plus clusters of about 7 richer rocks around each asteroid beacon, so beacons stay hotspots. Two rocks regrow a minute until the counts are back. Rock ids carry their system (`sys:12#5`, `inst:…#3`).
-- **Asteroid instances:** the main mining. See the section below.
+- **Rocks** are in belt POIs (see The Expanse). Rock ids carry their POI (`belt:…#3`).
 - **Ores:**
 
   | Ore | Rarity | Price | Volume |
@@ -180,39 +204,6 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - **The ring** (left of the hotbar): the white crescent is disposition used and the right crescent is power in use, scaled to everything fitted running at once. A white tick marks the capacity; if everything fitted fits within the capacity, the tick sits at the crescent's top end, because that fit can't run hot.
   - The power crescent is yellow, since capacitor is yellow and shields are blue **(owner)**. Past the tick it shifts yellow → orange → red as heat builds; deep red and pulsing means overloaded modules are taking damage.
   - The middle shows hardpoints used. Clicking or tapping it opens the Fitting window. Its capacity number is white, and turns green when batteries or Capacitor Management add to it; hovering it (or tapping, on touch) shows Base and each contributor.
-
-## Asteroid instances (owner)
-
-- **What they are:** small shared hexes (44 km across) made by the server, each holding one rich rock field next to its own beacon. They aren't part of anyone's system.
-  - The field rolls a primary ore by rarity (like the old belts), with 70–120 rocks and 250k–600k m³ in all.
-  - Rocks lose their ore passively: every rock loses its starting ore over 24 hours, so even an untouched instance ends within a day.
-  - An instance stays alive until its rocks are gone (mined or decayed).
-- **Asteroid beacons are acceleration gates (owner):** each player has 2 or 3 at fixed spots in their home system (sprite `assets/ships/accel_gate.webp`, true size 658 m, at least 16 px). It pivots on its spine (row 234 of 349), so the spine lines up with the partner gate **(owner)**. The pointy end faces the **partner gate**: a home gate faces its instance's gate, and an instance's gate faces the home gate you came through. Unlinked gates point outward. A gate links to an instance with room (chosen at random, no matchmaking with friends). While linked it glows blue, with light streaming along its spine toward the point; unlinked it's dimmed.
-  - A player's beacons spread over different instances when they can.
-  - A beacon linked to an instance that fills up (without you in it) looks for another.
-- **Jumping (owner):** a ship within 2.5 km of a linked gate gets a **Jump** action, which takes it and every other selected ship in range.
-  - Each ship flies into the gate, then crosses as a glowing blue ball to the partner gate in exactly **5 seconds, whatever the distance**; the camera follows it.
-  - It drops out at warp speed and brakes to a dead stop outside the gate, like a warp exit but with no window. A fleet comes out side by side.
-  - Move and dock commands are ignored during the crossing. Others see a ship heading somewhere they can't see vanish into the gate.
-  - The instance's beacon leads home, landing beside the beacon the ship went through.
-  - Targets, lasers and the auto miner reset on a jump.
-  - There's no docking inside an instance.
-- **Cap: 5 players** (not pilots or ships) per instance. A player already inside can always bring more ships. Squatting is allowed **(owner)**: idle players, even online ones, are never kicked.
-- **Sharing:** players in the same instance see each other's ships, share the rocks (mining the same rock is fine) and can bump each other (ship collisions stay on). There are no combat modules yet, and boosts will be decided when a boost module exists.
-- **On the map:** each linked instance is drawn as a small hex just outside your home system, off its gate, with a dashed blue line from your gate to the instance's gate.
-  - **Until you go through (owner),** the hex is faint and empty: no rocks, ships, players or cans are sent. The server only shows that the connection is there.
-  - Once you have a ship inside, everything in it shows.
-  - Move orders go to the selected ships in the system you clicked.
-- **Supply (owner):** the server keeps twice the room the loaded players need (instances = 2 × players ÷ 5, at least 2), and always at least 2 instances with space. It adds one every 5 s until that's true. Extra instances just decay away.
-- **Leaving:** when an instance closes, its ships are returned beside their beacons at home, never destroyed (unlike stargates), and cans in it are lost.
-- **Restarts:** instances are saved in their own `instances` table and kept across restarts. Beacons keep their links, and ships stay inside.
-- **Offline (owner):** see Offline mining below. An offline player's ship in an instance that has stopped working is sent home through its beacon.
-
-## Offline mining (owner)
-
-- A ship keeps working while its owner is offline, as long as it has something to do: lasers running, or an auto miner with a locked rock in range, room in the hold and a laser that can run. It stops when its targets are gone, its hold is full, or its lasers are off or burnt out. It's a light idle feel, not a full idle game.
-- While any ship is working (or moving, or a gate is open), the player's systems stay awake. Once nothing is left, they hibernate after 60 s.
-- Server restarts keep it going: on boot, systems with ships moving, mining, auto-mining or in an instance are loaded awake, with their pilots' licenses. After a restart the 60 s grace is 6 minutes, so players returning from an update don't find their idle ships sent home from instances.
 
 ## Inventories and items
 
@@ -323,6 +314,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Rejected promises are logged.
 - Each connection is limited to about 40 commands a second, with a 64 KB message limit.
 - Autosave runs every 10 s but skips the database write when nothing changed. Offline players get no snapshots.
+- Ship collisions are checked per POI.
 
 ## Rejected / removed (don't reintroduce)
 
@@ -342,3 +334,4 @@ This is a living spec of the game. Read it before every patch, and update it in 
 - Asteroid belts in home systems (5 slots, spawning and drifting away). Replaced by scattered home rocks and asteroid instances.
 - Anyone looting a fresh jettison can. Cans are owner-only for 30 minutes now.
 - Kicking idle online players out of instances, and matchmaking with friends (instances are random for now).
+- **Replaced by the Expanse (docs/DESIGN.md phase 1):** personal home systems; fuel stargates linking players' systems and the pirate hub; asteroid beacons, acceleration-gate jumps and asteroid instances (they'll return as the "small belt" instance type behind acceleration gates); scattered home rocks; offline mining and systems staying awake while offline.

@@ -8,7 +8,7 @@ const bad = [null, 1, "x", [], {}, { t: 5 }, { t: "inv_move" }, { t: "inv_move",
   { t: "inv_sort" }, { t: "inv_split" }, { t: "inv_move", from: { ...H0, slot: 0 }, to: { ...H0, slot: -1 } }, { t: "inv_move", from: { ...H0, slot: 0 }, to: { ...H0, slot: "x" } },
   { t: "inv_move", from: { owner: "ship", id: SHIP, inv: "__proto__", slot: 0 }, to: H0 }, { t: "move", ships: "x" }, { t: "move", ships: [null, {}], x: 1, y: 1 }, { t: "lock" },
   { t: "laser", idx: "__proto__" }, { t: "chat", text: { a: 1 } }, { t: "buy", item: "__proto__" }, { t: "buy", item: "constructor" }, { t: "crew" }, { t: "rename_hangar", h: "x", name: "y" },
-  { t: "gate", gate: "__proto__", open: true }, { t: "power", ship: SHIP, mod: "laser", idx: "x" }, { t: "power" }];
+  { t: "view", poi: "__proto__" }, { t: "view", poi: 5 }, { t: "warpto", ships: [SHIP], poi: "__proto__" }, { t: "warpto", ships: "x", poi: "station" }, { t: "warpto", ships: [SHIP, SHIP, null], poi: { id: 1 } }, { t: "power", ship: SHIP, mod: "laser", idx: "x" }, { t: "power" }];
 for (const b of bad) { c.send(b); await sleep(60); }
 await sleep(300);
 t.ok(await health(), "server survives malformed messages");

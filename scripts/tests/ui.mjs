@@ -20,7 +20,7 @@ const run = (page, body, arg) => page.evaluate(`(async (arg) => { const s = (ms)
 let page = await open(1280, 800);
 // selection drives inventories
 let r = await run(page, `closeAll(); if (!A.ship(ID).docked) { A.send({ t: "dock", ship: ID, dock: true }); }
-  A.send({ t: "dev", cmd: "move", ship: ID, x: -52, y: 38 }); await s(300); A.send({ t: "dock", ship: ID, dock: true }); await s(800);
+  A.send({ t: "dev", cmd: "move", ship: ID, x: 1, y: 0, sys: "station" }); await s(300); A.send({ t: "dock", ship: ID, dock: true }); await s(800);
   if (A.ship(ID).pilot == null) { A.send({ t: "crew", ship: ID, pilot: (await (await fetch("/game/state")).json()).pilots[0].id }); await s(800); }
   A.selectStation(); await s(400); const a = wins();
   A.selectShip(ID); await s(300); const b = wins();

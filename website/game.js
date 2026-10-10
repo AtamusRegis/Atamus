@@ -1,4 +1,4 @@
-// Atamus tech-demo client — canvas world (systems + one stargate).
+// Atamus client: the canvas world (the Expanse: POIs on a solar map, each its own local space).
 // The windowed UI lives in ui.js; this file exposes a small bridge for chat.
 (() => {
   "use strict";
@@ -8,7 +8,7 @@
   const statusEl = document.getElementById("status");
 
   let cfg = null, me = { id: null, name: "" };
-  let snap = { systems: [], gates: [] }; let belts = []; let invs = { ships: {}, hangars: null };
+  let snap = { ships: [], gates: [] }; let belts = []; let pois = [], poiById = new Map(); let invs = { ships: {}, hangars: null };
   let ws = null, lastFrame = performance.now();
   let camInit = false;
 
@@ -36,14 +36,13 @@
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
     else if (u.kind === "station") selectUnit(u);
   }
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get pois() { return pois; }, get camPoi() { return camPoi; }, warpTo: (poiId, ids) => warpTo(poiId, ids), get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null }, get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3) }; },
     // centre the camera on a ship (or the station it's docked at)
     locateShip: (id) => {
       const sh = (snap.ships || []).find((x) => x.id === id); if (!sh) return false;
-      const pl = curPlace.get(sh.sys) || { gx: 0, gy: 0 };
-      const p = sh.docked ? (cfg.station || { x: 0, y: 0 }) : shipPos(sh);
-      panVel.x = panVel.y = 0; cam.cx = pl.gx + p.x; cam.cy = pl.gy + p.y; viewWTarget = sh.docked ? 14 : 6;
+      const w = shipWorld(sh); if (!w) return false;
+      panVel.x = panVel.y = 0; cam.cx = w.x; cam.cy = w.y; viewWTarget = sh.docked ? 14 : 6;
       if (!sh.docked) { selected.clear(); selected.add(sh.id); syncShipSelection(); follow = true; }   // in space: select it and keep it centred, like [F]
       else follow = false;
       return true;
@@ -52,6 +51,9 @@
   const gateImg = new Image(); let gateImgReady = false;
   gateImg.onload = () => (gateImgReady = true); gateImg.src = "assets/stargate.webp";
   const GATE_LEN_KM = 1.656; // stargate ring, true size
+  // The Expanse's map: POI positions come in AU; the map draws 1 AU as AU_KM km, so zooming out from a POI (true km
+  // scale) reaches the whole system. Inside a POI everything is local km around its centre.
+  const AU_KM = 20000, PLANET_R_KM = 8, ICON_PX = 14, RING_MIN_PX = 16;
 
   // backdrop lives on its own canvas under the sun layer; the game canvas is transparent on top
   const bgCanvas = document.createElement("canvas"); bgCanvas.id = "bg";
@@ -80,8 +82,6 @@
     return shipArt[spr];
   }
 
-  let systemRadius = 250, placeDist = 650;
-  function computeSystemRadius() { let m = 0; for (const c of cfg.cells) m = Math.max(m, Math.hypot(c.x, c.y)); systemRadius = m + cfg.cellCircumradius; placeDist = systemRadius * 2.3; }
 
   Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
 
@@ -108,12 +108,14 @@
         serverBuild = m.build;
         if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
       }
-      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; indexRocks(); computeSystemRadius(); }
+      if (m.t === "hello") { cfg = m.cfg; me = m.you; belts = m.belts || []; indexRocks(); pois = m.pois || []; poiById = new Map(pois.map((p) => [p.id, p])); sentView = undefined; }
+      else if (m.t === "pois") { pois = m.pois || []; poiById = new Map(pois.map((p) => [p.id, p])); bus.dispatchEvent(new CustomEvent("pois")); }
       else if (m.t === "snap") {
         if (selectedUnit && selectedUnit.kind === "ship") {         // the selected ship just docked: select the station instead
           const was = (snap.ships || []).find((x) => x.id === selectedUnit.id), now = (m.ships || []).find((x) => x.id === selectedUnit.id);
           // (a docked ship stays selected: its pilot is still the selected pilot; the HUD just hides)
         }
+        m.gates = pois.filter((p) => p.kind === "gate").map((p) => ({ id: p.id, sys: p.id, lx: 0, ly: 0, state: p.state || "offline", name: p.name }));   // the stargate in each gate POI
         snap = m; snapAt = performance.now(); recordSnap(m, snapAt); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") { belts = m.belts || []; indexRocks(); }
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
@@ -180,25 +182,49 @@
   function send(o) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(o)); }
 
 
-  const instR = () => (cfg.instApothem || 22) / Math.cos(Math.PI / 6);   // an asteroid instance's hex (circumradius)
+  // where each POI sits on the map (km); k > 1 enlarges a POI your ships are in when zoomed out, so its boundary and
+  // your ships stay visible at solar scale (owner)
   function placements() {
-    const place = new Map(); const home = snap.systems.find((s) => s.mine);
-    if (home) place.set(home.id, { gx: 0, gy: 0, r: systemRadius });
-    const used = [];
-    for (const s of snap.systems) {
-      if (s.mine) continue;
-      let a = s.fromGateLocal ? Math.atan2(s.fromGateLocal.y, s.fromGateLocal.x) : 0;
-      if (s.inst) {                                                     // asteroid instance: just outside home, off its beacon (nudged so two never overlap)
-        for (let k = 0; k < 12 && used.some((u) => Math.abs(Math.atan2(Math.sin(a - u), Math.cos(a - u))) < 0.32); k++) a += (k % 2 ? -1 : 1) * 0.34 * (k + 1);
-        used.push(a); const d = systemRadius + instR() * 1.9;
-        place.set(s.id, { gx: Math.cos(a) * d, gy: Math.sin(a) * d, r: instR(), inst: true }); continue;
-      }
-      place.set(s.id, { gx: Math.cos(a) * placeDist, gy: Math.sin(a) * placeDist, r: systemRadius });
+    const place = new Map(), sc = scale(), mineIn = new Set();
+    for (const sh of snap.ships || []) if (sh.mine && sh.sys && !sh.docked) mineIn.add(sh.sys);
+    for (const poi of pois) {
+      const rPx = poi.r * sc, k = mineIn.has(poi.id) && rPx < RING_MIN_PX ? RING_MIN_PX / Math.max(1e-6, rPx) : 1;
+      place.set(poi.id, { gx: poi.ax * AU_KM, gy: poi.ay * AU_KM, r: poi.r, k, poi });
     }
     return place;
   }
-  // which system a world point falls in (the one it's most inside of, relative to each system's size)
-  function sysAtWorld(w) { let best = null, bd = Infinity; for (const [id, pl] of curPlace) { const d = Math.hypot(w.x - pl.gx, w.y - pl.gy) / (pl.r || systemRadius); if (d < bd) { bd = d; best = { id, pl }; } } return best; }
+  // which POI a map point falls in (inside its boundary)
+  function sysAtWorld(w) { let best = null, bd = Infinity; for (const [id, pl] of curPlace) { const d = Math.hypot(w.x - pl.gx, w.y - pl.gy) / (pl.r * pl.k); if (d <= 1 && d < bd) { bd = d; best = { id, pl }; } } return best; }
+  // a ship's map position: in its POI, or (warping between POIs) on its way across the map
+  function shipWorld(sh) {
+    if (sh.sys) { const pl = curPlace.get(sh.sys); if (!pl) { const poi = poiById.get(sh.sys); if (!poi) return null; return { x: poi.ax * AU_KM + (sh.docked ? 0 : sh.x), y: poi.ay * AU_KM + (sh.docked ? 0 : sh.y) }; } if (sh.docked) return { x: pl.gx, y: pl.gy }; const p = shipPos(sh); return { x: pl.gx + p.x * pl.k, y: pl.gy + p.y * pl.k }; }
+    const w = sh.wp; if (!w || w.ph !== "poi") return null;
+    const a = poiById.get(w.from), b = poiById.get(w.to); if (!a || !b) return null;
+    const u = Math.min(1, (w.el + (performance.now() - snapAt)) / (w.dur || 1)), e = u * u * (3 - 2 * u);
+    return { x: (a.ax + (b.ax - a.ax) * e) * AU_KM, y: (a.ay + (b.ay - a.ay) * e) * AU_KM, u, ball: true };
+  }
+  // the POI the camera is looking at: the server sends every ship in it (plus your own everywhere)
+  let camPoi = null, sentView;
+  function updateCamPoi() {
+    let best = null, bd = Infinity;
+    for (const pl of curPlace.values()) { const d = Math.hypot(cam.cx - pl.gx, cam.cy - pl.gy) / (pl.r * pl.k); if (d < 1.5 && d < bd && pl.r * 2 * scale() > 40) { bd = d; best = pl.poi.id; } }
+    camPoi = best;
+    if (camPoi !== sentView && ws && ws.readyState === WebSocket.OPEN) { sentView = camPoi; send({ t: "view", poi: camPoi }); }
+  }
+  // warp-to (right-click / hold a POI on the map): the given ships, or the selected ones
+  function warpers(poiId, ids) { return (ids || [...selected]).map((id) => (snap.ships || []).find((x) => x.id === id)).filter((sh) => sh && sh.mine && !sh.docked && sh.sys && sh.sys !== poiId && !(sh.wp && (sh.wp.ph === "open" || sh.wp.ph === "transit" || sh.wp.ph === "poi"))); }
+  function warpTo(poiId, ids) { const list = warpers(poiId, ids); if (list.length) send({ t: "warpto", ships: list.map((x) => x.id), poi: poiId }); return list.length; }
+  function poiMenu(poi, x, y) {
+    if (!poi || !warpers(poi.id).length || !window.Atamus.ctxMenu) return false;
+    window.Atamus.ctxMenu(x, y, [["Warp to " + poi.name, () => warpTo(poi.id)]]);
+    return true;
+  }
+  // a POI's map icon under a screen point (only drawn as an icon while the POI is small on screen)
+  function poiAt(p) {
+    let best = null, bd = ICON_PX;
+    for (const pl of curPlace.values()) { if (pl.poi.hidden || pl.r * scale() >= 40) continue; const d = Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)); if (d < bd) { bd = d; best = pl.poi; } }
+    return best;
+  }
 
   const ZOOM_MIN_W = 3.75;  // smallest view width (km) = deepest zoom-in
   let cam = { cx: 0, cy: 0, viewW: 600 }, curMaxW = 600, viewWTarget = 600;
@@ -210,9 +236,10 @@
   const gx2s = (gx) => innerWidth / 2 + (gx - cam.cx) * scale();
   const gy2s = (gy) => innerHeight / 2 - (gy - cam.cy) * scale();
 
-  function fitWidth(place) { let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity; for (const p of place.values()) { minX = Math.min(minX, p.gx - systemRadius); maxX = Math.max(maxX, p.gx + systemRadius); minY = Math.min(minY, p.gy - systemRadius); maxY = Math.max(maxY, p.gy + systemRadius); } if (!isFinite(minX)) return 600; const aspect = innerWidth / innerHeight; return Math.max(maxX - minX, (maxY - minY) * aspect) * 1.08; }
-  function centroidBound(place) { let n = 0, sx = 0, sy = 0; for (const p of place.values()) { sx += p.gx; sy += p.gy; n++; } if (!n) return { cx: 0, cy: 0, r: systemRadius }; const cx = sx / n, cy = sy / n; let maxd = 0; for (const p of place.values()) maxd = Math.max(maxd, Math.hypot(p.gx - cx, p.gy - cy)); return { cx, cy, r: maxd + systemRadius * 1.1 }; }
-  function clampCameraCircle(place) { const b = centroidBound(place); const dx = cam.cx - b.cx, dy = cam.cy - b.cy, d = Math.hypot(dx, dy); if (d > b.r) { cam.cx = b.cx + dx / d * b.r; cam.cy = b.cy + dy / d * b.r; } }
+  // the whole Expanse fits at the widest zoom; the camera stays over the hexagon
+  const HEX_R_AU = () => ((cfg && cfg.expanseApothemAu) || 0.5) / Math.cos(Math.PI / 6);
+  function fitWidth() { const R = HEX_R_AU() * AU_KM, aspect = innerWidth / innerHeight; return Math.max(2 * R, 2 * R * Math.cos(Math.PI / 6) * aspect) * 1.08; }
+  function clampCamera() { const R = HEX_R_AU() * AU_KM, d = Math.hypot(cam.cx, cam.cy); if (d > R) { cam.cx = cam.cx / d * R; cam.cy = cam.cy / d * R; } }
 
   const keys = new Set();
   addEventListener("keydown", (e) => {
@@ -225,19 +252,18 @@
   });
   addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
   addEventListener("blur", () => keys.clear());
-  canvas.addEventListener("wheel", (e) => { e.preventDefault(); viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? 1.12 : 1 / 1.12))); }, { passive: false });
+  canvas.addEventListener("wheel", (e) => { e.preventDefault(); const f = viewWTarget > 300 ? 1.3 : 1.12; viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget * (e.deltaY > 0 ? f : 1 / f))); }, { passive: false });   // bigger steps out at map scale
 
   function eventPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   let curPlace = new Map();
-  function mySys() { const h = snap.systems.find((s) => s.mine); return h ? h.id : null; }
 
   // ---- ship selection + movement (semi-RTS) ----
   const selected = new Set();           // selected ship ids
-  let drag = null, selBox = null, deselectTimer = 0, follow = false;
+  let drag = null, selBox = null, deselectTimer = 0, follow = false, hoverAt = null;
   // Interpolated render positions: ships are drawn INTERP_MS in the past, between the two server snapshots
   // around that moment (server timestamps, so network jitter doesn't show), so motion is smooth at any speed.
   const INTERP_MS = 110;
-  const shipHist = new Map();           // id -> [{ t, x, y, h }] (server time, oldest first)
+  const shipHist = new Map();           // id -> [{ t, x, y, h, sys }] (server time, oldest first; restarts when the ship changes POI)
   const shipRender = new Map();         // id -> { x, y, h } for this frame
   let clockOff = null;                  // local time − server time, tracking the fastest-arriving snapshot
   function recordSnap(m, at) {
@@ -245,8 +271,8 @@
     const o = at - m.st; clockOff = clockOff == null ? o : Math.min(o, clockOff + 0.5);   // creeps up slowly to follow clock drift
     const live = new Set();
     for (const sh of m.ships || []) {
-      live.add(sh.id); let h = shipHist.get(sh.id); if (!h) shipHist.set(sh.id, (h = []));
-      h.push({ t: m.st, x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }); if (h.length > 8) h.shift();
+      live.add(sh.id); let h = shipHist.get(sh.id); if (!h || (h.length && h[h.length - 1].sys !== sh.sys)) shipHist.set(sh.id, (h = []));
+      h.push({ t: m.st, x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2, sys: sh.sys }); if (h.length > 8) h.shift();
     }
     for (const id of [...shipHist.keys()]) if (!live.has(id)) { shipHist.delete(id); shipRender.delete(id); }
   }
@@ -261,29 +287,22 @@
       shipRender.set(id, { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, h: a.h + dh * Math.min(1, u) });
     }
   }
-  function gateBall(sh) {
-    const w = sh.wp; if (!w || w.ph !== "gate") return null;
-    const a = curPlace.get(sh.sys), b = curPlace.get(w.dsys); if (!a) return null;
-    const u = Math.min(1, (w.el + (performance.now() - snapAt)) / (w.dur || 5000)), ax = a.gx + w.fx, ay = a.gy + w.fy;
-    if (!b) return { x: ax, y: ay, u, fade: true };                              // heading somewhere you can't see: it just vanishes into the gate
-    const bx = b.gx + w.ex, by = b.gy + w.ey; return { x: ax + (bx - ax) * u, y: ay + (by - ay) * u, u, ax, ay };
-  }
   function shipPos(sh) { return shipRender.get(sh.id) || { x: sh.x, y: sh.y, h: sh.h != null ? sh.h : Math.PI / 2 }; }
   function followAnchor() {
     let n = 0, sx = 0, sy = 0;
-    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const gb = gateBall(sh); if (gb) { sx += gb.x; sy += gb.y; n++; continue; } const pl = curPlace.get(sh.sys); if (!pl) continue; const p = shipPos(sh); sx += pl.gx + p.x; sy += pl.gy + p.y; n++; }
+    for (const sh of snap.ships || []) { if (!sh.mine || !selected.has(sh.id)) continue; const w = shipWorld(sh); if (!w) continue; sx += w.x; sy += w.y; n++; }
     return n ? { x: sx / n, y: sy / n } : null;
   }
   function screenToWorld(px, py) { const s = scale(); return { x: cam.cx + (px - innerWidth / 2) / s, y: cam.cy - (py - innerHeight / 2) / s }; }
-  function shipScreen(sh) { const pl = curPlace.get(sh.sys); if (!pl) return null; const p = shipPos(sh); return { x: gx2s(pl.gx + p.x), y: gy2s(pl.gy + p.y) }; }
+  function shipScreen(sh) { const w = shipWorld(sh); return w ? { x: gx2s(w.x), y: gy2s(w.y) } : null; }
+  // the station structure (in the station POI), only while zoomed in far enough to see it
   function stationAt(p) {
-    const pl = curPlace.get(mySys()); if (!pl || !cfg) return false;
-    const st = cfg.station || { x: 0, y: 0 }; const sx = gx2s(pl.gx + st.x), sy = gy2s(pl.gy + st.y);
-    return Math.hypot(p.x - sx, p.y - sy) <= Math.max(14, STATION_LEN_KM * scale() * 0.4);
+    const pl = curPlace.get("station"); if (!pl || !cfg || STATION_LEN_KM * scale() < 3) return false;
+    return Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)) <= Math.max(14, STATION_LEN_KM * scale() * 0.4);
   }
   function rockAt(p) {
     let best = null, bd = Infinity;
-    for (const b of belts) { const pl = curPlace.get(b.sys); if (!pl) continue; for (const rk of b.rocks) { const x = gx2s(pl.gx + rk.x), y = gy2s(pl.gy + rk.y); const r = Math.max(8, (rk.size / 1000) * scale() * 0.5 + 3); const d = Math.hypot(p.x - x, p.y - y); if (d <= r && d < bd) { bd = d; best = rk; } } }
+    for (const b of belts) { const pl = curPlace.get(b.sys); if (!pl || pl.r * scale() < 40) continue; for (const rk of b.rocks) { const x = gx2s(pl.gx + rk.x * pl.k), y = gy2s(pl.gy + rk.y * pl.k); const r = Math.max(8, (rk.size / 1000) * scale() * 0.5 + 3); const d = Math.hypot(p.x - x, p.y - y); if (d <= r && d < bd) { bd = d; best = rk; } } }
     return best;
   }
   function anyShipAt(p) {   // any ship, not just mine (for targeting)
@@ -292,7 +311,8 @@
     return best;
   }
   function gateAt(p) {
-    for (const g of snap.gates) { const pl = curPlace.get(g.sys); if (!pl) continue; const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly); const r = Math.max(14, GATE_LEN_KM * scale() / 2); if (Math.hypot(p.x - sx, p.y - sy) <= r) return g; }
+    if (GATE_LEN_KM * scale() < 3) return null;                                // only while zoomed in on a gate POI
+    for (const g of snap.gates) { const pl = curPlace.get(g.sys); if (!pl) continue; const sx = gx2s(pl.gx + g.lx * pl.k), sy = gy2s(pl.gy + g.ly * pl.k); const r = Math.max(14, GATE_LEN_KM * scale() / 2); if (Math.hypot(p.x - sx, p.y - sy) <= r) return g; }
     return null;
   }
   function shipAt(p) {
@@ -305,12 +325,12 @@
     if (selected.size === 1) selectUnit({ kind: "ship", id: [...selected][0] });
     else if (selectedUnit && selectedUnit.kind === "ship") selectUnit(null);
   }
-  // a move order goes to the selected ships in the system that was clicked (ships elsewhere stay put)
+  // a move order goes to the selected ships in the POI that was clicked (ships elsewhere stay put)
   function commandMove(p) {
     if (!selected.size) return;
     const w = screenToWorld(p.x, p.y), at = sysAtWorld(w); if (!at) return;
     const ids = [...selected].filter((id) => { const sh = (snap.ships || []).find((x) => x.id === id); return sh && sh.sys === at.id; }); if (!ids.length) return;
-    send({ t: "move", ships: ids, x: w.x - at.pl.gx, y: w.y - at.pl.gy, sys: at.id });
+    send({ t: "move", ships: ids, x: (w.x - at.pl.gx) / at.pl.k, y: (w.y - at.pl.gy) / at.pl.k, sys: at.id });
   }
   // target lock (toggle) at a screen point for the first selected ship; true if something was there
   function lockAt(p) {
@@ -360,6 +380,9 @@
     if (d.moved && !d.ship) boxSelect(d.x0, d.y0, p.x, p.y, d.shift);
     else if (!d.moved) clickAt(p, d.shift);
   });
+  canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); const p = eventPos(e); poiMenu(poiAt(p), e.clientX, e.clientY); });   // right-click a POI on the map: warp to it
+  canvas.addEventListener("mousemove", (e) => { hoverAt = eventPos(e); });
+  canvas.addEventListener("mouseleave", () => { hoverAt = null; });
   canvas.addEventListener("dblclick", (e) => {
     if (e.button !== 0) return; const p = eventPos(e);
     clearTimeout(deselectTimer);                  // keep selection for the move order
@@ -379,6 +402,8 @@
       touch.mode = "tap"; touch.start = p; touch.cur = p; touch.cam = { cx: cam.cx, cy: cam.cy };
       touch.hold = setTimeout(() => {                      // long press
         if (touch.mode !== "tap") return;
+        const poi = poiAt(touch.start);                                  // hold a POI on the map = right-click: warp to it
+        if (poi) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); poiMenu(poi, touch.start.x + r.left, touch.start.y + r.top); return; }
         if (lockAt(touch.start)) { touch.mode = "done"; if (navigator.vibrate) navigator.vibrate(15); }
         else { touch.mode = "box"; selBox = { x0: p.x, y0: p.y, x1: p.x, y1: p.y }; }
       }, 450);
@@ -424,22 +449,13 @@
   canvas.addEventListener("touchcancel", touchEnd, { passive: false });
 
   // ---- drawing ----
-  function norm(x, y) { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; }
-  function hexCorners(R0) { const R = R0 || cfg.cellCircumradius, pts = []; for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; pts.push({ x: R * Math.cos(a), y: R * Math.sin(a) }); } return pts; }
-  function drawCell(cx, cy, round, stroke, fill, R) { const pts = hexCorners(R); ctx.beginPath(); for (let i = 0; i < 6; i++) { const V = pts[i], P = pts[(i + 5) % 6], N = pts[(i + 1) % 6]; const tP = norm(P.x - V.x, P.y - V.y), tN = norm(N.x - V.x, N.y - V.y); const Ax = gx2s(cx + V.x + tP.x * round), Ay = gy2s(cy + V.y + tP.y * round); const Bx = gx2s(cx + V.x + tN.x * round), By = gy2s(cy + V.y + tN.y * round); const Vx = gx2s(cx + V.x), Vy = gy2s(cy + V.y); if (i === 0) ctx.moveTo(Ax, Ay); else ctx.lineTo(Ax, Ay); ctx.quadraticCurveTo(Vx, Vy, Bx, By); } ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); } }
-  function systemTheme(s) { const fill = "rgba(0,0,0,0.15)"; if (s.mine) return { line: "rgba(120,170,255,0.55)", fill }; if (s.inst) return s.peek ? { line: "rgba(110,205,255,0.28)", fill: "rgba(10,30,50,0.12)" } : { line: "rgba(110,205,255,0.5)", fill: "rgba(10,30,50,0.25)" }; if (s.id === "sys:hub") return { line: "rgba(255,122,42,0.6)", fill }; return { line: "rgba(255,90,90,0.55)", fill }; }
-
   function drawGate(g, pl) {
-    const sx = gx2s(pl.gx + g.lx), sy = gy2s(pl.gy + g.ly);
+    const sx = gx2s(pl.gx + g.lx * pl.k), sy = gy2s(pl.gy + g.ly * pl.k);
     const wPx = Math.max(3, GATE_LEN_KM * scale());
     if (gateImgReady && gateImg.naturalWidth) {
       const hPx = wPx * (gateImg.naturalHeight / gateImg.naturalWidth);
       ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(gateImg, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
     } else { ctx.save(); ctx.strokeStyle = "#8a93a0"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx, sy, wPx / 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
-    // gate-use ring: any ship inside can use the stargate (brighter while connected)
-    const rPx = cfg.transferRadius * scale();
-    if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
-      ctx.strokeStyle = (g.state === "active" && g.connToSys) ? "rgba(255,170,80,0.6)" : "rgba(220,200,160,0.3)"; ctx.stroke(); ctx.restore(); }
     if (window.Atamus.hud && window.Atamus.hud.gate === g.id) drawSelBox(sx, sy, Math.max(12, wPx * 0.58));
     if (gateImg.naturalWidth && wPx >= 40) drawGateFx(sx, sy, wPx, g);
   }
@@ -480,7 +496,8 @@
   // ---- space backdrop (owner): a dark gradient, slow drifting noise, a very thin world grid and three layers of
   // parallax stars that dim and brighten. Redrawn every frame (so a GPU reset can never leave it blank). ----
   const SUN_BRIGHTNESS = 0.55;                           // owner: the sun was too bright
-  const PARALLAX_PX_PER_KM = 3;                          // how far the backdrop drifts as the camera pans (depth-scaled)
+  const PARALLAX_K = 0.25;                               // how far the backdrop drifts per screen pixel the camera pans (depth-scaled); jumps are capped per frame
+  const bgPan = { x: 0, y: 0 }; let lastCam = null;
   function makeNoise(seed, tint) {                       // a tileable soft value-noise texture (low-res, drawn scaled up)
     const N = 96, c = document.createElement("canvas"); c.width = c.height = N;
     let a = seed; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
@@ -501,7 +518,9 @@
     const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
     if (bgCanvas.width !== Math.floor(W * dpr) || bgCanvas.height !== Math.floor(H * dpr)) { bgCanvas.width = Math.floor(W * dpr); bgCanvas.height = Math.floor(H * dpr); }
     bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const t = performance.now() / 1000, px = cam.cx * PARALLAX_PX_PER_KM, py = -cam.cy * PARALLAX_PX_PER_KM;
+    if (lastCam) { const sc = scale(), cl = (v) => Math.max(-80, Math.min(80, v)); bgPan.x += cl((cam.cx - lastCam.x) * sc); bgPan.y += cl(-(cam.cy - lastCam.y) * sc); }
+    lastCam = { x: cam.cx, y: cam.cy };
+    const t = performance.now() / 1000, px = bgPan.x * PARALLAX_K, py = bgPan.y * PARALLAX_K;
     const gr = bgCtx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.hypot(W, H) * 0.7);   // deep blue centre to near black
     gr.addColorStop(0, "#09111f"); gr.addColorStop(0.55, "#050912"); gr.addColorStop(1, "#010205");
     bgCtx.fillStyle = gr; bgCtx.fillRect(0, 0, W, H);
@@ -528,7 +547,7 @@
     bgCtx.globalAlpha = 1; bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // a very thin world grid (step chosen so lines sit ~70+ px apart; every 5th line a touch brighter)
     if (cfg) {
-      const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200]; let step = steps.find((v) => v * sc >= 70) || 500;
+      const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]; let step = steps.find((v) => v * sc >= 70) || 20000;
       const x0 = cam.cx - W / 2 / sc, x1 = cam.cx + W / 2 / sc, y0 = cam.cy - H / 2 / sc, y1 = cam.cy + H / 2 / sc;
       bgCtx.lineWidth = 1;
       for (let gx = Math.floor(x0 / step) * step; gx <= x1; gx += step) { const x = Math.round(gx2s(gx)) + 0.5; bgCtx.strokeStyle = Math.round(gx / step) % 5 === 0 ? "rgba(140,170,220,0.07)" : "rgba(140,170,220,0.035)"; bgCtx.beginPath(); bgCtx.moveTo(x, 0); bgCtx.lineTo(x, H); bgCtx.stroke(); }
@@ -553,7 +572,7 @@
   // first opaque pixel of a rock's sprite along the screen ray (ox,oy)->(tx,ty); null if the ray misses
   function rockHit(home, rk, ox, oy, tx, ty) {
     const o = oreRock[rk.ore] || { rock: "cratered" }, img = rockImg(o.rock, rk.size), m = alphaMask(img); if (!m) return null;
-    const cx = gx2s(home.gx + rk.x), cy = gy2s(home.gy + rk.y), wPx = (rk.size / 1000) * scale(), hPx = wPx * (m.h / m.w);
+    const cx = gx2s(home.gx + rk.x * home.k), cy = gy2s(home.gy + rk.y * home.k), wPx = (rk.size / 1000) * scale(), hPx = wPx * (m.h / m.w);
     if (wPx < 2.2) return { x: cx, y: cy };
     const R = Math.hypot(wPx, hPx) / 2, dx = tx - ox, dy = ty - oy, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
     // enter / leave the sprite's bounding circle
@@ -587,7 +606,7 @@
   function targetWorld(tg) {
     if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: rk.x, y: rk.y, rock: rk } : null; }
     if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: g.lx, y: g.ly, gate: g } : null; }
-    if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: st.x, y: st.y }; }
+    if (tg.kind === "station") return { x: 0, y: 0 };
     if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const p = shipPos(o); return { x: p.x, y: p.y, ship: o }; }
     return null;
   }
@@ -604,11 +623,11 @@
     return { sx: scr ? scr.x : null, sy: scr ? scr.y : null, dist, name, sub, icon: w.rock ? "assets/rocks/rock_" + (((cfg.ores || []).find((q) => q.key === w.rock.ore) || {}).rock || "cratered") + "_200.webp" : tg.kind === "gate" ? "assets/ships/stargate.webp" : tg.kind === "station" ? "assets/ships/station_blue.webp" : w.ship ? "assets/ships/" + hull(w.ship.type).sprite + (w.ship.mine ? "_blue" : "_red") + ".webp" : null };
   }
   function targetScreen(place, tg) {
-    const sysOf = tg.kind === "rock" ? rockSys.get(tg.id) : tg.kind === "gate" ? (snap.gates.find((x) => x.id === tg.id) || {}).sys : mySys();
-    const pl = place.get(sysOf || mySys()); if (!pl) return null;
-    if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: gx2s(pl.gx + rk.x), y: gy2s(pl.gy + rk.y), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) } : null; }
-    if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: gx2s(pl.gx + g.lx), y: gy2s(pl.gy + g.ly), r: Math.max(12, GATE_LEN_KM * scale() * 0.6) } : null; }
-    if (tg.kind === "station") { const st = cfg.station || { x: 0, y: 0 }; return { x: gx2s(pl.gx + st.x), y: gy2s(pl.gy + st.y), r: Math.max(14, STATION_LEN_KM * scale() * 0.55) }; }
+    const sysOf = tg.kind === "rock" ? rockSys.get(tg.id) : tg.kind === "gate" ? tg.id : "station";
+    const pl = place.get(sysOf); if (!pl && tg.kind !== "ship") return null;
+    if (tg.kind === "rock") { const rk = rockById(tg.id); return rk ? { x: gx2s(pl.gx + rk.x * pl.k), y: gy2s(pl.gy + rk.y * pl.k), r: Math.max(9, (rk.size / 1000) * scale() * 0.6) } : null; }
+    if (tg.kind === "gate") { const g = snap.gates.find((x) => x.id === tg.id); return g ? { x: gx2s(pl.gx + g.lx * pl.k), y: gy2s(pl.gy + g.ly * pl.k), r: Math.max(12, GATE_LEN_KM * scale() * 0.6) } : null; }
+    if (tg.kind === "station") return { x: gx2s(pl.gx), y: gy2s(pl.gy), r: Math.max(14, STATION_LEN_KM * scale() * 0.55) };
     if (tg.kind === "ship") { const o = (snap.ships || []).find((x) => x.id === tg.id); if (!o) return null; const sp = shipScreen(o); return sp ? { x: sp.x, y: sp.y, r: Math.max(10, hull(o.type).lengthKm * scale() * 0.62) } : null; }
     return null;
   }
@@ -636,10 +655,10 @@
       if (!l.on) continue;
       const hp = hps[l.hp] || hps[0];
       const ox = sx + (hp[0] * c - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * c) * L;
-      let ex = gx2s(pl.gx + l.ax), ey = gy2s(pl.gy + l.ay);
+      let ex = gx2s(pl.gx + l.ax * pl.k), ey = gy2s(pl.gy + l.ay * pl.k);
       const rk = rockById(l.rock);
       if (rk) {                                            // stop on the first solid pixel of the rock (aim point, else its centre)
-        const h = rockHit(pl, rk, ox, oy, ex, ey) || rockHit(pl, rk, ox, oy, gx2s(pl.gx + rk.x), gy2s(pl.gy + rk.y));
+        const h = rockHit(pl, rk, ox, oy, ex, ey) || rockHit(pl, rk, ox, oy, gx2s(pl.gx + rk.x * pl.k), gy2s(pl.gy + rk.y * pl.k));
         if (h) { ex = h.x; ey = h.y; }
       }
       ex += (Math.random() - 0.5) * 0.8; ey += (Math.random() - 0.5) * 0.8;
@@ -662,7 +681,7 @@
     for (const belt of belts) {
       const home = place.get(belt.sys); if (!home) continue;
       for (const rk of belt.rocks) {
-        const x = gx2s(home.gx + rk.x), y = gy2s(home.gy + rk.y);
+        const x = gx2s(home.gx + rk.x * home.k), y = gy2s(home.gy + rk.y * home.k);
         const wPx = (rk.size / 1000) * s;                        // rock width at true scale
         if (x < -wPx || y < -wPx || x > innerWidth + wPx || y > innerHeight + wPx) continue;
         const o = oreRock[rk.ore] || { rock: "cratered", color: "#999" };
@@ -675,45 +694,8 @@
       }
     }
   }
-  // asteroid beacons are acceleration gates (owner): the pointy end faces the instance they lead to (the instance's
-  // own gate faces home). Linked gates glow blue; ships in the dashed ring can jump.
-  const accelImg = new Image(); accelImg.src = "assets/ships/accel_gate.webp";
-  const ACCEL_LEN_KM = 0.658, ACCEL_SPINE_Y = 234;      // the spine's row in the sprite (349 tall): the gate's axis
-  function drawBeacons(place) {
-    const t = performance.now() / 1000, homePl = place.get(mySys());
-    for (const b of snap.beacons || []) {
-      const pl = place.get(b.sys); if (!pl) continue;
-      const wx = pl.gx + b.x, wy = pl.gy + b.y, x = gx2s(wx), y = gy2s(wy);
-      // the point faces the partner gate: a home gate faces its instance's gate; an instance's gate faces the gate home you came through
-      let tgt = null;
-      if (b.to) { const ip = place.get(b.to); if (ip) tgt = { x: ip.gx + (cfg.instReturn || { x: -14, y: 0 }).x, y: ip.gy + (cfg.instReturn || { x: -14, y: 0 }).y }; }
-      else if (b.back && homePl) { const se = snap.systems.find((x) => x.id === b.sys); tgt = se && se.fromGateLocal ? { x: homePl.gx + se.fromGateLocal.x, y: homePl.gy + se.fromGateLocal.y } : { x: homePl.gx, y: homePl.gy }; }
-      const ang = tgt ? Math.atan2(tgt.y - wy, tgt.x - wx) : Math.atan2(wy - pl.gy, wx - pl.gx);   // world angle (unlinked: pointing outward)
-      const wPx = Math.max(16, ACCEL_LEN_KM * scale()), rr = (cfg.beaconRange || 2.5) * scale();
-      ctx.save();
-      if (rr > 10) { ctx.beginPath(); ctx.arc(x, y, rr, 0, Math.PI * 2); ctx.setLineDash([4, 6]); ctx.lineWidth = 1; ctx.strokeStyle = b.linked ? "rgba(110,190,255,0.4)" : "rgba(170,180,195,0.2)"; ctx.stroke(); ctx.setLineDash([]); }
-      if (b.linked) {
-        const pulse = 0.6 + 0.4 * Math.sin(t * 1.6), R = wPx * 0.9, g = ctx.createRadialGradient(x, y, 0, x, y, R);
-        g.addColorStop(0, "rgba(140,210,255," + 0.45 * pulse + ")"); g.addColorStop(1, "rgba(60,140,255,0)");
-        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill(); ctx.globalCompositeOperation = "source-over";
-      }
-      if (accelImg.naturalWidth) {
-        const hPx = wPx * accelImg.naturalHeight / accelImg.naturalWidth;
-        ctx.translate(x, y); ctx.rotate(-ang); ctx.imageSmoothingEnabled = wPx > 300; if (!b.linked) ctx.globalAlpha = 0.75;
-        const k0 = wPx / accelImg.naturalWidth;
-        ctx.drawImage(accelImg, -wPx / 2, -ACCEL_SPINE_Y * k0, wPx, hPx);   // pivot on the spine: it lines up with the partner gate (owner)
-        if (b.linked && wPx > 60) {                                   // the field: light streaming along the spine toward the pointy end
-          const k = wPx / accelImg.naturalWidth, sy = 0; ctx.globalCompositeOperation = "lighter";
-          for (let i = 0; i < 6; i++) { const f = (t * 0.6 + i / 6) % 1, px = (-0.47 + f * 0.95) * wPx; ctx.globalAlpha = Math.sin(f * Math.PI) * 0.8; ctx.fillStyle = "rgba(150,215,255,1)"; ctx.fillRect(px - 3 * k * 4, sy - 1.5, 6 * k * 4, 3); }
-        }
-      }
-      ctx.restore();
-    }
-  }
-
-
   // jettison cans: a small crate glyph (own cans blue, others amber), always at least a few pixels
-  function canScreen(c) { const pl = curPlace.get(c.sys); return pl ? { x: gx2s(pl.gx + c.x), y: gy2s(pl.gy + c.y) } : null; }
+  function canScreen(c) { const pl = curPlace.get(c.sys); return pl ? { x: gx2s(pl.gx + c.x * pl.k), y: gy2s(pl.gy + c.y * pl.k) } : null; }
   function canAt(p) { let best = null, bd = 18; for (const c of snap.cans || []) { const sc = canScreen(c); if (!sc) continue; const d = Math.hypot(p.x - sc.x, p.y - sc.y); if (d < bd) { bd = d; best = c; } } return best; }
   const canArt = { on: new Image(), off: new Image() };
   canArt.on.src = "assets/ships/jettison_can_on.png"; canArt.off.src = "assets/ships/jettison_can_off.png";
@@ -736,31 +718,20 @@
       ctx.restore();
     }
   }
+  // the Expanse station, at the centre of its POI (true 2766 m scale)
   function drawStations(place) {
-    for (const sE of snap.systems) {
-      if (sE.id === "sys:hub" || sE.inst) continue;      // the pirate hub and asteroid instances have no station
-      const pl = place.get(sE.id); if (!pl) continue;
-      const st = cfg.station || { x: 0, y: 0 };
-      const sx = gx2s(pl.gx + st.x), sy = gy2s(pl.gy + st.y);
-      // dock / anchor radius ring
-      const rPx = DOCK_RADIUS_KM * scale();
-      if (rPx > 6) {
-        ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2);
-        ctx.setLineDash([6, 7]); ctx.lineWidth = 1;
-        ctx.strokeStyle = sE.mine ? "rgba(120,170,255,0.35)" : "rgba(255,110,110,0.3)";
-        ctx.stroke(); ctx.restore();
-      }
-      const img = sE.mine ? stationArt.blue : stationArt.red;
-      if (!img.naturalWidth) continue;
-      const wPx = STATION_LEN_KM * scale(); if (wPx < 3) continue;  // true 2766 m scale
-      const hPx = wPx * (img.naturalHeight / img.naturalWidth);
-      // a soft glow behind the station
-      const gl = ctx.createRadialGradient(sx, sy, 0, sx, sy, wPx * 0.62), tint = sE.mine ? "90,160,255" : "255,110,90";
-      gl.addColorStop(0, "rgba(" + tint + ",0.16)"); gl.addColorStop(1, "rgba(" + tint + ",0)");
-      ctx.save(); ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(sx, sy, wPx * 0.62, hPx * 0.75, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(img, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
-      if (wPx >= 70) drawStationLights(sx - wPx / 2, sy - hPx / 2, wPx / img.naturalWidth, sE.mine);
-    }
+    const pl = place.get("station"); if (!pl) return;
+    const sx = gx2s(pl.gx), sy = gy2s(pl.gy);
+    const rPx = DOCK_RADIUS_KM * scale();                     // dock ring
+    if (rPx > 6) { ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.setLineDash([6, 7]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(120,170,255,0.35)"; ctx.stroke(); ctx.restore(); }
+    const img = stationArt.blue; if (!img.naturalWidth) return;
+    const wPx = STATION_LEN_KM * scale(); if (wPx < 3) return;
+    const hPx = wPx * (img.naturalHeight / img.naturalWidth);
+    const gl = ctx.createRadialGradient(sx, sy, 0, sx, sy, wPx * 0.62);   // a soft glow behind the station
+    gl.addColorStop(0, "rgba(90,160,255,0.16)"); gl.addColorStop(1, "rgba(90,160,255,0)");
+    ctx.save(); ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(sx, sy, wPx * 0.62, hPx * 0.75, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.imageSmoothingEnabled = wPx > 300; ctx.drawImage(img, sx - wPx / 2, sy - hPx / 2, wPx, hPx); ctx.restore();
+    if (wPx >= 70) drawStationLights(sx - wPx / 2, sy - hPx / 2, wPx / img.naturalWidth, true);
   }
   // station lights, in sprite pixels (1475×879): blinking beacons on the masts and arm tips, and running lights chasing
   // along both edges of the docking bay toward its back wall
@@ -806,19 +777,9 @@
   }
   function drawWarp(pl, sh, p, sx, sy, halfW) {
     const w = sh.wp; if (!w) { warpSeen.delete(sh.id + ":entry"); warpSeen.delete(sh.id + ":exit"); return; }
-    if (w.ph === "gate") {                                                    // gate jump: a glowing ball streaking from gate to gate
-      const gb = gateBall(sh); if (!gb || (gb.fade && gb.u > 0.15)) return;
-      const x = gx2s(gb.x), y = gy2s(gb.y), R = Math.max(4, halfW * 0.45) * (gb.fade ? 1 - gb.u / 0.15 : 1);
-      ctx.save();
-      if (gb.ax != null) { const tx = gx2s(gb.ax), ty = gy2s(gb.ay), back = Math.min(Math.hypot(x - tx, y - ty), R * 14), d = Math.hypot(x - tx, y - ty) || 1;
-        const lg = ctx.createLinearGradient(x, y, x + (tx - x) / d * back, y + (ty - y) / d * back); lg.addColorStop(0, "rgba(140,210,255,0.8)"); lg.addColorStop(1, "rgba(60,140,255,0)");
-        ctx.strokeStyle = lg; ctx.lineWidth = R * 0.9; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (tx - x) / d * back, y + (ty - y) / d * back); ctx.stroke(); }
-      const rg = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2); rg.addColorStop(0, "rgba(235,248,255,1)"); rg.addColorStop(0.3, "rgba(120,200,255,0.9)"); rg.addColorStop(1, "rgba(50,130,255,0)");
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, R * 2.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-      return;
-    }
+    if (w.ph === "poi" || w.ph === "palign" || w.fx == null) return;          // aligning, or off between POIs (drawn as the ball on the map)
     const el = w.el + (performance.now() - snapAt), t = performance.now();
-    const fx = gx2s(pl.gx + w.fx), fy = gy2s(pl.gy + w.fy), hasExit = w.ex != null, ex = hasExit ? gx2s(pl.gx + w.ex) : 0, ey = hasExit ? gy2s(pl.gy + w.ey) : 0;
+    const fx = gx2s(pl.gx + w.fx * pl.k), fy = gy2s(pl.gy + w.fy * pl.k), hasExit = w.ex != null, ex = hasExit ? gx2s(pl.gx + w.ex * pl.k) : 0, ey = hasExit ? gy2s(pl.gy + w.ey * pl.k) : 0;
     // progress line for your selected ship: start window → exit window, lit up to where it is now
     if (sh.mine && selected.has(sh.id) && hasExit && w.ph !== "exit") {
       ctx.save(); ctx.lineWidth = 1; ctx.setLineDash([3, 5]); ctx.strokeStyle = "rgba(110,180,255,0.35)"; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(ex, ey); ctx.stroke();
@@ -851,17 +812,91 @@
     }
   }
 
+  // POIs on the map: a dashed boundary once it's big enough to see, an icon while it's small (hidden POIs have none)
+  const POI_COL = { station: "120,170,255", planet: "130,200,170", gate: "220,200,160", belt: "230,170,90", spawn: "170,180,195" };
+  function drawPois(place) {
+    const sc = scale(); let hover = null;
+    { const R = HEX_R_AU() * AU_KM; ctx.save(); ctx.beginPath(); for (let k = 0; k <= 6; k++) { const a = k * Math.PI / 3, x = gx2s(Math.cos(a) * R), y = gy2s(Math.sin(a) * R); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); } ctx.strokeStyle = "rgba(140,170,220,0.22)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); }   // the Expanse's edge
+    for (const pl of place.values()) {
+      const poi = pl.poi, x = gx2s(pl.gx), y = gy2s(pl.gy), rPx = pl.r * sc * pl.k, col = POI_COL[poi.kind] || POI_COL.spawn;
+      if (x < -rPx - 60 || y < -rPx - 60 || x > innerWidth + rPx + 60 || y > innerHeight + rPx + 60) continue;
+      if (rPx >= 10) { ctx.save(); ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.setLineDash(rPx > 200 ? [10, 10] : [4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = "rgba(" + col + "," + (rPx > 200 ? 0.25 : 0.45) + ")"; ctx.stroke(); ctx.restore(); }
+      if (poi.kind === "planet") drawPlanet(x, y, Math.max(ICON_PX * 0.5, PLANET_R_KM * sc * pl.k), poi);
+      const small = pl.r * sc < 40;
+      if (small && !poi.hidden) drawPoiIcon(poi, x, y);
+      if (small && !poi.hidden && hoverAt && Math.hypot(hoverAt.x - x, hoverAt.y - y) < ICON_PX) hover = { poi, x, y };
+    }
+    if (hover) { ctx.save(); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(225,232,245,0.9)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 4; ctx.fillText(hover.poi.name, hover.x, hover.y + ICON_PX + 8); ctx.restore(); }
+  }
+  function drawPoiIcon(poi, x, y) {
+    ctx.save();
+    if (poi.kind === "station" && stationArt.blue.naturalWidth) { const w = 20, h = w * stationArt.blue.naturalHeight / stationArt.blue.naturalWidth; ctx.drawImage(stationArt.blue, x - w / 2, y - h / 2, w, h); }
+    else if (poi.kind === "gate" && gateImg.naturalWidth) { const w = 15, h = w * gateImg.naturalHeight / gateImg.naturalWidth; ctx.globalAlpha = 0.9; ctx.drawImage(gateImg, x - w / 2, y - h / 2, w, h); }
+    else if (poi.kind === "belt") { for (let i = 0; i < 6; i++) { const a = hash(i + poi.id.length) * 6.283, d = 1.5 + hash(i * 3 + 1) * 5, r = 1 + hash(i + 9) * 1.6; ctx.fillStyle = i % 3 ? "#a89580" : "#d6a05a"; ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r, 0, Math.PI * 2); ctx.fill(); } }
+    ctx.restore();
+  }
+  // procedural planets: a texture per planet (its seed picks the kind and colours), lit from the sun at the map's centre
+  const planetTex = new Map();
+  const PLANET_KINDS = [
+    { stops: [[0, "#1d3f6e"], [0.48, "#2f6aa3"], [0.52, "#c9b98a"], [0.6, "#4f7a3c"], [0.8, "#6d6a4a"], [1, "#e8eef2"]], atm: "120,180,255", bands: 0 },   // ocean world
+    { stops: [[0, "#7a4a2a"], [0.4, "#b07443"], [0.7, "#d8a66a"], [1, "#f0d9a8"]], atm: "255,190,130", bands: 0.25 },                                     // desert
+    { stops: [[0, "#8fb4c9"], [0.5, "#cfe3ee"], [1, "#ffffff"]], atm: "200,230,255", bands: 0.1 },                                                       // ice
+    { stops: [[0, "#5a3d6e"], [0.3, "#a3735a"], [0.55, "#d9b48a"], [0.8, "#8a5a7a"], [1, "#e8c9a0"]], atm: "230,180,160", bands: 1 },                    // gas giant
+  ];
+  function planetTexture(seed) {
+    if (planetTex.has(seed)) return planetTex.get(seed);
+    const N = 256, c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"), img = g.createImageData(N, N), kind = PLANET_KINDS[(seed - 1) % PLANET_KINDS.length];
+    let a = 1000 + seed * 7919; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+    const lat = (n) => { const v = []; for (let i = 0; i < n * n; i++) v.push(rnd()); return (x, y) => { const x0 = Math.floor(x) % n, y0 = Math.floor(y) % n, x1 = (x0 + 1) % n, y1 = (y0 + 1) % n, fx = x - Math.floor(x), fy = y - Math.floor(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); return (v[y0 * n + x0] * (1 - sx) + v[y0 * n + x1] * sx) * (1 - sy) + (v[y1 * n + x0] * (1 - sx) + v[y1 * n + x1] * sx) * sy; }; };
+    const o = [lat(4), lat(8), lat(16), lat(32), lat(64)];
+    const col = (t) => { const st = kind.stops; let i = 0; while (i < st.length - 2 && t > st[i + 1][0]) i++; const [t0, c0] = st[i], [t1, c1] = st[i + 1], u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); const h = (cc, k) => parseInt(cc.slice(1 + k * 2, 3 + k * 2), 16); return [0, 1, 2].map((k) => h(c0, k) + (h(c1, k) - h(c0, k)) * u); };
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N, n = o[0](u * 4, v * 4) * 0.48 + o[1](u * 8, v * 8) * 0.24 + o[2](u * 16, v * 16) * 0.14 + o[3](u * 32, v * 32) * 0.09 + o[4](u * 64, v * 64) * 0.05;
+      const t = kind.bands ? (Math.sin(v * 28 + n * 6 * kind.bands + seed) * 0.5 + 0.5) * kind.bands + n * (1 - kind.bands) : n;
+      const cc = col(Math.max(0, Math.min(1, (t - 0.25) / 0.5))), k = (y * N + x) * 4;
+      img.data[k] = cc[0]; img.data[k + 1] = cc[1]; img.data[k + 2] = cc[2]; img.data[k + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); const out = { c, kind }; planetTex.set(seed, out); return out;
+  }
+  function drawPlanet(x, y, rPx, poi) {
+    const { c, kind } = planetTexture(poi.seed || 1), d = Math.hypot(poi.ax, poi.ay) || 1, lx = -poi.ax / d, ly = poi.ay / d;   // toward the sun (screen y is down)
+    ctx.save();
+    const atm = ctx.createRadialGradient(x, y, rPx * 0.9, x, y, rPx * 1.25); atm.addColorStop(0, "rgba(" + kind.atm + ",0.35)"); atm.addColorStop(1, "rgba(" + kind.atm + ",0)");
+    ctx.fillStyle = atm; ctx.beginPath(); ctx.arc(x, y, rPx * 1.25, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.clip();
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(c, x - rPx, y - rPx, rPx * 2, rPx * 2);
+    const sh = ctx.createRadialGradient(x + lx * rPx * 0.45, y + ly * rPx * 0.45, rPx * 0.15, x + lx * rPx * 0.2, y + ly * rPx * 0.2, rPx * 1.45);
+    sh.addColorStop(0, "rgba(255,250,240,0.12)"); sh.addColorStop(0.45, "rgba(0,0,0,0.1)"); sh.addColorStop(0.75, "rgba(0,0,8,0.7)"); sh.addColorStop(1, "rgba(0,0,8,0.95)");
+    ctx.fillStyle = sh; ctx.fillRect(x - rPx, y - rPx, rPx * 2, rPx * 2);
+    ctx.restore();
+  }
+  // a ship between POIs: a glowing ball crossing the map
+  function drawMapBall(sh) {
+    const w = shipWorld(sh); if (!w) return;
+    const a = poiById.get(sh.wp.from), b = poiById.get(sh.wp.to); if (!a || !b) return;
+    const x = gx2s(w.x), y = gy2s(w.y), dx = b.ax - a.ax, dy = -(b.ay - a.ay), d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, R = 4;
+    ctx.save();
+    const tg = ctx.createLinearGradient(x, y, x - ux * 40, y - uy * 40); tg.addColorStop(0, "rgba(140,210,255,0.8)"); tg.addColorStop(1, "rgba(60,140,255,0)");
+    ctx.strokeStyle = tg; ctx.lineWidth = R * 0.9; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - ux * 40, y - uy * 40); ctx.stroke();
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, R * 2.2); rg.addColorStop(0, "rgba(235,248,255,1)"); rg.addColorStop(0.3, "rgba(120,200,255,0.9)"); rg.addColorStop(1, "rgba(50,130,255,0)");
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, R * 2.2, 0, Math.PI * 2); ctx.fill();
+    if (selected.has(sh.id)) drawSelBox(x, y, 10);
+    ctx.restore();
+  }
+
   function drawShips(place) {
     for (const sh of snap.ships || []) {
       if (sh.docked) continue;                                  // inside the station
+      if (!sh.sys) { if (sh.mine && sh.wp && sh.wp.ph === "poi") drawMapBall(sh); continue; }
       const pl = place.get(sh.sys); if (!pl) continue;
       const p = shipPos(sh);
-      const sx = gx2s(pl.gx + p.x), sy = gy2s(pl.gy + p.y);
-      const inTransit = !!(sh.wp && (sh.wp.ph === "transit" || sh.wp.ph === "gate"));
+      const sx = gx2s(pl.gx + p.x * pl.k), sy = gy2s(pl.gy + p.y * pl.k);
+      const inTransit = !!(sh.wp && sh.wp.ph === "transit");
       drawWarp(pl, sh, p, sx, sy, Math.max(9, hull(sh.type).lengthKm * 1.6 * scale()));
       // waypoint line for your own moving ships
       if (sh.mine && sh.tx != null && !inTransit) {
-        const tx = gx2s(pl.gx + sh.tx), ty = gy2s(pl.gy + sh.ty);
+        const tx = gx2s(pl.gx + sh.tx * pl.k), ty = gy2s(pl.gy + sh.ty * pl.k);
         ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
@@ -871,6 +906,7 @@
       const wPx = Math.max(2, lenKm * scale());           // true metre scale (min 2px so it's never a dead pixel)
       const img = sh.mine ? art(type).blue : art(type).red;
       if (inTransit) { /* drawn as the warp ball */ }
+      else if (pl.k > 1) { ctx.save(); ctx.fillStyle = sh.mine ? "#6fc3ff" : "#ff6a6a"; ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3); ctx.restore(); }   // a POI enlarged on the zoomed-out map: ships as dots
       else if (img && img.naturalWidth) {
         const hPx = wPx * (img.naturalHeight / img.naturalWidth);
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); // sprite faces +x; world +y is up
@@ -896,15 +932,18 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (!(cfg && snap.systems.length)) { if (window.SunFX) window.SunFX.clear(); drawBackground(); }
-    if (cfg && snap.systems.length) {
-      const place = placements(); curPlace = place; curMaxW = fitWidth(place);
-      if (!camInit) {
-        const b = centroidBound(place); cam.cx = b.cx; cam.cy = b.cy; cam.viewW = viewWTarget = curMaxW; camInit = true;
+    if (!(cfg && pois.length)) { if (window.SunFX) window.SunFX.clear(); drawBackground(); }
+    if (cfg && pois.length) {
+      let place = placements(); curPlace = place; curMaxW = fitWidth();
+      if (!camInit && snap.st) {                         // start on your ship (or the station), at POI scale
+        camInit = true;
+        const sh = (snap.ships || []).find((x) => x.mine && !x.docked && x.sys) || (snap.ships || []).find((x) => x.mine), w = sh && shipWorld(sh), st = place.get("station");
+        cam.cx = w ? w.x : st ? st.gx : 0; cam.cy = w ? w.y : st ? st.gy : 0; cam.viewW = viewWTarget = 60;
         try { const v = JSON.parse(sessionStorage.getItem("atamus.view") || "null"); if (v && isFinite(v.cx) && isFinite(v.w)) { cam.cx = v.cx; cam.cy = v.cy; cam.viewW = viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, v.w)); follow = !!v.follow; } } catch {}
       }
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(curMaxW, viewWTarget));
       cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
+      place = placements(); curPlace = place;
       updateShipRender();
       const anchor = follow ? followAnchor() : null;
       if (anchor) {                                    // follow selected ship / group centroid
@@ -918,17 +957,16 @@
         panVel.x += (dx * maxSpeed - panVel.x) * ease; panVel.y += (dy * maxSpeed - panVel.y) * ease;
         cam.cx += panVel.x * dt; cam.cy += panVel.y * dt;
       }
-      clampCameraCircle(place);
+      clampCamera();
+      updateCamPoi();
       drawBackground();                                // after the camera settled: the backdrop never runs past the pan limit
-
-      for (const sE of snap.systems) { if (sE.mine || !sE.fromGateLocal) continue; const home = place.get(mySys()), foreign = place.get(sE.id); if (!home || !foreign) continue; const ax = gx2s(home.gx + sE.fromGateLocal.x), ay = gy2s(home.gy + sE.fromGateLocal.y); let bx = gx2s(foreign.gx), by = gy2s(foreign.gy);
-        if (sE.inst) { const rx = gx2s(foreign.gx + (cfg.instReturn || { x: -14 }).x), ry = gy2s(foreign.gy + 0); ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(rx, ry); ctx.strokeStyle = "rgba(110,190,255,0.45)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); continue; } if (sE.partnerGateId) { const pg = snap.gates.find((g) => g.id === sE.partnerGateId); if (pg) { bx = gx2s(foreign.gx + pg.lx); by = gy2s(foreign.gy + pg.ly); } } ctx.save(); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.strokeStyle = "rgba(255,170,90,0.5)"; ctx.setLineDash([8, 8]); ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore(); }
-      for (const sE of snap.systems) { const pl = place.get(sE.id); if (!pl) continue; const th = systemTheme(sE); if (sE.inst) { drawCell(pl.gx, pl.gy, cfg.cellCornerRound * 0.25, th.line, th.fill, instR()); continue; } for (const c of cfg.cells) drawCell(pl.gx + c.x, pl.gy + c.y, cfg.cellCornerRound, th.line, th.fill); }
-      window.SunFX.render(gx2s(0), gy2s(0), SUN_BRIGHTNESS * (1 - 0.45 * Math.max(0, Math.min(1, (cam.viewW - 20) / Math.max(1, curMaxW - 20)))), now / 1000); // shader sun + lens flare at the system centre
+      // the sun at the map's centre; seen from inside a POI it's far off-screen, so only its glow reaches in from that side
+      const W = innerWidth, H = innerHeight, sx0 = gx2s(0), sy0 = gy2s(0), dxs = sx0 - W / 2, dys = sy0 - H / 2, ds = Math.hypot(dxs, dys), lim = Math.hypot(W, H) * 0.75, kS = ds > lim ? lim / ds : 1;
+      window.SunFX.render(W / 2 + dxs * kS, H / 2 + dys * kS, SUN_BRIGHTNESS * (kS < 1 ? 0.7 : 1), now / 1000);
+      drawPois(place);
       drawBelts(place);
-      drawBeacons(place);
       drawStations(place);
-      for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
+      if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl) drawGate(g, pl); }
       drawCans();
       drawShips(place);
       const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target

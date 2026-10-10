@@ -1,6 +1,6 @@
 # Atamus redesign: the Expanse, nomad space and a 1,000-player world
 
-Status: **planned** (rev. 2, 2026-10-09). `docs/FEATURES.md` still describes the live game. This file is the agreed target. As each phase ships, its rules move into FEATURES.md and get marked done here.
+Status: **phase 1 in progress** (rev. 2, 2026-10-09): the Expanse's POIs, warp-to, belts by population, hidden and spawn-in POIs, camera-following updates, per-POI collisions and logout despawn are built (FEATURES.md › The Expanse). Still to do in phase 1: per-POI clocks and time dilation, changes-only updates, POI caps, worker seams and the bot load tests. `docs/FEATURES.md` still describes the live game. This file is the agreed target. As each phase ships, its rules move into FEATURES.md and get marked done here.
 
 ## Goal
 
