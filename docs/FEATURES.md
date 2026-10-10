@@ -35,7 +35,7 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 - **Map and zoom (owner):** one continuous zoom from POI scale out to the whole system (1 AU is drawn as 20,000 km; the wheel takes bigger steps once zoomed out).
   - **Only POIs you have a ship in (docked counts) show their zone and contents (owner):** zoomed in, such a POI is at true scale with a dashed boundary circle, its rocks, structures and other players' ships. Every other POI is only ever its icon, at any zoom, and the server sends nothing from inside it.
   - Icons (owner's pixel art in `assets/icons/`, drawn crisp at their own size): the station, the stargate, an asteroid field for belts; planets are a small procedural sphere. Hovering an icon shows its name.
-  - **Zoomed out (owner):** a ship smaller than 8 px on screen (or in a POI shrunk to its ring) is drawn as its class icon, tinted blue for yours and red for others' (Mining Frigate: frigate; barges and exhumers: cruiser; arcs will use the ark). A rock smaller than 6 px is drawn as its ore family's icon (10 px).
+  - **Zoomed out (owner):** a ship smaller than 8 px on screen (or in a POI shrunk to its ring) is drawn as its **hull icon** from the owner's sheet (`assets/icons/ships/<sprite>_<blue|red>_s.png`): the blue set for yours, the red set for others'. Icons for future hulls (Gleaner, Lodestar, Motherload, Wick, Beacon, Vigil), arks and NPC law ships are already there. A hull without an icon falls back to the tinted class icon. A rock smaller than 6 px is drawn as its ore family's icon (10 px).
   - The marker icons (question, exclamation, circle, square, diamond) and the waypoint are kept in `assets/icons/` for temporary markers later **(owner)**.
   - **Wheel zoom (owner)** goes toward the point under the mouse, unless the camera is following a ship.
   - A POI your ships are in keeps a visible boundary at any zoom, with your ships as dots inside it.
@@ -162,6 +162,10 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
   - **Power on/off:** powering off cuts an active module immediately, and that cycle gives nothing. An offline module is greyed out, can't be activated, and the auto-miner skips it. Power state is saved.
   - **Info:** opens the module's item info (Description / Stats / Fitting), with no ship or target details **(owner)**.
 - **Rocks** are in belt POIs (see The Expanse). Rock ids carry their POI (`belt:…#3`).
+- **Rock labels (owner):** hovering a rock, or clicking it (pinned until the next click), shows its ore name under it, plus its distance from the selected ship in "X.X km" when that ship is in the same POI.
+- **Rock menu (owner):** right-click a rock → **Lock** / **Unlock** (for the selected ship, when it's in that POI) and **Info** (the ore's item info). Ctrl-click and hold (touch) still lock directly.
+- **Rock labels (owner):** hovering a rock, or clicking it (pinned until the next click), shows its ore name under it, plus its distance from the selected ship in "X.X km" when that ship is in the same POI.
+- **Rock menu (owner):** right-click a rock → **Lock** / **Unlock** (for the selected ship, when it's in that POI) and **Info** (the ore's item info). Ctrl-click and hold (touch) still lock directly.
 - **Ores:**
 
   | Ore | Rarity | Price | Volume |

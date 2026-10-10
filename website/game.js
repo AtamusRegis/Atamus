@@ -348,8 +348,28 @@
     const o = anyShipAt(p); if (o && o.id !== shipId) { send({ t: "lock", ship: shipId, kind: "ship", id: o.id }); return true; }
     return false;
   }
+  // rocks: hovering or clicking shows the ore's name and its distance from the selected ship; right-click locks or opens Info
+  let pinnedRock = null;
+  function rockMenu(rk, x, y) {
+    if (!window.Atamus.ctxMenu) return;
+    const shipId = [...selected][0], sh = shipId && (snap.ships || []).find((s) => s.id === shipId), locked = !!(sh && (sh.targets || []).some((t) => t.id === rk.id)), items = [];
+    if (sh && !sh.docked && rockSys.get(rk.id) === sh.sys) items.push([locked ? "Unlock" : "Lock", () => send({ t: "lock", ship: shipId, kind: "rock", id: rk.id })]);
+    items.push(["Info", () => window.Atamus.openItemInfo && window.Atamus.openItemInfo(rk.ore)]);
+    window.Atamus.ctxMenu(x, y, items);
+  }
+  function drawRockLabel() {
+    const rk = (hoverAt && rockAt(hoverAt)) || (pinnedRock && rockById(pinnedRock)); if (!rk) return;
+    const pl = curPlace.get(rockSys.get(rk.id)); if (!pl) return;
+    const x = gx2s(pl.gx + rk.x * pl.k), y = gy2s(pl.gy + rk.y * pl.k), r = Math.max(8, (rk.size / 1000) * scale() * 0.5);
+    const o = (cfg.ores || []).find((q) => q.key === rk.ore), lines = [o ? o.name : rk.ore];
+    const sh = (snap.ships || []).find((s) => s.id === [...selected][0]);
+    if (sh && sh.sys === rockSys.get(rk.id) && !sh.docked) { const p = shipPos(sh); lines.push((Math.hypot(rk.x - p.x, rk.y - p.y)).toFixed(1) + " km"); }
+    ctx.save(); ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(225,232,245,0.92)"; ctx.shadowColor = "rgba(0,0,0,0.85)"; ctx.shadowBlur = 4;
+    lines.forEach((t, i) => ctx.fillText(t, x, y + r + 14 + i * 14)); ctx.restore();
+  }
   // a click/tap on the map: select what's there, or (empty) deselect after a beat so a double can still move
   function clickAt(p, shift) {
+    const rk = rockAt(p); pinnedRock = rk ? rk.id : null;            // clicking a rock pins its name and distance
     const can = canAt(p);
     if (can) { bus.dispatchEvent(new CustomEvent("can", { detail: { id: can.id, x: p.x, y: p.y } })); return; }
     const gate = gateAt(p);
@@ -387,7 +407,11 @@
     if (d.moved && !d.ship) boxSelect(d.x0, d.y0, p.x, p.y, d.shift);
     else if (!d.moved) clickAt(p, d.shift);
   });
-  canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); const p = eventPos(e); poiMenu(poiAt(p), e.clientX, e.clientY); });   // right-click a POI on the map: warp to it
+  canvas.addEventListener("contextmenu", (e) => {                     // right-click: a rock → Lock / Info; a POI on the map → Warp to
+    e.preventDefault(); const p = eventPos(e);
+    const rk = rockAt(p); if (rk) { rockMenu(rk, e.clientX, e.clientY); return; }
+    poiMenu(poiAt(p), e.clientX, e.clientY);
+  });
   canvas.addEventListener("mousemove", (e) => { hoverAt = eventPos(e); });
   canvas.addEventListener("mouseleave", () => { hoverAt = null; });
   canvas.addEventListener("dblclick", (e) => {
@@ -838,11 +862,17 @@
   }
   // map icons (owner's pixel art, drawn crisp at their own size)
   const mapIcon = {}; for (const [k, f] of [["belt", "asteroid_field"], ["gate", "stargate"], ["station", "station"]]) { mapIcon[k] = new Image(); mapIcon[k].src = "assets/icons/map/" + f + "_s.png"; }
-  // zoomed out (owner): rocks become their ore family's icon, ships their class icon (tinted blue for yours, red for others)
+  // zoomed out (owner): rocks become their ore family's icon, ships their hull icon (blue set for yours, red for others)
   const ORE_ICON = { bubble: "rubble" }, oreIcon = {};
   function oreIconImg(family) { const f = ORE_ICON[family] || family; if (!oreIcon[f]) { oreIcon[f] = new Image(); oreIcon[f].src = "assets/icons/ores/" + f + "_s.png"; } return oreIcon[f]; }
   const CLASS_ICON = { "Mining Frigate": "frigate", "Mining Barge": "cruiser", "Exhumer": "cruiser" }, classIcon = {}, classTint = new Map();
+  // per-hull icons (owner's sheet: assets/icons/ships/<sprite>_<blue|red>_s.png); the class icon is the fallback
+  const hullIcon = {};
   function classIconFor(type, mine) {
+    const key0 = hull(type).sprite + (mine ? "_blue" : "_red");
+    let hi = hullIcon[key0]; if (!hi) { hi = hullIcon[key0] = new Image(); hi.src = "assets/icons/ships/" + key0 + "_s.png"; }
+    if (hi.naturalWidth) return hi;
+    if (hi.complete && !hi.naturalWidth) { /* no icon for this hull: fall back to the tinted class icon */ } else return null;
     const k = CLASS_ICON[hull(type).cls] || "frigate";
     if (!classIcon[k]) { classIcon[k] = new Image(); classIcon[k].src = "assets/icons/classes/" + k + "_s.png"; }
     const img = classIcon[k]; if (!img.naturalWidth) return null;
@@ -926,7 +956,7 @@
       const img = sh.mine ? art(type).blue : art(type).red;
       if (inTransit) { /* drawn as the warp ball */ }
       else if ((pl.k > 1 || wPx < 8) && classIconFor(type, sh.mine)) {   // zoomed out: the hull's class icon instead of a speck
-        const ic = classIconFor(type, sh.mine); ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); ctx.drawImage(ic, -ic.width / 2, -ic.height / 2); ctx.restore(); }
+        const ic = classIconFor(type, sh.mine), iw = ic.naturalWidth || ic.width, ih = ic.naturalHeight || ic.height; ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); ctx.drawImage(ic, -iw / 2, -ih / 2); ctx.restore(); }
       else if (img && img.naturalWidth) {
         const hPx = wPx * (img.naturalHeight / img.naturalWidth);
         ctx.save(); ctx.translate(sx, sy); ctx.rotate(-p.h); // sprite faces +x; world +y is up
@@ -993,6 +1023,7 @@
       if (GATE_LEN_KM * scale() >= 2) for (const g of snap.gates) { const pl = place.get(g.sys); if (pl && pl.active) drawGate(g, pl); }
       drawCans();
       drawShips(place);
+      drawRockLabel();
       const hl = window.Atamus.hud.line;                 // thin grey line from the HUD target icon to the target
       if (hl) { const t = targetScreen(place, hl.tg); if (t) { ctx.save(); ctx.beginPath(); ctx.moveTo(hl.x, hl.y); ctx.lineTo(t.x, t.y); ctx.strokeStyle = "rgba(200,205,215,0.22)"; ctx.lineWidth = 1; ctx.stroke(); ctx.restore(); } }
     }

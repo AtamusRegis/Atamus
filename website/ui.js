@@ -1739,6 +1739,7 @@
   // ---- custom right-click context menu ----
   let ctxMenu = null;
   window.Atamus.ctxMenu = (x, y, items) => showCtxMenu(x, y, items);   // the map's POI menu (game.js)
+  window.Atamus.openItemInfo = (key) => openInfo(key, 1);             // the map's rock menu → Info (game.js)
   function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   function showCtxMenu(x, y, items) {
     closeCtxMenu();
