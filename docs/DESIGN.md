@@ -17,24 +17,25 @@ The world is a set of **systems**, and every system is a set of **points of inte
 - **Hundreds of POIs** to warp between: stations, trading and NPC stations, home planets, asteroid belts and so on.
   - **Caps by popularity:** popular POIs (trading stations, NPC stations, home planets) get higher player caps; lower-priority ones (asteroid belts and the like) get lower caps.
   - **Bigger POIs** can contain **acceleration gates** to smaller capped instances.
-- **Wormholes** spawn and despawn in the Expanse and lead to nomad space.
-  - **Load balancing:** when one gets too much traffic, it closes and a new one opens elsewhere.
+- **Wormholes** spawn and despawn in the Expanse and lead to nomad space. The Expanse's job is to **balance nomad space (owner)**:
+  - it only connects to nomad systems that are below their target population, never to busy ones;
+  - when one of its wormholes gets too much traffic, it closes and a new one opens to a quieter system.
 - **Stargates** only arrive if there's ever a second hub world. They're skipped for now.
 
 ### Nomad space (wormhole systems)
 
 - **Many smaller systems** (0.5 AU) with planets, belts and their own acceleration gate instances where needed. This is where better resources are.
 - **No stable connections.** Wormholes open and close all the time, which is both the exploration and the **load balancing**.
-- **Population flow (owner):** crowds drain outward toward empty space.
-  - **A busy system's entrances** are biased to come from lower-population systems, so people are more likely to leave than to arrive.
-  - **Its exits** are biased toward **empty, unconnected systems**.
+- **Population flow (owner):** every nomad system is pulled toward a healthy middle population, from both ends.
+  - **Lone players are drawn toward groups:** a nearly empty system's new wormholes favor moderately populated systems, so solo players find company.
+  - **Large groups dissipate into smaller systems:** a busy system's entrances come from lower-population systems, so people are more likely to leave than to arrive. Its exits lead to emptier systems.
   - **At a high threshold** (e.g. 100 players), a system's new wormholes lead to empty systems that have no other connections.
 - **The follow window:** a wormhole stays open behind a traveller for a while (a set time or number of crossings), so friends can follow. It closes early if it's at its limit.
 - **No backtracking into crowds:** an unconnected system that fills up grows new exits of its own, but players can't backtrack to pile more people into it.
 - **Home nomad system:** a player can have one. On login they're put back there **even if it's over its threshold**; nomad space scales as needed.
 - **Safety rules:**
   - **Every occupied system always has at least one exit.** A fresh unconnected system starts spawning exits once someone is in it.
-  - **Residents can always get home:** their home system keeps a route in for them (see open questions).
+  - **Residents can always get home:** the arc has a **home jump (owner)**, a direct jump to your home nomad system on a long cooldown, whatever the wormholes are doing.
   - **The Expanse is reachable:** nomad space gets regular wormholes back to it (where bases and selling are), biased to appear in busy nomad systems, which also drains them.
 - **Unloading:** empty systems with no residents are unloaded and reloaded from save, so a large pool of nomad systems costs nothing until it's used.
 
@@ -143,5 +144,5 @@ Ships and hulls, fitting (hardpoints, disposition, capacitor, running hot), the 
 - **Before the arc:** how a new player's ships leave and return to the planet base.
 - **Where the market lives:** stations, the base, or both.
 - **Base surface:** grid size, building list, pipe rules (throughput, mixing) and catch-up limits.
-- **Nomad home:** how a player sets their home nomad system, and how residents are guaranteed a way home (a wormhole that's always findable, or an arc "return home" on a long cooldown).
-- **Wormhole numbers:** thresholds (e.g. 100), the follow-window length and crossing count, and how often Expanse wormholes spawn.
+- **Nomad home:** how a player sets their home nomad system, and the home jump's cooldown.
+- **Wormhole numbers:** the target ("healthy") population per system, thresholds (e.g. 100), the follow-window length and crossing count, and how often Expanse wormholes spawn.
