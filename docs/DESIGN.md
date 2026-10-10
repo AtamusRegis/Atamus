@@ -18,13 +18,13 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **4 planets**, each a POI. Player bases sit on them: a player's home is a dot on one planet, and "landing" opens the base surface (below), with no instance or world simulation behind it.
   - **1 station** for the marketplace and fitting. It's a POI.
   - **6 stargates, one in the middle of each side of the hexagon,** each a POI. They are the Expanse's links to nomad space (they replace wormholes here), and **players don't control them**. The server sets and changes where each one leads, by the balancing rules below.
-  - *Proposed, to confirm:* **asteroid belt POIs** (about 6 at the start, lower priority). New players mine in the Expanse until they own an arc, so the hub needs belts.
+  - **Asteroid belts are POIs, and their number is set by population (owner):** belt POIs spawn and despawn with how many players are in the Expanse. More players means more belts, so belts stay workable at any player count. *Proposed:* about one belt per 10–15 players in the Expanse, minimum 3; a belt with players in it is never despawned. New players mine here until they own an arc.
 - **POIs are 50–100 km across (owner).** *Proposed:* station 100 km (popular), planets 80 km, stargates 60 km, belts 50 km. Each POI is its own local space, with free flight inside its boundary.
 - **Proposed positions** (distance from the sun):
   - planets at about 0.10, 0.18, 0.27 and 0.38 AU, spread around the sun at different angles;
   - the station beside the second planet (about 0.18 AU);
   - stargates at the middle of each edge (about 0.48 AU, just inside the edge);
-  - belts scattered between the planet orbits.
+  - belts spawn between the planet orbits as population requires.
 - **Map and zoom (owner):**
   - **Zoomed in** is POI scale: the POI you're in, at true km scale, as the game looks today.
   - **Zoomed out to solar scale,** every POI shows only as an icon. In the POI you're in, you also see its boundary and the ships inside.
@@ -42,8 +42,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - *Proposed:* a gate whose link is cut stays dark for a short while (about 1–2 minutes), then connects to a new system;
   - **Gate capacity (sim):** 6 gates with **one link each are enough up to a few hundred players** (61% of players in the Expanse at launch). At 1,000 players they're too few: players leave faster than they find a way back, so only 22% stay in the Expanse.
     - With **2 links per gate**, 36% stay in the Expanse (your third to half); with 3 links, 47%.
-    - **Proposed:** links per gate scale with players online: 1 below about 400, 2 up to about 800, 3 above.
-    - **To decide (owner):** how a player picks between a gate's links. Each link would be its own destination, so a group needs to pick the same one, which means a choice when you jump, i.e. UI.
+    - **Decided (owner): 6 gates with one link each for now.** If the Expanse share drops too low as players grow, **more gates are added** (rather than several links per gate). The sim says that's needed somewhere past a few hundred players online.
 - **Stargates between hub worlds** only arrive if there's ever a second hub. The Expanse's 6 gates lead only to nomad space.
 
 ### Nomad space (wormhole systems)
