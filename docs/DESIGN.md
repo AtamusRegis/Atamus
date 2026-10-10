@@ -129,7 +129,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
 ## Persistence (owner)
 
 - **No logged-off presence in the world.** On logout, if not in a fight, the fleet docks in the arc and the arc despawns. Today's offline mining, staying awake offline and keeping ships in instances are removed.
-- **Logging back in** warps the arc in from outside the system to where it was. In nomad space it's the same system (or your home nomad system), but the connections will have changed.
+- **Logging back in** warps the arc in from outside the system to where it was, and the player respawns with it. If that POI no longer exists, they arrive at a random point outside any POI, inside a fresh 20 km POI made around them. In nomad space it's the same system (or your home nomad system), but the connections will have changed.
 - **The only offline persistence is the base factory,** calculated when you log in.
 - **PvP comes later** (always planned). The design keeps room for an aggression timer and a "can't log off in a fight" state.
 
