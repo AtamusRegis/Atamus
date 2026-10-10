@@ -1,0 +1,576 @@
+{
+ "meta": {
+  "layer_order": [
+   "dock_<tier>.png",
+   "build overlay (<ship>_build_stageN.png) OR the finished ship sprite (blue/red) drawn at offset",
+   "dock_<tier>_cranes.png"
+  ],
+  "overlays": "dock-sized transparent PNGs, origin = dock top-left; the real ship sprite goes at offset (x, y) in the same dock",
+  "tile": 64,
+  "frigates": "single overlay <ship>_build.png (no stages); finished = real sprite at offset"
+ },
+ "docks": {
+  "frigate": {
+   "file": "dock_frigate.png",
+   "cranes": "dock_frigate_cranes.png",
+   "size": [
+    192,
+    128
+   ],
+   "footprint": [
+    3,
+    2
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 1
+    },
+    {
+     "side": "E",
+     "tile": 1
+    },
+    {
+     "side": "S",
+     "tile": 1
+    }
+   ],
+   "usable_bay": [
+    30,
+    36,
+    158,
+    92
+   ]
+  },
+  "cruiser": {
+   "file": "dock_cruiser.png",
+   "cranes": "dock_cruiser_cranes.png",
+   "size": [
+    320,
+    256
+   ],
+   "footprint": [
+    5,
+    4
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 1
+    },
+    {
+     "side": "E",
+     "tile": 1
+    },
+    {
+     "side": "S",
+     "tile": 1
+    },
+    {
+     "side": "S",
+     "tile": 3
+    }
+   ],
+   "usable_bay": [
+    36,
+    46,
+    280,
+    210
+   ]
+  },
+  "large": {
+   "file": "dock_large.png",
+   "cranes": "dock_large_cranes.png",
+   "size": [
+    576,
+    384
+   ],
+   "footprint": [
+    9,
+    6
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 2
+    },
+    {
+     "side": "E",
+     "tile": 2
+    },
+    {
+     "side": "S",
+     "tile": 2
+    },
+    {
+     "side": "S",
+     "tile": 6
+    }
+   ],
+   "usable_bay": [
+    36,
+    40,
+    536,
+    344
+   ]
+  },
+  "battleship": {
+   "file": "dock_battleship.png",
+   "cranes": "dock_battleship_cranes.png",
+   "size": [
+    896,
+    448
+   ],
+   "footprint": [
+    14,
+    7
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 3
+    },
+    {
+     "side": "E",
+     "tile": 3
+    },
+    {
+     "side": "S",
+     "tile": 3
+    },
+    {
+     "side": "S",
+     "tile": 10
+    }
+   ],
+   "usable_bay": [
+    36,
+    46,
+    856,
+    402
+   ]
+  },
+  "capital": {
+   "file": "dock_capital.png",
+   "cranes": "dock_capital_cranes.png",
+   "size": [
+    960,
+    448
+   ],
+   "footprint": [
+    15,
+    7
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 3
+    },
+    {
+     "side": "E",
+     "tile": 3
+    },
+    {
+     "side": "S",
+     "tile": 3
+    },
+    {
+     "side": "S",
+     "tile": 11
+    }
+   ],
+   "usable_bay": [
+    36,
+    46,
+    920,
+    402
+   ]
+  },
+  "ark": {
+   "file": "dock_ark.png",
+   "cranes": "dock_ark_cranes.png",
+   "size": [
+    3136,
+    1152
+   ],
+   "footprint": [
+    49,
+    18
+   ],
+   "ports": [
+    {
+     "side": "W",
+     "tile": 9
+    },
+    {
+     "side": "E",
+     "tile": 9
+    },
+    {
+     "side": "S",
+     "tile": 8
+    },
+    {
+     "side": "S",
+     "tile": 40
+    }
+   ],
+   "usable_bay": [
+    36,
+    46,
+    3096,
+    1106
+   ]
+  }
+ },
+ "ships": {
+  "chisel": {
+   "label": "Chisel",
+   "dock": "frigate",
+   "offset": [
+    60,
+    47
+   ],
+   "sprite_size": [
+    68,
+    35
+   ],
+   "finished": {
+    "blue": "chisel/chisel.png",
+    "red": "chisel/chisel_red.png"
+   },
+   "overlays": [
+    "chisel_build.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "wick": {
+   "label": "Wick",
+   "dock": "frigate",
+   "offset": [
+    60,
+    44
+   ],
+   "sprite_size": [
+    68,
+    40
+   ],
+   "finished": {
+    "blue": "watchers/wick_blue.png",
+    "red": "watchers/wick_red.png"
+   },
+   "overlays": [
+    "wick_build.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "barge_XS": {
+   "label": "Barge XS",
+   "dock": "cruiser",
+   "offset": [
+    77,
+    93
+   ],
+   "sprite_size": [
+    163,
+    71
+   ],
+   "finished": {
+    "blue": "barge/variants/barge_XS_blue.png",
+    "red": "barge/variants/barge_XS_red.png"
+   },
+   "overlays": [
+    "barge_XS_build_stage1.png",
+    "barge_XS_build_stage2.png",
+    "barge_XS_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "barge_S": {
+   "label": "Barge S",
+   "dock": "cruiser",
+   "offset": [
+    58,
+    93
+   ],
+   "sprite_size": [
+    200,
+    71
+   ],
+   "finished": {
+    "blue": "barge/variants/barge_S_blue.png",
+    "red": "barge/variants/barge_S_red.png"
+   },
+   "overlays": [
+    "barge_S_build_stage1.png",
+    "barge_S_build_stage2.png",
+    "barge_S_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "barge_M": {
+   "label": "Barge M",
+   "dock": "cruiser",
+   "offset": [
+    49,
+    93
+   ],
+   "sprite_size": [
+    219,
+    71
+   ],
+   "finished": {
+    "blue": "barge/variants/barge_M_blue.png",
+    "red": "barge/variants/barge_M_red.png"
+   },
+   "overlays": [
+    "barge_M_build_stage1.png",
+    "barge_M_build_stage2.png",
+    "barge_M_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "exhumer_XS": {
+   "label": "Exhumer XS",
+   "dock": "cruiser",
+   "offset": [
+    77,
+    93
+   ],
+   "sprite_size": [
+    163,
+    71
+   ],
+   "finished": {
+    "blue": "barge/exhumer/exhumer_XS_blue.png",
+    "red": "barge/exhumer/exhumer_XS_red.png"
+   },
+   "overlays": [
+    "exhumer_XS_build_stage1.png",
+    "exhumer_XS_build_stage2.png",
+    "exhumer_XS_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "exhumer_S": {
+   "label": "Exhumer S",
+   "dock": "cruiser",
+   "offset": [
+    58,
+    93
+   ],
+   "sprite_size": [
+    200,
+    71
+   ],
+   "finished": {
+    "blue": "barge/exhumer/exhumer_S_blue.png",
+    "red": "barge/exhumer/exhumer_S_red.png"
+   },
+   "overlays": [
+    "exhumer_S_build_stage1.png",
+    "exhumer_S_build_stage2.png",
+    "exhumer_S_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "exhumer_M": {
+   "label": "Exhumer M",
+   "dock": "cruiser",
+   "offset": [
+    49,
+    93
+   ],
+   "sprite_size": [
+    219,
+    71
+   ],
+   "finished": {
+    "blue": "barge/exhumer/exhumer_M_blue.png",
+    "red": "barge/exhumer/exhumer_M_red.png"
+   },
+   "overlays": [
+    "exhumer_M_build_stage1.png",
+    "exhumer_M_build_stage2.png",
+    "exhumer_M_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "beacon": {
+   "label": "Beacon",
+   "dock": "cruiser",
+   "offset": [
+    51,
+    75
+   ],
+   "sprite_size": [
+    215,
+    107
+   ],
+   "finished": {
+    "blue": "watchers/beacon_blue.png",
+    "red": "watchers/beacon_red.png"
+   },
+   "overlays": [
+    "beacon_build_stage1.png",
+    "beacon_build_stage2.png",
+    "beacon_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "gleaner": {
+   "label": "Gleaner",
+   "dock": "large",
+   "offset": [
+    57,
+    48
+   ],
+   "sprite_size": [
+    458,
+    289
+   ],
+   "finished": {
+    "blue": "gleaner/gleaner_blue.png",
+    "red": "gleaner/gleaner_red.png"
+   },
+   "overlays": [
+    "gleaner_build_stage1.png",
+    "gleaner_build_stage2.png",
+    "gleaner_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "lodestar": {
+   "label": "Lodestar",
+   "dock": "large",
+   "offset": [
+    57,
+    48
+   ],
+   "sprite_size": [
+    458,
+    289
+   ],
+   "finished": {
+    "blue": "gleaner/lodestar_blue.png",
+    "red": "gleaner/lodestar_red.png"
+   },
+   "overlays": [
+    "lodestar_build_stage1.png",
+    "lodestar_build_stage2.png",
+    "lodestar_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "motherload": {
+   "label": "Motherload",
+   "dock": "battleship",
+   "offset": [
+    60,
+    118
+   ],
+   "sprite_size": [
+    773,
+    213
+   ],
+   "finished": {
+    "blue": "motherload/motherload.png",
+    "red": "motherload/motherload_red.png"
+   },
+   "overlays": [
+    "motherload_build_stage1.png",
+    "motherload_build_stage2.png",
+    "motherload_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "vigil": {
+   "label": "Vigil",
+   "dock": "battleship",
+   "offset": [
+    55,
+    75
+   ],
+   "sprite_size": [
+    782,
+    298
+   ],
+   "finished": {
+    "blue": "watchers/vigil_blue.png",
+    "red": "watchers/vigil_red.png"
+   },
+   "overlays": [
+    "vigil_build_stage1.png",
+    "vigil_build_stage2.png",
+    "vigil_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "ark_mini": {
+   "label": "Mini Ark",
+   "dock": "large",
+   "offset": [
+    57,
+    102
+   ],
+   "sprite_size": [
+    458,
+    180
+   ],
+   "finished": {
+    "blue": "ark/mini/ark_mini_blue.png",
+    "red": "ark/mini/ark_mini_red.png"
+   },
+   "overlays": [
+    "ark_mini_build_stage1.png",
+    "ark_mini_build_stage2.png",
+    "ark_mini_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "ark_small": {
+   "label": "Small Ark",
+   "dock": "capital",
+   "offset": [
+    70,
+    75
+   ],
+   "sprite_size": [
+    817,
+    298
+   ],
+   "finished": {
+    "blue": "ark/small/ark_small_blue.png",
+    "red": "ark/small/ark_small_red.png"
+   },
+   "overlays": [
+    "ark_small_build_stage1.png",
+    "ark_small_build_stage2.png",
+    "ark_small_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  },
+  "ark": {
+   "label": "Ark",
+   "dock": "ark",
+   "offset": [
+    60,
+    75
+   ],
+   "sprite_size": [
+    3012,
+    1002
+   ],
+   "finished": {
+    "blue": "ark/ark_blue.png",
+    "red": "ark/ark_red.png"
+   },
+   "overlays": [
+    "ark_build_stage1.png",
+    "ark_build_stage2.png",
+    "ark_build_stage3.png"
+   ],
+   "red_mask_matches_blue": true
+  }
+ }
+}

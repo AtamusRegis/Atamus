@@ -62,7 +62,7 @@
     win.style.left = (num(s.x) ? s.x : (opts.left || 120)) + "px";
     win.style.top = (num(s.y) ? s.y : (opts.top || 70)) + "px";
     win.style.width = (num(s.w) && s.w > 0 ? s.w : (opts.width || 260)) + "px";
-    if (num(s.h) && s.h > 0) win.style.height = s.h + "px";
+    if (num(s.h) && s.h > 0) win.style.height = s.h + "px"; else if (opts.height) win.style.height = opts.height + "px";
     document.body.appendChild(win);
     win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
     dragMove(win, bar, () => persistWin(id));
@@ -96,6 +96,7 @@
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
     persistWin(id); updateBtnActive(); updateChatGlow();
     if (id === "fleet" && typeof renderShipActions === "function") { actSig = ""; renderShipActions(); }
+    if (id === "base") window.Atamus.send({ t: "base_open", open: show });   // the server streams the base while its window is open
     if (id === "market" && !show && buyOffer) { buyOffer = null; w.sig = null; w.body.innerHTML = ""; }   // closing the market drops an unfinished purchase
   }
   function renderOpen() { for (const id in wins) if (isOpen(wins[id]) && wins[id].render) wins[id].render(wins[id].body); }
@@ -271,15 +272,17 @@
     chat: '<svg viewBox="0 0 24 24"><path d="M4 4h16v11H9l-5 4z"/></svg>',
     fleet: '<svg viewBox="0 0 24 24"><path d="M3 12l5-3v6z"/><path d="M10 7l5-3v6z"/><path d="M10 17l5-3v6z"/><path d="M17 12l4-2.4v4.8z"/></svg>',
     market: '<svg viewBox="0 0 24 24"><path d="M4 10h16l-1.5-5h-13z"/><path d="M5 10v9h14v-9"/><path d="M10 19v-5h4v5"/></svg>',
+    base: '<svg viewBox="0 0 24 24"><path d="M3 20h18"/><path d="M5 20v-7h5v7"/><path d="M12 20V8h7v12"/><path d="M14 11h3M14 14h3"/><path d="M7 13V9l3-2"/></svg>',
     settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
   };
-  let order = ["player", "pilot", "chat", "fleet", "market", "settings"];
+  let order = ["player", "pilot", "chat", "fleet", "market", "base", "settings"];
   const META = {
     player: { name: "Player Sheet", pinned: true },
     pilot: { name: "Pilot" },
     chat: { name: "Chat" },
     fleet: { name: "Fleet" },
     market: { name: "Market" },
+    base: { name: "Base" },
     settings: { name: "Settings" },
   };
   // press-and-hold (mouse or touch) → fn; the click that ends a hold is swallowed
@@ -703,7 +706,7 @@
     const A = window.Atamus, w = wins.unit, u = gateUnit() || A.unit;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const fmtM3 = (a, b) => Math.round(a).toLocaleString() + " / " + b.toLocaleString() + " m³";
-    const docked = u && u.kind === "station" ? (A.snap.ships || []).filter((sh) => sh.mine && sh.docked) : [];
+    const docked = u && u.kind === "station" ? (A.snap.ships || []).filter((sh) => sh.mine && inSt(sh)) : [];
     const lockedRock = !!(u && (u.targets || []).some((t) => t.kind === "rock" && t.locked));
     const sig = !u ? "" : u.kind === "ship" ? ["ship", u.id, u.docked, u.warp, u.mining, u.moving, u.canDock, lockedRock, u.pilot].join("|")
       : u.kind === "station" ? ["station", docked.map((d) => d.id + ":" + d.pilot).join(","), state ? state.pilots.length : 0].join("|")
@@ -753,7 +756,7 @@
   window.Atamus.bus.addEventListener("select", (e) => {
     const kind = e.detail && e.detail.kind;
     if (kind === "station") { openInventory({ owner: "station", inv: "hangar", h: 0 }); toggleWindow("unit", false); return; }
-    if (kind === "ship") { const sh = window.Atamus.ship(e.detail.id); if (sh && sh.docked) openInventory({ owner: "station", inv: "hangar", h: 0 }); }   // a docked ship selected: its station's window shows (owner)
+    if (kind === "ship") { const sh = window.Atamus.ship(e.detail.id); if (inSt(sh)) openInventory({ owner: "station", inv: "hangar", h: 0 }); }   // a docked ship selected: its station's window shows (owner)
     if (kind === "ship" && !wins.unit.group) { if (!window.Atamus.hud.gate) toggleWindow("unit", false); return; }
     toggleWindow("unit", true); renderUnit(wins.unit.body);
   });
@@ -767,7 +770,7 @@
     for (const key in invWins) {
       if (!isOpen(wins[key])) continue;
       const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? A.ship(r.id) : null;
-      const atStation = r.owner === "station" || !!(sh && sh.docked);
+      const atStation = r.owner === "station" || inSt(sh);
       if (atStation ? !stationKept : (r.owner === "ship" && r.id !== keep)) toggleWindow(key, false);
     }
   };
@@ -775,11 +778,11 @@
   let selDocked = null;                                    // the selected ship just undocked: the station's windows go
   window.Atamus.bus.addEventListener("snap", () => {
     const u = window.Atamus.selectedUnit, sh = u && u.kind === "ship" ? window.Atamus.ship(u.id) : null;
-    const d = sh ? sh.id + ":" + sh.docked : null;
+    const d = sh ? sh.id + ":" + inSt(sh) : null;
     if (d !== selDocked) {
       const was = selDocked; selDocked = d;
-      if (was && sh && was === sh.id + ":true" && !sh.docked) closeUnselectedInvs(u);
-      else if (was && sh && was === sh.id + ":false" && sh.docked) openInventory({ owner: "station", inv: "hangar", h: 0 });   // the selected ship just docked: the station window shows
+      if (was && sh && was === sh.id + ":true" && !inSt(sh)) closeUnselectedInvs(u);
+      else if (was && sh && was === sh.id + ":false" && inSt(sh)) openInventory({ owner: "station", inv: "hangar", h: 0 });   // the selected ship just docked: the station window shows
     }
   });
   window.Atamus.bus.addEventListener("select", closeOtherShipInvs);
@@ -790,8 +793,8 @@
     if (window.Atamus.hud.gate && !gateUnit()) toggleWindow("unit", false);   // that gate is gone from view
     if (w && isOpen(w)) renderUnit(w.body);
     // a docked ship's holds are reached through the station inventory: close its own windows
-    if (!pilotInStation()) for (const key in invWins) { if (!isOpen(wins[key])) continue; const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? window.Atamus.ship(r.id) : null; if (r.owner === "station" || (sh && sh.docked)) toggleWindow(key, false); }   // the selected pilot isn't in the station
-    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (!sh || sh.docked) toggleWindow(key, false); }
+    if (!pilotInStation()) for (const key in invWins) { if (!isOpen(wins[key])) continue; const r = invWins[key].root || invWins[key].ref, sh = r.owner === "ship" ? window.Atamus.ship(r.id) : null; if (r.owner === "station" || inSt(sh)) toggleWindow(key, false); }   // the selected pilot isn't in the station
+    for (const key in invWins) { const r = invWins[key].root || invWins[key].ref; if (r.owner !== "ship" || invWins[key].solo || !isOpen(wins[key])) continue; const sh = window.Atamus.ship(r.id); if (!sh || inSt(sh)) toggleWindow(key, false); }
   });
 
 
@@ -1114,8 +1117,8 @@
     for (const h of [hudAct, wins.fleet && wins.fleet.acts]) if (h) { h.innerHTML = ""; h.hidden = true; }
     if (!sh) return;                                                // a pilot is always selected: their ship's actions always show
     const act = (ico, title, fn) => el("button", { class: "hud-act", title, "aria-label": title, html: ICO[ico], onclick: fn });
-    host.append(act("inv", "Inventory", () => { const cur = A.ship(sh.id) || sh, key = cur.docked ? "inv:station" : "inv:" + sh.id, w = wins[key];
-      if (w && isOpen(w) && (!cur.docked || (invWins[key] && invWins[key].ref.id === sh.id))) toggleWindow(key, false); else openInventory({ owner: "ship", id: sh.id, inv: "ore" }); }));
+    host.append(act("inv", "Inventory", () => { const cur = A.ship(sh.id) || sh, key = inSt(cur) ? "inv:station" : "inv:" + sh.id, w = wins[key];
+      if (w && isOpen(w) && (!inSt(cur) || (invWins[key] && invWins[key].ref.id === sh.id))) toggleWindow(key, false); else openInventory({ owner: "ship", id: sh.id, inv: "ore" }); }));
     if (sh.canDock) host.append(act("dock", "Dock", () => A.send({ t: "dock", ship: sh.id, dock: true })));
     if (sh.docked && sh.pilot != null) host.append(act("undock", "Undock", () => A.send({ t: "dock", ship: sh.id, dock: false })));
     host.hidden = false;
@@ -1252,13 +1255,15 @@
     watchInvResize(key);
   }
   // the station's windows only exist for a selected pilot who is inside the station: in a docked ship, or not in a ship (owner)
+  // docked at the station (ships docked at the home planet aren't in the station: their holds open on their own)
+  function inSt(sh) { return !!(sh && sh.docked && sh.sys === "station"); }
   function pilotInStation() {
     const A = window.Atamus; if (saved.selPilot == null || !state || !state.pilots || !A.snap || !A.snap.ships) return true;   // not loaded yet: decide on the next snapshot
-    const sh = pilotShip(saved.selPilot); return !sh || !!sh.docked;
+    const sh = pilotShip(saved.selPilot); return !sh || inSt(sh);
   }
   function openInventory(ref) {
     const sh = ref.owner === "ship" ? window.Atamus.ship(ref.id) : null;
-    const viaStation = ref.owner === "station" || (sh && sh.docked);          // a docked ship's holds live under the station window
+    const viaStation = ref.owner === "station" || inSt(sh);          // a docked ship's holds live under the station window
     if (viaStation && !pilotInStation()) return;
     const key = viaStation ? "inv:station" : "inv:" + ref.id;                 // one window per holder; tabs switch inside
     makeInvWindow(key, { ref, root: viaStation ? { owner: "station", inv: "hangar", h: 0 } : ref });
@@ -1278,7 +1283,7 @@
       if (!st || !st.open || !st.ref) continue;
       const holder = st.solo ? st.ref : (st.root || st.ref);
       if (holder.owner === "ship" && !A.ship(holder.id)) continue;                         // ship is gone
-      if (!st.solo && key !== "inv:station" && A.ship(holder.id) && A.ship(holder.id).docked) continue; // its holds now live under the station
+      if (!st.solo && key !== "inv:station" && inSt(A.ship(holder.id))) continue; // its holds now live under the station
       makeInvWindow(key, { ref: st.ref, root: st.root, solo: st.solo });
       toggleWindow(key, true);
     }
@@ -1300,7 +1305,7 @@
     const items = (A.cfg && A.cfg.items) || {}, maxStacks = (A.cfg && A.cfg.maxStacks) || 100;
     const root = st.root || ref, station = !st.solo && root.owner === "station";
     const tabs = st.solo ? [] : invTabsFor(root);              // tabs belong to the window's holder, not the tab being viewed
-    const docked = station ? (A.snap.ships || []).filter((x) => x.mine && x.docked) : [];
+    const docked = station ? (A.snap.ships || []).filter((x) => x.mine && inSt(x)) : [];
     // slots flow into as many columns as the grid area fits: one cell per stack plus one empty cell to drop into
     const stacked = station && body.clientWidth < 230;           // too narrow for the ship list beside the grid: it goes above
     const SIDE = station && !stacked ? 128 : 0, CELL = 36, GAP = 3, cols = Math.max(1, Math.floor((body.clientWidth - SIDE + GAP) / (CELL + GAP)));
@@ -1461,7 +1466,7 @@
   function openItemMenu(ref, slot, x, y) {
     const A = window.Atamus, data = invData(ref), stck = data && data.slots[slot]; if (!stck) return;
     const def = (A.cfg.items || {})[stck.item] || { name: stck.item };
-    const holder = ref.owner === "ship" ? A.ship(ref.id) : null, atStation = ref.owner === "station" || !!(holder && holder.docked);
+    const holder = ref.owner === "ship" ? A.ship(ref.id) : null, atStation = ref.owner === "station" || inSt(holder);
     const items = [];
     if (stck.qty > 1) items.push(["Split", () => openSplit(ref, slot)]);
     if (ref.owner === "ship" && holder && !holder.docked) items.push(["Jettison", () => A.send({ t: "jettison", ref, slot, item: stck.item })]);
@@ -1643,7 +1648,7 @@
     const A = window.Atamus, data = invData(ref), stck = data && data.slots[slot]; if (!stck) return;
     const def = (A.cfg.items || {})[stck.item]; if (!def || !def.price) return;
     const holder = ref.owner === "station" ? null : A.ship(ref.id);
-    if (holder && !holder.docked) { flash("Dock to sell."); return; }
+    if (holder && !inSt(holder)) { flash("Dock to sell."); return; }
     if (!wins.sell) createWindow("sell", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 90), width: 300, minW: 260, minH: 150, render: renderSell, groupable: false });
     sell = { ref, slot, item: stck.item }; wins.sell.sig = null;
     toggleWindow("sell", true); renderSell(wins.sell.body);
@@ -1767,6 +1772,193 @@
     updateChatGlow();
   }
 
+  // ---- the base surface (DESIGN.md): your production grid on your home planet ----
+  // Sidebar: the build palette and the selected building's settings; canvas: the grid (64 px tiles in the owner's dock
+  // art), pan by dragging, zoom with the wheel or a pinch. Pipe tool: drag to lay pipes; Remove tool: click to remove.
+  const dockImg = {}, dockArt = (f) => { if (!dockImg[f]) { dockImg[f] = new Image(); dockImg[f].src = "assets/docks/" + f + ".webp"; dockImg[f].onload = () => drawBase(); } return dockImg[f]; };
+  let docksMeta = null; fetch("assets/docks/docks.json").then((r) => r.json()).then((j) => { docksMeta = j; drawBase(); }).catch(() => {});
+  const B = { tool: null, sel: null, cam: null, canvas: null, side: null, sig: "", live: null, paint: null, ptrs: new Map(), hover: null };
+  const bcfg = () => (window.Atamus.cfg || {}).base || {};
+  const bdef = (type) => (bcfg().buildings || {})[type] || {};
+  const itemName = (k) => (((window.Atamus.cfg || {}).items || {})[k] || {}).name || k;
+  const itemIcon = (k) => (((window.Atamus.cfg || {}).items || {})[k] || {}).icon || null;
+  const fmtDur = (ms) => { const s = Math.ceil(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m ? m + "m " + (s % 60) + "s" : s + "s"; };
+  const TOOLS = ["pipe", "storage", "refinery", "factory", "dock_frigate", "dock_cruiser", "dock_large", "dock_capital", "dock_ark"];
+  function renderBase(body) {
+    wins.base.slot.textContent = "Base";
+    if (!B.canvas || !body.contains(B.canvas)) {
+      body.innerHTML = ""; body.classList.add("base-body");
+      B.side = el("div", { class: "base-side" }); B.canvas = el("canvas", { class: "base-canvas" });
+      body.append(B.side, B.canvas); B.sig = ""; baseInput(B.canvas);
+      new ResizeObserver(() => drawBase()).observe(B.canvas);
+    }
+    renderBaseSide(); drawBase();
+  }
+  window.Atamus.bus.addEventListener("worldready", () => { if (wins.base && isOpen(wins.base)) window.Atamus.send({ t: "base_open", open: true }); });
+  window.Atamus.openBase = () => toggleWindow("base", true);
+  window.Atamus.bus.addEventListener("base", () => { if (wins.base && isOpen(wins.base)) { renderBaseSide(); drawBase(); } });
+  function renderBaseSide() {
+    const A = window.Atamus, base = A.base; if (!B.side || !base) return;
+    const q = B.sel != null ? base.buildings.find((x) => x.id === B.sel) : null; if (!q) B.sel = null;
+    const sig = [B.tool, q && q.id, q && q.recipe, q && q.mode, q && q.ore].join("|");
+    if (sig !== B.sig) {
+      B.sig = sig; B.side.innerHTML = ""; B.live = {};
+      const pal = el("div", { class: "base-tools" });
+      const tool = (k, label, cost) => { const b = el("button", { class: "base-tool" + (B.tool === k ? " on" : ""), onclick: () => { B.tool = B.tool === k ? null : k; B.sel = null; renderBaseSide(); drawBase(); } }, el("span", {}, label), cost != null ? el("span", { class: "credits" }, cost ? Math.round(cost).toLocaleString() : "") : null); pal.append(b); };
+      for (const k of TOOLS) tool(k, k === "pipe" ? "Pipe" : bdef(k).name, k === "pipe" ? bcfg().pipeCost : bdef(k).cost);
+      tool("remove", "Remove", null);
+      B.side.append(pal);
+      if (q) {
+        const d = bdef(q.type), box = el("div", { class: "base-info" }, el("div", { class: "base-info-h" }, d.name));
+        B.live.status = el("div", { class: "base-status" });
+        const set = (cfg) => A.send({ t: "base_set", id: q.id, cfg });
+        if (q.type === "refinery") {
+          const sel = el("select", { class: "base-sel", onchange: () => set({ ore: sel.value }) }, el("option", { value: "any" }, "Any ore"), ...Object.keys(bcfg().iums || {}).map((o) => el("option", { value: o }, itemName(o) + " → " + itemName(bcfg().iums[o]))));
+          sel.value = q.ore || "any"; box.append(sel);
+        }
+        if (q.type === "factory" || d.rank) {
+          const opts = d.rank ? Object.entries(bcfg().ships || {}).filter(([, s]) => s.rank <= d.rank).map(([k]) => [k, ((A.cfg.shipTypes || {})[k] || {}).name || k]) : Object.keys(bcfg().recipes || {}).map((k) => [k, itemName(k)]);
+          const sel = el("select", { class: "base-sel", onchange: () => set({ recipe: sel.value || null }) }, el("option", { value: "" }, d.rank ? "Pick a ship" : "Pick a component"), ...opts.map(([k, n]) => el("option", { value: k }, n)));
+          sel.value = q.recipe || ""; box.append(sel);
+          if (q.recipe) {
+            const need = d.rank ? (bcfg().ships[q.recipe] || {}).bill : (bcfg().recipes[q.recipe] || {}).in, ms = d.rank ? (bcfg().ships[q.recipe] || {}).ms : (bcfg().recipes[q.recipe] || {}).ms;
+            box.append(el("div", { class: "base-need" }, ...Object.entries(need || {}).map(([k, v]) => el("span", { class: "base-chip" }, itemIcon(k) ? el("img", { src: itemIcon(k), alt: "" }) : null, v.toLocaleString() + " " + itemName(k))), el("span", { class: "base-chip" }, fmtDur(ms))));
+            const mode = el("select", { class: "base-sel", onchange: () => set({ mode: mode.value }) }, el("option", { value: "unlimited" }, "Unlimited"), el("option", { value: "count" }, "Exact number"));
+            mode.value = q.mode || "unlimited"; box.append(mode);
+            if (q.mode === "count") { const n = el("input", { class: "base-num", type: "number", min: "0", value: String(q.count || 0), onchange: () => set({ count: Math.max(0, Math.floor(+n.value || 0)) }) }); box.append(n); }
+            B.live.prog = el("div", { class: "ubar" }, el("div", { class: "ubar-fill hold" }), el("span", { class: "ubar-txt" })); box.append(B.live.prog);
+          }
+        }
+        B.live.contents = el("div", { class: "base-contents" });
+        box.append(B.live.status, B.live.contents);
+        B.side.append(box);
+      }
+    }
+    if (q && B.live) {
+      const d = bdef(q.type), lines = [];
+      if (q.net < 0 && q.type !== "home") lines.push("Not connected to any pipes");
+      if (q.idle) lines.push(q.idle);
+      if (q.type === "factory" || d.rank) lines.push("Made: " + (q.made || 0) + (q.mode === "count" ? " / " + (q.count || 0) : ""));
+      B.live.status.textContent = lines.join(" · ");
+      if (B.live.prog) { const p = q.job ? q.job.p : 0; B.live.prog.firstChild.style.width = (p * 100).toFixed(1) + "%"; B.live.prog.lastChild.textContent = q.job ? itemName(q.job.item) === q.job.item ? ((A.cfg.shipTypes || {})[q.job.item] || {}).name + " · " + fmtDur(q.job.left) : itemName(q.job.item) + " · " + fmtDur(q.job.left) : "Idle"; }
+      const store = { ...(q.store || {}), ...(q.buf || {}) }, keys = Object.keys(store).filter((k) => store[k] > 0);
+      const head = q.used != null ? Math.round(q.used).toLocaleString() + " / " + (d.cap || 0).toLocaleString() + " m³" : keys.length ? "Waiting to be piped out" : "";
+      B.live.contents.innerHTML = "";
+      if (head) B.live.contents.append(el("div", { class: "base-cap" }, head));
+      for (const k of keys.sort()) B.live.contents.append(el("div", { class: "base-item" }, itemIcon(k) ? el("img", { src: itemIcon(k), alt: "" }) : el("span"), el("span", {}, itemName(k)), el("b", {}, Math.round(store[k]).toLocaleString())));
+    }
+  }
+  // view: B.cam = { x, y (tile at the canvas centre), z (px per tile) }
+  function baseFit() { const c = B.canvas, base = window.Atamus.base; if (!c || !base) return; const h = base.buildings.find((x) => x.type === "home"); B.cam = { x: h ? h.x + 2 : 32, y: h ? h.y + 2 : 32, z: Math.max(8, Math.min(48, c.clientWidth / 24)) }; }
+  function tileAt(px, py) { const c = B.canvas, z = B.cam.z; return { x: Math.floor(B.cam.x + (px - c.clientWidth / 2) / z), y: Math.floor(B.cam.y + (py - c.clientHeight / 2) / z) }; }
+  function drawBase() {
+    const c = B.canvas, A = window.Atamus, base = A.base; if (!c || !c.isConnected) return;
+    const dpr = window.devicePixelRatio || 1, W = c.clientWidth, Hh = c.clientHeight; if (!W || !Hh) return;
+    if (c.width !== Math.round(W * dpr) || c.height !== Math.round(Hh * dpr)) { c.width = Math.round(W * dpr); c.height = Math.round(Hh * dpr); }
+    const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = "#0b1018"; g.fillRect(0, 0, W, Hh);
+    if (!base) return;
+    if (!B.cam) baseFit();
+    const z = B.cam.z, sx = (tx) => W / 2 + (tx - B.cam.x) * z, sy = (ty) => Hh / 2 + (ty - B.cam.y) * z;
+    // the grid
+    g.fillStyle = "#121a26"; g.fillRect(sx(0), sy(0), base.w * z, base.h * z);
+    if (z >= 6) { g.strokeStyle = "rgba(140,170,220,0.07)"; g.lineWidth = 1; g.beginPath(); for (let i = 0; i <= base.w; i++) { g.moveTo(Math.round(sx(i)) + 0.5, sy(0)); g.lineTo(Math.round(sx(i)) + 0.5, sy(base.h)); } for (let j = 0; j <= base.h; j++) { g.moveTo(sx(0), Math.round(sy(j)) + 0.5); g.lineTo(sx(base.w), Math.round(sy(j)) + 0.5); } g.stroke(); }
+    g.strokeStyle = "rgba(140,170,220,0.3)"; g.strokeRect(sx(0), sy(0), base.w * z, base.h * z);
+    // pipes: a hub on each tile with arms toward neighbouring pipes and the buildings they feed
+    const pipes = new Set(base.pipes), paint = new Set(B.paint ? [...B.paint] : []);
+    const at = (x, y) => base.buildings.find((q) => x >= q.x && y >= q.y && x < q.x + bdef(q.type).w && y < q.y + bdef(q.type).h);
+    for (const k of [...pipes, ...paint]) {
+      const [x, y] = k.split(",").map(Number), cx = sx(x + 0.5), cy = sy(y + 0.5), w2 = Math.max(2, z * 0.18);
+      g.fillStyle = paint.has(k) && !pipes.has(k) ? "rgba(120,200,255,0.5)" : "#6f7f96";
+      g.fillRect(cx - w2, cy - w2, w2 * 2, w2 * 2);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = (x + dx) + "," + (y + dy); if (pipes.has(n) || paint.has(n) || at(x + dx, y + dy)) g.fillRect(Math.min(cx, cx + dx * z / 2) - (dy ? w2 : 0), Math.min(cy, cy + dy * z / 2) - (dx ? w2 : 0), dx ? z / 2 : w2 * 2, dy ? z / 2 : w2 * 2); }
+    }
+    // buildings
+    const nets = ["#3fa9ff", "#ffb347", "#7ddc7d", "#e07bd8", "#e5e06a", "#6fe0d9"];
+    for (const q of base.buildings) {
+      const d = bdef(q.type), x = sx(q.x), y = sy(q.y), w = d.w * z, h = d.h * z;
+      if (d.art && docksMeta) {
+        const dk = docksMeta.docks[d.art], base0 = dockArt(dk.file.replace(".png", "")), cranes = dockArt(dk.cranes.replace(".png", "")), k = w / dk.size[0];
+        g.imageSmoothingEnabled = k < 1;
+        if (base0.naturalWidth) g.drawImage(base0, x, y, w, h);
+        const job = q.job, sb = job && (bcfg().ships || {})[job.item], sm = sb && docksMeta.ships[sb.art];
+        if (sm) {                                                     // the ship under construction: its stage overlay, centred if it's a smaller dock's art
+          const sd = docksMeta.docks[sm.dock], ox = (dk.size[0] - sd.size[0]) / 2 * k, oy = (dk.size[1] - sd.size[1]) / 2 * k;
+          const ov = sm.overlays[sm.overlays.length === 1 ? 0 : Math.min(2, Math.floor(job.p * 3))], img = dockArt(ov.replace(".png", ""));
+          if (img.naturalWidth) g.drawImage(img, x + ox, y + oy, sd.size[0] * k, sd.size[1] * k);
+        }
+        if (cranes.naturalWidth) g.drawImage(cranes, x, y, w, h);
+      } else {
+        const col = { home: "#2b4a6b", storage: "#3b3f52", refinery: "#5a3e2b", factory: "#2f4f3a" }[q.type] || "#333";
+        g.fillStyle = col; g.fillRect(x + 1, y + 1, w - 2, h - 2); g.strokeStyle = "rgba(255,255,255,0.18)"; g.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+        const icon = q.type === "home" ? "assets/icons/map/asteroid_field.png" : q.type === "refinery" ? "assets/icons/ores/cratered.png" : q.type === "factory" ? (q.recipe ? itemIcon(q.recipe) : "assets/icons/components/structural_beam.png") : "assets/icons/components/steel_plate.png";
+        const im = icon && dockImgAbs(icon); if (im && im.naturalWidth && z >= 10) { const s = Math.min(w, h) * 0.55; g.imageSmoothingEnabled = false; g.drawImage(im, x + w / 2 - s / 2, y + h / 2 - s / 2 - (z >= 20 ? 6 : 0), s, s * im.naturalHeight / im.naturalWidth); }
+        if (z >= 20) { g.fillStyle = "rgba(230,236,245,0.9)"; g.font = "11px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(d.name, x + w / 2, y + h - 6); }
+        if (q.job) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(x + 4, y + h - 4, w - 8, 3); g.fillStyle = "#7fc4ff"; g.fillRect(x + 4, y + h - 4, (w - 8) * q.job.p, 3); }
+      }
+      if (q.net >= 0) { g.fillStyle = nets[q.net % nets.length]; g.beginPath(); g.arc(x + 6, y + 6, 3, 0, Math.PI * 2); g.fill(); }   // which pipe network it's on
+      if (q.idle) { g.fillStyle = "#ffb347"; g.beginPath(); g.arc(x + w - 6, y + 6, 3, 0, Math.PI * 2); g.fill(); }
+      if (B.sel === q.id) { g.strokeStyle = "rgba(255,160,70,0.95)"; g.lineWidth = 2; g.strokeRect(x, y, w, h); g.lineWidth = 1; }
+    }
+    // placement ghost
+    if (B.hover && B.tool && B.tool !== "remove" && B.tool !== "pipe") {
+      const d = bdef(B.tool), ok = canPlaceLocal(base, B.tool, B.hover.x, B.hover.y);
+      g.fillStyle = ok ? "rgba(90,200,120,0.25)" : "rgba(230,80,80,0.25)"; g.fillRect(sx(B.hover.x), sy(B.hover.y), d.w * z, d.h * z);
+      g.strokeStyle = ok ? "rgba(90,200,120,0.9)" : "rgba(230,80,80,0.9)"; g.strokeRect(sx(B.hover.x) + 0.5, sy(B.hover.y) + 0.5, d.w * z, d.h * z);
+    } else if (B.hover && B.tool) { g.strokeStyle = B.tool === "remove" ? "rgba(230,80,80,0.9)" : "rgba(120,200,255,0.9)"; g.strokeRect(sx(B.hover.x) + 0.5, sy(B.hover.y) + 0.5, z, z); }
+  }
+  const absImg = {}; function dockImgAbs(src) { if (!absImg[src]) { absImg[src] = new Image(); absImg[src].src = src; absImg[src].onload = () => drawBase(); } return absImg[src]; }
+  function canPlaceLocal(base, type, x, y) {
+    const d = bdef(type); if (x < 0 || y < 0 || x + d.w > base.w || y + d.h > base.h) return false;
+    const pipes = new Set(base.pipes);
+    for (const q of base.buildings) { const e = bdef(q.type); if (x < q.x + e.w && x + d.w > q.x && y < q.y + e.h && y + d.h > q.y) return false; }
+    for (let i = 0; i < d.w; i++) for (let j = 0; j < d.h; j++) if (pipes.has((x + i) + "," + (y + j))) return false;
+    return true;
+  }
+  function baseInput(c) {
+    const A = window.Atamus, pos = (e) => { const r = c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    let drag = null, hold = 0;
+    const buildingAtTile = (t) => (A.base ? A.base.buildings.find((q) => t.x >= q.x && t.y >= q.y && t.x < q.x + bdef(q.type).w && t.y < q.y + bdef(q.type).h) : null);
+    const menu = (e, t) => { const q = buildingAtTile(t), pipe = A.base && A.base.pipes.includes(t.x + "," + t.y); if (!q && !pipe) return; if (q && q.type === "home") return;
+      showCtxMenu(e.clientX, e.clientY, [["Remove (half refund)", () => A.send({ t: "base_remove", x: t.x, y: t.y })]]); };
+    c.addEventListener("wheel", (e) => { e.preventDefault(); if (!B.cam) return; const p = pos(e), before = tileAtF(p); B.cam.z = Math.max(4, Math.min(96, B.cam.z * (e.deltaY > 0 ? 1 / 1.15 : 1.15))); const after = tileAtF(p); B.cam.x += before.x - after.x; B.cam.y += before.y - after.y; drawBase(); }, { passive: false });
+    const tileAtF = (p) => ({ x: B.cam.x + (p.x - c.clientWidth / 2) / B.cam.z, y: B.cam.y + (p.y - c.clientHeight / 2) / B.cam.z });
+    c.addEventListener("contextmenu", (e) => { e.preventDefault(); if (B.cam) menu(e, tileAt(pos(e).x, pos(e).y)); });
+    c.addEventListener("pointerdown", (e) => {
+      if (!B.cam) return; c.setPointerCapture(e.pointerId); const p = pos(e); B.ptrs.set(e.pointerId, p);
+      if (B.ptrs.size === 2) { clearTimeout(hold); const [a, b] = [...B.ptrs.values()]; drag = { pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y), z: B.cam.z }; B.paint = null; return; }
+      if (e.button === 2) return;
+      const t = tileAt(p.x, p.y);
+      drag = { x0: p.x, y0: p.y, cx: B.cam.x, cy: B.cam.y, moved: false, t };
+      if (B.tool === "pipe") { B.paint = new Set([t.x + "," + t.y]); drawBase(); }
+      if (e.pointerType !== "mouse") hold = setTimeout(() => { if (drag && !drag.moved && B.tool !== "pipe") { drag = null; menu(e, t); } }, 500);   // hold = right-click (owner: mobile parity)
+    });
+    c.addEventListener("pointermove", (e) => {
+      if (!B.cam) return; const p = pos(e);
+      if (B.ptrs.has(e.pointerId)) B.ptrs.set(e.pointerId, p);
+      if (drag && drag.pinch && B.ptrs.size >= 2) { const [a, b] = [...B.ptrs.values()]; B.cam.z = Math.max(4, Math.min(96, drag.z * Math.hypot(a.x - b.x, a.y - b.y) / (drag.d || 1))); drawBase(); return; }
+      B.hover = tileAt(p.x, p.y);
+      if (drag && !drag.pinch) {
+        if (Math.abs(p.x - drag.x0) + Math.abs(p.y - drag.y0) > 6) { drag.moved = true; clearTimeout(hold); }
+        if (B.tool === "pipe") { const t = tileAt(p.x, p.y); B.paint.add(t.x + "," + t.y); }
+        else if (drag.moved) { B.cam.x = drag.cx - (p.x - drag.x0) / B.cam.z; B.cam.y = drag.cy - (p.y - drag.y0) / B.cam.z; }
+      }
+      drawBase();
+    });
+    const up = (e) => {
+      B.ptrs.delete(e.pointerId); clearTimeout(hold);
+      if (!drag) return; const d = drag; drag = null; if (d.pinch) { if (!B.ptrs.size) drag = null; return; }
+      if (B.tool === "pipe" && B.paint) { const tiles = [...B.paint].map((k) => k.split(",").map(Number)); B.paint = null; A.send({ t: "base_pipes", tiles }); drawBase(); return; }
+      if (d.moved) return;
+      const t = d.t;
+      if (B.tool === "remove") A.send({ t: "base_remove", x: t.x, y: t.y });
+      else if (B.tool) A.send({ t: "base_place", type: B.tool, x: t.x, y: t.y });
+      else { const q = buildingAtTile(t); B.sel = q ? q.id : null; renderBaseSide(); drawBase(); }
+    };
+    c.addEventListener("pointerup", up); c.addEventListener("pointercancel", up);
+    c.addEventListener("pointerleave", () => { B.hover = null; drawBase(); });
+    addEventListener("keydown", (e) => { if (e.key === "Escape" && B.tool) { B.tool = null; renderBaseSide(); drawBase(); } });
+  }
+
   // ---- custom right-click context menu ----
   let ctxMenu = null;
   window.Atamus.ctxMenu = (x, y, items) => showCtxMenu(x, y, items);   // the map's POI menu (game.js)
@@ -1819,6 +2011,8 @@
     wins.fleet.win.addEventListener("pointerup", () => { if (wins.fleet.win.style.left + "," + wins.fleet.win.style.top === fleetAt) return; setTimeout(() => { actSig = ""; renderShipActions(); }, 0); });
     createWindow("market", { left: 300, top: 120, width: 380, minW: 300, minH: 200, render: renderMarket, label: "Market" });
     createWindow("settings", { left: 320, top: 140, width: 300, minW: 260, minH: 180, render: renderSettings, label: "Settings" });
+    createWindow("base", { left: 200, top: 70, width: 820, height: 560, minW: 340, minH: 300, render: renderBase, label: "Base" });
+    if (isOpen(wins.base)) window.Atamus.send({ t: "base_open", open: true });
     createWindow("unit", { left: 420, top: 120, width: 250, minW: 230, minH: 120, render: renderUnit, label: "Selection" });
     renderPanel();
 

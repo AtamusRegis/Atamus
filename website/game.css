@@ -633,3 +633,24 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none;
 .fit-slots { display: grid; justify-content: center; gap: 6px; margin: 14px 0 4px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.22); }
 .fit-slots .hb-slot { width: 40px; height: 40px; }
 @media (max-width: 480px) { .fit-top { flex-direction: column; } .fit-ship { flex-basis: auto; } }
+
+/* the base window: build palette and settings on the left, the grid on the right */
+.win-body.base-body { display: flex; gap: 8px; padding: 6px; overflow: hidden; }
+.base-side { width: 200px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.base-canvas { flex: 1; min-width: 0; height: 100%; border-radius: 6px; touch-action: none; display: block; }
+.base-tools { display: flex; flex-direction: column; gap: 2px; }
+.base-tool { display: flex; justify-content: space-between; gap: 6px; padding: 5px 8px; border: none; border-radius: 5px; background: rgba(0,0,0,0.25); color: var(--text); font-size: 12px; cursor: pointer; text-align: left; }
+.base-tool:hover { background: rgba(255,255,255,0.08); }
+.base-tool.on { background: var(--sel); }
+.base-tool .credits { font-size: 11px; }
+.base-info { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; }
+.base-info-h { font-weight: 600; color: var(--text); }
+.base-sel, .base-num { width: 100%; background: rgba(0,0,0,0.35); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 4px 6px; font-size: 12px; }
+.base-need { display: flex; flex-wrap: wrap; gap: 3px; }
+.base-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-size: 11px; }
+.base-chip img, .base-item img { width: 16px; height: 16px; object-fit: contain; image-rendering: pixelated; }
+.base-status { color: #ffb347; font-size: 11px; min-height: 13px; }
+.base-cap { color: var(--text-dim); font-size: 11px; }
+.base-item { display: grid; grid-template-columns: 18px 1fr auto; gap: 5px; align-items: center; font-size: 12px; color: var(--text-dim); }
+.base-item b { color: var(--text); font-weight: 500; }
+@media (max-width: 600px) { .win-body.base-body { flex-direction: column; } .base-side { width: auto; max-height: 40%; } .base-canvas { min-height: 200px; } }

@@ -32,13 +32,25 @@ export const MODULES = {
     desc: "Adds 10% to mining laser yield. Each extra one is less effective than the last." },
 };
 for (const [k, m] of Object.entries(MODULES)) ITEMS[k] = { key: k, kind: "module", ...m, rarity: "module", unitM3: 5, color: "#7f8fb0" };
+// Base production (DESIGN.md › The base surface): refined "-iums" and the 18 ship components. They live in base
+// storage; volumes in m³ per unit.
+export const IUMS = { ironstone: "cryonium", cuprite: "pyroxium", cobaltine: "duranium", iridite: "hexium", starglass: "tantalium" };
+const IUM_NAMES = { cryonium: "Cryonium", pyroxium: "Pyroxium", duranium: "Duranium", hexium: "Hexium", tantalium: "Tantalium" };
+for (const [ore, k] of Object.entries(IUMS)) { const o = ORES.find((x) => x.key === ore); ITEMS[k] = { key: k, name: IUM_NAMES[k], kind: "ium", desc: "Refined " + o.name + ". Factories turn it into ship components.", rarity: o.rarity, unitM3: 0.1, price: 0, color: o.color, icon: "assets/icons/ore_" + o.rock + ".png" }; }
+export const COMPONENTS = {
+  steel_plate: ["Steel Plate", 1], hull_plating: ["Hull Plating", 4], structural_beam: ["Structural Beam", 3], bolts_fasteners: ["Bolts & Fasteners", 0.05], cable_spool: ["Cable Spool", 1],
+  circuit_board: ["Circuit Board", 0.2], processor_chip: ["Processor Chip", 0.1], power_cell: ["Power Cell", 0.5], reactor_core: ["Reactor Core", 5], thruster_nozzle: ["Thruster Nozzle", 2],
+  engine_assembly: ["Engine Assembly", 6], shield_emitter: ["Shield Emitter", 2], sensor_dish: ["Sensor Dish", 3], hydraulic_piston: ["Hydraulic Piston", 1], gyroscope: ["Gyroscope", 0.5],
+  coolant_canister: ["Coolant Canister", 0.5], viewport_glass: ["Viewport Glass", 1], forcefield_generator: ["Forcefield Generator", 10],
+};
+for (const [k, [name, m3]] of Object.entries(COMPONENTS)) ITEMS[k] = { key: k, name, kind: "component", desc: name + ": a ship component, made in a factory and used by shipyards.", rarity: "component", unitM3: m3, price: 0, color: "#9aa7bd", icon: "assets/icons/components/" + k + ".png" };
 // Packaged ships: bought ships arrive as items in the station's Deliveries; Assemble turns one into a docked ship.
 const PACKAGED_M3 = { "Mining Frigate": 2500, "Mining Barge": 3750, "Exhumer": 3750 };
 for (const [k, t] of Object.entries(SHIP_TYPES)) ITEMS["ship:" + k] = { key: "ship:" + k, name: t.name, kind: "ship", ship: k, desc: t.desc + " Packaged: assemble it in a station to fly it.", rarity: t.cls, unitM3: PACKAGED_M3[t.cls] || 5000, price: t.price, color: "#6a7fa8", icon: "assets/ships/" + t.sprite + "_blue.webp" };
 // What the station market sells. path: the market window's nested groups (Ships > Industry > Mining Frigate).
 const catName = (k) => (CATEGORIES.find((c) => c.key === k) || {}).name || k;
 export const MARKET = [
-  ...Object.entries(SHIP_TYPES).sort((a, b) => SHIP_ROLES.indexOf(a[1].role) - SHIP_ROLES.indexOf(b[1].role) || SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
+  ...Object.entries(SHIP_TYPES).filter(([, t]) => t.price > 0).sort((a, b) => SHIP_ROLES.indexOf(a[1].role) - SHIP_ROLES.indexOf(b[1].role) || SHIP_CLASSES.indexOf(a[1].cls) - SHIP_CLASSES.indexOf(b[1].cls) || a[1].price - b[1].price)
     .map(([k, t]) => ({ key: "ship:" + k, name: t.name, price: t.price, path: ["Ships", t.role, t.cls], ship: k })),
   ...Object.entries(MODULES).map(([k, m]) => ({ key: k, name: m.name, price: m.price, path: ["Modules", MODULE_CATEGORIES[m.cat]] })),
   ...Object.values(ITEMS).filter((it) => it.kind === "manual")

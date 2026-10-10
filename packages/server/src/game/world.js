@@ -7,8 +7,10 @@ import {
 import * as Inv from "./inventory.js";
 import { getLicense, hullEfficiency } from "../licenses.js";
 import { fixedPois, freeSpot, createBeltField, POI_SIZE_KM, auDist } from "./expanse.js";
+import * as Base from "./base.js";
 
 const STATION = "station";                 // the station POI; the station itself sits at its centre
+const PLANET_DOCK_KM = 12;                 // ships dock at their home planet within this of its centre (the planet is drawn 8 km across)
 const HANGARS = 4;
 // jettison cans (owner): only their owner can open them for 30 minutes, then anyone can for 10 more, then they're gone
 const CAN_PRIVATE_MS = 30 * 60 * 1000, CAN_PUBLIC_MS = 10 * 60 * 1000, CAN_LIFE_MS = CAN_PRIVATE_MS + CAN_PUBLIC_MS, CAN_COOLDOWN_MS = 30 * 60 * 1000, CAN_M3 = 15000, CAN_RANGE_KM = 2.5;
@@ -28,21 +30,25 @@ export class World {
     this.pois = new Map();    // the Expanse's points of interest: id -> { id, kind, name, ax, ay (AU), r (km), fixed, field?, expiresAt?, hidden?, owner? }
     for (const p of fixedPois()) this.pois.set(p.id, p);
     this.poiVer = 1; this.nextBelts = 0;
+    this.homeCounts = new Map();   // planet id -> players whose home it is (net.js fills it from the database at boot)
   }
 
   addPlayer(id, name, send, saved = null) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShips(id); return existing; }
     const now = Date.now();
-    const p = { id, name, send, offline: false, view: null, hangars: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {}, pilots: [] };
+    const p = { id, name, send, offline: false, view: null, baseOpen: false, hangars: null, invDirty: false, credits: 0, licenses: (saved && saved.licenses) || {}, unlocked: (saved && saved.unlocked) || {}, pilots: [] };
     this.players.set(id, p);
+    // home planet (owner): assigned once, to the planet with the fewest players, so homes spread evenly
+    p.home = saved && saved.home && this.pois.has(saved.home) ? saved.home : this._assignHome();
+    p.base = saved && saved.base && Array.isArray(saved.base.buildings) ? saved.base : Base.createBase();
     // Logging in (owner): ships come back where they were. One whose POI is gone arrives at a random point outside
     // any POI, inside a small unmarked POI made around them.
     let spawn = null;
     for (const sh of (saved && saved.ships) || []) {
       const rec = { ...sh, owner: id, wp: null, warp: false };
       const poi = rec.docked ? this.pois.get(STATION) : this.pois.get(rec.sys);
-      if (rec.docked) rec.sys = STATION;
+      if (rec.docked) rec.sys = rec.sys === p.home ? p.home : STATION;   // docked at the station, or at the home planet
       else if (!poi || poi.retired) {
         spawn ||= this._newPoi("spawn", { owner: id });
         const a = Math.random() * Math.PI * 2, d = Math.random() * spawn.r * 0.5;
@@ -59,7 +65,24 @@ export class World {
     p.delivery = (saved && saved.delivery) || Inv.makeInv(STATION_HANGAR_M3);   // market purchases land here
     while (p.hangars.length < HANGARS) p.hangars.push({ name: "Hangar " + (p.hangars.length + 1), inv: Inv.makeInv(STATION_HANGAR_M3) });
     this._ensureShips(id);
+    // the base kept producing while you were away (owner): catch up now
+    if (saved && saved.savedAt) Base.catchUp(p.base, Math.max(0, now - saved.savedAt), { spawn: (type) => this._spawnBuilt(p, type) });
+    p.baseAt = now;
     return p;
+  }
+  _assignHome() {
+    const planets = [...this.pois.values()].filter((q) => q.kind === "planet");
+    let best = planets[0], n = Infinity;
+    for (const q of planets) { const c = this.homeCounts.get(q.id) || 0; if (c < n) { n = c; best = q; } }
+    this.homeCounts.set(best.id, (this.homeCounts.get(best.id) || 0) + 1);
+    return best.id;
+  }
+  // a ship finished in a base shipyard: docked at the home planet, uncrewed, nothing fitted
+  _spawnBuilt(p, type) {
+    let n = 0; while (this.ships.has(`${p.id}:ship:${n}`)) n++;
+    const id = `${p.id}:ship:${n}`;
+    this.ships.set(id, this._hydrateShip({ id, owner: p.id, sys: p.home, type, x: 0, y: 0, tx: 0, ty: 0, moving: false, h: Math.PI / 2, docked: true, pilot: null, fit: [] }));
+    this._tell(p.id, `${(SHIP_TYPES[type] || {}).name || type} finished at your base.`); this._markInv(p.id);
   }
 
   /** Everything about a player worth keeping across logins and restarts. */
@@ -69,7 +92,7 @@ export class World {
       return { id: s.id, type: s.type, x: poiWarp ? 0 : s.x, y: poiWarp ? 0 : s.y, tx: s.tx, ty: s.ty, moving: false, h: s.h, docked: s.docked, sys: poiWarp ? s.wp.to : s.sys, fit: s.fit, heat: s.heat || 0, lasers: s.lasers, auto: s.auto, targets: s.targets, inv: s.inv, hp: s.hp, shield: s.shield, pilot: s.pilot, name: s.name };
     });
     const p = this.players.get(id);
-    return { ships, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
+    return { ships, home: p ? p.home : null, base: p ? p.base : null, hangars: p ? p.hangars : null, delivery: p ? p.delivery : null, jetUntil: p ? p.jetUntil : 0, cans: [...this.cans.values()].filter((c) => c.owner === id), licenses: p ? p.licenses : {}, unlocked: p ? p.unlocked : {}, savedAt: Date.now() };
   }
 
   // Fill in live/derived ship fields from a saved or fresh record.
@@ -360,7 +383,7 @@ export class World {
   }
   cmdFit(pid, shipId, from) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
-    if (!sh.docked) { this._tell(pid, "Dock to change a ship's fitting."); return; }
+    if (!sh.docked || sh.sys !== STATION) { this._tell(pid, "Dock at the station to change a ship's fitting."); return; }
     const a = this._inv(pid, from); if (!a || !a.inv || !a.docked) return;
     const slot = this._slotOf(a.inv, from.slot, from.item), st = a.inv.slots[slot], m = st && Inv.MODULES[st.item]; if (!m) return;
     const t = SHIP_TYPES[sh.type];
@@ -384,7 +407,7 @@ export class World {
   // to: optional station inventory (or this ship's own hold) to put the module in; default Hangar 1
   cmdUnfit(pid, shipId, idx, to) {
     const p = this.players.get(pid), sh = this.ships.get(shipId); if (!p || !sh || sh.owner !== pid) return;
-    if (!sh.docked) { this._tell(pid, "Dock to change a ship's fitting."); return; }
+    if (!sh.docked || sh.sys !== STATION) { this._tell(pid, "Dock at the station to change a ship's fitting."); return; }
     const i = Math.floor(Number(idx)), f = sh.fit[i]; if (!f) return;
     const dest = to ? this._inv(pid, to) : null, inv = dest && dest.inv && dest.docked && !dest.can ? dest.inv : p.hangars[0].inv;
     if (Inv.add(inv, f.item, 1) !== 1) { this._tell(pid, "No room for the module there."); return; }
@@ -394,12 +417,18 @@ export class World {
   cmdDock(pid, shipId, dock) {
     const sh = this.ships.get(shipId); if (!sh || sh.owner !== pid) return;
     if (dock) {
-      if (sh.docked || this._inWarp(sh) || sh.sys !== STATION || Math.hypot(sh.x, sh.y) > DOCK_RADIUS_KM) return;
+      const p = this.players.get(pid), atHome = p && sh.sys === p.home && Math.hypot(sh.x, sh.y) <= PLANET_DOCK_KM;
+      if (sh.docked || this._inWarp(sh) || !((sh.sys === STATION && Math.hypot(sh.x, sh.y) <= DOCK_RADIUS_KM) || atHome)) return;
       sh.docked = true; sh.moving = false; sh.warp = false; sh.wp = null; for (const L of sh.lasers) this._laserStop(L); sh.auto.on = false; sh.targets = []; sh.vx = sh.vy = 0; this._propStop(sh); this._dronesRecall(sh);
       sh.hp = SHIP_TYPES[sh.type].hp; sh.shield = SHIP_TYPES[sh.type].shield; this._repairModules(sh);   // docked: repaired and recharged
+      if (atHome) this._unloadAtHome(p, sh);
     } else {
       if (!sh.docked) return;
       if (!sh.pilot) { this._tell(pid, "That ship has no pilot. Crew it first."); return; }
+      if (sh.sys !== STATION) {                                   // leaving the home planet: lift off its surface and fly clear
+        const a = Math.random() * Math.PI * 2; sh.docked = false; sh.x = Math.cos(a) * 9; sh.y = Math.sin(a) * 9; sh.h = a;
+        sh.tx = +(Math.cos(a) * 13).toFixed(3); sh.ty = +(Math.sin(a) * 13).toFixed(3); sh.moving = true; sh.vx = 0; sh.vy = 0; this._markInv(pid); return;
+      }
       // undocking (owner): out of the docking bay's mouth, flying away until it stands still near the edge of the dock ring, facing away
       const a = Math.PI + (Math.random() - 0.5) * 0.7, bx = STATION_BAY.x, by = STATION_BAY.y;
       sh.docked = false; sh.sys = STATION; sh.x = bx; sh.y = by; sh.h = a; sh.vx = Math.cos(a) * sh.speed * 0.3; sh.vy = Math.sin(a) * sh.speed * 0.3;
@@ -423,6 +452,73 @@ export class World {
       s.warp = true; s.wp = { ph: "palign", to: poiId, dir: Math.atan2(dst.ay - src.ay, dst.ax - src.ax) };
     }
     this._markInv(pid);
+  }
+  // Docking at the home planet unloads the ore hold into the Home Base (owner: where raw resources go).
+  _unloadAtHome(p, sh) {
+    const home = Base.homeOf(p.base); if (!home) return;
+    const cap = Base.BUILDINGS.home.cap; let used = 0; for (const k in home.store) used += home.store[k] * ((Inv.ITEMS[k] || {}).unitM3 || 0);
+    let moved = 0;
+    for (const st of [...sh.inv.ore.slots]) {
+      const u = (Inv.ITEMS[st.item] || {}).unitM3 || 1, n = Math.min(st.qty, Math.floor((cap - used) / u + 1e-9)); if (n <= 0) continue;
+      home.store[st.item] = (home.store[st.item] || 0) + n; used += n * u; moved += n * u; st.qty -= n;
+    }
+    sh.inv.ore.slots = sh.inv.ore.slots.filter((st) => st.qty > 0);
+    if (moved > 0) { this._tell(p.id, `${shipLabel(sh)}: unloaded ${Math.round(moved).toLocaleString()} m³ of ore at your base.`); this._markInv(p.id); p.baseDirty = true; }
+    if (sh.inv.ore.slots.length) this._tell(p.id, "Your Home Base is full.");
+  }
+  // ---- the base surface (DESIGN.md): place / remove buildings and pipes, set what each makes ----
+  _baseEdit(p) { p.base.ver++; p.baseDirty = true; }
+  _spend(p, cost) {
+    if (p.credits < cost) { this._tell(p.id, "Not enough credits."); return false; }
+    p.credits -= cost; this._markInv(p.id); if (this.onCredits) { try { this.onCredits(p.id, -cost); } catch (e) { console.error("onCredits", e); } }
+    return true;
+  }
+  cmdBasePlace(pid, type, x, y) {
+    const p = this.players.get(pid); if (!p || typeof type !== "string" || !Object.hasOwn(Base.BUILDINGS, type)) return;
+    x = Math.floor(Number(x)); y = Math.floor(Number(y));
+    if (!Base.canPlace(p.base, type, x, y)) return;
+    if (!this._spend(p, Base.BUILDINGS[type].cost)) return;
+    Base.place(p.base, type, x, y); p.baseDirty = true;
+  }
+  cmdBasePipes(pid, tiles) {
+    const p = this.players.get(pid); if (!p || !Array.isArray(tiles)) return;
+    const add = Base.addPipes(p.base, tiles.slice(0, 400)); if (!add.length) return;
+    const n = Math.min(add.length, Math.floor(p.credits / Base.PIPE_COST)); if (n <= 0) { this._tell(pid, "Not enough credits."); return; }
+    if (!this._spend(p, n * Base.PIPE_COST)) return;
+    p.base.pipes.push(...add.slice(0, n)); this._baseEdit(p);
+  }
+  cmdBaseRemove(pid, x, y) {
+    const p = this.players.get(pid); if (!p) return;
+    const r = Base.remove(p.base, Math.floor(Number(x)), Math.floor(Number(y))); if (!r) return;
+    const refund = Math.floor((r.pipe ? Base.PIPE_COST : Base.BUILDINGS[r.building.type].cost) * Base.REFUND);   // half back
+    if (refund > 0) { p.credits += refund; this._markInv(pid); if (this.onCredits) { try { this.onCredits(pid, refund); } catch (e) { console.error("onCredits", e); } } }
+    p.baseDirty = true;
+  }
+  cmdBaseSet(pid, id, cfg) {
+    const p = this.players.get(pid); if (!p || !cfg || typeof cfg !== "object") return;
+    const q = p.base.buildings.find((b) => b.id === Math.floor(Number(id))); if (!q) return;
+    const d = Base.BUILDINGS[q.type];
+    if (q.type === "refinery" && typeof cfg.ore === "string" && (cfg.ore === "any" || Object.hasOwn(Inv.IUMS, cfg.ore))) q.ore = cfg.ore;
+    if (q.type === "factory" || d.rank) {
+      if (cfg.recipe === null) { q.recipe = null; q.made = 0; }
+      else if (typeof cfg.recipe === "string") {
+        const ok = d.rank ? Object.hasOwn(Base.SHIP_BUILDS, cfg.recipe) && Base.SHIP_BUILDS[cfg.recipe].rank <= d.rank : Object.hasOwn(Base.RECIPES, cfg.recipe);
+        if (ok && cfg.recipe !== q.recipe) { q.recipe = cfg.recipe; q.made = 0; }
+      }
+      if (cfg.mode === "unlimited" || cfg.mode === "count") q.mode = cfg.mode;
+      if (cfg.count != null) { const c = Math.floor(Number(cfg.count)); if (Number.isInteger(c) && c >= 0 && c <= 1_000_000) { q.count = c; q.made = Math.min(q.made || 0, c); } }
+      if (cfg.reset) q.made = 0;
+    }
+    p.baseDirty = true;
+  }
+  cmdBaseOpen(pid, open) { const p = this.players.get(pid); if (p) { p.baseOpen = !!open; p.baseDirty = true; } }
+  _tickBases(now) {
+    for (const p of this.players.values()) {
+      if (p.offline || now - (p.baseAt || now) < 1000) continue;
+      const dt = now - p.baseAt; p.baseAt = now;
+      Base.step(p.base, dt, { spawn: (type) => this._spawnBuilt(p, type) });
+      if (p.baseOpen) p.baseDirty = true;
+    }
   }
   // Jump through a stargate (right-click it → Jump). Nomad space doesn't exist yet, so every gate is offline.
   cmdGateJump(pid, gateId, shipIds) {
@@ -500,7 +596,7 @@ export class World {
     if (ref.owner === "station") { const h = p.hangars[Math.max(0, Math.min(p.hangars.length - 1, (ref.h | 0)))]; return { inv: h.inv, docked: true }; }
     if (ref.owner !== "ship" || (ref.inv !== "ore" && ref.inv !== "cargo")) return null;
     const sh = this.ships.get(ref.id); if (!sh || sh.owner !== pid) return null;
-    return { inv: sh.inv[ref.inv], docked: sh.docked, ship: sh };
+    return { inv: sh.inv[ref.inv], docked: sh.docked && sh.sys === STATION, ship: sh };   // station transfers only from ships docked at the station
   }
   // The client names the item it meant: if the stacks shifted under it (a sort, a merge, another tab),
   // find that item rather than acting on whatever now sits in the slot.
@@ -723,6 +819,7 @@ export class World {
       if (poi.hidden) e.hidden = true;
       if (poi.state) e.state = poi.state;
       if (poi.seed != null) e.seed = poi.seed;
+      if (poi.id === p.home) e.home = true;   // your home planet: dock here, open your base
       if (poi.turrets) e.turrets = poi.turrets;
       out.push(e);
     }
@@ -748,6 +845,7 @@ export class World {
     this._tickShips(dtSec);
     this._tickTargeting(dtSec, now);
     if (now >= this.nextBelts) { this.nextBelts = now + 2000; this._maintainPois(now); }
+    this._tickBases(now);
     for (const p of [...this.players.values()]) if (p.offline && now - (p.offlineSince || 0) > LOGOUT_GRACE_MS) this._purge(p.id);   // logged off: the fleet leaves the world
   }
 
@@ -929,7 +1027,7 @@ export class World {
         entry.drones = s.drones.on ? { on: true, since: now - s.drones.poweredAt, rock: s.drones.rock || null, eng: s.drones.rock ? now - s.drones.engagedAt : 0, p: s.drones.rock ? Math.min(1, (now - s.drones.start) / s.drones.dur) : 0, ym: +(this._droneYield(s) * Inv.MODULES["module:mining_drones"].cycle / 1000).toFixed(1) } : { on: false, ym: +(this._droneYield(s) * Inv.MODULES["module:mining_drones"].cycle / 1000).toFixed(1) };
         entry.fitOff = s.fit.map((f, i) => (f.off ? i : -1)).filter((i) => i >= 0);
         entry.targets = s.targets.map((tg) => ({ kind: tg.kind, id: tg.id, locked: tg.locked, p: tg.locked ? 1 : Math.min(1, 1 - (tg.lockAt - now) / (SHIP_TYPES[s.type].lockMs)) }));
-        entry.canDock = !s.docked && s.sys === STATION && !this._inWarp(s) && Math.hypot(s.x, s.y) <= DOCK_RADIUS_KM;
+        entry.canDock = !s.docked && !this._inWarp(s) && ((s.sys === STATION && Math.hypot(s.x, s.y) <= DOCK_RADIUS_KM) || (s.sys === p.home && Math.hypot(s.x, s.y) <= PLANET_DOCK_KM));
       }
       ships.push(entry);
     }

@@ -5,9 +5,10 @@ import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, DOCK_RADIUS_KM, SHIP_TYPES, SHIP_CLASSES, LASER_RANGE_KM, MINING_CYCLE_MS, MODULE_CATEGORIES, WARP_EXIT_SHOW_MS } from "./constants.js";
 import { EXPANSE_APOTHEM_AU, POI_KIND_NAMES } from "./expanse.js";
 import { ORES } from "./belts.js";
-import { ITEMS, MAX_STACKS, MARKET } from "./inventory.js";
+import * as Base from "./base.js";
+import { ITEMS, MAX_STACKS, MARKET, IUMS } from "./inventory.js";
 import { getState, useGameCredits } from "../pilots.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadHomeCounts } from "./persist.js";
 import { pool } from "../db.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
@@ -22,6 +23,7 @@ const conns = new Map();   // pid -> sockets; one session per account: a new tab
 
 const CLIENT_CONFIG = {
   expanseApothemAu: EXPANSE_APOTHEM_AU, poiKinds: POI_KIND_NAMES,
+  base: { buildings: Base.BUILDINGS, recipes: Base.RECIPES, ships: Base.SHIP_BUILDS, pipeCost: Base.PIPE_COST, refund: Base.REFUND, bufM3: Base.BUF_M3, iums: IUMS },
   ores: ORES,
   warpExitShowMs: WARP_EXIT_SHOW_MS,
   items: ITEMS,
@@ -92,6 +94,11 @@ export function attachGameServer(httpServer) {
         case "warpto": world.cmdWarpTo(pid, m.ships, m.poi); break;
         case "prop": world.cmdProp(pid, m.ship, m.fi, !!m.on); break;
         case "drones": world.cmdDrones(pid, m.ship, !!m.on); break;
+        case "base_open": world.cmdBaseOpen(pid, !!m.open); break;
+        case "base_place": world.cmdBasePlace(pid, m.type, m.x, m.y); break;
+        case "base_pipes": world.cmdBasePipes(pid, m.tiles); break;
+        case "base_remove": world.cmdBaseRemove(pid, m.x, m.y); break;
+        case "base_set": world.cmdBaseSet(pid, m.id, m.cfg); break;
         case "drones_engage": world.cmdDronesEngage(pid, m.ship, m.rock); break;
         case "gatejump": world.cmdGateJump(pid, m.gate, m.ships); break;
         case "move": world.cmdMove(pid, m.ships, +m.x, +m.y, m.sys); break;
@@ -140,6 +147,7 @@ export function attachGameServer(httpServer) {
   world.onPoiClosed = (poi) => { if (poiSaved.delete(poi.id) || poi.kind === "belt") deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
   (async () => {
     try { for (const d of await loadPois()) world.loadPoi(d); } catch (e) { console.error("loadPois", e); }
+    try { for (const r of await loadHomeCounts()) world.homeCounts.set(r.home, (world.homeCounts.get(r.home) || 0) + Number(r.n)); } catch (e) { console.error("loadHomeCounts", e); }
   })();
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);
 
@@ -156,6 +164,7 @@ export function attachGameServer(httpServer) {
       if (p.offline) continue;                              // nobody to send to
       const ps = world.poiSig(p); if (ps !== p.poiSig) { p.poiSig = ps; p.send(JSON.stringify({ t: "pois", pois: world.poisFor(p) })); }   // the map's POIs changed
       p.send(JSON.stringify(world.snapshotFor(p, idx)));
+      if (p.baseDirty && p.baseOpen) { p.baseDirty = false; p.send(JSON.stringify({ t: "base", base: Base.view(p.base) })); }   // the base window is open: its state, about once a second
       if (p.invDirty) { p.invDirty = false; p.send(JSON.stringify(world.inventoriesFor(p.id))); }
       if (world.fieldSig(p) !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); p.rockDirty && p.rockDirty.clear(); }   // a field came into view or regrew
       if (p.rockDirty && p.rockDirty.size) { p.send(JSON.stringify({ t: "rocks", rocks: [...p.rockDirty].map(([id, m3]) => ({ id, m3 })) })); p.rockDirty.clear(); }

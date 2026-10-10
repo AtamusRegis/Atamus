@@ -56,6 +56,22 @@ The first phase of docs/DESIGN.md. Today's personal home systems, fuel stargates
 - **Logging in (owner):** ships come back where they were. A ship whose POI no longer exists arrives at a random point outside any POI, inside a **new 20 km spawn-in POI** made around it. A spawn-in POI has **no map marker**, so nobody else can see it or warp to it, and it goes away once its player has left.
 - **New players** start with their Prospector docked at the Expanse Station.
 
+## The base (owner)
+
+Phase 2 of DESIGN.md, first version: production. Recipes, costs and times are first-pass numbers (DESIGN.md › Production chain).
+
+- **Home planet (owner):** every player is assigned one of the four planets, spreading players evenly (whichever planet has the fewest homes). It shows an "Open base" option: right-click (or hold) its icon or its sphere.
+- **Docking at home (owner):** any ship (or ark) can dock at your own home planet within 12 km of its centre (not at anyone else's). Docking there **unloads the ore hold into the Home Base**, repairs the ship, and that's where shipyards deliver new ships. Undocking lifts off the surface. Fitting, the station hangars, Deliveries and selling stay at the station: a ship at the home planet opens its own holds.
+- **The Base window** (left panel, or "Open base" on the home planet): a 64 × 64 grid of 64 px tiles. Drag to pan, wheel or pinch to zoom. The sidebar has the build palette (credits only, owner) and the selected building's settings. Pipe tool: drag to lay pipes. Remove tool, or right-click / hold a building or pipe: remove it for half its cost back. Esc drops the tool.
+- **Buildings:** Home Base (free, 4 × 4, holds 2,000,000 m³ of ore; can't be removed), Storage Unit (250k, 2 × 2, 50,000 m³), Refinery (750k, 3 × 3), Factory (1.5M, 3 × 3), and shipyards drawn in the owner's dock art: Frigate (2M), Cruiser (25M), Mini Ark Yard (100M), Small Ark Yard (1B), Ark Yard (5B). Pipes cost 500 a tile.
+- **Pipes (owner):** carry finished output **instantly** to whatever needs it on the same network. A building joins every pipe run that touches it (shipyards only at their ports, per the dock art), which also links those runs. Output goes to storage on the network (ore to the Home Base), else waits in the maker's own buffer (2,000 m³); a full buffer stalls it. A coloured dot shows each building's network; an orange dot means it's waiting (no ore, missing inputs, no room).
+- **Refinery (owner):** ore → iums (Cryonite → Cryonium, Pyroxite → Pyroxium, Duranite → Duranium, Hexite → Hexium, Tantalite → Tantalium), 10 ore units → 1 ium, 60 m³ of ore a minute. Set to any ore or one ore.
+- **Factory (owner):** pick one of the 18 components (owner's icons); set **Unlimited** or an **exact number**. It takes its inputs when it starts each item.
+- **Shipyards (owner):** pick a ship the yard is big enough for; Unlimited or an exact number. The bill is taken at the start; the build shows the owner's stage art (3 stages; frigates one). Times: frigate 2 h, barges 24 h, **exhumers 3 days with a battleship's bill but in the cruiser yard (owner)**, Mini Ark 3 days, Small Ark 10 days, Ark 30 days.
+- **Arks** are hulls now (Mini 559 m, Small 1,532 m, Ark 5,646 m; huge holds; no license needed; not on the market). Carrying ships and pilots comes later.
+- **Offline (owner):** the base is the only thing that runs while you're away: it catches up when you log in (60 s steps, up to 31 days). Ships finished meanwhile wait docked at the home planet.
+- Iums and components are items (not sellable).
+
 ## Accounts, pilots and sessions
 
 - **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**. "2026-10-09 the Expanse" was a world-only wipe: ships, hangars, cans and belts went; pilots, licenses and credits stayed.

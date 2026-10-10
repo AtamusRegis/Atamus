@@ -8,7 +8,7 @@
   const statusEl = document.getElementById("status");
 
   let cfg = null, me = { id: null, name: "" };
-  let snap = { ships: [], gates: [] }; let belts = []; let pois = [], poiById = new Map(); let invs = { ships: {}, hangars: null };
+  let snap = { ships: [], gates: [] }; let belts = []; let base = null; let pois = [], poiById = new Map(); let invs = { ships: {}, hangars: null };
   let ws = null, lastFrame = performance.now();
   let camInit = false;
 
@@ -36,7 +36,7 @@
     else if (u.kind === "gate") { if (snap.gates.some((g) => g.id === u.id)) selectUnit(u); }
     else if (u.kind === "station") selectUnit(u);
   }
-  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, followShip: (id) => { if (!(snap.ships || []).some((x) => x.id === id)) return; selected.clear(); selected.add(id); syncShipSelection(); follow = true; zoomAt = null; }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get pois() { return pois; }, get camPoi() { return camPoi; }, warpTo: (poiId, ids) => warpTo(poiId, ids), get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
+  window.Atamus = { send: (o) => send(o), bus, get me() { return me; }, get unit() { return unitData(); }, deselectUnit: () => selectUnit(null), selectShip: (id) => { selected.clear(); selected.add(id); syncShipSelection(); }, followShip: (id) => { if (!(snap.ships || []).some((x) => x.id === id)) return; selected.clear(); selected.add(id); syncShipSelection(); follow = true; zoomAt = null; }, selectStation: () => { selected.clear(); selectUnit({ kind: "station", id: "station" }); }, get snap() { return snap; }, get belts() { return belts; }, get pois() { return pois; }, get base() { return base; }, get camPoi() { return camPoi; }, warpTo: (poiId, ids) => warpTo(poiId, ids), get inv() { return invs; }, get cfg() { return cfg; }, ship: (id) => (snap.ships || []).find((x) => x.id === id) || null, get selectedShips() { return [...selected]; }, get selectedUnit() { return selectedUnit; },
     targetInfo: (sh, tg) => targetInfo(sh, tg), hud: { line: null }, get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3) }; },
     // centre the camera on a ship (or the station it's docked at)
     locateShip: (id) => {
@@ -118,6 +118,7 @@
         m.gates = pois.filter((p) => p.kind === "gate").map((p) => ({ id: p.id, sys: p.id, lx: 0, ly: 0, state: p.state || "offline", name: p.name }));   // the stargate in each gate POI
         snap = m; snapAt = performance.now(); recordSnap(m, snapAt); if (!selRestored && invs.hangars) { restoreSelection(); bus.dispatchEvent(new CustomEvent("worldready")); } bus.dispatchEvent(new CustomEvent("snap")); }
       else if (m.t === "belts") { belts = m.belts || []; indexRocks(); }
+      else if (m.t === "base") { base = m.base; bus.dispatchEvent(new CustomEvent("base")); }
       else if (m.t === "inv") { invs = m; bus.dispatchEvent(new CustomEvent("inv")); }
       else if (m.t === "rocks") { for (const u of m.rocks) { const r = rockIdx.get(u.id); if (!r) continue; if (u.m3 > 0) { r.m3 = u.m3; continue; } for (const b of belts) { const i = b.rocks.indexOf(r); if (i >= 0) b.rocks.splice(i, 1); } rockIdx.delete(u.id); } }
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
@@ -216,8 +217,12 @@
   function warpers(poiId, ids) { return (ids || [...selected]).map((id) => (snap.ships || []).find((x) => x.id === id)).filter((sh) => sh && sh.mine && !sh.docked && sh.sys && sh.sys !== poiId && !(sh.wp && (sh.wp.ph === "open" || sh.wp.ph === "transit" || sh.wp.ph === "poi"))); }
   function warpTo(poiId, ids) { const list = warpers(poiId, ids); if (list.length) send({ t: "warpto", ships: list.map((x) => x.id), poi: poiId }); return list.length; }
   function poiMenu(poi, x, y) {
-    if (!poi || !warpers(poi.id).length || !window.Atamus.ctxMenu) return false;
-    window.Atamus.ctxMenu(x, y, [["Warp to " + poi.name, () => warpTo(poi.id)]]);
+    if (!poi || !window.Atamus.ctxMenu) return false;
+    const items = [];
+    if (warpers(poi.id).length) items.push(["Warp to " + poi.name, () => warpTo(poi.id)]);
+    if (poi.home && window.Atamus.openBase) items.push(["Open base", () => window.Atamus.openBase()]);   // your home planet
+    if (!items.length) return false;
+    window.Atamus.ctxMenu(x, y, items);
     return true;
   }
   // right-click (or hold) empty space (owner): recenter on the selected ship, or go to a planet, station, stargate or
@@ -231,6 +236,11 @@
     if (sh) items.push(["Recenter on ship", () => { follow = true; zoomAt = null; }]);
     items.push(["Planets", list("planet")], ["Stations", list("station")], ["Stargates", list("gate")], ["Belts", list("belt")]);
     window.Atamus.ctxMenu(x, y, items);
+  }
+  // the planet sphere of a planet POI you're in (zoomed in)
+  function planetAt(p) {
+    for (const pl of curPlace.values()) { if (pl.poi.kind !== "planet" || !pl.active || pl.r * scale() < 40) continue; if (Math.hypot(p.x - gx2s(pl.gx), p.y - gy2s(pl.gy)) <= Math.max(10, PLANET_R_KM * scale() * pl.k)) return pl.poi; }
+    return null;
   }
   // a POI's map icon under a screen point (only drawn as an icon while the POI is small on screen)
   function poiAt(p) {
@@ -434,7 +444,7 @@
     e.preventDefault(); const p = eventPos(e);
     const rk = rockAt(p); if (rk) { rockMenu(rk, e.clientX, e.clientY); return; }
     const gate = gateAt(p); if (gate) { gateMenu(gate, e.clientX, e.clientY); return; }
-    if (poiMenu(poiAt(p), e.clientX, e.clientY)) return;
+    if (poiMenu(poiAt(p) || planetAt(p), e.clientX, e.clientY)) return;
     spaceMenu(e.clientX, e.clientY);
   });
   canvas.addEventListener("mousemove", (e) => { hoverAt = eventPos(e); });
@@ -460,6 +470,8 @@
         if (touch.mode !== "tap") return;
         const poi = poiAt(touch.start);                                  // hold a POI on the map = right-click: warp to it
         if (poi) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); poiMenu(poi, touch.start.x + r.left, touch.start.y + r.top); return; }
+        const pt = planetAt(touch.start);                                // hold your home planet = right-click: its menu
+        if (pt && pt.home) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); if (poiMenu(pt, touch.start.x + r.left, touch.start.y + r.top)) return; }
         const gt = gateAt(touch.start);                                  // hold a stargate = right-click: its menu
         if (gt) { touch.mode = "done"; const r = canvas.getBoundingClientRect(); gateMenu(gt, touch.start.x + r.left, touch.start.y + r.top); return; }
         if (lockAt(touch.start)) { touch.mode = "done"; if (navigator.vibrate) navigator.vibrate(15); }

@@ -120,7 +120,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
 - **A full production system connected by pipes** (no conveyors). It's where arcs, ships and modules are made (arcs can also be bought).
 - **Offline:** the factory is the only thing that keeps going while you're away, and its output is calculated when you log in.
 
-#### Production chain (owner, 2026-10-10; numbers are Claude's first pass)
+#### Production chain (owner, 2026-10-10; numbers are Claude's first pass) — first version live, see FEATURES.md › The base
 
 **Flow:** ore → **Home Base** → pipes → **Refinery** (ore → "-ium") → pipes → **Factory** (iums → components) → pipes → **Shipyard** (components → ships and arks). **Storage Units** hold anything piped into them.
 
@@ -176,7 +176,7 @@ The world is a set of **systems**, and every system is a set of **points of inte
 |---|---|
 | Prospector (frigate) | 10 Hull Plating, 8 Structural Beam, 40 Bolts, 4 Cable Spool, 2 Circuit Board, 1 Power Cell, 2 Thruster Nozzle, 1 Engine Assembly, 1 Sensor Dish, 1 Gyroscope, 1 Viewport Glass |
 | Mining barge (cruiser) | 60 Hull Plating, 40 Structural Beam, 200 Bolts, 20 Cable Spool, 10 Circuit Board, 4 Processor Chip, 6 Power Cell, 6 Thruster Nozzle, 3 Engine Assembly, 2 Sensor Dish, 8 Hydraulic Piston, 2 Gyroscope, 6 Coolant Canister, 4 Viewport Glass |
-| Exhumer (cruiser) | the barge bill, plus 1 Reactor Core, 4 Shield Emitter and 6 Processor Chip |
+| Exhumer | **the battleship bill and 3 days (owner)**, built in the cruiser yard |
 | Battleship | 400 Hull Plating, 250 Structural Beam, 1,000 Bolts, 80 Cable Spool, 40 Circuit Board, 20 Processor Chip, 4 Reactor Core, 16 Thruster Nozzle, 8 Engine Assembly, 8 Shield Emitter, 6 Sensor Dish, 30 Hydraulic Piston, 6 Gyroscope, 20 Coolant Canister, 10 Viewport Glass |
 | Mini Ark | 1 battleship bill, plus 1 Forcefield Generator |
 | Small Ark | 4 battleship bills, plus 4 Forcefield Generators |

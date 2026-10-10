@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
+- **The base (major):** every player gets a home planet (spread evenly); docking there unloads ore into your Home Base. The Base window lets you build refineries, factories, storage and shipyards with credits, link them with pipes, and refine ore into iums, iums into 18 components, and components into ships and arks (frigate 2 h, barge 24 h, exhumer 3 days, arks 3 / 10 / 30 days). It keeps running while you're offline. Arks exist as hulls.
+
 - **Front page:** Updates scrolls inside its panel; "Help build Atamus" sits under the game description.
 - **Design:** the base production chain (home base, pipes, refineries, factories, storage, shipyards), 18 components and arks as carriers are written up in DESIGN.md with first-pass numbers. Component icons added (not used yet).
 

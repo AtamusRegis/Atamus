@@ -19,3 +19,6 @@ export async function savePoi(id, data) {
   await pool.query(`INSERT INTO instances (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [id, data]);
 }
 export async function deletePoi(id) { await pool.query(`DELETE FROM instances WHERE id = $1`, [id]); }
+
+// how many players call each planet home (home planets are handed out evenly)
+export async function loadHomeCounts() { const { rows } = await pool.query(`SELECT data->>'home' AS home, count(*) AS n FROM systems WHERE data ? 'home' GROUP BY 1`); return rows; }

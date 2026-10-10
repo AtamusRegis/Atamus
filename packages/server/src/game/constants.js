@@ -73,6 +73,16 @@ export const SHIP_TYPES = {
     desc: "The Collier's exhumer. An ore hold big enough to swallow a small asteroid, built for long shifts far from the station.",
   },
 };
+// Arks (owner): mobile bases built in ark yards on the base surface (DESIGN.md). Slow and huge, with big holds. Carrying
+// ships and pilots comes later. No license needed to crew one; not sold on the market.
+const ARK = (name, sprite, lengthKm, speed, oreM3, cargoM3, hp, slots) => ({ name, cls: "Ark", sprite, lengthKm, speedKmps: speed, accelKmps2: speed / 4, radiusKm: lengthKm * 0.4, mass: 200 * lengthKm * lengthKm, hp, shield: hp,
+  cargoM3, oreM3, targetRangeKm: 10, maxTargets: 4, lockMs: 8000, lasers: 0, bonuses: {}, hardpoints: [[0, 0]], arms: [[0], [0]], req: {}, price: 0, fitSlots: slots, disposition: slots * 15, capacitor: slots * 15,
+  desc: "A mobile base. Its holds are vast; its hangars and pilot quarters come later." });
+Object.assign(SHIP_TYPES, {
+  ark_mini: ARK("Mini Ark", "mini_ark", 0.559, 0.08, 50_000, 10_000, 30_000, 4),
+  ark_small: ARK("Small Ark", "small_ark", 1.532, 0.05, 250_000, 50_000, 120_000, 6),
+  ark: ARK("Ark", "ark", 5.646, 0.03, 1_000_000, 250_000, 500_000, 8),
+});
 // Fitting: hardpoints = how many modules fit, disposition = their total size, capacitor = shared power
 // for running them; accepts = module categories this hull can fit. (`hardpoints` above are beam origins.)
 // Per-hull balance pass (owner, 2026-10-10): hardpoints / disposition / capacitor cap a hull's realistic laser count,
@@ -92,10 +102,10 @@ for (const t of Object.values(SHIP_TYPES)) Object.assign(t, { accepts: ["mining"
 export const MODULE_CATEGORIES = { mining: "Mining", drones: "Drones", automation: "Automation", propulsion: "Propulsion", upgrades: "Upgrades", power: "Power" };
 // Stacking penalty (owner: diminishing returns): the nth module of the same kind is this effective (EVE's curve)
 export const stackPenalty = (n) => Math.exp(-((n / 2.67) ** 2));
-export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer"];
+export const SHIP_CLASSES = ["Mining Frigate", "Mining Barge", "Exhumer", "Ark"];
 // What each class is for (the market groups hulls by this, then by class).
 export const SHIP_ROLES = ["Industry", "Combat"];
-const CLASS_ROLE = { "Mining Frigate": "Industry", "Mining Barge": "Industry", "Exhumer": "Industry" };
+const CLASS_ROLE = { "Mining Frigate": "Industry", "Mining Barge": "Industry", "Exhumer": "Industry", "Ark": "Industry" };
 for (const t of Object.values(SHIP_TYPES)) t.role = CLASS_ROLE[t.cls] || "Industry";
 
 export const STATION_BAY = { x: -0.155, y: -0.213 }; // the station's docking-bay mouth, relative to the station (its open side faces -x)
