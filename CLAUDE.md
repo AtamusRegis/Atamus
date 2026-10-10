@@ -58,6 +58,7 @@ scripts/
   check.sh        syntax-check every JS file (run before every push)
   ptr-test.sh     regression/stress suite against the PTR (see scripts/tests/)
   deploy.sh       server-side redeploy (the forced command for the deploy key)
+  sim/wormholes.mjs  nomad-space wormhole/population simulator for DESIGN.md (node scripts/sim/wormholes.mjs [scenario])
 .github/workflows deploy-server.yml (packages/server/**), deploy-website.yml (website/**)
 ```
 
