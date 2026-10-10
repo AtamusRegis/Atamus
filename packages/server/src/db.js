@@ -74,19 +74,22 @@ export async function migrate() {
  * A wipe keeps accounts (logins, sessions, recovery) and removes every pilot, system (ships, items, cans,
  * licenses unlocked) and credit, so everyone starts over as a new player.
  */
-const WIPES = ["2026-10-09 quick-training reset"];
+// tag -> what it clears. "full": pilots, systems and credits. "world": ships, hangars, cans and belts only (pilots,
+// licenses and credits stay).
+const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"]];
 export async function runWipes() {
   await pool.query(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  for (const tag of WIPES) {
+  for (const [tag, kind] of WIPES) {
     const c = await pool.connect();
     try {
       await c.query("BEGIN");
       const { rowCount } = await c.query(`INSERT INTO meta (key, value) VALUES ($1, 'done') ON CONFLICT (key) DO NOTHING`, ["wipe:" + tag]);
       if (!rowCount) { await c.query("ROLLBACK"); continue; }          // already ran
-      const p = await c.query(`DELETE FROM pilots`), s = await c.query(`DELETE FROM systems`);
-      await c.query(`UPDATE users SET credits = 0`);
+      const p = kind === "full" ? await c.query(`DELETE FROM pilots`) : { rowCount: 0 }, s = await c.query(`DELETE FROM systems`);
+      await c.query(`DELETE FROM instances`);
+      if (kind === "full") await c.query(`UPDATE users SET credits = 0`);
       await c.query("COMMIT");
-      console.log(`[wipe] ${tag}: ${p.rowCount} pilots, ${s.rowCount} systems removed, credits reset`);
+      console.log(`[wipe] ${tag}: ${p.rowCount} pilots, ${s.rowCount} systems removed` + (kind === "full" ? ", credits reset" : ""));
     } catch (e) { await c.query("ROLLBACK").catch(() => {}); throw e; }
     finally { c.release(); }
   }

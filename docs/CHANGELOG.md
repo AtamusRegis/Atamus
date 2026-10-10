@@ -10,6 +10,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
   - You receive the POI your camera is on plus your own ships; collisions are per POI; sockets are compressed; local chat is Expanse-wide.
   - Logging off despawns your fleet after 20 s; logging in puts it back, or into a fresh unmarked 20 km POI if its POI is gone. New players start docked at the station.
   - Removed: home systems, fuel stargates, asteroid beacons and instances, home rocks, offline mining.
+  - **World wipe:** ships, hangars, cans and belts are cleared; pilots, licenses and credits stay.
 
 - **Stars:** smaller, crisp points, and they no longer rubber-band at the pan limit. The sun is dimmer.
 - **Right-click menus:** centered above the press; below near the top; to the right near the left edge, to the left near the right edge.
