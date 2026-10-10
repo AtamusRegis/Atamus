@@ -17,6 +17,10 @@ const SC = {
   sizedSmallLow:{ peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, note: "hole sizes, holes into low systems only XS or S" },
   sizedRefuse:  { peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, refuseOversize: true, note: "hole sizes, XS/S into low, and a group bigger than what's left of a hole can't start through it" },
   sizedRefuseBlob:{ peak: 1000, worlds: 90, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, smallIntoLow: true, refuseOversize: true, blob: 80, note: "the refuse variant, plus the 80-group" },
+  gates6:       { peak: 1000, worlds: 90, hours: 48, expGates: 6, note: "the Expanse's 6 stargates (one link each)" },
+  gates6x2:     { peak: 1000, worlds: 90, hours: 48, expGates: 6, gateLinks: 2, note: "6 stargates holding 2 links each" },
+  gates6x3:     { peak: 1000, worlds: 90, hours: 48, expGates: 6, gateLinks: 3, note: "6 stargates holding 3 links each" },
+  gates6at100:  { peak: 100,  worlds: 12, hours: 48, expGates: 6, note: "6 stargates at launch" },
   sized100:     { peak: 100,  worlds: 12, hours: 48, sizes: true, lowCapAll: false, jumpLimit: Infinity, follow: 1, note: "hole sizes at launch" },
   // the original rules, for comparison: the settling delay works both ways and only overcrowded-to-low holes are limited
   blobOld:      { peak: 1000, worlds: 90, hours: 48, blob: 80, settleUpOnly: false, lowCapAll: false, note: "the 80-group under the original rules" },
@@ -182,7 +186,7 @@ function run(name, sc) {
     for (const h of [...holes.values()]) if (now >= h.expires || (h.closeAt != null && now >= h.closeAt) || h.cap <= 0) closeHole(h);
     for (const s of [...systems.values()]) if (s.kind === "instanced" && s.pop === 0 && now - s.born > 2) { for (const id of s.holes) closeHole(holes.get(id)); systems.delete(s.id); }
     // the Expanse keeps holes in proportion to who's online; occupied nomad systems keep a few
-    const expTarget = Math.max(2, Math.ceil(on / P.expPer));
+    const expTarget = P.expGates ? P.expGates * (P.gateLinks || 1) : Math.max(2, Math.ceil(on / P.expPer));   // expGates: the Expanse's fixed stargates (each re-points when its link closes)
     while ([...expanse.holes].filter((id) => holeOpen(holes.get(id), now)).length < expTarget) { const pt = partnerFor(expanse, now); if (!pt) break; mkHole(expanse, pt.sys, now, expanse, { cap: P.lowCapAll && pt.sys.tier === "low" ? P.jumpLimit : Infinity }); }
     for (const s of [...systems.values()]) {
       if (s.kind === "expanse" || s.pop === 0) continue;

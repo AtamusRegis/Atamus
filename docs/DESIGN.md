@@ -40,7 +40,10 @@ The world is a set of **systems**, and every system is a set of **points of inte
   - **an existing connection survives into high** (a system that grew to 16–25 while connected), but it's **cut the moment the system becomes overcrowded** (26+), after the 1-minute friend window. The Expanse is **never** connected to an overcrowded or past-50 system (owner);
   - a gate that gets too much traffic is also re-pointed elsewhere;
   - *Proposed:* a gate whose link is cut stays dark for a short while (about 1–2 minutes), then connects to a new system;
-  - **to check by sim:** 6 fixed gates is fewer than the "one hole per 60 players online" the sim wanted at 1,000 players (about 17). Options: gates hold several links at once, gates re-point faster, or nomad space gets more holes back to the Expanse.
+  - **Gate capacity (sim):** 6 gates with **one link each are enough up to a few hundred players** (61% of players in the Expanse at launch). At 1,000 players they're too few: players leave faster than they find a way back, so only 22% stay in the Expanse.
+    - With **2 links per gate**, 36% stay in the Expanse (your third to half); with 3 links, 47%.
+    - **Proposed:** links per gate scale with players online: 1 below about 400, 2 up to about 800, 3 above.
+    - **To decide (owner):** how a player picks between a gate's links. Each link would be its own destination, so a group needs to pick the same one, which means a choice when you jump, i.e. UI.
 - **Stargates between hub worlds** only arrive if there's ever a second hub. The Expanse's 6 gates lead only to nomad space.
 
 ### Nomad space (wormhole systems)
