@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
+- **Base art and directional pipes:** buildings, storage and ark yards use the owner's art; pipes flow the way you drag them (branch, merge, cross) and are drawn with the directional pipe tiles. New Small (1 × 1) and Large (3 × 3) Storage Depots; ark yards shrink to 4 × 3, 6 × 4 and 8 × 5. Old pipes stay two-way until redrawn.
+
 - **Base:** the Home Base, storage, refineries and factories are drawn as steel frames in the docks' style instead of flat coloured boxes (placeholder until their art exists).
 
 - **The base (major):** every player gets a home planet (spread evenly); docking there unloads ore into your Home Base. The Base window lets you build refineries, factories, storage and shipyards with credits, link them with pipes, and refine ore into iums, iums into 18 components, and components into ships and arks (frigate 2 h, barge 24 h, exhumer 3 days, arks 3 / 10 / 30 days). It keeps running while you're offline. Arks exist as hulls.

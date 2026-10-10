@@ -1783,7 +1783,47 @@
   const itemName = (k) => (((window.Atamus.cfg || {}).items || {})[k] || {}).name || k;
   const itemIcon = (k) => (((window.Atamus.cfg || {}).items || {})[k] || {}).icon || null;
   const fmtDur = (ms) => { const s = Math.ceil(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m ? m + "m " + (s % 60) + "s" : s + "s"; };
-  const TOOLS = ["pipe", "storage", "refinery", "factory", "dock_frigate", "dock_cruiser", "dock_large", "dock_capital", "dock_ark"];
+  const TOOLS = ["pipe", "storage_s", "storage", "storage_l", "refinery", "factory", "dock_frigate", "dock_cruiser", "dock_large", "dock_capital", "dock_ark"];
+  // pipes (mirrors the server's base.js applyPath): each tile has outs (o) and ins (i); c = a crossing; u = an old two-way pipe
+  const PD = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] }, POPP = { N: "S", S: "N", E: "W", W: "E" }, NESW = "NESW";
+  const pdirTo = (a, c) => (c[0] === a[0] + 1 ? "E" : c[0] === a[0] - 1 ? "W" : c[1] === a[1] + 1 ? "S" : "N");
+  function pipeLay(pipe, path, isB) {
+    const hz = (d) => d === "E" || d === "W";
+    for (let k = 0; k < path.length; k++) {
+      const [x, y] = path[k], key = x + "," + y; if (isB(x, y)) continue;
+      const t = pipe[key] = pipe[key] ? { ...pipe[key] } : { o: "", i: "", fresh: 1 };
+      const din = k > 0 ? pdirTo(path[k], path[k - 1]) : null, dout = k < path.length - 1 ? pdirTo(path[k], path[k + 1]) : null;
+      if (t.u) { t.o = ""; t.i = ""; delete t.u; }
+      const straight = din && dout && POPP[din] === dout, tStraight = !t.c && t.o.length === 1 && t.i.length === 1 && POPP[t.i] === t.o;
+      if (straight && (t.c || (tStraight && hz(dout) !== hz(t.o)))) { t.o = [...t.o].filter((d) => hz(d) !== hz(dout)).join("") + dout; t.i = [...t.i].filter((d) => hz(d) !== hz(dout)).join("") + din; t.c = 1; continue; }
+      delete t.c;
+      if (dout) { t.i = t.i.replace(dout, ""); if (!t.o.includes(dout)) t.o += dout; }
+      if (din) { t.o = t.o.replace(din, ""); if (!t.i.includes(din)) t.i += din; }
+    }
+    return pipe;
+  }
+  // which of the owner's pipe sprites a tile is
+  function pipeSprite(t, x, y, pipe, isB) {
+    const ord = (s) => [...s].sort((a, b) => NESW.indexOf(a) - NESW.indexOf(b));
+    if (t.c) return "X_" + (t.o.includes("E") ? "E" : "W") + "_" + (t.o.includes("S") ? "S" : "N");
+    let O = t.o, I = t.i;
+    if (t.u) { O = ""; I = [...NESW].filter((d) => pipe[(x + PD[d][0]) + "," + (y + PD[d][1])] || isB(x + PD[d][0], y + PD[d][1])).join(""); }
+    const all = ord(O + I), n = all.length, dirn = !t.u;
+    if (n === 0) return "straight_H";
+    if (n === 1) return "end_" + all[0];
+    if (n === 2) {
+      if (POPP[all[0]] === all[1]) return dirn && O.length === 1 ? "straight_" + O : all[0] === "N" ? "straight_V" : "straight_H";
+      if (dirn && O.length === 1) return "elbow_" + I + "_to_" + O;
+      const pair = all.join(""); return "elbow_" + (pair === "NW" ? "WN" : pair);
+    }
+    if (n === 3) {
+      const miss = [...NESW].find((d) => !all.includes(d));
+      if (dirn && I.length === 1) return "T_in_" + I + "_out_" + ord(O).join("_");
+      if (dirn && I.length === 2) return "T_in_" + ord(I).join("_") + "_out_" + O;
+      return "T_no" + miss;
+    }
+    return "X";
+  }
   function renderBase(body) {
     wins.base.slot.textContent = "Base";
     if (!B.canvas || !body.contains(B.canvas)) {
@@ -1836,7 +1876,7 @@
     }
     if (q && B.live) {
       const d = bdef(q.type), lines = [];
-      if (q.net < 0 && q.type !== "home") lines.push("Not connected to any pipes");
+      if (!q.linked && q.type !== "home") lines.push("Not connected to any pipes");
       if (q.idle) lines.push(q.idle);
       if (q.type === "factory" || d.rank) lines.push("Made: " + (q.made || 0) + (q.mode === "count" ? " / " + (q.count || 0) : ""));
       B.live.status.textContent = lines.join(" · ");
@@ -1863,24 +1903,35 @@
     g.fillStyle = "#121a26"; g.fillRect(sx(0), sy(0), base.w * z, base.h * z);
     if (z >= 6) { g.strokeStyle = "rgba(140,170,220,0.07)"; g.lineWidth = 1; g.beginPath(); for (let i = 0; i <= base.w; i++) { g.moveTo(Math.round(sx(i)) + 0.5, sy(0)); g.lineTo(Math.round(sx(i)) + 0.5, sy(base.h)); } for (let j = 0; j <= base.h; j++) { g.moveTo(sx(0), Math.round(sy(j)) + 0.5); g.lineTo(sx(base.w), Math.round(sy(j)) + 0.5); } g.stroke(); }
     g.strokeStyle = "rgba(140,170,220,0.3)"; g.strokeRect(sx(0), sy(0), base.w * z, base.h * z);
-    // pipes: a hub on each tile with arms toward neighbouring pipes and the buildings they feed
-    const pipes = new Set(base.pipes), paint = new Set(B.paint ? [...B.paint] : []);
+    // pipes: the owner's directional pipe tiles; a drag in progress shows as it will be laid
     const at = (x, y) => base.buildings.find((q) => x >= q.x && y >= q.y && x < q.x + bdef(q.type).w && y < q.y + bdef(q.type).h);
-    for (const k of [...pipes, ...paint]) {
-      const [x, y] = k.split(",").map(Number), cx = sx(x + 0.5), cy = sy(y + 0.5), w2 = Math.max(2, z * 0.18);
-      g.fillStyle = paint.has(k) && !pipes.has(k) ? "rgba(120,200,255,0.5)" : "#6f7f96";
-      g.fillRect(cx - w2, cy - w2, w2 * 2, w2 * 2);
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const n = (x + dx) + "," + (y + dy); if (pipes.has(n) || paint.has(n) || at(x + dx, y + dy)) g.fillRect(Math.min(cx, cx + dx * z / 2) - (dy ? w2 : 0), Math.min(cy, cy + dy * z / 2) - (dx ? w2 : 0), dx ? z / 2 : w2 * 2, dy ? z / 2 : w2 * 2); }
+    const pipe = B.paint && B.paint.length ? pipeLay({ ...(base.pipe || {}) }, B.paint, (x, y) => !!at(x, y)) : (base.pipe || {});
+    g.imageSmoothingEnabled = z < 64;
+    for (const k in pipe) {
+      const t = pipe[k], [x, y] = k.split(",").map(Number), px = sx(x), py = sy(y);
+      if (px > W || py > Hh || px + z < 0 || py + z < 0) continue;
+      const im = dockImgAbs("assets/base/pipes/" + pipeSprite(t, x, y, pipe, (a, b) => !!at(a, b)) + ".webp");
+      if (t.fresh || (B.paint && base.pipe && base.pipe[k] !== t)) g.globalAlpha = 0.6;
+      if (im.naturalWidth) g.drawImage(im, px, py, z, z);
+      g.globalAlpha = 1;
     }
-    // buildings
-    const nets = ["#3fa9ff", "#ffb347", "#7ddc7d", "#e07bd8", "#e5e06a", "#6fe0d9"];
+    // buildings: the owner's art (64 px per tile)
     for (const q of base.buildings) {
       const d = bdef(q.type), x = sx(q.x), y = sy(q.y), w = d.w * z, h = d.h * z;
-      if (d.art && docksMeta) {
+      if (x > W || y > Hh || x + w < 0 || y + h < 0) continue;
+      const job = q.job, sb = job && (bcfg().ships || {})[job.item], sm = sb && docksMeta && docksMeta.ships[sb.art];
+      g.imageSmoothingEnabled = z < 64;
+      if (d.yard) {
+        const own = job && job.item === d.ark, img = dockImgAbs("assets/base/" + d.yard + (own ? "_" + (1 + Math.min(2, Math.floor(job.p * 3))) : "") + ".webp");
+        if (img.naturalWidth) g.drawImage(img, x, y, w, h);
+        if (!own && sm) {                                            // another hull: its dock overlay, centred and shrunk to fit
+          const sd = docksMeta.docks[sm.dock], k = Math.min(z / 64, (w * 0.8) / sd.size[0], (h * 0.8) / sd.size[1]);
+          const ov = sm.overlays[sm.overlays.length === 1 ? 0 : Math.min(2, Math.floor(job.p * 3))], o = dockArt(ov.replace(".png", ""));
+          if (o.naturalWidth) g.drawImage(o, x + (w - sd.size[0] * k) / 2, y + (h - sd.size[1] * k) / 2, sd.size[0] * k, sd.size[1] * k);
+        }
+      } else if (d.art && docksMeta) {
         const dk = docksMeta.docks[d.art], base0 = dockArt(dk.file.replace(".png", "")), cranes = dockArt(dk.cranes.replace(".png", "")), k = w / dk.size[0];
-        g.imageSmoothingEnabled = k < 1;
         if (base0.naturalWidth) g.drawImage(base0, x, y, w, h);
-        const job = q.job, sb = job && (bcfg().ships || {})[job.item], sm = sb && docksMeta.ships[sb.art];
         if (sm) {                                                     // the ship under construction: its stage overlay, centred if it's a smaller dock's art
           const sd = docksMeta.docks[sm.dock], ox = (dk.size[0] - sd.size[0]) / 2 * k, oy = (dk.size[1] - sd.size[1]) / 2 * k;
           const ov = sm.overlays[sm.overlays.length === 1 ? 0 : Math.min(2, Math.floor(job.p * 3))], img = dockArt(ov.replace(".png", ""));
@@ -1888,19 +1939,10 @@
         }
         if (cranes.naturalWidth) g.drawImage(cranes, x, y, w, h);
       } else {
-        // (no art for these yet) a frame in the docks' style: dark steel plate, an inset bay, corner bolts, a hazard strip
-        const k = z / 64, r = 10 * k, accent = { home: "#c9a33a", storage: "#8a96a8", refinery: "#c8742e", factory: "#5fae6a" }[q.type] || "#8a96a8";
-        const rr = (x0, y0, ww, hh, rad) => { g.beginPath(); g.moveTo(x0 + rad, y0); g.arcTo(x0 + ww, y0, x0 + ww, y0 + hh, rad); g.arcTo(x0 + ww, y0 + hh, x0, y0 + hh, rad); g.arcTo(x0, y0 + hh, x0, y0, rad); g.arcTo(x0, y0, x0 + ww, y0, rad); g.closePath(); };
-        rr(x + 2 * k, y + 2 * k, w - 4 * k, h - 4 * k, r); g.fillStyle = "#3a3e45"; g.fill(); g.lineWidth = Math.max(1, 3 * k); g.strokeStyle = "#1c1f24"; g.stroke();
-        rr(x + 12 * k, y + 12 * k, w - 24 * k, h - 24 * k, r * 0.6); g.fillStyle = "#24282e"; g.fill(); g.lineWidth = Math.max(1, 2 * k); g.strokeStyle = "#4b5059"; g.stroke();
-        g.fillStyle = "#5b616b"; for (const [bx, by] of [[7, 7], [w / k - 7, 7], [7, h / k - 7], [w / k - 7, h / k - 7]]) { g.beginPath(); g.arc(x + bx * k, y + by * k, Math.max(1, 2.5 * k), 0, Math.PI * 2); g.fill(); }
-        if (z >= 12) { const sw = Math.min(w * 0.4, 60 * k), sx0 = x + w / 2 - sw / 2, sy0 = y + 3 * k; g.save(); g.beginPath(); g.rect(sx0, sy0, sw, 5 * k); g.clip(); g.fillStyle = "#1c1f24"; g.fillRect(sx0, sy0, sw, 5 * k); g.fillStyle = accent; for (let i = -10; i < sw / k + 10; i += 8) { g.beginPath(); g.moveTo(sx0 + i * k, sy0 + 5 * k); g.lineTo(sx0 + (i + 4) * k, sy0); g.lineTo(sx0 + (i + 8) * k, sy0); g.lineTo(sx0 + (i + 4) * k, sy0 + 5 * k); g.fill(); } g.restore(); }
-        const icon = q.type === "home" ? "assets/icons/map/asteroid_field.png" : q.type === "refinery" ? "assets/icons/ores/cratered.png" : q.type === "factory" ? (q.recipe ? itemIcon(q.recipe) : "assets/icons/components/structural_beam.png") : "assets/icons/components/steel_plate.png";
-        const im = icon && dockImgAbs(icon); if (im && im.naturalWidth && z >= 10) { const s = Math.min(w, h) * 0.4; g.imageSmoothingEnabled = false; g.drawImage(im, x + w / 2 - s / 2, y + h / 2 - s / 2 - (z >= 20 ? 5 : 0), s, s * im.naturalHeight / im.naturalWidth); }
-        if (z >= 20 && w >= 100) { g.fillStyle = "rgba(220,226,235,0.85)"; g.font = Math.round(Math.max(9, Math.min(12, 11 * k * 1.6))) + "px system-ui, sans-serif"; g.textAlign = "center"; g.fillText(d.name, x + w / 2, y + h - 15 * k); }
+        const img = dockImgAbs("assets/base/" + q.type + ".webp");
+        if (img.naturalWidth) g.drawImage(img, x, y, w, h);
         if (q.job) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(x + 4, y + h - 4, w - 8, 3); g.fillStyle = "#7fc4ff"; g.fillRect(x + 4, y + h - 4, (w - 8) * q.job.p, 3); }
       }
-      if (q.net >= 0) { g.fillStyle = nets[q.net % nets.length]; g.beginPath(); g.arc(x + 6, y + 6, 3, 0, Math.PI * 2); g.fill(); }   // which pipe network it's on
       if (q.idle) { g.fillStyle = "#ffb347"; g.beginPath(); g.arc(x + w - 6, y + 6, 3, 0, Math.PI * 2); g.fill(); }
       if (B.sel === q.id) { g.strokeStyle = "rgba(255,160,70,0.95)"; g.lineWidth = 2; g.strokeRect(x, y, w, h); g.lineWidth = 1; }
     }
@@ -1914,16 +1956,16 @@
   const absImg = {}; function dockImgAbs(src) { if (!absImg[src]) { absImg[src] = new Image(); absImg[src].src = src; absImg[src].onload = () => drawBase(); } return absImg[src]; }
   function canPlaceLocal(base, type, x, y) {
     const d = bdef(type); if (x < 0 || y < 0 || x + d.w > base.w || y + d.h > base.h) return false;
-    const pipes = new Set(base.pipes);
+    const pipe = base.pipe || {};
     for (const q of base.buildings) { const e = bdef(q.type); if (x < q.x + e.w && x + d.w > q.x && y < q.y + e.h && y + d.h > q.y) return false; }
-    for (let i = 0; i < d.w; i++) for (let j = 0; j < d.h; j++) if (pipes.has((x + i) + "," + (y + j))) return false;
+    for (let i = 0; i < d.w; i++) for (let j = 0; j < d.h; j++) if (pipe[(x + i) + "," + (y + j)]) return false;
     return true;
   }
   function baseInput(c) {
     const A = window.Atamus, pos = (e) => { const r = c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     let drag = null, hold = 0;
     const buildingAtTile = (t) => (A.base ? A.base.buildings.find((q) => t.x >= q.x && t.y >= q.y && t.x < q.x + bdef(q.type).w && t.y < q.y + bdef(q.type).h) : null);
-    const menu = (e, t) => { const q = buildingAtTile(t), pipe = A.base && A.base.pipes.includes(t.x + "," + t.y); if (!q && !pipe) return; if (q && q.type === "home") return;
+    const menu = (e, t) => { const q = buildingAtTile(t), pipe = A.base && A.base.pipe && A.base.pipe[t.x + "," + t.y]; if (!q && !pipe) return; if (q && q.type === "home") return;
       showCtxMenu(e.clientX, e.clientY, [["Remove (half refund)", () => A.send({ t: "base_remove", x: t.x, y: t.y })]]); };
     c.addEventListener("wheel", (e) => { e.preventDefault(); if (!B.cam) return; const p = pos(e), before = tileAtF(p); B.cam.z = Math.max(4, Math.min(96, B.cam.z * (e.deltaY > 0 ? 1 / 1.15 : 1.15))); const after = tileAtF(p); B.cam.x += before.x - after.x; B.cam.y += before.y - after.y; drawBase(); }, { passive: false });
     const tileAtF = (p) => ({ x: B.cam.x + (p.x - c.clientWidth / 2) / B.cam.z, y: B.cam.y + (p.y - c.clientHeight / 2) / B.cam.z });
@@ -1934,7 +1976,7 @@
       if (e.button === 2) return;
       const t = tileAt(p.x, p.y);
       drag = { x0: p.x, y0: p.y, cx: B.cam.x, cy: B.cam.y, moved: false, t };
-      if (B.tool === "pipe") { B.paint = new Set([t.x + "," + t.y]); drawBase(); }
+      if (B.tool === "pipe") { B.paint = [[t.x, t.y]]; drawBase(); }
       if (e.pointerType !== "mouse") hold = setTimeout(() => { if (drag && !drag.moved && B.tool !== "pipe") { drag = null; menu(e, t); } }, 500);   // hold = right-click (owner: mobile parity)
     });
     c.addEventListener("pointermove", (e) => {
@@ -1944,7 +1986,11 @@
       B.hover = tileAt(p.x, p.y);
       if (drag && !drag.pinch) {
         if (Math.abs(p.x - drag.x0) + Math.abs(p.y - drag.y0) > 6) { drag.moved = true; clearTimeout(hold); }
-        if (B.tool === "pipe") { const t = tileAt(p.x, p.y); B.paint.add(t.x + "," + t.y); }
+        if (B.tool === "pipe" && B.paint) {                        // the drag, tile by tile (a fast move fills in the corner)
+          const t = tileAt(p.x, p.y); let [lx, ly] = B.paint[B.paint.length - 1];
+          if (B.paint.length > 1 && B.paint[B.paint.length - 2][0] === t.x && B.paint[B.paint.length - 2][1] === t.y) B.paint.pop();   // stepping back undoes
+          else while ((lx !== t.x || ly !== t.y) && B.paint.length < 400) { if (lx !== t.x) lx += Math.sign(t.x - lx); else ly += Math.sign(t.y - ly); B.paint.push([lx, ly]); }
+        }
         else if (drag.moved) { B.cam.x = drag.cx - (p.x - drag.x0) / B.cam.z; B.cam.y = drag.cy - (p.y - drag.y0) / B.cam.z; }
       }
       drawBase();
@@ -1952,7 +1998,7 @@
     const up = (e) => {
       B.ptrs.delete(e.pointerId); clearTimeout(hold);
       if (!drag) return; const d = drag; drag = null; if (d.pinch) { if (!B.ptrs.size) drag = null; return; }
-      if (B.tool === "pipe" && B.paint) { const tiles = [...B.paint].map((k) => k.split(",").map(Number)); B.paint = null; A.send({ t: "base_pipes", tiles }); drawBase(); return; }
+      if (B.tool === "pipe" && B.paint) { const tiles = B.paint; B.paint = null; A.send({ t: "base_pipes", tiles }); drawBase(); return; }
       if (d.moved) return;
       const t = d.t;
       if (B.tool === "remove") A.send({ t: "base_remove", x: t.x, y: t.y });

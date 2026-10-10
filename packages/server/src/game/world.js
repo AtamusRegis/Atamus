@@ -41,7 +41,7 @@ export class World {
     this.players.set(id, p);
     // home planet (owner): assigned once, to the planet with the fewest players, so homes spread evenly
     p.home = saved && saved.home && this.pois.has(saved.home) ? saved.home : this._assignHome();
-    p.base = saved && saved.base && Array.isArray(saved.base.buildings) ? saved.base : Base.createBase();
+    p.base = Base.normalize(saved && saved.base && Array.isArray(saved.base.buildings) ? saved.base : Base.createBase());
     // Logging in (owner): ships come back where they were. One whose POI is gone arrives at a random point outside
     // any POI, inside a small unmarked POI made around them.
     let spawn = null;
@@ -482,10 +482,10 @@ export class World {
   }
   cmdBasePipes(pid, tiles) {
     const p = this.players.get(pid); if (!p || !Array.isArray(tiles)) return;
-    const add = Base.addPipes(p.base, tiles.slice(0, 400)); if (!add.length) return;
-    const n = Math.min(add.length, Math.floor(p.credits / Base.PIPE_COST)); if (n <= 0) { this._tell(pid, "Not enough credits."); return; }
-    if (!this._spend(p, n * Base.PIPE_COST)) return;
-    p.base.pipes.push(...add.slice(0, n)); this._baseEdit(p);
+    const plan = Base.planPath(p.base, tiles); if (!plan.runs.length) return;
+    const n = Math.min(plan.fresh, Math.floor(p.credits / Base.PIPE_COST)); if (plan.fresh && n <= 0) { this._tell(pid, "Not enough credits."); return; }
+    if (n > 0 && !this._spend(p, n * Base.PIPE_COST)) return;
+    Base.applyPath(p.base, plan.runs, n); this._baseEdit(p);
   }
   cmdBaseRemove(pid, x, y) {
     const p = this.players.get(pid); if (!p) return;

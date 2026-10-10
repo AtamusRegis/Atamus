@@ -31,18 +31,37 @@ w.cmdBasePlace("a", "refinery", 30, 30); t.ok(a.base.buildings.length === 1, "no
 w.cmdBasePlace("a", "refinery", 35, 30); w.cmdBasePlace("a", "storage", 35, 39); w.cmdBasePlace("a", "factory", 35, 35); w.cmdBasePlace("a", "dock_frigate", 35, 42);
 t.ok(a.base.buildings.length === 5 && a.credits === 10_000_000 - 750_000 - 250_000 - 1_500_000 - 2_000_000, "buildings cost credits", a.credits);
 w.cmdBasePlace("a", "dock_ark", 5, 5); t.ok(a.base.buildings.length === 5, "nothing you can't afford");
-// one pipe run down x = 34 (beside the Home Base, and the frigate shipyard's west port) links everything
-const tiles = []; for (let y = 28; y <= 43; y++) tiles.push([34, y]);
-w.cmdBasePipes("a", tiles);
-const nets = Base.networks(a.base);
-t.ok(nets.length === 1 && nets[0].length === 5, "pipes join the buildings into one network", nets.map((n) => n.map((q) => q.type)));
+// pipes run one way: home → refinery → (down x = 38, past the factory) → storage → factory → storage → shipyard
+const path = (...pts) => w.cmdBasePipes("a", pts);
+const col = (x, y0, y1) => { const o = []; for (let y = y0; y0 <= y1 ? y <= y1 : y >= y1; y += y0 <= y1 ? 1 : -1) o.push([x, y]); return o; };
+const c0 = a.credits;
+path([33, 31], [34, 31], [35, 31]);
+t.ok(a.credits === c0 - Base.PIPE_COST && a.base.pipe["34,31"].o === "E" && a.base.pipe["34,31"].i === "W", "a dragged pipe flows from where the drag started; only new tiles cost", a.base.pipe["34,31"]);
+path([37, 31], [38, 31], ...col(38, 32, 39), [37, 39], [36, 39]);
+path([36, 39], [36, 38], [36, 37]);
+path([35, 37], [34, 37], [34, 38], [34, 39], [35, 39]);
+path([35, 40], [34, 40], [34, 41], [34, 42], [34, 43], [35, 43]);
+const L = Base.links(a.base), byT = (k) => a.base.buildings.find((q) => q.type === k), dn = (k) => [...L.down.get(byT(k))].map((q) => q.type).sort();
+t.ok(dn("home").join() === "refinery" && dn("refinery").join() === "storage" && dn("storage").join() === "dock_frigate,factory" && dn("factory").join() === "storage", "output goes where the pipes lead, and nowhere else", ["home", "refinery", "storage", "factory"].map(dn));
+t.ok(!L.down.get(byT("refinery")).has(byT("factory")), "a pipe running past a building doesn't feed it");
+// a straight run across a straight pipe crosses it
+path([39, 33], [38, 33], [37, 33]);
+t.ok(a.base.pipe["38,33"].c === 1 && Base.links(a.base).down.get(byT("refinery")).size === 1, "crossing a pipe at right angles doesn't join it", a.base.pipe["38,33"]);
+w.cmdBaseRemove("a", 39, 33); w.cmdBaseRemove("a", 37, 33); w.cmdBaseRemove("a", 38, 33);
+t.ok(!a.base.pipe["38,33"] && a.base.pipe["38,32"].o === "" && !Base.links(a.base).down.get(byT("refinery")).size, "removing a pipe tile cuts the run there");
+path(...col(38, 32, 34));
+t.ok(Base.links(a.base).down.get(byT("refinery")).size === 1, "and redrawing mends it");
+// bases saved before pipes had a direction: their pipes carry both ways
+{ const old = { ver: 1, nextId: 3, buildings: [{ id: 1, type: "home", x: 0, y: 0, store: {} }, { id: 2, type: "refinery", x: 5, y: 0 }], pipes: ["4,1"] };
+  Base.normalize(old); const L2 = Base.links(old);
+  t.ok(old.pipe["4,1"].u && L2.down.get(old.buildings[0]).has(old.buildings[1]) && L2.down.get(old.buildings[1]).has(old.buildings[0]), "old two-way pipes still connect both ways"); }
 w.cmdBaseSet("a", a.base.buildings.find((q) => q.type === "factory").id, { recipe: "steel_plate", mode: "count", count: 5 });
 Base.step(a.base, 120e3, {});
 const st = a.base.buildings.find((q) => q.type === "storage");
 t.ok((st.store.cryonium || 0) + 0 >= 0 && a.base.buildings.find((q) => q.type === "refinery").done > 0, "the refinery turns ore into iums", st.store);
 Base.step(a.base, 30 * 60e3, {});
 t.ok(st.store.steel_plate === 5 && a.base.buildings.find((q) => q.type === "factory").made === 5, "a factory set to 5 makes exactly 5", st.store);
-w.cmdBaseRemove("a", 35, 39); t.ok(!a.base.buildings.some((q) => q.type === "storage") && a.credits > 0, "removing a building refunds half");
+{ const c1 = a.credits; w.cmdBaseRemove("a", 35, 39); t.ok(!a.base.buildings.some((q) => q.type === "storage") && a.credits === c1 + 125_000, "removing a building refunds half"); }
 
 // a frigate from scratch, while offline: everything the bill needs, piped in
 const dock = a.base.buildings.find((q) => q.type === "dock_frigate");
