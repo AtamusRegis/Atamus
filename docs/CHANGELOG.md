@@ -4,7 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-10
 
-- **Back to basics (owner, major):** the game is stripped back to the Player and Pilot pages, the Expanse's empty hexagon (20,000 km across) and one Prospector each that you click or tap to fly. Stations, stargates, planets, asteroids, mining, modules, inventories, the market, chat, the HUD, bases, the tutorial and every license are gone from the live game; all of it is kept in `reference/2026-10-10-pre-reset/` (and the git tag `pre-reset-2026-10-10`). Full wipe: every pilot, ship, item and credit (accounts stay).
+- **Back to basics (owner, major):** the game is stripped back to the Player and Pilot pages, the Expanse's empty hexagon (20,000 km across) and one Prospector each that you click or tap to fly. Stations, stargates, planets, asteroids, mining, modules, inventories, the market, chat, the HUD, bases, the tutorial and every license are gone from the live game; all of it is kept in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Full wipe: every pilot, ship, item and credit (accounts stay).
 - **Warp camera:** following a ship between POIs now zooms all the way out and holds the map still while the warp trail shows the trip, then zooms back onto the ship when it drops out.
 - **Arks renamed (owner):** Light Ark, Heavy Ark, Capital Ark (and their yards).
 - **Tutorial shard (testers):** Nyssary can pick a Tutorial server on the play page: a fresh, unsaved private world with a 21-step playable tutorial from undocking to building a ship; the base runs 60× faster there.

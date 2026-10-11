@@ -12,4 +12,4 @@ from it, but nothing here is deployed or run.
 - `tests/`: the regression suite that ran against it.
 - `docs/FEATURES.md`: how all of that behaved.
 
-The git tag `pre-reset-2026-10-10` is the exact commit.
+Commit `0a745ec` is the exact state.

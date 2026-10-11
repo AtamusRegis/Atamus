@@ -6,7 +6,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 The owner took the game back to scratch to focus on the Prospector's gameplay. **The only things in the game are the Player and Pilot pages, the world boundary and the Prospector.** Gone from the live game: stations, stargates, planets, the sun, asteroids and belts, mining, modules, fitting, inventories, the market, chat, the fleet bar, the HUD, settings and music, bases, the tutorial shard and every license in the trainer.
 
-- **Kept for reference:** everything that was live just before is in `reference/2026-10-10-pre-reset/` (client, server, tests, and the full FEATURES.md that described it) and at the git tag `pre-reset-2026-10-10`. The art is still in `website/assets/`. Bring things back from there when the owner asks for them.
+- **Kept for reference:** everything that was live just before is in `reference/2026-10-10-pre-reset/` (client, server, tests, and the full FEATURES.md that described it) and at commit `0a745ec` (the last one before the reset). The art is still in `website/assets/`. Bring things back from there when the owner asks for them.
 - docs/DESIGN.md is still the long-term plan.
 
 ## The world (owner)

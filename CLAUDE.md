@@ -7,7 +7,7 @@ Atamus is a browser-based, EVE-inspired multiplayer mining semi-RTS. Claude writ
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. Read `docs/DESIGN.md`: the agreed redesign (the Expanse and nomad space built from POIs, arcs, the base surface, and a world built for 1,000 concurrent players) that the next phases build toward.
-4. **Back to basics (owner, 2026-10-10):** the live game is only the Player and Pilot pages, the Expanse's empty hexagon and a Prospector to fly. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and the git tag `pre-reset-2026-10-10`). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
+4. **Back to basics (owner, 2026-10-10):** the live game is only the Player and Pilot pages, the Expanse's empty hexagon and a Prospector to fly. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
 
 **In the same commit as any change to behavior:**
 
