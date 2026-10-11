@@ -12,7 +12,7 @@ t.ok(A === 10_000, "the hexagon is 20,000 km across, flat to flat (1 AU at the m
 t.ok(insideExpanse(0, A - 1) && !insideExpanse(0, A + 1) && insideExpanse(R - 1, 0) && !insideExpanse(R + 1, 0), "flat top and bottom, corners left and right");
 const PA = [{ id: 1, name: "Pa", licenses: { mining_frigate: 5 } }];
 const a = w.addPlayer("a", "A", () => {}, null, PA), sa = w.ships.get("a:ship:1");
-t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x, sa.y) <= SPAWN_SPREAD_KM && w.ships.size === 1, "a pilot gets one Prospector near the center");
+t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x - 0, sa.y - (-1208)) <= SPAWN_SPREAD_KM && Math.hypot(sa.x, sa.y) > 1000 && w.ships.size === 1, "a pilot gets one Prospector, just south of the Station (owner: nothing spawns at the sun)");
 w.addPlayer("a", "A", () => {}, null, PA); t.ok(w.ships.size === 1, "and only ever one");
 w.setPilots("a", [...PA, { id: 7, name: "Pb" }]); t.ok(w.ships.has("a:ship:7") && w.ships.size === 2, "a new pilot gets their own");
 w.setPilots("a", PA); t.ok(!w.ships.has("a:ship:7") && w.ships.size === 1, "a pilot that's gone takes theirs with them");

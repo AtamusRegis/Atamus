@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
+import { celestialsForClient } from "./celestials.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
@@ -14,7 +15,7 @@ import { getState } from "../pilots.js";
 
 const world = new World();
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
-const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE };
+const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
 export function attachGameServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });

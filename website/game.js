@@ -47,6 +47,7 @@
     moveTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "approach" }); },
     orbit: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "orbit" }); },   // (owner) circle it
     info: (kind, id) => send({ t: "info", kind, id }),
+    celestial: (id) => celestialById(id),
     objPos: (kind, id) => objPos(kind, id), objName: (kind, id) => objName(kind, id), objIcon: (kind, id) => objIcon(kind, id),
     objItems: (kind, id) => objItems(kind, id), ownShipItems: (id) => ownShipItems(id),
     hoverTarget: null,                               // set by the HUD: a thin gray line runs from your ship to it
@@ -67,6 +68,8 @@
   bgCanvas.style.cssText = "position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;";
   canvas.insertAdjacentElement("beforebegin", bgCanvas);
   const bgCtx = bgCanvas.getContext("2d");
+  if (window.SunFX) window.SunFX.init();             // (owner) the sun's glow and flare: a WebGL layer between the backdrop and the game
+  const SUN_BRIGHTNESS = 0.55;                         // (owner, before the reset) the sun was too bright
 
   // ---- ship art: drawn at true scale from its sprite; zoomed out, its hull icon. Yours blue, others red ----
   const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Prospector", sprite: "chisel", lengthKm: 0.128 };
@@ -244,10 +247,14 @@
     }
     if (pr) { menu(px, py, [["Look At", () => lookAtObj("prop", pr.id)]]); return; }   // a Library prop
     const p = poiAt(px, py);
+    if (p && !p.hidden && (p.kind === "planet" || p.kind === "moon")) { const c = celestialById(p.id); if (c) { menu(px, py, celestialItems(c)); return; } }
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
+    const cb = celestialAt(px, py);
+    if (cb) { menu(px, py, celestialItems(cb)); return; }   // (owner) a planet or moon itself
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
     menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
-      ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])]]);   // (owner) a list: right-click (hold) a belt for its menu
+      ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])],   // (owner) a list: right-click (hold) a belt for its menu
+      ["Celestials", [["Planets", celestials().planets.map((q) => [q.name, null, { menu: [...celestialItems(q), ["Moons", q.moons.map((m) => [m.name, null, { menu: celestialItems(m) }])]] }])]]]]);   // (owner) Celestials › Planets › a planet (and its Moons)
   }
   canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); if (e.ctrlKey && e.button === 0) return; openMenu(e.clientX, e.clientY); });   // (a Mac's Ctrl + click is Align To, not the menu)
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
@@ -328,10 +335,12 @@
   }
   const oreOf = (key) => ((cfg && cfg.ores) || []).find((o) => o.key === key);
   function objName(kind, id) {
+    if (kind === "celestial") { const c = celestialById(id); return c ? c.name : "Celestial"; }
     if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore); return o ? o.name : "Asteroid"; }
     const s = (latest.ships || []).find((x) => x.id === id); return hull(s ? s.type : "chisel").name;
   }
   function objIcon(kind, id) {
+    if (kind === "celestial") { const c = celestialById(id); if (!c) return ""; const t = planetTexture(c.seed || 1, c.world).c; return t.toDataURL(); }   // its own surface
     if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + "_s.png"; }
     const s = (latest.ships || []).find((x) => x.id === id); return "assets/icons/ships/" + hull(s ? s.type : "chisel").sprite + (s && s.mine ? "_blue" : "_red") + "_s.png";
   }
@@ -422,7 +431,7 @@
     ctx.strokeStyle = "rgba(140,170,220,0.35)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
   // belts: the map marker always; the zone and the rocks only while one of your ships is inside (owner)
-  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png"), home: img("assets/icons/map/station_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
+  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png"), home: img("assets/icons/map/station_s.png"), planet: img("assets/icons/map/waypoint_s.png"), moon: img("assets/icons/map/waypoint_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
   const rockArt = (family, size) => img("assets/rocks/rock_" + family + "_" + size + ".webp"), oreIcon = (family) => img("assets/icons/ores/" + (family === "bubble" ? "rubble" : family) + "_s.png");
   function drawBelts(ships) {
     const sc = scale(), ores = oreBy();
@@ -442,11 +451,14 @@
         }
         drawProps(f, sc);
       }
+      if ((p.kind === "planet" || p.kind === "moon") && !showAnchor(p, sc)) continue;
       const mapIcon = mapIcons[p.kind] || mapIcons.belt;
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }
     for (const [id, f] of belts) if (!poiById.has(id)) drawProps(f, sc);   // (owner) someone's station you've flown to: there, though not on your map
   }
+  // a planet's or moon's anchor icon shows once it's clear of the body on screen (zoomed out, the body itself is what you click)
+  function showAnchor(p, sc) { const c = celestialById(p.id); return !c || Math.hypot(p.x - c.x, p.y - c.y) * sc - bodyPx(c, sc) > 14; }
   function drawProps(f, sc) {                        // a POI's props (the Library's, the stations): space objects at true size
     for (const o of f.props || []) {
       const px = gx2s(o.x), py = gy2s(o.y), w = o.w * sc, h = o.h * sc;
@@ -500,6 +512,78 @@
   // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
   // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
   // along its no-destination line, facing it.
+  // ---- celestials (owner): the sun at the center, planets on orbit lines around it, moons on orbit lines around their
+  // planets (nothing actually moves); each planet's and moon's anchor (its POI) sits just off it ----
+  const celestials = () => (cfg && cfg.celestials) || { sun: null, planets: [] };
+  function drawSun(now) {
+    if (!window.SunFX) return;
+    if (!cfg || !cfg.celestials) { window.SunFX.clear(); return; }
+    // far off-screen (zoomed in somewhere), only its glow reaches in from that side
+    const W = innerWidth, H = innerHeight, dxs = gx2s(0) - W / 2, dys = gy2s(0) - H / 2, ds = Math.hypot(dxs, dys), lim = Math.hypot(W, H) * 0.75, k = ds > lim ? lim / ds : 1;
+    window.SunFX.render(W / 2 + dxs * k, H / 2 + dys * k, SUN_BRIGHTNESS * (k < 1 ? 0.7 : 1), now / 1000);
+  }
+  const onScreenRing = (x, y, r) => { const d = Math.hypot(x - innerWidth / 2, y - innerHeight / 2); return Math.abs(d - r) < Math.hypot(innerWidth, innerHeight) / 2 + 2 && r < 3e6; };
+  function ring(x, y, r, color) { if (!onScreenRing(x, y, r)) return; ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
+  const bodyPx = (c, sc) => Math.max(c.kind === "moon" ? 1.5 : 3, c.r * sc);
+  function drawCelestials() {
+    const sc = scale(), sx = gx2s(0), sy = gy2s(0);
+    for (const p of celestials().planets) {
+      ring(sx, sy, p.orbit * sc, "rgba(150,175,215,0.16)");                          // the planet's orbit around the sun
+      const px = gx2s(p.x), py = gy2s(p.y);
+      for (const m of p.moons) ring(px, py, m.orbit * sc, "rgba(150,175,215,0.11)");   // its moons' orbits
+    }
+    for (const p of celestials().planets) for (const c of [p, ...p.moons]) {
+      const x = gx2s(c.x), y = gy2s(c.y), r = bodyPx(c, sc);
+      if (x < -r * 1.3 || y < -r * 1.3 || x > innerWidth + r * 1.3 || y > innerHeight + r * 1.3) continue;
+      drawPlanet(x, y, r, c);
+    }
+  }
+  // procedural worlds: a texture per body (its seed and kind pick the look), lit from the sun at the center (before the reset)
+  const planetTex = new Map();
+  const PLANET_KINDS = {
+    Ocean: { stops: [[0, "#1d3f6e"], [0.48, "#2f6aa3"], [0.52, "#c9b98a"], [0.6, "#4f7a3c"], [0.8, "#6d6a4a"], [1, "#e8eef2"]], atm: "120,180,255", bands: 0 },
+    Desert: { stops: [[0, "#7a4a2a"], [0.4, "#b07443"], [0.7, "#d8a66a"], [1, "#f0d9a8"]], atm: "255,190,130", bands: 0.25 },
+    Ice: { stops: [[0, "#8fb4c9"], [0.5, "#cfe3ee"], [1, "#ffffff"]], atm: "200,230,255", bands: 0.1 },
+    "Gas giant": { stops: [[0, "#5a3d6e"], [0.3, "#a3735a"], [0.55, "#d9b48a"], [0.8, "#8a5a7a"], [1, "#e8c9a0"]], atm: "230,180,160", bands: 1 },
+  };
+  function planetTexture(seed, world) {
+    const key = seed + ":" + world; if (planetTex.has(key)) return planetTex.get(key);
+    const N = 256, c = document.createElement("canvas"); c.width = c.height = N;
+    const g = c.getContext("2d"), img = g.createImageData(N, N), kind = PLANET_KINDS[world] || PLANET_KINDS.Desert;
+    let a = 1000 + seed * 7919; const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+    const lat = (n) => { const v = []; for (let i = 0; i < n * n; i++) v.push(rnd()); return (x, y) => { const x0 = Math.floor(x) % n, y0 = Math.floor(y) % n, x1 = (x0 + 1) % n, y1 = (y0 + 1) % n, fx = x - Math.floor(x), fy = y - Math.floor(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy); return (v[y0 * n + x0] * (1 - sx) + v[y0 * n + x1] * sx) * (1 - sy) + (v[y1 * n + x0] * (1 - sx) + v[y1 * n + x1] * sx) * sy; }; };
+    const o = [lat(4), lat(8), lat(16), lat(32), lat(64)];
+    const col = (t) => { const st = kind.stops; let i = 0; while (i < st.length - 2 && t > st[i + 1][0]) i++; const [t0, c0] = st[i], [t1, c1] = st[i + 1], u = Math.max(0, Math.min(1, (t - t0) / (t1 - t0))); const h = (cc, k) => parseInt(cc.slice(1 + k * 2, 3 + k * 2), 16); return [0, 1, 2].map((k) => h(c0, k) + (h(c1, k) - h(c0, k)) * u); };
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N, n = o[0](u * 4, v * 4) * 0.48 + o[1](u * 8, v * 8) * 0.24 + o[2](u * 16, v * 16) * 0.14 + o[3](u * 32, v * 32) * 0.09 + o[4](u * 64, v * 64) * 0.05;
+      const t = kind.bands ? (Math.sin(v * 28 + n * 6 * kind.bands + seed) * 0.5 + 0.5) * kind.bands + n * (1 - kind.bands) : n;
+      const cc = col(Math.max(0, Math.min(1, (t - 0.25) / 0.5))), k = (y * N + x) * 4;
+      img.data[k] = cc[0]; img.data[k + 1] = cc[1]; img.data[k + 2] = cc[2]; img.data[k + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); const out = { c, kind }; planetTex.set(key, out); return out;
+  }
+  function drawPlanet(x, y, rPx, b) {
+    const { c, kind } = planetTexture(b.seed || 1, b.world), d = Math.hypot(b.x, b.y) || 1, lx = -b.x / d, ly = b.y / d;   // toward the sun (screen y is down)
+    ctx.save();
+    const atm = ctx.createRadialGradient(x, y, rPx * 0.9, x, y, rPx * 1.25); atm.addColorStop(0, "rgba(" + kind.atm + ",0.35)"); atm.addColorStop(1, "rgba(" + kind.atm + ",0)");
+    ctx.fillStyle = atm; ctx.beginPath(); ctx.arc(x, y, rPx * 1.25, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.clip();
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(c, x - rPx, y - rPx, rPx * 2, rPx * 2);
+    const sh = ctx.createRadialGradient(x + lx * rPx * 0.45, y + ly * rPx * 0.45, rPx * 0.15, x + lx * rPx * 0.2, y + ly * rPx * 0.2, rPx * 1.45);
+    sh.addColorStop(0, "rgba(255,250,240,0.12)"); sh.addColorStop(0.45, "rgba(0,0,0,0.1)"); sh.addColorStop(0.75, "rgba(0,0,8,0.7)"); sh.addColorStop(1, "rgba(0,0,8,0.95)");
+    ctx.fillStyle = sh; ctx.fillRect(x - rPx, y - rPx, rPx * 2, rPx * 2);
+    ctx.restore();
+  }
+  // the planet or moon under the pointer (its body), for its menu
+  function celestialAt(px, py) {
+    const sc = scale(); let best = null, bd = Infinity;
+    for (const p of celestials().planets) for (const c of [p, ...p.moons]) { const d = Math.hypot(px - gx2s(c.x), py - gy2s(c.y)), r = Math.max(8, bodyPx(c, sc)); if (d <= r && d < bd) { bd = d; best = c; } }
+    return best;
+  }
+  const celestialById = (id) => { for (const p of celestials().planets) for (const c of [p, ...p.moons]) if (c.id === id) return c; return null; };
+  // a planet's or moon's options: warp / align to its anchor, Info
+  const celestialItems = (c) => { const poi = poiById.get(c.id); return [...(poi ? poiItems(poi) : []), ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "celestial", id: c.id } }))]]; };
+
   // (owner) the selected ship's targeting range (a faint gray dash-dot ring) and, fainter, one dashed ring per kind of
   // fitted module that works on a target; the one under the pointer on the hotbar / Fitting lights up orange
   function drawRanges(own) {
@@ -687,8 +771,9 @@
       sendView(now);
     }
     drawBackground();
+    drawSun(now);
     drawn = ships;
-    if (cfg) { drawHex(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
+    if (cfg) { drawHex(); drawCelestials(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
     requestAnimationFrame(frame);
   }
 

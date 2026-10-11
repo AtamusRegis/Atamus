@@ -1110,7 +1110,8 @@
   function openObjInfo(kind, id) {
     oinfo = { kind, id, data: null };
     if (!wins.oinfo) createWindow("oinfo", { left: Math.round(innerWidth / 2 + 40), top: 120, width: 240, minW: 200, minH: 120, render: renderObjInfo, label: "Info" });
-    toggleWindow("oinfo", true); window.Atamus.info(kind, id);
+    toggleWindow("oinfo", true);
+    if (kind === "celestial") { oinfo.data = window.Atamus.celestial(id); renderObjInfo(wins.oinfo.body); } else window.Atamus.info(kind, id);   // (a planet or moon: the client has it all)
   }
   window.Atamus.bus.addEventListener("objinfo", (e) => openObjInfo(e.detail.kind, e.detail.id));
   window.Atamus.bus.addEventListener("info", (e) => { const m = e.detail; if (oinfo && m.kind === oinfo.kind && m.id === oinfo.id) { oinfo.data = m; if (isOpen(wins.oinfo)) renderObjInfo(wins.oinfo.body); } });
@@ -1122,7 +1123,11 @@
     const head = el("div", { class: "oi-head" }, el("img", { class: "oi-icon", src: A.objIcon(kind, id), alt: "" }), el("span", { class: "ps-name" }, A.objName(kind, id)));
     if (!d) { body.append(head, el("div", { class: "muted" }, "Loading…")); return; }
     const rows = [];
-    if (kind === "rock") {
+    if (kind === "celestial") {                         // (owner) a planet or moon
+      const parent = d.parent ? A.celestial(d.parent) : null;
+      rows.push(row("Type", d.kind === "moon" ? "Moon" : "Planet"), row("World", d.world), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Orbits", parent ? parent.name : (cfg.celestials && cfg.celestials.sun ? cfg.celestials.sun.name : "-")), row("Orbit", Math.round(d.orbit).toLocaleString() + " km"));
+      if (d.moons) rows.push(row("Moons", d.moons.length));
+    } else if (kind === "rock") {
       const o = (cfg.ores || []).find((q) => q.key === d.ore) || {};
       rows.push(row("Rarity", o.rarity ? o.rarity.charAt(0).toUpperCase() + o.rarity.slice(1) : "-"), row("Ore", Math.round(d.m3).toLocaleString() + " m³"), row("Size", d.size.toLocaleString() + " m"), row("Belt", d.belt));
     } else {

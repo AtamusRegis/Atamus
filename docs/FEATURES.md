@@ -117,6 +117,16 @@ Bottom center, for the selected pilot's ship:
 - **The Station window** opens when the selected pilot's ship docks (or you come back docked) and closes when none of your ships is docked; right-click the station → Open Hangar reopens it. Left: **Hangar**, then each docked ship with its holds; right: the chosen one's items (a ship hold with its fill bar). **The list and the storage scroll on their own** (owner).
 - **The hangar:** one per account, **unlimited** (owner); separate from your own station's hangar (Player stations). Move items between it and your docked ships' holds (and between a ship's own holds anywhere) by dragging onto a list entry or the storage, or right-click → Move to ›. **The ore hold takes only ore**; a ship's hold takes what fits and the rest stays. Saved with your ships.
 
+## Celestials (owner, 2026-10-11)
+
+`celestials.js`, laid out the same on every start from a fixed seed; nothing actually moves.
+
+- **The sun** ("Atamus") at the Expanse's center, drawn again with the WebGL glow and lens flare from before the reset (`sun.js`, at the old 0.55 brightness; far off-screen only its glow reaches in from that side). **Nothing spawns within 1,000 km of it**: new ships now appear just south of the Station.
+- **Five planets** (Atamus I–V; ocean, desert, ice or gas giant; radius 70–210 km) on orbit lines around the sun, **1–3 moons each** on orbit lines around their planet. Bodies are drawn at true size (never under a few pixels), lit from the sun; orbit lines are faint circles.
+- **Anchors:** each planet and moon has an anchor on a ring just off it (140 km off a planet's surface, 50 km off a moon's): **its POI**, on everyone's map, what you align and warp to (a warp drops out at the anchor). Its map icon shows once it's clear of the body on screen; zoomed out, right-click the body itself.
+- **Menus:** right-click (hold) a planet, moon or anchor: Warp to / Align to and **Info** (type, world, radius, what it orbits and how far, its moons). The space menu has **Celestials › Planets › a planet** (its Warp to / Align to / Info, and **Moons ›** each moon's).
+- **Spawning:** asteroid belts now spawn **around planets and moons** (just beyond a planet's moons, or near a moon), never on a body or near the sun. Player stations keep out of each planet's area (the planet and its moons) and the sun's, but may sit along orbit lines or in deep space.
+
 ## Player stations (owner, 2026-10-11)
 
 `home.js`. **Every account has its own station**, made the first time they play (none is made until the saved ones are loaded, so no one gets two). It starts **small**.

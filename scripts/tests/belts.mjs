@@ -38,7 +38,7 @@ t.ok(other.retired && w.pois.has(other.id), "a mined-out belt with ships inside 
 const c0 = w.players.get("c0");
 t.ok(!w.poisFor(c0).some((p) => p.id === other.id) && w.poisFor(a).some((p) => p.id === other.id && p.hidden), "it's off everyone's map but those inside");
 t.ok(belts().length >= BELTS_MIN, "and a replacement spawns");
-t.ok(w.fieldsFor(a).fields.some((x) => x.poi === other.id) && !w.fieldsFor(c0).fields.length, "rocks are only sent to players with ships in the belt");
+t.ok(w.fieldsFor(a).fields.some((x) => x.poi === other.id) && !w.fieldsFor(c0).fields.some((x) => x.poi === other.id), "rocks are only sent to players with ships in the belt");
 Object.assign(sa, { x: 0, y: 0, tx: 0, ty: 0 }); w.nextPoiTick = 0; w.tick(0.05);
 t.ok(!w.pois.has(other.id), "once they leave, it closes");
 

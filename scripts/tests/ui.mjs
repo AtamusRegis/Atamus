@@ -58,7 +58,7 @@ r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden)
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
   const centered = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
   return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centered };`);
-t.ok(r.top.join() === "Center on ship,Belts" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts", r);
+t.ok(r.top.join() === "Center on ship,Belts,Celestials" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts, Celestials (owner)", r);
 t.ok(r.opts.join() === "Warp to,Align to" && r.kept === 3, "right-click a belt in the list: its own menu beside it, Warp to / Align to, the menus before it kept open (owner)", r);
 t.ok(r.dest && r.acts && r.btns.join() === "Align,Warp", "aligning shows Align and Warp under the fleet", r);
 t.ok(r.centered === A_SHIP, "Center on ship follows the selected pilot's ship", r);
