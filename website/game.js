@@ -44,7 +44,7 @@
     moveTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "approach" }); },
     info: (kind, id) => send({ t: "info", kind, id }),
     objPos: (kind, id) => objPos(kind, id), objName: (kind, id) => objName(kind, id), objIcon: (kind, id) => objIcon(kind, id),
-    objItems: (kind, id) => objItems(kind, id),
+    objItems: (kind, id) => objItems(kind, id), ownShipItems: (id) => ownShipItems(id),
     hoverTarget: null,                               // set by the HUD: a thin grey line runs from your ship to it
     rangeTo: (kind, id) => rangeTo(kind, id),
   };
@@ -211,7 +211,7 @@
     const menu = window.Atamus.ctxMenu; if (!menu) return;
     // one of your ships: its menu (the selected pilot's own: Info) plus Rename (owner)
     const mine = shipAt(px, py, drawn);
-    if (mine) { const items = mine.pilot === selPilot ? [["Look At", () => lookAtObj("ship", mine.id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: mine.id } }))]] : objItems("ship", mine.id); items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: mine.id }))]); menu(px, py, items); return; }
+    if (mine) { menu(px, py, ownShipItems(mine.id)); return; }
     const ob = objAt(px, py);
     if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
     const pr = propAt(px, py);
@@ -317,6 +317,13 @@
     if (kind === "ship") return window.Atamus.followShip(id);
     if (!lookPos({ kind, id })) return false;
     lookAt = { kind, id }; follow = null; zoomAt = null; return true;
+  }
+  // one of your ships' menu (owner): the selected pilot's own is Look At, Info; another is an object's menu; both add Rename
+  function ownShipItems(id) {
+    const sh = (latest.ships || []).find((x) => x.id === id); if (!sh) return [];
+    const items = sh.pilot === selPilot ? [["Look At", () => lookAtObj("ship", id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id } }))]] : objItems("ship", id);
+    items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: id }))]);
+    return items;
   }
   function objItems(kind, id) {
     const own = myShip(), out = [], A = window.Atamus;

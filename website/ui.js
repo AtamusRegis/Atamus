@@ -567,6 +567,11 @@
             el("div", { class: "fc-bars" + (sh ? "" : " empty") }, el("div", { class: "fc-bar fc-sh" }, sf), el("div", { class: "fc-bar fc-hp" }, hf)),
             el("div", { class: "fc-name" }, p.name)));
         card.addEventListener("click", () => selectPilot(p.id));
+        // (owner) right-click (hold) a card: its ship's menu, plus Pilot Info
+        const cardMenu = (x, y) => { const cur = pilotShip(p.id); showCtxMenu(x, y, [...(cur ? window.Atamus.ownShipItems(cur.id) : []), ["Pilot Info", () => openPilotInfo(String(p.id))]]); };
+        card.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); cardMenu(e.clientX, e.clientY); });
+        { let h = 0; card.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => cardMenu(e.clientX, e.clientY), 500); });
+          for (const ev of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) card.addEventListener(ev, () => clearTimeout(h)); }
         card.addEventListener("dblclick", () => { const cur = pilotShip(p.id); if (cur) window.Atamus.followShip(cur.id); });
         w.cards[p.id] = { card, sf, hf };
         list.append(card);
@@ -821,19 +826,26 @@
   }
   window.Atamus.bus.addEventListener("rename", (e) => openRename(e.detail));
 
+  // ---- Inventory (owner): a tab per hold, its fill bar under the tabs; only the slots scroll ----
   function renderInv(body) {
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
-    const sig = (sh ? sh.id + ":" + (sh.name || "") : "-") + "|" + JSON.stringify((sh && sh.inv) || []);
+    const holds = T.holds || [], hold = holds.find((h) => h.key === saved.invTab) || holds[0];
+    const sig = (sh ? sh.id + ":" + (sh.name || "") : "-") + "|" + (hold ? hold.key : "") + "|" + JSON.stringify((sh && sh.inv) || []);
     wins.inv.slot.textContent = sh ? shipName(sh) : "Inventory";
     if (wins.inv.isig === sig) return; wins.inv.isig = sig;
-    body.innerHTML = "";
-    if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
-    const items = sh.inv || [];
-    for (const h of T.holds || []) {                 // (owner) every storage type the ship has
-      const used = items.filter((it) => it.hold === h.key).reduce((t, it) => t + (it.m3 || 0), 0);
-      body.append(el("div", { class: "si-cap" }, el("div", { class: "si-hold" }, h.name), el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (h.m3 ? Math.min(100, used / h.m3 * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, Math.round(used).toLocaleString() + " / " + h.m3.toLocaleString() + " m³"))));
-    }
-    body.append(el("div", { class: "si-grid" }, items.map((it) => el("div", { class: "si-cell" }, it.name || "")), el("div", { class: "si-cell empty" })));
+    body.innerHTML = ""; body.classList.add("inv-win");
+    if (!sh || !hold) { body.append(el("div", { class: "muted" }, "No ship")); return; }
+    const items = (sh.inv || []).filter((it) => it.hold === hold.key), used = items.reduce((t, it) => t + (it.m3 || 0), 0);
+    body.append(el("div", { class: "tab-row inv-tabs" }, holds.map((h) => el("button", { class: "tab" + (h === hold ? " active" : ""), "data-hold": h.key, onclick: () => { saved.invTab = h.key; persistAll(); renderInv(body); } }, h.name))),
+      el("div", { class: "si-cap" }, el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (hold.m3 ? Math.min(100, used / hold.m3 * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, Math.round(used).toLocaleString() + " / " + hold.m3.toLocaleString() + " m³"))),
+      el("div", { class: "si-scroll" }, el("div", { class: "si-grid" }, items.map((it) => el("div", { class: "si-cell" }, it.name || "")), el("div", { class: "si-cell empty" }))));
+    requestAnimationFrame(() => { const m = invMin(), e = wins.inv.win; if (!m || e.hidden || wins.inv.group) return; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; fitOnScreen(e); });
+  }
+  // (owner) the Inventory window is always tall enough for at least one slot
+  function invMin() {
+    const w = wins.inv, b = w && w.body, sc = b && b.querySelector(".si-scroll"); if (!sc) return null;
+    const cs = getComputedStyle(b);
+    return { w: 0, h: Math.ceil(sc.getBoundingClientRect().top - w.win.getBoundingClientRect().top + 48 + (parseFloat(cs.paddingBottom) || 0) + 4) };
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.inv && isOpen(wins.inv)) renderInv(wins.inv.body); });
 
@@ -920,9 +932,10 @@
     const c = el("div", { class: "fit-body" + (tab === "fitting" ? "" : " fit-scroll") }); body.append(c);
     const act = modsOf(sh, "active"), pas = modsOf(sh, "passive"), mods = [...act, ...pas];
     if (tab === "fitting") {                         // (owner) active slots above the ship (keyed as on the hotbar), passive below, each row labeled
-      c.append(subHead("Active"), el("div", { class: "fit-slots fit-active" }, HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
+      c.classList.add("fit-split");                  // (phones: the slots and ship on the left, the stats beside them)
+      c.append(el("div", { class: "fit-left" }, el("div", { class: "fit-slots fit-active" }, el("span", { class: "fit-lab" }, "Active"), HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
         el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
-        subHead("Passive"), el("div", { class: "fit-slots fit-passive" }, Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") }))),
+        el("div", { class: "fit-slots fit-passive" }, el("span", { class: "fit-lab" }, "Passive"), Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") })))),
         el("div", { class: "ps-rows fit-rows fit-scroll" }, generalRows(T)));
     } else if (tab === "hull") {
       c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
@@ -938,15 +951,20 @@
       c.append(subHead("Licenses"), el("div", { class: "ps-rows fit-rows" }, (r.licenses || []).map(([key, n, lv]) => reqRow((lic[key] || 0) >= lv, n, ROMAN[lv] || lv))),
         subHead("Ark Ship"), el("div", { class: "ps-rows fit-rows" }, r.ark ? reqRow(owned.has(r.ark[0]), "Carried by", r.ark[1]) : statRow("Carried by", "-")));
     }
-    requestAnimationFrame(() => { const m = fitMin(), e = wins.fit.win; if (!m || e.hidden || wins.fit.group) return; if (e.offsetWidth < m.w) e.style.width = m.w + "px"; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; });
+    requestAnimationFrame(() => { const m = fitMin(), e = wins.fit.win; if (!m || e.hidden || wins.fit.group) return; if (e.offsetWidth < m.w) e.style.width = m.w + "px"; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; fitOnScreen(e); });   // (then back on screen)
   }
   // (owner) the Fitting window can't be narrower than 6 module slots, or shorter than its slots plus 4 stat rows
   function fitMin() {
     const w = wins.fit, b = w && w.body; if (!b) return null;
     const cs = getComputedStyle(b), px = (k) => parseFloat(cs[k]) || 0;
-    const width = Math.ceil(6 * 40 + 5 * 6 + 20 + px("paddingLeft") + px("paddingRight") + 6);
-    const sc = b.querySelector(".fit-rows.fit-scroll"), row = sc && sc.querySelector(".sheet-row");
-    if (sc && row) w.fitMinH = Math.ceil(sc.getBoundingClientRect().top - w.win.getBoundingClientRect().top + sc.scrollTop * 0 + 4 * row.offsetHeight + px("paddingBottom") + 4);
+    const phone = document.documentElement.classList.contains("phone"), slot = phone ? 34 : 40, slotsW = 6 * slot + 5 * 6 + 20;
+    const width = Math.ceil(slotsW + (phone ? 10 + 160 : 0) + px("paddingLeft") + px("paddingRight") + 6);   // phones: plus the stats column
+    const sc = b.querySelector(".fit-rows.fit-scroll"), row = sc && sc.querySelector(".sheet-row"), left = b.querySelector(".fit-left"), top = w.win.getBoundingClientRect().top;
+    if (sc && row) {
+      let bottom = phone ? sc.getBoundingClientRect().top + 4 * row.offsetHeight : sc.getBoundingClientRect().top + 4 * row.offsetHeight;
+      if (phone && left) bottom = Math.max(bottom, left.getBoundingClientRect().bottom);
+      w.fitMinH = Math.ceil(bottom - top + px("paddingBottom") + 4);
+    }
     return { w: width, h: w.fitMinH || 360 };
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.fit && isOpen(wins.fit)) renderFit(wins.fit.body); });
@@ -1011,8 +1029,9 @@
     createWindow("player", { left: 90, top: 70, width: 260, minW: 190, minH: 120, render: renderPlayer, dynMin: playerMin });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
-    createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory" });
-    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - 160)), top: 90, width: 320, minW: 290, minH: 200, render: renderFit, label: "Fitting", dynMin: fitMin });
+    createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory", dynMin: invMin });
+    const phoneUi = document.documentElement.classList.contains("phone");
+    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - (phoneUi ? 240 : 160))), top: phoneUi ? 60 : 90, width: phoneUi ? 470 : 320, minW: 290, minH: 200, render: renderFit, label: "Fitting", dynMin: fitMin });
     { const t = wins.fit.slot, menu = (x, y) => { const sh = hudShip(); if (sh) showCtxMenu(x, y, [["Rename", () => openRename(sh.id)]]); };   // (owner) right-click (hold) the ship's name: Rename
       t.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); menu(e.clientX, e.clientY); });
       let h = 0; t.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => menu(e.clientX, e.clientY), 500); });

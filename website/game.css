@@ -765,3 +765,33 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .req-row .sheet-k { flex: 1; }
 .si-hold { font-size: 10.5px; color: var(--text-dim); margin: 0 2px 3px; }
 .si-cap + .si-cap { margin-top: -2px; }
+/* (owner) Fitting: each slot row's type inside its box, small and grey; the ship centred between the rows, close under the tabs */
+.fit-body { margin-top: 2px; }
+.fit-tabs { margin-bottom: 0; }
+.fit-slots.fit-active, .fit-slots.fit-passive { position: relative; margin: 0; padding-top: 18px; }
+.fit-lab { position: absolute; left: 9px; top: 4px; font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: rgba(150,162,182,0.45); pointer-events: none; }
+.fit-body .fit-hull { padding: 10px 0; }
+.fit-body .fit-rows.fit-scroll { margin-top: 8px; }
+/* (owner) Inventory: hold tabs and the fill bar stay at the top; only the slots scroll */
+.win-body.inv-win { display: flex; flex-direction: column; overflow: hidden; }
+.inv-tabs { flex: 0 0 auto; margin-bottom: 6px; }
+.inv-win .si-cap { flex: 0 0 auto; margin-bottom: 8px; }
+.si-scroll { flex: 1 1 auto; min-height: 48px; overflow-y: auto; }
+/* Fitting: the left column (slots and ship) flows as part of the column on desktop */
+.fit-left { display: contents; }
+/* ---- phones (owner: mobile needs its own layouts and sizes): html.phone is set in game.html ---- */
+.phone .win-title { padding: 4px 9px; }
+.phone .win-body { padding: 8px; }
+.phone .tab { padding: 6px 9px 8px; }
+.phone .tab-row { margin-bottom: 6px; }
+.phone .sheet-row { padding: 4px 8px; font-size: 11.5px; }
+.phone .fit-body.fit-split { flex-direction: row; gap: 10px; align-items: stretch; }
+.phone .fit-left { display: flex; flex-direction: column; flex: 0 0 auto; width: 254px; }
+.phone .fit-slots .hb-slot { width: 34px; height: 34px; }
+.phone .fit-slots { grid-template-columns: repeat(auto-fit, 34px); }
+.phone .fit-body .fit-hull { padding: 6px 0; }
+.phone .fit-body .fit-hull img { max-height: 60px; }
+.phone .fit-split > .fit-rows.fit-scroll { flex: 1 1 auto; min-width: 150px; margin-top: 0; overflow-y: auto; }
+.phone .inv-tabs { margin-bottom: 4px; }
+.phone .si-cell { width: 40px; height: 40px; }
+.phone .si-grid { grid-template-columns: repeat(auto-fill, 40px); }
