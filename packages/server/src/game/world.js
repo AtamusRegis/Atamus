@@ -1,7 +1,8 @@
 // The authoritative simulation (back to basics, owner 2026-10-10): the Expanse's hexagon with nothing in it, and one
-// Prospector per pilot that flies where it's told. Everything else the game had is kept for reference in
-// reference/2026-10-10-pre-reset/.
-import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM } from "./constants.js";
+// Prospector per pilot that flies, aligns and warps where it's told, and asteroid belt POIs. Everything else the game
+// had is kept for reference in reference/2026-10-10-pre-reset/.
+import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
+import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -24,6 +25,8 @@ export class World {
     this.players = new Map();   // pid -> { id, name, send, offline, offlineSince, view, pilots: [{ id, name }] }
     this.ships = new Map();     // sid -> ship
     this.simAt = Date.now();    // the moment the ships' positions are for (snapshots carry it)
+    this.pois = new Map();      // belt POIs: id -> { id, kind, name, x, y, r, createdAt, field, retired }
+    this.poiVer = 1; this.nextPoiTick = 0; this.beltSeq = 0;
   }
 
   addPlayer(id, name, send, saved = null, pilots = []) {
@@ -73,8 +76,33 @@ export class World {
   /** Fly one of your ships to a point (clamped inside the hexagon). */
   cmdMove(pid, shipId, x, y) {
     if (!finite(x) || !finite(y)) return;
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid) return;
-    const t = clampToExpanse(x, y, s.radius); s.tx = t.x; s.ty = t.y; s.moving = true;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
+    const t = clampToExpanse(x, y, s.radius); s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false;
+  }
+  /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
+   *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
+  cmdAlign(pid, shipId, poiId, warp = false) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
+    if (!poi || poi.retired) return;                       // only a POI that still advertises itself
+    if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
+  }
+  cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
+  _inPoi(s, poi) { return Math.hypot(s.x - poi.x, s.y - poi.y) <= poi.r; }
+  // aligned (owner, EVE-like): heading within ALIGN_DEG of the destination and at ALIGN_SPEED of top speed
+  _aligned(s, poi) {
+    const v = Math.hypot(s.vx, s.vy); if (v < s.speed * ALIGN_SPEED) return false;
+    const want = Math.atan2(poi.y - s.y, poi.x - s.x), got = Math.atan2(s.vy, s.vx);
+    let d = Math.abs(want - got) % (2 * Math.PI); if (d > Math.PI) d = 2 * Math.PI - d;
+    return d <= ALIGN_DEG * Math.PI / 180;
+  }
+  _startWarp(s, poi, now) {
+    // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
+    const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
+    const to = { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
+    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false;
   }
   /** Where the player's camera is: other ships in view get sent to them. */
   cmdView(pid, x, y, w) {
@@ -94,7 +122,8 @@ export class World {
   }
 
   tick(dtSec) {
-    const now = Date.now();
+    const now = Date.now(); this.simAt = now;
+    if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); }
     this._tickShips(dtSec, now);
     for (const p of [...this.players.values()]) if (p.offline && now - p.offlineSince > LOGOUT_GRACE_MS) this._purge(p.id);
   }
@@ -103,6 +132,17 @@ export class World {
     const ships = [...this.ships.values()];
     // 1) steer toward the target as fast as it can while still able to brake in time, then integrate
     for (const s of ships) {
+      if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
+        const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
+        s.x = s.wp.fx + (s.wp.tx - s.wp.fx) * e; s.y = s.wp.fy + (s.wp.ty - s.wp.fy) * e; s.vx = 0; s.vy = 0;
+        if (k >= 1) { s.wp = null; s.dest = null; s.moving = false; s.tx = s.x; s.ty = s.y; }
+        continue;
+      }
+      if (s.dest) {                                        // aligning: the POI must still advertise itself, or the ship drifts on
+        const poi = this.pois.get(s.dest);
+        if (!poi || poi.retired) { s.dest = null; s.warpReq = false; s.moving = false; s.drift = true; }
+        else if (s.warpReq && this._aligned(s, poi)) { this._startWarp(s, poi, now); continue; }
+      }
       if (s.moving) {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
         if (d <= SHIP_ARRIVE_EPS_KM) s.moving = false;
@@ -112,13 +152,13 @@ export class World {
           if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
         }
       }
-      if (!s.moving) { const v = Math.hypot(s.vx, s.vy), step = s.accel * dtSec; if (v <= step) { s.vx = 0; s.vy = 0; } else { s.vx -= s.vx / v * step; s.vy -= s.vy / v * step; } }
+      if (!s.moving && !s.drift) { const v = Math.hypot(s.vx, s.vy), step = s.accel * dtSec; if (v <= step) { s.vx = 0; s.vy = 0; } else { s.vx -= s.vx / v * step; s.vy -= s.vy / v * step; } }
       s.x += s.vx * dtSec; s.y += s.vy * dtSec;
       if (Math.hypot(s.vx, s.vy) > 0.05) s.h = Math.atan2(s.vy, s.vx);   // face the way it's going
     }
     // 2) ships don't overlap: pairs in the same 1 km cell (or a neighbouring one) push apart, the lighter one more
     const cell = 1, grid = new Map(), key = (i, j) => i + "," + j;
-    for (const s of ships) { const k = key(Math.floor(s.x / cell), Math.floor(s.y / cell)); let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(s); }
+    for (const s of ships) { if (s.wp) continue; const k = key(Math.floor(s.x / cell), Math.floor(s.y / cell)); let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(s); }
     for (const a of ships) {
       const ci = Math.floor(a.x / cell), cj = Math.floor(a.y / cell);
       for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (const b of grid.get(key(ci + di, cj + dj)) || []) {
@@ -135,8 +175,68 @@ export class World {
     // 3) the hexagon's edge stops ships (and whatever velocity was carrying them out)
     for (const s of ships) {
       if (insideExpanse(s.x, s.y, s.radius)) continue;
-      const c = clampToExpanse(s.x, s.y, s.radius); s.x = c.x; s.y = c.y; s.vx = 0; s.vy = 0;
+      const c = clampToExpanse(s.x, s.y, s.radius); s.x = c.x; s.y = c.y; s.vx = 0; s.vy = 0; s.drift = false;
     }
+  }
+
+  // ---- asteroid belt POIs (owner) ----
+  // Belts by population: one per PLAYERS_PER_BELT online, at least BELTS_MIN. A belt whose ore is all gone stops
+  // showing on the map and no longer counts (a replacement spawns), but it stays open while anyone's ships are inside.
+  _maintainPois(now = Date.now()) {
+    for (const poi of [...this.pois.values()]) {
+      if (decayField(poi.field, now)) this.poiFieldVer = (this.poiFieldVer || 0) + 1;
+      if (!poi.retired && !poi.field.rocks.length) { poi.retired = true; this.poiVer++; }
+      if (poi.retired && !this._shipsIn(poi)) { this.pois.delete(poi.id); this.poiVer++; if (this.onPoiClosed) { try { this.onPoiClosed(poi); } catch (e) { console.error("onPoiClosed", e); } } }
+    }
+    let online = 0; for (const p of this.players.values()) if (!p.offline) online++;
+    const want = Math.max(BELTS_MIN, Math.ceil(online / PLAYERS_PER_BELT));
+    let have = 0; for (const poi of this.pois.values()) if (!poi.retired) have++;
+    for (; have < want; have++) this._newBelt(now);
+  }
+  /** A belt from the database (a restart): back on the map with its rocks as they were. */
+  loadPoi(d) {
+    if (!d || d.kind !== "belt" || !d.field || !Array.isArray(d.field.rocks) || this.pois.has(d.id)) return;
+    this.pois.set(d.id, { ...d, retired: !d.field.rocks.length }); this.poiVer++;
+  }
+  // who has ships in which POI, worked out once per tick (POIs are few; this keeps snapshots cheap with many players)
+  _occupancy() {
+    if (this._occ && this._occ.at === this.simAt && this._occ.ver === this.poiVer) return this._occ.map;
+    const map = new Map(); for (const poi of this.pois.values()) map.set(poi.id, new Set());
+    for (const s of this.ships.values()) { if (s.wp) continue; for (const poi of this.pois.values()) if (this._inPoi(s, poi)) map.get(poi.id).add(s.owner); }
+    this._occ = { at: this.simAt, ver: this.poiVer, map };
+    return map;
+  }
+  _shipsIn(poi, owner = null) { const set = this._occupancy().get(poi.id); return !!set && (owner == null ? set.size > 0 : set.has(owner)); }
+  _newBelt(now = Date.now()) {
+    // somewhere inside the hexagon, clear of the edge and of other belts
+    let x = 0, y = 0;
+    for (let t = 0; t < 500; t++) {
+      const a = Math.random() * Math.PI * 2, d = (0.1 + Math.random() * 0.8) * EXPANSE_APOTHEM_KM; x = Math.cos(a) * d; y = Math.sin(a) * d;
+      if (insideExpanse(x, y, BELT.radiusKm * 3) && [...this.pois.values()].every((o) => Math.hypot(o.x - x, o.y - y) > 600)) break;
+    }
+    const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
+    const poi = { id, kind: "belt", name: "Asteroid Belt " + id.slice(-4).toUpperCase(), x: +x.toFixed(3), y: +y.toFixed(3), r: BELT.radiusKm, createdAt: now, field: createBeltField(id, x, y, now), retired: false };
+    this.pois.set(id, poi); this.poiVer++;
+    return poi;
+  }
+  // what one player's map shows: every belt still advertising itself, plus a mined-out one their ships are still in
+  poiSig(p) { let sig = String(this.poiVer); for (const poi of this.pois.values()) if (poi.retired && this._shipsIn(poi, p.id)) sig += "," + poi.id; return sig; }
+  poisFor(p) {
+    const out = [];
+    for (const poi of this.pois.values()) {
+      if (poi.retired && !this._shipsIn(poi, p.id)) continue;
+      const e = { id: poi.id, kind: poi.kind, name: poi.name, x: poi.x, y: poi.y, r: poi.r };
+      if (poi.retired) e.hidden = true;
+      out.push(e);
+    }
+    return out;
+  }
+  // (owner) a POI's zone and asteroids are only sent while one of your ships is inside it
+  fieldSig(p) { let sig = ""; for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) sig += poi.id + ":" + poi.field.ver + ","; return sig; }
+  fieldsFor(p) {
+    const out = [];
+    for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) out.push({ poi: poi.id, rocks: poi.field.rocks.map((k) => ({ id: k.id, x: k.x, y: k.y, size: k.size, ore: k.ore, rot: k.rot })) });
+    return { fields: out, sig: this.fieldSig(p) };
   }
 
   // ---- snapshots: your own ships always, other ships inside your camera's view (or near your ship) ----
@@ -148,7 +248,12 @@ export class World {
       const mine = s.owner === p.id;
       if (!mine && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
-      if (mine) { e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); } }
+      if (mine) {
+        e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
+        if (s.dest) { e.dest = s.dest; if (s.warpReq) e.warpReq = true; }
+        if (s.drift) e.drift = true;
+      }
+      if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };
       ships.push(e);
     }
     return { t: "snap", st: this.simAt, ships };

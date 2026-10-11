@@ -12,3 +12,10 @@ export async function saveSystem(userId, data) {
     [userId, data]
   );
 }
+
+// Belt POIs (shared by everyone), kept in the instances table so a restart doesn't reshuffle them.
+export async function loadPois() { const { rows } = await pool.query(`SELECT data FROM instances`); return rows.map((r) => r.data); }
+export async function savePoi(id, data) {
+  await pool.query(`INSERT INTO instances (id, data, updated_at) VALUES ($1, $2, now()) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [id, data]);
+}
+export async function deletePoi(id) { await pool.query(`DELETE FROM instances WHERE id = $1`, [id]); }

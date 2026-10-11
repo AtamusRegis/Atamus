@@ -9,11 +9,14 @@
   const statusEl = document.getElementById("status");
 
   let cfg = null, me = { id: null, name: "" }, ws = null;
+  let pois = [], poiById = new Map(), belts = new Map();   // belt POIs on the map; the rock fields of the ones your ships are in
   const bus = new EventTarget();
   // snapshots: the last few, each with the server time its positions are for; ships are drawn RENDER_DELAY_MS in
   // the past, interpolated between the two snapshots around that moment
   const RENDER_DELAY_MS = 110, snaps = []; let clockOffset = null, latest = { ships: [] };
   // follow: the id of the ship the camera follows, or null. Selecting a pilot doesn't move the camera (owner).
+  const POI_VIEW_KM = 110;                         // a whole 100 km POI with a little margin
+  let warpView = null;                             // the zoom to come back to after following a ship through a warp
   const ZOOM_MIN_W = 3.25;                         // km across the screen at the closest zoom (owner: the Prospector at about 1/25 of the width)
   const cam = { cx: 0, cy: 0, viewW: ZOOM_MIN_W }; let viewWTarget = ZOOM_MIN_W, follow = null, camInit = false, zoomAt = null;
   let selPilot = null;                             // the selected pilot (ui.js keeps it; one is always selected)
@@ -25,6 +28,12 @@
     get selectedPilot() { return selPilot; },
     selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
     followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; zoomAt = null; return true; },
+    // (owner) Tab: centre on that pilot's ship and zoom to show a whole POI around it
+    focusShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; zoomAt = null; viewWTarget = POI_VIEW_KM * Math.max(1, innerWidth / innerHeight); warpView = null; return true; },
+    get pois() { return pois; }, poi: (id) => poiById.get(id) || null, get belts() { return belts; },
+    align: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "align", ship: sh.id, poi: poiId }); },
+    warp: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "warp", ship: sh.id, poi: poiId }); },
+    inPoi: (sh, poi) => !!(sh && poi && Math.hypot(sh.x - poi.x, sh.y - poi.y) <= poi.r),
   };
   const myShip = () => { const own = (latest.ships || []).filter((x) => x.mine); return own.find((x) => x.pilot === selPilot) || own[0] || null; };   // the selected pilot's ship
 
@@ -67,7 +76,9 @@
           serverBuild = m.build;
           if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
         }
-        cfg = m.cfg; me = m.you; sentView = ""; bus.dispatchEvent(new CustomEvent("hello"));
+        cfg = m.cfg; me = m.you; sentView = ""; setPois(m.pois); setBelts(m.belts); bus.dispatchEvent(new CustomEvent("hello"));
+      } else if (m.t === "pois") { setPois(m.pois); bus.dispatchEvent(new CustomEvent("pois"));
+      } else if (m.t === "belts") { setBelts(m.belts);
       } else if (m.t === "snap") {
         const now = performance.now(), off = m.st - now;
         clockOffset = clockOffset == null ? off : Math.max(off, clockOffset + (off - clockOffset) * 0.02);   // server clock ≈ local + offset (the freshest arrival)
@@ -167,9 +178,30 @@
     return out;
   }
 
-  // ---- input: click / tap = fly the selected ship there (on one of your ships: select its pilot and follow it);
+  function setPois(list) { pois = list || []; poiById = new Map(pois.map((p) => [p.id, p])); }
+  function setBelts(list) { belts = new Map((list || []).map((f) => [f.poi, f])); }
+
+  // ---- input: click / tap = fly the selected ship there (on one of your ships: select its pilot, owner: no centring);
+  // right-click or hold = the menu (on a belt's map marker: Warp to / Align to; elsewhere: Center on ship, Belts ›);
   // drag or WASD = pan; wheel / pinch = zoom ----
-  const ptrs = new Map(); let drag = null;
+  const ptrs = new Map(); let drag = null, hold = 0;
+  const MARKER_PX = 12;
+  const poiAt = (px, py) => { let best = null, bd = MARKER_PX; for (const p of pois) { const d = Math.hypot(px - gx2s(p.x), py - gy2s(p.y)); if (d <= bd) { bd = d; best = p; } } return best; };
+  const poiItems = (p) => {                         // a POI's options for the selected pilot's ship
+    const own = myShip(), out = [];
+    if (own && !window.Atamus.inPoi(own, p)) out.push(["Warp to " + p.name, () => window.Atamus.warp(p.id)]);
+    out.push(["Align to " + p.name, () => window.Atamus.align(p.id)]);
+    return out;
+  };
+  function openMenu(px, py) {
+    const menu = window.Atamus.ctxMenu; if (!menu) return;
+    const p = poiAt(px, py);
+    if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
+    const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
+    menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
+      ["Belts", belts.map((q) => [q.name, poiItems(q).map(([label, fn]) => [label.replace(" " + q.name, ""), fn])])]]);
+  }
+  canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
     let best = null, bd = Infinity;
     for (const s of ships) { if (!s.mine) continue; const r = Math.max(14, hull(s.type).lengthKm * scale() * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = s; } }
@@ -181,25 +213,34 @@
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; drag = { pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y), w: viewWTarget }; return; }
     if (e.button !== 0) { drag = null; return; }
     drag = { x0: e.clientX, y0: e.clientY, cx: cam.cx, cy: cam.cy, moved: false };
+    clearTimeout(hold);
+    if (e.pointerType !== "mouse") hold = setTimeout(() => { if (drag && !drag.moved && !drag.pinch) { drag = null; openMenu(e.clientX, e.clientY); } }, 500);   // hold = right-click (owner: mobile parity)
   });
   canvas.addEventListener("pointermove", (e) => {
     if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (!drag) return;
     if (drag.pinch) { if (ptrs.size < 2) return; const [a, b] = [...ptrs.values()]; zoomTo(drag.w * (drag.d || 1) / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
-    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = null; zoomAt = null; }
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = null; zoomAt = null; clearTimeout(hold); }
     if (drag.moved) { cam.cx = drag.cx - (e.clientX - drag.x0) / scale(); cam.cy = drag.cy + (e.clientY - drag.y0) / scale(); clampCamera(); }
   });
   const up = (e) => {
-    ptrs.delete(e.pointerId);
+    ptrs.delete(e.pointerId); clearTimeout(hold);
     const d = drag; if (!d) return;
     if (d.pinch) { if (!ptrs.size) drag = null; return; }
     drag = null; if (d.moved || e.type === "pointercancel") return;
     const ships = shipsNow(), own = myShip();
     const hit = shipAt(e.clientX, e.clientY, ships);
-    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); follow = hit.id; zoomAt = null; return; }   // one of your ships: its pilot, and the camera follows it
+    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); return; }   // one of your ships: select its pilot (owner: the camera stays)
     if (!own) return;
     const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
   };
+  const tip = document.getElementById("tooltip"); let mapTip = false;
+  canvas.addEventListener("pointermove", (e) => {    // a map marker's name on hover (owner: tooltips show names only)
+    if (e.pointerType !== "mouse" || !tip) return;
+    const p = poiAt(e.clientX, e.clientY);
+    if (p) { tip.textContent = p.name; tip.hidden = false; tip.style.left = (e.clientX + 14) + "px"; tip.style.top = e.clientY + "px"; mapTip = true; }
+    else if (mapTip) { tip.hidden = true; mapTip = false; }
+  });
   canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
   canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoomTo(viewWTarget * (e.deltaY > 0 ? 1.18 : 1 / 1.18), e.clientX, e.clientY); }, { passive: false });
   // zoom toward the pointer (or about your ship while following it)
@@ -222,12 +263,44 @@
     for (let k = 0; k <= 6; k++) { const a = k * Math.PI / 3, x = gx2s(Math.cos(a) * R), y = gy2s(Math.sin(a) * R); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
     ctx.strokeStyle = "rgba(140,170,220,0.35)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
+  // belts: the map marker always; the zone and the rocks only while one of your ships is inside (owner)
+  const mapIcon = img("assets/icons/map/asteroid_field_s.png"), oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
+  const rockArt = (family, size) => img("assets/rocks/rock_" + family + "_" + size + ".webp"), oreIcon = (family) => img("assets/icons/ores/" + (family === "bubble" ? "rubble" : family) + "_s.png");
+  function drawBelts(ships) {
+    const sc = scale(), ores = oreBy();
+    for (const p of pois) {
+      const x = gx2s(p.x), y = gy2s(p.y), rPx = p.r * sc, f = belts.get(p.id);
+      if (x < -rPx - 40 || y < -rPx - 40 || x > innerWidth + rPx + 40 || y > innerHeight + rPx + 40) continue;
+      if (f) {
+        ctx.save(); ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.strokeStyle = "rgba(140,170,220,0.22)"; ctx.setLineDash([6, 6]); ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
+        for (const k of f.rocks) {
+          const rx = gx2s(k.x), ry = gy2s(k.y), wPx = k.size / 1000 * sc;
+          if (rx < -wPx || ry < -wPx || rx > innerWidth + wPx || ry > innerHeight + wPx) continue;
+          const o = ores.get(k.ore) || { rock: "cratered", color: "#888" };
+          ctx.save(); ctx.translate(rx, ry); ctx.rotate(k.rot);
+          if (wPx < 6) { const ic = oreIcon(o.rock); if (ic.naturalWidth && rPx > 60) { ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -4, -4, 8, 8); } else { ctx.fillStyle = o.color; ctx.fillRect(-1, -1, 2, 2); } }
+          else { const a = rockArt(o.rock, k.size); if (a.naturalWidth) { ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(a, -wPx / 2, -wPx / 2 * a.naturalHeight / a.naturalWidth, wPx, wPx * a.naturalHeight / a.naturalWidth); } }
+          ctx.restore();
+        }
+      }
+      if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
+    }
+  }
+  function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
+    for (const sh of ships) {
+      if (!sh.warp) continue;
+      const x = gx2s(sh.x), y = gy2s(sh.y), fx = gx2s(sh.warp.fx), fy = gy2s(sh.warp.fy), L = Math.hypot(x - fx, y - fy); if (L < 2) continue;
+      const k = Math.min(1, 160 / L), sx = x + (fx - x) * k, sy = y + (fy - y) * k, g = ctx.createLinearGradient(x, y, sx, sy);
+      g.addColorStop(0, sh.mine ? "rgba(120,200,255,0.9)" : "rgba(255,120,120,0.9)"); g.addColorStop(1, "rgba(120,200,255,0)");
+      ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sx, sy); ctx.stroke(); ctx.restore();
+    }
+  }
   function drawShips(ships) {
     const sc = scale();
     for (const sh of ships) {
       const sx = gx2s(sh.x), sy = gy2s(sh.y);
       if (sx < -80 || sy < -80 || sx > innerWidth + 80 || sy > innerHeight + 80) continue;
-      if (sh.mine && sh.moving && sh.tx != null) {          // where it's headed
+      if (sh.mine && sh.moving && sh.tx != null && !sh.dest) {   // where it's headed
         const tx = gx2s(sh.tx), ty = gy2s(sh.ty); ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
@@ -266,12 +339,17 @@
       }
       const fs = follow && ships.find((s) => s.id === follow);
       if (follow && !fs && latest.ships && !latest.ships.some((s) => s.id === follow)) follow = null;   // that ship is gone
-      if (fs) { const e = 1 - Math.exp(-12 * dt); cam.cx += (fs.x - cam.cx) * e; cam.cy += (fs.y - cam.cy) * e; }
+      // (owner) following a ship through a warp: zoom all the way out and hold the map still; zoom back onto it after
+      if (fs && fs.warp) { if (!warpView) warpView = { w: viewWTarget }; viewWTarget = fitWidth(); const e = 1 - Math.exp(-6 * dt); cam.cx += (0 - cam.cx) * e; cam.cy += (0 - cam.cy) * e; }
+      else if (fs) {
+        if (warpView) { viewWTarget = warpView.w; warpView = null; }
+        const e = 1 - Math.exp(-12 * dt); cam.cx += (fs.x - cam.cx) * e; cam.cy += (fs.y - cam.cy) * e;
+      }
       clampCamera();
       sendView(now);
     }
     drawBackground();
-    if (cfg) { drawHex(); drawShips(ships); }
+    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); }
     requestAnimationFrame(frame);
   }
 

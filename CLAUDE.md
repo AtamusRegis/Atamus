@@ -7,7 +7,7 @@ Atamus is a browser-based, EVE-inspired multiplayer mining semi-RTS. Claude writ
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. Read `docs/DESIGN.md`: the agreed redesign (the Expanse and nomad space built from POIs, arcs, the base surface, and a world built for 1,000 concurrent players) that the next phases build toward.
-4. **Back to basics (owner, 2026-10-10):** the live game is only the Player, Pilot, Chat and Fleet windows, the Expanse's empty hexagon and a Prospector per pilot. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
+4. **Back to basics (owner, 2026-10-10):** the live game is the Player, Pilot, Chat and Fleet windows, the Expanse's hexagon with asteroid belts, and a Prospector per pilot that flies, aligns and warps. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
 
 **In the same commit as any change to behavior:**
 
@@ -42,9 +42,10 @@ packages/server/src/
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): the hexagon, one Prospector per pilot, flying, collisions, chat
-    constants.js  tunables + SHIP_TYPES (the Prospector)
-    persist.js    systems table (JSONB per player: their ship)
+    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying, align / warp, collisions, chat
+    belts.js      asteroid belts: ores, crescent fields, wasting away
+    constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
+    persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer (backdrop, hexagon edge, ships), input, socket, update/countdown handling
   ui.js           the left panel and the Player, Pilot, Chat and Fleet windows (window manager, tab groups)

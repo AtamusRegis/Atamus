@@ -39,7 +39,25 @@ r = await run(page, `for (const b of document.querySelectorAll(".win:not([hidden
   return { moving, tx, afterDrag, refollow: A.view.follow };`);
 t.ok(r.moving && r.tx > 0, "a click on space flies the ship there", r);
 t.ok(r.afterDrag === null, "dragging pans the camera off the ship", r);
-t.ok(r.refollow === A_SHIP, "clicking your ship follows it again", r);
+t.ok(r.refollow === null, "clicking your ship selects its pilot but doesn't centre on it (owner)", r);
+// right-click / hold menus (owner): space → Center on ship, Belts › name › Warp to / Align to; Align shows the fleet's Align / Warp
+r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(200);
+  c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); await s(200);
+  const top = [...document.querySelectorAll(".ctx-root > .ctx-menu > .ctx-item")].map((x) => x.textContent);
+  const beltsRow = [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Belts"); beltsRow.click(); await s(100);
+  const names = [...document.querySelectorAll('.ctx-sub[data-depth="1"] .ctx-item')].map((x) => x.textContent);
+  document.querySelector('.ctx-sub[data-depth="1"] .ctx-item').click(); await s(100);
+  const opts = [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].map((x) => x.textContent);
+  [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].find((x) => x.textContent === "Align to").click(); await s(800);
+  const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent);
+  const centerRow = () => { c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); return [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Center on ship"); };
+  ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
+  const centred = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
+  return { top, names: names.length, opts, dest: A.myShip.dest || null, acts: !acts.hidden, btns, centred };`);
+t.ok(r.top.join() === "Center on ship,Belts" && r.names >= 3, "space menu: Center on ship, Belts › the belts", r);
+t.ok(r.opts.join() === "Warp to,Align to", "each belt: Warp to, Align to", r.opts);
+t.ok(r.dest && r.acts && r.btns.join() === "Align,Warp", "aligning shows Align and Warp under the fleet", r);
+t.ok(r.centred === A_SHIP, "Center on ship follows the selected pilot's ship", r);
 r = await run(page, `const card = document.querySelector(".fleet-card"); const parts = card && [card.querySelector("canvas.portrait"), card.querySelector(".fc-ship img"), card.querySelector(".fc-sh i"), card.querySelector(".fc-hp i"), card.querySelector(".fc-name")].map(Boolean);
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); const off = A.view.follow;
   card.click(); await s(200); const afterClick = A.view.follow; card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); await s(200); const afterDbl = A.view.follow;

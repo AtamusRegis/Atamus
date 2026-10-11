@@ -524,8 +524,9 @@
     const t = document.activeElement && document.activeElement.tagName; if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     e.preventDefault();
     const ps = (state && state.pilots) || []; if (ps.length < 2) return;
-    const i = ps.findIndex((p) => String(p.id) === String(saved.selPilot));
-    selectPilot(ps[(i + 1) % ps.length].id);
+    const i = ps.findIndex((p) => String(p.id) === String(saved.selPilot)), next = ps[(i + 1) % ps.length];
+    selectPilot(next.id);
+    const sh = pilotShip(next.id); if (sh) window.Atamus.focusShip(sh.id);   // (owner) Tab centres on them, zoomed to show a whole POI
   });
 
   // ---- Fleet window (owner): how you switch pilots. Each card: the pilot's portrait on the left; their ship with its
@@ -552,8 +553,19 @@
         w.cards[p.id] = { card, sf, hf };
         list.append(card);
       }
-      body.append(list);
+      // (owner) under the fleet: Align and Warp, for the selected pilot's ship and its destination POI
+      w.acts = { row: el("div", { class: "fleet-acts2" }) };
+      w.acts.align = el("button", { class: "fa-btn", onclick: () => { const sh = pilotShip(saved.selPilot); if (sh && sh.dest) window.Atamus.align(sh.dest, sh.id); } }, "Align");
+      w.acts.warp = el("button", { class: "fa-btn", onclick: () => { const sh = pilotShip(saved.selPilot); if (sh && sh.dest) window.Atamus.warp(sh.dest, sh.id); } }, "Warp");
+      w.acts.row.append(w.acts.align, w.acts.warp);
+      body.append(list, w.acts.row);
       w.win.style.width = "auto"; w.win.style.height = "auto";   // exactly as big as its cards
+    }
+    {                                                // the actions show while the ship has a destination; Warp only while that POI still advertises itself
+      const sh = pilotShip(saved.selPilot), A = window.Atamus, poi = sh && sh.dest ? A.poi(sh.dest) : null;
+      const show = !!(sh && sh.dest && !sh.warp), canWarp = !!(poi && !poi.hidden && !A.inPoi(sh, poi));
+      w.acts.row.hidden = !show; w.acts.warp.hidden = !canWarp;
+      w.acts.align.classList.toggle("on", show && !sh.warpReq); w.acts.warp.classList.toggle("on", show && !!sh.warpReq);
     }
     for (const p of pilots) {
       const c = w.cards[p.id]; if (!c) continue;
@@ -604,6 +616,44 @@
     body.append(log, form); log.scrollTop = log.scrollHeight;
     updateChatGlow();
   }
+
+  // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near
+  // the left edge, to the left near the right edge). An item is [label, fn] or [label, [items…]]: a submenu opens beside
+  // it on hover or tap, and submenus nest. ----
+  let ctxMenu = null;
+  function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
+  function showCtxMenu(x, y, items) {
+    closeCtxMenu();
+    ctxMenu = el("div", { class: "ctx-root" }); ctxMenu.style.zIndex = z + 100000;
+    const M = 6, GAP = 8;
+    const build = (list, depth) => el("div", { class: "ctx-menu" + (depth ? " ctx-sub" : "") }, list.length ? list.map(([label, fn]) => {
+      if (Array.isArray(fn)) {
+        const row = el("div", { class: "ctx-item ctx-has-sub" }, label);
+        const open = () => {
+          for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove();
+          const sub = build(fn, depth + 1); sub.dataset.depth = depth + 1; ctxMenu.append(sub);
+          const r = row.getBoundingClientRect(), b = sub.getBoundingClientRect();
+          let left = r.right + 2; if (left + b.width > innerWidth - M) left = r.left - 2 - b.width;
+          sub.style.left = Math.max(M, left) + "px"; sub.style.top = Math.max(M, Math.min(innerHeight - b.height - M, r.top - 4)) + "px";
+        };
+        row.addEventListener("mouseenter", open); row.addEventListener("click", (e) => { e.stopPropagation(); open(); });
+        return row;
+      }
+      const row = el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label);
+      row.addEventListener("mouseenter", () => { for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove(); });
+      return row;
+    }) : [el("div", { class: "ctx-item ctx-empty" }, "—")]);
+    const top = build(items, 0); ctxMenu.append(top); document.body.append(ctxMenu);
+    const r = top.getBoundingClientRect();
+    let left = x - r.width / 2;
+    if (left < M) left = x + GAP; else if (left + r.width > innerWidth - M) left = x - GAP - r.width;
+    left = Math.max(M, Math.min(innerWidth - r.width - M, left));
+    let tp = y - GAP - r.height; if (tp < M) tp = y + GAP;
+    top.style.left = left + "px"; top.style.top = Math.max(M, Math.min(innerHeight - r.height - M, tp)) + "px";
+  }
+  window.Atamus.ctxMenu = showCtxMenu;
+  document.addEventListener("pointerdown", (e) => { if (ctxMenu && !(e.target instanceof Element && e.target.closest(".ctx-root"))) closeCtxMenu(); }, true);
+  addEventListener("keydown", (e) => { if (e.key === "Escape") closeCtxMenu(); });
 
   function flash(text) { const s = document.getElementById("status"); if (!s) return; s.textContent = text; s.className = "status err"; setTimeout(() => s.classList.add("hidden"), 2500); }
 

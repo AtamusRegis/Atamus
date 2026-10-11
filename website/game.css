@@ -649,3 +649,11 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .chat-line { display: flex; align-items: flex-start; gap: 6px; }
 .chat-portrait { width: 22px; height: 22px; flex: none; border-radius: 3px; }
 .chat-msg { min-width: 0; overflow-wrap: anywhere; padding-top: 2px; }
+
+/* fleet: Align / Warp under the cards (owner) */
+.win[data-id="fleet"] .win-body { flex-direction: column; align-items: stretch; }
+.fleet-acts2 { display: flex; gap: 6px; justify-content: center; }
+.fleet-acts2[hidden], .fa-btn[hidden] { display: none; }
+.fa-btn { font: inherit; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 12px; color: var(--text-dim); background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; cursor: pointer; }
+.fa-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+.fa-btn.on { color: #eaf7ff; border-color: rgba(42,182,255,0.8); box-shadow: inset 0 0 0 1px rgba(42,182,255,0.4); }

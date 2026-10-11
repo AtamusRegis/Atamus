@@ -4,14 +4,15 @@ import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM } from "./constants.js";
-import { loadSystem, saveSystem } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
+import { ORES } from "./belts.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
 import { getState } from "../pilots.js";
 
 const world = new World();
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
-const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES };
+const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES };
 
 export function attachGameServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
@@ -47,7 +48,8 @@ export function attachGameServer(httpServer) {
       if (mine.size) return;                                 // replaced by a newer session: it carries on
       conns.delete(pid); persist(pid).finally(() => { if (!conns.has(pid)) world.removePlayer(pid); });
     });
-    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG }));
+    const fl = world.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = world.poiSig(player);
+    send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, pois: world.poisFor(player), belts: fl.fields }));
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
@@ -62,6 +64,8 @@ export function attachGameServer(httpServer) {
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
           case "pilots": refreshPilots(); break;
           case "chat": world.cmdChat(pid, m.text, m.channel); break;
+          case "align": world.cmdAlign(pid, m.ship, m.poi); break;
+          case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }
       } catch (e) { console.error("command " + m.t, e); }
@@ -76,11 +80,23 @@ export function attachGameServer(httpServer) {
     try { await saveSystem(pid, json); lastSaved.set(pid, json); } catch (e) { console.error("saveSystem", e); }
   };
   world.onBeforePurge = (pid) => { lastSaved.delete(pid); saveSystem(pid, world.exportState(pid)).catch((e) => console.error("saveSystem(purge)", e)); };
-  setInterval(() => { for (const pid of world.players.keys()) persist(pid); }, 10000);
+  // belt POIs persist on their own (shared by everyone); a closed one is deleted
+  const poiSaved = new Map();
+  const persistPois = () => { for (const poi of world.pois.values()) { const json = JSON.stringify(poi); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
+  world.onPoiClosed = (poi) => { poiSaved.delete(poi.id); deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
+  loadPois().then((list) => { for (const d of list) world.loadPoi(d); }).catch((e) => console.error("loadPois", e));
+  setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);
 
   let last = Date.now();
   setInterval(() => { const now = Date.now(), dt = Math.min(0.25, (now - last) / 1000); last = now; world.tick(dt); }, TICK_MS);
-  setInterval(() => { for (const p of world.players.values()) if (!p.offline) p.send(JSON.stringify(world.snapshotFor(p))); }, SNAPSHOT_MS);
+  setInterval(() => {
+    for (const p of world.players.values()) {
+      if (p.offline) continue;
+      const ps = world.poiSig(p); if (ps !== p.poiSig) { p.poiSig = ps; p.send(JSON.stringify({ t: "pois", pois: world.poisFor(p) })); }   // the map's POIs changed
+      const fs = world.fieldSig(p); if (fs !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); }   // a belt came into reach, or its rocks changed
+      p.send(JSON.stringify(world.snapshotFor(p)));
+    }
+  }, SNAPSHOT_MS);
 
   return wss;
 }

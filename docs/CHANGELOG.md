@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-11
+
+- **Asteroid belts, align and warp (owner, major):** belt POIs are back: 100 km across, a half moon of rocks 45 km out (give or take 5), all five ores, at least 2,000,000 m³ each. After an hour they slowly waste away, rocks shrinking large → medium → small; a mined-out belt leaves the map but stays open while ships are inside. Right-click (or hold) a belt's marker, or space › Belts, to Warp to or Align to it; Align and Warp also sit under the Fleet window. Aligning flies at regular speed toward the POI; Warp aligns then warps (about 30 s across the map); if the POI disappears you drift. Clicking your ship now only selects its pilot; Center on ship is in the space menu; Tab centres on the next pilot's ship, zoomed to a whole POI.
+
 ## 2026-10-10
 
 - **Fleet, pilots and chat (owner):** the Fleet window is back as how you switch pilots: each card shows the pilot's portrait, their ship with shield and hull bars, and their name; click to select (the camera stays put), double-click to follow; Tab steps through pilots. Every pilot now has their own Prospector. Local and Corp chat are back, with each message showing the speaker's character portrait. WASD pans the camera; right-click no longer opens the browser menu; the closest zoom is now 3.25 km across. Everyone's pilots were reset (accounts and characters stay).
