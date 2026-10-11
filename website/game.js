@@ -40,7 +40,7 @@
     get pois() { return pois; }, poi: (id) => poiById.get(id) || null, get belts() { return belts; },
     align: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "align", ship: sh.id, poi: poiId }); },
     warp: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "warp", ship: sh.id, poi: poiId }); },
-    inPoi: (sh, poi) => !!(sh && poi && Math.hypot(sh.x - poi.x, sh.y - poi.y) <= poi.r),
+    inPoi: (sh, poi) => { if (!sh || !poi) return false; const a = poi.ax != null ? { x: poi.ax, y: poi.ay, r: poi.ar } : poi; return Math.hypot(sh.x - a.x, sh.y - a.y) <= a.r; },   // (a celestial: at its anchor)
     // objects in space (owner): { kind: "rock" | "ship", id }. Orders go to the selected pilot's ship.
     lock: (kind, id) => { const sh = myShip(); if (sh) send({ t: "lock", ship: sh.id, kind, id }); },
     unlock: (kind, id) => { const sh = myShip(); if (sh) send({ t: "unlock", ship: sh.id, kind, id }); },
@@ -89,9 +89,9 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = (e) => {
       if (e.code === 4001) { location.href = "login.html"; return; }          // signed out (session expired): back to the website
-      if (e.code === 4003 || e.code === 4004) {        // (owner) kicked or banned by an admin: say why, then off to the website
-        reloading = true; const why = kickedWhy ? ": " + kickedWhy : ""; setStatus((e.code === 4004 ? "Banned" : "Kicked") + why, "err");
-        setTimeout(() => { location.href = e.code === 4004 ? "login.html" : "play.html"; }, 5000); return;
+      if (e.code === 4005 || e.code === 4006) {        // (owner) kicked or banned by an admin: say why, then off to the website
+        reloading = true; const why = kickedWhy ? ": " + kickedWhy : ""; setStatus((e.code === 4006 ? "Banned" : "Kicked") + why, "err");
+        setTimeout(() => { location.href = e.code === 4006 ? "login.html" : "play.html"; }, 5000); return;
       }
       if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
@@ -121,6 +121,7 @@
         if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
+      } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
       } else if (m.t === "kicked" || m.t === "banned") { kickedWhy = m.reason || "";
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
@@ -253,14 +254,14 @@
     }
     if (pr) { menu(px, py, [["Look At", () => lookAtObj("prop", pr.id)]]); return; }   // a Library prop
     const p = poiAt(px, py);
-    if (p && !p.hidden && (p.kind === "planet" || p.kind === "moon")) { const c = celestialById(p.id); if (c) { menu(px, py, celestialItems(c)); return; } }
+    if (p && !p.hidden && p.ax != null) { const c = celestialById(p.id); if (c) { menu(px, py, celestialItems(c)); return; } }
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
     const cb = celestialAt(px, py);
     if (cb) { menu(px, py, celestialItems(cb)); return; }   // (owner) a planet or moon itself
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
     menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
       ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])],   // (owner) a list: right-click (hold) a belt for its menu
-      ["Celestials", [["Planets", celestials().planets.map((q) => [q.name, null, { menu: [...celestialItems(q), ["Moons", q.moons.map((m) => [m.name, null, { menu: celestialItems(m) }])]] }])]]]]);   // (owner) Celestials › Planets › a planet (and its Moons)
+      ["Celestials", [...(celestials().sun ? [[celestials().sun.name, null, { menu: celestialItems(celestials().sun) }]] : []), ["Planets", celestials().planets.map((q) => [q.name, null, { menu: [...celestialItems(q), ["Moons", q.moons.map((m) => [m.name, null, { menu: celestialItems(m) }])]] }])]]]]);   // (owner) Celestials › Planets › a planet (and its Moons)
   }
   canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); if (e.ctrlKey && e.button === 0) return; openMenu(e.clientX, e.clientY); });   // (a Mac's Ctrl + click is Align To, not the menu)
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
@@ -346,7 +347,11 @@
     const s = (latest.ships || []).find((x) => x.id === id); return hull(s ? s.type : "chisel").name;
   }
   function objIcon(kind, id) {
-    if (kind === "celestial") { const c = celestialById(id); if (!c) return ""; const t = planetTexture(c.seed || 1, c.world).c; return t.toDataURL(); }   // its own surface
+    if (kind === "celestial") {                       // its own surface (the sun: a glowing disc)
+      const c = celestialById(id); if (!c) return "";
+      if (c.kind === "sun") { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31); gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.35, "#bcd6ff"); gr.addColorStop(1, "rgba(70,130,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return cv.toDataURL(); }
+      return planetTexture(c.seed || 1, c.world).c.toDataURL();
+    }
     if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + "_s.png"; }
     const s = (latest.ships || []).find((x) => x.id === id); return "assets/icons/ships/" + hull(s ? s.type : "chisel").sprite + (s && s.mine ? "_blue" : "_red") + "_s.png";
   }
@@ -457,14 +462,15 @@
         }
         drawProps(f, sc);
       }
-      if ((p.kind === "planet" || p.kind === "moon") && !showAnchor(p, sc)) continue;
+      if (p.ax != null) { if (showAnchor(p, sc)) drawAnchor(p); continue; }   // a celestial: the body is its marker; its anchor shows once clear of it
       const mapIcon = mapIcons[p.kind] || mapIcons.belt;
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }
     for (const [id, f] of belts) if (!poiById.has(id)) drawProps(f, sc);   // (owner) someone's station you've flown to: there, though not on your map
   }
   // a planet's or moon's anchor icon shows once it's clear of the body on screen (zoomed out, the body itself is what you click)
-  function showAnchor(p, sc) { const c = celestialById(p.id); return !c || Math.hypot(p.x - c.x, p.y - c.y) * sc - bodyPx(c, sc) > 14; }
+  function showAnchor(p, sc) { const c = celestialById(p.id); return !!c && Math.hypot(p.ax - c.x, p.ay - c.y) * sc - bodyPx(c, sc) > 14; }
+  function drawAnchor(p) { const ic = mapIcons.planet; if (!ic.naturalWidth) return; ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = 0.8; ctx.drawImage(ic, Math.round(gx2s(p.ax) - ic.naturalWidth / 2), Math.round(gy2s(p.ay) - ic.naturalHeight / 2)); ctx.restore(); }
   function drawProps(f, sc) {                        // a POI's props (the Library's, the stations): space objects at true size
     for (const o of f.props || []) {
       const px = gx2s(o.x), py = gy2s(o.y), w = o.w * sc, h = o.h * sc;
@@ -583,10 +589,11 @@
   // the planet or moon under the pointer (its body), for its menu
   function celestialAt(px, py) {
     const sc = scale(); let best = null, bd = Infinity;
-    for (const p of celestials().planets) for (const c of [p, ...p.moons]) { const d = Math.hypot(px - gx2s(c.x), py - gy2s(c.y)), r = Math.max(8, bodyPx(c, sc)); if (d <= r && d < bd) { bd = d; best = c; } }
+    for (const c of allCelestials()) { const d = Math.hypot(px - gx2s(c.x), py - gy2s(c.y)), r = Math.max(8, bodyPx(c, sc)); if (d <= r && d < bd) { bd = d; best = c; } }
     return best;
   }
-  const celestialById = (id) => { for (const p of celestials().planets) for (const c of [p, ...p.moons]) if (c.id === id) return c; return null; };
+  const allCelestials = () => { const cc = celestials(), out = cc.sun ? [cc.sun] : []; for (const p of cc.planets) out.push(p, ...p.moons); return out; };
+  const celestialById = (id) => allCelestials().find((c) => c.id === id) || null;
   // a planet's or moon's options: warp / align to its anchor, Info
   const celestialItems = (c) => { const poi = poiById.get(c.id); return [...(poi ? poiItems(poi) : []), ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "celestial", id: c.id } }))]]; };
 

@@ -5,13 +5,13 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
-import { setGameHooks } from "../admin.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
+import { setGameHooks, isUnlocked, muteOf } from "../admin.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts } from "./persist.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
 import { DOCK_KM } from "./station.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { PTR, devCommand } from "../ptr.js";
+import { PTR, devCommand, ptrAs } from "../ptr.js";
 import { getState } from "../pilots.js";
 
 const world = new World();
@@ -19,8 +19,38 @@ const conns = new Map();   // pid -> sockets; one session per account: a new tab
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
 export function attachGameServer(httpServer) {
+  const sendTo = (pid, o) => { const s = JSON.stringify(o); for (const c of conns.get(pid) || []) if (c.readyState === c.OPEN && !c.replaced) c.send(s); };
+  // (owner) admin DMs: an admin (with the panel open) messages an online player; the player's side is a window of its own
+  // that they can't close, until the admin ends it. One admin conversation per player (kept in memory).
+  const admDm = new Map();                              // player pid -> { admin, adminName, name, log: [{ from, text, ts }] }
+  const pidByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return p.id; return null; };
+  const cleanText = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 500) : "");
+  function admSay(pid, name, m) {
+    const text = cleanText(m.text); if (!text) return;
+    if (typeof m.to === "string" && isUnlocked(pid)) {    // an admin to a player
+      const to = pidByName(m.to); if (!to || to === pid) return;
+      let d = admDm.get(to);
+      if (d && d.admin !== pid) sendTo(d.admin, { t: "admend", with: d.name });   // another admin takes it over
+      if (!d || d.admin !== pid) { d = { admin: pid, adminName: name, name: world.players.get(to).name, log: [] }; admDm.set(to, d); }
+      const line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift();
+      sendTo(to, { t: "admdm", ...line, admin: name }); sendTo(pid, { t: "admdm", ...line, with: d.name });
+      return;
+    }
+    const d = admDm.get(pid); if (!d) return;            // the player answering
+    const line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift();
+    sendTo(pid, { t: "admdm", ...line, admin: d.adminName }); sendTo(d.admin, { t: "admdm", ...line, with: d.name });
+  }
+  function admEnd(pid, m) {
+    const to = pidByName(m.to), d = to && admDm.get(to); if (!d || d.admin !== pid) return;
+    admDm.delete(to); sendTo(to, { t: "admend" }); sendTo(pid, { t: "admend", with: d.name });
+  }
   // (owner) the admin panel: who's online, kicking (a message, then the socket closes), and a player's pilots changed
+  // (owner) muted players: no Local, Corp or DMs (an admin conversation still works) until it ends
+  const mutes = new Map();                              // pid -> { perm, until (ms), reason }
+  const mutedNow = (pid) => { const m = mutes.get(pid); if (!m) return null; if (!m.perm && m.until <= Date.now()) { mutes.delete(pid); return null; } return m; };
   setGameHooks({
+    mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
+    freeze: (pid, on) => { world.setFrozen(pid, on); sendTo(pid, { t: "frozen", on }); },
     online: () => new Set(conns.keys()),
     kick: (pid, code, msg) => { for (const c of conns.get(pid) || []) { try { c.send(JSON.stringify(msg)); c.close(code, msg.t); } catch {} } },
     refreshPilots: async (pid) => { if (!world.players.has(pid)) return; try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch (e) { console.error("admin refresh", e); } },
@@ -33,7 +63,8 @@ export function attachGameServer(httpServer) {
   wss.on("connection", async (ws, req) => {
     const origin = req.headers.origin;
     if (origin && !config.allowedOrigins.includes(origin)) { ws.close(4003, "origin"); return; }
-    const user = await getSessionUser(readCookie(req));
+    let user = await getSessionUser(readCookie(req));
+    if (PTR) { const as = new URL(req.url || "/", "http://ptr").searchParams.get("as"); if (as) user = await ptrAs(as); }   // (PTR only: a second test account)
     if (!user) { ws.close(4001, "auth"); return; }
 
     const pid = String(user.id);
@@ -61,6 +92,10 @@ export function attachGameServer(httpServer) {
     });
     const fl = world.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = world.poiSig(player);
     send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, pois: world.poisFor(player), belts: fl.fields }));
+    world.setFrozen(pid, !!user.frozen); if (user.frozen) send(JSON.stringify({ t: "frozen", on: true }));   // (owner) still frozen
+    { const mu = muteOf(user); if (mu) mutes.set(pid, { perm: mu.perm, until: mu.until ? new Date(mu.until).getTime() : 0, reason: mu.reason }); else mutes.delete(pid); }
+    { const d = admDm.get(pid); if (d) send(JSON.stringify({ t: "admopen", admin: d.adminName, log: d.log })); }   // an admin conversation still open
+    for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: d.log }));
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
@@ -69,13 +104,20 @@ export function attachGameServer(httpServer) {
       if (budget < 1) return; budget--;
       let m; try { m = JSON.parse(buf.toString()); } catch { return; }
       if (!m || typeof m !== "object" || typeof m.t !== "string") return;
+      if (world.frozen.has(pid) && m.t !== "view" && m.t !== "adm") return;   // (owner) frozen: nothing but looking around and answering the admin
       try {
         switch (m.t) {
           case "move": world.cmdMove(pid, m.ship, m.x, m.y); break;
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
           case "pilots": refreshPilots(); break;
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
-          case "chat": world.cmdChat(pid, m.text, m.channel, m.to, m.ship); break;
+          case "chat": {
+            const mu = mutedNow(pid);
+            if (mu) { send(JSON.stringify({ t: "notice", text: mu.perm ? "You're muted." : "You're muted until " + new Date(mu.until).toLocaleString("en-US", { timeZone: "UTC" }) + " UTC." })); break; }   // (owner) muted
+            world.cmdChat(pid, m.text, m.channel, m.to, m.ship); break;
+          }
+          case "adm": admSay(pid, user.username, m); break;
+          case "admend": admEnd(pid, m); break;
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
           case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
@@ -110,7 +152,7 @@ export function attachGameServer(httpServer) {
       const json = JSON.stringify(poi); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
   world.onPoiClosed = (poi) => { poiSaved.delete(poi.id); deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
   world.homesReady = false;                               // (no player station is made until the saved ones are in)
-  const loadAll = (tries = 0) => loadPois().then((list) => { for (const d of list) world.loadPoi(d); world.homesLoaded(); })
+  const loadAll = (tries = 0) => loadPois().then(async (list) => { for (const d of list) world.loadPoi(d); world.homesLoaded(await loadAccounts()); })
     .catch((e) => { console.error("loadPois", e); setTimeout(() => loadAll(tries + 1), Math.min(30000, 2000 * (tries + 1))); });   // keep trying: never make stations over saved ones
   loadAll();
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);

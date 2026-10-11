@@ -75,6 +75,7 @@ export class World {
     this.pois.set(LIBRARY.id, { ...LIBRARY, createdAt: 0, field: { rocks: [], props: libraryProps(), dir: 0, ver: 1 }, retired: false });
     this.pois.set(STATION.id, { ...STATION, createdAt: 0, field: { rocks: [], props: stationProps(), dir: 0, ver: 1 }, retired: false });   // (owner, temporary) the station
     for (const c of celestialPois()) this.pois.set(c.id, c);   // (owner) planets' and moons' anchors, always on the map
+    this.frozen = new Set();    // (owner) accounts an admin has frozen: their ships hold still, take no orders and can't be targeted
     this.homesReady = true;     // (the server clears this until the saved player stations are loaded, so none is made twice)
   }
 
@@ -86,6 +87,17 @@ export class World {
     this._ensureHome(p);
     this.setPilots(id, pilots, saved);
     return p;
+  }
+  /** (owner) Freeze or unfreeze an account: its ships stop where they are, switch everything off and drop their locks, and
+   *  no one can target them (net.js also refuses the account's commands while frozen). */
+  setFrozen(pid, on) {
+    if (!on) { this.frozen.delete(pid); return; }
+    this.frozen.add(pid);
+    for (const s of this.shipsOf(pid)) {
+      Object.assign(s, { vx: 0, vy: 0, moving: false, chase: null, dest: null, warpReq: false, dockReq: false, drift: false, targets: [], tx: s.x, ty: s.y });
+      s.act = s.act.map(() => null); this._recalc(s);
+    }
+    for (const o of this.ships.values()) if (o.targets.length) o.targets = o.targets.filter((g) => !(g.kind === "ship" && this.ships.get(g.id) && this.ships.get(g.id).owner === pid));
   }
   // ---- (owner) player stations (home.js): one per account, made the first time they play ----
   _home(owner) { const h = this.pois.get(homeId(owner)); return h && h.kind === "home" ? h : null; }
@@ -99,8 +111,14 @@ export class World {
     const at = this._homeSite();
     this.pois.set(homeId(p.id), this._makeHome({ owner: p.id, name: p.name + "'s Station", x: +at.x.toFixed(3), y: +at.y.toFixed(3) })); this.poiVer++;
   }
-  /** The saved player stations are in: give everyone online who still has none theirs. */
-  homesLoaded() { this.homesReady = true; for (const p of this.players.values()) this._ensureHome(p); }
+  /** The saved player stations are in: give everyone online who still has none theirs, and (owner) every other account
+   *  without one (`accounts`: [{ id, name }] from the database). */
+  homesLoaded(accounts = []) {
+    this.homesReady = true;
+    for (const p of this.players.values()) this._ensureHome(p);
+    let made = 0; for (const a of accounts) if (!this._home(String(a.id))) { this._ensureHome({ id: String(a.id), name: a.name }); made++; }
+    if (made) console.log("[homes] " + made + " player stations made");
+  }
   // (owner) somewhere random, as far as can be found from other players' stations and clear of every other POI
   _homeSite() {
     let best = null;
@@ -108,7 +126,7 @@ export class World {
       const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * EXPANSE_APOTHEM_KM, x = Math.cos(a) * d, y = Math.sin(a) * d;
       if (!insideExpanse(x, y, HOME.clearKm) || celestialClearance(x, y) < 0) continue;   // (owner) not near the sun, a planet or a moon
       let m = Infinity;
-      for (const o of this.pois.values()) { if (o.kind === "planet" || o.kind === "moon") continue; const dd = Math.hypot(o.x - x, o.y - y); m = Math.min(m, o.kind === "home" ? dd : dd - o.r - HOME.clearKm + HOME.apartKm); }
+      for (const o of this.pois.values()) { if (o.ax != null) continue; const dd = Math.hypot(o.x - x, o.y - y); m = Math.min(m, o.kind === "home" ? dd : dd - o.r - HOME.clearKm + HOME.apartKm); }
       if (!best || m > best.m) best = { x, y, m };
       if (m > HOME.apartKm * 4) break;                     // plenty of room: no need to keep looking
     }
@@ -218,8 +236,9 @@ export class World {
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
     if (poi.kind === "home" && poi.owner !== pid) return;   // (owner) someone else's station isn't on your map
-    if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
-    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
+    const aim = this._poiAim(poi);
+    if (warp && this._inPoi(s, aim)) return;               // no warping to where you already are
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.tx = aim.x; s.ty = aim.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
 
@@ -318,7 +337,7 @@ export class World {
   // or the ore hold is full
   _tickModules(now) {
     for (const s of this.ships.values()) {
-      if (!s.act || !s.act.some(Boolean)) continue;
+      if (!s.act || !s.act.some(Boolean) || this.frozen.has(s.owner)) continue;
       if (s.wp) { s.act = s.act.map(() => null); this._recalc(s); continue; }   // a warp switches everything off
       for (let i = 0; i < s.act.length; i++) {
         const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
@@ -417,7 +436,7 @@ export class World {
   /** Where an object is now: { x, y, r } (r = its solid radius), or null if it's gone (or a ship is in warp). */
   _objPos(kind, id) {
     if (typeof id !== "string" || id.length > 80) return null;
-    if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp && !o.docked ? { x: o.x, y: o.y, r: o.radius } : null; }
+    if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp && !o.docked && !this.frozen.has(o.owner) ? { x: o.x, y: o.y, r: o.radius } : null; }   // (a frozen player's ships can't be targeted)
     if (kind === "rock") { const k = this._rock(id); return k ? { x: k.x, y: k.y, r: k.r } : null; }   // to its edge (owner)
     return null;
   }
@@ -465,17 +484,19 @@ export class World {
     }
   }
   _inPoi(s, poi) { return Math.hypot(s.x - poi.x, s.y - poi.y) <= poi.r; }
+  // where aligning and warping to a POI head: a celestial's anchor (owner: the point orbiting it), else the POI itself
+  _poiAim(poi) { return poi.ax != null ? { x: poi.ax, y: poi.ay, r: poi.ar } : poi; }
   // aligned (owner, EVE-like): heading within ALIGN_DEG of the destination and at ALIGN_SPEED of top speed
   _aligned(s, poi) {
     const v = Math.hypot(s.vx, s.vy); if (v < s.speed * ALIGN_SPEED) return false;
-    const want = Math.atan2(poi.y - s.y, poi.x - s.x), got = Math.atan2(s.vy, s.vx);
+    const aim = this._poiAim(poi), want = Math.atan2(aim.y - s.y, aim.x - s.x), got = Math.atan2(s.vy, s.vx);
     let d = Math.abs(want - got) % (2 * Math.PI); if (d > Math.PI) d = 2 * Math.PI - d;
     return d <= ALIGN_DEG * Math.PI / 180;
   }
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
-    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : poi.kind === "home" ? homeLanding(poi) : poi.kind === "planet" || poi.kind === "moon" ? anchorLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : poi.kind === "home" ? homeLanding(poi) : poi.ax != null ? anchorLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
@@ -531,6 +552,7 @@ export class World {
     // 1) steer toward the target as fast as it can while still able to brake in time, then integrate
     for (const s of ships) {
       if (s.docked) continue;                              // (owner) a docked ship is out of space
+      if (this.frozen.has(s.owner) && !s.wp) { s.vx = 0; s.vy = 0; s.moving = false; continue; }   // (owner) frozen: it holds still
       if (s.dockReq) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) { this._dock(s, s.dockReq); continue; } }
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
@@ -649,7 +671,7 @@ export class World {
       x = body.x + Math.cos(a) * d; y = body.y + Math.sin(a) * d;
       if (!insideExpanse(x, y, BELT.radiusKm * 3) || Math.hypot(x, y) < SUN.clearKm) continue;
       if (PLANETS.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + BELT.radiusKm + 100 || q.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 60))) continue;
-      if (this._poisNearAll(x, y, 600).some((o) => Math.hypot(o.x - x, o.y - y) < (o.kind === "planet" || o.kind === "moon" ? 150 : 600))) continue;
+      if (this._poisNearAll(x, y, 600).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 150 : 600))) continue;
       break;
     }
     const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
@@ -665,6 +687,7 @@ export class World {
       if (poi.retired && !this._shipsIn(poi, p.id)) continue;
       if (poi.kind === "home" && poi.owner !== p.id) continue;   // (owner) only your own station is on your map
       const e = { id: poi.id, kind: poi.kind, name: poi.name, x: poi.x, y: poi.y, r: poi.r };
+      if (poi.ax != null) Object.assign(e, { ax: poi.ax, ay: poi.ay, ar: poi.ar });   // a celestial's anchor
       if (poi.retired) e.hidden = true;
       out.push(e);
     }

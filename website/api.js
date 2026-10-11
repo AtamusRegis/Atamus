@@ -27,7 +27,7 @@ const Api = {
     try { data = await res.json(); } catch { /* empty body is fine */ }
 
     if (!res.ok) {
-      throw new Error(data.error || `Request failed (${res.status}).`);
+      const e = new Error(data.error || `Request failed (${res.status}).`); e.status = res.status; e.data = data; throw e;
     }
     return data;
   },

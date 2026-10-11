@@ -25,7 +25,7 @@ export async function getSessionUser(token) {
   if (PTR) return ptrUser();                         // private test copy: no accounts
   if (!token) return null;
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.email, u.role,
+    `SELECT u.id, u.username, u.email, u.role, u.frozen, u.mute_perm, u.mute_until, u.mute_reason,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = u.id) AS has_recovery
        FROM sessions s
        JOIN users u ON u.id = s.user_id

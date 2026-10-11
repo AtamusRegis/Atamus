@@ -8,6 +8,7 @@ import {
   readCookie, setSessionCookie, clearSessionCookie,
 } from "./sessions.js";
 import { allow } from "./ratelimit.js";
+import { PTR } from "./ptr.js";
 
 export const auth = express.Router();
 
@@ -97,14 +98,14 @@ auth.post("/signup", async (req, res) => {
 
 auth.post("/login", async (req, res) => {
   const ip = clientIp(req);
-  if (!allow("login", ip, 10, 15 * 60_000))
+  if (!PTR && !allow("login", ip, 10, 15 * 60_000))   // (the PTR's test suite logs in test accounts many times)
     return fail(res, 429, "Too many attempts. Please wait a few minutes.");
 
   const { username, password } = req.body || {};
   if (!username || !password) return fail(res, 400, "Enter your username and password.");
 
   const { rows } = await pool.query(
-    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason,
+    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = users.id) AS has_recovery
        FROM users WHERE lower(username) = lower($1)`,
     [username]
@@ -116,13 +117,38 @@ auth.post("/login", async (req, res) => {
     : await verifySecret(password, "scrypt$16384$8$1$00$00");
 
   if (!user || !ok) return fail(res, 401, "Incorrect username or password.");
-  // (owner) a banned player is told why (and until when) at login
-  if (user.ban_perm || (user.ban_until && new Date(user.ban_until) > new Date()))
-    return res.status(403).json({ error: (user.ban_perm ? "This account is permanently banned." : "This account is banned until " + new Date(user.ban_until).toUTCString() + ".") + (user.ban_reason ? " Reason: " + user.ban_reason : ""), ban: { perm: !!user.ban_perm, until: user.ban_until, reason: user.ban_reason || "" } });
+  // (owner) a banned player is told why (and until when) at login, and where their appeal stands
+  if (isBanned(user)) {
+    const ap = await lastAppeal(user);
+    return res.status(403).json({ error: banText(user), ban: { perm: !!user.ban_perm, until: user.ban_until, reason: user.ban_reason || "" }, appeal: ap ? { status: ap.status, response: ap.response || "" } : null });
+  }
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
   res.json(publicUser(user));
+});
+
+// ---- (owner) bans and appeals: only a banned player can appeal (from the login page, with their password), one at a time ----
+const isBanned = (u) => !!(u.ban_perm || (u.ban_until && new Date(u.ban_until) > new Date()));
+const banText = (u) => (u.ban_perm ? "This account is permanently banned." : "This account is banned until " + new Date(u.ban_until).toUTCString() + ".") + (u.ban_reason ? " Reason: " + u.ban_reason : "");
+async function lastAppeal(u) {   // the latest appeal since this ban began
+  const { rows } = await pool.query(`SELECT status, response FROM appeals WHERE user_id = $1 AND ($2::timestamptz IS NULL OR created_at >= $2) ORDER BY id DESC LIMIT 1`, [u.id, u.ban_at || null]);
+  return rows[0] || null;
+}
+auth.post("/appeal", async (req, res) => {
+  if (!PTR && !allow("appeal", clientIp(req), 10, 60 * 60_000)) return fail(res, 429, "Too many attempts. Try again later.");
+  const { username, password, text } = req.body || {};
+  if (!username || !password) return fail(res, 400, "Enter your username and password.");
+  const { rows } = await pool.query(`SELECT id, username, password, ban_perm, ban_until, ban_reason, ban_at FROM users WHERE lower(username) = lower($1)`, [String(username).slice(0, 40)]);
+  const user = rows[0];
+  const ok = user ? await verifySecret(String(password), user.password) : await verifySecret(String(password), "scrypt$16384$8$1$00$00");
+  if (!user || !ok) return fail(res, 401, "Incorrect username or password.");
+  if (!isBanned(user)) return fail(res, 400, "This account isn't banned.");
+  const body = typeof text === "string" ? text.replace(/\s+/g, " ").trim().slice(0, 1000) : "";
+  if (!body) return fail(res, 400, "Write your appeal.");
+  const ap = await lastAppeal(user); if (ap && ap.status === "open") return fail(res, 400, "Your appeal is already being reviewed.");
+  await pool.query(`INSERT INTO appeals (user_id, username, ban_reason, text) VALUES ($1, $2, $3, $4)`, [user.id, user.username, user.ban_reason || "", body]);
+  res.json({ ok: true });
 });
 
 auth.post("/logout", async (req, res) => {

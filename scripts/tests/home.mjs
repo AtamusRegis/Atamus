@@ -41,6 +41,8 @@ const w2 = new World(); w2.homesReady = false; const c = w2.addPlayer("a", "Alic
 t.ok(!w2.pois.has(homeId("a")), "no station is made before the saved ones are loaded");
 w2.loadPoi(JSON.parse(JSON.stringify(ha))); w2.homesLoaded();
 const h2 = w2.pois.get(homeId("a")); t.ok(h2 && h2.x === ha.x && h2.items.mining_laser === 1 && w2.poisFor(c).some((p) => p.id === ha.id), "a saved station comes back where it was, with its storage", h2 && h2.items);
+{ const w4 = new World(); w4.homesReady = false; w4.loadPoi(JSON.parse(JSON.stringify(ha))); w4.homesLoaded([{ id: "a", name: "Alice" }, { id: "z9", name: "Zoe" }]);
+  t.ok(w4.pois.get(homeId("a")).x === ha.x && w4.pois.get(homeId("z9")) && w4.pois.get(homeId("z9")).name === "Zoe's Station", "at start-up every account without a station gets one, offline or not (owner)"); }
 w2.loadPoi({ ...JSON.parse(JSON.stringify(ha)), id: "home:zzz" }); t.ok(!w2.pois.has("home:zzz"), "a bad saved station is ignored");
 // many players: still spread out
 const w3 = new World(); for (let i = 0; i < 60; i++) w3.addPlayer("p" + i, "P" + i, () => {}, null, []);

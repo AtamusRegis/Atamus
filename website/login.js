@@ -18,9 +18,30 @@ form.addEventListener("submit", async (e) => {
     await Api.post("/auth/login", { username, password });
     location.href = "play.html";
   } catch (err) {
+    const d = err.data || {};
+    if (d.ban) {                                       // (owner) banned: why (and until when), where the appeal stands, and the appeal form
+      const ap = d.appeal;
+      showMessage(msg, err.message + (ap && ap.status === "open" ? " Your appeal is being reviewed." : ap && ap.status === "denied" ? " Your appeal was denied" + (ap.response ? ": " + ap.response : ".") : ""));
+      setBusy(form, false);
+      banned = { username, password };
+      appealForm.hidden = !!(ap && ap.status === "open");
+      return;
+    }
     showMessage(msg, err.message);
     setBusy(form, false);
     form.elements.password.value = "";
     form.elements.password.focus();
   }
+});
+
+const appealForm = document.getElementById("appeal-form"), appealMsg = document.getElementById("appeal-msg");
+let banned = null;
+appealForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!banned) return;
+  const text = appealForm.elements.text.value.trim(); if (!text) { showMessage(appealMsg, "Write your appeal."); return; }
+  setBusy(appealForm, true);
+  try { await Api.post("/auth/appeal", { ...banned, text }); appealForm.hidden = true; showMessage(msg, "Your appeal was sent.", "ok"); }
+  catch (err) { showMessage(appealMsg, err.message); }
+  setBusy(appealForm, false);
 });

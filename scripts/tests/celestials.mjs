@@ -8,7 +8,9 @@ t.ok(PLANETS.every((p) => Math.abs(Math.hypot(p.x, p.y) - p.orbit) < 0.1 && insi
 t.ok([...PLANETS, ...MOONS].every((c) => { const d = Math.hypot(c.anchor.x - c.x, c.anchor.y - c.y); return d > c.r && d < c.r + 200; }), "each has an anchor on a ring just off it (owner: the warp-in point)");
 const w = new World(), a = w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "A", licenses: {} }]); w.tick(0.05);
 const pp = w.poisFor(a), planetPoi = pp.find((p) => p.id === PLANETS[0].id), moonPoi = pp.find((p) => p.id === MOONS[0].id);
-t.ok(planetPoi && moonPoi && planetPoi.kind === "planet" && planetPoi.x === PLANETS[0].anchor.x && moonPoi.kind === "moon", "planets' and moons' anchors are POIs on everyone's map");
+t.ok(planetPoi && moonPoi && planetPoi.kind === "planet" && planetPoi.x === PLANETS[0].x && planetPoi.ax === PLANETS[0].anchor.x && moonPoi.kind === "moon", "planets and moons are POIs on everyone's map, at the body, with their anchor (owner)", planetPoi);
+const sunPoi = pp.find((p) => p.id === "sun"); t.ok(sunPoi && sunPoi.kind === "sun" && sunPoi.x === 0 && sunPoi.ax != null && Math.hypot(sunPoi.ax, sunPoi.ay) > SUN.rKm, "so is the sun, with its own orbiting point (owner)", sunPoi);
+w.cmdAlign("a", "a:ship:1", PLANETS[0].id); { const s0 = w.ships.get("a:ship:1"); t.ok(s0.tx === PLANETS[0].anchor.x && s0.ty === PLANETS[0].anchor.y, "aligning heads for the anchor, not the body (owner)", [s0.tx, s0.ty]); s0.dest = null; s0.moving = false; }
 const s = w.ships.get("a:ship:1"); w._startWarp(s, w.pois.get(PLANETS[0].id), Date.now());
 t.ok(Math.hypot(s.wp.tx - PLANETS[0].anchor.x, s.wp.ty - PLANETS[0].anchor.y) < 4, "a warp to a planet drops out at its anchor", s.wp);
 // spawning

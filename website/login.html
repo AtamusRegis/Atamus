@@ -50,10 +50,20 @@
 
         <a class="link-small" href="recover.html">Forgot your password?</a>
       </form>
+
+      <!-- (owner) a banned player can appeal (one at a time) -->
+      <form id="appeal-form" class="form" novalidate hidden>
+        <label class="field">
+          <span>Appeal</span>
+          <textarea name="text" rows="5" maxlength="1000" required></textarea>
+        </label>
+        <p class="msg" id="appeal-msg" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Send appeal</button>
+      </form>
     </section>
   </main>
 
-  <script src="api.js?v=1791700660"></script>
-  <script src="login.js?v=1791700660" defer></script>
+  <script src="api.js?v=1791738602"></script>
+  <script src="login.js?v=1791738602" defer></script>
 </body>
 </html>

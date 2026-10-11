@@ -20,7 +20,7 @@ const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new 
   ${body} })()`);
 
 let page = await open(1280, 800);
-let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(500);
+let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 1500, y: -1500 }); await s(500);
   return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
 t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit,admin", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory and Fitting windows (and Admin, for admins: the PTR tester is the Head Admin)", r.btns);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
@@ -56,7 +56,7 @@ r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden)
   const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent); const dest0 = A.myShip.dest || null, acts0 = !acts.hidden;
   const centerRow = () => { c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); return [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Center on ship"); };
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
-  const centered = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
+  const centered = A.view.follow; A.send({ t: "dev", cmd: "move", x: 1500, y: -1500 }); await s(300);
   return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centered };`);
 t.ok(r.top.join() === "Center on ship,Belts,Celestials" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts, Celestials (owner)", r);
 t.ok(r.opts.join() === "Warp to,Align to" && r.kept === 3, "right-click a belt in the list: its own menu beside it, Warp to / Align to, the menus before it kept open (owner)", r);
@@ -234,7 +234,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   await s(400); [x, y] = at(); click(x, y, { ctrlKey: true }); await s(400); const ctrl = A.myShip.chase && A.myShip.chase.mode;
   await s(400); [x, y] = at(); click(x, y, { shiftKey: true }); await s(400); const shift = A.myShip.chase && A.myShip.chase.mode;
   await s(400); click(60 + 20, innerHeight - 120, { shiftKey: true }); await s(400); const space = { moving: A.myShip.moving, chase: A.myShip.chase || null };
-  A.unlock("rock", k.id); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  A.unlock("rock", k.id); dev({ cmd: "move", x: 1500, y: -1520 }); await s(300);
   return { locked, ctrl, shift, space };`);
 t.ok(r.locked, "double-clicking an asteroid locks it", r);
 t.ok(r.ctrl === "align" && r.shift === "approach", "Ctrl + click: Align To; Shift + click: Move towards", r);
@@ -264,7 +264,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   const inp = document.querySelector('.win[data-id="rename"] input'), prefill = inp.value; inp.value = "  Rock   Hopper "; inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(600);
   const renamed = { title: fw.querySelector(".win-title-slot").textContent, snap: A.myShip.name };
   A.send({ t: "rename", ship: A.myShip.id, name: "" }); await s(500); const back = fw.querySelector(".win-title-slot").textContent;
-  fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 1500, y: -1520 }); await s(300);
   return { near1, zoomed, dropped, min, checks, tmenu, prefill, renamed, back };`);
 t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its center, until you pan", r);
 t.ok(r.min.scrolls && r.min.barsIn && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide (plus the stats beside), down to the Power / Disposition bars; the stats scroll, the tabs stay on top", r.min);
@@ -285,7 +285,7 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   for (const id of ["station"]) { const x = document.querySelector('.win[data-id="' + id + '"] .win-close'); if (x && !x.closest(".win").hidden) x.click(); } await s(200);
   fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
   await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
-  A.send({ t: "undock", ship: A.myShip.id }); await s(900); dev({ cmd: "move", x: 0, y: -20 }); await s(600);
+  A.send({ t: "undock", ship: A.myShip.id }); await s(900); dev({ cmd: "move", x: 1500, y: -1520 }); await s(600);
   for (const id of ["inv", "fit"]) { const w2 = document.querySelector('.win[data-id="' + id + '"]'); if (w2.hidden) document.querySelector('.wbtn[data-id="' + id + '"]').click(); await s(300); }
   fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; inv.querySelector('.tab[data-hold="cargo"]').click(); await s(200);
   const fitted = A.myShip.fit.active[0], hb = !!document.querySelector('#hud .hb-slot.filled .hb-img'), bars = fw.querySelector(".fit-bar").textContent;
@@ -308,7 +308,7 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   await drag(st.querySelector('.st-main .si-cell[data-item="mining_drones"]'), st.querySelector('.st-entry[data-cont="hangar"]'));
   const hangar = JSON.stringify(A.snap.hangar);
   st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
-  dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  dev({ cmd: "move", x: 1500, y: -1520 }); await s(300);
   return { kit, spaceFit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
 t.ok(r.kit === "mining_laser,mining_drones,afterburner_1,cargo_expander,inertia_stabilizer,mining_laser_upgrade,mining_beam_extender,mining_overclocker", "the starter kit is in the cargo hold", r.kit);
 t.ok(r.fitted === "mining_laser" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
@@ -340,13 +340,13 @@ r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: 
   [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
   return { btn: true, masked, tabs, rows, info, lic, log };`);
-t.ok(r.btn && r.masked && r.tabs === "Players,Log,Players,Admins" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins) and Log (owner)", r);
-t.ok(r.info === "Role,Online,Joined,Ban,Credits,Corporation" && r.lic >= 6 && r.log, "a player's admin info and their pilots' licenses", r);
+t.ok(r.btn && r.masked && r.tabs === "Players,Appeals,Log,Players,Admins,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins / Disciplined), Appeals and Log (owner)", r);
+t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.lic >= 6 && r.log, "a player's admin info and their pilots' licenses", r);
 await page.close();
 
 // phone: windows fit the screen, a pinch zooms, a tap flies
 page = await open(844, 390, true);
-r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: -20 }); await s(400);   // open space: a tap mustn't land on an asteroid
+r = await run(page, `A.send({ t: "dev", cmd: "move", x: 1500, y: -1520 }); await s(400);   // open space: a tap mustn't land on an asteroid
   for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   const over = [...document.querySelectorAll(".win:not([hidden])")].filter((w) => { const b = w.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1; }).map((w) => w.dataset.id);
   for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);
@@ -356,7 +356,7 @@ r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: -20 }); await s(40
 t.ok(!r.over.length, "windows fit a phone screen", r.over);
 t.ok(r.w1 > r.w0, "a pinch zooms", r);
 t.ok(r.moving, "a double tap flies the ship", r);
-await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);`);
+await run(page, `A.send({ t: "dev", cmd: "move", x: 1500, y: -1500 }); await s(300);`);
 await page.close(); await browser.close();
 t.ok(!errors.length, "no page errors", errors.slice(0, 5));
 t.done();

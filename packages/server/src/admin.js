@@ -21,7 +21,9 @@ const REASON_MAX = 500;
 const unlocked = new Map();                         // session key -> { uid, until }
 
 // the game socket's side (net.js registers these): who's online, kicking, and refreshing a player's pilots in the world
-let hooks = { online: () => new Set(), kick: () => {}, refreshPilots: async () => {} };
+let hooks = { online: () => new Set(), kick: () => {}, refreshPilots: async () => {}, freeze: () => {}, mute: () => {} };
+/** Has this account opened the admin panel (the second password) in any of its sessions? (admin DMs over the socket) */
+export const isUnlocked = (uid) => { for (const v of unlocked.values()) if (v.uid === String(uid) && v.until > Date.now()) return true; return false; };
 export const setGameHooks = (h) => { hooks = { ...hooks, ...h }; };
 
 export const admin = express.Router();
@@ -42,7 +44,7 @@ async function who(req, res, needUnlock = true) {
 const guard = (needUnlock, fn) => async (req, res) => { try { const me = await who(req, res, needUnlock); if (me) await fn(req, res, me); } catch (e) { console.error("admin", e); fail(res, 500, "Something went wrong."); } };
 async function target(id) {
   if (!isId(id)) return null;
-  const { rows } = await pool.query(`SELECT id, username, role, credits, corp, created_at, ban_perm, ban_until, ban_reason FROM users WHERE id = $1`, [String(id)]);
+  const { rows } = await pool.query(`SELECT id, username, role, credits, corp, created_at, ban_perm, ban_until, ban_reason, ban_at, frozen, frozen_at, frozen_reason, mute_perm, mute_until, mute_reason, mute_at FROM users WHERE id = $1`, [String(id)]);
   return rows[0] || null;
 }
 // may `me` act on `t` (kick, ban, change)? never yourself or the Head Admin; an admin not on another admin
@@ -50,7 +52,11 @@ const mayAct = (me, t) => String(t.id) !== me.id && t.role !== "head" && !(t.rol
 async function log(me, t, action, reason, detail = null) {
   await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason, detail) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [me.id, me.name, t.id, t.username, action, reason || "", detail]);
 }
-const banOf = (u) => u.ban_perm ? { perm: true, reason: u.ban_reason || "" } : u.ban_until && new Date(u.ban_until) > new Date() ? { perm: false, until: u.ban_until, reason: u.ban_reason || "" } : null;
+// a player's active discipline (each with when it started and why): a ban, a mute (permanent, or until a time), Freeze
+const banOf = (u) => u.ban_perm ? { perm: true, reason: u.ban_reason || "", at: u.ban_at } : u.ban_until && new Date(u.ban_until) > new Date() ? { perm: false, until: u.ban_until, reason: u.ban_reason || "", at: u.ban_at } : null;
+export const muteOf = (u) => u.mute_perm ? { perm: true, reason: u.mute_reason || "", at: u.mute_at } : u.mute_until && new Date(u.mute_until) > new Date() ? { perm: false, until: u.mute_until, reason: u.mute_reason || "", at: u.mute_at } : null;
+const frozenOf = (u) => u.frozen ? { reason: u.frozen_reason || "", at: u.frozen_at } : null;
+const lengthOf = (b) => { const n = Number(b.amount), unit = b.unit === "days" ? 86400_000 : b.unit === "hours" ? 3600_000 : 0; return b.perm ? { perm: true, until: null } : Number.isInteger(n) && n >= 1 && n <= 3650 && unit ? { perm: false, until: new Date(Date.now() + n * unit), n } : null; };
 
 // ---- the second password ----
 admin.get("/me", guard(false, async (req, res, me) => { const un = unlocked.get(me.key); res.json({ role: me.role, unlocked: !!(un && un.uid === me.id && un.until > Date.now()) }); }));
@@ -64,14 +70,14 @@ admin.post("/lock", guard(false, async (req, res, me) => { unlocked.delete(me.ke
 
 // ---- players ----
 admin.get("/players", guard(true, async (req, res) => {
-  const { rows } = await pool.query(`SELECT id, username, role, created_at, ban_perm, ban_until, ban_reason FROM users ORDER BY lower(username)`);
+  const { rows } = await pool.query(`SELECT id, username, role, credits, corp, created_at, ban_perm, ban_until, ban_reason, ban_at, frozen, frozen_at, frozen_reason, mute_perm, mute_until, mute_reason, mute_at FROM users ORDER BY lower(username)`);
   const on = hooks.online();
-  res.json(rows.map((u) => ({ id: String(u.id), name: u.username, role: u.role || null, createdAt: u.created_at, online: on.has(String(u.id)), ban: banOf(u) })));
+  res.json(rows.map((u) => ({ id: String(u.id), name: u.username, role: u.role || null, createdAt: u.created_at, online: on.has(String(u.id)), ban: banOf(u), mute: muteOf(u), frozen: frozenOf(u) })));
 }));
 admin.get("/player/:id", guard(true, async (req, res) => {
   const t = await target(req.params.id); if (!t) return fail(res, 404, "No such player.");
   const { rows } = await pool.query(`SELECT id, name, data FROM pilots WHERE user_id = $1 ORDER BY id`, [t.id]);
-  res.json({ id: String(t.id), name: t.username, role: t.role || null, createdAt: t.created_at, credits: Number(t.credits || 0), corp: t.corp || CORP, online: hooks.online().has(String(t.id)), ban: banOf(t),
+  res.json({ id: String(t.id), name: t.username, role: t.role || null, createdAt: t.created_at, credits: Number(t.credits || 0), corp: t.corp || CORP, online: hooks.online().has(String(t.id)), ban: banOf(t), mute: muteOf(t), frozen: frozenOf(t),
     pilots: rows.map((p) => ({ id: String(p.id), name: p.name, licenses: (p.data && p.data.licenses) || {} })),
     licenses: LICENSES.map((l) => ({ key: l.key, name: l.name, maxLevel: l.maxLevel, start: STARTING_LICENSES[l.key] || 0 })) });
 }));
@@ -81,19 +87,18 @@ admin.post("/kick", guard(true, async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
-  hooks.kick(String(t.id), 4003, { t: "kicked", reason });
+  hooks.kick(String(t.id), 4005, { t: "kicked", reason });
   await log(me, t, "kick", reason); res.json({ ok: true });
 }));
 admin.post("/ban", guard(true, async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason the player will see.");
-  const perm = !!b.perm, n = Number(b.amount), unit = b.unit === "days" ? 86400_000 : b.unit === "hours" ? 3600_000 : 0;
-  if (!perm && !(Number.isInteger(n) && n >= 1 && n <= 3650 && unit)) return fail(res, 400, "Give the ban a length.");
-  const until = perm ? null : new Date(Date.now() + n * unit);
-  await pool.query(`UPDATE users SET ban_perm = $2, ban_until = $3, ban_reason = $4 WHERE id = $1`, [t.id, perm, until, reason]);
+  const len = lengthOf(b); if (!len) return fail(res, 400, "Give the ban a length.");
+  const { perm, until } = len, n = len.n;
+  await pool.query(`UPDATE users SET ban_perm = $2, ban_until = $3, ban_reason = $4, ban_at = now() WHERE id = $1`, [t.id, perm, until, reason]);
   await destroyAllSessions(t.id);
-  hooks.kick(String(t.id), 4004, { t: "banned", reason, perm, until });
+  hooks.kick(String(t.id), 4006, { t: "banned", reason, perm, until });
   await log(me, t, "ban", reason, perm ? { perm: true } : { amount: n, unit: b.unit, until }); res.json({ ok: true });
 }));
 admin.post("/unban", guard(true, async (req, res, me) => {
@@ -101,8 +106,55 @@ admin.post("/unban", guard(true, async (req, res, me) => {
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write why.");
   if (!banOf(t)) return fail(res, 400, "That player isn't banned.");
-  await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL WHERE id = $1`, [t.id]);
+  await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
+  await pool.query(`UPDATE appeals SET status = 'accepted', admin_name = $2, response = $3, handled_at = now() WHERE user_id = $1 AND status = 'open'`, [t.id, me.name, reason]);   // (an open appeal is answered by it)
   await log(me, t, "unban", reason, isId(b.logId) ? { of: String(b.logId) } : null); res.json({ ok: true });
+}));
+// (owner) Mute: no chat, permanent or for hours / days, with a reason
+admin.post("/mute", guard(true, async (req, res, me) => {
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  const len = lengthOf(b); if (!len) return fail(res, 400, "Give the mute a length.");
+  await pool.query(`UPDATE users SET mute_perm = $2, mute_until = $3, mute_reason = $4, mute_at = now() WHERE id = $1`, [t.id, len.perm, len.until, reason]);
+  hooks.mute(String(t.id), { perm: len.perm, until: len.until && len.until.getTime(), reason });
+  await log(me, t, "mute", reason, len.perm ? { perm: true } : { amount: len.n, unit: b.unit, until: len.until }); res.json({ ok: true });
+}));
+admin.post("/unmute", guard(true, async (req, res, me) => {
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write why.");
+  await pool.query(`UPDATE users SET mute_perm = false, mute_until = NULL, mute_reason = NULL, mute_at = NULL WHERE id = $1`, [t.id]);
+  hooks.mute(String(t.id), null);
+  await log(me, t, "unmute", reason); res.json({ ok: true });
+}));
+// (owner) appeals: only banned players have them (sent from the login page); accepting one unbans, denying answers it
+admin.get("/appeals", guard(true, async (req, res) => {
+  const { rows } = await pool.query(`SELECT id, user_id, username, ban_reason, text, status, admin_name, response, created_at, handled_at FROM appeals ORDER BY (status = 'open') DESC, id DESC LIMIT 300`);
+  res.json(rows.map((a) => ({ id: String(a.id), userId: a.user_id == null ? null : String(a.user_id), name: a.username, banReason: a.ban_reason, text: a.text, status: a.status, admin: a.admin_name, response: a.response, at: a.created_at, handledAt: a.handled_at })));
+}));
+admin.post("/appeal", guard(true, async (req, res, me) => {
+  const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request.");
+  const { rows } = await pool.query(`SELECT * FROM appeals WHERE id = $1`, [String(b.id)]); const a = rows[0];
+  if (!a || a.status !== "open") return fail(res, 404, "That appeal isn't open.");
+  const t = await target(String(a.user_id)); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  const accept = !!b.accept;
+  await pool.query(`UPDATE appeals SET status = $2, admin_name = $3, response = $4, handled_at = now() WHERE id = $1`, [a.id, accept ? "accepted" : "denied", me.name, reason]);
+  if (accept) await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
+  await log(me, t, accept ? "appeal accepted" : "appeal denied", reason, { appeal: String(a.id) }); res.json({ ok: true });
+}));
+// (owner) Freeze: the player's ships, station, chat and the rest are suspended (their ships can't be targeted) and their
+// screen is grayed out but for an admin DM, until unfrozen
+admin.post("/freeze", guard(true, async (req, res, me) => {
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  const on = !!b.on; if (on === !!t.frozen) return res.json({ ok: true });   // (already so)
+  await pool.query(`UPDATE users SET frozen = $2, frozen_at = CASE WHEN $2 THEN now() END, frozen_reason = CASE WHEN $2 THEN $3 END WHERE id = $1`, [t.id, on, reason]);
+  hooks.freeze(String(t.id), on);
+  await log(me, t, on ? "freeze" : "unfreeze", reason); res.json({ ok: true });
 }));
 admin.get("/log", guard(true, async (req, res) => {
   const { rows } = await pool.query(`SELECT id, at, admin_name, target_id, target_name, action, reason, detail FROM admin_log ORDER BY id DESC LIMIT 300`);
@@ -116,6 +168,7 @@ admin.post("/role", head(async (req, res, me) => {
   if (String(t.id) === me.id || t.role === "head") return fail(res, 403, "You can't change that player's role.");
   const make = !!b.admin; if (make === (t.role === "admin")) return res.json({ ok: true });
   await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make ? "admin" : null]);
+  if (!make) for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);   // a removed admin's panel locks at once
   await log(me, t, make ? "make admin" : "remove admin", cleanReason(b.reason)); res.json({ ok: true });
 }));
 admin.post("/license", head(async (req, res, me) => {

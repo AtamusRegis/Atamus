@@ -55,6 +55,7 @@
 
   // ---- windows ----
   const wins = {};
+  const PIN_Z = 2000000005;                          // above everything, the Freeze overlay included (the player's admin conversation)
   const isOpen = (w) => !!w && (w.group ? true : !w.win.hidden);
   function createWindow(id, opts) {
     opts = opts || {};
@@ -71,10 +72,11 @@
     win.style.width = (num(s.w) && s.w > 0 ? s.w : (opts.width || 260)) + "px";
     if (num(s.h) && s.h > 0) win.style.height = s.h + "px"; else if (opts.height) win.style.height = opts.height + "px";
     document.body.appendChild(win);
-    win.addEventListener("pointerdown", () => { win.style.zIndex = ++z; });
+    win.addEventListener("pointerdown", () => { win.style.zIndex = opts.pinTop ? PIN_Z : ++z; });
+    if (opts.noClose) close.hidden = true;             // (owner) an admin conversation can't be closed by the player
     dragMove(win, bar, () => persistWin(id));
     addResize(win, opts.minW || 220, opts.minH || 130, () => persistWin(id), opts.dynMin);
-    wins[id] = { id, win, body, slot, bar, close, render: opts.render, label: opts.label, groupable: opts.groupable !== false, group: null };
+    wins[id] = { id, win, body, slot, bar, close, render: opts.render, label: opts.label, groupable: opts.groupable !== false, group: null, pinTop: !!opts.pinTop };
     return wins[id];
   }
   // keep a window on screen (phones, or a desktop window that shrank): narrower than the screen, inside it
@@ -99,7 +101,7 @@
       updateBtnActive(); return;
     }
     w.win.hidden = !show;
-    if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
+    if (show) { w.win.style.zIndex = w.pinTop ? PIN_Z : ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
     persistWin(id); updateBtnActive(); updateChatGlow();
     if (id === "fit") renderHud();
   }
@@ -722,47 +724,103 @@
   const fmtWhen = (t) => { const d = new Date(t); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); };
   async function adminLoad() {
     try { AD.me = await Api.get("/game/admin/me"); } catch { AD.me = null; }
-    if (AD.me && AD.me.unlocked) { try { [AD.players, AD.log] = await Promise.all([Api.get("/game/admin/players"), Api.get("/game/admin/log")]); } catch (e) { flash(e.message); } }
+    if (AD.me && AD.me.unlocked) { try { [AD.players, AD.log, AD.appeals] = await Promise.all([Api.get("/game/admin/players"), Api.get("/game/admin/log"), Api.get("/game/admin/appeals")]); } catch (e) { flash(e.message); } }
     if (wins.admin && isOpen(wins.admin)) renderAdmin(wins.admin.body);   // (rebuilt only when something changed)
   }
+  // the tabs (and the search box) are built once per tab; the list under them is redrawn when its data or the search changes
   function renderAdmin(body, force) {
-    const sig = JSON.stringify([AD.me, AD.tab, AD.sub, AD.players, AD.log]);
-    if (!force && sig === AD.sig) return; AD.sig = sig;
-    wins.admin.slot.textContent = "Admin"; body.innerHTML = ""; body.classList.add("adm-body");
-    if (!AD.me) { body.append(el("div", { class: "muted" }, "Loading…")); adminLoad(); return; }
-    if (!AD.me.unlocked) {                             // the second password (masked; paste works)
-      const pw = el("input", { class: "text-input adm-pw", type: "password", autocomplete: "off", spellcheck: "false" }), err = el("div", { class: "form-err", hidden: "" });
-      const go = async () => { try { await Api.post("/game/admin/unlock", { password: pw.value }); pw.value = ""; await adminLoad(); } catch (e) { err.textContent = e.message; err.hidden = false; } };
-      pw.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-      body.append(el("div", { class: "adm-lock" }, el("div", { class: "sheet-k" }, "Admin password"), pw, err, el("button", { class: "btn-primary2", onclick: go }, "Unlock")));
-      setTimeout(() => pw.focus(), 30); return;
+    const shell = JSON.stringify([AD.me, AD.tab, AD.sub]);
+    if (force || shell !== AD.shell || !body.querySelector(".adm-list")) {
+      AD.shell = shell; AD.sig = ""; wins.admin.slot.textContent = "Admin"; body.innerHTML = ""; body.classList.add("adm-body");
+      if (!AD.me) { body.append(el("div", { class: "muted" }, "Loading…")); adminLoad(); return; }
+      if (!AD.me.unlocked) {                           // the second password (masked; paste works)
+        const pw = el("input", { class: "text-input adm-pw", type: "password", autocomplete: "off", spellcheck: "false" }), err = el("div", { class: "form-err", hidden: "" });
+        const go = async () => { try { await Api.post("/game/admin/unlock", { password: pw.value }); pw.value = ""; await adminLoad(); } catch (e) { err.textContent = e.message; err.hidden = false; } };
+        pw.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+        body.append(el("div", { class: "adm-lock" }, el("div", { class: "sheet-k" }, "Admin password"), pw, err, el("button", { class: "btn-primary2", onclick: go }, "Unlock")));
+        setTimeout(() => pw.focus(), 30); return;
+      }
+      const openN = (AD.appeals || []).filter((a) => a.status === "open").length;
+      body.append(el("div", { class: "tab-row" }, [["players", "Players"], ["appeals", "Appeals" + (openN ? " (" + openN + ")" : "")], ["log", "Log"]].map(([k, n]) => el("button", { class: "tab" + (AD.tab === k ? " active" : ""), "data-atab": k, onclick: () => { AD.tab = k; renderAdmin(body, true); adminLoad(); } }, n))));
+      if (AD.tab === "players") {
+        body.append(el("div", { class: "tab-row adm-sub" }, [["players", "Players"], ["admins", "Admins"], ["disc", "Disciplined"]].map(([k, n]) => el("button", { class: "tab" + (AD.sub === k ? " active" : ""), onclick: () => { AD.sub = k; renderAdmin(body, true); } }, n))));
+        const q = el("input", { class: "text-input adm-search", type: "search", value: AD.q || "", autocomplete: "off", spellcheck: "false" });
+        q.addEventListener("input", () => { AD.q = q.value; drawAdminList(body); }); q.addEventListener("keydown", (e) => e.stopPropagation());
+        const bar = el("div", { class: "adm-bar" }, q);
+        if (AD.sub === "disc") {                       // (owner) sortable by name, date, type
+          const sort = el("select", { class: "base-sel adm-sort" }, [["date", "Date"], ["name", "Name"], ["type", "Type"]].map(([v, n]) => el("option", { value: v }, n)));
+          sort.value = AD.sort || "date"; sort.addEventListener("change", () => { AD.sort = sort.value; drawAdminList(body); }); bar.append(sort);
+        }
+        body.append(bar);
+      }
+      body.append(el("div", { class: "adm-list" }));
     }
-    body.append(el("div", { class: "tab-row" }, [["players", "Players"], ["log", "Log"]].map(([k, n]) => el("button", { class: "tab" + (AD.tab === k ? " active" : ""), onclick: () => { AD.tab = k; adminLoad(); } }, n))));
-    const list = el("div", { class: "adm-list" });
+    drawAdminList(body);
+  }
+  // a player's name that acts like their row in the list: click for Info, right-click (hold) for their menu
+  function playerLink(id, name) {
+    const a = el("span", { class: "adm-link" }, name), p = () => (AD.players || []).find((x) => x.id === id);
+    if (!id) return a;
+    a.addEventListener("click", (e) => { e.stopPropagation(); openAdminPlayer(id); });
+    holdMenu(a, () => { const pl = p(); return pl ? adminMenu(pl) : [["Info", () => openAdminPlayer(id)]]; });
+    return a;
+  }
+  // a player's discipline in effect: [type, its label, when it began]
+  function disciplines(p) {
+    const out = [];
+    if (p.ban) out.push([p.ban.perm ? "perma" : "temp", p.ban.perm ? "Permanent ban" : "Temp ban until " + fmtWhen(p.ban.until), p.ban.at, p.ban.reason]);
+    if (p.mute) out.push(["mute", p.mute.perm ? "Muted" : "Muted until " + fmtWhen(p.mute.until), p.mute.at, p.mute.reason]);
+    if (p.frozen) out.push(["frozen", "Frozen", p.frozen.at, p.frozen.reason]);
+    return out;
+  }
+  function drawAdminList(body) {
+    const list = body.querySelector(".adm-list"); if (!list || !AD.me || !AD.me.unlocked) return;
+    const sig = JSON.stringify([AD.tab, AD.sub, AD.q, AD.sort, AD.players, AD.log, AD.appeals]); if (sig === AD.sig) return; AD.sig = sig;
+    const keep = list.scrollTop; list.innerHTML = "";
+    { const openN = (AD.appeals || []).filter((a) => a.status === "open").length, tb = body.querySelector('[data-atab="appeals"]'); if (tb) tb.textContent = "Appeals" + (openN ? " (" + openN + ")" : ""); }
+    const needle = (AD.q || "").trim().toLowerCase(), match = (n) => !needle || n.toLowerCase().includes(needle);
     if (AD.tab === "players") {
-      body.append(el("div", { class: "tab-row adm-sub" }, [["players", "Players"], ["admins", "Admins"]].map(([k, n]) => el("button", { class: "tab" + (AD.sub === k ? " active" : ""), onclick: () => { AD.sub = k; renderAdmin(body, true); } }, n))));
-      for (const p of (AD.players || []).filter((x) => (AD.sub === "admins") === !!x.role)) {
-        const row = el("div", { class: "adm-row" + (p.ban ? " banned" : "") },
-          el("span", { class: "adm-dot" + (p.online ? " on" : "") }), el("span", { class: "adm-name" }, p.name),
-          el("span", { class: "adm-tag" }, p.role === "head" ? "Head Admin" : p.role === "admin" ? "Admin" : p.ban ? (p.ban.perm ? "Banned" : "Banned until " + fmtWhen(p.ban.until)) : ""));
-        holdMenu(row, () => adminMenu(p));
-        row.addEventListener("dblclick", () => openAdminPlayer(p.id));
-        list.append(row);
+      if (AD.sub === "disc") {
+        const rows = [];
+        for (const p of AD.players || []) if (match(p.name)) for (const d of disciplines(p)) rows.push({ p, d });
+        const order = { perma: 0, temp: 1, mute: 2, frozen: 3 }, srt = AD.sort || "date";
+        rows.sort((a, b) => srt === "name" ? a.p.name.localeCompare(b.p.name) : srt === "type" ? order[a.d[0]] - order[b.d[0]] || a.p.name.localeCompare(b.p.name) : new Date(b.d[2] || 0) - new Date(a.d[2] || 0));
+        for (const { p, d } of rows) {
+          const row = el("div", { class: "adm-row adm-disc" }, el("span", { class: "adm-dot" + (p.online ? " on" : "") }), playerLink(p.id, p.name), el("span", { class: "adm-tag" }, d[1]), el("span", { class: "adm-when" }, d[2] ? fmtWhen(d[2]) : ""));
+          holdMenu(row, () => adminMenu(p)); list.append(row, d[3] ? el("div", { class: "adm-reason adm-disc-reason" }, d[3]) : "");
+        }
+      } else {
+        for (const p of (AD.players || []).filter((x) => (AD.sub === "admins") === !!x.role && match(x.name))) {
+          const tag = p.role === "head" ? "Head Admin" : p.role === "admin" ? "Admin" : disciplines(p).map((d) => d[1]).join(" · ");
+          const row = el("div", { class: "adm-row" + (p.ban ? " banned" : "") }, el("span", { class: "adm-dot" + (p.online ? " on" : "") }), el("span", { class: "adm-name" }, p.name), el("span", { class: "adm-tag" }, tag));
+          holdMenu(row, () => adminMenu(p)); row.addEventListener("dblclick", () => openAdminPlayer(p.id));
+          list.append(row);
+        }
+      }
+    } else if (AD.tab === "appeals") {                 // (owner) only banned players appeal; open ones first
+      for (const a of AD.appeals || []) {
+        const acts = a.status === "open" ? el("div", { class: "adm-acts" },
+          el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Accept " + a.name, (reason) => adminDo("/appeal", { id: a.id, accept: true, reason })) }, "Accept"),
+          el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Deny " + a.name, (reason) => adminDo("/appeal", { id: a.id, accept: false, reason })) }, "Deny")) : null;
+        list.append(el("div", { class: "adm-log" + (a.status === "open" ? " open" : "") },
+          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(a.at)), el("b", {}, a.status === "open" ? "Appeal" : a.status === "accepted" ? "Accepted" : "Denied"), playerLink(a.userId, a.name), a.admin ? el("span", { class: "adm-by" }, a.admin) : null),
+          a.banReason ? el("div", { class: "adm-reason adm-dim" }, "Ban: " + a.banReason) : null, el("div", { class: "adm-reason" }, a.text),
+          a.response ? el("div", { class: "adm-reason adm-dim" }, "Answer: " + a.response) : null, acts));
       }
     } else {
       for (const r of AD.log || []) {
         const banned = r.action === "ban" && r.targetId && (AD.players || []).some((p) => p.id === r.targetId && p.ban);
         list.append(el("div", { class: "adm-log" },
-          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(r.at)), el("b", {}, r.action), el("span", {}, r.target), el("span", { class: "adm-by" }, r.admin)),
+          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(r.at)), el("b", {}, r.action), playerLink(r.targetId, r.target), el("span", { class: "adm-by" }, r.admin)),
           r.reason ? el("div", { class: "adm-reason" }, r.reason) : null,
           banned ? el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Unban " + r.target, (reason) => adminDo("/unban", { id: r.targetId, reason, logId: r.id })) }, "Unban") : null));
       }
     }
-    body.append(list);
+    list.scrollTop = keep;
   }
   // right-click and hold (touch) both open a row's menu
   function holdMenu(node, items) {
-    node.addEventListener("contextmenu", (e) => { e.preventDefault(); showCtxMenu(e.clientX, e.clientY, items()); });
+    node.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, items()); });
     let h = 0; node.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => showCtxMenu(e.clientX, e.clientY, items()), 500); });
     for (const ev of ["pointerup", "pointercancel", "pointerleave"]) node.addEventListener(ev, () => clearTimeout(h));
   }
@@ -770,9 +828,11 @@
     const self = state && state.profile && p.name.toLowerCase() === state.profile.username.toLowerCase(), head = myRole() === "head";
     const canAct = !self && p.role !== "head" && !(p.role === "admin" && !head);
     const out = [["Info", () => openAdminPlayer(p.id)]];
-    if (!self) out.push(["DM", () => openDm(p.name)], ["Report", () => openReport(p.name, null)]);
+    if (!self) out.push(["DM", () => { if (!p.online) { flash(p.name + " is not online."); return; } openAdmDm(p.name); }], ["Report", () => openReport(p.name, null)]);   // (owner) an admin DM: its own window
     if (canAct) {
+      out.push(p.frozen ? ["Unfreeze", () => adminReason("Unfreeze " + p.name, (reason) => adminDo("/freeze", { id: p.id, on: false, reason }))] : ["Freeze", () => adminReason("Freeze " + p.name, (reason) => adminDo("/freeze", { id: p.id, on: true, reason }))]);
       out.push(["Kick", () => adminReason("Kick " + p.name, (reason) => adminDo("/kick", { id: p.id, reason }))]);
+      out.push(p.mute ? ["Unmute", () => adminReason("Unmute " + p.name, (reason) => adminDo("/unmute", { id: p.id, reason }))] : ["Mute", () => openBan(p, "mute")]);
       out.push(p.ban ? ["Unban", () => adminReason("Unban " + p.name, (reason) => adminDo("/unban", { id: p.id, reason }))] : ["Ban", () => openBan(p)]);
     }
     if (head && !self && p.role !== "head") out.push(p.role === "admin" ? ["Remove Admin", () => adminDo("/role", { id: p.id, admin: false })] : ["Make Admin", () => adminDo("/role", { id: p.id, admin: true })]);
@@ -788,20 +848,20 @@
     w.body.append(el("div", { class: "report-form" }, el("div", { class: "sheet-k" }, "Reason"), text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("areason", false) }, "Cancel"), ok)));
     toggleWindow("areason", true); setTimeout(() => text.focus(), 30);
   }
-  // a ban: permanent, or for a number of hours or days; the reason is what the player sees at login
-  function openBan(p) {
+  // a ban (or, owner: a mute): permanent, or for a number of hours or days; a ban's reason is what the player sees at login
+  function openBan(p, what = "ban") {
     if (!wins.aban) createWindow("aban", { left: Math.round(innerWidth / 2 - 170), top: 150, width: 340, minW: 280, minH: 230, render: () => {}, label: "Ban", groupable: false });
-    const w = wins.aban; w.slot.textContent = "Ban " + p.name; w.body.innerHTML = "";
+    const w = wins.aban, verb = what === "mute" ? "Mute" : "Ban"; w.slot.textContent = verb + " " + p.name; w.body.innerHTML = "";
     const kind = el("select", { class: "base-sel" }, el("option", { value: "temp" }, "Temporary"), el("option", { value: "perm" }, "Permanent"));
     const amount = el("input", { class: "text-input adm-amount", type: "number", min: "1", max: "3650", value: "1" }), unit = el("select", { class: "base-sel" }, el("option", { value: "days" }, "Days"), el("option", { value: "hours" }, "Hours"));
     const len = el("div", { class: "adm-len" }, amount, unit); kind.addEventListener("change", () => { len.hidden = kind.value === "perm"; });
     const text = el("textarea", { class: "text-input report-text", maxlength: "500", rows: "3" }), err = el("div", { class: "form-err", hidden: "" });
     const ok = el("button", { class: "btn-primary2", onclick: async () => {
-      if (!text.value.trim()) { err.textContent = "Write a reason the player will see."; err.hidden = false; return; }
+      if (!text.value.trim()) { err.textContent = what === "mute" ? "Write a reason." : "Write a reason the player will see."; err.hidden = false; return; }
       ok.disabled = true;
-      if (await adminDo("/ban", { id: p.id, reason: text.value, perm: kind.value === "perm", amount: Math.round(+amount.value), unit: unit.value })) toggleWindow("aban", false);
+      if (await adminDo("/" + what, { id: p.id, reason: text.value, perm: kind.value === "perm", amount: Math.round(+amount.value), unit: unit.value })) toggleWindow("aban", false);
       ok.disabled = false;
-    } }, "Ban");
+    } }, verb);
     w.body.append(el("div", { class: "report-form" }, kind, len, el("div", { class: "sheet-k" }, "Reason"), text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("aban", false) }, "Cancel"), ok)));
     toggleWindow("aban", true);
   }
@@ -820,7 +880,7 @@
     if (apTab === "info") {
       const reset = (what) => head ? el("button", { class: "btn-ghost2 adm-mini", onclick: () => adminDo("/reset", { id: p.id, what }) }, "Reset") : null;
       box.append(row("Role", p.role === "head" ? "Head Admin" : p.role === "admin" ? "Admin" : "Player"), row("Online", p.online ? "Yes" : "No"), row("Joined", fmtWhen(p.createdAt)),
-        row("Ban", p.ban ? (p.ban.perm ? "Permanent" : "Until " + fmtWhen(p.ban.until)) + " · " + p.ban.reason : "None"),
+        row("Ban", p.ban ? (p.ban.perm ? "Permanent" : "Until " + fmtWhen(p.ban.until)) + " · " + p.ban.reason : "None"), row("Muted", p.mute ? (p.mute.perm ? "Permanent" : "Until " + fmtWhen(p.mute.until)) + " · " + p.mute.reason : "No"), row("Frozen", p.frozen ? "Yes · " + p.frozen.reason : "No"),
         row("Credits", p.credits.toLocaleString(), reset("credits")), row("Corporation", p.corp, reset("corp")));
     } else {
       for (const pl of p.pilots) {
@@ -834,6 +894,51 @@
     }
     body.append(box);
   }
+  // ---- (owner) admin DMs: each conversation in its own window. The admin's closes (ending it); the player's can't be closed
+  // and stays on top (over the Freeze overlay) until the admin ends it ----
+  const admConv = new Map();                         // window id -> { name (the other side), admin (am I the admin), log }
+  const admWinId = (name, iAmAdmin) => iAmAdmin ? "admdm:" + name.toLowerCase() : "admdm";
+  function openAdmDm(name, iAmAdmin = true, log = null) {
+    const id = admWinId(name, iAmAdmin);
+    if (!admConv.has(id)) admConv.set(id, { name, admin: iAmAdmin, log: [] });
+    const c = admConv.get(id); if (log) c.log = log.slice();
+    if (!wins[id]) {
+      createWindow(id, { left: Math.round(innerWidth / 2 - 170), top: 120, width: 340, height: 300, minW: 260, minH: 180, render: (b) => renderAdmDm(id, b), label: iAmAdmin ? name : "Admin", groupable: false, noClose: !iAmAdmin, pinTop: !iAmAdmin });
+      if (iAmAdmin) wins[id].close.onclick = () => { window.Atamus.send({ t: "admend", to: name }); toggleWindow(id, false); };   // closing it ends the conversation
+    }
+    toggleWindow(id, true);
+  }
+  function renderAdmDm(id, body) {
+    const c = admConv.get(id); if (!c) return;
+    wins[id].slot.textContent = c.admin ? "DM · " + c.name : "Admin · " + c.name;
+    let list = body.querySelector(".admdm-list"), input = body.querySelector(".admdm-input");
+    if (!list) {
+      body.innerHTML = ""; body.classList.add("admdm-body");
+      list = el("div", { class: "admdm-list" }); input = el("input", { class: "text-input admdm-input", maxlength: "500", autocomplete: "off" });
+      input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key !== "Enter" || !input.value.trim()) return; window.Atamus.send(c.admin ? { t: "adm", to: c.name, text: input.value } : { t: "adm", text: input.value }); input.value = ""; });
+      body.append(list, input);
+    }
+    list.innerHTML = "";
+    for (const l of c.log) list.append(el("div", { class: "admdm-line" }, el("b", {}, l.from + ": "), l.text));
+    list.scrollTop = list.scrollHeight;
+  }
+  const A0 = window.Atamus.bus;
+  A0.addEventListener("admopen", (e) => { const m = e.detail; if (m.with) openAdmDm(m.with, true, m.log); else openAdmDm(m.admin, false, m.log); });
+  A0.addEventListener("admdm", (e) => {
+    const m = e.detail, id = m.with ? admWinId(m.with, true) : "admdm";
+    if (!admConv.has(id) || !wins[id] || !isOpen(wins[id])) openAdmDm(m.with || m.admin, !!m.with);
+    const c = admConv.get(id); if (!m.with) c.name = m.admin;
+    c.log.push({ from: m.from, text: m.text, ts: m.ts }); renderAdmDm(id, wins[id].body);
+  });
+  A0.addEventListener("admend", (e) => { const m = e.detail, id = m.with ? admWinId(m.with, true) : "admdm"; admConv.delete(id); if (wins[id]) { toggleWindow(id, false); wins[id].body.innerHTML = ""; } });
+  // (owner) Freeze: a gray overlay over the whole screen; only the admin conversation shows above it
+  let frozenEl = null;
+  A0.addEventListener("frozen", (e) => {
+    if (e.detail.on && !frozenEl) { frozenEl = el("div", { class: "frozen-overlay" }); for (const ev of ["pointerdown", "click", "contextmenu", "wheel"]) frozenEl.addEventListener(ev, (x) => { x.preventDefault(); x.stopPropagation(); }, { passive: false }); document.body.append(frozenEl); }
+    else if (!e.detail.on && frozenEl) { frozenEl.remove(); frozenEl = null; }
+  });
+  addEventListener("keydown", (e) => { if (frozenEl && !(e.target && e.target.closest && e.target.closest(".admdm-body"))) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);   // frozen: no keys but the admin chat's
+
   const ROMAN_LV = (n) => (n ? ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"][n] || String(n) : "0");
 
   // ---- report a player (owner): what it's about, what happened; stored on the server for admin tools later ----
@@ -1256,7 +1361,8 @@
     const rows = [];
     if (kind === "celestial") {                         // (owner) a planet or moon
       const parent = d.parent ? A.celestial(d.parent) : null;
-      rows.push(row("Type", d.kind === "moon" ? "Moon" : "Planet"), row("World", d.world), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Orbits", parent ? parent.name : (cfg.celestials && cfg.celestials.sun ? cfg.celestials.sun.name : "-")), row("Orbit", Math.round(d.orbit).toLocaleString() + " km"));
+      if (d.kind === "sun") rows.push(row("Type", "Star"), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Planets", ((cfg.celestials && cfg.celestials.planets) || []).length));
+      else rows.push(row("Type", d.kind === "moon" ? "Moon" : "Planet"), row("World", d.world), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Orbits", parent ? parent.name : (cfg.celestials && cfg.celestials.sun ? cfg.celestials.sun.name : "-")), row("Orbit", Math.round(d.orbit).toLocaleString() + " km"));
       if (d.moons) rows.push(row("Moons", d.moons.length));
     } else if (kind === "rock") {
       const o = (cfg.ores || []).find((q) => q.key === d.ore) || {};

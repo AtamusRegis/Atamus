@@ -616,3 +616,19 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .adm-mini { padding: 2px 8px; font-size: 11px; margin-left: 8px; }
 .adm-lic .sheet-v { display: flex; align-items: center; gap: 4px; }
 .adm-lic-btns { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+/* (owner) admin DMs and Freeze */
+.admdm-body { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.admdm-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.admdm-line { word-break: break-word; }
+.admdm-line b { color: #f0b46a; font-weight: 600; }
+.frozen-overlay { position: fixed; inset: 0; z-index: 2000000004; background: rgba(70,74,84,0.62); backdrop-filter: grayscale(1) blur(1px); -webkit-backdrop-filter: grayscale(1) blur(1px); }
+.adm-bar { display: flex; gap: 6px; margin: 0 0 8px; }
+.adm-search { flex: 1; min-width: 0; }
+.adm-sort { width: auto; flex: none; }
+.adm-link { color: #8fc8ff; cursor: pointer; text-decoration: underline; text-decoration-color: rgba(143,200,255,0.35); touch-action: manipulation; }
+.adm-link:hover { color: #b8dcff; }
+.adm-disc .adm-name, .adm-disc .adm-link { flex: 1; }
+.adm-disc-reason { padding: 0 8px 4px 23px; }
+.adm-dim { color: var(--text-dim); }
+.adm-acts { display: flex; gap: 6px; }
+.adm-log.open { box-shadow: inset 2px 0 0 #f0b46a; }

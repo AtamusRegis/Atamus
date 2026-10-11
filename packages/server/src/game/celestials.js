@@ -3,10 +3,10 @@
 // seed. Each planet and moon has an anchor, a point on a ring just off it, which is its POI: what you align and warp to.
 // Nothing spawns near the sun; player stations keep clear of planets and moons (but may sit along their orbits or in
 // deep space); asteroid belts spawn around planets and moons.
-export const SUN = { id: "sun", name: "Atamus", rKm: 260, clearKm: 1000 };   // nothing spawns within clearKm of the center
+export const SUN = { id: "sun", kind: "sun", name: "Atamus", x: 0, y: 0, rKm: 260, r: 260, clearKm: 1000 };   // nothing spawns within clearKm of the center
 const PLANET_ORBITS_KM = [2300, 3800, 5300, 6800, 8400];
 export const WORLD_KINDS = ["Ocean", "Desert", "Ice", "Gas giant"];
-const ANCHOR = { rKm: 25, planetGapKm: 140, moonGapKm: 50 };   // an anchor POI is 50 km across, this far off the body's surface
+const ANCHOR = { rKm: 25, planetGapKm: 140, moonGapKm: 50, sunGapKm: 400 };   // an anchor POI is 50 km across, this far off the body's surface
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
 
 function layout(seed = 1337) {
@@ -26,16 +26,18 @@ function layout(seed = 1337) {
   // anchors: a point on a ring just off each body, at its own angle (the POI)
   const anchor = (b, gap) => { const t = rnd() * Math.PI * 2, d = b.r + gap; return { x: +(b.x + Math.cos(t) * d).toFixed(2), y: +(b.y + Math.sin(t) * d).toFixed(2), ring: d }; };
   for (const p of planets) { p.anchor = anchor(p, ANCHOR.planetGapKm); for (const m of p.moons) m.anchor = anchor(m, ANCHOR.moonGapKm); }
+  SUN.anchor = anchor({ x: 0, y: 0, r: SUN.rKm }, ANCHOR.sunGapKm);   // (owner) the sun has its orbiting point too
   return planets;
 }
 export const PLANETS = layout();
 export const MOONS = PLANETS.flatMap((p) => p.moons);
 export const CELESTIALS = [...PLANETS, ...MOONS];
 
-/** Each planet's and moon's anchor as a POI (always on everyone's map). */
-export const celestialPois = () => CELESTIALS.map((c) => ({ id: c.id, kind: c.kind, name: c.name, x: c.anchor.x, y: c.anchor.y, r: ANCHOR.rKm, createdAt: 0, body: c.id, field: { rocks: [], props: [], dir: 0, ver: 1 }, retired: false }));
-/** Where a warp to a planet or moon drops you: at its anchor, give or take a couple of km. */
-export const anchorLanding = (poi) => ({ x: poi.x + (Math.random() - 0.5) * 4, y: poi.y + (Math.random() - 0.5) * 4 });
+/** (owner) The sun, each planet and each moon is a POI (on everyone's map) at the body itself; aligning and warping to
+ *  it head for its anchor (ax, ay), the point orbiting just off it. */
+export const celestialPois = () => [SUN, ...CELESTIALS].map((c) => ({ id: c.id, kind: c.kind, name: c.name, x: c.x, y: c.y, r: c.r, ax: c.anchor.x, ay: c.anchor.y, ar: ANCHOR.rKm, createdAt: 0, field: { rocks: [], props: [], dir: 0, ver: 1 }, retired: false }));
+/** Where a warp to a celestial drops you: at its anchor, give or take a couple of km. */
+export const anchorLanding = (poi) => ({ x: poi.ax + (Math.random() - 0.5) * 4, y: poi.ay + (Math.random() - 0.5) * 4 });
 /** How far a point is outside every no-station zone (the sun's, each planet's with its moons); negative = inside one. */
 export function celestialClearance(x, y) {
   let m = Math.hypot(x, y) - SUN.clearKm;

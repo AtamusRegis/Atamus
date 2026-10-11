@@ -14,8 +14,16 @@ export async function ptrUser() {
     await pool.query(`UPDATE users SET role = 'head' WHERE id = $1`, [rows[0].id]);   // (the PTR tester starts as the Head Admin, to test the admin panel)
     tester = { ...rows[0], has_recovery: true };
   }
-  const { rows } = await pool.query(`SELECT role FROM users WHERE id = $1`, [tester.id]);   // (tests switch it to admin and back)
-  return { ...tester, role: rows[0] ? rows[0].role : null };
+  const { rows } = await pool.query(`SELECT role, frozen, mute_perm, mute_until, mute_reason FROM users WHERE id = $1`, [tester.id]);   // (tests switch it to admin and back)
+  return { ...tester, ...(rows[0] || {}), frozen: !!(rows[0] && rows[0].frozen) };
+}
+
+/** PTR only: a second test account for the socket (`/ws?as=Name`), to test things between players (admin DMs, Freeze). */
+export async function ptrAs(name) {
+  if (!PTR || typeof name !== "string" || !/^[A-Za-z0-9_]{3,24}$/.test(name) || name.toLowerCase() === "ptr") return null;
+  let { rows } = await pool.query(`SELECT id, username, email, role, frozen, mute_perm, mute_until, mute_reason FROM users WHERE lower(username) = lower($1)`, [name]);
+  if (!rows[0]) ({ rows } = await pool.query(`INSERT INTO users (username, password) VALUES ($1, '!') RETURNING id, username, email, role, frozen, mute_perm, mute_until, mute_reason`, [name]));
+  return { ...rows[0], has_recovery: true };
 }
 
 // Dev commands from the PTR client: Atamus.send({ t: "dev", cmd, ... })

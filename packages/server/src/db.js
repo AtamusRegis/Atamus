@@ -88,6 +88,28 @@ export async function migrate() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_perm BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen BOOLEAN NOT NULL DEFAULT false;   -- (owner) frozen by an admin
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_reason TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_at TIMESTAMPTZ;
+    -- (owner) muted: no chat (permanent, or until a time)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_perm BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_until TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_reason TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_at TIMESTAMPTZ;
+    -- (owner) a banned player's appeals (one open at a time), answered from the admin panel
+    CREATE TABLE IF NOT EXISTS appeals (
+      id          BIGSERIAL PRIMARY KEY,
+      user_id     BIGINT REFERENCES users(id) ON DELETE CASCADE,
+      username    TEXT NOT NULL,
+      ban_reason  TEXT NOT NULL DEFAULT '',
+      text        TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'open',      -- open | accepted | denied
+      admin_name  TEXT,
+      response    TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      handled_at  TIMESTAMPTZ
+    );
     CREATE TABLE IF NOT EXISTS admin_log (
       id          BIGSERIAL PRIMARY KEY,
       at          TIMESTAMPTZ NOT NULL DEFAULT now(),
