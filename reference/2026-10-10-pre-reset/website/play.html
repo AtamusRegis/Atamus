@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css?v=1791625448">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
+      <filter id="noise">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
+          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
+                   values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
+        </feTurbulence>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+      <rect width="100%" height="100%" filter="url(#noise)"/>
+    </svg>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <header class="site-head"><a class="site-logo" href="index.html">ATAMUS</a></header>
+
+  <main>
+    <section class="card" aria-labelledby="title">
+      <h1 id="title" class="brand">Atamus</h1>
+      <div class="form">
+        <p class="welcome"><span id="hello">Welcome back</span>, <strong id="who">…</strong></p>
+        <div id="update-step" hidden>
+          <p class="update-title">Atamus is updating</p>
+          <p class="hint" id="update-msg">Back in a moment…</p>
+        </div>
+        <div id="pilot-step" hidden>
+          <form id="pilot-form" class="form" novalidate>
+            <label class="field">
+              <span>Pilot name</span>
+              <input name="name" type="text" required maxlength="24" spellcheck="false" autocomplete="off">
+            </label>
+            <p class="msg" id="pilot-msg" role="alert" hidden></p>
+            <button type="submit" class="btn btn-primary">Create pilot</button>
+          </form>
+        </div>
+        <div id="enter-step" hidden>
+          <label class="field" id="server-pick" hidden>
+            <span>Server</span>
+            <select id="server"><option value="live">Atamus</option><option value="tutorial">Tutorial (test)</option></select>
+          </label>
+          <a class="btn btn-primary" href="game.html">Enter System</a>
+        </div>
+        <button type="button" class="btn btn-ghost" id="logout">Log out</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="api.js?v=1791625448"></script>
+  <script src="play.js?v=1791625448" defer></script>
+</body>
+</html>

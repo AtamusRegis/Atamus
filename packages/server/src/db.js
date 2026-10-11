@@ -76,7 +76,7 @@ export async function migrate() {
  */
 // tag -> what it clears. "full": pilots, systems and credits. "world": ships, hangars, cans and belts only (pilots,
 // licenses and credits stay).
-const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"]];
+const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"]];
 export async function runWipes() {
   await pool.query(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   for (const [tag, kind] of WIPES) {

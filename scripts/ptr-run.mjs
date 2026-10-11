@@ -8,7 +8,7 @@ const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width, height } });
 const errors = []; page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 await page.goto("http://localhost:8090/" + (process.env.PTR_PAGE || "game.html"), { waitUntil: "load" });   // PTR_PAGE="game.html?shard=tutorial&new=1" for the tutorial
-await page.waitForFunction(() => window.Atamus && window.Atamus.cfg && window.Atamus.inv && window.Atamus.inv.hangars, null, { timeout: 15000 });
+await page.waitForFunction(() => window.Atamus && window.Atamus.cfg && window.Atamus.myShip, null, { timeout: 15000 });
 const body = stepsFile ? readFileSync(stepsFile, "utf8") : "return 'ready'";
 const result = await page.evaluate(`(async () => { const s = (ms) => new Promise((r) => setTimeout(r, ms)); const A = window.Atamus; const dev = (o) => A.send({ t: "dev", ...o }); ${body} })()`);
 if (shot) await page.screenshot({ path: shot });

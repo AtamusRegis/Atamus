@@ -1,0 +1,58 @@
+// Build markers. SERVER_BUILD: short git SHA of the running server (written by deploy.sh).
+// The website's live build is read from its version.json; when it changes, every
+// connected client is told to reload so nobody keeps playing an old version.
+import fs from "node:fs";
+import { execFile } from "node:child_process";
+
+export let SERVER_BUILD = "dev";
+try { SERVER_BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
+
+const SITE = "https://atamus.io/version.json";
+let webBuild = null, onChange = () => {}, burstUntil = 0, burstTimer = 0;
+export const onWebsiteUpdate = (fn) => { onChange = fn; };
+export async function checkWebsiteBuild() {
+  try {
+    const r = await fetch(SITE + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return false;
+    const v = (await r.json()).v; if (!v) return false;
+    if (webBuild && v !== webBuild) { webBuild = v; onChange(v); return true; }
+    webBuild = v; return false;
+  } catch { return false; }
+}
+// A deploy just finished: the CDN can take a few seconds to serve the new file, so look every 2 s for a minute.
+export function websiteDeployed() {
+  burstUntil = Date.now() + 60_000;
+  if (burstTimer) return;
+  const tick = async () => { const changed = await checkWebsiteBuild(); if (changed || Date.now() > burstUntil) { burstTimer = 0; return; } burstTimer = setTimeout(tick, 2000); };
+  burstTimer = setTimeout(tick, 0);
+}
+if (process.env.ATAMUS_PTR !== "1") { checkWebsiteBuild(); setInterval(checkWebsiteBuild, 20_000); }   // the PTR has no live website to watch                       // backstop if the deploy ping never arrives
+
+// ---- update countdown: a deploy announces itself ~30 s before it switches anything ----
+// Only honoured when the repo's main really is ahead of what's live, and once per commit,
+// so a stray request can't spam players.
+const REPO_DIR = new URL("../../../", import.meta.url).pathname;
+let announced = null, announcedAt = 0, parts = new Set(), onCountdownFn = () => {};
+export const onCountdown = (fn) => { onCountdownFn = fn; };
+const mainHead = () => new Promise((res) => execFile("git", ["-C", REPO_DIR, "ls-remote", "origin", "refs/heads/main"], { timeout: 10_000 }, (err, out) => res(err ? null : String(out).split(/\s/)[0] || null)));
+// part: "server" or "web" — which half of the game this deploy is about to switch
+export async function announceUpdate(part, seconds = 30) {
+  part = part === "web" ? "web" : "server";
+  const now = Date.now(), running = announced && now < announcedAt + 120_000;
+  let head = await mainHead();
+  if (!head) {                                            // can't reach GitHub: still warn, merging into a countdown that's already running
+    console.log("[build] could not read main; counting down anyway");
+    head = running ? announced : "unknown-" + now;
+  }
+  if (head === announced) {                               // the other workflow for the same commit: same countdown, more parts
+    if (!parts.has(part)) { parts.add(part); onCountdownFn(announcedAt, head, [...parts]); }
+    return { ok: true, at: announcedAt, parts: [...parts] };
+  }
+  const serverCurrent = head.startsWith(SERVER_BUILD), webCurrent = webBuild && head === webBuild;
+  if (serverCurrent && webCurrent) { console.log("[build] countdown refused: nothing pending"); return { ok: false, why: "nothing pending" }; }
+  announced = head; announcedAt = now + seconds * 1000; parts = new Set([part]);
+  onCountdownFn(announcedAt, head, [...parts]);
+  return { ok: true, at: announcedAt, parts: [...parts] };
+}
+// A countdown that's still running, for players who connect in the middle of it.
+export const activeCountdown = () => (announced && announcedAt > Date.now() ? { in: announcedAt - Date.now(), parts: [...parts] } : null);

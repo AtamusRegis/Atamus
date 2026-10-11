@@ -345,5 +345,3 @@ main {
 .update h3 { margin: 2px 0 4px; font-size: 14px; color: var(--text); }
 .update p { font-size: 13px; }
 @media (max-width: 760px) { .front-main { grid-template-columns: 1fr; grid-template-rows: none; } .front-about, .front-help, .front-updates { grid-column: 1; grid-row: auto; } .front-updates .front-body { max-height: 420px; } .btn-play { align-self: stretch; } }
-#server-pick { margin-bottom: 12px; }
-.field select option { background: #0e141d; color: var(--text); }
