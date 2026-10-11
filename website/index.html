@@ -6,7 +6,7 @@
   <title>Atamus</title>
   <meta name="description" content="Atamus is a multiplayer space mining game you play in your browser. Mine the Expanse, train your pilots, grow your fleet.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1791698609">
+  <link rel="stylesheet" href="style.css?v=1791699557">
   <script>
     // already signed in: straight to the welcome-back page
     fetch((/(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin) + "/auth/me", { credentials: "include" })
@@ -46,71 +46,21 @@
     <section class="card front-updates" aria-labelledby="updates-title">
       <h2 id="updates-title" class="brand">Updates</h2>
       <div class="front-body">
-        <!-- major changes only, newest first -->
+        <!-- one entry per day, newest first: that day's major changes (owner) -->
         <article class="update">
           <time datetime="2026-10-11">Oct 11, 2026</time>
-          <h3>Asteroid belts and warp</h3>
-          <p>Asteroid belts are back in the Expanse: huge crescents of rock holding all five ores, which slowly waste away after their first hour. Right-click a belt to align or warp to it, or use the new Align and Warp buttons under your fleet.</p>
+          <ul>
+            <li><b>Asteroid belts and warp.</b> Huge crescents of rock holding all five ores, which slowly waste away after their first hour. Right-click a belt to align or warp to it, or use the Align and Warp buttons under your fleet.</li>
+            <li><b>Pilot Sheet.</b> All your pilots side by side: pick one to fly them.</li>
+          </ul>
         </article>
         <article class="update">
           <time datetime="2026-10-10">Oct 10, 2026</time>
-          <h3>Characters and portraits</h3>
-          <p>Create your character and your pilots with the new portrait creator: male or female, skin, hair, outfit and background. Your character is who you'll be when you talk to other players.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-10">Oct 10, 2026</time>
-          <h3>Back to basics</h3>
-          <p>We've taken Atamus back to the start to get the core of flying and mining right. For now it's just you and your Prospector in the open Expanse. Everything else, from stations to bases, will return as it's rebuilt. All pilots, ships and credits were reset, so name a new pilot to jump back in.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-10">Oct 10, 2026</time>
-          <h3>Your base</h3>
-          <p>Every pilot now has a home planet. Dock there to unload your ore, then build refineries, factories and shipyards in the new Base window, pipe them together, and turn ore into the ships and arks you fly. Your base keeps working while you're offline.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-10">Oct 10, 2026</time>
-          <h3>Drones and propulsion</h3>
-          <p>Launch mining drones and press F to send them at your target. Afterburners and microwarpdrives take over from warping inside a belt or around the station, and cargohold expansions and mining laser upgrades boost your fit.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>The Expanse</h3>
-          <p>Everyone now shares one home system: four planets, the Expanse Station and six stargates around a blue sun. Zoom out to see the whole system, then right-click (or hold) a planet, the station or a belt to warp there. Asteroid belts appear as more pilots come online, and they don't last forever.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>Asteroid instances</h3>
-          <p>Belts are gone. Your system now has asteroid beacons that link to shared asteroid fields for up to five players. When a beacon glows, fly over and jump. Your ships keep mining while you're offline, and fresh jettison cans stay yours for 30 minutes.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>Warp windows and hull bonuses</h3>
-          <p>Warping now opens a glowing window ahead of your ship. You cross as a ball of light and drop out of a second window right at your destination. Hulls now boost the modules they're built for, and every ship has an acceleration stat.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>Music, settings and hotkeys</h3>
-          <p>The Expanse has a soundtrack, with volume controls in the new Settings window. Fire your modules with the number keys, and pick a pilot from the fleet panel.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>Fitting and running hot</h3>
-          <p>Ships now have hardpoints, disposition and a capacitor. Buy modules on the market and fit them in your station. Run more modules than your capacitor can handle, but watch the heat.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-09">Oct 9, 2026</time>
-          <h3>A fresh start</h3>
-          <p>Every pilot has been reset so everyone starts on equal footing. Training is quick for now while we test.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-08">Oct 8, 2026</time>
-          <h3>Station market and pilots</h3>
-          <p>Buy ships and training manuals from the station market. Each account can now have up to three pilots.</p>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-08">Oct 8, 2026</time>
-          <h3>Mining in the Expanse</h3>
-          <p>Mining lasers, the auto miner, station hangars and jettison cans. Mine ore, haul it home and sell it.</p>
+          <ul>
+            <li><b>Back to basics.</b> We've taken Atamus back to the start to get the core of flying and mining right. For now it's you, your pilots' Prospectors and the open Expanse. Everything else will return as it's rebuilt. Pilots, ships and credits were reset.</li>
+            <li><b>Characters and portraits.</b> Create your character and your pilots with the new portrait creator. Your character is who you are in Local and Corp chat.</li>
+            <li><b>Fleet.</b> Switch between your pilots from the Fleet bar or with Tab.</li>
+          </ul>
         </article>
       </div>
     </section>

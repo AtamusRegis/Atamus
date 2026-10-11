@@ -320,16 +320,19 @@
   function renderPilot(body) {
     const slot = wins.pilot && wins.pilot.slot;
     body.innerHTML = ""; if (slot) slot.innerHTML = "";
-    if (!state || !catalog) { if (slot) slot.textContent = "Pilot"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
-    if (!state.pilots.length) { if (slot) slot.textContent = "Pilot"; renderCreatePilot(body); return; }
+    if (slot) slot.textContent = "Pilot Sheet";
+    if (!state || !catalog) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    if (!state.pilots.length) { renderCreatePilot(body); return; }
     const pilot = state.pilots.find((p) => String(p.id) === String(saved.selPilot)) || state.pilots[0];
     selectedPilotId = pilot.id;
-    if (slot) slot.textContent = pilot.name;
 
-    if (pilot.portrait && window.Portrait) body.append(el("div", { class: "sheet-portrait" }, Portrait.canvas(pilot.portrait, 96)));   // (owner) the pilot's portrait
+    // (owner) every pilot side by side (room for 5): portrait, name beneath. Click one to select them (and so their
+    // ship) and show their stats below; the camera stays put.
+    body.append(el("div", { class: "pilot-pick" }, state.pilots.map((p) => el("button", { class: "pp-card" + (p.id === pilot.id ? " sel" : ""), onclick: () => selectPilot(p.id) },
+      p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 52, "pp-portrait") : el("span", { class: "pp-portrait" }), el("span", { class: "pp-name" }, p.name)))));
     const tabs = [["skills", "Licenses"], ["queue", "Training Queue"]];
     if (!tabs.some(([k]) => k === pilotTab)) pilotTab = "skills";
-    body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pilotTab ? " active" : ""), onclick: () => { pilotTab = k; renderPilot(body); } }, n))));
+    body.append(el("div", { class: "tab-row tab-row-center" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pilotTab ? " active" : ""), onclick: () => { pilotTab = k; renderPilot(body); } }, n))));
     const content = el("div", { class: "tab-content" }); body.append(content);
     if (pilotTab === "skills") renderSkills(content, pilot);
     else renderQueue(content, pilot);
@@ -640,11 +643,19 @@
         row.addEventListener("mouseenter", open); row.addEventListener("click", (e) => { e.stopPropagation(); open(); });
         return row;
       }
-      const row = el("div", { class: "ctx-item", onclick: (e) => { if (fn) { closeCtxMenu(); fn(); } else if (opt && opt.menu) showCtxMenu(e.clientX, e.clientY, opt.menu); } }, label);
-      row.addEventListener("mouseenter", () => { for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove(); });
+      const openOwn = () => {                        // (owner) its own menu opens beside it; the menus before it stay open
+        for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove();
+        const sub = build(opt.menu, depth + 1); sub.dataset.depth = depth + 1; ctxMenu.append(sub);
+        const r = row.getBoundingClientRect(), b = sub.getBoundingClientRect();
+        let left = r.right + 2; if (left + b.width > innerWidth - M) left = r.left - 2 - b.width;
+        sub.style.left = Math.max(M, left) + "px"; sub.style.top = Math.max(M, Math.min(innerHeight - b.height - M, r.top - 4)) + "px";
+        for (const o of row.parentNode.children) o.classList.toggle("ctx-open", o === row);
+      };
+      const row = el("div", { class: "ctx-item", onclick: (e) => { if (fn) { closeCtxMenu(); fn(); } else if (opt && opt.menu) { e.stopPropagation(); openOwn(); } } }, label);
+      row.addEventListener("mouseenter", () => { if (row.classList.contains("ctx-open")) return; for (const o of row.parentNode.children) o.classList.remove("ctx-open"); for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove(); });
       if (opt && opt.menu) {                         // its own menu: right-click, or hold on touch
-        row.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, opt.menu); });
-        let t = 0; row.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(t); t = setTimeout(() => showCtxMenu(e.clientX, e.clientY, opt.menu), 500); });
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openOwn(); });
+        let t = 0; row.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(t); t = setTimeout(openOwn, 500); });
         for (const ev of ["pointerup", "pointercancel", "pointerleave"]) row.addEventListener(ev, () => clearTimeout(t));
       }
       return row;

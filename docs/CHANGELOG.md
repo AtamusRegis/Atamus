@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Pilot Sheet (owner):** the Pilot window is now the Pilot Sheet: every pilot side by side with their name beneath (pick one to select them, no recentring), tabs centred. Resizable windows have a visible corner knob (bigger on touch). A belt's own menu opens beside the Belts list and keeps the list open. The front page's Updates is now one entry per day, starting from the reset.
 - **Belts menu (owner):** space menu › Belts is now a plain list; right-click (or hold) a belt for its Warp to / Align to menu, instead of a third layer of submenus.
 - **Design:** the owner's vertical-slice goals are at the top of DESIGN.md.
 - **Asteroid belts, align and warp (owner, major):** belt POIs are back: 100 km across, a half moon of rocks 45 km out (give or take 5), all five ores, at least 2,000,000 m³ each. After an hour they slowly waste away, rocks shrinking large → medium → small; a mined-out belt leaves the map but stays open while ships are inside. Right-click (or hold) a belt's marker, or space › Belts, to Warp to or Align to it; Align and Warp also sit under the Fleet window. Aligning flies at regular speed toward the POI; Warp aligns then warps (about 30 s across the map); if the POI disappears you drift. Clicking your ship now only selects its pilot; Center on ship is in the space menu; Tab centres on the next pilot's ship, zoomed to a whole POI.

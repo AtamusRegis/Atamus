@@ -344,6 +344,8 @@ main {
 .update time { font-size: 11px; letter-spacing: .06em; color: var(--text-faint); }
 .update h3 { margin: 2px 0 4px; font-size: 14px; color: var(--text); }
 .update p { font-size: 13px; }
+.update ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.update li b { color: var(--text); font-weight: 600; }
 @media (max-width: 760px) { .front-main { grid-template-columns: 1fr; grid-template-rows: none; } .front-about, .front-help, .front-updates { grid-column: 1; grid-row: auto; } .front-updates .front-body { max-height: 420px; } .btn-play { align-self: stretch; } }
 
 /* ---------- character / pilot creator (portrait.js) ---------- */
