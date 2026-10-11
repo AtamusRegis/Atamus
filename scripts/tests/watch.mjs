@@ -19,7 +19,12 @@ const m = (path, body) => g("/game/admin" + path, body, "WatMod");
 let r = await m("/unlock", { password: MPW }); t.ok(r.body.ok, "a Moderator unlocks their panel", r.body);
 
 // ---- Moderators are chat moderators (owner) ----
-r = await m("/ban", { id: pa, reason: "x", amount: 1, unit: "hours" }); t.ok(r.status === 403, "a Moderator can't ban");
+{ const head = await connect(); await sleep(300);
+  r = await m("/ban", { id: pa, reason: "x", amount: 1, unit: "hours" }); t.ok(r.status === 403 && /no Admin is online/.test(r.body.error), "a Moderator can't ban while an Admin is online (owner)", r.body);
+  await head.close(); await sleep(1500); }
+r = await m("/ban", { id: pa, reason: "x", perm: true }); t.ok(r.status === 403, "never for good");
+r = await m("/ban", { id: pa, reason: "spam", amount: 1, unit: "hours" }); t.ok(r.body.ok, "but for a time while none is (owner)", r.body);
+await g("/game/admin/unban", { id: pa, reason: "test" });
 r = await m("/mute", { id: pa, reason: "language", amount: 1, unit: "hours" }); t.ok(r.body.ok, "but can mute", r.body);
 await g("/game/admin/unmute", { id: pa, reason: "test" });
 r = await m("/relation", { id: pa, other: "WatBen", kind: "block", reason: "feud" }); t.ok(r.body.ok, "and block two players from each other", r.body);
@@ -122,6 +127,26 @@ r = await g("/game/admin/words/repeal", { word: "damn" }); t.ok(r.body.ok || /al
   const w = (await g("/game/admin/words")).body.find((x) => x.word === "damn" && x.status === "repealed"); r = await g("/game/admin/words/restore", { id: w.id }); t.ok(r.body.ok, "and can restore it");
   c2.send({ t: "chat", text: "damn again", channel: "local" }); await sleep(400); t.ok(hh.some((x) => x.t === "chat" && x.text === "**** again"), "filtered again"); await c2.close(); }
 r = await m("/words/repeal", { word: "crap" }); t.ok(r.status === 403, "Moderators can't");
+
+// ---- staff activity (owner): 90 days without any and an Admin becomes a Moderator, then a player; they ask to be reinstated ----
+await db.query(`UPDATE users SET staff_active_at = now() - interval '100 days' WHERE id = $1`, [mod]);
+r = await m("/language/reset", { id: pc, reason: "activity test" }); t.ok(r.body.ok, "(a staff action)", r.body); await sleep(300);
+let act = (await db.query(`SELECT staff_active_at FROM users WHERE id = $1`, [mod])).rows[0].staff_active_at; t.ok(Date.now() - new Date(act) < 60_000, "anything a staff member does in the panel keeps them active (owner)", act);
+await db.query(`UPDATE users SET role = 'admin', lapsed_role = NULL, staff_active_at = now() - interval '91 days' WHERE id = $1`, [mod]);
+await g("/game/admin/dev/lapse", {}); let ru = (await db.query(`SELECT role, lapsed_role FROM users WHERE id = $1`, [mod])).rows[0];
+t.ok(ru.role === "mod" && ru.lapsed_role === "admin", "90 days without staff activity: an Admin becomes a Moderator (owner)", ru);
+await db.query(`UPDATE users SET staff_active_at = now() - interval '91 days' WHERE id = $1`, [mod]); await g("/game/admin/dev/lapse", {});
+ru = (await db.query(`SELECT role, lapsed_role FROM users WHERE id = $1`, [mod])).rows[0]; t.ok(ru.role === null && ru.lapsed_role === "admin", "90 more: a player, who keeps the Admin button (owner)", ru);
+r = await g("/game/state", null, "WatMod"); t.ok(r.body.profile.lapsedRole === "admin", "their game knows", r.body.profile);
+await db.query(`DELETE FROM reinstatements WHERE user_id = $1`, [mod]);
+r = await g("/game/admin/reinstate", { reason: "" }, "WatMod"); t.ok(r.status === 400, "asking needs a reason");
+r = await g("/game/admin/reinstate", { reason: "I was away for surgery" }, "WatMod"); t.ok(r.body.ok, "they ask the Head Admin to be reinstated (owner)", r.body);
+r = await g("/game/admin/reinstate", { reason: "again" }, "WatMod"); t.ok(r.status === 400, "one request at a time");
+notes = (await g("/game/admin/notes")).body; t.ok(notes.some((n) => /WatMod asks to be reinstated as Admin: I was away/.test(n.text)), "the Head Admin is told");
+r = await g("/game/admin/reinstatements"); const rq = r.body.find((x) => x.name === "WatMod"); t.ok(rq && rq.role === "admin", "and sees it under Staff");
+r = await g("/game/admin/reinstatement", { id: rq.id, approve: true }); ru = (await db.query(`SELECT role, lapsed_role, admin_pw_hash FROM users WHERE id = $1`, [mod])).rows[0];
+t.ok(r.body.ok && ru.role === "admin" && !ru.lapsed_role && !ru.admin_pw_hash, "approved: their role back, a new password to make", ru);
+await db.query(`UPDATE users SET role = 'mod', admin_pw_hash = $2, staff_active_at = now() WHERE id = $1`, [mod, await hashSecret(MPW)]); await m("/unlock", { password: MPW });
 
 // ---- what staff see on the map (owner): Moderators no other ships; Admins only in admin mode ----
 for (const n of ["WatAnn", "WatCid"]) if (!(await g("/game/state", null, n)).body.pilots.length) await g("/game/pilot/create", { name: n + " Pilot" }, n);

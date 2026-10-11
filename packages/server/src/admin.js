@@ -20,7 +20,7 @@ import { CORP, offerName } from "./pilots.js";
 import { nameKey, filterForm, CATEGORY_KEYS, isFiltered } from "./namefilter.js";
 import { reloadWords } from "./names.js";
 import * as resets from "./resets.js";
-import { unreadNoteCount, notesOf, readNotes, staffChatRecent, unreadCounts, markSeen, MOD_REPORTS } from "./staff.js";
+import { unreadNoteCount, notesOf, readNotes, staffChatRecent, unreadCounts, markSeen, MOD_REPORTS, markActive } from "./staff.js";
 import { setRelation, relationsOf } from "./relations.js";
 import * as relAp from "./relappeals.js";
 import * as tickets from "./tickets.js";
@@ -47,6 +47,9 @@ export const isUnlocked = (uid) => { for (const v of unlocked.values()) if (v.ui
 export const setGameHooks = (h) => { hooks = { ...hooks, ...h }; };
 
 export const admin = express.Router();
+// (owner) staff activity: any action in the panel (not just opening, locking or reading it) keeps a staff member active
+const NOT_ACTIVITY = new Set(["/unlock", "/lock", "/seen", "/notes/read", "/password", "/persona", "/pwreset/request", "/reinstate"]);
+admin.use((req, res, next) => { res.on("finish", () => { if (req.method === "POST" && req.staffId && res.statusCode < 300 && !NOT_ACTIVITY.has(req.path)) markActive(req.staffId).catch(() => {}); }); next(); });
 const sessionKey = (req, uid) => PTR ? "ptr:" + uid : crypto.createHash("sha256").update(readCookie(req) || "").digest("hex");
 const fail = (res, code, error) => res.status(code).json({ error });
 const isId = (v) => typeof v === "string" && /^[0-9]{1,15}$/.test(v) || (Number.isInteger(v) && v > 0);
@@ -72,6 +75,7 @@ async function who(req, res, needUnlock = true, needPersona = needUnlock) {
     if (rows[0]) { fail(res, 403, "Your moderator abilities are suspended until " + new Date(rows[0].mod_suspended_until).toUTCString() + "."); return null; }
   }
   if (needPersona && !pe) { fail(res, 403, "Make your admin profile first."); return null; }
+  req.staffId = String(u.id);
   return { id: String(u.id), name: pe ? pe.name : u.username, username: u.username, role: u.role, key, persona: pe };
 }
 const guard = (needUnlock, fn, needPersona = needUnlock) => async (req, res) => { try { const me = await who(req, res, needUnlock, needPersona); if (me) await fn(req, res, me); } catch (e) { console.error("admin", e); fail(res, 500, "Something went wrong."); } };
@@ -180,7 +184,8 @@ admin.post("/kick", guard(true, async (req, res, me) => {
   await log(me, t, "kick", reason, { chat, ships: hooks.shipNames(String(t.id)) }); res.json({ ok: true });
 }));
 admin.post("/ban", guard(true, async (req, res, me) => {
-  if (noMod(me, res)) return;                       // (owner) Moderators are chat moderators: mute and block, no bans
+  // (owner) Moderators are chat moderators: a ban for a time only, and only while no Admin (or the Head Admin) is online
+  if (me.role === "mod") { const on = [...hooks.online()]; if (on.length && (await pool.query(`SELECT 1 FROM users WHERE id = ANY($1) AND role IN ('admin', 'head') LIMIT 1`, [on])).rows[0]) return fail(res, 403, "Moderators can ban only while no Admin is online."); }
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason the player will see.");
@@ -515,6 +520,60 @@ admin.post("/suspend", guard(true, async (req, res, me) => {
   await hooks.staffNotify(["head"], "suspension", "Moderator " + t.username + (personaOf(t.id) ? " (" + personaOf(t.id).name + ")" : "") + " suspended by " + me.name + " for your review: " + reason, { player: String(t.id) });   // (owner) the Head Admin is told, to review
   res.json({ ok: true, until });
 }));
+// (owner) inactivity: 90 days with no staff activity and an Admin becomes a Moderator (another 90: a player); a
+// Moderator becomes a player. Whoever lapses keeps the Admin button, to ask the Head Admin to be reinstated. No quotas,
+// no schedules: any staff activity counts. Checked hourly; the Head Admin is told.
+export const INACTIVE_DAYS = 90;
+async function lapse(uid, from, to) {
+  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = NULL, staff_active_at = now(), lapsed_role = coalesce(lapsed_role, $3) WHERE id = $1`, [uid, to, from]);
+  for (const [k, v] of unlocked) if (v.uid === String(uid)) unlocked.delete(k);
+  await setRank(String(uid)); if (personaOf(uid)) hooks.persona(String(uid), personaOf(uid)); hooks.renameRequired(String(uid));
+}
+export async function lapseSweep() {
+  const { rows } = await pool.query(`SELECT id, username, role FROM users WHERE role IN ('admin', 'mod') AND staff_active_at < now() - make_interval(days => $1)`, [INACTIVE_DAYS]);
+  for (const u of rows) {
+    const to = u.role === "admin" ? "mod" : null;
+    await lapse(String(u.id), u.role, to);
+    await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason) VALUES (NULL, 'System', $1, $2, $3, $4)`, [u.id, u.username, to ? "make Moderator" : "remove Moderator", INACTIVE_DAYS + " days without staff activity"]);
+    await hooks.staffNotify(["head"], "staff", (u.role === "admin" ? "Admin " : "Moderator ") + u.username + (to ? " is now a Moderator" : " is now a player") + ": " + INACTIVE_DAYS + " days without staff activity.", { player: String(u.id) });
+  }
+  return rows.length;
+}
+setInterval(() => lapseSweep().catch((e) => console.error("lapse sweep", e)), 3600_000).unref();
+admin.post("/dev/lapse", async (req, res) => { if (!PTR) return fail(res, 404, "Not found."); res.json({ n: await lapseSweep() }); });   // (PTR only: tests)
+// (owner) one who lapsed asks to be reinstated (why); the Head Admin approves (their old role back, a new password to
+// make) or denies
+async function lapsedUser(req) {
+  let u = await getSessionUser(readCookie(req)); if (PTR && req.headers["x-ptr-as"]) u = await ptrAs(String(req.headers["x-ptr-as"]));
+  if (!u) return null; const { rows } = await pool.query(`SELECT id, username, role, lapsed_role FROM users WHERE id = $1`, [u.id]); return rows[0] || null;
+}
+admin.get("/lapsed", async (req, res) => {
+  try { const u = await lapsedUser(req); if (!u || u.role || !u.lapsed_role) return fail(res, 403, "Not for you.");
+    const { rows } = await pool.query(`SELECT status, at FROM reinstatements WHERE user_id = $1 ORDER BY id DESC LIMIT 1`, [u.id]);
+    res.json({ role: u.lapsed_role, request: rows[0] || null }); } catch (e) { console.error("lapsed", e); fail(res, 500, "Something went wrong."); }
+});
+admin.post("/reinstate", async (req, res) => {
+  try { const u = await lapsedUser(req); if (!u || u.role || !u.lapsed_role) return fail(res, 403, "Not for you.");
+    const reason = cleanReason((req.body || {}).reason); if (!reason) return fail(res, 400, "Write why.");
+    if ((await pool.query(`SELECT 1 FROM reinstatements WHERE user_id = $1 AND status = 'open'`, [u.id])).rows[0]) return fail(res, 400, "Your request is waiting for the Head Admin.");
+    const r = (await pool.query(`INSERT INTO reinstatements (user_id, role, reason) VALUES ($1, $2, $3) RETURNING id`, [u.id, u.lapsed_role, reason])).rows[0];
+    await hooks.staffNotify(["head"], "staff", u.username + " asks to be reinstated as " + ROLE_NAME[u.lapsed_role] + ": " + reason, { tab: "players", sub: "admins" });
+    res.json({ ok: true, id: String(r.id) }); } catch (e) { console.error("reinstate", e); fail(res, 500, "Something went wrong."); }
+});
+admin.get("/reinstatements", guard(true, async (req, res, me) => {
+  if (me.role !== "head") return res.json([]);
+  const { rows } = await pool.query(`SELECT r.id, r.user_id, u.username, r.role, r.reason, r.at FROM reinstatements r JOIN users u ON u.id = r.user_id WHERE r.status = 'open' ORDER BY r.id`);
+  res.json(rows.map((r) => ({ id: String(r.id), userId: String(r.user_id), name: r.username, role: r.role, reason: r.reason, at: r.at })));
+}));
+admin.post("/reinstatement", guard(true, async (req, res, me) => {
+  if (me.role !== "head") return fail(res, 403, "Only the Head Admin can do that.");
+  const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request.");
+  const { rows } = await pool.query(`SELECT * FROM reinstatements WHERE id = $1 AND status = 'open'`, [String(b.id)]); const r = rows[0]; if (!r) return fail(res, 404, "That request isn't open.");
+  const ok = !!b.approve; await pool.query(`UPDATE reinstatements SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1`, [r.id, ok ? "approved" : "denied", me.id]);
+  const t = await target(String(r.user_id));
+  if (ok) { await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, staff_active_at = now(), lapsed_role = NULL WHERE id = $1`, [r.user_id, r.role]); await setRank(String(r.user_id)); hooks.renameRequired(String(r.user_id)); }
+  if (t) await log(me, t, ok ? "reinstated " + ROLE_NAME[r.role] : "reinstatement denied", cleanReason(b.reason)); res.json({ ok: true });
+}));
 // (owner) a 24-hour suspension ending: the Head Admin is told
 setInterval(async () => {
   try {
@@ -604,7 +663,7 @@ admin.post("/role", head(async (req, res, me) => {
   if (String(t.id) === me.id || isOwner(t.username) || t.role === "head") return fail(res, 403, "You can't change that player's role.");
   if (!isOwner(me.username)) return fail(res, 403, "Only Nyssary can do that.");   // (owner) only Nyssary makes or removes Admins and Moderators
   if ((t.role || null) === want) return res.json({ ok: true });
-  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = $2, promo_from = $3 WHERE id = $1`, [t.id, want, t.role || null]);   // (owner) a new role, a new password (its own rules); a promotion waits to be accepted
+  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = $2, promo_from = $3, staff_active_at = now(), lapsed_role = NULL WHERE id = $1`, [t.id, want, t.role || null]);   // (owner) a new role, a new password (its own rules); a promotion waits to be accepted
   hooks.renameRequired(String(t.id));                // (their game refreshes: the promotion page opens)
   for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);   // their panel locks at once
   await setRank(String(t.id)); if (personaOf(t.id)) hooks.persona(String(t.id), personaOf(t.id));   // (their identity and lines' color follow the role)

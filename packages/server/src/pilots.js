@@ -191,7 +191,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role, rename_required, rename_reason, name_offer, promo_pending FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role, rename_required, rename_reason, name_offer, promo_pending, lapsed_role FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -212,7 +212,7 @@ export async function getState(userId) {
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, renameRequired: !!user.rename_required, ...(user.rename_required ? { renameReason: user.rename_reason || "" } : {}), ...(user.name_offer ? { nameOffer: user.name_offer } : {}), ...(user.promo_pending ? { promoPending: user.promo_pending } : {}), pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
+    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, renameRequired: !!user.rename_required, ...(user.rename_required ? { renameReason: user.rename_reason || "" } : {}), ...(user.name_offer ? { nameOffer: user.name_offer } : {}), ...(user.promo_pending ? { promoPending: user.promo_pending } : {}), ...(user.lapsed_role && !user.role ? { lapsedRole: user.lapsed_role } : {}), pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
     pilots, serverTime: now,
   };
 }

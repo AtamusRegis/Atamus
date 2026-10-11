@@ -135,7 +135,7 @@ await q("/role", { id: String(bob.id), role: null });
   { await db.query(`UPDATE users SET role = NULL WHERE id = $1`, [bob.id]); await q("/notes/read", {});
     r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't kick");
     r = await qa("/banname", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "or ban a name");
-    r = await qa("/ban", { id: String(bob.id), reason: "x", amount: 1, unit: "hours" }); t.ok(r.status === 403, "or ban at all: Moderators are chat moderators (owner)", r.body);
+    r = await qa("/ban", { id: String(bob.id), reason: "x", perm: true }); t.ok(r.status === 403, "or ban for good (owner)", r.body);
     r = await qa("/mute", { id: String(bob.id), reason: "spamming trade", amount: 2, unit: "hours" }); t.ok(r.body.ok, "but can mute", r.body);
     r = await qa("/unmute", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and can't lift it themselves");
     r = await q("/reviews"); const rv = r.body.find((x) => x.target === "AdmTestBob" && x.action === "muted" && x.status === "open");
@@ -221,7 +221,7 @@ r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403
 r = await q("/license", { id: String(bob.id), pilotId: String(bp.id), key: "mining_lasers", op: "+" }); t.ok(r.status === 403, "or change licenses");
 r = await q("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or reset credits");
 r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick staff");
-r = await q("/ban", { id: String(bob.id), reason: "afk", amount: 1, unit: "hours" }); t.ok(r.status === 403, "or ban (owner: mute and block only)", r.body);
+r = await q("/ban", { id: String(bob.id), reason: "afk", perm: true }); t.ok(r.status === 403, "or ban for good (owner)", r.body);
 await db.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [bob.id]);
 await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
 // (owner) Ban Name: the name goes on the list and its owner must rename (player or pilot)

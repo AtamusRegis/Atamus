@@ -5,7 +5,10 @@ import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE
 import { safeText } from "../textsafe.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
-import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
+import { STATION, DOCK_KM, stationProps, stationLanding, stationRange, nearestHangar, hangarAt } from "./station.js";
+const shipLen = (s) => (SHIP_TYPES[s.type] || {}).lengthKm || 0.13;
+const SAFE_DOCK_MAX_MS = 10 * 60 * 1000;   // (a safe log off's warp home and docking: the longest it's given)
+const HANGAR_GAP_KM = 0.03, HANGAR_KMPS = 0.06, UNDOCK_KM = 5, UNDOCK_SPREAD = 0.5;   // (owner) a hangar: the gap in front, the speed in and out; undocking: how far out, how wide the angle
 import { Obstacles } from "./obstacles.js";
 import { HOME, homeId, homeProps, homeLanding } from "./home.js";
 import { SUN, PLANETS, celestialPois, anchorLanding, celestialClearance } from "./celestials.js";
@@ -189,10 +192,20 @@ export class World {
       if (ships.every((s) => s.docked)) { if (away > LOGOUT_GRACE_MS) this._purge(p.id); continue; }
       if (away < UNSAFE_LOGOFF_MS) continue;
       if (!p.safeWarp) { p.safeWarp = true; for (const s of ships) if (!s.docked && !s.wp) this._safeWarp(s, now); }
-      else if (ships.every((s) => s.docked || !s.wp)) this._purge(p.id);
+      else if (ships.every((s) => s.docked || (!s.wp && !s.dockReq && !s.dockSeq)) || away > UNSAFE_LOGOFF_MS + SAFE_DOCK_MAX_MS) this._purge(p.id);   // (docked, or stuck: then it leaves anyway)
     }
   }
+  // (owner) a ship left in space when its player has been offline a while warps to their station and docks (later: in
+  // nomad space an ark ship makes a safe warp, and one in the system of its owner's station warps there and docks); with
+  // no station, the Station; with neither, a safe spot SAFE_WARP_KM away
   _safeWarp(s, now) {
+    const home = this._home(s.owner), st = this.pois.get(STATION.id), goal = home || st;
+    if (goal) {
+      s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockSeq = null; this._recalc(s);
+      const where = home ? "home" : "station", prop = this._dockProp(s.owner, where);
+      if (prop && stationRange(s, prop) <= DOCK_KM) { this._startDock(s, where); return; }   // (already there: in it goes)
+      this._startWarp(s, goal, now); s.dockReq = where; return;
+    }
     const a = Math.random() * Math.PI * 2, to = clampToExpanse(s.x + Math.cos(a) * SAFE_WARP_KM, s.y + Math.sin(a) * SAFE_WARP_KM, 50), dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockReq = false; this._recalc(s);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: null };
@@ -216,9 +229,9 @@ export class World {
   /** Fly one of your ships to a point (clamped inside the hexagon). */
   cmdMove(pid, shipId, x, y) {
     if (!finite(x) || !finite(y)) return;
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;   // no new orders mid-warp (or docked)
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked || this._inHangar(s)) return;   // no new orders mid-warp (or docked, or in a hangar's mouth)
     const t = this._clearPoint(clampToExpanse(x, y, s.radius), s);   // (owner) never a destination inside an object's bounds
-    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = false;
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = false; s.dockSeq = null;
   }
   // ---- where a destination can't be (obstacles.js): asteroids and Library props ----
   _ix(poi) {                                           // a POI's objects, indexed (rebuilt when its rocks change)
@@ -240,13 +253,13 @@ export class World {
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
    *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
   cmdAlign(pid, shipId, poiId, warp = false) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked || this._inHangar(s)) return;
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
     if (poi.kind === "home" && poi.owner !== pid) return;   // (owner) someone else's station isn't on your map
     const aim = this._poiAim(poi);
     if (warp && this._inPoi(s, aim)) return;               // no warping to where you already are
-    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.tx = aim.x; s.ty = aim.y; s.moving = true;
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.dockSeq = null; s.tx = aim.x; s.ty = aim.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
 
@@ -395,13 +408,44 @@ export class World {
   _station() { return this.pois.get(STATION.id).field.props[0]; }
   _dockProp(owner, where) { if (where === "home") { const h = this._home(owner); return h ? h.field.props[0] : null; } return this._station(); }
   cmdDock(pid, shipId, where = "station") {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked || this._inHangar(s)) return;
     where = where === "home" ? "home" : "station";
     const st = this._dockProp(pid, where); if (!st) return;
-    if (stationRange(s, st) <= DOCK_KM) { this._dock(s, where); return; }
+    if (stationRange(s, st) <= DOCK_KM) { this._startDock(s, where); return; }
     const dx = s.x - st.x, dy = s.y - st.y, d = Math.hypot(dx, dy) || 1, k = Math.max(st.w, st.h) / 2 + 1.5;   // fly to just off it, then dock
     const t = this._clearPoint({ x: st.x + dx / d * k, y: st.y + dy / d * k }, s);
-    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = where;
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = where; s.dockSeq = null;
+  }
+  // (owner) docking and undocking through a hangar: in range, the ship flies to the front of the station's hangar (the
+  // nearest, if it has more than one), then slowly into it, hidden as it passes the front (the client masks it); then
+  // it's docked. Undocking runs the other way: out of the hangar, then away at full speed at a slightly random angle,
+  // stopping about 5 km out. No orders while in the hangar's mouth.
+  _inHangar(s) { return !!(s.dockSeq && s.dockSeq.phase !== "approach"); }
+  _startDock(s, where) {
+    const st = this._dockProp(s.owner, where), hg = st && nearestHangar(st, s.x, s.y);
+    if (!hg) { this._dock(s, where); return; }
+    const fx = hg.x + hg.nx * (shipLen(s) / 2 + HANGAR_GAP_KM), fy = hg.y + hg.ny * (shipLen(s) / 2 + HANGAR_GAP_KM);
+    s.dockSeq = { phase: "approach", where, prop: st.id, i: hg.i, fx, fy, ix: hg.x - hg.nx * (shipLen(s) / 2 + HANGAR_GAP_KM), iy: hg.y - hg.ny * (shipLen(s) / 2 + HANGAR_GAP_KM), nx: hg.nx, ny: hg.ny };
+    s.tx = fx; s.ty = fy; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = false;
+  }
+  _tickDockSeq(s, dtSec) {                                // true: this tick's motion is done
+    const q = s.dockSeq, st = this._dockProp(s.owner, q.where);
+    if (!st) { s.dockSeq = null; return false; }
+    if (q.phase === "approach") {
+      if (Math.hypot(q.fx - s.x, q.fy - s.y) <= Math.max(0.03, SHIP_ARRIVE_EPS_KM * 2) && Math.hypot(s.vx, s.vy) < 0.05) { q.phase = "in"; s.vx = 0; s.vy = 0; s.moving = false; s.h = Math.atan2(-q.ny, -q.nx); }
+      else { s.tx = q.fx; s.ty = q.fy; s.moving = true; }
+      return false;
+    }
+    const tx = q.phase === "in" ? q.ix : q.fx, ty = q.phase === "in" ? q.iy : q.fy, dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy), step = HANGAR_KMPS * dtSec;
+    s.h = q.phase === "in" ? Math.atan2(-q.ny, -q.nx) : Math.atan2(q.ny, q.nx); s.vx = 0; s.vy = 0;
+    if (d > step) { s.x += dx / d * step; s.y += dy / d * step; return true; }
+    s.x = tx; s.y = ty;
+    if (q.phase === "in") { s.dockSeq = null; this._dock(s, q.where); s.x = tx; s.y = ty; s.tx = tx; s.ty = ty; return true; }   // (kept where it went in)
+    // out of the hangar: away at full speed, a little off straight out, stopping about 5 km away
+    const a = Math.atan2(q.ny, q.nx) + (Math.random() - 0.5) * UNDOCK_SPREAD, v = s.speed;
+    s.dockSeq = null; s.vx = Math.cos(a) * v; s.vy = Math.sin(a) * v; s.h = a;
+    const t = this._clearPoint(clampToExpanse(s.x + Math.cos(a) * UNDOCK_KM, s.y + Math.sin(a) * UNDOCK_KM, s.radius), s); s.tx = t.x; s.ty = t.y; s.moving = true;
+    return true;
   }
   _dock(s, where = "station") {
     const st = this._dockProp(s.owner, where); if (!st) return;
@@ -411,9 +455,12 @@ export class World {
   cmdUndock(pid, shipId) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
     if (s.unboarded) return this._notice(pid, "Board the ship first");   // (owner) a pilot not in their ship can't undock it
-    const st = this._dockProp(pid, s.docked) || this._station(), a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2;   // out the bottom, a couple of km off
-    Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a });
-    s.tx = s.x; s.ty = s.y;
+    const where = s.docked, st = this._dockProp(pid, where) || this._station();
+    const h = st.hangars && st.hangars.length ? hangarAt(st, Math.floor(Math.random() * st.hangars.length)) : null;   // (a station with two hangars: either one)
+    if (!h) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2; Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a }); s.tx = s.x; s.ty = s.y; return; }
+    const ix = h.x - h.nx * (shipLen(s) / 2 + HANGAR_GAP_KM), iy = h.y - h.ny * (shipLen(s) / 2 + HANGAR_GAP_KM);
+    s.dockSeq = { phase: "out", where, prop: st.id, i: h.i, fx: h.x + h.nx * (shipLen(s) / 2 + HANGAR_GAP_KM), fy: h.y + h.ny * (shipLen(s) / 2 + HANGAR_GAP_KM), ix, iy, nx: h.nx, ny: h.ny };
+    Object.assign(s, { docked: false, x: ix, y: iy, vx: 0, vy: 0, h: Math.atan2(h.ny, h.nx), moving: false, tx: ix, ty: iy });
   }
   /** (owner) Board or leave your ship while it's docked: a pilot who isn't aboard can't undock it. */
   cmdBoard(pid, shipId, on) {
@@ -472,9 +519,9 @@ export class World {
   }
   /** Align To (fly at the object at full speed, no braking) or Move towards (fly to its edge and stop; follows a ship). */
   cmdChase(pid, shipId, kind, id, mode) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked || this._inHangar(s)) return;
     if ((mode !== "align" && mode !== "approach" && mode !== "orbit") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
-    s.dockReq = false; s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
+    s.dockReq = false; s.dockSeq = null; s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
   }
   /** Info on an object: an asteroid you have a ship beside (its belt), or a ship. */
   cmdInfo(pid, kind, id) {
@@ -583,7 +630,8 @@ export class World {
     for (const s of ships) {
       if (s.docked) continue;                              // (owner) a docked ship is out of space
       if (this.frozen.has(s.owner) && !s.wp) { s.vx = 0; s.vy = 0; s.moving = false; continue; }   // (owner) frozen: it holds still
-      if (s.dockReq) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) { this._dock(s, s.dockReq); continue; } }
+      if (s.dockReq && !s.wp) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) this._startDock(s, s.dockReq); }
+      if (s.dockSeq && this._tickDockSeq(s, dtSec)) continue;   // (owner) into / out of a hangar
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
         s.x = s.wp.fx + (s.wp.tx - s.wp.fx) * e; s.y = s.wp.fy + (s.wp.ty - s.wp.fy) * e; s.vx = 0; s.vy = 0;
@@ -770,6 +818,7 @@ export class World {
         });
         if (b.length) e.beams = b;
       }
+      if (s.dockSeq && s.dockSeq.phase !== "approach") e.dk = { prop: s.dockSeq.prop, i: s.dockSeq.i };   // (owner) in a hangar's mouth: masked by its front
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };
       ships.push(e);
     }

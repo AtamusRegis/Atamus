@@ -34,6 +34,10 @@ export async function mentioned(text, channel = "admin") {
   const names = [...new Set((String(text).match(/@([A-Za-z0-9_]{3,24})/g) || []).map((m) => m.slice(1).toLowerCase()))]; if (!names.length) return [];
   const { rows } = await pool.query(`SELECT id FROM users WHERE role = ANY($1) AND ((role <> 'mod' AND lower(admin_name) = ANY($2)) OR (role = 'mod' AND lower(username) = ANY($2)))`, [CHAT_ROLES[channel] || HIGH_ROLES, names]); return rows.map((r) => String(r.id));
 }
+/** (owner) staff activity: anything done in the admin panel, the staff chats or a staff DM keeps a staff member active */
+export async function markActive(uid) {
+  await pool.query(`UPDATE users SET staff_active_at = now() WHERE id = $1 AND role IS NOT NULL`, [String(uid)]);
+}
 export async function rolesOf(ids) { if (!ids.length) return new Map(); const { rows } = await pool.query(`SELECT id, role FROM users WHERE id = ANY($1)`, [ids]); return new Map(rows.map((r) => [String(r.id), r.role])); }
 
 // ---- unread counts: what's new on each tab since the staff member last opened it ----

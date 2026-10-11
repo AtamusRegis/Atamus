@@ -8,7 +8,7 @@ import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
 import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
-import { staffIds, storeNote, unreadNoteCount, saveStaffLine, mentioned, rolesOf, STAFF_ROLES, HIGH_ROLES, CHAT_ROLES } from "../staff.js";
+import { markActive, staffIds, storeNote, unreadNoteCount, saveStaffLine, mentioned, rolesOf, STAFF_ROLES, HIGH_ROLES, CHAT_ROLES } from "../staff.js";
 import { personaOf } from "../personas.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, deleteAdminDm, loadAdminRooms, saveAdminRoom, deleteAdminRoom, setFrozenRow, userByName, roleOf } from "./persist.js";
 import { scan } from "../namefilter.js";
@@ -92,6 +92,7 @@ export function attachGameServer(httpServer) {
   }
   async function admSay(pid, name, m) {
     const text = cleanText(m.text); if (!text) return;
+    if (isUnlocked(pid)) markActive(pid).catch(() => {});   // (owner) staff activity (markActive only touches staff)
     let r = roomOf(pid, m);
     if (!r && typeof m.to === "string" && staffNow(pid)) r = pairRoom(pid, m.to) || await admStart(pid, m.to);   // (one-to-one, by name)
     if (!r && !staffNow(pid)) { for (const x of rooms.values()) if (isIn(x, pid) && !isStaffIn(x, pid)) r = x; }   // a player answering their latest room
@@ -165,6 +166,7 @@ export function attachGameServer(httpServer) {
     const pe = isUnlocked(pid) && personaOf(pid), text = cleanText(raw); if (!pe || !text || !CHAT_ROLES[channel]) return;
     const online = [...conns.keys()].filter((id) => isUnlocked(id)), roles = await rolesOf(online.includes(pid) ? online : [...online, pid]);
     if (!CHAT_ROLES[channel].includes(roles.get(pid))) return;
+    markActive(pid).catch(() => {});   // (owner) staff activity
     await saveStaffLine(pid, text, channel);
     const msg = { t: "chat", ch: channel === "mod" ? "modchat" : "staff", from: pe.name, admin: pe.key, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}), text, ts: Date.now() };
     for (const id of online) if (CHAT_ROLES[channel].includes(roles.get(id))) sendTo(id, msg);

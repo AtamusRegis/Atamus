@@ -349,6 +349,15 @@ export async function migrate() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_auto BOOLEAN NOT NULL DEFAULT false;
     ALTER TABLE mod_suspensions ADD COLUMN IF NOT EXISTS end_told BOOLEAN NOT NULL DEFAULT true;   -- (earlier ones count as told)
     ALTER TABLE mod_suspensions ALTER COLUMN end_told SET DEFAULT false;
+    -- (owner) staff activity: 90 days without any turns an Admin into a Moderator, then a Moderator into a player; one
+    -- who lapsed keeps the Admin button to ask the Head Admin to be reinstated
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_active_at TIMESTAMPTZ;
+    UPDATE users SET staff_active_at = now() WHERE role IS NOT NULL AND staff_active_at IS NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lapsed_role TEXT;
+    CREATE TABLE IF NOT EXISTS reinstatements (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL, reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open', at TIMESTAMPTZ NOT NULL DEFAULT now(), decided_by BIGINT, decided_at TIMESTAMPTZ
+    );
   `);
 }
 

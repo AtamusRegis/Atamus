@@ -47,8 +47,8 @@
   async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); ensurePilot(); syncAdminBtn(); syncRenames(); syncNameOffers(); syncPromotion(); renderOpen(); }
   // (owner) the Admin button is only for admins and the Head Admin
   function syncAdminBtn() {
-    const is = !!(state && state.profile && state.profile.role), has = order.includes("admin");
-    if (is && !AD.me && !AD.loading) { AD.loading = true; adminLoad(); }   // (the chat's Player / Admin switch needs to know)
+    const staff = !!(state && state.profile && state.profile.role), is = staff || !!(state && state.profile && state.profile.lapsedRole), has = order.includes("admin");   // (owner) staff who lapsed keep it, to ask to be reinstated
+    if (staff && !AD.me && !AD.loading) { AD.loading = true; adminLoad(); }   // (the chat's Player / Admin switch needs to know)
     if (is === has) return;
     order = is ? [...order, "admin"] : order.filter((x) => x !== "admin"); renderPanel();
     if (!is && wins.admin && isOpen(wins.admin)) toggleWindow("admin", false);
@@ -788,13 +788,17 @@
   const myRole = () => (state && state.profile && state.profile.role) || null;
   const fmtWhen = (t) => { const d = new Date(t); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); };
   async function adminLoad() {
+    if (!myRole()) {                                  // (owner) a lapsed staff member: only the reinstatement request
+      AD.me = null; try { AD.lapsed = state && state.profile && state.profile.lapsedRole ? await Api.get("/game/admin/lapsed") : null; } catch { AD.lapsed = null; }
+      if (wins.admin && isOpen(wins.admin)) renderLapsed(wins.admin.body); return;
+    }
     const could = canAdminChat();
     // (a failed /me no longer loops: the panel says why and tries again a little later, each time longer)
     try { AD.me = await Api.get("/game/admin/me"); AD.meErr = null; AD.retry = 0; } catch (e) { AD.me = null; AD.meErr = e.message || "Can't reach the server."; }
     if (could !== canAdminChat() && wins.chat && isOpen(wins.chat)) renderChat(wins.chat.body);   // (the Player / Admin switch)
     if (AD.me && AD.me.unlocked && AD.me.persona) {   // (all at once; the Head Admin also gets reset requests, Admins the reviews)
       const head = AD.me.role === "head", hi = AD.me.role !== "mod";
-      try { [AD.players, AD.log, AD.appeals, AD.flags, AD.names, AD.reports, AD.words, AD.relappeals, AD.tickets, AD.notes, AD.unread, AD.resets, AD.reviews] = await Promise.all([...["players", "log", "appeals", "chatflags", "names", "reports", "words", "relappeals", "tickets", "notes", "unread"].map((x) => Api.get("/game/admin/" + x)), head ? Api.get("/game/admin/resets") : [], hi ? Api.get("/game/admin/reviews") : []]); } catch (e) { flash(e.message); }
+      try { [AD.players, AD.log, AD.appeals, AD.flags, AD.names, AD.reports, AD.words, AD.relappeals, AD.tickets, AD.notes, AD.unread, AD.resets, AD.reviews, AD.reins] = await Promise.all([...["players", "log", "appeals", "chatflags", "names", "reports", "words", "relappeals", "tickets", "notes", "unread"].map((x) => Api.get("/game/admin/" + x)), head ? Api.get("/game/admin/resets") : [], hi ? Api.get("/game/admin/reviews") : [], head ? Api.get("/game/admin/reinstatements") : []]); } catch (e) { flash(e.message); }
     }
     syncAdminBadge(); loadStaffChat();
     if (wins.admin && isOpen(wins.admin) && AD.me && AD.me.unlocked) await markAdminSeen();
@@ -818,7 +822,22 @@
     set(body.querySelector('[data-atab="notes"]'), AD.me && AD.me.notes);
   }
   // the tabs (and the search box) are built once per tab; the list under them is redrawn when its data or the search changes
+  // (owner) staff who lapsed (90 days without staff activity) ask the Head Admin to be reinstated, saying why
+  function renderLapsed(body) {
+    const L = AD.lapsed, sig = JSON.stringify(L); if (body.dataset.lapsed === sig) return; body.dataset.lapsed = sig;
+    body.innerHTML = ""; body.classList.add("adm-body"); wins.admin.slot.textContent = "Reinstatement";
+    if (!L) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    const err = el("div", { class: "form-err", hidden: "" }), why = el("textarea", { class: "text-input report-text", maxlength: "500", rows: "4" });
+    why.addEventListener("keydown", (e) => e.stopPropagation());
+    const pending = L.request && L.request.status === "open", last = L.request && L.request.status === "denied" ? el("div", { class: "muted" }, "Your last request was denied.") : null;
+    const send = el("button", { class: "btn-primary2", onclick: async () => { if (!why.value.trim()) { err.textContent = "Write why."; err.hidden = false; return; } send.disabled = true;
+      try { await Api.post("/game/admin/reinstate", { reason: why.value }); body.dataset.lapsed = ""; await adminLoad(); } catch (e) { err.textContent = e.message; err.hidden = false; } send.disabled = false; } }, "Send");
+    body.append(el("div", { class: "adm-lock" }, el("div", { class: "sheet-k" }, "Reinstatement as " + (ROLE_NAME[L.role] || L.role)),
+      pending ? el("div", { class: "muted" }, "Sent to the Head Admin " + fmtWhen(L.request.at) + ".") : el("div", { class: "report-form" }, last, el("div", { class: "sheet-k" }, "Why"), why, err, send)));
+  }
   function renderAdmin(body, force) {
+    if (!myRole()) { renderLapsed(body); return; }
+    delete body.dataset.lapsed;
     const shell = JSON.stringify([AD.me, AD.meErr, AD.tab, AD.sub, AD.fcat, AD.apSub]);
     if (force || shell !== AD.shell || !body.querySelector(".adm-list")) {
       AD.shell = shell; AD.sig = ""; wins.admin.slot.textContent = isMod() ? "Moderation" : "Admin"; body.innerHTML = ""; body.classList.add("adm-body");
@@ -914,7 +933,7 @@
   }
   function drawAdminList(body) {
     const list = body.querySelector(".adm-list"); if (!list || !AD.me || !AD.me.unlocked) return;
-    const sig = JSON.stringify([AD.tab, AD.sub, AD.fcat, AD.q, AD.sort, AD.players, AD.log, AD.appeals, AD.flags, AD.names, AD.reports, AD.words, AD.relappeals, AD.tickets, AD.apSub, AD.notes, AD.unread, AD.me && AD.me.notes, AD.resets, AD.reviews]); if (sig === AD.sig) return; AD.sig = sig;
+    const sig = JSON.stringify([AD.reins, AD.tab, AD.sub, AD.fcat, AD.q, AD.sort, AD.players, AD.log, AD.appeals, AD.flags, AD.names, AD.reports, AD.words, AD.relappeals, AD.tickets, AD.apSub, AD.notes, AD.unread, AD.me && AD.me.notes, AD.resets, AD.reviews]); if (sig === AD.sig) return; AD.sig = sig;
     const keep = list.scrollTop; list.innerHTML = "";
     paintBadges(body);
     const needle = (AD.q || "").trim().toLowerCase(), match = (n) => !needle || n.toLowerCase().includes(needle);
@@ -930,6 +949,10 @@
           holdMenu(row, () => adminMenu(p)); list.append(row, d[3] ? el("div", { class: "adm-reason adm-disc-reason" }, d[3]) : "");
         }
       } else {
+        if (AD.sub === "admins") for (const r of AD.reins || []) {   // (owner) reinstatement requests: the Head Admin decides
+          list.append(el("div", { class: "adm-log open" }, el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(r.at)), el("b", {}, "Reinstate as " + (ROLE_NAME[r.role] || r.role)), playerLink(r.userId, r.name)),
+            el("div", { class: "adm-reason" }, r.reason), el("div", { class: "adm-bar adm-words" }, el("button", { class: "btn-ghost2 adm-mini", onclick: () => adminDo("/reinstatement", { id: r.id, approve: true }) }, "Approve"), el("button", { class: "btn-ghost2 adm-mini", onclick: () => adminDo("/reinstatement", { id: r.id, approve: false }) }, "Deny"))));
+        }
         for (const p of (AD.players || []).filter((x) => (AD.sub === "admins") === !!x.role && (match(x.name) || (x.adminName && match(x.adminName))))) {
           const tag = (p.role ? ROLE_NAME[p.role] || p.role : disciplines(p).map((d) => d[1]).join(" · ")) + (p.adminName ? " · " + p.adminName : "") + (p.suspendedUntil ? " · Suspended until " + fmtWhen(p.suspendedUntil) : "") + (p.pending ? " · Not accepted yet" : "");
           const row = el("div", { class: "adm-row" + (p.ban ? " banned" : "") }, el("span", { class: "adm-dot" + (p.online ? " on" : "") }), el("span", { class: "adm-name" }, p.name), p.heat >= 0.5 ? heatBar(p.heat) : "", el("span", { class: "adm-tag" }, tag));
@@ -1067,6 +1090,7 @@
     if (!self) out.push(["DM", () => startAdmDm(p.name)], ["Report", () => openReport(p.name, null)]);   // (owner) an admin DM: its own window, at once
     if (canAct && isMod()) {                          // (owner) Moderators (chat moderators): mute, mute / block between players (the Admins review them), suggest a name ban
       if (!p.mute) out.push(["Mute", () => openBan(p, "mute")]);
+      if (!p.ban && !(AD.players || []).some((x) => x.online && (x.role === "admin" || x.role === "head"))) out.push(["Ban", () => openBan(p)]);   // (owner) a timed ban, only while no Admin is online
       out.push(["Set Mute", () => openAdminRel(p, "mute")], ["Set Block", () => openAdminRel(p, "block")]);
       out.push(["Suggest Name Ban", () => openBanName(p, true)]);
     } else if (canAct) {
@@ -1162,7 +1186,7 @@
       can: ["See every player, the staff and the disciplined list, language reports, flagged chat, language meters and the full admin log", "Speak in Moderator mode under your own name and portrait (in orange), and talk with the other Moderators and the Admins in the Moderator chat",
         "Open moderator DMs with players", "Mute players, and set mutes and blocks between players who can't get along", "Reset a player's language meter and automatic mutes",
         "Answer mute and block appeals and Language support tickets, and escalate disputes to the Admins", "Suggest name bans and words for the filter (the Admins decide)",
-        "Your mutes and blocks are reviewed by the Admins, who may keep, change or lift them", "Membership perks while your Moderator role is active"],
+        "Your mutes and blocks are reviewed by the Admins, who may keep, change or lift them", "Free membership while you're active as a Moderator; 90 days without any staff activity and the role lapses (you can ask to be reinstated)"],
       duty: "You don't need to respond to every issue. Help when you can; the tools are there whenever you choose to use them." },
     admin: { title: "You've been promoted to Admin",
       intro: "You've been invited to join the Atamus staff as an Admin. It's your choice: you can accept, or decline and nothing about your account changes.",
@@ -1170,7 +1194,7 @@
         "Player moderation: admin DMs, freezes, kicks, mutes, bans (permanent too), name bans, appeals and support",
         "Review the Moderators' mutes, bans and blocks: keep, change or lift them",
         "Change players' credits, licenses and items, and reset corporations", "Approve or deny words for the filter",
-        "Suspend a Moderator's abilities for the Head Admin to review"],
+        "Suspend a Moderator's abilities for the Head Admin to review", "Free membership while you're active as an Admin; 90 days without any staff activity and you become a Moderator (90 more: a player; you can ask to be reinstated)"],
       duty: "Admins are expected to take an active part: review reports, appeals and tickets, and keep an eye on how moderation is going. Staying active is part of keeping the role." },
   };
   const CONDUCT = ["Be fair. Treat every player the same, and never act on a dispute you're part of or for a friend: hand it to someone else.",

@@ -23,7 +23,9 @@ w.cmdAlign("a", sa.id, ha.id, true); t.ok(sa.dest === ha.id && sa.warpReq, "its 
 // docking, storage, refitting
 Object.assign(sa, { x: prop.x, y: prop.y - 3, vx: 0, vy: 0, dest: null, warpReq: false, moving: false }); w.tick(0.05);
 w.cmdDock("b", sb.id, "home"); t.ok(!sb.docked, "someone else can't dock at (or reach for) your station");
-w.cmdDock("a", sa.id, "home"); t.ok(sa.docked === "home" && sa.x === prop.x, "dock at your station within " + DOCK_KM + " km of its edge", sa.docked);
+w.cmdDock("a", sa.id, "home"); t.ok(!sa.docked && sa.dockSeq && sa.dockSeq.phase === "approach", "in range, Dock flies to the station's hangar (owner)", sa.dockSeq);
+for (let i = 0; i < 4000 && !sa.docked; i++) w.tick(0.05);
+t.ok(sa.docked === "home" && Math.hypot(sa.x - prop.x, sa.y - prop.y) < 0.5, "then in, and docks at your station within " + DOCK_KM + " km of its edge", sa.docked);
 w.cmdTransfer("a", { ship: sa.id, hold: "cargo" }, "home", "mining_laser", 1);
 t.ok(ha.items.mining_laser === 1 && sa.holds.cargo.mining_laser === 1, "items go into its storage", ha.items);
 w.cmdTransfer("a", { ship: sa.id, hold: "cargo" }, "hangar", "afterburner_1", 1);
@@ -33,7 +35,9 @@ w.cmdFit("a", sa.id, "mining_laser", "active", 0); t.ok(sa.fit.active[0] === "mi
 t.ok(w.exportState("a").ships["1"].docked === "home", "a ship saved docked remembers where");
 w.cmdBoard("a", sa.id, false); w.cmdUndock("a", sa.id); t.ok(sa.docked && sa.unboarded && w.snapshotFor(a).ships.find((x) => x.id === sa.id).unboarded && w.exportState("a").ships["1"].unboarded, "a pilot who leaves their docked ship can't undock it (owner)");
 w.cmdBoard("a", sa.id, true); t.ok(!sa.unboarded, "boarding again");
-w.cmdUndock("a", sa.id); t.ok(!sa.docked && Math.hypot(sa.x - prop.x, sa.y - prop.y) < 5, "undock beside it");
+w.cmdUndock("a", sa.id); t.ok(!sa.docked && sa.dockSeq && sa.dockSeq.phase === "out" && Math.hypot(sa.x - prop.x, sa.y - prop.y) < 0.5, "undock out of its hangar (owner)");
+for (let i = 0; i < 400 && sa.dockSeq; i++) w.tick(0.05);
+t.ok(!sa.dockSeq && Math.hypot(sa.vx, sa.vy) >= sa.speed * 0.99 && Math.abs(Math.hypot(sa.tx - sa.x, sa.ty - sa.y) - 5) < 0.6 && sa.vx > 0, "then away at full speed (east, out of a small station's window), to stop about 5 km out", { v: Math.hypot(sa.vx, sa.vy), d: Math.hypot(sa.tx - sa.x, sa.ty - sa.y) });
 w.cmdTransfer("a", "home", { ship: sa.id, hold: "cargo" }, "mining_laser", 1); t.ok(ha.items.mining_laser === 1, "undocked, its storage is out of reach");
 // a visitor who flies there sees it, though it isn't on their map
 Object.assign(sb, { x: ha.x + 5, y: ha.y }); w.tick(0.05);

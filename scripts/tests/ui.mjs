@@ -281,7 +281,7 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
   const kit = [...inv.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item).join();
   await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]')); const spaceFit = A.myShip.fit.active[0] || null;
-  dev({ cmd: "move", x: 0, y: -1204 }); await s(900); A.send({ t: "dock", ship: A.myShip.id, where: "station" }); await s(900);   // (owner) refit docked
+  dev({ cmd: "move", x: -1.3, y: -1200.2 }); await s(900); A.send({ t: "dock", ship: A.myShip.id, where: "station" }); for (let i = 0; i < 60 && !A.myShip.docked; i++) await s(200);   // (owner) refit docked (through the hangar)
   for (const id of ["station"]) { const x = document.querySelector('.win[data-id="' + id + '"] .win-close'); if (x && !x.closest(".win").hidden) x.click(); } await s(200);
   fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
   await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
@@ -300,9 +300,9 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
   const mi = document.querySelector('.win[data-id="minfo"]'), minfo = [...mi.querySelectorAll(".sheet-k")].map((x) => x.textContent).join(); mi.querySelector(".win-close").click();
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
-  dev({ cmd: "move", x: 0, y: -1204 }); await s(1300); A.followShip(A.myShip.id);
+  dev({ cmd: "move", x: -1.3, y: -1200.2 }); await s(1300); A.followShip(A.myShip.id);
   if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(300);
-  const dockBtn = document.querySelector(".fa-dock"), dockShown = !dockBtn.hidden && !dockBtn.parentNode.hidden; dockBtn.click(); await s(900);
+  const dockBtn = document.querySelector(".fa-dock"), dockShown = !dockBtn.hidden && !dockBtn.parentNode.hidden; dockBtn.click(); for (let i = 0; i < 60 && !A.myShip.docked; i++) await s(200); await s(400);
   const st = document.querySelector('.win[data-id="station"]'), stOpen = !st.hidden, side = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|");
   const bay = {}, tab = () => st.querySelector(".st-ship-tab");
   tab().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 200 })); await s(150);

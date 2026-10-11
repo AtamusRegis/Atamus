@@ -125,8 +125,8 @@ const st = w.pois.get("station");
 t.ok(st && st.kind === "station" && w.poisFor(a).some((p) => p.id === "station"), "the Station is a POI on everyone's map");
 Object.assign(s, { x: STATION.x + 40, y: STATION.y, vx: 0, vy: 0, wp: null }); w.cmdDock("a", s.id);
 t.ok(!s.docked && s.dockReq && s.moving, "out of range, Dock flies there first");
-Object.assign(s, { x: STATION.x, y: STATION.y - 4 }); w.tick(0.05);
-t.ok(s.docked && !s.moving && !s.targets.length, "then docks (within 5 km of its edge)");
+Object.assign(s, { x: STATION.x, y: STATION.y - 4 }); for (let i = 0; i < 4000 && !s.docked; i++) w.tick(0.05);
+t.ok(s.docked && !s.moving && !s.targets.length, "then docks (within 5 km of its edge), through the hangar");
 t.ok(!w.snapshotFor(w.players.get("b")).ships.some((x) => x.id === s.id) && w.snapshotFor(a).ships.find((x) => x.id === s.id).docked, "a docked ship is out of space: others don't see it");
 w.cmdMove("a", s.id, 0, 0); w.cmdLock("a", s.id, "rock", k.id); t.ok(!s.moving && !s.targets.length, "no orders while docked");
 s.holds.ore = { "ore:ironstone": 100 }; w.cmdTransfer("a", { ship: s.id, hold: "ore" }, "hangar", "ore:ironstone");
@@ -140,6 +140,7 @@ w.cmdTransfer("b", "hangar", { ship: s.id, hold: "cargo" }, "ore:ironstone"); w.
 t.ok(!w.players.get("b").hangar["ore:ironstone"] && !sb.holds.cargo["ore:ironstone"], "only your own hangar and ships, real items");
 w.cmdUndock("a", s.id); w.cmdTransfer("a", "hangar", { ship: s.id, hold: "ore" }, "ore:ironstone", 1);
 t.ok(!s.docked && !s.holds.ore["ore:ironstone"], "undocked: back in space, and no hangar from out there");
+for (let i = 0; i < 400 && s.dockSeq; i++) w.tick(0.05);   // (out of the hangar first)
 const ex = w.exportState("a");
 t.ok(ex.hangar["ore:ironstone"] > 0 && ex.ships["1"].fit.active[0] === "mining_laser" && ex.ships["1"].kit, "the hangar, holds and fit are saved");
 const w2 = new World(); w2.addPlayer("a", "A", () => {}, ex, [{ id: 1, name: "Ann", licenses: {} }]); const s2 = w2.ships.get("a:ship:1");

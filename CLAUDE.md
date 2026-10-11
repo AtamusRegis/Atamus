@@ -110,7 +110,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
 
-PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check).
+PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check), `POST /game/admin/dev/lapse` (the staff inactivity check).
 
 PTR test overrides: `x-ptr-as: Name` (HTTP) and `?as=Name` (socket) act as another account; `x-ptr-geo: lat,lon,city` and `x-ptr-vpn: 1` set a login's place and VPN status (security.js).
 

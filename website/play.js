@@ -1,5 +1,7 @@
 // (owner) returning players come through the log-in page first
 if (needLogin()) location.replace("login.html");
+// (owner) another account logged in from another tab: this page follows who's logged in now
+addEventListener("focus", () => { Api.get("/auth/me").then((u) => { const w = document.getElementById("who"); if (u && w && w.textContent && u.username !== w.textContent) location.reload(); }).catch(() => { location.href = "login.html"; }); });
 const who = document.getElementById("who");
 const logoutBtn = document.getElementById("logout");
 const pilotStep = document.getElementById("pilot-step");

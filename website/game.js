@@ -19,6 +19,8 @@
   // follow: the id of the ship the camera follows, or null. Selecting a pilot doesn't move the camera (owner).
   const POI_VIEW_KM = 110;                         // a whole 100 km POI with a little margin
   let warpView = null;                             // the zoom to come back to after following a ship through a warp
+  let warpFollowed = null;                         // (owner) the selected pilot's warping ship the camera took up (once)
+  const WARP_ZOOM_BACK = 0.85;                     // (owner) how far through a warp the zoom starts coming back in
   const ZOOM_MIN_W = 3.25;                         // km across the screen at the closest zoom (owner: the Prospector at about 1/25 of the width)
   const cam = { cx: 0, cy: 0, viewW: ZOOM_MIN_W }; let viewWTarget = ZOOM_MIN_W, follow = null, camInit = false, zoomAt = null;
   let lookAt = null;                               // (owner) Look At: { kind: "rock" | "prop", id } the camera follows (a ship is followed by id)
@@ -32,7 +34,15 @@
     ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); }, get picked() { return picked; },
     get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow, lookAt }; },
     get selectedPilot() { return selPilot; },
-    selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
+    selectPilot: (id) => {
+      const was = selPilot; selPilot = id == null ? null : String(id);
+      // (owner) switching pilots while the camera is following a ship aligning or warping: it refocuses on the new pilot's ship
+      if (was !== selPilot) { const cur = follow && (latest.ships || []).find((x) => x.id === follow);
+        if (warpView || (cur && cur.mine && (cur.warp || (cur.warpReq && cur.dest)))) { const nx = (latest.ships || []).find((x) => x.mine && x.pilot === selPilot);
+          if (warpView) { viewWTarget = warpView.w; warpView = null; }
+          if (nx) { follow = nx.id; lookAt = null; zoomAt = null; warpFollowed = nx.warp || (nx.warpReq && nx.dest) ? nx.id : null; } } }
+      bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot }));
+    },
     followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; lookAt = null; zoomAt = null; return true; },
     lookAt: (kind, id) => lookAtObj(kind, id),
     // (owner) Tab: center on that pilot's ship and zoom to show a whole POI around it
@@ -81,6 +91,10 @@
 
   // ---- connection ----
   if (needLogin()) { location.replace("login.html"); return; }   // (owner) returning players log in first
+  // (owner) logging in to another account in this browser (another tab) changes who the website's requests are for; the
+  // game here would still be the first account. Checked now and then and on coming back to the tab: then back to Log in.
+  const sameUser = () => { if (!me || !me.name || reloading) return; Api.get("/auth/me").then((u) => { if (u && u.username && me && me.name && u.username.toLowerCase() !== me.name.toLowerCase()) { reloading = true; try { ws && ws.close(); } catch {} location.href = "login.html"; } }).catch(() => {}); };
+  setInterval(sameUser, 20000); addEventListener("focus", sameUser); document.addEventListener("visibilitychange", () => { if (!document.hidden) sameUser(); });
   Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
   function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws?d=" + deviceId(); }
   function setStatus(t, k) { statusEl.textContent = t; statusEl.className = "status" + (k ? " " + k : ""); if (k === "ok") setTimeout(() => statusEl.classList.add("hidden"), 1200); else statusEl.classList.remove("hidden"); }
@@ -222,7 +236,7 @@
         const q = pre.ships.get(s.id), f = Math.min(rt - a.st, 150) / Math.max(1, a.st - pre.st);
         if (q && !s.warp && !q.warp && Math.hypot(s.x - q.x, s.y - q.y) < 5) { out.push({ ...s, x: s.x + (s.x - q.x) * f, y: s.y + (s.y - q.y) * f }); continue; }
       }
-      if (!b || !p) { out.push({ ...s }); continue; }
+      if (!b || !p || !!p.docked !== !!s.docked) { out.push({ ...s }); continue; }   // (docking / undocking: no sliding from where it was kept)
       const k = Math.max(0, Math.min(1, (rt - a.st) / Math.max(1, b.st - a.st)));
       let dh = s.h - p.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
       out.push({ ...s, x: p.x + (s.x - p.x) * k, y: p.y + (s.y - p.y) * k, h: p.h + dh * k });
@@ -695,7 +709,7 @@
     const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.max(0, Math.min(1, b.t0 != null ? (rt - b.t0) / (b.c || 60000) : (b.p || 0)));
     for (let d = 0; d < 2; d++) {
       const [x, y, a] = orbitAt(k.x, k.y, k.size, d, t);
-      ctx.save(); ctx.strokeStyle = "rgba(255,190,110," + (0.3 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx, ry); ctx.stroke(); ctx.restore();   // (owner) to the rock's center
+      ctx.save(); ctx.strokeStyle = "rgba(90,180,255," + (0.35 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx, ry); ctx.stroke(); ctx.restore();   // (owner) to the rock's center
       drawChunk(rx, ry, x, y, p, o && o.color, qs * 0.8);   // (owner) the drone's yield rides its beam too
       put(x, y, a + Math.PI, false);                     // nose toward the rock
     }
@@ -733,6 +747,14 @@
       ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sx, sy); ctx.stroke(); ctx.restore();
     }
   }
+  // (owner) a hangar's mouth: everything is drawn but the inside of the hangar (from its front, inward, as wide as it is)
+  function maskHangar(dk) {
+    const o = propById(dk.prop), h = o && o.hangars && o.hangars[dk.i]; if (!h) return;
+    const fx = o.x + h.ox, fy = o.y + h.oy, nx = Math.cos(h.out), ny = Math.sin(h.out), ux = -ny * h.half, uy = nx * h.half;
+    const pts = [[fx + ux, fy + uy], [fx - ux, fy - uy], [fx - ux - nx * h.depth, fy - uy - ny * h.depth], [fx + ux - nx * h.depth, fy + uy - ny * h.depth]];
+    ctx.beginPath(); ctx.rect(-10, -10, innerWidth + 20, innerHeight + 20);
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, gx2s(x), gy2s(y))); ctx.closePath(); ctx.clip("evenodd");
+  }
   function drawShips(ships) {
     const sc = scale();
     for (const sh of ships) {
@@ -746,7 +768,9 @@
       }
       if (sx < -80 || sy < -80 || sx > innerWidth + 80 || sy > innerHeight + 80) continue;
       const wPx = hull(sh.type).lengthKm * sc, art = shipArt(sh.type, sh.mine), ic = shipIcon(sh.type, sh.mine);
-      ctx.save(); ctx.translate(sx, sy); ctx.rotate(-sh.h);  // sprites face +x; world +y is up
+      ctx.save();
+      if (sh.dk) maskHangar(sh.dk);                    // (owner) flying into / out of a hangar: hidden past its front
+      ctx.translate(sx, sy); ctx.rotate(-sh.h);  // sprites face +x; world +y is up
       if (wPx < 10 && ic.naturalWidth) { ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -ic.naturalWidth / 2, -ic.naturalHeight / 2); }   // zoomed out: its hull icon
       else if (art.naturalWidth) { const hPx = wPx * art.naturalHeight / art.naturalWidth; ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(art, -wPx / 2, -hPx / 2, wPx, hPx); }
       else { ctx.fillStyle = sh.mine ? "#4fd2ff" : "#ff5a5a"; ctx.fillRect(-Math.max(2, wPx) / 2, -Math.max(1, wPx / 4), Math.max(2, wPx), Math.max(2, wPx / 2)); }
@@ -768,7 +792,7 @@
     }
     if (cfg) {
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(fitWidth(), viewWTarget));
-      cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-14 * dt));
+      cam.viewW += (viewWTarget - cam.viewW) * (1 - Math.exp(-(warpView ? 2.5 : 14) * dt));   // (owner) a warp's zoom out and back in is slow and smooth
       if (zoomAt && !follow) {                         // keep the point under the pointer still while the zoom eases
         const sc = scale(); cam.cx = zoomAt.wx - (zoomAt.px - innerWidth / 2) / sc; cam.cy = zoomAt.wy + (zoomAt.py - innerHeight / 2) / sc;
         if (Math.abs(viewWTarget - cam.viewW) < viewWTarget * 0.002) zoomAt = null;
@@ -778,14 +802,25 @@
         if (dx || dy) { const l = Math.hypot(dx, dy); follow = null; lookAt = null; zoomAt = null; cam.cx += dx / l * cam.viewW * 0.9 * dt; cam.cy += dy / l * cam.viewW * 0.9 * dt; }
       }
       if (lookAt) { const p = lookPos(lookAt); if (!p) lookAt = null; else { const e = 1 - Math.exp(-12 * dt); cam.cx += (p.x - cam.cx) * e; cam.cy += (p.y - cam.cy) * e; } }   // (owner) Look At
+      // (owner) the selected pilot's ship aligning to warp, or warping: the camera follows it (once: panning away stays away)
+      { const sel = ships.find((s) => s.mine && s.pilot === selPilot), going = sel && (sel.warp || (sel.warpReq && sel.dest));
+        if (going && warpFollowed !== sel.id) { follow = sel.id; lookAt = null; zoomAt = null; warpFollowed = sel.id; }
+        if (!going) warpFollowed = null; }
       const fs = follow && ships.find((s) => s.id === follow);
       if (follow && !fs && latest.ships && !latest.ships.some((s) => s.id === follow)) follow = null;   // that ship is gone
-      // (owner) following a ship through a warp: zoom all the way out and hold the map still; zoom back onto it after
-      if (fs && fs.warp) { if (!warpView) warpView = { w: viewWTarget }; viewWTarget = fitWidth(); const e = 1 - Math.exp(-6 * dt); cam.cx += (0 - cam.cx) * e; cam.cy += (0 - cam.cy) * e; }
+      // (owner) following a ship through a warp: zoom smoothly all the way out and follow it across the map; as it comes
+      // out of warp, zoom back in to where the zoom was
+      if (fs && fs.warp) {
+        if (!warpView) warpView = { w: viewWTarget };
+        viewWTarget = fs.warp.p >= WARP_ZOOM_BACK ? warpView.w : fitWidth();
+        const e = 1 - Math.exp(-8 * dt); cam.cx += (fs.x - cam.cx) * e; cam.cy += (fs.y - cam.cy) * e;
+      }
       else if (fs) {
-        if (warpView) { viewWTarget = warpView.w; warpView = null; }
+        if (warpView && Math.abs(cam.viewW - warpView.w) < warpView.w * 0.02) warpView = null;   // (back in: normal zooming again)
+        else if (warpView) viewWTarget = warpView.w;
         const e = 1 - Math.exp(-12 * dt); cam.cx += (fs.x - cam.cx) * e; cam.cy += (fs.y - cam.cy) * e;
       }
+      else if (warpView) { viewWTarget = warpView.w; warpView = null; }
       clampCamera();
       sendView(now);
     }

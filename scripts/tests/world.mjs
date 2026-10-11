@@ -55,9 +55,12 @@ w.removePlayer("a"); run(w, 0.1); t.ok(w.ships.has(sa.id), "a reload within the 
 w.players.get("a").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; w.tick(0.05);
 t.ok(w.ships.has(sa.id), "undocked ships aren't a safe log off: they carry on (owner)");
 w.players.get("a").offlineSince = Date.now() - UNSAFE_LOGOFF_MS - 1; const x0 = sa.x, y0 = sa.y; w.tick(0.05);
-t.ok(sa.wp && Math.abs(Math.hypot(sa.wp.tx - x0, sa.wp.ty - y0) - SAFE_WARP_KM) < 60, "after 5 minutes they warp to a safe spot", sa.wp);
-const safe = { x: sa.wp.tx, y: sa.wp.ty }; sa.wp.at -= 1e6; w.tick(0.05); w.tick(0.05);
-t.ok(!w.players.has("a") && !w.ships.has(sa.id), "and then leave the world");
+const home = w._home("a"), wantPoi = home ? home.id : "station";
+t.ok(sa.wp && sa.wp.poi === wantPoi && sa.dockReq === (home ? "home" : "station"), "after 5 minutes they warp to their station (else the Station) to dock (owner)", { wp: sa.wp, dockReq: sa.dockReq });
+sa.wp.at -= 1e6; for (let i = 0; i < 6000 && w.ships.has(sa.id) && !sa.docked; i++) w.tick(0.05);
+t.ok(sa.docked || !w.ships.has(sa.id), "and dock there", { docked: sa.docked });
+w.tick(0.05); w.tick(0.05);
+t.ok(!w.players.has("a") && !w.ships.has(sa.id), "then leave the world");
 { const wd = new World(); wd.addPlayer("d", "D", () => {}, null, PA); const sd = wd.ships.get("d:ship:1"); wd._dock(sd); wd.removePlayer("d"); wd.players.get("d").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; wd.tick(0.05);
   t.ok(!wd.players.has("d"), "with every ship docked, logging off is safe: gone after the short grace"); }
 w.addPlayer("a", "A", () => {}, saved, PA); const back = w.ships.get("a:ship:1");
