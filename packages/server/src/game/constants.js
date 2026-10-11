@@ -28,7 +28,11 @@ export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the tar
 export const LOGOUT_GRACE_MS = 20 * 1000; // a safe log off (every ship docked) leaves after this (a reload comes back in time)
 export const UNSAFE_LOGOFF_MS = 5 * 60 * 1000;   // (owner) otherwise the ships carry on this long, then warp to a safe spot and leave
 export const SAFE_WARP_KM = 1500;                // how far that safe spot is
-export const DRONE_KMPS = 1;                      // (owner) mining drones fly each cycle's ore to the ship and back at this speed
+// (owner) mining drones fly each cycle's ore to the ship, circle it twice streaming the ore in, and fly back; they're
+// slower within DRONE.nearKm of the ship
+export const DRONE = { nearKm: 5, nearKmps: 0.75, farKmps: 2, depositMs: 4000 };
+/** How long a drone takes to fly between the ship and something dk km away (fast out there, slower near the ship). */
+export const droneLegMs = (dk) => Math.max(800, Math.round((Math.min(dk, DRONE.nearKm) / DRONE.nearKmps + Math.max(0, dk - DRONE.nearKm) / DRONE.farKmps) * 1000));
 
 // The Prospector (owner: the only ship for now). Stats as they were; radius drives spacing;
 // hp / shield are shown in the fleet window and the HUD (nothing damages ships yet). Targeting: the Prospector's
@@ -37,7 +41,7 @@ export const DRONE_KMPS = 1;                      // (owner) mining drones fly e
 export const SHIP_TYPES = {
   chisel: {
     name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
-    targetRangeKm: 5, maxTargets: 5, lockMs: 3000,
+    targetRangeKm: 5, maxTargets: 5, lockMs: 3000, droneControlKm: 20,   // (owner) drones keep at a target out to their control range once on it
     // (owner) every storage type the ship has: the 5,000 m³ the Prospector starts with is its ore hold; the small cargo
     // hold is as it was before the reset
     holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 50 }],

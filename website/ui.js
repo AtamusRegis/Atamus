@@ -425,14 +425,12 @@
     pilot.queue.forEach((q, i) => {
       const l = licById(q.key);
       const active = i === 0;
-      const item = el("div", { class: "queue-item" + (active ? " active" : "") + (active && paused ? " paused" : ""), draggable: "true", "data-i": i },
+      const item = el("div", { class: "queue-item" + (active ? " active" : "") + (active && paused ? " paused" : ""), "data-i": i },
         el("span", { class: "q-pos" }, active ? (paused ? "॥" : "▶") : (i + 1)),
         el("span", { class: "q-name" }, l.name + " " + q.level),
         el("span", { class: "q-time", "data-active": active ? "1" : "" }, active && pilot.active ? fmtTime(pilot.active.remainingMs) : fmtTime(l.levelTimes[q.level - 1])),
         el("button", { class: "q-cancel", title: "Cancel this endorsement", onclick: (e) => { e.stopPropagation(); queueCancel(q.key, q.level); } }, "×"));
-      item.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", String(i)));
-      item.addEventListener("dragover", (e) => e.preventDefault());
-      item.addEventListener("drop", (e) => { e.preventDefault(); const from = +e.dataTransfer.getData("text/plain"); reorderQueue(pilot, from, i); });
+      sortable(item, () => [...list.querySelectorAll(".queue-item")], (from, to) => reorderQueue(pilot, from, to));   // (owner) drag to reorder
       list.append(item);
     });
     content.append(list);
@@ -445,12 +443,13 @@
   async function queuePause(paused) { try { await Api.post("/game/queue/pause", { pilotId: selectedPilotId, paused }); await refreshState(); } catch (e) { flash(e.message); } }
   async function queueCancel(key, level) { try { await Api.post("/game/queue/cancel", { pilotId: selectedPilotId, key, level }); await refreshState(); } catch (e) { flash(e.message); } }
 
-  async function reorderQueue(pilot, from, to) {
-    if (from === to) return;
+  // false when the order can't be (a license's levels must stay in order), so the drag puts it back
+  function reorderQueue(pilot, from, to) {
+    if (from === to) return false;
     const arr = pilot.queue.slice(); const [m] = arr.splice(from, 1); arr.splice(to, 0, m);
-    // validate ascending per license
-    const seen = {}; for (const q of arr) { if (seen[q.key] != null && q.level < seen[q.key]) { flash("Can't put a higher level below a lower one"); return; } seen[q.key] = q.level; }
-    try { await Api.post("/game/queue/reorder", { pilotId: selectedPilotId, order: arr }); await refreshState(); } catch (e) { flash(e.message); }
+    const seen = {}; for (const q of arr) { if (seen[q.key] != null && q.level < seen[q.key]) { flash("Can't put a higher level below a lower one"); return false; } seen[q.key] = q.level; }
+    (async () => { try { await Api.post("/game/queue/reorder", { pilotId: selectedPilotId, order: arr }); await refreshState(); } catch (e) { flash(e.message); await refreshState(); } })();
+    return true;
   }
 
   // ---- license popup (data window) ----
@@ -746,6 +745,49 @@
   const contOf = (key) => { if (key === "hangar") return "hangar"; const i = key.lastIndexOf("|"); return { ship: key.slice(0, i), hold: key.slice(i + 1) }; };
   // Drag an item (mouse or finger): from a hold, the hangar or a module slot, onto a slot (fits it), a container in the
   // station's list or the Inventory window (moves it there; a fitted module goes back into the cargo hold)
+  // ---- (owner) drag to reorder (items, the training queue, locked targets): while dragging, the others dim a little and
+  // slide to where they'd be; letting go keeps that order ----
+  const sortTo = (rects, x, y) => { let best = 0, bd = Infinity; rects.forEach((r, i) => { const d = Math.hypot(x - (r.left + r.width / 2), y - (r.top + r.height / 2)); if (d < bd) { bd = d; best = i; } }); return best; };
+  function sortPreview(items, rects, from, to, moveDragged) {
+    items.forEach((e, i) => {
+      const j = i === from ? to : i < from ? (i >= to ? i + 1 : i) : (i <= to ? i - 1 : i);
+      if (i !== from) e.classList.add("sort-dim"); else if (!moveDragged) return;   // (a dragged entry follows the pointer)
+      e.style.transform = "translate(" + (rects[j].left - rects[i].left) + "px," + (rects[j].top - rects[i].top) + "px)";
+    });
+  }
+  function sortClear(items) { for (const e of items) { e.classList.remove("sort-dim", "sort-drag", "sort-ghost"); e.style.transform = ""; } }
+  function sortApply(items, from, to) { if (from === to) return; const node = items[from]; node.parentNode.insertBefore(node, to > from ? items[to].nextSibling : items[to]); }
+  const eatClick = () => { const h = (c) => { c.stopPropagation(); c.preventDefault(); }; addEventListener("click", h, true); setTimeout(() => removeEventListener("click", h, true), 60); };   // a drag isn't a click
+  function sortable(node, getItems, commit) {
+    node.style.touchAction = "none";                     // (touch: drag = drag)
+    node.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.target.closest("button")) return;
+      const st = { x0: e.clientX, y0: e.clientY, pid: e.pointerId, on: false };
+      const end = (ev) => {
+        if (ev && ev.pointerId !== st.pid) return;
+        removeEventListener("pointermove", mv); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
+        if (!st.on) return; sortClear(st.items); eatClick();
+        if (ev && ev.type === "pointerup" && st.to !== st.from && commit(st.from, st.to) !== false) sortApply(st.items, st.from, st.to);
+      };
+      const mv = (ev) => {
+        if (ev.pointerId !== st.pid) return;
+        if (!st.on) {
+          if (Math.hypot(ev.clientX - st.x0, ev.clientY - st.y0) < 6) return;
+          st.items = getItems(); st.from = st.items.indexOf(node); if (st.from < 0 || st.items.length < 2) return end();
+          st.on = true; st.rects = st.items.map((x) => x.getBoundingClientRect()); st.to = st.from; tooltip.hidden = true;
+          node.classList.add("sort-drag"); node.dispatchEvent(new Event("sortstart")); sortPreview(st.items, st.rects, st.from, st.from, false);
+        }
+        node.style.transform = "translate(" + (ev.clientX - st.x0) + "px," + (ev.clientY - st.y0) + "px)";
+        const to = sortTo(st.rects, ev.clientX, ev.clientY); if (to !== st.to) { st.to = to; sortPreview(st.items, st.rects, st.from, to, false); }
+      };
+      addEventListener("pointermove", mv); addEventListener("pointerup", end); addEventListener("pointercancel", end);
+    });
+  }
+  // (owner) items keep the order you drag them into, per hold (and the hangar), in this browser
+  let itemOrder = {}; try { itemOrder = JSON.parse(localStorage.getItem("atamus.itemOrder") || "{}") || {}; } catch {}
+  const orderKey = (from) => from.type === "hold" ? from.ship + "|" + from.hold : "hangar";
+  const orderedItems = (from, items) => { const o = itemOrder[orderKey(from)] || [], at = (k) => { const i = o.indexOf(k); return i < 0 ? 1e9 : i; }; return Object.entries(items).sort((a, b) => at(a[0]) - at(b[0])); };
+  function saveItemOrder(from, grid) { itemOrder[orderKey(from)] = [...grid.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item); try { localStorage.setItem("atamus.itemOrder", JSON.stringify(itemOrder)); } catch {} }
   function dragSource(elm, payloadFn, menuFn, clickFn) {
     elm.style.touchAction = "none";
     elm.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); const m = menuFn && menuFn(); if (m && m.length) showCtxMenu(e.clientX, e.clientY, m); });
@@ -763,13 +805,23 @@
         st.ghost.style.left = ev.clientX + "px"; st.ghost.style.top = ev.clientY + "px";
         const t = document.elementFromPoint(ev.clientX, ev.clientY); let over = t && t.closest("[data-mslot], [data-cont], .win[data-id=\"inv\"] .win-body, .win[data-id=\"station\"] .st-main");
         if (over && !accepts(over, payload)) over = null;
+        const grid = payload.from && payload.from.type !== "slot" && elm.closest(".si-grid"), gr = grid && grid.getBoundingClientRect();
+        if (gr && ev.clientX >= gr.left && ev.clientX <= gr.right && ev.clientY >= gr.top && ev.clientY <= gr.bottom) {   // (owner) over its own grid: show the new order
+          if (!st.sort) { const items = [...grid.querySelectorAll(".si-cell.filled")]; st.sort = { grid, items, rects: items.map((x) => x.getBoundingClientRect()), from: items.indexOf(elm), to: -1 }; elm.classList.add("sort-ghost"); }
+          const to = sortTo(st.sort.rects, ev.clientX, ev.clientY); if (to !== st.sort.to && st.sort.from >= 0) { st.sort.to = to; sortPreview(st.sort.items, st.sort.rects, st.sort.from, to, true); }
+          over = null;
+        } else if (st.sort) { sortClear(st.sort.items); st.sort = null; }
         if (over !== st.over) { if (st.over) st.over.classList.remove("drop"); st.over = over; if (over) over.classList.add("drop"); }
       };
       const up = (ev) => {
         if (ev.pointerId !== st.pid) return;
         removeEventListener("pointermove", mv); removeEventListener("pointerup", up); removeEventListener("pointercancel", up); clearTimeout(hold);
         if (st.over) st.over.classList.remove("drop");
-        if (st.started) { st.ghost.remove(); hud.classList.remove("hb-dragging"); if (ev.type === "pointerup") dropItem(payload, document.elementFromPoint(ev.clientX, ev.clientY)); }
+        if (st.started && st.sort) {                      // reordered within its grid
+          st.ghost.remove(); hud.classList.remove("hb-dragging"); const so = st.sort; sortClear(so.items);
+          if (ev.type === "pointerup" && so.to >= 0 && so.to !== so.from) { sortApply(so.items, so.from, so.to); saveItemOrder(payload.from, so.grid); }
+        }
+        else if (st.started) { st.ghost.remove(); hud.classList.remove("hb-dragging"); if (ev.type === "pointerup") dropItem(payload, document.elementFromPoint(ev.clientX, ev.clientY)); }
         else if (!st.held && ev.type === "pointerup" && clickFn) clickFn();
       };
       addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
@@ -917,6 +969,11 @@
         cell.addEventListener("pointerleave", out);
         cell.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; over(); clearTimeout(hold); hold = setTimeout(() => { out(); menu(e.clientX, e.clientY); }, 500); });   // hold = right-click
         for (const ev of ["pointerup", "pointercancel"]) cell.addEventListener(ev, (e) => { if (e.pointerType === "mouse") return; clearTimeout(hold); out(); });
+        cell.dataset.tkey = key; cell.addEventListener("sortstart", () => { clearTimeout(hold); out(); });
+        sortable(cell, () => [...hudTargets.querySelectorAll(".tgt")], (from, to) => {   // (owner) drag a target to change its priority
+          const keys = [...hudTargets.querySelectorAll(".tgt")].map((c) => c.dataset.tkey), [mv] = keys.splice(from, 1); keys.splice(to, 0, mv);
+          A.send({ t: "torder", ship: sh.id, order: keys });
+        });
         H.cards[key] = { g, cell, ring, dist };
         hudTargets.append(cell);
       }
@@ -985,7 +1042,7 @@
     const used = boxUsed(items);
     body.append(el("div", { class: "tab-row inv-tabs" }, holds.map((h) => el("button", { class: "tab" + (h === hold ? " active" : ""), "data-hold": h.key, "data-cont": sh.id + "|" + h.key, onclick: () => { saved.invTab = h.key; persistAll(); renderInv(body); } }, h.name))),   // (owner) drop an item on a hold's tab to move it there
       el("div", { class: "si-cap" }, el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, (Math.round(used * 10) / 10).toLocaleString() + " / " + cap.toLocaleString() + " m³"))),
-      el("div", { class: "si-scroll" }, el("div", { class: "si-grid" }, Object.entries(items).map(([k, n]) => itemCell(k, n, { type: "hold", ship: sh.id, hold: hold.key })), el("div", { class: "si-cell empty" }))));
+      el("div", { class: "si-scroll" }, el("div", { class: "si-grid" }, orderedItems({ type: "hold", ship: sh.id, hold: hold.key }, items).map(([k, n]) => itemCell(k, n, { type: "hold", ship: sh.id, hold: hold.key })), el("div", { class: "si-cell empty" }))));
     requestAnimationFrame(() => { const m = invMin(), e = wins.inv.win; if (!m || e.hidden || wins.inv.group) return; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; fitOnScreen(e); });
   }
   // (owner) the Inventory window is always tall enough for at least one slot
@@ -1024,7 +1081,7 @@
       main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, shipName(x) + " · " + (h.name || "")), el("div", { class: "hud-track st-bar" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, (Math.round(used * 10) / 10).toLocaleString() + " / " + cap.toLocaleString() + " m³"))));
     }
     const from = sel === "hangar" ? { type: "hangar" } : { type: "hold", ship: selC.ship, hold: selC.hold };
-    main.append(el("div", { class: "st-grid-wrap" }, el("div", { class: "si-grid" }, Object.entries(items).map(([k, n]) => itemCell(k, n, from)), el("div", { class: "si-cell empty" }))));
+    main.append(el("div", { class: "st-grid-wrap" }, el("div", { class: "si-grid" }, orderedItems(from, items).map(([k, n]) => itemCell(k, n, from)), el("div", { class: "si-cell empty" }))));
     body.append(el("div", { class: "st-split" }, side, main));
     if (sh && sh.docked) body.append(el("div", { class: "st-foot" }, el("button", { class: "btn-ghost2 st-undock", onclick: () => A.send({ t: "undock", ship: sh.id }) }, "Undock")));
     [...body.querySelectorAll(".st-side, .st-grid-wrap")].forEach((x, i) => { x.scrollTop = keepScroll[i] || 0; });
@@ -1102,7 +1159,7 @@
   // a hull's general stats (owner); max power, disposition and slots are in the Stats tab's Fitting section
   function generalRows(T, calc) {                    // calc: the ship as fitted (holds with expanders), else the hull's own
     return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", (T.armor || 0).toLocaleString()], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
-      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0],
+      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ["Drone Control Range", (T.droneControlKm || 0) + " km"],
       ...(T.holds || []).map((h) => [h.name, ((calc && calc.holds && calc.holds[h.key]) || h.m3).toLocaleString() + " m³"])].map(([k, v]) => statRow(k, v));
   }
   const subHead = (t) => el("div", { class: "skills-sub-head fit-head" }, t);

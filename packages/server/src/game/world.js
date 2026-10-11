@@ -1,7 +1,7 @@
 // The authoritative simulation (back to basics, owner 2026-10-10): the Expanse's hexagon with nothing in it, and one
 // Prospector per pilot that flies, aligns and warps where it's told, and asteroid belt POIs. Everything else the game
 // had is kept for reference in reference/2026-10-10-pre-reset/.
-import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, DRONE_KMPS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
+import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, DRONE, droneLegMs, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
@@ -226,7 +226,7 @@ export class World {
   cmdModule(pid, shipId, slot, on) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Number.isInteger(slot) || slot < 0 || slot >= s.fit.active.length) return;
     const m = MODULES[s.fit.active[slot]]; if (!m) return;
-    if (!on) { this._modOff(s, slot); return; }
+    if (!on) { if (m.key === "mining_drones") this._dronesOff(s, slot); else this._modOff(s, slot); return; }
     if (s.wp || s.docked || (s.act[slot] && s.act[slot].on)) return;
     if (isOff(s.fit, "active", slot)) return this._notice(pid, "Powered off");
     if (m.yield) {
@@ -241,7 +241,34 @@ export class World {
     const k = this._rock(tg), t = SHIP_TYPES[s.type], arm = (t.arms || [[0]])[slot % (t.arms || [[0]]).length];
     return { on: true, at, tg, ...aimPoint(k), hp: arm[Math.floor(Math.random() * arm.length)] };
   }
+  /** (owner) Reorder your locked targets (their priority): `order` is every current target as "kind:id", once each. */
+  cmdTargetOrder(pid, shipId, order) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Array.isArray(order) || order.length !== s.targets.length) return;
+    const by = new Map(s.targets.map((g) => [g.kind + ":" + g.id, g])), next = [];
+    for (const k of order) { if (typeof k !== "string" || !by.has(k)) return; next.push(by.get(k)); by.delete(k); }
+    s.targets = next;
+  }
+  /** (owner) Drones out: the key sends them to a different locked asteroid in drone range (the first such), or else
+   *  recalls them: they fly home (dropping off anything they carry) and switch off when they're in. */
+  _dronesOff(s, slot) {
+    const a = s.act[slot]; if (!a || a.standby || !a.tg) return this._modOff(s, slot);
+    if (a.haul && a.haul.recall) return;                   // already on their way in
+    const m = MODULES.mining_drones, range = this._mcalc(s, m).rangeKm;
+    const next = s.targets.find((g) => g.kind === "rock" && g.locked && g.id !== a.tg && (() => { const p = this._objPos("rock", g.id); return p && this._range(s, p) <= range; })());
+    const now = this.simAt;
+    if (next) {
+      if (a.haul) { a.haul.next = next.id; return; }       // after this load they go to the new one
+      const from = this._rock(a.tg), to = this._rock(next.id), fly = from && to ? Math.round(Math.hypot(to.x - from.x, to.y - from.y) / DRONE.nearKmps * 1000) : 0;
+      s.act[slot] = { ...this._cycle(s, slot, next.id, now + fly), ...(from && fly ? { fx: from.x, fy: from.y, fs: from.size } : {}) };   // they fly over, then start
+      return;
+    }
+    if (a.haul) { a.haul.recall = true; return; }
+    const k = this._rock(a.tg); if (!k) return this._modOff(s, slot);
+    const dk = Math.hypot(k.x - s.x, k.y - s.y);
+    a.haul = { amt: 0, ore: k.ore, at: now, leg: droneLegMs(dk), dp: 0, dk: +dk.toFixed(3), rx: k.x, ry: k.y, rs: k.size, recall: true };
+  }
   _modOff(s, slot) { if (s.act[slot]) { s.act[slot] = null; this._recalc(s); } }
+  _controlKm(s) { return SHIP_TYPES[s.type].droneControlKm || 0; }
   _mcalc(s, m) { return m.key === "mining_drones" ? s.calc.drones : s.calc.laser; }
   // the first locked asteroid within this module's reach
   _miningTarget(s, m) {
@@ -260,24 +287,29 @@ export class World {
         const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
         if (a.standby) { const tg = this._miningTarget(s, m); if (tg) s.act[i] = this._cycle(s, i, tg, now); continue; }   // the first lock in range
         const c = this._mcalc(s, m), k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };
-        if (a.haul) {                                      // drones on their way to the ship (deposit) and back
-          const h = a.haul;
-          if (!h.dep && now >= h.at + h.leg) {
+        const drones = m.key === "mining_drones";
+        if (a.haul) {                                      // (owner) drones: out to the ship, twice round it streaming the ore in, and back
+          const h = a.haul, home = h.at + h.leg + h.dp;
+          if (!h.dep && now >= home) {
             h.dep = true; const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(h.amt, Math.max(0, free));
             if (amt > 0) addItem(s.holds, "ore", "ore:" + h.ore, amt);
-            if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); continue; }
+            if (h.recall) { this._modOff(s, i); continue; }   // recalled: in, and off
+            if (h.amt > 0 && free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); continue; }
+            const tg = h.next || a.tg, kk = this._rock(tg), dk = kk && Math.hypot(kk.x - s.x, kk.y - s.y);
+            if (!kk || this._range(s, { x: kk.x, y: kk.y, r: kk.r }) > this._controlKm(s)) { this._modOff(s, i); continue; }   // nothing to go back to: they stay in
+            h.back = { tg, leg: droneLegMs(dk), dk: +dk.toFixed(3), rx: kk.x, ry: kk.y, rs: kk.size };
           }
-          if (now < h.at + 2 * h.leg) continue;
-          if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
-          s.act[i] = this._cycle(s, i, a.tg, now); continue;
+          if (!h.back || now < home + h.back.leg) continue;
+          s.act[i] = this._cycle(s, i, h.back.tg, now); continue;
         }
-        if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
+        // lasers need the lock and their range; (owner) drones, once on a rock, stay on it out to the hull's control range, locked or not
+        if (!k || (drones ? this._range(s, pos) > this._controlKm(s) : !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm)) { this._modOff(s, i); continue; }
         if (a.size !== k.size) Object.assign(a, aimPoint(k));   // the rock shrank: aim at the smaller art
         if (now - a.at < c.cycleMs) continue;
         const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(c.yield, k.m3, Math.max(0, free));
-        if (m.key === "mining_drones" && amt > 0) {        // (owner) the drones carry it home: the rock loses it now, the hold gets it on arrival
-          this._mineRock(a.tg, amt);
-          a.haul = { amt, ore: k.ore, at: now, leg: Math.max(1000, Math.round(Math.hypot(k.x - s.x, k.y - s.y) / DRONE_KMPS * 1000)), rx: k.x, ry: k.y, rs: k.size };
+        if (drones && amt > 0) {                           // (owner) the drones carry it home: the rock loses it now, the hold gets it once streamed in
+          this._mineRock(a.tg, amt); const dk = Math.hypot(k.x - s.x, k.y - s.y);
+          a.haul = { amt, ore: k.ore, at: now, leg: droneLegMs(dk), dp: DRONE.depositMs, dk: +dk.toFixed(3), rx: k.x, ry: k.y, rs: k.size };
           continue;
         }
         if (amt > 0) { addItem(s.holds, "ore", "ore:" + k.ore, amt); this._mineRock(a.tg, amt); }
@@ -601,7 +633,12 @@ export class World {
           if (!a || !a.tg) return;
           const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = a.haul ? 1 : +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3);
           const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs, t0: a.at };   // t0: when the cycle began (server time), so clients run it smoothly
-          if (a.haul) { const h = a.haul; Object.assign(e, { hl: +Math.min(1, (this.simAt - h.at) / (2 * h.leg)).toFixed(3), hd: 2 * h.leg, h0: h.at, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore }); }   // drones hauling: how far through the round trip
+          if (a.haul) {                                      // drones hauling: when they left, each stretch's length, where from and back to
+            const h = a.haul; Object.assign(e, { h0: h.at, lg: h.leg, dp: h.dp, dk: h.dk, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore, amt: h.amt });
+            if (h.recall) e.rc = 1;
+            if (h.back) e.bk = { lg: h.back.leg, dk: h.back.dk, rx: h.back.rx, ry: h.back.ry, rs: h.back.rs };
+          }
+          if (a.fx != null) Object.assign(e, { fx: a.fx, fy: a.fy, fs: a.fs });   // drones flying over from another rock until t0   // drones hauling: how far through the round trip
           b.push(e);
         });
         if (b.length) e.beams = b;

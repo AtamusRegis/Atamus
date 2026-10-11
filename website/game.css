@@ -585,3 +585,8 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .hb-slot.off .hb-img { opacity: .3; filter: grayscale(1); }
 .hb-slot.standby { animation: hbStandby 0.9s ease-in-out infinite alternate; }
 @keyframes hbStandby { from { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.15); } to { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.85); } }
+
+/* (owner) drag to reorder: the others dim a little and slide to where they'd be */
+.sort-dim { opacity: 0.55; transition: transform 0.15s ease, opacity 0.15s; }
+.sort-drag { position: relative; z-index: 30; transition: none !important; pointer-events: none; }
+.sort-ghost { opacity: 0.3; transition: transform 0.15s ease; }

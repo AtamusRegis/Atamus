@@ -104,4 +104,11 @@ w.cmdRename("a", sa.id, "   "); t.ok(sa.name === null, "an empty name puts back 
   t.ok(se.speed === T.speedKmps && se.hp === T.hp && se.maxTargets === T.maxTargets && se.targetRange === T.targetRangeKm && se.lockMs === T.lockMs, "a ship always has its hull's full stats, whatever the pilot's license", se);
   t.ok(mf && mf.maxLevel === 5 && L.STARTING_LICENSES.mining_frigate === 1 && mf.levelTimes.map((x) => x / 60000).join() === "2.4,4.8,7.2,9.6,12", "Mining Frigate: 5 levels, the first known from the start, stepped (level 5 an hour, 5× faster for now: 12 min)", mf && mf.levelTimes);
   t.ok(T.bonuses.map((b) => b.per + ":" + b.what).join() === "4:Mining Laser yield,1:Mining Laser range,10:Mining Drones yield", "the Prospector's hull bonuses are per level", T.bonuses); }
+// (owner) drag a target to change its priority: the order must name every target once
+{ const wo = new World(); wo.addPlayer("o", "O", () => {}, null, [{ id: 1, name: "O", licenses: {} }]); const so = wo.ships.get("o:ship:1");
+  so.targets = [{ kind: "rock", id: "r1", locked: true }, { kind: "rock", id: "r2", locked: true }, { kind: "ship", id: "x", locked: false }];
+  wo.cmdTargetOrder("o", so.id, ["ship:x", "rock:r1", "rock:r2"]); const ok = so.targets.map((g) => g.id).join();
+  for (const bad of [["rock:r1", "rock:r1", "rock:r2"], ["rock:r1", "rock:r2"], ["rock:r1", "rock:r2", "rock:zz"], "x", null, [1, 2, 3]]) wo.cmdTargetOrder("o", so.id, bad);
+  wo.cmdTargetOrder("p", so.id, ["rock:r1", "rock:r2", "ship:x"]);
+  t.ok(ok === "x,r1,r2" && so.targets.map((g) => g.id).join() === "x,r1,r2", "targets reorder to the order given; bad orders and other players' are ignored", so.targets); }
 t.done();

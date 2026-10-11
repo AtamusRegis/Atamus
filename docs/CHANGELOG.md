@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Drones and drag to reorder (owner):** mining lasers are blue; no destination line while orbiting. Drones fly slower within 5 km of the ship, circle it twice streaming their ore in before heading back, and stay on their rock (locked or not) out to the hull's new Drone Control Range (Prospector 20 km). The drone key sends them to another locked rock in range, or recalls them home. Items (per hold, this browser), training-queue entries (now pointer/touch, not HTML drag) and locked targets (priority) can be dragged into a new order, with the others dimming and sliding to preview it.
 - **One training-time modifier (owner):** `TRAINING_TIME_MODIFIER` in licenses.js (0.2 for now) is the single value that scales every license's training time; the old unused time switches are gone. No change for players.
 - **Training 5× faster for now (owner):** every license level trains in a fifth of its time (Mining Frigate V: 12 min).
 - **Range rings, chat bubbles, smoother motion (owner):** the selected ship shows its targeting range (gray dash-dot) and each target-module's range (faint dashed; orange while you hover that module). Local chat shows in a bubble over the speaker's ship for players nearby. Orbiting ships and drones no longer skip: a steadier server-clock estimate, a longer render delay with brief extrapolation, and beams timed from their server start time.

@@ -1,7 +1,7 @@
 // Modules, mining and the Station (docs/FEATURES.md › Modules, The Station). Drives the World directly.
 import { World } from "../../packages/server/src/game/world.js";
 import { MODULES, shipCalc, moduleCost, stackPenalty } from "../../packages/server/src/game/modules.js";
-import { SHIP_TYPES } from "../../packages/server/src/game/constants.js";
+import { SHIP_TYPES, DRONE, droneLegMs } from "../../packages/server/src/game/constants.js";
 import { STATION } from "../../packages/server/src/game/station.js";
 import { suite } from "./lib.mjs";
 const t = suite("modules");
@@ -72,18 +72,35 @@ const m0 = k.m3; s.act[0].at -= 15000; w.tick(0.05);
 t.ok(Math.abs((s.holds.ore["ore:" + k.ore] || 0) - s.calc.laser.yield) < 1e-6 && Math.abs(k.m3 - (m0 - s.calc.laser.yield)) < 0.02, "each laser cycle moves its yield from the rock into the ore hold", [s.holds.ore, k.m3]);
 const m1 = k.m3; s.act[2].at -= 60000; w.tick(0.05);
 const h = s.act[2] && s.act[2].haul, hsnap = w.snapshotFor(a).ships.find((x) => x.id === s.id).beams.find((b) => b.m === "mining_drones");
-t.ok(h && h.amt === s.calc.drones.yield && Math.abs(k.m3 - (m1 - h.amt)) < 0.02 && Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield) < 1e-6 && hsnap && hsnap.hl >= 0 && hsnap.hd === 2 * h.leg, "a drone cycle takes its yield from the rock, and the drones fly it to the ship (owner)", [h, hsnap]);
+t.ok(h && h.amt === s.calc.drones.yield && Math.abs(k.m3 - (m1 - h.amt)) < 0.02 && Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield) < 1e-6 && hsnap && hsnap.h0 === h.at && hsnap.lg === h.leg && hsnap.dp === DRONE.depositMs && hsnap.amt > 0, "a drone cycle takes its yield from the rock, and the drones fly it to the ship (owner)", [h, hsnap]);
+t.ok(droneLegMs(4) === Math.round(4 / DRONE.nearKmps * 1000) && droneLegMs(10) === Math.round((5 / DRONE.nearKmps + 5 / DRONE.farKmps) * 1000) && DRONE.nearKmps < DRONE.farKmps, "drones fly slower within 5 km of the ship (owner)");
 h.at -= h.leg; w.tick(0.05);
-t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield - s.calc.drones.yield) < 1e-6 && s.act[2].haul, "it lands in the ore hold when they reach the ship, then they fly back", s.holds.ore);
-h.at -= h.leg; w.tick(0.05);
+t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield) < 1e-6, "at the ship they circle it twice, streaming the ore in: nothing lands until the streams are done (owner)", s.holds.ore);
+h.at -= DRONE.depositMs; w.tick(0.05);
+t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield - s.calc.drones.yield) < 1e-6 && s.act[2].haul && s.act[2].haul.back && w.snapshotFor(a).ships.find((x) => x.id === s.id).beams.find((b) => b.m === "mining_drones").bk, "then it's in the ore hold and they fly back out", s.holds.ore);
+h.at -= h.back.leg; w.tick(0.05);
 t.ok(s.act[2] && !s.act[2].haul && s.act[2].tg === k.id, "back at the rock, the next cycle starts", s.act[2]);
+t.ok(SHIP_TYPES.chisel.droneControlKm === 20, "the Prospector's drone control range is 20 km (owner)");
 const snap = w.snapshotFor(a).ships.find((x) => x.id === s.id);
 t.ok(snap.fit && snap.holds && snap.calc && snap.act[0].tg === k.id && snap.beams.length === 2 && snap.beams.every((b) => Number.isFinite(b.ax) && Number.isFinite(b.p) && b.c > 0), "your ship's snapshot carries its fit, holds, numbers and running modules; everyone sees the beams (spot, hardpoint, cycle)", snap.beams);
 s.holds.ore["ore:" + k.ore] = s.calc.holds.ore - 1; s.act[0].at -= 15000; w.tick(0.05);
 t.ok(!s.act[0] && Math.abs(Object.values(s.holds.ore).reduce((x, y) => x + y, 0) - s.calc.holds.ore) < 1e-6 && lastNote() === "Ore hold full", "a full ore hold stops the laser (only what fits is taken)", [s.act[0], lastNote()]);
 w.cmdModule("a", s.id, 0, true); t.ok(!s.act[0], "and it won't start with the hold full");
 s.holds.ore = {}; w.cmdModule("a", s.id, 0, true); w.cmdUnlock("a", s.id, "rock", k.id); w.tick(0.05);
-t.ok(!s.act[0] && !s.act[2], "unlocking the rock stops what's mining it");
+t.ok(!s.act[0] && s.act[2] && s.act[2].tg === k.id, "unlocking the rock stops a laser, but drones stay on it (owner)", s.act);
+{ const k0 = { x: k.x, y: k.y }; k.x = s.x + 12; k.y = s.y; w.tick(0.05);
+  t.ok(s.act[2] && s.act[2].tg === k.id, "drones keep at their rock past targeting range, within control range (owner)");
+  k.x = s.x + 25; w.tick(0.05); t.ok(!s.act[2], "beyond the control range they stop"); Object.assign(k, k0); }
+// (owner) the drone key: a different locked rock in range sends them there; otherwise it recalls them
+{ const k2 = belt.field.rocks.find((r) => r !== k && r.m3 > 100);
+  Object.assign(k2, { x: s.x + 1.5, y: s.y + 0.5 }); w.cmdLock("a", s.id, "rock", k.id); w.cmdLock("a", s.id, "rock", k2.id); for (const g of s.targets) g.lockAt = 0; w.tick(0.05);
+  w.cmdModule("a", s.id, 2, true); const first = s.act[2] && s.act[2].tg;
+  w.cmdModule("a", s.id, 2, false); const re = s.act[2];
+  t.ok(first === k.id && re && re.tg === k2.id && re.at > w.simAt && re.fx === k.x, "with another locked rock in range, the drone key sends them over to it (they fly, then start)", re);
+  w.cmdUnlock("a", s.id, "rock", k.id); w.cmdModule("a", s.id, 2, false); const rc = s.act[2] && s.act[2].haul;
+  t.ok(rc && rc.recall && rc.amt === 0 && w.snapshotFor(a).ships.find((x) => x.id === s.id).beams.find((b) => b.m === "mining_drones").rc === 1, "otherwise the key recalls them: they fly home", rc);
+  rc.at -= rc.leg + 1; w.tick(0.05); t.ok(!s.act[2], "and switch off once they're in");
+  w.cmdUnlock("a", s.id, "rock", k2.id); }
 // (owner) Orbit: it circles the object at full speed, off its no-destination line
 { const ow = new World(); ow.addPlayer("o", "O", () => {}, null, [{ id: 1, name: "O", licenses: {} }]); ow.tick(0.05); const so = ow.ships.get("o:ship:1"), bo = [...ow.pois.values()].find((p) => p.kind === "belt"), ko = bo.field.rocks[0];
   Object.assign(so, { x: ko.x + 3, y: ko.y, vx: 0, vy: 0 }); ow.cmdChase("o", so.id, "rock", ko.id, "orbit");
