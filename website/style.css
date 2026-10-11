@@ -389,3 +389,5 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .ulog-close { flex: none; width: 34px; height: 34px; font-size: 22px; line-height: 1; color: var(--text-dim); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; cursor: pointer; }
 .ulog-close:hover { color: var(--text); background: rgba(255,255,255,0.1); }
 .ulog-body { gap: 0; overflow-y: auto; min-height: 0; padding-right: 8px; scrollbar-width: thin; scrollbar-color: rgba(140,170,220,0.35) transparent; }
+/* hidden means hidden, whatever a class's display says (the login page's appeal, the recovery steps) */
+[hidden] { display: none !important; }
