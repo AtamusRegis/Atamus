@@ -63,16 +63,20 @@ for (let i = 0; i < 40; i++) w.tick(0.05);
 t.ok(!sa.dest && sa.drift && Math.abs(Math.hypot(sa.vx, sa.vy) - v) < 1e-6, "when the POI stops showing, the destination goes and the ship drifts on", [v, Math.hypot(sa.vx, sa.vy)]);
 w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 
-// (owner) everything is solid: a ship can't fly through a rock (or stop inside one), only warp past it
+// (owner) asteroids are solid out to their whole art: a ship flies around one (pathfinding), never closer than its
+// edge, and can't be ordered inside it; only a warp passes through
 { const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z" }]); wb.tick(0.05);
   const bz = [...wb.pois.values()].find((p) => p.kind === "belt"), rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
   Object.assign(sz, { x: rock.x - 3, y: rock.y, tx: rock.x - 3, ty: rock.y, vx: 0, vy: 0, moving: false });
   for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbours
+  bz.field.ver++;
   wb.cmdMove("z", sz.id, rock.x + 3, rock.y); let minD = Infinity;
+  t.ok(sz.path && sz.path.length > 1, "a move order past a rock gets a path around it", sz.path);
   for (let i = 0; i < 600; i++) { wb.tick(0.05); minD = Math.min(minD, Math.hypot(sz.x - rock.x, sz.y - rock.y)); }
-  t.ok(minD >= rock.r * 0.9 + sz.radius - 1e-6, "a ship can't fly through an asteroid", [minD, rock.r]);
-  wb.cmdMove("z", sz.id, rock.x, rock.y);
-  t.ok(Math.hypot(sz.tx - rock.x, sz.ty - rock.y) >= rock.r * 0.9 + sz.radius, "an order into a rock stops at its edge"); }
+  t.ok(minD >= rock.r + sz.radius - 1e-6, "a ship never gets closer than the rock's edge", [minD, rock.r]);
+  t.ok(Math.hypot(sz.x - rock.x - 3, sz.y - rock.y) < 0.05, "and arrives on the far side", [sz.x - rock.x, sz.y - rock.y]);
+  wb.cmdMove("z", sz.id, rock.x, rock.y); const end = sz.path[sz.path.length - 1];
+  t.ok(Math.hypot(end.x - rock.x, end.y - rock.y) >= rock.r + sz.radius + 0.07 - 1e-6, "an order into a rock stops outside its bounds"); }
 
 // ---- part 2: on the PTR ----
 const c = await connect();

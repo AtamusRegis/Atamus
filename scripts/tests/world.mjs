@@ -1,5 +1,5 @@
 // The world (docs/FEATURES.md › The world): the Expanse's empty hexagon, one Prospector per pilot, click to fly, the edge
-// stops ships, ships don't overlap, what each player is sent, saving and logging off. Part 1 drives the World
+// stops ships, ships pass over each other, what each player is sent, saving and logging off. Part 1 drives the World
 // directly; part 2 flies on the PTR.
 import { World, insideExpanse, clampToExpanse } from "../../packages/server/src/game/world.js";
 import { EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, LOGOUT_GRACE_MS, SHIP_TYPES } from "../../packages/server/src/game/constants.js";
@@ -29,15 +29,15 @@ t.ok(Math.abs(top - T.speedKmps) < 1e-6, "at the Prospector's top speed (" + T.s
 
 // the edge
 w.cmdMove("a", sa.id, 0, A + 500);
-t.ok(insideExpanse(sa.tx, sa.ty) && Math.abs(sa.ty - (A - T.radiusKm)) < 1e-6, "a target past the edge is pulled inside it", [sa.tx, sa.ty]);
+{ const e = sa.path[sa.path.length - 1]; t.ok(insideExpanse(e.x, e.y) && Math.abs(e.y - (A - T.radiusKm)) < 1e-6, "a target past the edge is pulled inside it", e); }
 Object.assign(sa, { x: 0, y: A - 0.5, vx: 0, vy: T.speedKmps, moving: false }); run(w, 5);
 t.ok(insideExpanse(sa.x, sa.y, T.radiusKm - 1e-6) && sa.vy === 0, "a ship coasting into the edge stops at it", [sa.x, sa.y, sa.vy]);
 const c = clampToExpanse(R * 2, R * 2); t.ok(insideExpanse(c.x, c.y), "clamping works from any direction, corners too", c);
 
-// ships don't overlap
+// (owner) ships pass over each other
 const b = w.addPlayer("b", "B", () => {}, null, [{ id: 2, name: "Pc" }]), sb = w.ships.get("b:ship:2");
 Object.assign(sa, { x: 100, y: 100, vx: 0, vy: 0, moving: false }); Object.assign(sb, { x: 100.01, y: 100, vx: 0, vy: 0, moving: false });
-w.tick(0.05); t.ok(Math.hypot(sa.x - sb.x, sa.y - sb.y) >= sa.radius + sb.radius - 1e-9, "ships push apart instead of overlapping");
+w.tick(0.05); t.ok(Math.abs(sa.x - 100) < 1e-9 && Math.abs(sb.x - 100.01) < 1e-9, "ships pass over each other");
 
 // what each player is sent
 w.cmdView("b", 100, 100, 10); t.ok(w.snapshotFor(b).ships.length === 2, "ships in your camera's view are sent");

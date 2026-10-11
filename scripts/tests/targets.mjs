@@ -12,7 +12,7 @@ w.tick(0.05);
 const sa = w.ships.get("a:ship:1"), sa2 = w.ships.get("a:ship:2"), sb = w.ships.get("b:ship:1");
 const belt = [...w.pois.values()].find((p) => p.kind === "belt"), k = belt.field.rocks[0], k2 = belt.field.rocks[1];
 const put = (s, x, y) => Object.assign(s, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false, chase: null });
-const solid = k.r * 0.9;
+const solid = k.r;   // (owner) an object's edge: its whole art
 // a point d km from the rock's edge, on the belt's centre side (so it's always inside the belt)
 const inb = Math.atan2(belt.y - k.y, belt.x - k.x), nearK = (d) => [k.x + Math.cos(inb) * (solid + sa.radius + d), k.y + Math.sin(inb) * (solid + sa.radius + d)];
 put(sa, ...nearK(2)); put(sb, sa.x + Math.cos(inb + 1.2), sa.y + Math.sin(inb + 1.2)); put(sa2, sa.x + Math.cos(inb - 1.2), sa.y + Math.sin(inb - 1.2)); w.tick(0.05);
@@ -31,13 +31,13 @@ w.cmdLock("a", sa.id, "rock", k.id); w.cmdLock("a", sa.id, "rock", k.id);
 t.ok(sa.targets.length === 1, "the same object can't be locked twice");
 
 // what can't be locked
-const far = belt.field.rocks.find((r) => Math.hypot(r.x - sa.x, r.y - sa.y) - r.r * 0.9 - sa.radius > T.targetRangeKm + 0.5);
+const far = belt.field.rocks.find((r) => Math.hypot(r.x - sa.x, r.y - sa.y) - r.r - sa.radius > T.targetRangeKm + 0.5);
 w.cmdLock("a", sa.id, "rock", far.id);
 t.ok(!sa.targets.some((g) => g.id === far.id), "nothing beyond targeting range (" + T.targetRangeKm + " km)");
 w.cmdLock("a", sa.id, "ship", sa.id); w.cmdLock("a", sb.id, "rock", k.id); w.cmdLock("a", sa.id, "station", "x"); w.cmdLock("a", sa.id, "rock", 5); w.cmdLock("a", sa.id, "rock", "x".repeat(200)); w.cmdLock("a", "nope", "rock", k.id);
 t.ok(sa.targets.length === 1 && !sb.targets.length, "not itself, not with someone else's ship, nothing hostile");
 w.cmdLock("a", sa.id, "ship", sb.id); w.cmdLock("a", sa.id, "ship", sa2.id);
-const near = belt.field.rocks.filter((r) => r !== k && Math.hypot(r.x - sa.x, r.y - sa.y) - r.r * 0.9 - sa.radius <= T.targetRangeKm);
+const near = belt.field.rocks.filter((r) => r !== k && Math.hypot(r.x - sa.x, r.y - sa.y) - r.r - sa.radius <= T.targetRangeKm);
 for (const r of near) w.cmdLock("a", sa.id, "rock", r.id);
 t.ok(sa.targets.length === Math.min(T.maxTargets, 3 + near.length) && sa.targets.length <= T.maxTargets, "up to the hull's " + T.maxTargets + " targets", sa.targets.length);
 t.ok(sa.targets[0].id === k.id && sa.targets[1].id === sb.id, "in the order they were locked");

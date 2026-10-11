@@ -275,7 +275,7 @@
   // ---- objects in space (owner): asteroids and ships. Right-click / hold one: Lock Target (Unlock Target once locked),
   // Align To, Move towards, Info ----
   let drawn = [];                                   // the ships as last drawn (interpolated)
-  const ROCK_SOLID = 0.9;
+  const ROCK_SOLID = 1;                             // (owner) an object's edge: a rock's whole art
   function objPos(kind, id) {
     if (kind === "rock") { const k = rockById(id); return k ? { x: k.x, y: k.y, r: k.size / 2000 * ROCK_SOLID, size: k.size / 1000 } : null; }
     if (kind === "ship") { const s = drawn.find((x) => x.id === id) || (latest.ships || []).find((x) => x.id === id); return s && !s.warp ? { x: s.x, y: s.y, r: (hull(s.type).radiusKm || 0.09), size: hull(s.type).lengthKm, mine: s.mine, type: s.type } : null; }
@@ -312,6 +312,23 @@
     for (const s of drawn) { if (s.warp || (s.mine && s.pilot === selPilot)) continue; const r = Math.max(12, hull(s.type).lengthKm * sc * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = { kind: "ship", id: s.id }; } }
     if (best) return best;
     const k = rockAt(px, py); return k ? { kind: "rock", id: k.id } : null;
+  }
+  // (owner) hovering an asteroid or Library prop (touch: while pressing it) shows a light dotted outline of where a
+  // destination can't be set: its edge plus the selected ship's radius plus the server's DEST_CLEAR_KM
+  const DEST_CLEAR_KM = 0.07, shipR = (s) => (hull(s ? s.type : "chisel").radiusKm || 0.09);
+  let hoverObj = null;
+  const objUnder = (px, py) => { const k = rockAt(px, py); if (k) return { kind: "rock", id: k.id }; const p = propAt(px, py); return p ? { kind: "prop", id: p.id } : null; };
+  canvas.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") hoverObj = objUnder(e.clientX, e.clientY); });
+  canvas.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse") hoverObj = objUnder(e.clientX, e.clientY); });
+  for (const ev of ["pointerup", "pointercancel"]) canvas.addEventListener(ev, (e) => { if (e.pointerType !== "mouse") hoverObj = null; });
+  canvas.addEventListener("pointerleave", () => { hoverObj = null; });
+  function drawKeepOut(ships) {
+    if (!hoverObj) return;
+    const own = ships.find((s) => s.mine && s.pilot === selPilot), pad = shipR(own) + DEST_CLEAR_KM, sc = scale();
+    ctx.save(); ctx.strokeStyle = "rgba(220,226,236,0.45)"; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.beginPath();
+    if (hoverObj.kind === "rock") { const k = rockById(hoverObj.id); if (!k) { hoverObj = null; ctx.restore(); return; } ctx.arc(gx2s(k.x), gy2s(k.y), (k.size / 2000 + pad) * sc, 0, Math.PI * 2); }
+    else { const p = propById(hoverObj.id); if (!p) { hoverObj = null; ctx.restore(); return; } const hx = (p.w / 2 + pad) * sc, hy = (p.h / 2 + pad) * sc; ctx.rect(gx2s(p.x) - hx, gy2s(p.y) - hy, hx * 2, hy * 2); }
+    ctx.stroke(); ctx.restore();
   }
   const tip = document.getElementById("tooltip"); let mapTip = false;
   canvas.addEventListener("pointermove", (e) => {    // a map marker's name on hover (owner: tooltips show names only)
@@ -380,12 +397,12 @@
     if (picked.kind === "prop") {                     // a Library prop: brackets around its art
       const p = propById(picked.id); if (!p) { picked = null; return; }
       x = gx2s(p.x); y = gy2s(p.y); r = Math.max(9, Math.max(p.w, p.h) * scale() * 0.55); name = p.name;
-      dist = own ? Math.max(0, Math.hypot(Math.max(0, Math.abs(own.x - p.x) - p.w / 2), Math.max(0, Math.abs(own.y - p.y) - p.h / 2))) : null;
+      dist = own ? Math.max(0, Math.hypot(Math.max(0, Math.abs(own.x - p.x) - p.w / 2), Math.max(0, Math.abs(own.y - p.y) - p.h / 2)) - shipR(own)) : null;
     } else {
       const k = picked.kind === "rock" && rockById(picked.id); if (!k) { picked = null; return; }
       x = gx2s(k.x); y = gy2s(k.y); r = Math.max(9, k.size / 1000 * scale() * 0.55);
       const o = ((cfg && cfg.ores) || []).find((q) => q.key === k.ore); name = o ? o.name : k.ore;
-      dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000) : null;
+      dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000 - shipR(own)) : null;
     }
     ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.85)"; ctx.lineWidth = 1.5; const c = Math.min(8, r * 0.5);   // (owner) grey = selected; orange is kept for targeted
     for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
@@ -421,12 +438,13 @@
     const sc = scale();
     for (const sh of ships) {
       const sx = gx2s(sh.x), sy = gy2s(sh.y);
-      if (sx < -80 || sy < -80 || sx > innerWidth + 80 || sy > innerHeight + 80) continue;
-      if (sh.mine && sh.moving && sh.tx != null && !sh.dest) {   // where it's headed
-        const tx = gx2s(sh.tx), ty = gy2s(sh.ty); ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
+      if (sh.mine && sh.moving && sh.tx != null && !sh.dest) {   // where it's headed, along its path (drawn even with the ship off screen)
+        const pts = sh.path && sh.path.length ? sh.path.map(([x, y]) => [gx2s(x), gy2s(y)]) : [[gx2s(sh.tx), gy2s(sh.ty)]], [tx, ty] = pts[pts.length - 1];
+        ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); for (const [x, y] of pts) ctx.lineTo(x, y);
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
       }
+      if (sx < -80 || sy < -80 || sx > innerWidth + 80 || sy > innerHeight + 80) continue;
       const wPx = hull(sh.type).lengthKm * sc, art = shipArt(sh.type, sh.mine), ic = shipIcon(sh.type, sh.mine);
       ctx.save(); ctx.translate(sx, sy); ctx.rotate(-sh.h);  // sprites face +x; world +y is up
       if (wPx < 10 && ic.naturalWidth) { ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -ic.naturalWidth / 2, -ic.naturalHeight / 2); }   // zoomed out: its hull icon
@@ -472,7 +490,7 @@
     }
     drawBackground();
     drawn = ships;
-    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); drawTargets(ships); drawPicked(ships); }
+    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); }
     requestAnimationFrame(frame);
   }
 

@@ -42,9 +42,10 @@ packages/server/src/
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying, align / warp, target locks, Align To / Move towards objects, collisions, chat
+    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying (paths around objects), align / warp, target locks, Align To / Move towards objects, collisions, chat
     belts.js      asteroid belts: ores, crescent fields, wasting away
     library.js    the Library POI: every space object's art in rows (props)
+    pathing.js    pathfinding around asteroids and props (Obstacles grid index, A* on a lazy visibility graph)
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
     persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client
