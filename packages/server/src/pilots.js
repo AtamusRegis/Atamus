@@ -1,5 +1,6 @@
 import { pool } from "./db.js";
 import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
+import { cleanPortrait, randomPortrait } from "./portraits.js";
 
 const CORP = "Deep Core Industries";
 
@@ -63,10 +64,12 @@ export const PILOT_PRICE = 1_000_000;
 // take() -> true (taken), false (not enough), null (not online: use the database).
 let gameCredits = { take: () => null, give: () => {} };
 export const useGameCredits = (hooks) => { gameCredits = hooks; };
-export async function createPilot(userId, nameRaw) {
+export async function createPilot(userId, nameRaw, portraitRaw) {
   if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
   const name = nameRaw.replace(/\s+/g, " ").trim().slice(0, 24);
   if (!name) throw new Error("Pilot name required.");
+  const portrait = portraitRaw == null ? randomPortrait() : cleanPortrait(portraitRaw);   // the website always sends one
+  if (!portrait) throw new Error("That portrait isn't valid.");
   const c = await pool.connect(); let taken = false;
   try {
     await c.query("BEGIN");
@@ -81,7 +84,7 @@ export async function createPilot(userId, nameRaw) {
       taken = mem === true;
       await c.query(`UPDATE users SET credits = credits - $1 WHERE id = $2`, [cost, userId]);
     }
-    const { rows } = await c.query(`INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`, [userId, name, freshData()]);
+    const { rows } = await c.query(`INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`, [userId, name, { ...freshData(), portrait }]);
     await c.query("COMMIT");
     return rows[0].id;
   } catch (e) {
@@ -185,7 +188,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at, credits FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -201,12 +204,19 @@ export async function getState(userId) {
       active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - elapsed), paused: !!d.paused };
     }
     for (const l of LICENSES) maxByLicense[l.key] = Math.max(maxByLicense[l.key] || 0, d.licenses[l.key] || 0);
-    pilots.push({ id: row.id, name: row.name, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused });
+    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused });
   }
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0) },
+    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
     pilots, serverTime: now,
   };
+}
+
+/** The account's character (owner): one portrait for the player, used in chat; its name is the username. */
+export async function setCharacter(userId, portraitRaw) {
+  const portrait = cleanPortrait(portraitRaw); if (!portrait) throw new Error("That portrait isn't valid.");
+  await pool.query(`UPDATE users SET portrait = $1 WHERE id = $2`, [portrait, userId]);
+  return portrait;
 }

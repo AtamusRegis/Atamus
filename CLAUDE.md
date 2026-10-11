@@ -37,6 +37,7 @@ packages/server/src/
   gamehttp.js     /game/*: catalog, state, pilot/create, training queue, deploy hooks
   pilots.js       pilots + training queues (Postgres pilots table, JSONB data); MAX_PILOTS
   licenses.js     license catalog (empty for now), training helpers
+  portraits.js    portrait part lists (served at /game/portraits) and validation
   ptr.js          PTR flag, PTR user, dev commands
   db.js           schema, one-time WIPES
   game/
@@ -48,7 +49,8 @@ website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer (backdrop, hexagon edge, ships), input, socket, update/countdown handling
   ui.js           the left panel and the Player and Pilot windows (window manager, tab groups)
   game.css        game UI styles
-  play.html/js    website hub: pilot creation, "updating" wait page, Enter System
+  play.html/js    website hub: character + pilot creation, "updating" wait page, Enter System
+  portrait.js     draws portraits (assets/portraits layers) and the portrait creator
   api.js          fetch helper; API_BASE = play.atamus.io on atamus.io, else same origin
 reference/        the game as it was before a reset, for reference only (never deployed)
 scripts/

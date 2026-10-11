@@ -35,8 +35,8 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
   - a very thin world grid whose spacing steps (1, 2, 5, 10… km) so lines stay at least 70 px apart, with every 5th line slightly brighter.
 - **Left panel:** just the **Player** and **Pilot** buttons. A button's name shows only on hover, or while holding on touch.
 - **Windows:** dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width); resizing never squeezes a window narrower than its content. **Tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again. Layout, groups and which windows are open are remembered in localStorage `atamus.ui`.
-- **Player Sheet:** your username in the title; Day Born, Credits, Pilots, Total Endorsement Level, Corp.
-- **Pilot window:** your first pilot (name in the title), with two tabs: Licenses (the trainer, empty for now) and Training Queue.
+- **Player Sheet:** your username in the title; your character's portrait; Day Born, Credits, Pilots, Total Endorsement Level, Corp.
+- **Pilot window:** your first pilot (name in the title), their portrait, and two tabs: Licenses (the trainer, empty for now) and Training Queue.
 - **Persistence across reloads:** the camera (sessionStorage `atamus.view`) and the open windows.
 - **Mobile:** phones play in landscape (owner): on a phone (touch, shorter side < 600 px; not tablets), the first tap goes fullscreen and locks landscape. On phones, game.html sets the viewport scale to the shorter side ÷ 540 (minimum 0.6), so the whole UI is about 30% smaller; it's recomputed when the phone rotates. Text selection and the long-press callout are disabled.
 
@@ -49,7 +49,15 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
   - **Updates** lists **major changes only**, never small fixes. Edit the `<article class="update">` list in index.html, newest first.
   - Signed-in visitors skip the front page and go straight to play.html: "Welcome back, name" (or "Welcome" before the first pilot exists), with Enter System and Log out.
   - Pages: `login.html`, `signup.html`, `recover.html` and `play.html`. An expired session returns to login.html.
-- **First pilot:** named on the website (play.html), not in the game **(owner)**.
+- **Character, then first pilot (owner):** both are made on the website (play.html), not in the game, in this order:
+  1. **Your character:** the account's own portrait, which is who you'll be in chat (one person, not each of your pilots). Its name is your username.
+  2. **Your first pilot:** a portrait plus a pilot name.
+  - Then Enter System. The card widens for these steps; on narrow screens the portrait sits above the controls.
+- **Portraits (owner, the scifi portrait builder art):** 32×32 pixel art in `website/assets/portraits/`, stacked background → head → outfit → hair and drawn crisp at any size (`website/portrait.js`).
+  - The creator: a big preview, **Male / Female**, a ‹ › stepper each for Skin (5), Hair, Hair color (10), Outfit (5 styles), Outfit color (10) and Background (25), and Randomize. A new creator starts on a random look.
+  - **Male / female** picks which hairstyles are offered (the art has no other differences): male buzz, short, quiff, spiky, mohawk, shaggy, curly; female long, bob, bun, curly, shaggy, short, mohawk. Switching keeps the hair if the other list has it.
+  - The server keeps the part lists (`portraits.js`, served at `/game/portraits`) and refuses any pick not on them; it stores only the seven fields. The account's is `users.portrait` (`POST /game/character`), a pilot's is in its data (sent with `/game/pilot/create`; a pilot made without one gets a random portrait).
+  - In the game, the Player Sheet shows your character's portrait and the Pilot window your pilot's (96 px, above their rows).
 - **Pilots (owner):** up to 3 per account (`MAX_PILOTS`), with no duplicate names.
   - The first pilot is free. Each extra pilot costs **1,000,000 cr** (`PILOT_PRICE`), taken from the account's credits in the database (there's no way to earn credits right now).
   - Creation runs in a locked transaction, so parallel requests can't get past the cap or skip the charge.

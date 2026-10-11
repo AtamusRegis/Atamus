@@ -661,3 +661,8 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none;
 .tut-title { font-size: 15px; font-weight: 600; margin: 2px 0 3px; }
 .tut-text { font-size: 13px; line-height: 1.4; color: #b9c3d2; }
 @media (max-width: 600px) { .tut-panel { left: 56px; transform: none; width: calc(100vw - 68px); } }
+
+/* portraits (portrait.js) in the Player Sheet and Pilot window */
+canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.sheet-portrait { display: flex; justify-content: center; margin: 2px 0 10px; }
+.sheet-portrait canvas { border: 1px solid rgba(200, 220, 255, 0.22); }

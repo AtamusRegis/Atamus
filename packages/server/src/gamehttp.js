@@ -1,6 +1,7 @@
 import express from "express";
 import { getSessionUser, readCookie } from "./sessions.js";
 import { CATALOG } from "./licenses.js";
+import { PORTRAIT_PARTS } from "./portraits.js";
 import * as pilots from "./pilots.js";
 import { websiteDeployed, announceUpdate } from "./build.js";
 
@@ -19,6 +20,12 @@ game.post("/build-check", (_req, res) => { websiteDeployed(); res.json({ ok: tru
 game.post("/update-countdown", async (req, res) => { res.json(await announceUpdate(req.query.part, 30)); });
 
 game.get("/catalog", (_req, res) => res.json(CATALOG));
+game.get("/portraits", (_req, res) => res.json(PORTRAIT_PARTS));
+
+game.post("/character", auth, async (req, res) => {
+  try { res.json({ portrait: await pilots.setCharacter(req.uid, req.body?.portrait) }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 game.get("/state", auth, async (req, res) => {
   try { res.json(await pilots.getState(req.uid)); }
@@ -26,7 +33,7 @@ game.get("/state", auth, async (req, res) => {
 });
 
 game.post("/pilot/create", auth, async (req, res) => {
-  try { const id = await pilots.createPilot(req.uid, req.body?.name); res.json({ id }); }
+  try { const id = await pilots.createPilot(req.uid, req.body?.name, req.body?.portrait); res.json({ id }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 

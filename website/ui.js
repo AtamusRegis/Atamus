@@ -304,6 +304,7 @@
     if (slot) slot.textContent = p.username;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    if (p.portrait && window.Portrait) body.append(el("div", { class: "sheet-portrait" }, Portrait.canvas(p.portrait, 96)));   // the account's character (owner)
     body.append(row("Day Born", born), row("Credits", cr(p.credits)), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
   }
 
@@ -323,6 +324,7 @@
     selectedPilotId = pilot.id;
     if (slot) slot.textContent = pilot.name;
 
+    if (pilot.portrait && window.Portrait) body.append(el("div", { class: "sheet-portrait" }, Portrait.canvas(pilot.portrait, 96)));   // (owner) the pilot's portrait
     const tabs = [["skills", "Licenses"], ["queue", "Training Queue"]];
     if (!tabs.some(([k]) => k === pilotTab)) pilotTab = "skills";
     body.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pilotTab ? " active" : ""), onclick: () => { pilotTab = k; renderPilot(body); } }, n))));
