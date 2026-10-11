@@ -79,7 +79,7 @@
     if (elm.offsetHeight > innerHeight - 4) elm.style.height = (innerHeight - 4) + "px";
     const l = parseFloat(elm.style.left) || 0, t = parseFloat(elm.style.top) || 0;
     elm.style.left = Math.max(PANEL_W, Math.min(innerWidth - elm.offsetWidth - 2, l)) + "px";
-    elm.style.top = Math.max(0, Math.min(innerHeight - Math.min(elm.offsetHeight, 120), t)) + "px";
+    elm.style.top = Math.max(0, Math.min(innerHeight - elm.offsetHeight - 2, t)) + "px";   // wholly on screen
   }
   addEventListener("resize", () => { for (const w of document.querySelectorAll(".win:not([hidden]), .license-popup")) fitOnScreen(w); });
   function toggleWindow(id, force) {
@@ -833,11 +833,9 @@
       rows.push(row("Rarity", o.rarity ? o.rarity.charAt(0).toUpperCase() + o.rarity.slice(1) : "-"), row("Ore", Math.round(d.m3).toLocaleString() + " m³"), row("Size", d.size.toLocaleString() + " m"), row("Belt", d.belt));
     } else {
       // (owner) a ship's Info is its hull's
-      const t = (cfg.shipTypes || {})[d.type] || {}, m = (km) => Math.round(km * 1000).toLocaleString() + " m";
+      const t = (cfg.shipTypes || {})[d.type] || {};
       wins.oinfo.slot.textContent = t.name || "Ship"; head.lastChild.textContent = t.name || "Ship";
-      rows.push(row("Class", t.cls || "-"), row("Length", m(t.lengthKm || 0)), row("Max speed", m(t.speedKmps || 0) + "/s"), row("Acceleration", m(t.accelKmps2 || 0) + "/s²"),
-        row("Shield", (t.shield || 0).toLocaleString()), row("Hull", (t.hp || 0).toLocaleString()), row("Targeting range", (t.targetRangeKm || 0) + " km"), row("Max targets", t.maxTargets || 0),
-        row("Lock time", ((t.lockMs || 0) / 1000) + " s"), row("Cargo", (t.cargoM3 || 0).toLocaleString() + " m³"));
+      rows.push(row("Class", t.cls || "-"), row("Length", kmM(t.lengthKm || 0)), ...generalRows(t));
     }
     body.append(head, el("div", { class: "ps-rows" }, rows));
   }
@@ -867,18 +865,48 @@
       el("div", { class: "ps-rows" }, el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, "Player"), player), row("Corp", p.corp), row("Day Born", born), row("Total Endorsement Level", p.totalSkillLevel)));
   }
 
-  // ---- Fitting (owner: a window button): the selected pilot's ship and its 12 module slots (keys as on the hotbar) ----
+  // ---- a hull's numbers (owner): the general info the Fitting window and a ship's Info show ----
+  const kmM = (km) => Math.round(km * 1000).toLocaleString() + " m";
+  const statRow = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+  const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+  function generalRows(T) {
+    return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", (T.armor || 0).toLocaleString()], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
+      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ["Storage", (T.cargoM3 || 0).toLocaleString() + " m³"],
+      ["Max Power", T.powerMax || 0], ["Max Disposition", T.dispositionMax || 0]].map(([k, v]) => statRow(k, v));
+  }
+  const subHead = (t) => el("div", { class: "skills-sub-head fit-head" }, t);
+
+  // ---- Fitting (owner: a window button): Fitting (the ship, its hotbar slots, general stats) · Hull (description and
+  // bonuses) · Stats (fitting stats and the ship's own) · Requirements (licenses, and the ark that must carry it) ----
+  const FIT_TABS = [["fitting", "Fitting"], ["hull", "Hull"], ["stats", "Stats"], ["req", "Requirements"]];
   function renderFit(body) {
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
     const pilot = state && state.pilots.find((p) => String(p.id) === String(saved.selPilot));
     wins.fit.slot.textContent = pilot ? pilot.name + "'s " + (T.name || "Ship") : "Fitting";
-    const sig = (sh ? sh.id + ":" + sh.type : "-") + "|" + JSON.stringify((sh && sh.mods) || []);
+    const tab = FIT_TABS.some(([k]) => k === saved.fitTab) ? saved.fitTab : "fitting";
+    const sig = tab + "|" + (sh ? sh.id + ":" + sh.type : "-") + "|" + JSON.stringify((sh && sh.mods) || []);
     if (wins.fit.fsig === sig) return; wins.fit.fsig = sig;
     body.innerHTML = "";
+    body.append(el("div", { class: "tab-row tab-row-center" }, FIT_TABS.map(([k, n]) => el("button", { class: "tab" + (k === tab ? " active" : ""), "data-tab": k, onclick: () => { saved.fitTab = k; persistAll(); renderFit(body); } }, n))));
     if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
+    const c = el("div", { class: "fit-body" }); body.append(c);
     const mods = sh.mods || [];
-    body.append(el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
-      el("div", { class: "fit-slots" }, HB_KEYS.map((k, i) => el("div", { class: "hb-slot fit-slot" + (mods[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))));
+    if (tab === "fitting") {
+      c.append(el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
+        el("div", { class: "fit-slots" }, HB_KEYS.slice(0, T.slots || 12).map((k, i) => el("div", { class: "hb-slot fit-slot" + (mods[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
+        el("div", { class: "ps-rows fit-rows" }, generalRows(T)));
+    } else if (tab === "hull") {
+      c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
+        el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, b))));
+    } else if (tab === "stats") {
+      const used = (k) => mods.reduce((t, m) => t + ((m && m[k]) || 0), 0);
+      c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Module Slots", mods.filter(Boolean).length + " / " + (T.slots || 12)), statRow("Power", used("power") + " / " + (T.powerMax || 0)), statRow("Disposition", used("disposition") + " / " + (T.dispositionMax || 0))),
+        subHead("Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Class", T.cls || "-"), statRow("Length", kmM(T.lengthKm || 0)), statRow("Acceleration", kmM(T.accelKmps2 || 0) + "/s²"), generalRows(T)));
+    } else {
+      const r = T.req || {};
+      c.append(subHead("Licenses"), el("div", { class: "ps-rows fit-rows" }, (r.licenses || []).map(([n, lv]) => statRow(n, ROMAN[lv] || lv))),
+        subHead("Ark Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Carried by", r.ark || "-")));
+    }
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.fit && isOpen(wins.fit)) renderFit(wins.fit.body); });
   window.Atamus.bus.addEventListener("snap", () => { for (const [id, r] of [["fit", renderFit], ["inv", renderInv]]) if (wins[id] && isOpen(wins[id])) r(wins[id].body); });   // only rebuilt when their signature changes
@@ -943,7 +971,7 @@
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory" });
-    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 120, width: 300, minW: 220, minH: 160, render: renderFit, label: "Fitting" });
+    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - 160)), top: 90, width: 320, minW: 290, minH: 200, render: renderFit, label: "Fitting" });
     createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
     if (!saved.win.fleet) saved.win.fleet = { open: true };   // (owner) the fleet window is how you switch pilots: open the first time
     dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));   // a bar with no title: dragged by its background

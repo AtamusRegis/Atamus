@@ -176,7 +176,13 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   const inv = document.querySelector('.win[data-id="inv"]'), invTitle = inv.querySelector(".win-title-slot").textContent, invCap = inv.querySelector(".hud-txt").textContent;
   inv.querySelector(".win-close").click();
   document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
-  const fw = document.querySelector('.win[data-id="fit"]'), fit = { title: fw.querySelector(".win-title-slot").textContent, art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-slot")].map((x) => x.textContent).join() };
+  const fw = document.querySelector('.win[data-id="fit"]'), tabTo = async (k) => { fw.querySelector('.tab[data-tab="' + k + '"]').click(); await s(150); }, keys = () => [...fw.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
+  await tabTo("fitting");
+  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-slot")].map((x) => x.textContent).join(), gen: keys() };
+  await tabTo("hull"); fit.desc = !!fw.querySelector(".fit-desc").textContent; fit.bonuses = fw.querySelectorAll(".fit-bonus").length;
+  await tabTo("stats"); fit.stats = keys();
+  await tabTo("req"); fit.req = [...fw.querySelectorAll(".sheet-row")].map((x) => x.textContent).join();
+  await tabTo("fitting");
   fw.querySelector(".win-close").click();
   A.bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: A.myShip.id } })); await s(500);
   const ow = document.querySelector('.win[data-id="oinfo"]'), hull = { title: ow.querySelector(".win-title-slot").textContent, rows: [...ow.querySelectorAll(".sheet-k")].map((x) => x.textContent) };
@@ -194,10 +200,32 @@ t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s"
 t.ok(r.hbHidden && r.slots.join() === "1,2,3,4,5,6,7,8,9,0,-,=", "no modules: the hotbar's 12 empty slots (1-9, 0, -, =) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
 t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
-t.ok(/Prospector$/.test(r.fit.title) && r.fit.art && r.fit.slots === "1,2,3,4,5,6,7,8,9,0,-,=", "the Fitting window: the ship and its 12 module slots", r.fit);
-t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length,Max speed,Acceleration,Shield,Hull,Targeting range,Max targets,Lock time,Cargo", "a ship's Info is its hull's", r.hull);
+const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Storage,Max Power,Max Disposition";
+t.ok(/Prospector$/.test(r.fit.title) && r.fit.tabs === "Fitting,Hull,Stats,Requirements", "the Fitting window's tabs: Fitting, Hull, Stats, Requirements", r.fit);
+t.ok(r.fit.art && r.fit.slots === "1,2,3,4,5,6,7,8,9,0,-,=" && r.fit.gen === GEN, "Fitting: the ship, its 12 hotbar slots and its general stats", r.fit);
+t.ok(r.fit.desc && r.fit.bonuses === 3, "Hull: its description and bonuses", r.fit);
+t.ok(r.fit.stats === "Module Slots,Power,Disposition,Class,Length,Acceleration," + GEN, "Stats: fitting stats, then the ship's", r.fit.stats);
+t.ok(r.fit.req === "Mining FrigateI,Carried byLight Ark", "Requirements: licenses and the ark that carries it", r.fit.req);
+t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length," + GEN, "a ship's Info is its hull's", r.hull);
 t.ok(r.pinfo.title === "Pilot Info" && r.pinfo.name === "Vera Kestrel" && r.pinfo.rows.join() === "Player,Corp,Day Born,Total Endorsement Level", "Pilot Info: a pilot's portrait, name, player, corp, day born and endorsements", r.pinfo);
 t.ok(r.pilotTitle === "Pilot Info", "the pilot window is titled Pilot Info", r.pilotTitle);
+
+// (owner) double-click an object: Lock Target; Ctrl + click: Align To; Shift + click: Move towards (on space: fly there)
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600); A.followShip(A.myShip.id); await s(500);
+  const at = () => { const v = A.view, sc = innerWidth / v.w; return [innerWidth / 2 + (k.x - v.cx) * sc, innerHeight / 2 - (k.y - v.cy) * sc]; };
+  const click = (x, y, mods = {}) => { for (const t of ["pointerdown", "pointerup"]) c.dispatchEvent(new PointerEvent(t, { pointerId: 9, pointerType: "mouse", button: 0, clientX: x, clientY: y, bubbles: true, ...mods })); };
+  let [x, y] = at(); click(x, y); await s(80); click(x, y); await s(500);
+  const locked = (A.myShip.targets || []).some((g) => g.id === k.id);
+  await s(400); [x, y] = at(); click(x, y, { ctrlKey: true }); await s(400); const ctrl = A.myShip.chase && A.myShip.chase.mode;
+  await s(400); [x, y] = at(); click(x, y, { shiftKey: true }); await s(400); const shift = A.myShip.chase && A.myShip.chase.mode;
+  await s(400); click(60 + 20, innerHeight - 120, { shiftKey: true }); await s(400); const space = { moving: A.myShip.moving, chase: A.myShip.chase || null };
+  A.unlock("rock", k.id); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  return { locked, ctrl, shift, space };`);
+t.ok(r.locked, "double-clicking an asteroid locks it", r);
+t.ok(r.ctrl === "align" && r.shift === "approach", "Ctrl + click: Align To; Shift + click: Move towards", r);
+t.ok(r.space.moving && !r.space.chase, "Shift + click on space flies there", r.space);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);

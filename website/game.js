@@ -215,7 +215,7 @@
     menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
       ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])]]);   // (owner) a list: right-click (hold) a belt for its menu
   }
-  canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
+  canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); if (e.ctrlKey && e.button === 0) return; openMenu(e.clientX, e.clientY); });   // (a Mac's Ctrl + click is Align To, not the menu)
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
     let best = null, bd = Infinity;
     for (const s of ships) { if (!s.mine) continue; const r = Math.max(14, hull(s.type).lengthKm * scale() * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = s; } }
@@ -242,16 +242,25 @@
     const d = drag; if (!d) return;
     if (d.pinch) { if (!ptrs.size) drag = null; return; }
     drag = null; if (d.moved || e.type === "pointercancel") return;
-    // (owner) a single click / tap selects what's under it; a double click / tap on empty space flies there
-    const ships = shipsNow(), own = myShip(), now = performance.now();
+    // (owner) a single click / tap selects what's under it; a double click / tap on empty space flies there, on an
+    // object locks it. Ctrl + click an object: Align To; Shift + click: Move towards it (on empty space: fly there).
+    const ships = shipsNow(), own = myShip(), now = performance.now(), A = window.Atamus;
     const dbl = lastTap && now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 14;
     lastTap = dbl ? null : { t: now, x: e.clientX, y: e.clientY };
     const hit = shipAt(e.clientX, e.clientY, ships);
-    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); picked = null; return; }   // one of your ships: select its pilot (owner: the camera stays)
-    const rk = rockAt(e.clientX, e.clientY);
-    if (rk) { picked = { kind: "rock", id: rk.id }; return; }
+    if (hit && !e.ctrlKey && !e.metaKey && !e.shiftKey) { if (hit.pilot !== selPilot) A.selectPilot(hit.pilot); picked = null; return; }   // one of your ships: select its pilot (owner: the camera stays)
+    const ob = objAt(e.clientX, e.clientY);          // an asteroid or a ship (not the selected pilot's own)
+    if (ob && (e.ctrlKey || e.metaKey)) { A.alignTo(ob.kind, ob.id); return; }
+    if (e.shiftKey) {
+      if (ob) { A.moveTo(ob.kind, ob.id); return; }
+      if (own) { const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) }); }
+      return;
+    }
+    if (ob && dbl) { const sel = myShip(); if (!(sel && (sel.targets || []).some((g) => g.kind === ob.kind && g.id === ob.id))) A.lock(ob.kind, ob.id); return; }
+    if (ob && ob.kind === "rock") { picked = { kind: "rock", id: ob.id }; return; }   // an asteroid: its name and distance
+    if (ob) return;
     const pr = propAt(e.clientX, e.clientY);
-    if (pr) { picked = { kind: "prop", id: pr.id }; return; }                      // a Library prop: its name and distance                      // an asteroid: its name and distance
+    if (pr) { picked = { kind: "prop", id: pr.id }; return; }                      // a Library prop: its name and distance
     if (!dbl) { picked = null; return; }
     if (!own) return;
     const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
