@@ -668,8 +668,15 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .tab-row-center { justify-content: center; }
 .ctx-item.ctx-open { background: var(--sel); }
 
-/* resize knob (owner: easier on phones): the bottom-right corner of a resizable window, visible and big enough to grab */
-.rz-se { width: 18px; height: 18px; right: 1px; bottom: 1px; z-index: 4; border-radius: 0 0 8px 0;
-  background: linear-gradient(135deg, transparent 0 46%, rgba(170,185,210,0.45) 46% 54%, transparent 54% 64%, rgba(170,185,210,0.45) 64% 72%, transparent 72% 82%, rgba(170,185,210,0.45) 82% 90%, transparent 90%); }
-.rz-se:hover { filter: brightness(1.6); }
+/* resize knob (owner: easier on phones; two thin blue-tinted bars, not prominent) */
+.rz-se { width: 18px; height: 18px; right: 1px; bottom: 1px; z-index: 4; border-radius: 0 0 8px 0; opacity: .55;
+  background: linear-gradient(135deg, transparent 0 58%, rgba(90,170,255,0.75) 58% 64%, transparent 64% 76%, rgba(90,170,255,0.75) 76% 82%, transparent 82%); }
+.rz-se:hover { opacity: 1; }
 @media (pointer: coarse) { .rz-se { width: 30px; height: 30px; } }
+
+/* Player Sheet (owner): name row, then stats that scroll on their own at the smallest size */
+.win-body.player-body { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.ps-head { display: flex; align-items: center; gap: 8px; flex: none; }
+.ps-portrait { width: 28px; height: 28px; border-radius: 3px; flex: none; }
+.ps-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.ps-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; }

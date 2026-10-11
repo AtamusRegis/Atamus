@@ -301,13 +301,25 @@
   function renderPlayer(body) {
     const slot = wins.player && wins.player.slot;
     body.innerHTML = "";
-    if (!state) { if (slot) slot.textContent = "Player Sheet"; body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    if (slot) slot.textContent = "Player Sheet";
+    body.classList.add("player-body");
+    if (!state) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
     const p = state.profile;
-    if (slot) slot.textContent = p.username;
     const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, v && v.nodeType ? v : String(v)));
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    if (p.portrait && window.Portrait) body.append(el("div", { class: "sheet-portrait" }, Portrait.canvas(p.portrait, 96)));   // the account's character (owner)
-    body.append(row("Day Born", born), row("Credits", cr(p.credits)), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp));
+    // (owner) your character's small portrait and your name, then the stats; at the window's smallest only the stats scroll
+    body.append(el("div", { class: "ps-head" }, p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 28, "ps-portrait") : el("span", { class: "ps-portrait" }), el("span", { class: "ps-name" }, p.username)),
+      el("div", { class: "ps-rows" }, row("Day Born", born), row("Credits", cr(p.credits)), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp)));
+    requestAnimationFrame(() => { const m = playerMin(), e = wins.player.win; if (!m || e.hidden) return; if (e.offsetWidth < m.w) e.style.width = m.w + "px"; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; });   // a saved size from before can't be smaller either
+  }
+  // (owner) the Player Sheet can't shrink past its name row and three stat rows, or narrower than its widest row
+  function playerMin() {
+    const w = wins.player, b = w && w.body, rows = b && b.querySelectorAll(".ps-rows .sheet-row"), head = b && b.querySelector(".ps-head");
+    if (!rows || rows.length < 3 || !head) return null;
+    let rh = 0; for (let i = 0; i < 3; i++) rh += rows[i].offsetHeight;
+    let rw = head.scrollWidth; for (const r of rows) rw = Math.max(rw, [...r.children].reduce((a, c) => a + c.scrollWidth, 0) + 14 + 16);
+    const cs = getComputedStyle(b), pad = (k) => parseFloat(cs[k]) || 0;
+    return { w: Math.ceil(rw + pad("paddingLeft") + pad("paddingRight") + 12), h: Math.ceil(w.bar.offsetHeight + head.offsetHeight + 8 + rh + pad("paddingTop") + pad("paddingBottom") + 2) };
   }
 
   // ---- Pilot window ----
@@ -676,7 +688,7 @@
 
   // ---- init ----
   async function init() {
-    createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
+    createWindow("player", { left: 90, top: 70, width: 260, minW: 190, minH: 120, render: renderPlayer, dynMin: playerMin });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
