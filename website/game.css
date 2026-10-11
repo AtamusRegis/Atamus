@@ -778,20 +778,27 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .inv-win .si-cap { flex: 0 0 auto; margin-bottom: 8px; }
 .si-scroll { flex: 1 1 auto; min-height: 48px; overflow-y: auto; }
 /* Fitting: the left column (slots and ship) flows as part of the column on desktop */
-.fit-left { display: contents; }
+/* (owner) Fitting, everywhere: the slots, ship and fitting bars on the left, the stats beside them */
+.fit-body.fit-split { flex-direction: row; gap: 10px; align-items: stretch; }
+.fit-left { display: flex; flex-direction: column; flex: 0 0 auto; width: 290px; }
+.fit-split > .fit-rows.fit-scroll { flex: 1 1 auto; min-width: 150px; margin-top: 0; overflow-y: auto; }
+.fit-bars { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.fit-bar { display: flex; align-items: center; gap: 8px; }
+.fit-bar-k { width: 74px; flex: 0 0 74px; font-size: 11px; color: var(--text-dim); }
+.fit-bar .hud-track { flex: 1; height: 14px; }
+.hud-fill.power { background: linear-gradient(90deg, #b8902a, #f0c64a); }
+.hud-fill.disposition { background: linear-gradient(90deg, #8a96a8, #dfe6f0); }
 /* ---- phones (owner: mobile needs its own layouts and sizes): html.phone is set in game.html ---- */
 .phone .win-title { padding: 4px 9px; }
 .phone .win-body { padding: 8px; }
 .phone .tab { padding: 6px 9px 8px; }
 .phone .tab-row { margin-bottom: 6px; }
 .phone .sheet-row { padding: 4px 8px; font-size: 11.5px; }
-.phone .fit-body.fit-split { flex-direction: row; gap: 10px; align-items: stretch; }
-.phone .fit-left { display: flex; flex-direction: column; flex: 0 0 auto; width: 254px; }
+.phone .fit-left { width: 254px; }
 .phone .fit-slots .hb-slot { width: 34px; height: 34px; }
 .phone .fit-slots { grid-template-columns: repeat(auto-fit, 34px); }
 .phone .fit-body .fit-hull { padding: 6px 0; }
 .phone .fit-body .fit-hull img { max-height: 60px; }
-.phone .fit-split > .fit-rows.fit-scroll { flex: 1 1 auto; min-width: 150px; margin-top: 0; overflow-y: auto; }
 .phone .inv-tabs { margin-bottom: 4px; }
 .phone .si-cell { width: 40px; height: 40px; }
 .phone .si-grid { grid-template-columns: repeat(auto-fill, 40px); }

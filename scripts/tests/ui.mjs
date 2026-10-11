@@ -186,9 +186,9 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
   const fw = document.querySelector('.win[data-id="fit"]'), tabTo = async (k) => { fw.querySelector('.tab[data-tab="' + k + '"]').click(); await s(150); }, keys = () => [...fw.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
   await tabTo("fitting");
-  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-left").children].map((x) => x.className.split(" ").pop()).join(), labels: [...fw.querySelectorAll(".fit-slots .fit-lab")].map((x) => x.textContent).join(), gen: keys() };
+  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-left").children].map((x) => x.className.split(" ").pop()).join(), labels: [...fw.querySelectorAll(".fit-slots .fit-lab")].map((x) => x.textContent).join(), gen: keys(), bars: [...fw.querySelectorAll(".fit-left .fit-bar")].map((x) => x.textContent).join(), side: fw.querySelector(".fit-rows.fit-scroll").getBoundingClientRect().left > fw.querySelector(".fit-left").getBoundingClientRect().right - 1 };
   await tabTo("hull"); fit.desc = !!fw.querySelector(".fit-desc").textContent; fit.bonuses = fw.querySelectorAll(".fit-bonus").length;
-  await tabTo("stats"); fit.stats = keys();
+  await tabTo("stats"); fit.stats = keys(); fit.statBars = [...fw.querySelectorAll(".fit-bar")].map((x) => x.textContent).join();
   await tabTo("req"); fit.req = [...fw.querySelectorAll(".sheet-row")].map((x) => x.textContent).join();
   await tabTo("fitting");
   fw.querySelector(".win-close").click();
@@ -210,12 +210,12 @@ t.ok(r.after === 0, "the × unlocks it", r.after);
 t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
 t.ok(r.invTabs === "Ore Hold,Cargo Hold" && r.invCargo === "0 / 50 m³" && r.invBars === 1, "Inventory: a tab per hold, with that hold's fill bar under the tabs", r);
 t.ok(r.invSlot, "the Inventory window stays tall enough for at least one slot", r.invSlot);
-t.ok(r.cardMenu === "Look At,Info,Rename,Pilot Info", "right-clicking a fleet card: its ship's menu plus Pilot Info", r.cardMenu);
+t.ok(r.cardMenu === "Look At,Show Fitting,Info,Rename,Pilot Info", "right-clicking a fleet card: its ship's menu (with Show Fitting) plus Pilot Info", r.cardMenu);
 const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Ore Hold,Cargo Hold,Max Power,Max Disposition";
 t.ok(/Prospector$/.test(r.fit.title) && r.fit.tabs === "Fitting,Hull,Stats,Requirements", "the Fitting window's tabs: Fitting, Hull, Stats, Requirements", r.fit);
-t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-active,fit-hull,fit-passive" && r.fit.labels === "Active,Passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, each row labeled inside its box, then its general stats", r.fit);
+t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-active,fit-hull,fit-passive,fit-bars" && r.fit.bars === "Power0 / 40,Disposition0 / 70" && r.fit.side && r.fit.labels === "Active,Passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, each row labeled inside its box, the Power / Disposition bars under them, the general stats beside", r.fit);
 t.ok(r.fit.desc && r.fit.bonuses === 3, "Hull: its description and bonuses", r.fit);
-t.ok(r.fit.stats === "Active Slots,Passive Slots,Power,Disposition,Class,Length,Acceleration," + GEN, "Stats: fitting stats, then the ship's", r.fit.stats);
+t.ok(r.fit.stats === "Class,Length,Acceleration," + GEN && r.fit.statBars === "Power0 / 40,Disposition0 / 70", "Stats: the Power and Disposition bars, then the ship's stats", r.fit);
 t.ok(r.fit.req === "Mining FrigateI,Carried byLight Ark", "Requirements: licenses and the ark that carries it", r.fit.req);
 t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length," + GEN, "a ship's Info is its hull's", r.hull);
 t.ok(r.pinfo.title === "Pilot Info" && r.pinfo.name === "Vera Kestrel" && r.pinfo.rows.join() === "Player,Corp,Day Born,Total Endorsement Level", "Pilot Info: a pilot's portrait, name, player, corp, day born and endorsements", r.pinfo);
@@ -254,7 +254,8 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   knob.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 5, button: 0, clientX: kr.left + 5, clientY: kr.top + 5, bubbles: true }));
   dispatchEvent(new PointerEvent("pointermove", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); await s(200);
   const sc = fw.querySelector(".fit-rows.fit-scroll"), rowH = sc.querySelector(".sheet-row").offsetHeight, slotsW = fw.querySelector(".fit-active").offsetWidth;
-  const min = { rows: sc.clientHeight / rowH, scrolls: sc.scrollHeight > sc.clientHeight, body: fw.querySelector(".win-body").scrollHeight <= fw.querySelector(".win-body").clientHeight + 1, sixSlots: slotsW >= 6 * 40 + 5 * 6, tabsTop: fw.querySelector(".fit-tabs").getBoundingClientRect().top - fw.getBoundingClientRect().top < 60 };
+  const lb = fw.querySelector(".fit-bars").getBoundingClientRect().bottom, wb = fw.getBoundingClientRect().bottom;
+  const min = { barsIn: lb <= wb && wb - lb < 40, rows: sc.clientHeight / rowH, scrolls: sc.scrollHeight > sc.clientHeight, body: fw.querySelector(".win-body").scrollHeight <= fw.querySelector(".win-body").clientHeight + 1, sixSlots: slotsW >= 6 * 40 + 5 * 6, tabsTop: fw.querySelector(".fit-tabs").getBoundingClientRect().top - fw.getBoundingClientRect().top < 60 };
   fw.querySelector('.tab[data-tab="req"]').click(); await s(200); const checks = [...fw.querySelectorAll(".req-check")].map((x) => x.textContent).join("|");
   fw.querySelector(".win-title-slot").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 120 })); await s(100);
   const tmenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); document.querySelector(".ctx-item").click(); await s(200);
@@ -264,7 +265,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
   return { near1, zoomed, dropped, min, checks, tmenu, prefill, renamed, back };`);
 t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its centre, until you pan", r);
-t.ok(r.min.rows >= 3.9 && r.min.rows < 5 && r.min.scrolls && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide, 4 stat rows; only the stats scroll, the tabs stay on top", r.min);
+t.ok(r.min.scrolls && r.min.barsIn && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide (plus the stats beside), down to the Power / Disposition bars; the stats scroll, the tabs stay on top", r.min);
 t.ok(r.checks === "|", "Requirements: no check for what the pilot doesn't have yet", r.checks);
 t.ok(r.tmenu === "Rename" && /Prospector$/.test(r.prefill) && r.renamed.title === "Rock Hopper" && r.renamed.snap === "Rock Hopper" && /Prospector$/.test(r.back), "Rename from the Fitting window's title; an empty name puts back the default", r);
 

@@ -568,7 +568,8 @@
             el("div", { class: "fc-name" }, p.name)));
         card.addEventListener("click", () => selectPilot(p.id));
         // (owner) right-click (hold) a card: its ship's menu, plus Pilot Info
-        const cardMenu = (x, y) => { const cur = pilotShip(p.id); showCtxMenu(x, y, [...(cur ? window.Atamus.ownShipItems(cur.id) : []), ["Pilot Info", () => openPilotInfo(String(p.id))]]); };
+        const cardMenu = (x, y) => { const cur = pilotShip(p.id); const items = cur ? window.Atamus.ownShipItems(cur.id) : []; if (cur && !items.some((it) => it[0] === "Show Fitting")) items.splice(Math.min(1, items.length), 0, ["Show Fitting", () => showFitting(p.id)]);
+          showCtxMenu(x, y, [...items, ["Pilot Info", () => openPilotInfo(String(p.id))]]); };
         card.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); cardMenu(e.clientX, e.clientY); });
         { let h = 0; card.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => cardMenu(e.clientX, e.clientY), 500); });
           for (const ev of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) card.addEventListener(ev, () => clearTimeout(h)); }
@@ -916,6 +917,12 @@
 
   // ---- Fitting (owner: a window button): Fitting (the ship, its hotbar slots, general stats) · Hull (description and
   // bonuses) · Stats (fitting stats and the ship's own) · Requirements (licenses, and the ark that must carry it) ----
+  // (owner) the fitting stats: Power and Disposition as fill bars (used / max)
+  function fitBars(T, mods) {
+    const used = (k) => mods.reduce((t, m) => t + ((m && m[k]) || 0), 0);
+    const bar = (label, cls, u, max) => el("div", { class: "fit-bar" }, el("span", { class: "fit-bar-k" }, label), el("div", { class: "hud-track" }, el("div", { class: "hud-fill " + cls, style: "width:" + (max ? Math.min(100, u / max * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, u + " / " + max)));
+    return el("div", { class: "fit-bars" }, bar("Power", "power", used("power"), T.powerMax || 0), bar("Disposition", "disposition", used("disposition"), T.dispositionMax || 0));
+  }
   const FIT_TABS = [["fitting", "Fitting"], ["hull", "Hull"], ["stats", "Stats"], ["req", "Requirements"]];
   function renderFit(body) {
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
@@ -932,17 +939,17 @@
     const c = el("div", { class: "fit-body" + (tab === "fitting" ? "" : " fit-scroll") }); body.append(c);
     const act = modsOf(sh, "active"), pas = modsOf(sh, "passive"), mods = [...act, ...pas];
     if (tab === "fitting") {                         // (owner) active slots above the ship (keyed as on the hotbar), passive below, each row labeled
-      c.classList.add("fit-split");                  // (phones: the slots and ship on the left, the stats beside them)
+      c.classList.add("fit-split");                  // (owner) the slots, ship and fitting bars on the left, the stats beside them
       c.append(el("div", { class: "fit-left" }, el("div", { class: "fit-slots fit-active" }, el("span", { class: "fit-lab" }, "Active"), HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
         el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
-        el("div", { class: "fit-slots fit-passive" }, el("span", { class: "fit-lab" }, "Passive"), Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") })))),
+        el("div", { class: "fit-slots fit-passive" }, el("span", { class: "fit-lab" }, "Passive"), Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") }))),
+        fitBars(T, mods)),
         el("div", { class: "ps-rows fit-rows fit-scroll" }, generalRows(T)));
     } else if (tab === "hull") {
       c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
         el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, b))));
     } else if (tab === "stats") {
-      const used = (k) => mods.reduce((t, m) => t + ((m && m[k]) || 0), 0);
-      c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Active Slots", act.filter(Boolean).length + " / " + (T.activeSlots || 0)), statRow("Passive Slots", pas.filter(Boolean).length + " / " + (T.passiveSlots || 0)), statRow("Power", used("power") + " / " + (T.powerMax || 0)), statRow("Disposition", used("disposition") + " / " + (T.dispositionMax || 0))),
+      c.append(subHead("Fitting"), fitBars(T, mods),
         subHead("Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Class", T.cls || "-"), statRow("Length", kmM(T.lengthKm || 0)), statRow("Acceleration", kmM(T.accelKmps2 || 0) + "/s²"), generalRows(T)));
     } else {
       // (owner) a green check left of each requirement the player meets: the selected pilot's license level, an ark of that type
@@ -953,21 +960,21 @@
     }
     requestAnimationFrame(() => { const m = fitMin(), e = wins.fit.win; if (!m || e.hidden || wins.fit.group) return; if (e.offsetWidth < m.w) e.style.width = m.w + "px"; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; fitOnScreen(e); });   // (then back on screen)
   }
-  // (owner) the Fitting window can't be narrower than 6 module slots, or shorter than its slots plus 4 stat rows
+  // (owner) the Fitting window can't be narrower than 6 module slots (plus the stats column), or shorter than its left column (down to the Power / Disposition bars)
   function fitMin() {
     const w = wins.fit, b = w && w.body; if (!b) return null;
     const cs = getComputedStyle(b), px = (k) => parseFloat(cs[k]) || 0;
     const phone = document.documentElement.classList.contains("phone"), slot = phone ? 34 : 40, slotsW = 6 * slot + 5 * 6 + 20;
-    const width = Math.ceil(slotsW + (phone ? 10 + 160 : 0) + px("paddingLeft") + px("paddingRight") + 6);   // phones: plus the stats column
+    const width = Math.ceil(slotsW + 10 + 160 + px("paddingLeft") + px("paddingRight") + 6);   // (owner) the slots, plus the stats column beside them
     const sc = b.querySelector(".fit-rows.fit-scroll"), row = sc && sc.querySelector(".sheet-row"), left = b.querySelector(".fit-left"), top = w.win.getBoundingClientRect().top;
-    if (sc && row) {
-      let bottom = phone ? sc.getBoundingClientRect().top + 4 * row.offsetHeight : sc.getBoundingClientRect().top + 4 * row.offsetHeight;
-      if (phone && left) bottom = Math.max(bottom, left.getBoundingClientRect().bottom);
-      w.fitMinH = Math.ceil(bottom - top + px("paddingBottom") + 4);
-    }
+    const bars = left && left.querySelector(".fit-bars");   // (the column stretches with the window: measure to its last item)
+    if (bars) w.fitMinH = Math.ceil(bars.getBoundingClientRect().bottom - top + px("paddingBottom") + 4);   // (owner) down to the Power / Disposition bars; the stats beside scroll
     return { w: width, h: w.fitMinH || 360 };
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.fit && isOpen(wins.fit)) renderFit(wins.fit.body); });
+  // (owner) Show Fitting (a ship's or a fleet card's menu): that pilot selected, the Fitting window on its Fitting tab
+  function showFitting(pilotId) { if (String(pilotId) !== String(saved.selPilot)) selectPilot(pilotId); saved.fitTab = "fitting"; persistAll(); if (wins.fit) wins.fit.fsig = null; toggleWindow("fit", true); }
+  window.Atamus.bus.addEventListener("showfitting", (e) => showFitting(e.detail));
   window.Atamus.bus.addEventListener("snap", () => { for (const [id, r] of [["fit", renderFit], ["inv", renderInv]]) if (wins[id] && isOpen(wins[id])) r(wins[id].body); });   // only rebuilt when their signature changes
 
   // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near
@@ -1031,7 +1038,7 @@
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory", dynMin: invMin });
     const phoneUi = document.documentElement.classList.contains("phone");
-    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - (phoneUi ? 240 : 160))), top: phoneUi ? 60 : 90, width: phoneUi ? 470 : 320, minW: 290, minH: 200, render: renderFit, label: "Fitting", dynMin: fitMin });
+    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - (phoneUi ? 240 : 270))), top: phoneUi ? 60 : 90, width: phoneUi ? 470 : 540, minW: 290, minH: 200, render: renderFit, label: "Fitting", dynMin: fitMin });
     { const t = wins.fit.slot, menu = (x, y) => { const sh = hudShip(); if (sh) showCtxMenu(x, y, [["Rename", () => openRename(sh.id)]]); };   // (owner) right-click (hold) the ship's name: Rename
       t.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); menu(e.clientX, e.clientY); });
       let h = 0; t.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => menu(e.clientX, e.clientY), 500); });

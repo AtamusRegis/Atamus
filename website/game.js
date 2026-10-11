@@ -321,7 +321,7 @@
   // one of your ships' menu (owner): the selected pilot's own is Look At, Info; another is an object's menu; both add Rename
   function ownShipItems(id) {
     const sh = (latest.ships || []).find((x) => x.id === id); if (!sh) return [];
-    const items = sh.pilot === selPilot ? [["Look At", () => lookAtObj("ship", id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id } }))]] : objItems("ship", id);
+    const items = sh.pilot === selPilot ? [["Look At", () => lookAtObj("ship", id)], ["Show Fitting", () => bus.dispatchEvent(new CustomEvent("showfitting", { detail: sh.pilot }))], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id } }))]] : objItems("ship", id);
     items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: id }))]);
     return items;
   }
