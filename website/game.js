@@ -1,6 +1,7 @@
-// Atamus client (back to basics, owner 2026-10-10): the Expanse's hexagon, empty, and a Prospector per pilot. Click or
-// tap to fly the selected pilot's ship; drag or WASD to pan; wheel or pinch to zoom; click / tap one of your ships to
-// select its pilot and follow it. The windows (Player, Pilot, Fleet) live in ui.js. What the client did before the reset is in reference/2026-10-10-pre-reset/website/.
+// Atamus client (back to basics, owner 2026-10-10): the Expanse's hexagon with asteroid belts, and a Prospector per
+// pilot. Single click / tap selects (a ship of yours: its pilot; an asteroid: its name and distance); double click / tap
+// on empty space flies the selected pilot's ship there; right-click / hold for menus; drag or WASD to pan; wheel or
+// pinch to zoom. The windows live in ui.js. What the client did before the reset is in reference/2026-10-10-pre-reset/.
 (() => {
   "use strict";
 
@@ -23,7 +24,7 @@
 
   window.Atamus = {
     send: (o) => send(o), bus, get me() { return me; }, get cfg() { return cfg; }, get snap() { return latest; },
-    ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); },
+    ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); }, get picked() { return picked; },
     get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow }; },
     get selectedPilot() { return selPilot; },
     selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
@@ -228,12 +229,25 @@
     const d = drag; if (!d) return;
     if (d.pinch) { if (!ptrs.size) drag = null; return; }
     drag = null; if (d.moved || e.type === "pointercancel") return;
-    const ships = shipsNow(), own = myShip();
+    // (owner) a single click / tap selects what's under it; a double click / tap on empty space flies there
+    const ships = shipsNow(), own = myShip(), now = performance.now();
+    const dbl = lastTap && now - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 14;
+    lastTap = dbl ? null : { t: now, x: e.clientX, y: e.clientY };
     const hit = shipAt(e.clientX, e.clientY, ships);
-    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); return; }   // one of your ships: select its pilot (owner: the camera stays)
+    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); picked = null; return; }   // one of your ships: select its pilot (owner: the camera stays)
+    const rk = rockAt(e.clientX, e.clientY);
+    if (rk) { picked = { kind: "rock", id: rk.id }; return; }                      // an asteroid: its name and distance
+    if (!dbl) { picked = null; return; }
     if (!own) return;
     const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
   };
+  let lastTap = null, picked = null;                 // picked: the object a single click selected ({ kind: "rock", id })
+  function rockAt(px, py) {
+    let best = null, bd = Infinity; const sc = scale();
+    for (const f of belts.values()) for (const k of f.rocks) { const d = Math.hypot(px - gx2s(k.x), py - gy2s(k.y)), r = Math.max(8, k.size / 1000 * sc * 0.5); if (d <= r && d < bd) { bd = d; best = k; } }
+    return best;
+  }
+  const rockById = (id) => { for (const f of belts.values()) { const k = f.rocks.find((x) => x.id === id); if (k) return k; } return null; };
   const tip = document.getElementById("tooltip"); let mapTip = false;
   canvas.addEventListener("pointermove", (e) => {    // a map marker's name on hover (owner: tooltips show names only)
     if (e.pointerType !== "mouse" || !tip) return;
@@ -285,6 +299,19 @@
       }
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }
+  }
+  // the picked asteroid (owner): grey corner brackets, its ore's name and its distance from the selected pilot's ship
+  function drawPicked(ships) {
+    if (!picked) return;
+    const k = picked.kind === "rock" && rockById(picked.id); if (!k) { picked = null; return; }
+    const x = gx2s(k.x), y = gy2s(k.y), r = Math.max(9, k.size / 1000 * scale() * 0.55), own = ships.find((s) => s.mine && s.pilot === selPilot);
+    const o = ((cfg && cfg.ores) || []).find((q) => q.key === k.ore), name = o ? o.name : k.ore;
+    const dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000) : null;
+    ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.85)"; ctx.lineWidth = 1.5; const c = Math.min(8, r * 0.5);   // (owner) grey = selected; orange is kept for targeted
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
+    ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(230,235,245,0.95)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 3;
+    ctx.fillText(name + (dist != null ? " - " + (dist < 10 ? dist.toFixed(1) : Math.round(dist)) + " km" : ""), x, y - r - 6);
+    ctx.restore();
   }
   function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
     for (const sh of ships) {
@@ -349,7 +376,7 @@
       sendView(now);
     }
     drawBackground();
-    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); }
+    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); drawPicked(ships); }
     requestAnimationFrame(frame);
   }
 

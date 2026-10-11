@@ -18,6 +18,7 @@ export function clampToExpanse(x, y, margin = 0) {
   return { x, y };
 }
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
+const ROCK_SOLID = 0.9;                               // a rock's solid radius, as a share of half its sprite's size (the art doesn't fill its square)
 const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
 
 export class World {
@@ -77,7 +78,9 @@ export class World {
   cmdMove(pid, shipId, x, y) {
     if (!finite(x) || !finite(y)) return;
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
-    const t = clampToExpanse(x, y, s.radius); s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false;
+    const t = clampToExpanse(x, y, s.radius);
+    for (const poi of this.pois.values()) if (Math.hypot(t.x - poi.x, t.y - poi.y) <= poi.r + 1) for (const k of poi.field.rocks) this._pushOut(t, k.x, k.y, k.r * ROCK_SOLID + s.radius + 0.02);   // a point inside a rock: its edge
+    s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false;
   }
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
    *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
@@ -89,6 +92,14 @@ export class World {
     s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
+  // push a ship out of a circle (cx, cy, minD), taking away the velocity that carried it in
+  _pushOut(s, cx, cy, minD) {
+    let dx = s.x - cx, dy = s.y - cy, d = Math.hypot(dx, dy); if (d >= minD) return false;
+    if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
+    const nx = dx / d, ny = dy / d; s.x = cx + nx * minD; s.y = cy + ny * minD;
+    const vn = s.vx * nx + s.vy * ny; if (vn < 0) { s.vx -= vn * nx; s.vy -= vn * ny; }
+    return true;
+  }
   _inPoi(s, poi) { return Math.hypot(s.x - poi.x, s.y - poi.y) <= poi.r; }
   // aligned (owner, EVE-like): heading within ALIGN_DEG of the destination and at ALIGN_SPEED of top speed
   _aligned(s, poi) {
@@ -113,9 +124,18 @@ export class World {
 
   /** Local and Corp chat (owner): you speak as your account's character (its portrait and your username), not as a
    *  pilot. Local is everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. */
-  cmdChat(pid, text, channel) {
+  cmdChat(pid, text, channel, to) {
     const p = this.players.get(pid); if (!p || typeof text !== "string") return;
     const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
+    if (channel === "dm") {                               // (owner) a direct message: both ends see it in a tab named for the other
+      if (typeof to !== "string" || !to || to.length > 40) return;
+      const msg = JSON.stringify({ t: "chat", ch: "dm", from: p.name, to, portrait: p.portrait || null, text: clean, ts: Date.now() });
+      let sent = false;
+      for (const o of this.players.values()) if (!o.offline && o.id !== pid && o.name.toLowerCase() === to.toLowerCase()) { o.send(msg); sent = true; }
+      p.send(msg);
+      if (!sent) p.send(JSON.stringify({ t: "sys", text: to + " is not online.", dm: to }));
+      return;
+    }
     const ch = channel === "corp" ? "corp" : "local";
     const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now() });
     for (const other of this.players.values()) if (!other.offline) other.send(msg);
@@ -170,6 +190,15 @@ export class World {
         a.x -= nx * overlap * wa; a.y -= ny * overlap * wa; b.x += nx * overlap * wb; b.y += ny * overlap * wb;
         const avn = a.vx * nx + a.vy * ny; if (avn > 0) { a.vx -= avn * nx; a.vy -= avn * ny; }   // no ramming / jitter
         const bvn = b.vx * nx + b.vy * ny; if (bvn < 0) { b.vx -= bvn * nx; b.vy -= bvn * ny; }
+      }
+    }
+    // 2b) (owner) everything in space is solid: ships can't fly through asteroids (only a warp passes through anything)
+    const occ = this._occupancy();
+    for (const poi of this.pois.values()) {
+      if (!occ.get(poi.id) || !occ.get(poi.id).size) continue;
+      for (const s of ships) {
+        if (s.wp || Math.hypot(s.x - poi.x, s.y - poi.y) > poi.r + 1) continue;
+        for (const k of poi.field.rocks) this._pushOut(s, k.x, k.y, k.r * ROCK_SOLID + s.radius);
       }
     }
     // 3) the hexagon's edge stops ships (and whatever velocity was carrying them out)

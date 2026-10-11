@@ -31,13 +31,15 @@ t.ok(/Credits/.test(r.player) && /Vera Kestrel/.test(r.pilot), "the Player Sheet
 // click = fly; drag = pan (the camera stops following); click your ship = follow again
 r = await run(page, `for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click();
   const W = innerWidth, H = innerHeight; ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(600);
+  const single = A.myShip.moving;
+  ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(80); ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(600);
   const moving = A.myShip.moving, tx = A.myShip.tx;
   ev("pointerdown", 300, 300); ev("pointermove", 360, 340); ev("pointermove", 420, 380); ev("pointerup", 420, 380); await s(300);
   const afterDrag = A.view.follow;
   const own = A.myShip, sc = innerWidth / A.view.w, sx = W / 2 + (own.x - A.view.cx) * sc, sy = H / 2 - (own.y - A.view.cy) * sc;
   ev("pointerdown", sx, sy); ev("pointerup", sx, sy); await s(200);
-  return { moving, tx, afterDrag, refollow: A.view.follow };`);
-t.ok(r.moving && r.tx > 0, "a click on space flies the ship there", r);
+  return { single, moving, tx, afterDrag, refollow: A.view.follow };`);
+t.ok(!r.single && r.moving && r.tx > 0, "a single click on space doesn't move the ship; a double click flies it there (owner)", r);
 t.ok(r.afterDrag === null, "dragging pans the camera off the ship", r);
 t.ok(r.refollow === null, "clicking your ship selects its pilot but doesn't centre on it (owner)", r);
 // right-click / hold menus (owner): space → Center on ship, Belts › name › Warp to / Align to; Align shows the fleet's Align / Warp
@@ -102,6 +104,31 @@ r = await run(page, `const w = document.querySelector('.win[data-id="player"]');
   w.querySelector(".win-close").click(); return { out, scroll };`);
 t.ok(r.out[0] === 300 && r.out[1] === 280 && r.out[2] < 260 && r.out[3] < 260 && r.out[2] > 150 && r.scroll, "the Player Sheet grows and shrinks with its knob, to a minimum where only its stats scroll", r);
 
+// a name in chat (owner): right-click / hold → Info, DM, Report; just Info on your own
+r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); await s(200); document.querySelector('.win[data-id="chat"] .tab[data-ch="local"]').click(); await s(50);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "yo" } })); await s(100);
+  const who = [...document.querySelectorAll('.win[data-id="chat"] .who')].find((x) => x.textContent.startsWith("Zed"));
+  who.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  const menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "DM").click(); await s(200);
+  const tabs = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((x) => x.textContent.replace("×", ""));
+  const ph = document.querySelector('.win[data-id="chat"] input').placeholder;
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "again" } })); await s(50);
+  document.querySelector('.win[data-id="chat"] .tab[data-ch="local"]').click(); await s(100);
+  const z = [...document.querySelectorAll('.win[data-id="chat"] .who')].find((x) => x.textContent.startsWith("Zed"));
+  z.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Report").click(); await s(400);
+  const rep = document.querySelector('.win[data-id="report"]'), parts = [!!rep.querySelector("select"), !!rep.querySelector("textarea"), [...rep.querySelectorAll(".win-body button")].map((b) => b.textContent).join()];
+  [...rep.querySelectorAll("button")].find((b) => b.textContent === "Cancel").click(); await s(100);
+  document.querySelector('.tab[data-ch="dm:zed"] .tab-x').click(); await s(100);
+  const after = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((x) => x.textContent);
+  document.querySelector('.win[data-id="chat"] .win-close').click();
+  return { menu, tabs, ph, parts, title: rep.querySelector(".win-title-slot").textContent, closed: rep.hidden, after };`);
+t.ok(r.menu.join() === "Info,DM,Report", "a player's name: Info, DM, Report", r.menu);
+t.ok(r.tabs.join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab named for them", r);
+t.ok(r.parts[0] && r.parts[1] && r.parts[2] === "Cancel,Send report" && r.title === "Report Zed" && r.closed, "Report: what it's about, what happened, Cancel / Send report", r);
+t.ok(r.after.join() === "Local,Corp", "a DM tab closes with its ×", r.after);
+
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
 await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(1200);
@@ -116,11 +143,11 @@ r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click
   const over = [...document.querySelectorAll(".win:not([hidden])")].filter((w) => { const b = w.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1; }).map((w) => w.dataset.id);
   for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);
   const w0 = A.view.w; ev("pointerdown", 400, 200, 1, "touch"); ev("pointerdown", 500, 200, 2, "touch"); ev("pointermove", 440, 200, 1, "touch"); ev("pointermove", 460, 200, 2, "touch"); ev("pointerup", 440, 200, 1, "touch"); ev("pointerup", 460, 200, 2, "touch"); await s(500);
-  const w1 = A.view.w; ev("pointerdown", 700, 120, 3, "touch"); ev("pointerup", 700, 120, 3, "touch"); await s(500);
+  const w1 = A.view.w; ev("pointerdown", 700, 120, 3, "touch"); ev("pointerup", 700, 120, 3, "touch"); await s(60); ev("pointerdown", 700, 120, 4, "touch"); ev("pointerup", 700, 120, 4, "touch"); await s(500);
   return { over, w0, w1, moving: A.myShip.moving };`);
 t.ok(!r.over.length, "windows fit a phone screen", r.over);
 t.ok(r.w1 > r.w0, "a pinch zooms", r);
-t.ok(r.moving, "a tap flies the ship", r);
+t.ok(r.moving, "a double tap flies the ship", r);
 await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);`);
 await page.close(); await browser.close();
 t.ok(!errors.length, "no page errors", errors.slice(0, 5));

@@ -63,6 +63,17 @@ for (let i = 0; i < 40; i++) w.tick(0.05);
 t.ok(!sa.dest && sa.drift && Math.abs(Math.hypot(sa.vx, sa.vy) - v) < 1e-6, "when the POI stops showing, the destination goes and the ship drifts on", [v, Math.hypot(sa.vx, sa.vy)]);
 w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 
+// (owner) everything is solid: a ship can't fly through a rock (or stop inside one), only warp past it
+{ const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z" }]); wb.tick(0.05);
+  const bz = [...wb.pois.values()][0], rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
+  Object.assign(sz, { x: rock.x - 3, y: rock.y, tx: rock.x - 3, ty: rock.y, vx: 0, vy: 0, moving: false });
+  for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbours
+  wb.cmdMove("z", sz.id, rock.x + 3, rock.y); let minD = Infinity;
+  for (let i = 0; i < 600; i++) { wb.tick(0.05); minD = Math.min(minD, Math.hypot(sz.x - rock.x, sz.y - rock.y)); }
+  t.ok(minD >= rock.r * 0.9 + sz.radius - 1e-6, "a ship can't fly through an asteroid", [minD, rock.r]);
+  wb.cmdMove("z", sz.id, rock.x, rock.y);
+  t.ok(Math.hypot(sz.tx - rock.x, sz.ty - rock.y) >= rock.r * 0.9 + sz.radius, "an order into a rock stops at its edge"); }
+
 // ---- part 2: on the PTR ----
 const c = await connect();
 t.ok((c.last.hello.pois || []).length >= BELTS_MIN, "the map's belts arrive with hello");

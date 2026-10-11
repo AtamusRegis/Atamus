@@ -220,3 +220,26 @@ export async function setCharacter(userId, portraitRaw) {
   await pool.query(`UPDATE users SET portrait = $1 WHERE id = $2`, [portrait, userId]);
   return portrait;
 }
+
+/** Another player's sheet (owner: Info on a chat name): what anyone may see. No credits. */
+export async function publicProfile(nameRaw) {
+  if (typeof nameRaw !== "string" || !nameRaw || nameRaw.length > 40) return null;
+  const { rows } = await pool.query(`SELECT id, username, created_at, portrait FROM users WHERE lower(username) = lower($1)`, [nameRaw]);
+  const u = rows[0]; if (!u) return null;
+  const pilotRows = await listPilotRows(u.id), maxBy = {};
+  for (const r of pilotRows) for (const l of LICENSES) maxBy[l.key] = Math.max(maxBy[l.key] || 0, (r.data.licenses || {})[l.key] || 0);
+  return { username: u.username, createdAt: u.created_at, portrait: u.portrait || null, corp: CORP, pilotCount: pilotRows.length, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (maxBy[l.key] || 0), 0) };
+}
+
+// ---- reports (owner): stored for admin tools to read later ----
+export const REPORT_CATEGORIES = ["Harassment", "Spam", "Cheating", "Offensive name", "Other"];
+export async function fileReport(userId, b) {
+  const target = await pool.query(`SELECT id, username FROM users WHERE lower(username) = lower($1)`, [typeof b.target === "string" ? b.target.slice(0, 40) : ""]);
+  const t = target.rows[0]; if (!t) throw new Error("No such player.");
+  if (String(t.id) === String(userId)) throw new Error("You can't report yourself.");
+  if (!REPORT_CATEGORIES.includes(b.category)) throw new Error("Pick what the report is about.");
+  const text = typeof b.text === "string" ? b.text.replace(/\s+/g, " ").trim().slice(0, 1000) : "";
+  if (!text) throw new Error("Describe the issue.");
+  const context = typeof b.context === "string" ? b.context.slice(0, 300) : null;
+  await pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, context) VALUES ($1, $2, $3, $4, $5, $6)`, [userId, t.id, t.username, b.category, text, context]);
+}

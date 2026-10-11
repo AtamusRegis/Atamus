@@ -4,6 +4,7 @@ import { CATALOG } from "./licenses.js";
 import { PORTRAIT_PARTS } from "./portraits.js";
 import * as pilots from "./pilots.js";
 import { websiteDeployed, announceUpdate } from "./build.js";
+import { allow } from "./ratelimit.js";
 
 export const game = express.Router();
 
@@ -21,6 +22,18 @@ game.post("/update-countdown", async (req, res) => { res.json(await announceUpda
 
 game.get("/catalog", (_req, res) => res.json(CATALOG));
 game.get("/portraits", (_req, res) => res.json(PORTRAIT_PARTS));
+
+// another player's sheet (Info on a chat name)
+game.get("/player/:name", auth, async (req, res) => {
+  try { const p = await pilots.publicProfile(req.params.name); if (!p) return res.status(404).json({ error: "No such player." }); res.json(p); }
+  catch (e) { console.error("player", e); res.status(500).json({ error: "Could not load that player." }); }
+});
+game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES));
+game.post("/report", auth, async (req, res) => {
+  if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });
+  try { await pilots.fileReport(req.uid, req.body || {}); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 game.post("/character", auth, async (req, res) => {
   try { res.json({ portrait: await pilots.setCharacter(req.uid, req.body?.portrait) }); }

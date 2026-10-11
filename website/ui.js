@@ -593,8 +593,11 @@
   }
   window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
 
-  // ---- chat (owner): Local and Corp. You speak as your account's character: its portrait and your username. ----
-  const chat = { local: [], corp: [] }, unread = {}; let chatTab = "local";
+  // ---- chat (owner): Local and Corp, plus a tab per direct message. You speak as your account's character: its
+  // portrait and your username. Right-click (or hold) a name for Info, DM and Report. ----
+  const chat = { local: [], corp: [] }, unread = {}, dms = []; let chatTab = "local";
+  const myName = () => (window.Atamus.me && window.Atamus.me.name) || "";
+  const dmKey = (name) => "dm:" + name.toLowerCase();
   const viewing = (ch) => { const w = wins.chat; return w && isOpen(w) && chatTab === ch; };
   function updateChatGlow() {
     const w = wins.chat;
@@ -602,35 +605,109 @@
     const btn = panel.querySelector('.wbtn[data-id="chat"]');
     if (btn) btn.classList.toggle("unread", (!w || !isOpen(w)) && Object.values(unread).some(Boolean));
   }
+  function ensureDm(name) {
+    const k = dmKey(name);
+    if (!chat[k]) chat[k] = [];
+    if (!dms.some((d) => d.k === k)) { dms.push({ k, name }); if (wins.chat && isOpen(wins.chat)) renderChat(wins.chat.body); }
+    return k;
+  }
+  function openDm(name) { if (!name || name.toLowerCase() === myName().toLowerCase()) return; chatTab = ensureDm(name); toggleWindow("chat", true); renderChat(wins.chat.body); }
+  function closeDm(k) { const i = dms.findIndex((d) => d.k === k); if (i >= 0) dms.splice(i, 1); delete unread[k]; if (chatTab === k) chatTab = "local"; if (wins.chat && isOpen(wins.chat)) renderChat(wins.chat.body); }
   function pushChat(ch, msg) {
+    if (!chat[ch]) chat[ch] = [];
     chat[ch].push(msg); if (chat[ch].length > 300) chat[ch].shift();
     if (viewing(ch)) appendChatLine(wins.chat.body.querySelector(".chat-log"), msg);
     else { unread[ch] = true; updateChatGlow(); }
   }
+  function playerMenu(name, x, y, line) {
+    const self = name.toLowerCase() === myName().toLowerCase(), items = [["Info", () => openPlayerInfo(name)]];
+    if (!self) items.push(["DM", () => openDm(name)], ["Report", () => openReport(name, line)]);
+    showCtxMenu(x, y, items);
+  }
   function appendChatLine(log, msg) {
     if (!log) return;
-    const node = msg.sys ? el("div", { class: "sys" }, "» " + msg.text)
-      : el("div", { class: "chat-line" }, msg.portrait && window.Portrait ? Portrait.canvas(msg.portrait, 22, "chat-portrait") : el("span", { class: "chat-portrait" }),
-        el("div", { class: "chat-msg" }, el("span", { class: "who" }, msg.from + ": "), msg.text));
+    let node;
+    if (msg.sys) node = el("div", { class: "sys" }, "» " + msg.text);
+    else {
+      const who = el("span", { class: "who" }, msg.from + ": ");
+      who.addEventListener("contextmenu", (e) => { e.preventDefault(); playerMenu(msg.from, e.clientX, e.clientY, msg.text); });
+      let t = 0; who.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(t); t = setTimeout(() => playerMenu(msg.from, e.clientX, e.clientY, msg.text), 500); });   // hold = right-click
+      for (const ev of ["pointerup", "pointercancel", "pointerleave"]) who.addEventListener(ev, () => clearTimeout(t));
+      node = el("div", { class: "chat-line" }, msg.portrait && window.Portrait ? Portrait.canvas(msg.portrait, 22, "chat-portrait") : el("span", { class: "chat-portrait" }), el("div", { class: "chat-msg" }, who, msg.text));
+    }
     log.append(node); log.scrollTop = log.scrollHeight;
   }
-  window.Atamus.bus.addEventListener("chat", (e) => { const m = e.detail; pushChat(m.ch === "corp" ? "corp" : "local", { from: m.from, portrait: m.portrait, text: m.text }); });
-  window.Atamus.bus.addEventListener("sys", (e) => pushChat("local", { sys: true, text: e.detail.text }));
+  window.Atamus.bus.addEventListener("chat", (e) => {
+    const m = e.detail;
+    if (m.ch === "dm") { const other = m.from.toLowerCase() === myName().toLowerCase() ? m.to : m.from; pushChat(ensureDm(other), { from: m.from, portrait: m.portrait, text: m.text }); return; }
+    pushChat(m.ch === "corp" ? "corp" : "local", { from: m.from, portrait: m.portrait, text: m.text });
+  });
+  window.Atamus.bus.addEventListener("sys", (e) => { const d = e.detail; pushChat(d.dm ? ensureDm(d.dm) : "local", { sys: true, text: d.text }); });
   function renderChat(body) {
     unread[chatTab] = false;
+    if (!chat[chatTab]) chatTab = "local";
     const slot = wins.chat && wins.chat.slot;
     if (slot) {
       slot.innerHTML = "";
-      slot.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, label]) =>
-        el("button", { class: "tab" + (k === chatTab ? " active" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, label))));
+      const row = el("div", { class: "tab-row" });
+      for (const [k, label] of [["local", "Local"], ["corp", "Corp"], ...dms.map((d) => [d.k, d.name])]) {
+        const b = el("button", { class: "tab" + (k === chatTab ? " active" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, label);
+        if (k.startsWith("dm:")) b.append(el("span", { class: "tab-x", onclick: (e) => { e.stopPropagation(); closeDm(k); } }, "×"));
+        row.append(b);
+      }
+      slot.append(row);
     }
     body.innerHTML = "";
     const log = el("div", { class: "chat-log" });
     for (const m of chat[chatTab]) appendChatLine(log, m);
-    const input = el("input", { class: "text-input", maxlength: "240", placeholder: chatTab === "corp" ? "Deep Core Industries" : "Local" });
-    const form = el("form", { class: "chat-form", onsubmit: (e) => { e.preventDefault(); const t = input.value.trim(); if (!t) return; window.Atamus.send({ t: "chat", text: t, channel: chatTab }); input.value = ""; } }, input);
+    const dm = dms.find((d) => d.k === chatTab);
+    const input = el("input", { class: "text-input", maxlength: "240", placeholder: dm ? dm.name : chatTab === "corp" ? "Deep Core Industries" : "Local" });
+    const form = el("form", { class: "chat-form", onsubmit: (e) => {
+      e.preventDefault(); const t = input.value.trim(); if (!t) return;
+      window.Atamus.send(dm ? { t: "chat", text: t, channel: "dm", to: dm.name } : { t: "chat", text: t, channel: chatTab }); input.value = "";
+    } }, input);
     body.append(log, form); log.scrollTop = log.scrollHeight;
     updateChatGlow();
+  }
+
+  // ---- another player's sheet (owner: Info on a chat name): their portrait and name, then what anyone may see ----
+  let infoName = null, infoData = null;
+  async function openPlayerInfo(name) {
+    infoName = name; infoData = null;
+    if (!wins.pinfo) createWindow("pinfo", { left: Math.round(innerWidth / 2 - 130), top: 120, width: 260, minW: 200, minH: 150, render: renderPlayerInfo, label: "Player" });
+    toggleWindow("pinfo", true);
+    try { infoData = await Api.get("/game/player/" + encodeURIComponent(name)); } catch (e) { infoData = { error: e.message }; }
+    if (infoName === name && isOpen(wins.pinfo)) renderPlayerInfo(wins.pinfo.body);
+  }
+  function renderPlayerInfo(body) {
+    if (wins.pinfo.slot) wins.pinfo.slot.textContent = "Player Sheet";
+    body.innerHTML = ""; body.classList.add("player-body");
+    const p = infoData;
+    if (!p) { body.append(el("div", { class: "muted" }, "Loading…")); return; }
+    if (p.error) { body.append(el("div", { class: "muted" }, p.error)); return; }
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    body.append(el("div", { class: "ps-head" }, p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 28, "ps-portrait") : el("span", { class: "ps-portrait" }), el("span", { class: "ps-name" }, p.username)),
+      el("div", { class: "ps-rows" }, row("Day Born", born), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp)));
+  }
+
+  // ---- report a player (owner): what it's about, what happened; stored on the server for admin tools later ----
+  let reportCats = null;
+  async function openReport(name, line) {
+    if (!reportCats) { try { reportCats = await Api.get("/game/report-categories"); } catch { reportCats = ["Other"]; } }
+    if (!wins.report) createWindow("report", { left: Math.round(innerWidth / 2 - 160), top: 140, width: 320, minW: 260, minH: 220, render: () => {}, label: "Report", groupable: false });
+    const w = wins.report; w.slot.textContent = "Report " + name; w.body.innerHTML = "";
+    const sel = el("select", { class: "base-sel report-cat" }, el("option", { value: "" }, "What's it about?"), ...reportCats.map((c) => el("option", { value: c }, c)));
+    const text = el("textarea", { class: "text-input report-text", maxlength: "1000", rows: "5" });
+    const err = el("div", { class: "form-err", hidden: "" });
+    const send = el("button", { class: "btn-primary2", onclick: async () => {
+      send.disabled = true;
+      try { await Api.post("/game/report", { target: name, category: sel.value, text: text.value, context: line || null }); toggleWindow("report", false); flash("Report sent"); }
+      catch (e) { err.textContent = e.message; err.hidden = false; }
+      send.disabled = false;
+    } }, "Send report");
+    w.body.append(el("div", { class: "report-form" }, sel, text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("report", false) }, "Cancel"), send)));
+    toggleWindow("report", true);
   }
 
   // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near

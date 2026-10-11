@@ -62,6 +62,19 @@ export async function migrate() {
     );
 
     -- shared asteroid instances (their rock fields); they survive restarts and go when mined out
+    -- player reports (owner: kept for admin tools to read later)
+    CREATE TABLE IF NOT EXISTS reports (
+      id          BIGSERIAL PRIMARY KEY,
+      reporter    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      target      BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      target_name TEXT NOT NULL,
+      category    TEXT NOT NULL,
+      text        TEXT NOT NULL,
+      context     TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS instances (
       id          TEXT PRIMARY KEY,
       data        JSONB NOT NULL,

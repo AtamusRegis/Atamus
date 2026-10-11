@@ -680,3 +680,13 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .ps-portrait { width: 28px; height: 28px; border-radius: 3px; flex: none; }
 .ps-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .ps-rows { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* report a player (owner) */
+.report-form { display: flex; flex-direction: column; gap: 8px; }
+.report-cat { padding: 7px 8px; }
+.report-text { resize: vertical; min-height: 90px; font: inherit; font-size: 12px; }
+.report-btns { display: flex; justify-content: flex-end; gap: 8px; }
+.report-btns button { padding: 7px 14px; }
+.btn-ghost2 { font: inherit; font-size: 11px; letter-spacing: .08em; color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; border-radius: var(--radius-sm); }
+.btn-ghost2:hover { color: var(--text); }
+.chat-log .who { cursor: pointer; }

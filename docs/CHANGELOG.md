@@ -4,6 +4,9 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Chat: Info, DM, Report (owner):** right-click (or hold) a name in chat for their Player Sheet, a direct-message tab, or a report (category and description, stored on the server for admin tools later).
+- **Clicks (owner):** a single click selects (your ship's pilot, or an asteroid: grey brackets, its ore and distance; orange is kept for targeted); a double click on space flies the ship there.
+- **Solid asteroids (owner):** ships can't fly through rocks (only warp passes through things); a move order into one stops at its edge.
 - **Fixes:** a player who's signed out and lands on the "updating" page (say, a browser restored after an update) is sent to log in instead of being stuck at "Welcome back, …" with only Log out. Every scrolling box inside a window (like the Player Sheet's stats) uses the game's own scrollbar, not the browser's.
 - **Fix:** the Player Sheet's minimum width measured its own stretched rows, so resizing only ever made it wider; it now resizes both ways.
 - **Player Sheet (owner):** titled Player Sheet, with a row for your character's small portrait and your name; at its smallest it shows three stat rows and only they scroll. Resize knobs are two faint blue bars. The front page's Updates lists features only (the Pilot Sheet bullet came out).
