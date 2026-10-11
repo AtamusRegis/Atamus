@@ -8,11 +8,14 @@ export const PTR = process.env.ATAMUS_PTR === "1";
 
 let tester = null;
 export async function ptrUser() {
-  if (tester) return tester;
-  let { rows } = await pool.query(`SELECT id, username, email FROM users WHERE lower(username) = 'ptr'`);
-  if (!rows[0]) ({ rows } = await pool.query(`INSERT INTO users (username, password) VALUES ('PTR', '!') RETURNING id, username, email`));
-  tester = { ...rows[0], has_recovery: true };
-  return tester;
+  if (!tester) {
+    let { rows } = await pool.query(`SELECT id, username, email FROM users WHERE lower(username) = 'ptr'`);
+    if (!rows[0]) ({ rows } = await pool.query(`INSERT INTO users (username, password) VALUES ('PTR', '!') RETURNING id, username, email`));
+    await pool.query(`UPDATE users SET role = 'head' WHERE id = $1`, [rows[0].id]);   // (the PTR tester starts as the Head Admin, to test the admin panel)
+    tester = { ...rows[0], has_recovery: true };
+  }
+  const { rows } = await pool.query(`SELECT role FROM users WHERE id = $1`, [tester.id]);   // (tests switch it to admin and back)
+  return { ...tester, role: rows[0] ? rows[0].role : null };
 }
 
 // Dev commands from the PTR client: Atamus.send({ t: "dev", cmd, ... })

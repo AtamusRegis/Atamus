@@ -22,7 +22,7 @@ const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new 
 let page = await open(1280, 800);
 let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(500);
   return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
-t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory and Fitting windows", r.btns);
+t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit,admin", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory and Fitting windows (and Admin, for admins: the PTR tester is the Head Admin)", r.btns);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   return { wins: wins(), player: document.querySelector('.win[data-id="player"]').innerText, pilot: document.querySelector('.win[data-id="pilot"]').innerText };`);
 t.ok(r.wins.includes("player") && r.wins.includes("pilot"), "both open from the panel", r.wins);
@@ -325,6 +325,23 @@ await page.reload(); await page.waitForFunction(() => window.Atamus && window.At
 r = await run(page, `return wins();`);
 t.ok(r.includes("pilot"), "a reload brings back the open windows", r);
 await run(page, `for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);`);
+// (owner) the admin panel: the Head Admin's button, the second password, players / admins, a player's info and licenses, the log
+r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const btn = document.querySelector('.wbtn[data-id="admin"]'); if (!btn) return { btn: false };
+  btn.click(); await s(800); const w = document.querySelector('.win[data-id="admin"]'), pw = w.querySelector('input[type="password"]');
+  const masked = !!pw; pw.value = "Cinder@Hollow6021=Magnet~Captain%Creek"; pw.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(1200);
+  const tabs = [...w.querySelectorAll(".tab")].map((x) => x.textContent).join();
+  [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Admins").click(); await s(300);
+  const r0 = w.querySelector(".adm-row"), rows = [...w.querySelectorAll(".adm-row")].map((x) => x.textContent), b = r0.getBoundingClientRect();
+  r0.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: b.left + 20, clientY: b.top + 5 })); await s(150);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(900);
+  const ap = document.querySelector('.win[data-id="aplayer"]'), info = [...ap.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
+  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Pilots").click(); await s(300); const lic = ap.querySelectorAll(".adm-lic").length;
+  [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
+  for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  return { btn: true, masked, tabs, rows, info, lic, log };`);
+t.ok(r.btn && r.masked && r.tabs === "Players,Log,Players,Admins" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins) and Log (owner)", r);
+t.ok(r.info === "Role,Online,Joined,Ban,Credits,Corporation" && r.lic >= 6 && r.log, "a player's admin info and their pilots' licenses", r);
 await page.close();
 
 // phone: windows fit the screen, a pinch zooms, a tap flies

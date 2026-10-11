@@ -25,11 +25,12 @@ export async function getSessionUser(token) {
   if (PTR) return ptrUser();                         // private test copy: no accounts
   if (!token) return null;
   const { rows } = await pool.query(
-    `SELECT u.id, u.username, u.email,
+    `SELECT u.id, u.username, u.email, u.role,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = u.id) AS has_recovery
        FROM sessions s
        JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = $1 AND s.expires_at > now()`,
+      WHERE s.token_hash = $1 AND s.expires_at > now()
+        AND NOT (u.ban_perm OR coalesce(u.ban_until > now(), false))`,   // (owner) a banned player's sessions don't count
     [sha256(token)]
   );
   return rows[0] || null;

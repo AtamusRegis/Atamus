@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { migrate, cleanupExpired, runWipes } from "./db.js";
 import { auth } from "./auth.js";
 import { game } from "./gamehttp.js";
+import { admin } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
@@ -30,6 +31,7 @@ if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../web
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
 app.use("/auth", auth);
+app.use("/game/admin", admin);   // (owner) the admin panel (under /game: the path the live proxy already passes on)
 app.use("/game", game);
 
 app.use((err, _req, res, _next) => {

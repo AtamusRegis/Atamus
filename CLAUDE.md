@@ -39,6 +39,7 @@ packages/server/src/
   licenses.js     license catalog (empty for now), training helpers
   portraits.js    portrait part lists (served at /game/portraits) and validation
   ptr.js          PTR flag, PTR user, dev commands
+  admin.js        the admin panel's API (/game/admin/*): second password, players, kick / ban / unban, roles, license / credit / corp changes, admin log
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz

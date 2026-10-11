@@ -22,6 +22,7 @@
   const ZOOM_MIN_W = 3.25;                         // km across the screen at the closest zoom (owner: the Prospector at about 1/25 of the width)
   const cam = { cx: 0, cy: 0, viewW: ZOOM_MIN_W }; let viewWTarget = ZOOM_MIN_W, follow = null, camInit = false, zoomAt = null;
   let lookAt = null;                               // (owner) Look At: { kind: "rock" | "prop", id } the camera follows (a ship is followed by id)
+  let kickedWhy = null;                            // (owner) the reason an admin gave, kept for the moment the socket closes
   let selPilot = null;                             // the selected pilot (ui.js keeps it; one is always selected)
 
   window.Atamus = {
@@ -88,6 +89,10 @@
     ws.onopen = () => setStatus("Connected", "ok");
     ws.onclose = (e) => {
       if (e.code === 4001) { location.href = "login.html"; return; }          // signed out (session expired): back to the website
+      if (e.code === 4003 || e.code === 4004) {        // (owner) kicked or banned by an admin: say why, then off to the website
+        reloading = true; const why = kickedWhy ? ": " + kickedWhy : ""; setStatus((e.code === 4004 ? "Banned" : "Kicked") + why, "err");
+        setTimeout(() => { location.href = e.code === 4004 ? "login.html" : "play.html"; }, 5000); return;
+      }
       if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
     };
@@ -116,6 +121,7 @@
         if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
+      } else if (m.t === "kicked" || m.t === "banned") { kickedWhy = m.reason || "";
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));

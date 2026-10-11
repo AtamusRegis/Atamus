@@ -104,7 +104,7 @@ auth.post("/login", async (req, res) => {
   if (!username || !password) return fail(res, 400, "Enter your username and password.");
 
   const { rows } = await pool.query(
-    `SELECT id, username, password, email,
+    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = users.id) AS has_recovery
        FROM users WHERE lower(username) = lower($1)`,
     [username]
@@ -116,6 +116,9 @@ auth.post("/login", async (req, res) => {
     : await verifySecret(password, "scrypt$16384$8$1$00$00");
 
   if (!user || !ok) return fail(res, 401, "Incorrect username or password.");
+  // (owner) a banned player is told why (and until when) at login
+  if (user.ban_perm || (user.ban_until && new Date(user.ban_until) > new Date()))
+    return res.status(403).json({ error: (user.ban_perm ? "This account is permanently banned." : "This account is banned until " + new Date(user.ban_until).toUTCString() + ".") + (user.ban_reason ? " Reason: " + user.ban_reason : ""), ban: { perm: !!user.ban_perm, until: user.ban_until, reason: user.ban_reason || "" } });
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);

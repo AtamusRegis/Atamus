@@ -2,7 +2,7 @@ import { pool } from "./db.js";
 import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 import { cleanPortrait, randomPortrait } from "./portraits.js";
 
-const CORP = "Deep Core Industries";
+export const CORP = "Deep Core Industries";   // everyone's corporation for now (users.corp NULL)
 
 function freshData() { return { licenses: { ...STARTING_LICENSES }, banked: {}, queue: [], activeStart: null, paused: false }; }
 const banked = (d, key, level) => (d.banked[key] && d.banked[key][level]) || 0;
@@ -188,7 +188,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -209,7 +209,7 @@ export async function getState(userId) {
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: CORP, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
+    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
     pilots, serverTime: now,
   };
 }
@@ -224,20 +224,20 @@ export async function setCharacter(userId, portraitRaw) {
 /** Another player's sheet (owner: Info on a chat name): what anyone may see. No credits. */
 export async function publicProfile(nameRaw) {
   if (typeof nameRaw !== "string" || !nameRaw || nameRaw.length > 40) return null;
-  const { rows } = await pool.query(`SELECT id, username, created_at, portrait FROM users WHERE lower(username) = lower($1)`, [nameRaw]);
+  const { rows } = await pool.query(`SELECT id, username, created_at, portrait, corp FROM users WHERE lower(username) = lower($1)`, [nameRaw]);
   const u = rows[0]; if (!u) return null;
   const pilotRows = await listPilotRows(u.id), maxBy = {};
   for (const r of pilotRows) for (const l of LICENSES) maxBy[l.key] = Math.max(maxBy[l.key] || 0, (r.data.licenses || {})[l.key] || 0);
-  return { username: u.username, createdAt: u.created_at, portrait: u.portrait || null, corp: CORP, pilotCount: pilotRows.length, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (maxBy[l.key] || 0), 0) };
+  return { username: u.username, createdAt: u.created_at, portrait: u.portrait || null, corp: u.corp || CORP, pilotCount: pilotRows.length, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (maxBy[l.key] || 0), 0) };
 }
 
 /** (owner) Pilot Info on another player's ship: what anyone may see of a pilot. */
 export async function publicPilot(idRaw) {
   if (typeof idRaw !== "string" || !/^[0-9]{1,15}$/.test(idRaw)) return null;
-  const { rows } = await pool.query(`SELECT p.id, p.name, p.data, p.created_at, u.username FROM pilots p JOIN users u ON u.id = p.user_id WHERE p.id = $1`, [idRaw]);
+  const { rows } = await pool.query(`SELECT p.id, p.name, p.data, p.created_at, u.username, u.corp FROM pilots p JOIN users u ON u.id = p.user_id WHERE p.id = $1`, [idRaw]);
   const r = rows[0]; if (!r) return null;
   const lic = r.data.licenses || {};
-  return { id: String(r.id), name: r.name, portrait: r.data.portrait || null, player: r.username, corp: CORP, createdAt: r.created_at, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (lic[l.key] || 0), 0) };
+  return { id: String(r.id), name: r.name, portrait: r.data.portrait || null, player: r.username, corp: r.corp || CORP, createdAt: r.created_at, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (lic[l.key] || 0), 0) };
 }
 
 // ---- reports (owner): stored for admin tools to read later ----

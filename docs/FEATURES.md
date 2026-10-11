@@ -221,6 +221,18 @@ Bottom center, for the selected pilot's ship:
 - **Safe log-off:** every one of your ships docked. Your ships leave the world 20 s after you go (a reload within that keeps everything).
 - **Otherwise** your ships stay in space for **5 minutes**, still doing what they were (flying, mining, holding locks), then each **safe-warps** about 1,500 km in a random direction (modules and locks off) and leaves the world when it lands. Coming back before then picks up where they are.
 
+## Admin panel (owner, 2026-10-11)
+
+`admin.js` (served under `/game/admin/*`, the path the live proxy already passes on) and the Admin window in `ui.js`.
+
+- **Roles** (`users.role`): **Head Admin** (Nyssary; set at every server start, and the only one), **Admin**, or a player. The Admin button (shield) is in the left panel only for admins. In the PTR the tester is the Head Admin.
+- **Second password:** the panel opens with a password field (masked, paste works). Only its scrypt hash is in the code; a correct one unlocks the panel for that session for 8 hours (5 tries per 15 min).
+- **Players tab**, with **Players** and **Admins** tabs under it: each account (online dot, role, ban). Right-click (hold) one: **Info**, **DM**, **Report**, **Kick**, **Ban** / **Unban**, and for the Head Admin **Make Admin** / **Remove Admin** (owner: only the Head Admin makes admins). Double-click: Info.
+- **Info** (a window with the player's name): **Player** tab (role, online, joined, ban, credits, corporation; the Head Admin can **Reset** credits to 0 and the corporation to the starting one) and **Pilots** tab (each pilot's license levels; the Head Admin can **+ / − / Reset** each: never below where everyone starts, never past the top; levels it now has leave the training queue; a player online gets them at once).
+- **Kick** (a reason) closes their game with the reason shown, back to the website. **Ban**: permanent, or temporary for a number of **hours or days**, with a **reason the player sees when they try to log in** ("banned until …" / "permanently banned"); their sessions end at once. **Unban** asks why too.
+- **Who can do what:** anyone with a role: see players and the log, kick, ban, unban. Only the Head Admin: make / remove admins, change licenses, reset credits and corporation. No one acts on themselves or the Head Admin; an admin can't act on another admin.
+- **Log tab** (`admin_log`): every kick, ban, unban, role and stat change, newest first: when, the action, the player, the admin and the reason. A ban whose player is still banned has an **Unban** button there (asks why; the unban is its own entry).
+
 ## Server hardening
 
 - Malformed or hostile messages are ignored and logged, never fatal. Every command field is checked: coordinates must be finite numbers, the ship must be the sender's.

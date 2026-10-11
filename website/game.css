@@ -71,7 +71,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .win-title-slot .tab-row { margin: 0; }
 .win-title-slot .tab { padding: 4px 10px 5px; }
 .text-input { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: none; padding: 9px 11px; outline: none; border-radius: var(--radius-sm); }
- .text-input { width: 100%; }
+.text-input { width: 100%; }
 .text-input:focus { box-shadow: 0 0 0 2px rgba(56,198,255,0.5); }
 
 .tab-row { display: flex; gap: 3px; margin-bottom: 10px; justify-content: center; }   /* (owner) tab rows are centered unless stated */
@@ -590,3 +590,29 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .sort-dim { opacity: 0.55; transition: transform 0.15s ease, opacity 0.15s; }
 .sort-drag { position: relative; z-index: 30; transition: none !important; pointer-events: none; }
 .sort-ghost { opacity: 0.3; transition: transform 0.15s ease; }
+
+/* (owner) the admin panel */
+.adm-body { display: flex; flex-direction: column; min-height: 0; }
+.adm-lock { display: flex; flex-direction: column; gap: 8px; padding: 6px 4px; }
+.adm-pw { width: 100%; box-sizing: border-box; }
+.adm-sub { margin-top: -4px; }
+.adm-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.adm-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); cursor: default; user-select: none; touch-action: manipulation; }
+.adm-row:hover { background: rgba(255,255,255,0.07); }
+.adm-row.banned .adm-name { color: #e08585; }
+.adm-dot { width: 7px; height: 7px; border-radius: 50%; background: #3a4558; flex: none; }
+.adm-dot.on { background: #4fd18b; }
+.adm-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-tag { font-size: 11px; color: var(--text-dim); }
+.adm-log { padding: 6px 8px; border-radius: 6px; background: rgba(255,255,255,0.03); display: flex; flex-direction: column; gap: 3px; }
+.adm-log-head { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.adm-log-head b { text-transform: capitalize; }
+.adm-when, .adm-by { color: var(--text-dim); font-size: 11px; }
+.adm-by { margin-left: auto; }
+.adm-reason { font-size: 12px; color: var(--text); opacity: 0.85; word-break: break-word; }
+.adm-unban { align-self: flex-start; padding: 3px 10px; font-size: 11px; }
+.adm-len { display: flex; gap: 6px; }
+.adm-amount { width: 80px; }
+.adm-mini { padding: 2px 8px; font-size: 11px; margin-left: 8px; }
+.adm-lic .sheet-v { display: flex; align-items: center; gap: 4px; }
+.adm-lic-btns { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }

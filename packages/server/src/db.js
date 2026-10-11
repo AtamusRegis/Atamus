@@ -80,6 +80,28 @@ export async function migrate() {
       data        JSONB NOT NULL,
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+
+    -- (owner) admins: role 'head' (the Head Admin) or 'admin'; bans (a permanent one, or until a time) with the reason
+    -- the player sees at login; a corporation (NULL: the starting one); and the admin log of every kick, ban and change
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS corp TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_perm BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason TEXT;
+    CREATE TABLE IF NOT EXISTS admin_log (
+      id          BIGSERIAL PRIMARY KEY,
+      at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      admin_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      admin_name  TEXT NOT NULL,
+      target_id   BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      target_name TEXT NOT NULL,
+      action      TEXT NOT NULL,
+      reason      TEXT NOT NULL DEFAULT '',
+      detail      JSONB
+    );
+    -- (owner) Nyssary is the Head Admin (the only one; only they make admins)
+    UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
+    UPDATE users SET role = NULL WHERE role = 'head' AND lower(username) <> 'nyssary';
   `);
 }
 

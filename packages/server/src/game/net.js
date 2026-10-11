@@ -5,6 +5,7 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
+import { setGameHooks } from "../admin.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
@@ -18,6 +19,12 @@ const conns = new Map();   // pid -> sockets; one session per account: a new tab
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
 export function attachGameServer(httpServer) {
+  // (owner) the admin panel: who's online, kicking (a message, then the socket closes), and a player's pilots changed
+  setGameHooks({
+    online: () => new Set(conns.keys()),
+    kick: (pid, code, msg) => { for (const c of conns.get(pid) || []) { try { c.send(JSON.stringify(msg)); c.close(code, msg.t); } catch {} } },
+    refreshPilots: async (pid) => { if (!world.players.has(pid)) return; try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch (e) { console.error("admin refresh", e); } },
+  });
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
   onCountdown((at, head, parts) => { const msg = JSON.stringify({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
   // a new website build is live: tell every connected client to reload now
