@@ -249,7 +249,9 @@
     const hit = shipAt(e.clientX, e.clientY, ships);
     if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); picked = null; return; }   // one of your ships: select its pilot (owner: the camera stays)
     const rk = rockAt(e.clientX, e.clientY);
-    if (rk) { picked = { kind: "rock", id: rk.id }; return; }                      // an asteroid: its name and distance
+    if (rk) { picked = { kind: "rock", id: rk.id }; return; }
+    const pr = propAt(e.clientX, e.clientY);
+    if (pr) { picked = { kind: "prop", id: pr.id }; return; }                      // a Library prop: its name and distance                      // an asteroid: its name and distance
     if (!dbl) { picked = null; return; }
     if (!own) return;
     const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
@@ -260,6 +262,15 @@
     for (const f of belts.values()) for (const k of f.rocks) { const d = Math.hypot(px - gx2s(k.x), py - gy2s(k.y)), r = Math.max(8, k.size / 1000 * sc * 0.5); if (d <= r && d < bd) { bd = d; best = k; } }
     return best;
   }
+  function propAt(px, py) {                         // a Library prop under the pointer (its art's box)
+    const sc = scale(); let best = null, bd = Infinity;
+    for (const f of belts.values()) for (const o of f.props || []) {
+      const dx = Math.abs(px - gx2s(o.x)), dy = Math.abs(py - gy2s(o.y)), hw = Math.max(6, o.w * sc / 2), hh = Math.max(6, o.h * sc / 2);
+      if (dx <= hw && dy <= hh) { const d = Math.hypot(dx, dy); if (d < bd) { bd = d; best = o; } }
+    }
+    return best;
+  }
+  const propById = (id) => { for (const f of belts.values()) { const o = (f.props || []).find((x) => x.id === id); if (o) return o; } return null; };
   const rockById = (id) => { for (const f of belts.values()) { const k = f.rocks.find((x) => x.id === id); if (k) return k; } return null; };
   // ---- objects in space (owner): asteroids and ships. Right-click / hold one: Lock Target (Unlock Target once locked),
   // Align To, Move towards, Info ----
@@ -332,7 +343,7 @@
     ctx.strokeStyle = "rgba(140,170,220,0.35)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
   // belts: the map marker always; the zone and the rocks only while one of your ships is inside (owner)
-  const mapIcon = img("assets/icons/map/asteroid_field_s.png"), oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
+  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
   const rockArt = (family, size) => img("assets/rocks/rock_" + family + "_" + size + ".webp"), oreIcon = (family) => img("assets/icons/ores/" + (family === "bubble" ? "rubble" : family) + "_s.png");
   function drawBelts(ships) {
     const sc = scale(), ores = oreBy();
@@ -350,17 +361,32 @@
           else { const a = rockArt(o.rock, k.size); if (a.naturalWidth) { ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(a, -wPx / 2, -wPx / 2 * a.naturalHeight / a.naturalWidth, wPx, wPx * a.naturalHeight / a.naturalWidth); } }
           ctx.restore();
         }
+        for (const o of f.props || []) {                // the Library's props (owner): every space object, at true size
+          const px = gx2s(o.x), py = gy2s(o.y), w = o.w * sc, h = o.h * sc;
+          if (px < -w || py < -h || px > innerWidth + w || py > innerHeight + h || w < 1.5) continue;
+          const a = img("assets/" + o.sprite); if (!a.naturalWidth) continue;
+          ctx.save(); ctx.imageSmoothingEnabled = w > 48; ctx.drawImage(a, px - w / 2, py - h / 2, w, h); ctx.restore();
+        }
       }
+      const mapIcon = mapIcons[p.kind] || mapIcons.belt;
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }
   }
   // the picked asteroid (owner): grey corner brackets, its ore's name and its distance from the selected pilot's ship
   function drawPicked(ships) {
     if (!picked) return;
-    const k = picked.kind === "rock" && rockById(picked.id); if (!k) { picked = null; return; }
-    const x = gx2s(k.x), y = gy2s(k.y), r = Math.max(9, k.size / 1000 * scale() * 0.55), own = ships.find((s) => s.mine && s.pilot === selPilot);
-    const o = ((cfg && cfg.ores) || []).find((q) => q.key === k.ore), name = o ? o.name : k.ore;
-    const dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000) : null;
+    const own = ships.find((s) => s.mine && s.pilot === selPilot);
+    let x, y, r, name, dist;
+    if (picked.kind === "prop") {                     // a Library prop: brackets around its art
+      const p = propById(picked.id); if (!p) { picked = null; return; }
+      x = gx2s(p.x); y = gy2s(p.y); r = Math.max(9, Math.max(p.w, p.h) * scale() * 0.55); name = p.name;
+      dist = own ? Math.max(0, Math.hypot(Math.max(0, Math.abs(own.x - p.x) - p.w / 2), Math.max(0, Math.abs(own.y - p.y) - p.h / 2))) : null;
+    } else {
+      const k = picked.kind === "rock" && rockById(picked.id); if (!k) { picked = null; return; }
+      x = gx2s(k.x); y = gy2s(k.y); r = Math.max(9, k.size / 1000 * scale() * 0.55);
+      const o = ((cfg && cfg.ores) || []).find((q) => q.key === k.ore); name = o ? o.name : k.ore;
+      dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000) : null;
+    }
     ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.85)"; ctx.lineWidth = 1.5; const c = Math.min(8, r * 0.5);   // (owner) grey = selected; orange is kept for targeted
     for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
     ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(230,235,245,0.95)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 3;

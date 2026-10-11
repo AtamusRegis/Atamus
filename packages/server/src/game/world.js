@@ -3,6 +3,7 @@
 // had is kept for reference in reference/2026-10-10-pre-reset/.
 import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
+import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -18,7 +19,8 @@ export function clampToExpanse(x, y, margin = 0) {
   return { x, y };
 }
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
-const ROCK_SOLID = 0.9;                               // a rock's solid radius, as a share of half its sprite's size (the art doesn't fill its square)
+const ROCK_SOLID = 0.9;
+const PROP_SOLID = 0.9;                               // a Library prop's solid box, as a share of its art's                               // a rock's solid radius, as a share of half its sprite's size (the art doesn't fill its square)
 const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
 
 export class World {
@@ -28,6 +30,8 @@ export class World {
     this.simAt = Date.now();    // the moment the ships' positions are for (snapshots carry it)
     this.pois = new Map();      // belt POIs: id -> { id, kind, name, x, y, r, createdAt, field, retired }
     this.poiVer = 1; this.nextPoiTick = 0; this.beltSeq = 0;
+    // (owner) the Library: every space object's art in rows, always on the map; its props are solid and nothing else
+    this.pois.set(LIBRARY.id, { ...LIBRARY, createdAt: 0, field: { rocks: [], props: libraryProps(), dir: 0, ver: 1 }, retired: false });
   }
 
   addPlayer(id, name, send, saved = null, pilots = []) {
@@ -79,7 +83,7 @@ export class World {
     if (!finite(x) || !finite(y)) return;
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
     const t = clampToExpanse(x, y, s.radius);
-    for (const poi of this.pois.values()) if (Math.hypot(t.x - poi.x, t.y - poi.y) <= poi.r + 1) for (const k of poi.field.rocks) this._pushOut(t, k.x, k.y, k.r * ROCK_SOLID + s.radius + 0.02);   // a point inside a rock: its edge
+    for (const poi of this.pois.values()) if (Math.hypot(t.x - poi.x, t.y - poi.y) <= poi.r + 1) { for (const k of poi.field.rocks) this._pushOut(t, k.x, k.y, k.r * ROCK_SOLID + s.radius + 0.02); for (const o of poi.field.props || []) this._pushRect(t, o, s.radius + 0.02); }   // a point inside a rock (or a Library prop): its edge
     s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null;
   }
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
@@ -152,6 +156,15 @@ export class World {
     const vn = s.vx * nx + s.vy * ny; if (vn < 0) { s.vx -= vn * nx; s.vy -= vn * ny; }
     return true;
   }
+  // push a ship out of a Library prop: a box (PROP_SOLID of the art's) plus `pad`, along the shallower side
+  _pushRect(s, o, pad) {
+    const hx = o.w * PROP_SOLID / 2 + pad, hy = o.h * PROP_SOLID / 2 + pad, dx = s.x - o.x, dy = s.y - o.y;
+    if (Math.abs(dx) >= hx || Math.abs(dy) >= hy) return false;
+    const vx = s.vx || 0, vy = s.vy || 0;
+    if (hx - Math.abs(dx) < hy - Math.abs(dy)) { const sg = dx < 0 ? -1 : 1; s.x = o.x + sg * hx; if (vx * sg < 0 && "vx" in s) s.vx = 0; }
+    else { const sg = dy < 0 ? -1 : 1; s.y = o.y + sg * hy; if (vy * sg < 0 && "vy" in s) s.vy = 0; }
+    return true;
+  }
   _inPoi(s, poi) { return Math.hypot(s.x - poi.x, s.y - poi.y) <= poi.r; }
   // aligned (owner, EVE-like): heading within ALIGN_DEG of the destination and at ALIGN_SPEED of top speed
   _aligned(s, poi) {
@@ -163,7 +176,7 @@ export class World {
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
-    const to = { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
@@ -194,7 +207,7 @@ export class World {
   }
 
   tick(dtSec) {
-    const now = Date.now(); this.simAt = now;
+    const now = Date.now(); this.simAt = now; this.tickN = (this.tickN || 0) + 1;
     if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); }
     this._tickShips(dtSec, now);
     this._tickTargets(now);
@@ -258,6 +271,7 @@ export class World {
       for (const s of ships) {
         if (s.wp || Math.hypot(s.x - poi.x, s.y - poi.y) > poi.r + 1) continue;
         for (const k of poi.field.rocks) this._pushOut(s, k.x, k.y, k.r * ROCK_SOLID + s.radius);
+        for (const o of poi.field.props || []) this._pushRect(s, o, s.radius);
       }
     }
     // 3) the hexagon's edge stops ships (and whatever velocity was carrying them out)
@@ -272,13 +286,14 @@ export class World {
   // showing on the map and no longer counts (a replacement spawns), but it stays open while anyone's ships are inside.
   _maintainPois(now = Date.now()) {
     for (const poi of [...this.pois.values()]) {
+      if (poi.kind !== "belt") continue;                   // the Library stays as it is
       if (decayField(poi.field, now)) this.poiFieldVer = (this.poiFieldVer || 0) + 1;
       if (!poi.retired && !poi.field.rocks.length) { poi.retired = true; this.poiVer++; }
       if (poi.retired && !this._shipsIn(poi)) { this.pois.delete(poi.id); this.poiVer++; if (this.onPoiClosed) { try { this.onPoiClosed(poi); } catch (e) { console.error("onPoiClosed", e); } } }
     }
     let online = 0; for (const p of this.players.values()) if (!p.offline) online++;
     const want = Math.max(BELTS_MIN, Math.ceil(online / PLAYERS_PER_BELT));
-    let have = 0; for (const poi of this.pois.values()) if (!poi.retired) have++;
+    let have = 0; for (const poi of this.pois.values()) if (poi.kind === "belt" && !poi.retired) have++;
     for (; have < want; have++) this._newBelt(now);
   }
   /** A belt from the database (a restart): back on the map with its rocks as they were. */
@@ -288,10 +303,10 @@ export class World {
   }
   // who has ships in which POI, worked out once per tick (POIs are few; this keeps snapshots cheap with many players)
   _occupancy() {
-    if (this._occ && this._occ.at === this.simAt && this._occ.ver === this.poiVer) return this._occ.map;
+    if (this._occ && this._occ.at === this.tickN && this._occ.ver === this.poiVer) return this._occ.map;   // once per tick
     const map = new Map(); for (const poi of this.pois.values()) map.set(poi.id, new Set());
     for (const s of this.ships.values()) { if (s.wp) continue; for (const poi of this.pois.values()) if (this._inPoi(s, poi)) map.get(poi.id).add(s.owner); }
-    this._occ = { at: this.simAt, ver: this.poiVer, map };
+    this._occ = { at: this.tickN, ver: this.poiVer, map };
     return map;
   }
   _shipsIn(poi, owner = null) { const set = this._occupancy().get(poi.id); return !!set && (owner == null ? set.size > 0 : set.has(owner)); }
@@ -323,7 +338,7 @@ export class World {
   fieldSig(p) { let sig = ""; for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) sig += poi.id + ":" + poi.field.ver + ","; return sig; }
   fieldsFor(p) {
     const out = [];
-    for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) out.push({ poi: poi.id, rocks: poi.field.rocks.map((k) => ({ id: k.id, x: k.x, y: k.y, size: k.size, ore: k.ore, rot: k.rot })) });
+    for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) out.push({ poi: poi.id, rocks: poi.field.rocks.map((k) => ({ id: k.id, x: k.x, y: k.y, size: k.size, ore: k.ore, rot: k.rot })), ...(poi.field.props ? { props: poi.field.props } : {}) });
     return { fields: out, sig: this.fieldSig(p) };
   }
 

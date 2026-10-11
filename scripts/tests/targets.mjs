@@ -10,10 +10,12 @@ const w = new World(), mk = (id, pilots) => w.addPlayer(id, id.toUpperCase(), (m
 const a = mk("a", [{ id: 1, name: "Ann" }, { id: 2, name: "Bea" }]), b = mk("b", [{ id: 1, name: "Cid" }]);
 w.tick(0.05);
 const sa = w.ships.get("a:ship:1"), sa2 = w.ships.get("a:ship:2"), sb = w.ships.get("b:ship:1");
-const belt = [...w.pois.values()][0], k = belt.field.rocks[0], k2 = belt.field.rocks[1];
+const belt = [...w.pois.values()].find((p) => p.kind === "belt"), k = belt.field.rocks[0], k2 = belt.field.rocks[1];
 const put = (s, x, y) => Object.assign(s, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false, chase: null });
 const solid = k.r * 0.9;
-put(sa, k.x + solid + sa.radius + 2, k.y); put(sb, sa.x, sa.y + 1); put(sa2, sa.x, sa.y - 1); w.tick(0.05);
+// a point d km from the rock's edge, on the belt's centre side (so it's always inside the belt)
+const inb = Math.atan2(belt.y - k.y, belt.x - k.x), nearK = (d) => [k.x + Math.cos(inb) * (solid + sa.radius + d), k.y + Math.sin(inb) * (solid + sa.radius + d)];
+put(sa, ...nearK(2)); put(sb, sa.x + Math.cos(inb + 1.2), sa.y + Math.sin(inb + 1.2)); put(sa2, sa.x + Math.cos(inb - 1.2), sa.y + Math.sin(inb - 1.2)); w.tick(0.05);
 const ticks = (n, dt = 0.05) => { for (let i = 0; i < n; i++) w.tick(dt); };
 
 // locking
@@ -53,20 +55,20 @@ t.ok(!sa.targets.some((g) => g.id === sb.id), "a target that leaves range is dro
 put(sb, sa.x, sa.y + 1); w.cmdLock("a", sa.id, "ship", sb.id); sb.wp = { fx: 0, fy: 0, tx: 0, ty: 0, at: Date.now(), dur: 1e6, poi: belt.id }; w.tick(0.05);
 t.ok(!sa.targets.some((g) => g.id === sb.id), "a target that warps away is dropped");
 sb.wp = null; put(sb, sa.x, sa.y + 1); w.tick(0.05);
-const other = [...w.pois.values()].find((p) => p !== belt);
+const other = [...w.pois.values()].find((p) => p.kind === "belt" && p !== belt);
 w._startWarp(sa, other, Date.now());
 t.ok(!sa.targets.length && !sa.chase, "warping drops every lock");
 w.cmdLock("a", sa.id, "rock", k.id);
 t.ok(!sa.targets.length, "no locking mid-warp");
-sa.wp = null; put(sa, k.x + solid + sa.radius + 2, k.y);
+sa.wp = null; put(sa, ...nearK(2));
 
 // Move towards: to the object's edge, then stop; Align To: at it at full speed; a move order replaces either
 w.cmdChase("a", sa.id, "rock", k.id, "approach"); ticks(600);
 const gap = Math.hypot(sa.x - k.x, sa.y - k.y) - solid - sa.radius;
 t.ok(gap < 0.15 && Math.hypot(sa.vx, sa.vy) < 0.01, "Move towards stops at the object's edge", { gap, v: Math.hypot(sa.vx, sa.vy) });
-put(sb, sa.x + 4, sa.y + 4); w.cmdChase("a", sa.id, "ship", sb.id, "approach"); ticks(400);
+put(sa, belt.x - 3, belt.y); put(sb, belt.x + 3, belt.y + 3); w.cmdChase("a", sa.id, "ship", sb.id, "approach"); ticks(900);   // (the belt's middle is clear of rocks)
 t.ok(Math.hypot(sa.x - sb.x, sa.y - sb.y) < sa.radius + sb.radius + 0.2, "and follows a ship to it");
-put(sa, sb.x - 40, sb.y); w.cmdChase("a", sa.id, "ship", sb.id, "align"); ticks(80);
+put(sb, belt.x + 20, belt.y); put(sa, belt.x - 20, belt.y); w.cmdChase("a", sa.id, "ship", sb.id, "align"); ticks(80);
 t.ok(Math.hypot(sa.vx, sa.vy) > sa.speed * 0.99 && sa.vx > 0, "Align To flies at it at full speed", Math.hypot(sa.vx, sa.vy));
 w.cmdMove("a", sa.id, sa.x, sa.y + 1);
 t.ok(!sa.chase, "a move order replaces it");
@@ -74,7 +76,7 @@ w.cmdChase("a", sa.id, "ship", sa.id, "align"); w.cmdChase("a", sa.id, "ship", s
 t.ok(!sa.chase, "not at itself, no unknown modes, not someone else's ship, nothing that isn't there");
 
 // Info
-put(sa, k.x + solid + sa.radius + 2, k.y); w.tick(0.05); sent.a.length = 0;
+put(sa, ...nearK(2)); w.tick(0.05); sent.a.length = 0;
 w.cmdInfo("a", "rock", k.id); w.cmdInfo("a", "ship", sb.id);
 const ri = sent.a.find((m) => m.t === "info" && m.kind === "rock"), si = sent.a.find((m) => m.t === "info" && m.kind === "ship");
 t.ok(ri && ri.ore === k.ore && ri.m3 === k.m3 && ri.size === k.size && ri.belt === belt.name, "Info on an asteroid: its ore, what's left, its size and belt", ri);

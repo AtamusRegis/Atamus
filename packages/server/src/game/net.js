@@ -86,7 +86,8 @@ export function attachGameServer(httpServer) {
   world.onBeforePurge = (pid) => { lastSaved.delete(pid); saveSystem(pid, world.exportState(pid)).catch((e) => console.error("saveSystem(purge)", e)); };
   // belt POIs persist on their own (shared by everyone); a closed one is deleted
   const poiSaved = new Map();
-  const persistPois = () => { for (const poi of world.pois.values()) { const json = JSON.stringify(poi); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
+  const persistPois = () => { for (const poi of world.pois.values()) { if (poi.kind !== "belt") continue;   // the Library is built at start-up
+      const json = JSON.stringify(poi); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
   world.onPoiClosed = (poi) => { poiSaved.delete(poi.id); deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
   loadPois().then((list) => { for (const d of list) world.loadPoi(d); }).catch((e) => console.error("loadPois", e));
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);

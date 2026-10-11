@@ -30,13 +30,22 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 - **Mined out:** a belt with no rocks left **stops showing on the map** (and a replacement spawns), but **stays open while anyone's ships are inside**; it closes once they've left.
 - **Who sees what (owner):** every belt still showing is on everyone's map as an asteroid-field marker (hover: its name). Its zone (a faint dashed circle) and rocks are only sent to, and drawn for, players with a ship inside it. Rocks are drawn at true size; when one would be under 6 px it's a dot, or its ore's icon when the belt is big on screen.
 
+## The Library (owner)
+
+A POI (`library.js`) that shows **every space object's art in rows**, always on everyone's map (map marker: the waypoint pin; hover: "Library"), 1,200 km north of the centre, 60 km across. It never wastes away or closes, isn't saved (it's built at start-up), and doesn't count toward the belts.
+
+- **The rows**, top to bottom, each centred, smallest to largest left to right: every ship hull in **blue** (Prospector, Wick, Bulwark, Rampart, Dredger, Excavator, Collier, Carrack, Beacon, Light Ark, Gleaner, Lodestar, Motherlode, Vigil, Heavy Ark, Capital Ark); the same in **red**; the **NPC law ships** (Deputy, Constable, Magistrate); the **structures and small objects** (Mining Drone ×2, Jettison Can off / on, Turret Base, Turret Head, Acceleration Gate, Stargate, Station blue / red); and the **asteroids** (each ore's rock at 200, 500 and 1000 m). Every sprite in `assets/ships` and `assets/rocks` is on a shelf. (Base-surface buildings and shipyard docks aren't space objects.)
+- **True size:** the size each object had in the game before the reset, otherwise its art at 1.875 m per pixel (the scale nearly every sprite was drawn at). Rocks are their size wide, as in a belt.
+- The shelves sit above the POI's centre (clear of its marker); a warp drops out about 4 km below the bottom row.
+- **Props:** drawn at true size, only sent to players with a ship inside (like a belt's rocks). They're **solid** (a box at 90% of the art's; a move order into one stops at its edge). A single click picks one: grey brackets and "Name - distance". Nothing else: no menu, locking or Info.
+
 ## Align and warp (owner)
 
 - **Align to a POI:** the ship turns and flies toward it at regular speed; the POI becomes its **destination**. It can warp there as long as the POI still advertises itself (shows on the map). If the POI stops showing, the destination goes and the ship **drifts on** at its speed and heading (no braking) until given a new order or stopped by the edge.
 - **Warp to a POI:** align, and warp as soon as aligned: at least 75% of top speed, heading within 5° of the POI. You can't warp to a POI you're already in.
 - **The warp:** a straight line, easing in and out, taking 2 s plus the distance at about 714 km/s (owner: crossing the system takes about 30 s). It drops out 30 km from the belt's centre on the inside of its crescent (give or take a couple of km), at a dead stop, and the destination is cleared. No orders are taken mid-warp; ships in warp don't collide. A warping ship leaves a short fading streak.
 - **Camera (owner):** following a ship through a warp zooms all the way out and holds the whole map still; when it drops out, the camera zooms back to where it was, onto the ship.
-- **Where you order it:** right-click (or hold) a belt's map marker → **Warp to name / Align to name**; or right-click (hold) space → **Belts ›**, a list of the belts: right-click (hold) one for its own menu, **Warp to / Align to** (owner: a list, not a third layer of submenus; a plain click on a name opens it too). That menu opens beside the name and the menus before it stay open until you pick something or move to another item in them. Under the Fleet window (below).
+- **Where you order it:** right-click (or hold) a belt's (or the Library's) map marker → **Warp to name / Align to name**; or right-click (hold) space → **Belts ›**, a list of the belts: right-click (hold) one for its own menu, **Warp to / Align to** (owner: a list, not a third layer of submenus; a plain click on a name opens it too). That menu opens beside the name and the menus before it stay open until you pick something or move to another item in them. Under the Fleet window (below).
 
 ## Objects in space (owner)
 

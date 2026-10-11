@@ -7,7 +7,7 @@ import { connect, suite, sleep, SHIP } from "./lib.mjs";
 const t = suite("belts");
 const w = new World(), mk = (id) => w.addPlayer(id, id, () => {}, null, [{ id: 1, name: "P" + id }]);
 const a = mk("a"), sa = w.ships.get("a:ship:1"); w.tick(0.05);
-const belts = () => [...w.pois.values()].filter((p) => !p.retired);
+const belts = () => [...w.pois.values()].filter((p) => p.kind === "belt" && !p.retired);
 t.ok(belts().length === BELTS_MIN, "a few players: " + BELTS_MIN + " belts", belts().length);
 for (let i = 0; i < 40; i++) mk("c" + i); w.nextPoiTick = 0; w.tick(0.05);
 t.ok(belts().length === Math.ceil(41 / PLAYERS_PER_BELT), "more belts with more players online", belts().length);
@@ -18,7 +18,7 @@ t.ok(Math.min(...ds) >= BELT.arcKm - BELT.arcJitterKm - 0.01 && Math.max(...ds) 
 const off = f.rocks.map((k) => { let d = Math.atan2(k.y - b.y, k.x - b.x) - f.dir; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d); });
 t.ok(Math.max(...off) <= Math.PI / 2 + 1e-9, "on a half moon: within 90° either side of its middle");
 t.ok(fieldM3(f) >= 2_000_000, "with at least 2,000,000 m³ of ore", fieldM3(f));
-const all = new Set(); for (const p of w.pois.values()) for (const k of p.field.rocks) all.add(k.ore);
+const all = new Set(); for (const p of belts()) for (const k of p.field.rocks) all.add(k.ore);
 t.ok([...all].every((o) => ORES.some((x) => x.key === o)) && ORES.length === 5, "five ore types", [...all]);
 t.ok(f.rocks.every((k) => k.size === sizeFor(k.m3)), "a rock's size follows its ore: 1000 m, 500 m, 200 m");
 
@@ -65,7 +65,7 @@ w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 
 // (owner) everything is solid: a ship can't fly through a rock (or stop inside one), only warp past it
 { const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z" }]); wb.tick(0.05);
-  const bz = [...wb.pois.values()][0], rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
+  const bz = [...wb.pois.values()].find((p) => p.kind === "belt"), rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
   Object.assign(sz, { x: rock.x - 3, y: rock.y, tx: rock.x - 3, ty: rock.y, vx: 0, vy: 0, moving: false });
   for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbours
   wb.cmdMove("z", sz.id, rock.x + 3, rock.y); let minD = Infinity;
@@ -76,9 +76,9 @@ w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 
 // ---- part 2: on the PTR ----
 const c = await connect();
-t.ok((c.last.hello.pois || []).length >= BELTS_MIN, "the map's belts arrive with hello");
+t.ok((c.last.hello.pois || []).filter((p) => p.kind === "belt").length >= BELTS_MIN, "the map's belts arrive with hello");
 c.dev({ cmd: "move", x: 0, y: 0 }); await sleep(400);
-const target = c.last.hello.pois[0];
+const target = c.last.hello.pois.find((p) => p.kind === "belt");
 c.send({ t: "warp", ship: SHIP, poi: target.id });
 const t0 = Date.now(); let saw = false;
 while (Date.now() - t0 < 45000) { await sleep(200); const s = c.mine(); if (s && s.warp) saw = true; if (saw && s && !s.warp) break; }
