@@ -7,6 +7,7 @@ import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM } from "./c
 import { loadSystem, saveSystem } from "./persist.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
+import { getState } from "../pilots.js";
 
 const world = new World();
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
@@ -34,9 +35,15 @@ export function attachGameServer(httpServer) {
     const inMemory = world.players.has(pid);               // a reload within the grace: memory is the truth
     let saved = null; if (!inMemory) try { saved = await loadSystem(pid); } catch (e) { console.error("loadSystem", e); }
     if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }   // left while loading
-    world.addPlayer(pid, user.username, sendAll, saved);
+    let st0 = null; try { st0 = await getState(user.id); } catch (e) { console.error("pilots", e); }
+    if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }
+    const player = world.addPlayer(pid, user.username, sendAll, saved, st0 ? st0.pilots : []);
+    player.portrait = st0 && st0.profile.portrait;          // the account's character: who you are in chat
+    // a pilot made or gone while you play (the client says so; and once a minute anyway)
+    const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; } catch (e) { console.error("pilots", e); } };
+    const pilotTimer = setInterval(refreshPilots, 60000);
     ws.on("close", () => {
-      mine.delete(ws);
+      clearInterval(pilotTimer); mine.delete(ws);
       if (mine.size) return;                                 // replaced by a newer session: it carries on
       conns.delete(pid); persist(pid).finally(() => { if (!conns.has(pid)) world.removePlayer(pid); });
     });
@@ -53,6 +60,8 @@ export function attachGameServer(httpServer) {
         switch (m.t) {
           case "move": world.cmdMove(pid, m.ship, m.x, m.y); break;
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
+          case "pilots": refreshPilots(); break;
+          case "chat": world.cmdChat(pid, m.text, m.channel); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }
       } catch (e) { console.error("command " + m.t, e); }

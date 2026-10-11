@@ -7,7 +7,7 @@ Atamus is a browser-based, EVE-inspired multiplayer mining semi-RTS. Claude writ
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. Read `docs/DESIGN.md`: the agreed redesign (the Expanse and nomad space built from POIs, arcs, the base surface, and a world built for 1,000 concurrent players) that the next phases build toward.
-4. **Back to basics (owner, 2026-10-10):** the live game is only the Player and Pilot pages, the Expanse's empty hexagon and a Prospector to fly. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
+4. **Back to basics (owner, 2026-10-10):** the live game is only the Player, Pilot, Chat and Fleet windows, the Expanse's empty hexagon and a Prospector per pilot. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
 
 **In the same commit as any change to behavior:**
 
@@ -41,13 +41,13 @@ packages/server/src/
   ptr.js          PTR flag, PTR user, dev commands
   db.js           schema, one-time WIPES
   game/
-    net.js        websocket server: one session per account, move/view commands, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): the hexagon, one Prospector per player, flying, collisions
+    net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
+    world.js      authoritative simulation (20 Hz): the hexagon, one Prospector per pilot, flying, collisions, chat
     constants.js  tunables + SHIP_TYPES (the Prospector)
     persist.js    systems table (JSONB per player: their ship)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer (backdrop, hexagon edge, ships), input, socket, update/countdown handling
-  ui.js           the left panel and the Player and Pilot windows (window manager, tab groups)
+  ui.js           the left panel and the Player, Pilot, Chat and Fleet windows (window manager, tab groups)
   game.css        game UI styles
   play.html/js    website hub: character + pilot creation, "updating" wait page, Enter System
   portrait.js     draws portraits (assets/portraits layers) and the portrait creator
@@ -86,11 +86,11 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 
 **PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
 
-- `move x y` (put your ship at x, y km, stopped)
+- `move x y [ship]` (put a ship of yours at x, y km, stopped)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
 
-The single PTR pilot is "Vera Kestrel". The ship is `1:ship:0`; the world's centre is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
+The single PTR pilot is "Vera Kestrel" (pilot 1 after a reset). Ships are `<account>:ship:<pilot>`, so hers is `1:ship:1`; the world's centre is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
 
 ## Code conventions
 

@@ -2,7 +2,7 @@
 // drag pans, clicking your ship follows it again, the pinch and wheel zoom, windows survive a reload and fit a phone.
 // No page errors allowed.
 import { chromium } from "/opt/npm-tools/node_modules/playwright/index.mjs";
-import { suite, BASE } from "./lib.mjs";
+import { suite, BASE, SHIP as A_SHIP } from "./lib.mjs";
 const t = suite("ui");
 const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" }).catch(() => chromium.launch());
 const errors = [];
@@ -22,7 +22,7 @@ const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new 
 let page = await open(1280, 800);
 let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(500);
   return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
-t.ok(r.btns.join() === "player,pilot", "the left panel has just the Player and Pilot windows", r.btns);
+t.ok(r.btns.join() === "player,pilot,chat,fleet", "the left panel has the Player, Pilot, Chat and Fleet windows", r.btns);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   return { wins: wins(), player: document.querySelector('.win[data-id="player"]').innerText, pilot: document.querySelector('.win[data-id="pilot"]').innerText };`);
 t.ok(r.wins.includes("player") && r.wins.includes("pilot"), "both open from the panel", r.wins);
@@ -38,11 +38,38 @@ r = await run(page, `for (const b of document.querySelectorAll(".win:not([hidden
   ev("pointerdown", sx, sy); ev("pointerup", sx, sy); await s(200);
   return { moving, tx, afterDrag, refollow: A.view.follow };`);
 t.ok(r.moving && r.tx > 0, "a click on space flies the ship there", r);
-t.ok(r.afterDrag === false, "dragging pans the camera off the ship", r);
-t.ok(r.refollow === true, "clicking your ship follows it again", r);
+t.ok(r.afterDrag === null, "dragging pans the camera off the ship", r);
+t.ok(r.refollow === A_SHIP, "clicking your ship follows it again", r);
+r = await run(page, `const card = document.querySelector(".fleet-card"); const parts = card && [card.querySelector("canvas.portrait"), card.querySelector(".fc-ship img"), card.querySelector(".fc-sh i"), card.querySelector(".fc-hp i"), card.querySelector(".fc-name")].map(Boolean);
+  ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); const off = A.view.follow;
+  card.click(); await s(200); const afterClick = A.view.follow; card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); await s(200); const afterDbl = A.view.follow;
+  const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true }); document.body.dispatchEvent(menu);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "d" })); await s(400); window.dispatchEvent(new KeyboardEvent("keyup", { key: "d" }));
+  return { parts, sel: card.classList.contains("sel"), off, afterClick, afterDbl, blocked: menu.defaultPrevented, afterKeys: A.view.follow };`);
+t.ok(r.parts && r.parts.every(Boolean) && r.sel, "a fleet card: portrait, ship, shield and hull bars, name; the pilot is selected", r);
+t.ok(r.off === null && r.afterClick === null, "selecting a pilot doesn't move the camera (owner)", r);
+t.ok(r.afterDbl === A_SHIP, "double-clicking a card follows that pilot's ship", r);
+t.ok(r.blocked, "right-click never opens the browser's menu", r);
+t.ok(r.afterKeys === null, "WASD pans the camera off the ship", r);
 r = await run(page, `for (let i = 0; i < 80; i++) c.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, clientX: 640, clientY: 400, bubbles: true, cancelable: true })); await s(800); const out = A.view.w;
   for (let i = 0; i < 80; i++) c.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 640, clientY: 400, bubbles: true, cancelable: true })); await s(800); return { out, in: A.view.w };`);
-t.ok(r.out > 20000 && r.in < 1, "the wheel zooms out to the whole hexagon and back in to the ship", r);
+t.ok(r.out > 20000 && Math.abs(r.in - 3.25) < 0.01, "the wheel zooms out to the whole hexagon and back in, no closer than 3.25 km across (owner)", r);
+
+// Local / Corp chat (owner): you speak as your character, portrait and username
+await fetch(BASE + "/game/character", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ portrait: { gender: "male", background: "nebula", skin: "tan", hair: "buzz", hairColor: "black", shirt: "armor", shirtColor: "red" } }) });
+await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(800);
+r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); await s(300);
+  const tabs = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((b) => b.textContent);
+  const inp = document.querySelector('.win[data-id="chat"] input'); inp.value = "hello expanse"; inp.form.requestSubmit(); await s(600);
+  const line = [...document.querySelectorAll('.win[data-id="chat"] .chat-line')].pop();
+  document.querySelector('.win[data-id="chat"] .tab[data-ch="corp"]').click(); await s(100);
+  const inp2 = document.querySelector('.win[data-id="chat"] input'); inp2.value = "corp hello"; inp2.form.requestSubmit(); await s(600);
+  const corp = [...document.querySelectorAll('.win[data-id="chat"] .chat-line')].map((x) => x.textContent);
+  document.querySelector('.win[data-id="chat"] .win-close').click();
+  return { tabs, line: line && line.textContent, portrait: !!(line && line.querySelector("canvas.portrait")), corp };`);
+t.ok(r.tabs.join() === "Local,Corp", "chat has Local and Corp", r.tabs);
+t.ok(r.line === "PTR: hello expanse" && r.portrait, "a message shows the character's portrait and the username", r);
+t.ok(r.corp.length === 1 && r.corp[0] === "PTR: corp hello", "corp has its own log", r.corp);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
@@ -57,11 +84,11 @@ page = await open(844, 390, true);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   const over = [...document.querySelectorAll(".win:not([hidden])")].filter((w) => { const b = w.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1; }).map((w) => w.dataset.id);
   for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);
-  const w0 = A.view.w; ev("pointerdown", 400, 200, 1, "touch"); ev("pointerdown", 500, 200, 2, "touch"); ev("pointermove", 350, 200, 1, "touch"); ev("pointermove", 550, 200, 2, "touch"); ev("pointerup", 350, 200, 1, "touch"); ev("pointerup", 550, 200, 2, "touch"); await s(500);
+  const w0 = A.view.w; ev("pointerdown", 400, 200, 1, "touch"); ev("pointerdown", 500, 200, 2, "touch"); ev("pointermove", 440, 200, 1, "touch"); ev("pointermove", 460, 200, 2, "touch"); ev("pointerup", 440, 200, 1, "touch"); ev("pointerup", 460, 200, 2, "touch"); await s(500);
   const w1 = A.view.w; ev("pointerdown", 700, 120, 3, "touch"); ev("pointerup", 700, 120, 3, "touch"); await s(500);
   return { over, w0, w1, moving: A.myShip.moving };`);
 t.ok(!r.over.length, "windows fit a phone screen", r.over);
-t.ok(r.w1 < r.w0, "a pinch zooms in", r);
+t.ok(r.w1 > r.w0, "a pinch zooms", r);
 t.ok(r.moving, "a tap flies the ship", r);
 await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);`);
 await page.close(); await browser.close();

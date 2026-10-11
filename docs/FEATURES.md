@@ -4,7 +4,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Back to basics (owner, 2026-10-10)
 
-The owner took the game back to scratch to focus on the Prospector's gameplay. **The only things in the game are the Player and Pilot pages, the world boundary and the Prospector.** Gone from the live game: stations, stargates, planets, the sun, asteroids and belts, mining, modules, fitting, inventories, the market, chat, the fleet bar, the HUD, settings and music, bases, the tutorial shard and every license in the trainer.
+The owner took the game back to scratch to focus on the Prospector's gameplay. **The game is the Player, Pilot, Chat and Fleet windows, the world boundary and a Prospector per pilot.** Gone from the live game: stations, stargates, planets, the sun, asteroids and belts, mining, modules, fitting, inventories, the market, whispers, the HUD, settings and music, bases, the tutorial shard and every license in the trainer. (The Fleet window and Local / Corp chat came back the same day, owner: "I didn't tell you to get rid of the Fleet window".)
 
 - **Kept for reference:** everything that was live just before is in `reference/2026-10-10-pre-reset/` (client, server, tests, and the full FEATURES.md that described it) and at commit `0a745ec` (the last one before the reset). The art is still in `website/assets/`. Bring things back from there when the owner asks for them.
 - docs/DESIGN.md is still the long-term plan.
@@ -13,36 +13,40 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 
 - **The Expanse's hexagon, empty:** 1 AU across at the map scale the game always used (1 AU = 20,000 km), so **20,000 km across, flat to flat**, with flat top and bottom edges. The origin is its centre. Its edge is drawn as a thin line.
 - **The edge stops ships:** a move order past it is pulled just inside, and a ship that reaches it stops dead there.
-- **One Prospector per player:** a new player's appears within 5 km of the centre. It's the only ship (`SHIP_TYPES.chisel` in constants.js): 128 m long, top speed 335 m/s, acceleration 0.15 km/s². It has no pilot, modules or holds.
+- **One Prospector per pilot:** each of your pilots has their own (id `<account>:ship:<pilot>`), which first appears within 5 km of the centre. A new pilot gets one (the server rereads your pilots when the client says so, and every minute); a pilot that's gone takes theirs along. It's the only ship (`SHIP_TYPES.chisel` in constants.js): 128 m long, top speed 335 m/s, acceleration 0.15 km/s², hull 200, shield 225 (shown in the Fleet window; nothing damages ships yet). No modules or holds.
 - **Flying:** the ship accelerates toward its target as fast as it can while still able to brake in time, faces the way it's moving, and stops on the point. At top speed, crossing the hexagon takes about 16½ hours.
 - **Ships don't overlap:** overlapping ships push apart (the lighter one more) and lose the velocity pushing them together.
-- **Logging off:** a closed connection keeps the ship in space for 20 s (a reload), then it leaves the world. Logging back in puts it where it was (pulled inside the edge if it somehow wasn't). The ship's position is saved every 10 s and on leaving.
-- **Other players:** your own ship is always sent to you. Other ships are sent while they're inside your camera's view (the client reports its view; a view wider than 40,000 km is capped). Other players' destinations aren't sent.
+- **Logging off:** a closed connection keeps your ships in space for 20 s (a reload), then they leave the world. Logging back in puts each where it was (pulled inside the edge if it somehow wasn't). Positions are saved every 10 s and on leaving.
+- **Other players:** your own ships are always sent to you (with their pilot, hull and shield). Other ships are sent while they're inside your camera's view (the client reports its view; a view wider than 40,000 km is capped). Other players' destinations aren't sent.
 - The server simulates at 20 Hz and sends snapshots at 15 Hz; the client draws ships 110 ms in the past, interpolated between the two snapshots around that moment.
 
 ## The game screen
 
-- **Canvas:** the space backdrop, the hexagon's edge and the ships. Your ship is drawn in its blue sprite, others in red, at true scale; once a ship would be under 10 px long it's drawn as its hull icon instead. While your ship is flying, a faint dashed line runs to its destination.
+- **Canvas:** the space backdrop, the hexagon's edge and the ships. Your ships are drawn in their blue sprite, others in red, at true scale; once a ship would be under 10 px long it's drawn as its hull icon instead. While one of your ships is flying, a faint dashed line runs to its destination.
+- **The selected pilot (owner):** one is always selected (remembered in `atamus.ui`); a click in space flies *their* ship. **Selecting a pilot never moves the camera** (owner: the player doesn't always need to centre on the pilot). **Tab** selects the next pilot, left to right as in the Fleet window, wrapping (not while typing).
 - **Controls (owner: mobile parity):**
-  - **click / tap** empty space: fly there;
-  - **drag:** pan the camera (it stops following your ship);
-  - **click / tap your ship:** the camera follows it again (it follows from the start);
-  - **wheel / pinch:** zoom, from 0.4 km across the screen out to the whole hexagon. The wheel zooms toward the pointer, or about your ship while following it.
+  - **click / tap** empty space: the selected pilot's ship flies there;
+  - **drag**, or **WASD** (owner): pan the camera (it stops following);
+  - **click / tap one of your ships:** select its pilot and follow that ship (the camera follows the selected pilot's ship from the start);
+  - **wheel / pinch:** zoom, from **3.25 km across the screen** (owner: the Prospector about 1/25 of the screen's width) out to the whole hexagon. The wheel zooms toward the pointer, or about the followed ship.
+  - **Right-click** does nothing yet, and never opens the browser's menu anywhere in the game (owner).
 - **Space backdrop (owner):** no nebula image in the game. It's built from these layers, redrawn every frame:
   - a dark radial gradient;
   - two layers of soft noise drifting slowly in different directions;
   - three layers of parallax stars (the nearer the layer, the more it moves as you pan), each star slowly dimming and brightening. They're crisp 1–2 device-pixel points (owner: no big blurry dots);
   - a very thin world grid whose spacing steps (1, 2, 5, 10… km) so lines stay at least 70 px apart, with every 5th line slightly brighter.
-- **Left panel:** just the **Player** and **Pilot** buttons. A button's name shows only on hover, or while holding on touch.
+- **Left panel:** **Player**, **Pilot**, **Chat** and **Fleet** buttons. A button's name shows only on hover, or while holding on touch.
+- **Fleet window (owner: how you switch pilots):** a bar with no title, dragged by its background, exactly as big as its cards, open the first time you play. One card per pilot: their **portrait on the left**; on the right their **ship** (hull icon) with its **shield (blue) and hull (red) bars**, and the **pilot's name beneath**. The selected pilot's card has an orange outline. Click a card to select that pilot (the camera stays); double-click / double-tap it to also follow their ship.
+- **Chat (owner): Local and Corp** tabs. You speak as your **account's character**: each line shows its portrait, then your username and the message (240 characters at most, whitespace squashed). Local reaches everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. An unread tab's label glows, and so does the Chat button while the window is closed. There's no history: you see what's said while you're online. Server notices show in Local.
 - **Windows:** dragged by the title bar (touch-friendly), resizable, always kept on screen (fit to phone width); resizing never squeezes a window narrower than its content. **Tab stacking:** drop a window's title onto another window to group them; drag a tab out to split it again. Layout, groups and which windows are open are remembered in localStorage `atamus.ui`.
 - **Player Sheet:** your username in the title; your character's portrait; Day Born, Credits, Pilots, Total Endorsement Level, Corp.
-- **Pilot window:** your first pilot (name in the title), their portrait, and two tabs: Licenses (the trainer, empty for now) and Training Queue.
+- **Pilot window:** the selected pilot (name in the title), their portrait, and two tabs: Licenses (the trainer, empty for now) and Training Queue.
 - **Persistence across reloads:** the camera (sessionStorage `atamus.view`) and the open windows.
 - **Mobile:** phones play in landscape (owner): on a phone (touch, shorter side < 600 px; not tablets), the first tap goes fullscreen and locks landscape. On phones, game.html sets the viewport scale to the shorter side ÷ 540 (minimum 0.6), so the whole UI is about 30% smaller; it's recomputed when the phone rotates. Text selection and the long-press callout are disabled.
 
 ## Accounts, pilots and sessions
 
-- **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**. "2026-10-09 the Expanse" was a world-only wipe: ships, hangars, cans and belts went; pilots, licenses and credits stayed. **"2026-10-10 back to basics" (owner) was a full wipe:** every pilot, ship, item, base and credit went; accounts stayed, so everyone names a new pilot on the website.
+- **Wipes:** one-time resets run at server start, once each (`WIPES` in db.js, recorded in the `meta` table). They keep accounts but delete every pilot and system and zero credits. "2026-10-09 quick-training reset" was the first **(owner)**. "2026-10-09 the Expanse" was a world-only wipe: ships, hangars, cans and belts went; pilots, licenses and credits stayed. **"2026-10-10 back to basics" (owner) was a full wipe:** every pilot, ship, item, base and credit went; accounts stayed, so everyone names a new pilot on the website. **"2026-10-10 pilot portraits" (owner: "reset everyone's pilots") was a pilots wipe:** every pilot and their ships went; accounts, characters and credits stayed.
 
 - **Website (owner):** styled like the game's panels and buttons, over a nebula backdrop. The game itself no longer uses the nebula.
   - **Front page** (`index.html`): a header with the logo and Log in on the right; a description card ("The Expanse") with **Play now**, which goes to account creation; and an **Updates** card.

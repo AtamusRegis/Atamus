@@ -366,32 +366,12 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .win[data-id="fleet"] .win-title { display: none; }
 .win[data-id="fleet"] .win-body { padding: 4px; display: flex; flex-direction: row; align-items: stretch; gap: 4px; overflow: hidden; }
 .win[data-id="fleet"].vertical .win-body { flex-direction: column; }
-.fleet-grip { flex: none; width: 8px; border-radius: 4px; cursor: move; touch-action: none; background: repeating-linear-gradient(0deg, rgba(150,165,190,0.35) 0 2px, transparent 2px 4px); opacity: .7; }
-.win[data-id="fleet"].vertical .fleet-grip { width: auto; height: 8px; background: repeating-linear-gradient(90deg, rgba(150,165,190,0.35) 0 2px, transparent 2px 4px); }
-.fleet-grip:hover { opacity: 1; }
-.fleet-list { display: grid; gap: 4px; }
 .win[data-id="fleet"] { max-height: none; }
 .win[data-id="fleet"] .rz { display: none; }
-.fleet-empty { font-size: 11px; color: var(--text-dim); padding: 6px; }
-.fleet-card { width: 66px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 3px 3px; border: none; border-radius: 6px; background: rgba(0,0,0,0.3); color: var(--text-dim); font: inherit; cursor: pointer; touch-action: manipulation; }
 
-.fleet-card:hover { background: rgba(255,255,255,0.08); }
-.fleet-card.sel { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.95); color: var(--text); }
-.fleet-card.docked .fleet-img { opacity: .45; }
-.fleet-img { height: 26px; display: grid; place-items: center; }
-.fleet-ship { max-width: 58px; max-height: 26px; image-rendering: pixelated; }
-.fleet-bar { display: flex; gap: 1px; width: 56px; height: 5px; }
-.fb-half { flex: 1; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
-.fb-sh { height: 100%; background: #4a9dff; }
-.fb-hp { height: 100%; background: #e2914a; }
-.fleet-name { font-size: 9px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ship actions anchored to the fleet bar */
-.fleet-acts { position: absolute; bottom: 100%; left: 0; margin-bottom: 5px; display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: var(--shadow); }
-.win[data-id="fleet"].vertical .fleet-acts { bottom: auto; top: 0; left: 100%; margin: 0 0 0 5px; flex-direction: column; }
-.fleet-acts[hidden], .hud-actions[hidden] { display: none; }
 .win[data-id="fleet"] .win-body { cursor: move; }
-.fleet-card { cursor: pointer; }
 
 /* station inventory: ship list on top, deliveries anchored to the bottom */
 .win-body:has(> .inv-split) { display: flex; flex-direction: column; }
@@ -417,22 +397,13 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .win[data-id="fleet"], .win[data-id="fleet"] .win-body, .win[data-id="fleet"] .fleet-list, .fleet-card { touch-action: none; }
 
 /* fleet actions sit on the side of the bar that faces the centre of the screen */
-.win[data-id="fleet"].acts-above .fleet-acts { top: auto; bottom: 100%; left: 0; right: auto; margin: 0 0 5px; flex-direction: row; }
-.win[data-id="fleet"].acts-below .fleet-acts { bottom: auto; top: 100%; left: 0; right: auto; margin: 5px 0 0; flex-direction: row; }
-.win[data-id="fleet"].acts-right .fleet-acts { bottom: auto; top: 0; left: 100%; right: auto; margin: 0 0 0 5px; flex-direction: column; }
-.win[data-id="fleet"].acts-left .fleet-acts { bottom: auto; top: 0; left: auto; right: 100%; margin: 0 5px 0 0; flex-direction: column; }
 
 .status.warn { color: #ffd59a; box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,190,110,0.45); }
 
 /* fleet action buttons: compact */
-.fleet-acts { padding: 2px; gap: 2px; border-radius: 5px; }
-.fleet-acts .hud-act { width: 24px; height: 24px; border-radius: 4px; }   /* owner: a third bigger */
-.fleet-acts .hud-act svg { width: 15px; height: 15px; stroke-width: 2; }
-@media (pointer: coarse) { .fleet-acts .hud-act { width: 32px; height: 32px; } .fleet-acts .hud-act svg { width: 19px; height: 19px; } }
 
 /* hull bars read red */
 .ubar-fill.hull { background: linear-gradient(90deg, #a8262b, #e0484a); }
-.fb-hp { background: #e0484a; }
 
 /* fleet bar: roomier ends to grab it by */
 .win[data-id="fleet"] .win-body { padding: 4px 16px; }
@@ -461,8 +432,6 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .mk-price .credits { font-weight: 600; }
 
 /* fleet actions centred on the side of the bar that faces the screen */
-.win[data-id="fleet"].acts-above .fleet-acts, .win[data-id="fleet"].acts-below .fleet-acts { left: 50%; transform: translateX(-50%); }
-.win[data-id="fleet"].acts-left .fleet-acts, .win[data-id="fleet"].acts-right .fleet-acts { top: 50%; transform: translateY(-50%); }
 
 /* endorsement levels that unlock something get a white box outline */
 .lvl-box.unlock { box-shadow: inset 0 0 0 1.5px #fff; }
@@ -542,14 +511,6 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .fit-col { text-align: right; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .fit-hp { font-size: 10px; color: #ff6b5b; white-space: nowrap; }
 /* fleet panel: smaller pilot cards (owner: it was too big) */
-.fleet-card { width: 52px; gap: 2px; padding: 3px 2px 2px; }
-.fleet-img { height: 20px; }
-.fleet-img .fleet-ship { max-height: 20px; max-width: 46px; }
-.fleet-bar { width: 44px; height: 4px; }
-.fleet-bar.empty { opacity: .25; }
-.fleet-name { font-size: 8.5px; max-width: 48px; }
-.fleet-noship { width: 18px; height: 12px; border: 1px dashed rgba(255,255,255,0.18); border-radius: 3px; }
-.fleet-card.no-ship .fleet-name { color: var(--text-faint); }
 /* hotbar module states (owner): powered = an outline in the module's color (mining orange, combat red,
    automation / self blue, passive grey); running = fill timer in that color; stopping after this cycle = grey; powered off = dark slate */
 .hb-slot { --mc: 255,160,70; }
@@ -666,3 +627,25 @@ input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none;
 canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
 .sheet-portrait { display: flex; justify-content: center; margin: 2px 0 10px; }
 .sheet-portrait canvas { border: 1px solid rgba(200, 220, 255, 0.22); }
+
+/* Fleet window (owner): portrait left; ship, shield / hull bars and the pilot's name right */
+.win[data-id="fleet"] .fleet-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.fc-portrait { width: 44px; height: 44px; flex: none; border-radius: 3px; background: rgba(255,255,255,0.04); }
+.fc-right { display: flex; flex-direction: column; gap: 3px; min-width: 64px; }
+.fc-ship { height: 18px; display: flex; align-items: center; }
+.fc-ship img { max-height: 18px; max-width: 64px; image-rendering: pixelated; }
+.fc-bars { display: flex; flex-direction: column; gap: 2px; width: 64px; }
+.fc-bars.empty { opacity: .25; }
+.fc-bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.fc-bar i { display: block; height: 100%; }
+.fc-sh i { background: #4aa8ff; }
+.fc-hp i { background: #e0534a; }
+.fc-name { font-size: 11px; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fleet-card { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 5px; border: none; border-radius: 6px; background: rgba(0,0,0,0.3); color: var(--text-dim); font: inherit; cursor: pointer; text-align: left; }
+.fleet-card:hover { background: rgba(255,255,255,0.08); }
+.fleet-card.sel { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.95); color: var(--text); }
+
+/* chat lines: the speaker's character portrait, then name and text (owner) */
+.chat-line { display: flex; align-items: flex-start; gap: 6px; }
+.chat-portrait { width: 22px; height: 22px; flex: none; border-radius: 3px; }
+.chat-msg { min-width: 0; overflow-wrap: anywhere; padding-top: 2px; }

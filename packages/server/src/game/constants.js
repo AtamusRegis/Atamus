@@ -17,9 +17,10 @@ export const SPAWN_SPREAD_KM = 5;                  // new ships appear within th
 export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the target
 export const LOGOUT_GRACE_MS = 20 * 1000; // a closed connection keeps the ship in space this long (a reload), then it despawns
 
-// The Prospector (owner: the only ship for now). Stats as they were; radius drives spacing, mass who pushes whom.
+// The Prospector (owner: the only ship for now). Stats as they were; radius drives spacing, mass who pushes whom;
+// hp / shield are shown in the fleet window (nothing damages ships yet).
 export const SHIP_TYPES = {
   chisel: {
-    name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2,
+    name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
   },
 };

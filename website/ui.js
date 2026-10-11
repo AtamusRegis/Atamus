@@ -1,4 +1,4 @@
-// Atamus windowed UI (back to basics, owner 2026-10-10): the left panel with the Player and Pilot windows, nothing else.
+// Atamus windowed UI (back to basics, owner 2026-10-10): the left panel with the Player, Pilot, Chat and Fleet windows.
 // The full UI from before the reset is in reference/2026-10-10-pre-reset/website/ui.js.
 (() => {
   "use strict";
@@ -44,7 +44,7 @@
   // ---- data ----
   let serverOffset = 0; // server epoch - client epoch
   async function ensureCatalog() { if (!catalog) catalog = await Api.get("/game/catalog"); }
-  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); if (selectedPilotId == null && state.pilots[0]) selectedPilotId = state.pilots[0].id; renderOpen(); }
+  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); ensurePilot(); renderOpen(); }
 
   // ---- windows ----
   const wins = {};
@@ -93,13 +93,13 @@
     }
     w.win.hidden = !show;
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
-    persistWin(id); updateBtnActive();
+    persistWin(id); updateBtnActive(); updateChatGlow();
   }
   function renderOpen() { for (const id in wins) if (isOpen(wins[id]) && wins[id].render) wins[id].render(wins[id].body); }
 
   // ---- tab groups: drop a window's title bar onto another window to stack them ----
   const groups = {}; let gseq = 0;
-  const persistableInGroup = (id) => ["player", "pilot"].includes(id);
+  const persistableInGroup = (id) => ["player", "pilot", "chat", "fleet"].includes(id);
   const winLabel = (id) => (wins[id] && wins[id].label) || (META[id] && META[id].name) || id;
   function createGroupFrame(r) {
     const gid = "g" + (++gseq);
@@ -265,9 +265,11 @@
   const ICONS = {
     player: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
     pilot: '<svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7v4l-1 3h16l-1-3V9a7 7 0 0 0-7-7z"/><path d="M9 20h6"/></svg>',
+    chat: '<svg viewBox="0 0 24 24"><path d="M4 4h16v11H9l-5 4z"/></svg>',
+    fleet: '<svg viewBox="0 0 24 24"><path d="M3 12l5-3v6z"/><path d="M10 7l5-3v6z"/><path d="M10 17l5-3v6z"/><path d="M17 12l4-2.4v4.8z"/></svg>',
   };
-  let order = ["player", "pilot"];
-  const META = { player: { name: "Player Sheet", pinned: true }, pilot: { name: "Pilot" } };
+  let order = ["player", "pilot", "chat", "fleet"];
+  const META = { player: { name: "Player Sheet", pinned: true }, pilot: { name: "Pilot" }, chat: { name: "Chat" }, fleet: { name: "Fleet" } };
   function renderPanel() {
     panel.innerHTML = "";
     for (const id of order) {
@@ -503,12 +505,116 @@
     render();
   }
 
+  // ---- the selected pilot (owner): one is always selected; it's whose ship a click flies. Selecting doesn't move
+  // the camera. Tab steps through the pilots left to right (wrapping). ----
+  function ensurePilot() {
+    const ps = (state && state.pilots) || []; if (!ps.length) return;
+    if (!ps.some((p) => String(p.id) === String(saved.selPilot))) saved.selPilot = String(ps[0].id);
+    selectedPilotId = ps.find((p) => String(p.id) === String(saved.selPilot)).id;
+    if (window.Atamus.selectedPilot !== String(saved.selPilot)) window.Atamus.selectPilot(String(saved.selPilot));
+  }
+  function selectPilot(id) {
+    saved.selPilot = String(id); persistAll(); ensurePilot();
+    if (wins.pilot && isOpen(wins.pilot)) renderPilot(wins.pilot.body);
+    if (wins.fleet && isOpen(wins.fleet)) renderFleet(wins.fleet.body);
+  }
+  window.Atamus.bus.addEventListener("pilotselect", (e) => { if (e.detail != null && String(e.detail) !== String(saved.selPilot)) selectPilot(e.detail); });   // clicked one of your ships
+  addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    const t = document.activeElement && document.activeElement.tagName; if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    e.preventDefault();
+    const ps = (state && state.pilots) || []; if (ps.length < 2) return;
+    const i = ps.findIndex((p) => String(p.id) === String(saved.selPilot));
+    selectPilot(ps[(i + 1) % ps.length].id);
+  });
+
+  // ---- Fleet window (owner): how you switch pilots. Each card: the pilot's portrait on the left; their ship with its
+  // shield and hull bars on the right, the pilot's name beneath. Click a card to select that pilot; double-click (or
+  // double-tap) it to also centre the camera on their ship and follow it. ----
+  const pilotShip = (id) => ((window.Atamus.snap && window.Atamus.snap.ships) || []).find((x) => x.mine && String(x.pilot) === String(id)) || null;
+  function renderFleet(body) {
+    const w = wins.fleet, pilots = (state && state.pilots) || [], cfgT = (window.Atamus.cfg && window.Atamus.cfg.shipTypes) || {};
+    const sig = pilots.map((p) => p.id + ":" + p.name + ":" + JSON.stringify(p.portrait) + ":" + ((pilotShip(p.id) || {}).type || "-")).join(",");
+    if (sig !== w.fsig) {
+      w.fsig = sig; w.cards = {}; body.innerHTML = "";
+      const list = el("div", { class: "fleet-list" });
+      for (const p of pilots) {
+        const sh = pilotShip(p.id), t = sh ? cfgT[sh.type] || {} : {};
+        const sf = el("i"), hf = el("i");
+        const card = el("button", { class: "fleet-card" },
+          p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 44, "fc-portrait") : el("span", { class: "fc-portrait" }),
+          el("div", { class: "fc-right" },
+            el("div", { class: "fc-ship" }, sh ? el("img", { src: "assets/icons/ships/" + (t.sprite || "chisel") + "_blue.png", alt: "", draggable: "false" }) : null),
+            el("div", { class: "fc-bars" + (sh ? "" : " empty") }, el("div", { class: "fc-bar fc-sh" }, sf), el("div", { class: "fc-bar fc-hp" }, hf)),
+            el("div", { class: "fc-name" }, p.name)));
+        card.addEventListener("click", () => selectPilot(p.id));
+        card.addEventListener("dblclick", () => { const cur = pilotShip(p.id); if (cur) window.Atamus.followShip(cur.id); });
+        w.cards[p.id] = { card, sf, hf };
+        list.append(card);
+      }
+      body.append(list);
+      w.win.style.width = "auto"; w.win.style.height = "auto";   // exactly as big as its cards
+    }
+    for (const p of pilots) {
+      const c = w.cards[p.id]; if (!c) continue;
+      const sh = pilotShip(p.id), t = sh ? cfgT[sh.type] || {} : {};
+      c.sf.style.width = (sh && t.shield ? Math.max(0, Math.min(1, sh.shield / t.shield)) * 100 : 0) + "%";
+      c.hf.style.width = (sh && t.hp ? Math.max(0, Math.min(1, sh.hp / t.hp)) * 100 : 0) + "%";
+      c.card.classList.toggle("sel", String(p.id) === String(saved.selPilot));
+    }
+  }
+  window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
+
+  // ---- chat (owner): Local and Corp. You speak as your account's character: its portrait and your username. ----
+  const chat = { local: [], corp: [] }, unread = {}; let chatTab = "local";
+  const viewing = (ch) => { const w = wins.chat; return w && isOpen(w) && chatTab === ch; };
+  function updateChatGlow() {
+    const w = wins.chat;
+    if (w && isOpen(w) && w.slot) for (const b of w.slot.querySelectorAll(".tab")) b.classList.toggle("unread", b.dataset.ch !== chatTab && !!unread[b.dataset.ch]);
+    const btn = panel.querySelector('.wbtn[data-id="chat"]');
+    if (btn) btn.classList.toggle("unread", (!w || !isOpen(w)) && Object.values(unread).some(Boolean));
+  }
+  function pushChat(ch, msg) {
+    chat[ch].push(msg); if (chat[ch].length > 300) chat[ch].shift();
+    if (viewing(ch)) appendChatLine(wins.chat.body.querySelector(".chat-log"), msg);
+    else { unread[ch] = true; updateChatGlow(); }
+  }
+  function appendChatLine(log, msg) {
+    if (!log) return;
+    const node = msg.sys ? el("div", { class: "sys" }, "» " + msg.text)
+      : el("div", { class: "chat-line" }, msg.portrait && window.Portrait ? Portrait.canvas(msg.portrait, 22, "chat-portrait") : el("span", { class: "chat-portrait" }),
+        el("div", { class: "chat-msg" }, el("span", { class: "who" }, msg.from + ": "), msg.text));
+    log.append(node); log.scrollTop = log.scrollHeight;
+  }
+  window.Atamus.bus.addEventListener("chat", (e) => { const m = e.detail; pushChat(m.ch === "corp" ? "corp" : "local", { from: m.from, portrait: m.portrait, text: m.text }); });
+  window.Atamus.bus.addEventListener("sys", (e) => pushChat("local", { sys: true, text: e.detail.text }));
+  function renderChat(body) {
+    unread[chatTab] = false;
+    const slot = wins.chat && wins.chat.slot;
+    if (slot) {
+      slot.innerHTML = "";
+      slot.append(el("div", { class: "tab-row" }, [["local", "Local"], ["corp", "Corp"]].map(([k, label]) =>
+        el("button", { class: "tab" + (k === chatTab ? " active" : ""), "data-ch": k, onclick: () => { chatTab = k; renderChat(body); } }, label))));
+    }
+    body.innerHTML = "";
+    const log = el("div", { class: "chat-log" });
+    for (const m of chat[chatTab]) appendChatLine(log, m);
+    const input = el("input", { class: "text-input", maxlength: "240", placeholder: chatTab === "corp" ? "Deep Core Industries" : "Local" });
+    const form = el("form", { class: "chat-form", onsubmit: (e) => { e.preventDefault(); const t = input.value.trim(); if (!t) return; window.Atamus.send({ t: "chat", text: t, channel: chatTab }); input.value = ""; } }, input);
+    body.append(log, form); log.scrollTop = log.scrollHeight;
+    updateChatGlow();
+  }
+
   function flash(text) { const s = document.getElementById("status"); if (!s) return; s.textContent = text; s.className = "status err"; setTimeout(() => s.classList.add("hidden"), 2500); }
 
   // ---- init ----
   async function init() {
     createWindow("player", { left: 90, top: 70, width: 260, minW: 230, minH: 196, render: renderPlayer });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
+    createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
+    createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
+    if (!saved.win.fleet) saved.win.fleet = { open: true };   // (owner) the fleet window is how you switch pilots: open the first time
+    dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));   // a bar with no title: dragged by its background
     renderPanel();
     restoreGroups();
     for (const id in wins) { if (saved.win[id] && saved.win[id].open && !wins[id].group) toggleWindow(id, true); }   // windows open last session

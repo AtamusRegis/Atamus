@@ -1,5 +1,5 @@
 // The authoritative simulation (back to basics, owner 2026-10-10): the Expanse's hexagon with nothing in it, and one
-// Prospector per player that flies where it's told. Everything else the game had is kept for reference in
+// Prospector per pilot that flies where it's told. Everything else the game had is kept for reference in
 // reference/2026-10-10-pre-reset/.
 import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM } from "./constants.js";
 
@@ -21,28 +21,37 @@ const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view 
 
 export class World {
   constructor() {
-    this.players = new Map();   // pid -> { id, name, send, offline, offlineSince, view }
+    this.players = new Map();   // pid -> { id, name, send, offline, offlineSince, view, pilots: [{ id, name }] }
     this.ships = new Map();     // sid -> ship
     this.simAt = Date.now();    // the moment the ships' positions are for (snapshots carry it)
   }
 
-  addPlayer(id, name, send, saved = null) {
+  addPlayer(id, name, send, saved = null, pilots = []) {
     const existing = this.players.get(id);
-    if (existing) { existing.send = send; existing.offline = false; existing.name = name; this._ensureShip(id, saved); return existing; }
-    const p = { id, name, send, offline: false, offlineSince: 0, view: null };
+    if (existing) { existing.send = send; existing.offline = false; existing.name = name; this.setPilots(id, pilots, saved); return existing; }
+    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved };
     this.players.set(id, p);
-    this._ensureShip(id, saved);
+    this.setPilots(id, pilots, saved);
     return p;
   }
-  // every player has one Prospector: where they left it, or a fresh one near the centre
-  _ensureShip(id, saved) {
-    for (const s of this.ships.values()) if (s.owner === id) return s;
-    const t = SHIP_TYPES.chisel, sv = saved && saved.ship;
+  /** The account's pilots (from the database): each has one Prospector, and a pilot that's gone takes theirs with it. */
+  setPilots(id, pilots, saved = null) {
+    const p = this.players.get(id); if (!p) return;
+    p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name }));
+    const keep = new Set(p.pilots.map((x) => this._sid(id, x.id)));
+    for (const [sid, s] of this.ships) if (s.owner === id && !keep.has(sid)) this.ships.delete(sid);
+    for (const pl of p.pilots) this._ensureShip(id, pl.id, saved || p.saved);
+  }
+  _sid(owner, pilotId) { return `${owner}:ship:${pilotId}`; }
+  // a pilot's Prospector: where they left it, or a fresh one near the centre
+  _ensureShip(id, pilotId, saved) {
+    const sid = this._sid(id, pilotId);
+    if (this.ships.has(sid)) return this.ships.get(sid);
+    const t = SHIP_TYPES.chisel, sv = saved && saved.ships && saved.ships[pilotId];
     let x, y, h;
     if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
-    const sid = `${id}:ship:0`;
-    const s = { id: sid, owner: id, type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass };
+    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield };
     this.ships.set(sid, s);
     return s;
   }
@@ -55,12 +64,13 @@ export class World {
   }
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
-    const s = [...this.ships.values()].find((x) => x.owner === id);
-    return { ship: s ? { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3) } : null, savedAt: Date.now() };
+    const ships = {};
+    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3) };
+    return { ships, savedAt: Date.now() };
   }
 
   // ---- commands (every field hostile) ----
-  /** Fly your ship to a point (clamped inside the hexagon). */
+  /** Fly one of your ships to a point (clamped inside the hexagon). */
   cmdMove(pid, shipId, x, y) {
     if (!finite(x) || !finite(y)) return;
     const s = this.ships.get(shipId); if (!s || s.owner !== pid) return;
@@ -71,6 +81,16 @@ export class World {
     const p = this.players.get(pid); if (!p) return;
     if (!finite(x) || !finite(y) || !finite(w) || w <= 0) { p.view = null; return; }
     const c = clampToExpanse(x, y); p.view = { x: c.x, y: c.y, w: Math.min(w, VIEW_MAX_W) };
+  }
+
+  /** Local and Corp chat (owner): you speak as your account's character (its portrait and your username), not as a
+   *  pilot. Local is everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. */
+  cmdChat(pid, text, channel) {
+    const p = this.players.get(pid); if (!p || typeof text !== "string") return;
+    const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
+    const ch = channel === "corp" ? "corp" : "local";
+    const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now() });
+    for (const other of this.players.values()) if (!other.offline) other.send(msg);
   }
 
   tick(dtSec) {
@@ -119,16 +139,16 @@ export class World {
     }
   }
 
-  // ---- snapshots: your own ship always, other ships inside your camera's view (or near your ship) ----
+  // ---- snapshots: your own ships always, other ships inside your camera's view (or near your ship) ----
   snapshotFor(p) {
-    const own = [...this.ships.values()].find((s) => s.owner === p.id);
+    const own = [...this.ships.values()].find((s) => s.owner === p.id);   // (no view yet: around one of your ships)
     const v = p.view || (own ? { x: own.x, y: own.y, w: 60 } : null);
     const half = v ? v.w * 0.75 : 0, ships = [];
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
       if (!mine && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
-      if (mine) { e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); } }
+      if (mine) { e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); } }
       ships.push(e);
     }
     return { t: "snap", st: this.simAt, ships };

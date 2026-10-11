@@ -1,6 +1,6 @@
-// Atamus client (back to basics, owner 2026-10-10): the Expanse's hexagon, empty, and your Prospector. Click or tap
-// to fly; drag to pan; wheel or pinch to zoom; click / tap your ship to follow it again. The Player and Pilot windows
-// live in ui.js. What the client did before the reset is in reference/2026-10-10-pre-reset/website/.
+// Atamus client (back to basics, owner 2026-10-10): the Expanse's hexagon, empty, and a Prospector per pilot. Click or
+// tap to fly the selected pilot's ship; drag or WASD to pan; wheel or pinch to zoom; click / tap one of your ships to
+// select its pilot and follow it. The windows (Player, Pilot, Fleet) live in ui.js. What the client did before the reset is in reference/2026-10-10-pre-reset/website/.
 (() => {
   "use strict";
 
@@ -13,15 +13,20 @@
   // snapshots: the last few, each with the server time its positions are for; ships are drawn RENDER_DELAY_MS in
   // the past, interpolated between the two snapshots around that moment
   const RENDER_DELAY_MS = 110, snaps = []; let clockOffset = null, latest = { ships: [] };
-  const cam = { cx: 0, cy: 0, viewW: 2 }; let viewWTarget = 2, follow = true, camInit = false, zoomAt = null;
-  const ZOOM_MIN_W = 0.4;                          // km across the screen at the closest zoom
+  // follow: the id of the ship the camera follows, or null. Selecting a pilot doesn't move the camera (owner).
+  const ZOOM_MIN_W = 3.25;                         // km across the screen at the closest zoom (owner: the Prospector at about 1/25 of the width)
+  const cam = { cx: 0, cy: 0, viewW: ZOOM_MIN_W }; let viewWTarget = ZOOM_MIN_W, follow = null, camInit = false, zoomAt = null;
+  let selPilot = null;                             // the selected pilot (ui.js keeps it; one is always selected)
 
   window.Atamus = {
     send: (o) => send(o), bus, get me() { return me; }, get cfg() { return cfg; }, get snap() { return latest; },
     ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); },
     get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow }; },
+    get selectedPilot() { return selPilot; },
+    selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
+    followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; zoomAt = null; return true; },
   };
-  const myShip = () => (latest.ships || []).find((x) => x.mine) || null;
+  const myShip = () => { const own = (latest.ships || []).filter((x) => x.mine); return own.find((x) => x.pilot === selPilot) || own[0] || null; };   // the selected pilot's ship
 
   // backdrop on its own canvas under the transparent game canvas
   const bgCanvas = document.createElement("canvas"); bgCanvas.id = "bg";
@@ -68,7 +73,8 @@
         clockOffset = clockOffset == null ? off : Math.max(off, clockOffset + (off - clockOffset) * 0.02);   // server clock ≈ local + offset (the freshest arrival)
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; bus.dispatchEvent(new CustomEvent("snap"));
-      } else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
+      } else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
+      else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
     };
   }
 
@@ -161,9 +167,14 @@
     return out;
   }
 
-  // ---- input: click / tap = fly there (or follow your ship, on it); drag = pan; wheel / pinch = zoom ----
+  // ---- input: click / tap = fly the selected ship there (on one of your ships: select its pilot and follow it);
+  // drag or WASD = pan; wheel / pinch = zoom ----
   const ptrs = new Map(); let drag = null;
-  const shipAt = (px, py, ships) => { const own = ships.find((s) => s.mine); if (!own) return null; const r = Math.max(14, hull(own.type).lengthKm * scale() * 0.6); return Math.hypot(px - gx2s(own.x), py - gy2s(own.y)) <= r ? own : null; };
+  const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
+    let best = null, bd = Infinity;
+    for (const s of ships) { if (!s.mine) continue; const r = Math.max(14, hull(s.type).lengthKm * scale() * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = s; } }
+    return best;
+  };
   canvas.addEventListener("pointerdown", (e) => {
     try { canvas.setPointerCapture(e.pointerId); } catch {}
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -175,7 +186,7 @@
     if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (!drag) return;
     if (drag.pinch) { if (ptrs.size < 2) return; const [a, b] = [...ptrs.values()]; zoomTo(drag.w * (drag.d || 1) / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
-    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = false; zoomAt = null; }
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = null; zoomAt = null; }
     if (drag.moved) { cam.cx = drag.cx - (e.clientX - drag.x0) / scale(); cam.cy = drag.cy + (e.clientY - drag.y0) / scale(); clampCamera(); }
   });
   const up = (e) => {
@@ -184,7 +195,8 @@
     if (d.pinch) { if (!ptrs.size) drag = null; return; }
     drag = null; if (d.moved || e.type === "pointercancel") return;
     const ships = shipsNow(), own = myShip();
-    if (shipAt(e.clientX, e.clientY, ships)) { follow = true; zoomAt = null; return; }   // your ship: the camera follows it again
+    const hit = shipAt(e.clientX, e.clientY, ships);
+    if (hit) { if (hit.pilot !== selPilot) window.Atamus.selectPilot(hit.pilot); follow = hit.id; zoomAt = null; return; }   // one of your ships: its pilot, and the camera follows it
     if (!own) return;
     const w = s2w(e.clientX, e.clientY); send({ t: "move", ship: own.id, x: +w.x.toFixed(4), y: +w.y.toFixed(4) });
   };
@@ -196,7 +208,13 @@
     if (follow) { zoomAt = null; return; }
     const p = s2w(px, py); zoomAt = { wx: p.x, wy: p.y, px, py };
   }
-  document.addEventListener("contextmenu", (e) => { if (e.target === canvas) e.preventDefault(); });
+  document.addEventListener("contextmenu", (e) => e.preventDefault());   // no browser menu anywhere in the game (owner)
+  // WASD pans the camera (owner); it stops following
+  const keys = new Set();
+  const typing = () => { const t = document.activeElement && document.activeElement.tagName; return t === "INPUT" || t === "TEXTAREA" || t === "SELECT"; };
+  addEventListener("keydown", (e) => { const k = e.key.toLowerCase(); if ("wasd".includes(k) && k.length === 1 && !typing() && !e.ctrlKey && !e.metaKey && !e.altKey) keys.add(k); });
+  addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+  addEventListener("blur", () => keys.clear());
 
   // ---- drawing ----
   function drawHex() {                            // the Expanse's edge (owner: the world boundary)
@@ -229,10 +247,11 @@
     const dpr = window.devicePixelRatio || 1;
     if (canvas.width !== Math.floor(innerWidth * dpr) || canvas.height !== Math.floor(innerHeight * dpr)) { canvas.width = Math.floor(innerWidth * dpr); canvas.height = Math.floor(innerHeight * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, innerWidth, innerHeight);
-    const ships = shipsNow(), own = ships.find((s) => s.mine);
+    const ships = shipsNow(), own = ships.find((s) => s.mine && s.pilot === selPilot) || ships.find((s) => s.mine);
     if (!camInit && own && cfg) {                      // start on your ship (or where you were, after an update reload)
       camInit = true; cam.cx = own.x; cam.cy = own.y;
-      try { const v = JSON.parse(sessionStorage.getItem("atamus.view") || "null"); if (v && isFinite(v.cx) && isFinite(v.w)) { cam.cx = v.cx; cam.cy = v.cy; cam.viewW = viewWTarget = Math.max(ZOOM_MIN_W, v.w); follow = !!v.follow; } } catch {}
+      follow = own.id;
+      try { const v = JSON.parse(sessionStorage.getItem("atamus.view") || "null"); if (v && isFinite(v.cx) && isFinite(v.w)) { cam.cx = v.cx; cam.cy = v.cy; cam.viewW = viewWTarget = Math.max(ZOOM_MIN_W, v.w); follow = typeof v.follow === "string" ? v.follow : null; } } catch {}
     }
     if (cfg) {
       viewWTarget = Math.max(ZOOM_MIN_W, Math.min(fitWidth(), viewWTarget));
@@ -241,7 +260,13 @@
         const sc = scale(); cam.cx = zoomAt.wx - (zoomAt.px - innerWidth / 2) / sc; cam.cy = zoomAt.wy + (zoomAt.py - innerHeight / 2) / sc;
         if (Math.abs(viewWTarget - cam.viewW) < viewWTarget * 0.002) zoomAt = null;
       }
-      if (follow && own) { const e = 1 - Math.exp(-12 * dt); cam.cx += (own.x - cam.cx) * e; cam.cy += (own.y - cam.cy) * e; }
+      if (keys.size) {                                 // WASD
+        let dx = 0, dy = 0; if (keys.has("a")) dx -= 1; if (keys.has("d")) dx += 1; if (keys.has("w")) dy += 1; if (keys.has("s")) dy -= 1;
+        if (dx || dy) { const l = Math.hypot(dx, dy); follow = null; zoomAt = null; cam.cx += dx / l * cam.viewW * 0.9 * dt; cam.cy += dy / l * cam.viewW * 0.9 * dt; }
+      }
+      const fs = follow && ships.find((s) => s.id === follow);
+      if (follow && !fs && latest.ships && !latest.ships.some((s) => s.id === follow)) follow = null;   // that ship is gone
+      if (fs) { const e = 1 - Math.exp(-12 * dt); cam.cx += (fs.x - cam.cx) * e; cam.cy += (fs.y - cam.cy) * e; }
       clampCamera();
       sendView(now);
     }

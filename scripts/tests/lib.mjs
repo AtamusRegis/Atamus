@@ -2,7 +2,7 @@
 import WebSocket from "../../packages/server/node_modules/ws/index.js";
 
 export const BASE = "http://localhost:8090";
-export const SHIP = "1:ship:0";
+export const SHIP = "1:ship:1";   // the PTR pilot Vera Kestrel (pilot 1 after a reset) flies ship <account>:ship:<pilot>
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // A game connection that keeps the latest message of each type plus all system lines.

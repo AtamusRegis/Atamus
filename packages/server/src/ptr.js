@@ -20,8 +20,8 @@ export async function devCommand(world, pid, m) {
   const p = world.players.get(pid); if (!p) return;
   const tell = (text) => p.send(JSON.stringify({ t: "sys", text: "[PTR] " + text }));
   switch (m.cmd) {
-    case "move": {                                       // put your ship at x, y (km), stopped
-      const sh = [...world.ships.values()].find((s) => s.owner === pid), x = +m.x, y = +m.y;
+    case "move": {                                       // put a ship of yours (m.ship, else the first) at x, y (km), stopped
+      const sh = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid), x = +m.x, y = +m.y;
       if (sh && Number.isFinite(x) && Number.isFinite(y)) { Object.assign(sh, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false }); tell("moved"); }
       break;
     }
