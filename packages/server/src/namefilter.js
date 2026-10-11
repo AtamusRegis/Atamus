@@ -37,7 +37,10 @@ const CATS = {
   },
 };
 // what each is called in the admin panel
-export const CAT_NAMES = { racist: "Racist", groups: "Groups", slurs: "Slurs", profanity: "Profanity", sexual: "Sexual", extremist: "Extremist" };
+export const CAT_NAMES = { racist: "Racist", groups: "Groups", hostile: "Group hostility", slurs: "Slurs", profanity: "Profanity", sexual: "Sexual", extremist: "Extremist" };
+// (owner) naming a people is often harmless, but a contemptuous word just before it ("dirty", "filthy", "evil" ...) is
+// "hostile": weighted like slurs, it can mute at once and the staff are told straight away (chat only, never names)
+const HOSTILE = new Set(["dirty", "filthy", "filthie", "bad", "evil", "disgusting", "nasty", "vile", "worthless", "subhuman", "stupid", "dumb", "lazy", "greedy", "savage", "savages", "inferior", "rotten", "scum", "scummy", "trash", "trashy", "ugly", "damn", "damned", "smelly", "stinking", "stinky", "useless", "sneaky", "thieving", "backward", "primitive", "animal", "animals", "vermin", "parasite", "parasites", "cursed", "godless", "sick", "gross", "lowlife", "degenerate"]);
 // names refuse all but naming a people; chat lines are flagged for all of them (owner)
 const NAME_CATS = ["racist", "slurs", "extremist", "sexual", "profanity"];
 // ordinary words that contain an "anywhere" term (squashed like the text): taken out before checking
@@ -53,11 +56,11 @@ function leet(s) {
 // stretched spellings ("seeexy" → "sexy")
 // (owner) words the admins asked for and the Head Admin approved (admin panel › Words), in their category: read the same way
 // (leet, padding); 5 letters or more count anywhere in a word, shorter ones only as a whole word
-let extra = [];
+let extra = [], repealed = new Set();
 const SQ = {};
 function build() {
   for (const [cat, l] of Object.entries(CATS)) {
-    const any = [...l.anywhere], word = [...l.word];
+    const any = l.anywhere.filter((w) => !repealed.has(w)), word = l.word.filter((w) => !repealed.has(w));   // (owner) words the Head Admin repealed: not filtered
     for (const x of extra) if (x.cat === cat) (x.word.length >= 5 ? any : word).push(x.word);
     SQ[cat] = { anywhere: any.map(squash), word: new Set(word), wordSq: new Set(word.filter((w) => squash(w) === w)) };
   }
@@ -69,7 +72,9 @@ export const filterForm = (raw) => leet(String(raw)).replace(/[^a-z]/g, "");
 export const nameKey = (raw) => squash(filterForm(raw));
 export const CATEGORY_KEYS = Object.keys(CATS);
 /** The approved requested words ([{ word, cat }]). */
-export function setExtraWords(list) { extra = list.filter((x) => x && CATS[x.cat] && typeof x.word === "string" && x.word.length >= 2).map((x) => ({ word: filterForm(x.word), cat: x.cat })); build(); }
+export function setExtraWords(list, repeal = []) { repealed = new Set(repeal.map((w) => filterForm(w))); extra = list.filter((x) => x && CATS[x.cat] && typeof x.word === "string" && x.word.length >= 2 && !repealed.has(filterForm(x.word))).map((x) => ({ word: filterForm(x.word), cat: x.cat })); build(); }
+/** Is this word (as the filter reads it) one of the built-in or approved ones? */
+export const isFiltered = (w) => { const f = filterForm(w); return Object.values(CATS).some((l) => l.anywhere.includes(f) || l.word.includes(f)) || extra.some((x) => x.word === f); };
 const wordHit = (c, plain) => { const sq = squash(plain); return SQ[c].word.has(plain) || SQ[c].wordSq.has(sq); };
 const words = (raw) => String(raw).replace(/([a-z])([A-Z])/g, "$1 $2").split(/[^A-Za-z0-9@$!|+€¡À-ɏ]+/).filter(Boolean);
 
@@ -93,6 +98,11 @@ export function scan(raw, forNames = false) {
     if (local.size) { hit.add(w); for (const c of local) cats.add(c); }
   }
   if (/(^|\D)1488(\D|$)/.test(String(raw)) && cats0.includes("extremist")) { cats.add("extremist"); hit.add("1488"); }
+  if (!forNames && cats.has("groups")) {                     // (owner) a contemptuous word up to two words before a people named
+    const ws = words(raw), plain = ws.map((w) => squash(leet(w).replace(/[^a-z]/g, "")));
+    ws.forEach((w, i) => { const t = leet(w).replace(/[^a-z]/g, ""); if (!(wordHit("groups", t) || (t.endsWith("s") && wordHit("groups", t.slice(0, -1))))) return;
+      for (const j of [i - 1, i - 2]) if (j >= 0 && (HOSTILE.has(plain[j]) || HOSTILE.has(leet(ws[j]).replace(/[^a-z]/g, "")))) { cats.add("hostile"); hit.add(ws[j]); } });
+  }
   // spelled out with spaces or dots ("n i g g e r", "f.u.c.k"): the run-together check above catches it; mark the letters
   if (cats.size && !hit.size) for (const w of words(raw)) if (w.length <= 2) hit.add(w);
   return { bad: cats.size > 0, cats: [...cats], words: [...hit] };

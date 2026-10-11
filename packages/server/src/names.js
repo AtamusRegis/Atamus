@@ -20,6 +20,6 @@ export async function loadNameData() {
   await reloadWords();
 }
 export async function reloadWords() {
-  const { rows } = await pool.query(`SELECT word, cat FROM filter_words WHERE status = 'approved'`);
-  setExtraWords(rows);
+  const { rows } = await pool.query(`SELECT word, cat, status FROM filter_words WHERE status IN ('approved', 'repealed')`);
+  setExtraWords(rows.filter((r) => r.status === "approved"), rows.filter((r) => r.status === "repealed").map((r) => r.word));   // (owner) the Head Admin repeals words
 }

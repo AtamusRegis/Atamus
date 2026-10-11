@@ -37,24 +37,29 @@ export async function mentioned(text, channel = "admin") {
 export async function rolesOf(ids) { if (!ids.length) return new Map(); const { rows } = await pool.query(`SELECT id, role FROM users WHERE id = ANY($1)`, [ids]); return new Map(rows.map((r) => [String(r.id), r.role])); }
 
 // ---- unread counts: what's new on each tab since the staff member last opened it ----
+// (owner) Moderators (chat moderators) only count what they can see: language reports, mute / block appeals, Language tickets
+export const MOD_REPORTS = ["Language", "Harassment", "Spam", "Offensive name"];
 const TABS = {
-  reports: `SELECT count(*)::int AS n FROM reports WHERE created_at > $1`,
-  appeals: `SELECT (SELECT count(*) FROM appeal_messages WHERE NOT from_admin AND at > $1) + (SELECT count(*) FROM rel_appeal_messages WHERE NOT from_admin AND at > $1) AS n`,
-  chat: `SELECT count(*)::int AS n FROM chat_flags WHERE at > $1`,
-  names: `SELECT count(*)::int AS n FROM banned_names WHERE at > $1`,
-  words: `SELECT count(*)::int AS n FROM filter_words WHERE requested_at > $1 OR decided_at > $1`,
-  support: `SELECT count(*)::int AS n FROM ticket_messages WHERE NOT from_admin AND at > $1`,
-  disc: `SELECT count(*)::int AS n FROM admin_log WHERE at > $1 AND action IN ('ban', 'mute', 'freeze', 'unban', 'unmute', 'unfreeze')`,
-  review: `SELECT count(*)::int AS n FROM mod_reviews WHERE at > $1 AND status = 'open'`,
+  reports: (mod) => `SELECT count(*)::int AS n FROM reports WHERE created_at > $1` + (mod ? ` AND category IN (${MOD_REPORTS.map((c) => "'" + c + "'").join(", ")})` : ""),
+  appeals: (mod) => mod ? `SELECT count(*)::int AS n FROM rel_appeal_messages WHERE NOT from_admin AND at > $1` : `SELECT (SELECT count(*) FROM appeal_messages WHERE NOT from_admin AND at > $1) + (SELECT count(*) FROM rel_appeal_messages WHERE NOT from_admin AND at > $1) AS n`,
+  chat: () => `SELECT count(*)::int AS n FROM chat_flags WHERE at > $1`,
+  names: () => `SELECT count(*)::int AS n FROM banned_names WHERE at > $1`,
+  words: () => `SELECT count(*)::int AS n FROM filter_words WHERE requested_at > $1 OR decided_at > $1`,
+  support: (mod) => `SELECT count(*)::int AS n FROM ticket_messages m` + (mod ? ` JOIN tickets t ON t.id = m.ticket_id AND t.category = 'Language'` : "") + ` WHERE NOT m.from_admin AND m.at > $1`,
+  // (owner) only players newly disciplined count, not ones leaving the list
+  disc: () => `SELECT count(*)::int AS n FROM admin_log WHERE at > $1 AND action IN ('ban', 'mute', 'freeze', 'auto mute')`,
+  review: (mod) => mod ? `SELECT 0 AS n` : `SELECT count(*)::int AS n FROM mod_reviews WHERE at > $1 AND status = 'open'`,
 };
 export const UNREAD_TABS = Object.keys(TABS);
-export async function unreadCounts(adminId) {
+/** Counts per tab, and when each tab was last seen (`seen`: the Disciplined list marks what's new since then). */
+export async function unreadCounts(adminId, role = null) {
   const { rows } = await pool.query(`SELECT tab, at FROM staff_seen WHERE admin_id = $1`, [adminId]);
-  const seen = Object.fromEntries(rows.map((r) => [r.tab, r.at])), out = {};
+  const seen = Object.fromEntries(rows.map((r) => [r.tab, r.at])), out = {}, mod = role === "mod";
   for (const [tab, sql] of Object.entries(TABS)) {
     if (!seen[tab]) { await markSeen(adminId, tab); out[tab] = 0; continue; }        // a new staff member starts with nothing unread
-    out[tab] = Number((await pool.query(sql, [seen[tab]])).rows[0].n);
+    const q = sql(mod); out[tab] = Number((await pool.query(q, q.includes("$1") ? [seen[tab]] : [])).rows[0].n);
   }
+  out.seen = { disc: seen.disc || null };
   return out;
 }
 export async function markSeen(adminId, tab) {

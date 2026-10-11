@@ -14,6 +14,7 @@ import { pool } from "./db.js";
 import { locate, isVpn, km } from "./geo.js";
 import { gameHook } from "./admin.js";
 import { destroyAllSessions } from "./sessions.js";
+import { flag } from "./suspicion.js";
 
 export const MAX_MPH = 150, MAX_KMH = MAX_MPH * 1.609344;
 const MIN_KM = 100;                                   // closer than this is the same area (geolocation isn't exact)
@@ -45,6 +46,7 @@ export function loginFailed(name, device, ip) {
   const now = Date.now(), k = failKey(name, device, ip), f = fails.get(k) || { n: 0, until: 0 };
   f.n++; f.at = now; if (f.n >= FAIL_FREE) f.until = now + Math.min(60, 2 ** (f.n - FAIL_FREE)) * 60_000; fails.set(k, f);
   const sk = String(name || "").toLowerCase(), s = spray.get(sk); if (!s || now - s.at > HOUR) spray.set(sk, { n: 1, at: now }); else s.n++;
+  if (s && s.n === SPRAY_MAX + 1) pool.query(`SELECT id FROM users WHERE lower(username) = $1`, [sk]).then(({ rows }) => rows[0] && flag(rows[0].id, "spray", "Over " + SPRAY_MAX + " failed logins in an hour.")).catch(() => {});
 }
 export const loginSucceeded = (name, device, ip) => fails.delete(failKey(name, device, ip));
 setInterval(() => { const now = Date.now(); for (const [k, f] of fails) if (now - f.at > 24 * HOUR && f.until < now) fails.delete(k); for (const [k, s] of spray) if (now - s.at > HOUR) spray.delete(k); }, 10 * 60_000).unref();
@@ -52,6 +54,7 @@ setInterval(() => { const now = Date.now(); for (const [k, f] of fails) if (now 
 // ---- locks ----
 export async function lockAccount(uid, reason) {
   await pool.query(`UPDATE users SET locked_reason = $2, locked_at = now() WHERE id = $1`, [String(uid), reason]);
+  await pool.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [String(uid)]);
   await destroyAllSessions(uid);
   gameHook("kick", String(uid), 4011, { t: "locked" });
 }
@@ -76,13 +79,14 @@ export async function checkLogin(user, ip, device, tz, req) {
       : !!(cur.country && prev.country && cur.country !== prev.country && hours < 3);   // (country-level database: a different country within 3 hours)
     if (tooFar) {
       const what = user.username + " logged in from " + placeOf(cur) + (d != null ? " (" + Math.round(d) + " km" : " (") + " from " + placeOf(prev) + " " + Math.round(hours * 60) + " minutes earlier) on a different device";
-      if (vpn || prev.vpn) { verdict = "flag"; notify("Flagged: " + what + ", through a VPN.", { player: String(user.id) }); }
-      else if (tz && prev.tz && tz === prev.tz) { verdict = "flag"; notify("Flagged: " + what + " (same time zone: possibly a VPN).", { player: String(user.id) }); }
+      if (vpn || prev.vpn) { verdict = "flag"; await flag(user.id, "vpnjump", what + ", through a VPN.", device || ""); }
+      else if (tz && prev.tz && tz === prev.tz) { verdict = "flag"; await flag(user.id, "tzjump", what + " (same time zone: possibly a VPN).", device || ""); }
       else verdict = "locked";
       if (verdict === "locked") {
         await pool.query(`INSERT INTO logins (user_id, ip, device, tz, city, country, lat, lon, vpn, result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'locked')`, [user.id, ip, device, tz, cur.city, cur.country, cur.lat, cur.lon, vpn]);
         await lockAccount(user.id, what);
-        notify("Locked: " + what + ".", { player: String(user.id) });
+        notify("Locked: " + what + ".", { player: String(user.id), tab: "sec" });
+        await flag(user.id, "travel", what + ".", device || "", 5);
         return { locked: true };
       }
     }
@@ -92,12 +96,12 @@ export async function checkLogin(user, ip, device, tz, req) {
   const newDevice = !device || !hist.some((h) => h.device === device);
   if (newDevice && device) {
     const { rows } = await pool.query(`SELECT count(DISTINCT device)::int AS n FROM logins WHERE user_id = $1 AND result = 'ok' AND device IS NOT NULL AND at > now() - interval '30 days'`, [user.id]);
-    if (rows[0].n > 4) notify("Flagged: " + user.username + " has logged in on " + rows[0].n + " devices in 30 days.", { player: String(user.id) });
+    if (rows[0].n > 4) await flag(user.id, "devices", rows[0].n + " devices in 30 days.", device);
   }
   // a new place at an unusual hour (when there's enough history to know their hours)
   if (hist.length >= 20 && (cur.city || cur.country) && !hist.some((h) => (h.city || null) === cur.city && (h.country || null) === cur.country)) {
     const hr = new Date(at).getUTCHours(), near = hist.filter((h) => { const x = Math.abs(new Date(h.at).getUTCHours() - hr); return Math.min(x, 24 - x) <= 1; }).length;
-    if (near / hist.length < 0.05) notify("Flagged: " + user.username + " logged in from a new place (" + placeOf(cur) + ") at an hour they don't usually play (" + String(hr).padStart(2, "0") + ":00 UTC).", { player: String(user.id) });
+    if (near / hist.length < 0.05) await flag(user.id, "oddhour", placeOf(cur) + " at " + String(hr).padStart(2, "0") + ":00 UTC.", placeOf(cur));
   }
   return { locked: false };
 }

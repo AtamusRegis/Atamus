@@ -80,6 +80,7 @@
   const shipIcon = (type, mine) => img("assets/icons/ships/" + hull(type).sprite + (mine ? "_blue" : "_red") + "_s.png");
 
   // ---- connection ----
+  if (needLogin()) { location.replace("login.html"); return; }   // (owner) returning players log in first
   Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
   function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws?d=" + deviceId(); }
   function setStatus(t, k) { statusEl.textContent = t; statusEl.className = "status" + (k ? " " + k : ""); if (k === "ok") setTimeout(() => statusEl.classList.add("hidden"), 1200); else statusEl.classList.remove("hidden"); }

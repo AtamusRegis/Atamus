@@ -1,5 +1,6 @@
 // The game socket: one session per account, a few commands in, snapshots out at 15 Hz.
 import { WebSocketServer } from "ws";
+import { recordContact, addPlay } from "../watch.js";
 import { safeText } from "../textsafe.js";
 import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
@@ -24,10 +25,13 @@ import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../
 import { PTR, devCommand, ptrAs } from "../ptr.js";
 import { getState } from "../pilots.js";
 import { deviceOf, strikes, timeOut, timedOut } from "../security.js";
+import { flag } from "../suspicion.js";
 
 const world = new World();
 // the commands a client may send (anything else counts as malformed)
-const KNOWN = new Set(["move", "view", "pilots", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "dev"]);
+// (owner) a staff member's role, for what they see on the map (the PTR's tester is left out: its tests fly among others)
+const staffRoleOf = async (pid) => { const r = await roleOf(pid); if (!r) return null; if (PTR) { const p = world.players.get(String(pid)); if (p && p.name === "PTR") return null; } return r; };
+const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
@@ -136,7 +140,7 @@ export function attachGameServer(httpServer) {
   // (owner) the last hour of chat (Local, Corp, DMs and admin DMs), saved with a kick, a ban or a report on a player
   const CHAT_KEEP_MS = 3600_000, chatBuf = [];
   function chatLine(l) { chatBuf.push({ ts: Date.now(), ...l }); while (chatBuf.length && chatBuf[0].ts < Date.now() - CHAT_KEEP_MS) chatBuf.shift(); if (chatBuf.length > 20000) chatBuf.shift(); }
-  world.onLine = (l) => chatLine(l);
+  world.onLine = (l) => { chatLine(l); if (l.ch === "dm" && l.toId) recordContact(l.fromId, l.toId).catch((e) => console.error("contact", e)); };   // (owner) who has talked, for the trade watch
   function chatLogFor(pid) {                            // Local and Corp (everyone's), and the player's own DMs and admin DMs
     const since = Date.now() - CHAT_KEEP_MS;
     return chatBuf.filter((l) => l.ts >= since && (l.ch === "local" || l.ch === "corp" || l.fromId === pid || l.toId === pid || (l.members && l.members.includes(pid)))).slice(-600)
@@ -170,7 +174,12 @@ export function attachGameServer(httpServer) {
   // language running hot is a notification for the Admins and the Head Admin
   world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) flagLine(p.id, p.name, ch, text, r.cats, r.words).then((h) => {
     for (const id of conns.keys()) if (isUnlocked(id)) sendTo(id, { t: "chatflag" });
-    if (h.alert) staffNotify(HIGH_ROLES, "language", "High profanity: " + p.name + " (" + Math.min(HEAT_MAX, Math.round(h.heat * 10) / 10) + "): " + text, { player: p.id, tab: "high" });
+    if (h.hostile && !h.alert) staffNotify(STAFF_ROLES, "language", "Group hostility: " + p.name + ": " + text, { player: p.id, tab: "chat" });   // (owner) told at once
+    if (h.alert) staffNotify(STAFF_ROLES, "language", "High profanity: " + p.name + " (" + Math.min(HEAT_MAX, Math.round(h.heat * 10) / 10) + "): " + text, { player: p.id, tab: "high" });   // (owner) Moderators too: they're chat moderators
+    if (h.muted) { mutes.set(p.id, { perm: false, until: h.muted.until.getTime(), reason: h.muted.reason });   // (owner) the game's automatic mute
+      sendTo(p.id, { t: "notice", text: "You're muted until " + h.muted.until.toLocaleString("en-US", { timeZone: "UTC" }) + " UTC." });
+      logAction(null, "Filter", p.id, p.name, "auto mute", h.muted.reason, { minutes: h.muted.mins, until: h.muted.until }).catch((e) => console.error("auto mute log", e));
+      if (h.muted.mins > 30) staffNotify(STAFF_ROLES, "language", "Auto mute: " + p.name + " muted for " + (h.muted.mins >= 1440 ? "a day" : h.muted.mins === 60 ? "an hour" : h.muted.mins > 60 ? h.muted.mins / 60 + " hours" : h.muted.mins + " minutes") + " for language.", { player: p.id, tab: "high" }); }   // (owner) past 30 minutes, staff are told
   }).catch((e) => console.error("chat flag", e)); };
   // (owner) a new line in a ban appeal: the admins subscribed to it (not the one who wrote it)
   onAppealLine(async (appealId, name, text, except) => {
@@ -181,7 +190,7 @@ export function attachGameServer(httpServer) {
   // (owner) a mute / block appeal changed: both players are told; a player's line is a notification for the staff. A support
   // ticket's new line: its player (an admin's answer) or the staff (the player's)
   onRelAppeal((id, players, fromPlayer) => { for (const p of players) sendTo(p, { t: "relappeal", id }); if (fromPlayer) staffNotify(STAFF_ROLES, "relappeal", "Mute / block appeal: a new line", { relappeal: id }); });
-  onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else staffNotify(STAFF_ROLES, "ticket", "Support: " + subject, { ticket: id }); });
+  onTicket((id, uid, fromAdmin, subject, category) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else staffNotify(category === "Language" ? STAFF_ROLES : HIGH_ROLES, "ticket", "Support: " + subject, { ticket: id }); });   // (owner) Moderators: Language tickets
   onResetLine((id, name, text) => staffNotify(["head"], "reset", "Password reset request · " + name + ": " + text, { reset: id }));   // (owner) the Head Admin only
   setGameHooks({
     modSuspended: async (uid) => { for (const r of [...rooms.values()]) if (isStaffIn(r, uid)) await admEnd(uid, { room: r.id }).catch((e) => console.error("susp dm", e)); },
@@ -189,7 +198,7 @@ export function attachGameServer(httpServer) {
     // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
     persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}) }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
       for (const r of rooms.values()) if (isStaffIn(r, String(uid))) tellRoom(r); },
-    renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch {} } },
+    renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); const pl = world.players.get(pid); pl.staffRole = await staffRoleOf(pid); if (!pl.staffRole || pl.staffRole === "mod") pl.adminMode = false; } catch {} } },
     renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     freeze: async (pid, on, by) => { await setFreeze(pid, on, by); },   // (the panel: unfreeze)
@@ -234,11 +243,16 @@ export function attachGameServer(httpServer) {
     if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }
     const player = world.addPlayer(pid, user.username, sendAll, saved, st0 ? st0.pilots : []);
     player.portrait = st0 && st0.profile.portrait;          // the account's character: who you are in chat
+    player.staffRole = await staffRoleOf(pid); player.adminMode = false;   // (owner) staff see other ships only in admin mode
     player.heavy = new Map();                              // a new session gets the whole fit / holds / hangar again
     // a pilot made or gone while you play (the client says so; and once a minute anyway)
-    const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; } catch (e) { console.error("pilots", e); } };
+    const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; player.staffRole = await staffRoleOf(pid); if (!player.staffRole || player.staffRole === "mod" || !isUnlocked(pid)) player.adminMode = false; } catch (e) { console.error("pilots", e); } };
     const pilotTimer = setInterval(refreshPilots, 60000);
+    // (owner) time played, for the trade watch (training far beyond it is a red flag)
+    let playAt = Date.now(); const playTick = () => { if (ws.replaced) return; const now = Date.now(); addPlay(pid, (now - playAt) / 1000).catch(() => {}); playAt = now; };
+    const playTimer = setInterval(playTick, 300_000);
     ws.on("close", () => {
+      clearInterval(playTimer); playTick();
       clearInterval(pilotTimer); mine.delete(ws);
       if (mine.size) return;                                 // replaced by a newer session: it carries on
       conns.delete(pid); persist(pid).finally(() => { if (!conns.has(pid)) world.removePlayer(pid); });
@@ -261,7 +275,7 @@ export function attachGameServer(httpServer) {
       timingOut = true;
       timeOut(pid, device, why).then((until) => {
         try { ws.close(4007, String(until.getTime())); } catch {}
-        staffNotify(["head", "admin"], "security", "Timed out " + user.username + " until " + until.toUTCString() + ": too many malformed messages from their client (" + why + ").", { player: pid }).catch(() => {});
+        flag(pid, "timeout", "Timed out until " + until.toUTCString() + " (" + why + ").").catch((e) => console.error("flag", e));   // (owner) a red flag, not a notification of its own
       }).catch((e) => { console.error("timeout", e); try { ws.close(4007, "timeout"); } catch {} });
     };
     ws.on("message", (buf) => {
@@ -276,6 +290,7 @@ export function attachGameServer(httpServer) {
           case "move": world.cmdMove(pid, m.ship, m.x, m.y); break;
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
           case "pilots": refreshPilots(); break;
+          case "mode": player.adminMode = m.admin === true && isUnlocked(pid) && (player.staffRole === "admin" || player.staffRole === "head"); break;   // (owner) admin mode: Admins see other players' ships
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
           case "chat": {
             if (m.channel === "staff" || m.channel === "modchat") { staffSay(pid, m.text, m.channel === "modchat" ? "mod" : "admin").catch((e) => console.error("staff chat", e)); break; }   // (owner) the Admin and Moderator chats

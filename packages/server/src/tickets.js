@@ -4,7 +4,7 @@ import { pool } from "./db.js";
 import { safeText } from "./textsafe.js";
 import { adminShown } from "./personas.js";
 
-export const TICKET_CATEGORIES = ["Bug", "Account", "Player Behavior", "Gameplay", "Other"];
+export const TICKET_CATEGORIES = ["Bug", "Account", "Language", "Player Behavior", "Gameplay", "Other"];   // (owner) Language tickets are the Moderators'
 const clean = (t, n = 1000) => safeText(t, n);
 let notify = () => {};                                     // (net.js) the player and the admins online are told of a new line
 export const onTicket = (fn) => { notify = fn; };
@@ -20,7 +20,7 @@ export async function ticketView(id) {
 async function addLine(t, fromAdmin, adminId, name, text) {
   await pool.query(`INSERT INTO ticket_messages (ticket_id, from_admin, admin_id, name, text) VALUES ($1, $2, $3, $4, $5)`, [t.id, fromAdmin, adminId, name, text]);
   await pool.query(`UPDATE tickets SET updated_at = now() WHERE id = $1`, [t.id]);
-  try { notify(String(t.id), t.user_id == null ? null : String(t.user_id), fromAdmin, t.subject); } catch (e) { console.error("ticket notify", e); }
+  try { notify(String(t.id), t.user_id == null ? null : String(t.user_id), fromAdmin, t.subject, t.category); } catch (e) { console.error("ticket notify", e); }
 }
 export async function openTicket(uid, name, b) {
   const subject = clean(b && b.subject, 80), text = clean(b && b.text);

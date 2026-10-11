@@ -53,6 +53,8 @@ packages/server/src/
   security.js     login records, failed-login backoff, impossible-travel locks and flags, malformed-message timeouts
   geo.js          IP places (DB-IP Lite mmdb, downloaded into packages/server/data/) and VPN / datacenter ranges
   textsafe.js     safeText: the one cleaner for all player-written text
+  suspicion.js    red flags add to a fading suspicion score: staff told every 10 points, logins on hold at 30
+  watch.js        the trade ledger (recordFlow: trades, cans, kills, loot), contacts, play time, the trade web, its red flags
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
     world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying (straight, over objects), align / warp, target locks, Align To / Move towards objects, collisions, chat
@@ -107,6 +109,8 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
+
+PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check).
 
 PTR test overrides: `x-ptr-as: Name` (HTTP) and `?as=Name` (socket) act as another account; `x-ptr-geo: lat,lon,city` and `x-ptr-vpn: 1` set a login's place and VPN status (security.js).
 

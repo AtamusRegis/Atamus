@@ -14,6 +14,18 @@ function deviceId() {
 }
 const timeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } };
 
+// (owner) returning players always come through the log-in page (this tab must have logged in) before play.html and the
+// game; on the live site only (the PTR is always signed in)
+const LIVE_SITE = /(^|\.)atamus\.io$/.test(location.hostname);
+function markLoggedIn() { try { sessionStorage.setItem("atamus.in", "1"); } catch {} }
+function needLogin() { if (!LIVE_SITE) return false; try { return sessionStorage.getItem("atamus.in") !== "1"; } catch { return false; } }
+// (owner) Remember Password: a token from the server for this account on this browser (never the password itself)
+const Remember = {
+  get() { try { const r = JSON.parse(localStorage.getItem("atamus.remember") || "null"); return r && typeof r.u === "string" && typeof r.t === "string" ? r : null; } catch { return null; } },
+  set(u, t) { try { localStorage.setItem("atamus.remember", JSON.stringify({ u, t })); } catch {} },
+  clear() { const r = Remember.get(); try { localStorage.removeItem("atamus.remember"); } catch {} if (r) Api.post("/auth/remember/forget", { token: r.t }).catch(() => {}); },
+};
+
 const Api = {
   /**
    * POST JSON to the server. Resolves with the parsed JSON body.

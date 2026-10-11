@@ -1,4 +1,5 @@
 import http from "node:http";
+import { startWatch } from "./watch.js";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
@@ -56,7 +57,7 @@ async function main() {
   await loadPersonas();
   await loadNameData();
   await loadRelations();                                 // (owner) players' mutes and blocks
-  startGeo();                                            // (owner) IP places and VPN lists for the login checks (security.js)
+  startGeo(); startWatch();                                            // (owner) IP places and VPN lists for the login checks (security.js)
   await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();

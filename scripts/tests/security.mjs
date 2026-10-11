@@ -44,8 +44,10 @@ r = await login(d3, LON, "Europe/London"); t.ok(r.status === 403 && r.body.locke
 r = await login(d2, NY, "America/New_York"); t.ok(r.status === 403 && r.body.locked, "and it stays locked, from anywhere");
 let notes = (await g("/game/admin/notes")).body;
 t.ok(notes.some((n) => n.kind === "security" && /^Locked: SecTestCal/.test(n.text)), "the Admins are told it was locked", notes.slice(0, 5));
-t.ok(notes.some((n) => /^Flagged: SecTestCal.*VPN/.test(n.text)) && notes.some((n) => /^Flagged: SecTestCal.*same time zone/.test(n.text)), "and of the VPN and time zone flags");
-t.ok(notes.some((n) => /devices in 30 days/.test(n.text)), "more than 4 devices in 30 days is flagged");
+let su = (await g("/game/admin/player/" + uid + "/suspicion")).body;
+t.ok(su.reasons.some((x) => x.kind === "VPN jump") && su.reasons.some((x) => x.kind === "Jump, same time zone") && su.reasons.some((x) => x.kind === "Impossible travel"), "the VPN and time-zone jumps are red flags on its suspicion score (owner)", su);
+t.ok(su.reasons.some((x) => x.kind === "Many devices" && /devices in 30 days/.test(x.text)), "more than 4 devices in 30 days is one too");
+t.ok(su.score >= 10 && notes.some((n) => n.kind === "suspicion" && /^Suspicious activity: SecTestCal/.test(n.text)), "enough of them (10 points) and the Admins are told, with the latest reasons (owner)", { score: su.score });
 let sec = (await g("/game/admin/player/" + uid + "/security")).body;
 t.ok(sec.locked && sec.logins.some((l) => l.result === "locked" && /London/.test(l.place)) && sec.logins.some((l) => l.result === "failed") && sec.devices30 >= 5, "staff see the logins, the lock and the devices", sec);
 t.ok(!JSON.stringify(sec).includes(d2), "device ids themselves aren't shown");
@@ -86,7 +88,8 @@ t.ok(other.closeCode === 4008, "not on another device either (the account is tim
 const { rows: to } = await db.query(`SELECT round(extract(epoch FROM until - at) / 60) AS len FROM timeouts WHERE device = $1`, [bot]);
 t.ok(to.length === 1 && +to[0].len === 5, "the first timeout is 5 minutes", to);
 notes = (await g("/game/admin/notes")).body;
-t.ok(notes.some((n) => /^Timed out SecTestDee/.test(n.text)), "staff are told");
+{ const did = (await db.query(`SELECT id FROM users WHERE username = 'SecTestDee'`)).rows[0].id; const sd = (await g("/game/admin/player/" + did + "/suspicion")).body;
+  t.ok(sd.reasons.some((x) => x.kind === "Malformed messages"), "a red flag on the account (owner)", sd); }
 const flood = dev(); await db.query(`UPDATE timeouts SET until = now() WHERE user_id = (SELECT id FROM users WHERE username = 'SecTestDee')`);   // (the first one over)
 const cf = await connect("?as=SecTestDee&d=" + flood);
 for (let i = 0; i < 2000; i++) cf.send({ t: "view", x: 0, y: 0, w: 100 });

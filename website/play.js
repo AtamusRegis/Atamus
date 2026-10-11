@@ -1,3 +1,5 @@
+// (owner) returning players come through the log-in page first
+if (needLogin()) location.replace("login.html");
 const who = document.getElementById("who");
 const logoutBtn = document.getElementById("logout");
 const pilotStep = document.getElementById("pilot-step");
@@ -77,6 +79,7 @@ pilotForm.addEventListener("submit", async (e) => {
 logoutBtn.addEventListener("click", async () => {
   logoutBtn.disabled = true;
   try { await Api.post("/auth/logout"); } catch { /* clear client-side regardless */ }
+  try { sessionStorage.removeItem("atamus.in"); } catch {}
   location.href = "index.html";
 });
 
@@ -98,6 +101,6 @@ pwForm.addEventListener("submit", async (e) => {
   e.preventDefault(); showMessage(pwMsg, ""); if (!pwForm.reportValidity()) return;
   const v = formValues(pwForm); if (v.password !== v.confirm) { showMessage(pwMsg, "Passwords don't match."); return; }
   setBusy(pwForm, true);
-  try { await Api.post("/auth/account/password", { current: v.current, password: v.password }); resetNote.hidden = true; }
+  try { await Api.post("/auth/account/password", { current: v.current, password: v.password }); resetNote.hidden = true; try { localStorage.removeItem("atamus.remember"); } catch {} }
   catch (err) { showMessage(pwMsg, err.message); setBusy(pwForm, false); }
 });

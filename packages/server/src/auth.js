@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { checkNewAccount } from "./watch.js";
+import { isVpn } from "./geo.js";
 import express from "express";
 import { pool } from "./db.js";
 import { config } from "./config.js";
@@ -14,6 +16,7 @@ import { appealToken, tokenUser, appealState, playerWrite } from "./appeals.js";
 import * as resets from "./resets.js";
 import { gameHook } from "./admin.js";
 import * as sec from "./security.js";
+import { HOLD_TEXT } from "./suspicion.js";
 
 export const auth = express.Router();
 
@@ -41,7 +44,7 @@ auth.get("/me", async (req, res) => {
 // (owner) the End User License Agreement (website/eula.html): agreed to at sign-up; the version agreed is kept
 export const EULA_VERSION = "2026-10-11";
 auth.post("/signup", async (req, res) => {
-  if (!allow("signup", clientIp(req), 10, 60 * 60_000))
+  if (!PTR && !allow("signup", clientIp(req), 10, 60 * 60_000))   // (the PTR's tests sign up test accounts)
     return fail(res, 429, "Too many sign-ups from this address. Try again later.");
 
   const { username, password, email, recovery, eula } = req.body || {};
@@ -93,7 +96,8 @@ auth.post("/signup", async (req, res) => {
 
     await client.query("COMMIT");
 
-    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz), req).catch((e) => console.error("signup login", e)); }   // (the first login's place and device)
+    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz), req).catch((e) => console.error("signup login", e));
+      await checkNewAccount(userId, sec.deviceOf(b.device), clientIp(req), isVpn(clientIp(req), req)).catch((e) => console.error("signup watch", e)); }   // (owner) several new accounts from one device or address   // (the first login's place and device)
     const { token, expires } = await createSession(userId);
     setSessionCookie(res, token, expires);
     res.status(201).json({ username, email: email || null, hasRecovery: !!recoveryRows });
@@ -112,22 +116,25 @@ auth.post("/login", async (req, res) => {
   if (!PTR && !allow("login", ip, 120, 15 * 60_000))   // (the PTR's test suite logs in test accounts many times)
     return fail(res, 429, "Too many attempts. Please wait a few minutes.");
 
-  const { username, password } = req.body || {};
-  if (typeof username !== "string" || typeof password !== "string" || !username || !password || username.length > 40 || password.length > 200) return fail(res, 400, "Enter your username and password.");
+  const { username, password } = req.body || {}, remembered = (req.body || {}).token;
   const device = sec.deviceOf((req.body || {}).device), tz = sec.tzOf((req.body || {}).tz);
+  // (owner) Remember Password: the browser keeps a token for this account and device, never the password
+  const byToken = typeof remembered === "string" && remembered.length >= 20 && remembered.length <= 100 && !!device;
+  if (typeof username !== "string" || !username || username.length > 40 || (!byToken && (typeof password !== "string" || !password || password.length > 200))) return fail(res, 400, "Enter your username and password.");
   { const wait = await sec.loginWait(username, device, ip); if (wait) return fail(res, 429, "Too many failed logins. Try again in " + wait + (wait === 1 ? " minute." : " minutes.")); }
 
   const { rows } = await pool.query(
-    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at, locked_reason,
+    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at, locked_reason, login_hold_until,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = users.id) AS has_recovery
        FROM users WHERE lower(username) = lower($1)`,
     [username]
   );
   const user = rows[0];
   // Verify even when the user is missing, to keep timing roughly constant.
-  const ok = user
-    ? await verifySecret(password, user.password)
+  const ok = byToken ? !!user && await rememberOk(user.id, device, remembered)
+    : user ? await verifySecret(password, user.password)
     : await verifySecret(password, "scrypt$16384$8$1$00$00");
+  if (byToken && !ok) { sec.loginFailed(username, device, ip); return res.status(401).json({ error: "Enter your password.", forget: true }); }
 
   if (user && !ok) {                                   // (owner) a temporary password from a reset request: that request's conversation
     const r = await resets.requestByTemp(user.id, password);
@@ -144,13 +151,32 @@ auth.post("/login", async (req, res) => {
 
   // (owner) a locked account (suspected sharing or compromise), and where this login comes from
   if (user.locked_reason) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
+  if (user.login_hold_until && new Date(user.login_hold_until) > new Date()) return res.status(403).json({ error: HOLD_TEXT(user.login_hold_until), hold: true });   // (owner) suspicion: logins on hold
   if (device && gameHook("deviceBusy", device, String(user.id))) return fail(res, 409, "Another account is playing on this device.");   // (owner) one account per device
   if ((await sec.checkLogin(user, ip, device, tz, req)).locked) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
-  res.json(publicUser(user));
+  let rem = null;
+  if (device && (req.body || {}).remember === true) rem = byToken ? remembered : await rememberNew(user.id, device);
+  else if (byToken) await forget(remembered);
+  res.json({ ...publicUser(user), ...(rem ? { remember: rem } : {}) });
 });
+// (owner) Remember Password tokens: one per account and browser, 30 days from last use; a new password, a recovery, an
+// approved reset or a lock revokes them all
+const tokHash = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
+async function rememberOk(uid, device, t) {
+  const { rows } = await pool.query(`UPDATE remember_tokens SET used_at = now() WHERE token_hash = $1 AND user_id = $2 AND device = $3 AND used_at > now() - interval '30 days' RETURNING 1`, [tokHash(t), uid, device]);
+  return !!rows[0];
+}
+async function rememberNew(uid, device) {
+  await pool.query(`DELETE FROM remember_tokens WHERE user_id = $1 AND device = $2`, [uid, device]);
+  const t = crypto.randomBytes(32).toString("base64url");
+  await pool.query(`INSERT INTO remember_tokens (token_hash, user_id, device) VALUES ($1, $2, $3)`, [tokHash(t), uid, device]); return t;
+}
+const forget = (t) => pool.query(`DELETE FROM remember_tokens WHERE token_hash = $1`, [tokHash(t)]);
+export const forgetAll = (uid) => pool.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [String(uid)]);
+auth.post("/remember/forget", async (req, res) => { const t = (req.body || {}).token; if (typeof t === "string" && t.length <= 100) await forget(t); res.json({ ok: true }); });
 
 // ---- (owner) bans and appeals (appeals.js): a banned player is told why at login and gets a token to write their
 // appeal (a conversation with the admins) from the login page ----
@@ -266,6 +292,7 @@ auth.post("/recover/finish", async (req, res) => {
   await pool.query(`DELETE FROM recovery_tokens WHERE user_id = $1`, [userId]);
   await destroyAllSessions(userId); // force re-login everywhere
   await sec.unlockAccount(userId);   // (owner) the recovery answers unlock a locked account
+  await forgetAll(userId);
 
   res.json({ ok: true });
 });
@@ -286,5 +313,6 @@ auth.post("/account/password", async (req, res) => {
 
   await pool.query(`UPDATE users SET password = $1 WHERE id = $2`,
     [await hashSecret(password), user.id]);
+  await forgetAll(user.id);   // (owner) remembered logins end with a new password
   res.json({ ok: true });
 });

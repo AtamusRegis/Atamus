@@ -316,7 +316,7 @@ export async function publicPilot(idRaw) {
 }
 
 // ---- reports (owner): stored for admin tools to read later ----
-export const REPORT_CATEGORIES = ["Harassment", "Spam", "Cheating", "Offensive name", "Other"];
+export const REPORT_CATEGORIES = ["Language", "Harassment", "Spam", "Cheating", "Offensive name", "Other"];   // (owner) Language: Moderators see these with Harassment, Spam and Offensive name
 export async function fileReport(userId, b, chatOf = null) {
   const target = await pool.query(`SELECT id, username FROM users WHERE lower(username) = lower($1)`, [typeof b.target === "string" ? b.target.slice(0, 40) : ""]);
   const t = target.rows[0]; if (!t) throw new Error("No such player.");

@@ -659,7 +659,8 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .chat-apic { image-rendering: pixelated; object-fit: cover; }
 .chat-form:has(.chat-as) { display: flex; gap: 6px; align-items: center; }
 .chat-form .chat-as { flex: none; font: inherit; font-size: 11px; letter-spacing: .06em; padding: 5px 8px; color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); cursor: pointer; }
-.chat-form .chat-as.on { color: #1a1206; background: #f0b46a; border-color: #f0b46a; }
+.chat-form .chat-as { color: var(--text); }
+.chat-form .chat-as.on { color: #fff; background: #e5383b; border-color: #e5383b; }   /* (owner) white, then red in admin mode */
 .chat-form:has(.chat-as) .text-input { flex: 1 1 auto; min-width: 0; }
 .apic-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .apic { padding: 2px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); cursor: pointer; }
@@ -711,3 +712,27 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .admdm-addrow { display: inline-flex; gap: 4px; margin-left: auto; }
 .admdm-add { width: 110px; padding: 3px 6px; font-size: 12px; }
 .admdm-chip .admdm-who { font-size: 13px; font-weight: 600; }
+
+/* (owner) a player's admin options in their menu: red */
+.ctx-item.ctx-admin { color: #ff5c5c; }
+/* (owner) the DM's Freeze box: dark like an input, a green check when frozen */
+.admdm-freeze { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; display: grid; place-items: center; cursor: pointer; }
+.admdm-freeze:checked { border-color: rgba(62,207,106,0.5); }
+.admdm-freeze:checked::after { content: ""; width: 4px; height: 8px; border: solid #3ecf6a; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+/* (owner) the game time (UTC) at the bottom of the window panel */
+.panel-clock { margin-top: auto; font-size: 10px; line-height: 1.25; color: var(--text-dim); text-align: center; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+/* (owner) disciplined players new since the list was last opened; escalated disputes */
+.adm-new { font-size: 10px; font-weight: 700; color: #fff; background: #e5383b; border-radius: 8px; padding: 0 6px; line-height: 15px; }
+.adm-esc { color: #ffb347; }
+/* (owner) the trade web */
+.web-svg { width: 100%; height: auto; display: block; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm); touch-action: manipulation; }
+.web-svg text { font-size: 10px; fill: var(--text); pointer-events: none; }
+.web-node { cursor: pointer; }
+.web-node circle { stroke: rgba(255,255,255,0.25); stroke-width: 1; }
+.web-node:hover circle { stroke: #fff; }
+.web-in { stroke: #3ecf6a; }
+.web-out { stroke: #ff9f43; }
+.web-kill { stroke: #e5383b; }
+.web-assoc { stroke: #b18cff; stroke-dasharray: 4 3; }
+.web-far { opacity: .55; }
+.susp-n { font-weight: 700; }

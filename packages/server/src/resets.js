@@ -63,7 +63,7 @@ export async function adminSay(admin, id, raw) {
 /** Approve (the temporary password becomes the account's password) or deny. Returns the request. */
 export async function closeReset(admin, id, approve) {
   const r = await row(id); if (!r || r.status !== "open") throw new Error("This request isn't open.");
-  if (approve) { await pool.query(`UPDATE users SET password = $2 WHERE id = $1`, [r.user_id, r.temp_hash]); await unlockAccount(r.user_id); }   // (an approved reset also unlocks a locked account)
+  if (approve) { await pool.query(`UPDATE users SET password = $2 WHERE id = $1`, [r.user_id, r.temp_hash]); await unlockAccount(r.user_id); await pool.query(`DELETE FROM remember_tokens WHERE user_id = $1`, [r.user_id]); }   // (an approved reset also unlocks a locked account)
   await pool.query(`UPDATE reset_requests SET status = $2, closed_by = $3, closed_at = now() WHERE id = $1`, [r.id, approve ? "approved" : "denied", admin.id]);
   await addLine(r, true, admin.id, admin.name, approve ? "Approved: your temporary password is now this account's password. Log in with it, then change it." : "Denied.");
   return r;

@@ -135,7 +135,7 @@ await q("/role", { id: String(bob.id), role: null });
   { await db.query(`UPDATE users SET role = NULL WHERE id = $1`, [bob.id]); await q("/notes/read", {});
     r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't kick");
     r = await qa("/banname", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "or ban a name");
-    r = await qa("/ban", { id: String(bob.id), reason: "x", perm: true }); t.ok(r.status === 403 && /for a time/.test(r.body.error), "or ban for good (owner)", r.body);
+    r = await qa("/ban", { id: String(bob.id), reason: "x", amount: 1, unit: "hours" }); t.ok(r.status === 403, "or ban at all: Moderators are chat moderators (owner)", r.body);
     r = await qa("/mute", { id: String(bob.id), reason: "spamming trade", amount: 2, unit: "hours" }); t.ok(r.body.ok, "but can mute", r.body);
     r = await qa("/unmute", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and can't lift it themselves");
     r = await q("/reviews"); const rv = r.body.find((x) => x.target === "AdmTestBob" && x.action === "muted" && x.status === "open");
@@ -221,7 +221,7 @@ r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403
 r = await q("/license", { id: String(bob.id), pilotId: String(bp.id), key: "mining_lasers", op: "+" }); t.ok(r.status === 403, "or change licenses");
 r = await q("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or reset credits");
 r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick staff");
-r = await q("/ban", { id: String(bob.id), reason: "afk", amount: 1, unit: "hours" }); t.ok(r.body.ok, "but can ban a player for a time (the Admins review it)", r.body);
+r = await q("/ban", { id: String(bob.id), reason: "afk", amount: 1, unit: "hours" }); t.ok(r.status === 403, "or ban (owner: mute and block only)", r.body);
 await db.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [bob.id]);
 await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
 // (owner) Ban Name: the name goes on the list and its owner must rename (player or pilot)
@@ -329,7 +329,11 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
   for (const x of ["you retard", "dirty japs", "what a bitch", "you queer"]) { zed.send({ t: "chat", text: x, channel: "local" }); await sleep(120); }
   await sleep(400);
   { const L = (await q("/player/" + zid + "/language")).body, P = (await q("/players")).body.find((p) => p.name === "AdmTestZed");
-    t.ok(L.lines.length === 4 && L.kinds.slurs.count === 2 && L.kinds.racist.count === 1 && L.kinds.profanity.count === 1 && L.kinds.slurs.heat > L.kinds.profanity.heat && P.heat >= 6, "a player's language log, a meter per kind, and the overall meter (owner)", { L: L.kinds, h: P.heat });
+    t.ok(L.lines.length === 3 && L.kinds.slurs.count === 1 && L.kinds.racist.count === 1 && L.kinds.profanity.count === 1 && L.kinds.slurs.heat > L.kinds.profanity.heat && P.heat >= 6, "a player's language log, a meter per kind, and the overall meter (owner)", { L: L.kinds, h: P.heat });
+    t.ok(P.mute && /Automatic/.test(P.mute.reason) && got.z.some((m) => m.t === "notice" && /muted until/.test(m.text)), "running hot, the game mutes them (1 minute first); the 4th line never went out (owner)", P.mute);
+    r = await q("/language/reset", { id: zid, reason: "talked to them" }); const P2 = (await q("/players")).body.find((p) => p.name === "AdmTestZed");
+    t.ok(r.body.ok && !P2.mute && P2.heat === 0, "staff reset the heat and the automatic mute (owner)", P2);
+    zed.send({ t: "chat", text: "back now", channel: "local" }); await sleep(250); t.ok(got.a.some((m) => m.t === "chat" && m.text === "back now"), "and they can talk again");
     t.ok(got.a.some((m) => m.t === "staffsys" && m.kind === "language" && /AdmTestZed/.test(m.text)) && got.a.some((m) => m.t === "chatflag"), "running hot: the Admins online are told in the Admin chat (owner)", got.a.filter((m) => m.t === "langalert")); }
   // (owner) the chat's Admin switch: Local under the admin profile (no ship says it); a DM becomes an admin DM
   adm.send({ t: "chat", text: "admin here", channel: "local", as: "admin", ship: "1:ship:1" }); adm.send({ t: "chat", text: "as admin dm", channel: "dm", to: "AdmTestZed", as: "admin" }); await sleep(400);

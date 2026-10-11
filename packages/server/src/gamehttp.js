@@ -1,4 +1,6 @@
 import express from "express";
+import { recordFlow, trainingSweep } from "./watch.js";
+import { MOD_REPORTS } from "./staff.js";
 import { safeText } from "./textsafe.js";
 import { getSessionUser, readCookie } from "./sessions.js";
 import { CATALOG } from "./licenses.js";
@@ -63,10 +65,18 @@ game.post("/ticket", auth, async (req, res) => {
 });
 game.post("/ticket/say", auth, async (req, res) => { try { await tickets.playerSay(req.uid, await nameOf(req.uid), (req.body || {}).id, (req.body || {}).text); res.json({ ok: true }); } catch (e) { fail400(res, e); } });
 game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES));
+// (PTR only) the trade watch's inputs for tests: a flow between two players by name, and the training sweep
+game.post("/dev/flow", async (req, res) => {
+  if (!PTR) return res.status(404).json({ error: "Not found." });
+  const b = req.body || {}, id = async (n) => (await pool.query(`SELECT id FROM users WHERE lower(username) = lower($1)`, [String(n || "")])).rows[0]?.id;
+  const from = await id(b.from), to = await id(b.to); if (!from || !to) return res.status(404).json({ error: "No such player." });
+  await recordFlow({ from, to, kind: b.kind, credits: b.credits, value: b.value }); res.json({ ok: true });
+});
+game.post("/dev/sweep", async (req, res) => { if (!PTR) return res.status(404).json({ error: "Not found." }); await trainingSweep(); res.json({ ok: true }); });
 game.post("/report", auth, async (req, res) => {
   if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });
   try { await pilots.fileReport(req.uid, req.body || {}, (pid) => ({ chat: gameHook("chatLog", pid) || [], ships: gameHook("shipNames", pid) || [] }));
-    const b = req.body || {}; gameHook("staffNotify", ["head", "admin", "mod"], "report", "Report: " + (await nameOf(req.uid)) + " reported " + String(b.target || "").slice(0, 40) + " (" + String(b.category || "").slice(0, 40) + ")", { tab: "reports" });   // (owner) staff are told
+    const b = req.body || {}; gameHook("staffNotify", MOD_REPORTS.includes(b.category) ? ["head", "admin", "mod"] : ["head", "admin"], "report", "Report: " + (await nameOf(req.uid)) + " reported " + String(b.target || "").slice(0, 40) + " (" + String(b.category || "").slice(0, 40) + ")", { tab: "reports" });   // (owner) staff are told
     res.json({ ok: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });

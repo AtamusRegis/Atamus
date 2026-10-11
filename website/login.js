@@ -1,10 +1,14 @@
 const form = document.getElementById("login-form");
 const msg = document.getElementById("msg");
 
-// Already logged in? Skip straight to the game.
-Api.get("/auth/me")
-  .then((me) => { if (me && me.username) location.href = "play.html"; })
-  .catch(() => { /* not logged in, or server offline: show the form */ });
+// (owner) every returning player logs in here (no skipping to the game). Remember Password fills the password field
+// for a remembered account (the browser keeps a token, never the password); unticking it forgets it
+const remBox = form.elements.remember, SAVED = "\u2022".repeat(12);
+let byToken = false;
+{ const r = Remember.get(); if (r) { form.elements.username.value = r.u; form.elements.password.value = SAVED; remBox.checked = true; byToken = true; } }
+form.elements.password.addEventListener("input", () => { byToken = false; });
+form.elements.username.addEventListener("input", () => { if (byToken) { byToken = false; form.elements.password.value = ""; } });
+remBox.addEventListener("change", () => { if (remBox.checked) return; Remember.clear(); if (byToken) { byToken = false; form.elements.password.value = ""; } });
 
 // (owner) Create account carries what was typed here (username and password) to the sign-up form; kept only for this
 // tab, and only until the sign-up page reads it
@@ -22,10 +26,17 @@ form.addEventListener("submit", async (e) => {
 
   setBusy(form, true);
   try {
-    await Api.post("/auth/login", { username, password });
+    const r = Remember.get(), useToken = byToken && r && r.u.toLowerCase() === username.toLowerCase();
+    if (useToken) form.elements.password.value = "";   // (so the browser doesn't offer to save the placeholder)
+    const res = await Api.post("/auth/login", useToken ? { username, token: r.t, remember: remBox.checked } : { username, password, remember: remBox.checked });
+    if (res.remember) { try { localStorage.setItem("atamus.remember", JSON.stringify({ u: res.username, t: res.remember })); } catch {} }
+    else if (!remBox.checked) Remember.clear();
+    markLoggedIn();
     location.href = "play.html";
   } catch (err) {
     const d = err.data || {};
+    if (d.forget) { try { localStorage.removeItem("atamus.remember"); } catch {} byToken = false; }   // (a remembered login that no longer works)
+    else if (byToken) form.elements.password.value = SAVED;
     if (d.reset) {                                     // (owner) a temporary password: the reset request's conversation
       resetToken = d.resetToken; showReset(d.reset);
       clearInterval(resetPoll); resetPoll = setInterval(refreshReset, 10000);

@@ -312,6 +312,43 @@ export async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS timeouts_user_idx ON timeouts (user_id, until DESC);
     CREATE INDEX IF NOT EXISTS timeouts_device_idx ON timeouts (device, until DESC);
+    -- (owner) suspicion (suspicion.js): red flags adding up to notifications and a login hold
+    CREATE TABLE IF NOT EXISTS suspicion (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      kind TEXT NOT NULL, points REAL NOT NULL, text TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS suspicion_user_idx ON suspicion (user_id, id DESC);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS susp_level INT NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS login_hold_until TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_device TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_vpn BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS play_seconds BIGINT NOT NULL DEFAULT 0;
+    -- (owner) who gave what to whom (watch.js): trades, jettisoned cans picked up, kills and their loot
+    CREATE TABLE IF NOT EXISTS ledger (
+      id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), from_id BIGINT REFERENCES users(id) ON DELETE CASCADE, to_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL, credits BIGINT NOT NULL DEFAULT 0, value BIGINT NOT NULL DEFAULT 0, items JSONB
+    );
+    CREATE INDEX IF NOT EXISTS ledger_from_idx ON ledger (from_id, at DESC);
+    CREATE INDEX IF NOT EXISTS ledger_to_idx ON ledger (to_id, at DESC);
+    -- (owner) players who have talked (a DM either way), for "credits from someone they never talked to"
+    CREATE TABLE IF NOT EXISTS contacts (a_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, b_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (a_id, b_id));
+    -- (owner) Remember Password: a token for one browser (never the password itself)
+    CREATE TABLE IF NOT EXISTS remember_tokens (
+      token_hash TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, device TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), used_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    -- (owner) a Moderator escalates a report, ticket or appeal to the Admins
+    CREATE TABLE IF NOT EXISTS escalations (
+      id BIGSERIAL PRIMARY KEY, kind TEXT NOT NULL, ref_id BIGINT NOT NULL, by_id BIGINT, reason TEXT NOT NULL, at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS escalations_ref_idx ON escalations (kind, ref_id);
+    -- (owner) automatic language mutes: a step a day, and whether the current mute is the game's
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_mute_step INT NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_mute_day TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mute_auto BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE mod_suspensions ADD COLUMN IF NOT EXISTS end_told BOOLEAN NOT NULL DEFAULT true;   -- (earlier ones count as told)
+    ALTER TABLE mod_suspensions ALTER COLUMN end_told SET DEFAULT false;
   `);
 }
 

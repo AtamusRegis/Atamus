@@ -61,6 +61,7 @@ form.addEventListener("submit", async (e) => {
   setBusy(form, true);
   try {
     await Api.post("/auth/signup", payload);
+    markLoggedIn();
     location.href = "play.html";
   } catch (err) {
     showMessage(msg, err.message);
