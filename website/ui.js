@@ -689,6 +689,9 @@
     const born = new Date(p.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
     body.append(el("div", { class: "ps-head" }, p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 28, "ps-portrait") : el("span", { class: "ps-portrait" }), el("span", { class: "ps-name" }, p.username)),
       el("div", { class: "ps-rows" }, row("Day Born", born), row("Pilots", p.pilotCount), row("Total Endorsement Level", p.totalSkillLevel), row("Corp", p.corp)));
+    // (owner) DM / Report at the bottom too, outside the scrolling rows; not on your own sheet
+    if (p.username.toLowerCase() !== myName().toLowerCase())
+      body.append(el("div", { class: "ps-acts" }, el("button", { class: "btn-ghost2", onclick: () => openDm(p.username) }, "DM"), el("button", { class: "btn-ghost2", onclick: () => openReport(p.username, null) }, "Report")));
   }
 
   // ---- report a player (owner): what it's about, what happened; stored on the server for admin tools later ----

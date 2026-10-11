@@ -129,6 +129,26 @@ t.ok(r.tabs.join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab 
 t.ok(r.parts[0] && r.parts[1] && r.parts[2] === "Cancel,Send report" && r.title === "Report Zed" && r.closed, "Report: what it's about, what happened, Cancel / Send report", r);
 t.ok(r.after.join() === "Local,Corp", "a DM tab closes with its ×", r.after);
 
+// another player's sheet (owner): DM / Report at the bottom; not on your own
+r = await run(page, `const get0 = Api.get; Api.get = async (u) => u.startsWith("/game/player/") ? { username: decodeURIComponent(u.split("/").pop()), createdAt: Date.now(), portrait: null, corp: "None", pilotCount: 1, totalSkillLevel: 0 } : get0(u);
+  document.querySelector('.wbtn[data-id="chat"]').click(); await s(200);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "hi" } })); await s(100);
+  const who = [...document.querySelectorAll('.win[data-id="chat"] .who')].reverse().find((x) => x.textContent.startsWith("Zed"));
+  who.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const pi = document.querySelector('.win[data-id="pinfo"]'), btns = [...pi.querySelectorAll(".ps-acts button")].map((b) => b.textContent);
+  [...pi.querySelectorAll(".ps-acts button")].find((b) => b.textContent === "DM").click(); await s(200);
+  const tab = !!document.querySelector('.tab[data-ch="dm:zed"]');
+  document.querySelector('.tab[data-ch="dm:zed"] .tab-x').click(); await s(100);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: A.me.name, text: "me" } })); await s(100);
+  const mine = [...document.querySelectorAll('.win[data-id="chat"] .who')].reverse().find((x) => x.textContent.startsWith(A.me.name));
+  mine.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const own = pi.querySelectorAll(".ps-acts button").length;
+  Api.get = get0; pi.querySelector(".win-close").click(); document.querySelector('.win[data-id="chat"] .win-close').click(); await s(100);
+  return { btns, tab, own };`);
+t.ok(r.btns.join() === "DM,Report" && r.tab && r.own === 0, "a player's sheet: DM / Report at the bottom (DM opens their tab); none on your own", r);
+
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
 await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(1200);

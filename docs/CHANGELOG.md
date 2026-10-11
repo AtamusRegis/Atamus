@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Player Sheet buttons (owner):** another player's sheet has DM and Report buttons at the bottom.
 - **Chat: Info, DM, Report (owner):** right-click (or hold) a name in chat for their Player Sheet, a direct-message tab, or a report (category and description, stored on the server for admin tools later).
 - **Clicks (owner):** a single click selects (your ship's pilot, or an asteroid: grey brackets, its ore and distance; orange is kept for targeted); a double click on space flies the ship there.
 - **Solid asteroids (owner):** ships can't fly through rocks (only warp passes through things); a move order into one stops at its edge.
