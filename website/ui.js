@@ -317,7 +317,8 @@
     const w = wins.player, b = w && w.body, rows = b && b.querySelectorAll(".ps-rows .sheet-row"), head = b && b.querySelector(".ps-head");
     if (!rows || rows.length < 3 || !head) return null;
     let rh = 0; for (let i = 0; i < 3; i++) rh += rows[i].offsetHeight;
-    let rw = head.scrollWidth; for (const r of rows) rw = Math.max(rw, [...r.children].reduce((a, c) => a + c.scrollWidth, 0) + 14 + 16);
+    // (sizes of the children, never of the stretched rows themselves, or the minimum would chase the window outward)
+    let rw = [...head.children].reduce((t, c) => t + c.offsetWidth, 0) + 8; for (const r of rows) rw = Math.max(rw, [...r.children].reduce((a, c) => a + c.scrollWidth, 0) + 14 + 16);
     const cs = getComputedStyle(b), pad = (k) => parseFloat(cs[k]) || 0;
     return { w: Math.ceil(rw + pad("paddingLeft") + pad("paddingRight") + 12), h: Math.ceil(w.bar.offsetHeight + head.offsetHeight + 8 + rh + pad("paddingTop") + pad("paddingBottom") + 2) };
   }

@@ -91,6 +91,17 @@ t.ok(r.tabs.join() === "Local,Corp", "chat has Local and Corp", r.tabs);
 t.ok(r.line === "PTR: hello expanse" && r.portrait, "a message shows the character's portrait and the username", r);
 t.ok(r.corp.length === 1 && r.corp[0] === "PTR: corp hello", "corp has its own log", r.corp);
 
+// the Player Sheet resizes both ways by its knob, down to a minimum (a stretched-row measurement once made it run away)
+r = await run(page, `const w = document.querySelector('.win[data-id="player"]'); if (w.hidden) document.querySelector('.wbtn[data-id="player"]').click(); await s(500);
+  w.style.width = "260px"; w.style.height = "260px"; await s(50); const k = w.querySelector(".rz-se"), out = [];
+  const drag = async (dx, dy) => { const b = k.getBoundingClientRect(), x = b.left + 5, y = b.top + 5;
+    k.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 9, pointerType: "mouse", button: 0, clientX: x, clientY: y, bubbles: true }));
+    for (let i = 1; i <= 10; i++) window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x + dx * i / 10, clientY: y + dy * i / 10 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, clientX: x + dx, clientY: y + dy })); await s(80); out.push(w.offsetWidth, w.offsetHeight); };
+  await drag(40, 20); await drag(-300, -300); const rows = w.querySelector(".ps-rows"); const scroll = rows.scrollHeight > rows.clientHeight;
+  w.querySelector(".win-close").click(); return { out, scroll };`);
+t.ok(r.out[0] === 300 && r.out[1] === 280 && r.out[2] < 260 && r.out[3] < 260 && r.out[2] > 150 && r.scroll, "the Player Sheet grows and shrinks with its knob, to a minimum where only its stats scroll", r);
+
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
 await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(1200);

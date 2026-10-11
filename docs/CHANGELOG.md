@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Fix:** the Player Sheet's minimum width measured its own stretched rows, so resizing only ever made it wider; it now resizes both ways.
 - **Player Sheet (owner):** titled Player Sheet, with a row for your character's small portrait and your name; at its smallest it shows three stat rows and only they scroll. Resize knobs are two faint blue bars. The front page's Updates lists features only (the Pilot Sheet bullet came out).
 - **Pilot Sheet (owner):** the Pilot window is now the Pilot Sheet: every pilot side by side with their name beneath (pick one to select them, no recentring), tabs centred. Resizable windows have a visible corner knob (bigger on touch). A belt's own menu opens beside the Belts list and keeps the list open. The front page's Updates is now one entry per day, starting from the reset.
 - **Belts menu (owner):** space menu › Belts is now a plain list; right-click (or hold) a belt for its Warp to / Align to menu, instead of a third layer of submenus.
