@@ -57,7 +57,7 @@ export function decayField(f, now = Date.now()) {
   let changed = false;
   for (let i = f.rocks.length - 1; i >= 0; i--) {
     const k = f.rocks[i]; if (now <= k.fadeAt) continue;
-    k.m3 = Math.max(0, Math.round(k.m0 * (k.goneAt - now) / (k.goneAt - k.fadeAt)));
+    k.m3 = Math.max(0, Math.round(k.m0 * (k.goneAt - now) / (k.goneAt - k.fadeAt)) - (k.mined || 0));   // (less what's been mined out of it)
     if (k.m3 <= 0) { f.rocks.splice(i, 1); changed = true; continue; }
     const size = sizeFor(k.m3); if (size !== k.size) { k.size = size; k.r = size / 2000; changed = true; }
   }

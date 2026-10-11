@@ -208,7 +208,7 @@ t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s"
 t.ok(r.hbHidden && r.slots.join() === "1,2,3,4", "no modules: the hotbar's empty active slots (the Prospector's 4, keyed 1-4) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
 t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
-t.ok(r.invTabs === "Ore Hold,Cargo Hold" && r.invCargo === "0 / 50 m³" && r.invBars === 1, "Inventory: a tab per hold, with that hold's fill bar under the tabs", r);
+t.ok(r.invTabs === "Ore Hold,Cargo Hold" && r.invCargo === "45 / 50 m³" && r.invBars === 1, "Inventory: a tab per hold, with that hold's fill bar under the tabs", r);
 t.ok(r.invSlot, "the Inventory window stays tall enough for at least one slot", r.invSlot);
 t.ok(r.cardMenu === "Look At,Show Fitting,Info,Rename,Pilot Info", "right-clicking a fleet card: its ship's menu (with Show Fitting) plus Pilot Info", r.cardMenu);
 const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Ore Hold,Cargo Hold";
@@ -270,6 +270,40 @@ t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object a
 t.ok(r.min.scrolls && r.min.barsIn && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide (plus the stats beside), down to the Power / Disposition bars; the stats scroll, the tabs stay on top", r.min);
 t.ok(r.checks === "✓|", "Requirements: a green check for what the pilot has (Mining Frigate I), none for what it doesn't (an ark)", r.checks);
 t.ok(r.tmenu === "Rename" && /Prospector$/.test(r.prefill) && r.renamed.title === "Rock Hopper" && r.renamed.snap === "Rock Hopper" && /Prospector$/.test(r.back), "Rename from the Fitting window's title; an empty name puts back the default", r);
+
+// (owner) modules: drag one from the cargo hold onto a slot to fit it; its hotbar key runs it; the Station: dock, the
+// hangar and the ship list, drag items between them
+r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  const P = (tgt, ty, x, y) => (tgt || window).dispatchEvent(new PointerEvent(ty, { pointerId: 11, button: 0, clientX: x, clientY: y, bubbles: true }));
+  const drag = async (src, dst) => { const a = src.getBoundingClientRect(), b = dst.getBoundingClientRect(); P(src, "pointerdown", a.left + 10, a.top + 10); P(null, "pointermove", a.left + 30, a.top + 30); P(null, "pointermove", b.left + 10, b.top + 10); await s(40); P(null, "pointerup", b.left + 10, b.top + 10); await s(600); };
+  document.querySelector('.wbtn[data-id="inv"]').click(); await s(300); const inv = document.querySelector('.win[data-id="inv"]'); inv.querySelector('.tab[data-hold="cargo"]').click(); await s(200);
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(400); const fw = document.querySelector('.win[data-id="fit"]'); fw.querySelector('.tab[data-tab="fitting"]').click(); await s(200);
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
+  const kit = [...inv.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item).join();
+  await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
+  const fitted = A.myShip.fit.active[0], hb = !!document.querySelector('#hud .hb-slot.filled .hb-img'), bars = fw.querySelector(".fit-bar").textContent;
+  const flashText = () => document.getElementById("status").textContent;
+  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); const noTarget = flashText();
+  fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100);
+  const slotMenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const mi = document.querySelector('.win[data-id="minfo"]'), minfo = [...mi.querySelectorAll(".sheet-k")].map((x) => x.textContent).join(); mi.querySelector(".win-close").click();
+  for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  dev({ cmd: "move", x: 0, y: -1204 }); await s(1300); A.followShip(A.myShip.id);
+  if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(300);
+  const dockBtn = document.querySelector(".fa-dock"), dockShown = !dockBtn.hidden && !dockBtn.parentNode.hidden; dockBtn.click(); await s(900);
+  const st = document.querySelector('.win[data-id="station"]'), stOpen = !st.hidden, side = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|");
+  [...st.querySelectorAll(".st-entry")].find((x) => x.textContent === "Cargo Hold").click(); await s(300);
+  await drag(st.querySelector('.st-main .si-cell[data-item="mining_drones"]'), st.querySelector('.st-entry[data-cont="hangar"]'));
+  const hangar = JSON.stringify(A.snap.hangar);
+  st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
+  dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  return { kit, fitted, hb, bars, noTarget, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
+t.ok(r.kit === "mining_laser,mining_drones,afterburner_1,cargo_expander,inertia_stabilizer,mining_laser_upgrade,mining_beam_extender,mining_overclocker", "the starter kit is in the cargo hold", r.kit);
+t.ok(r.fitted === "mining_laser" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
+t.ok(r.noTarget === "No locked asteroid in range", "its hotbar key runs it (a laser needs a locked asteroid)", r.noTarget);
+t.ok(r.slotMenu === "Unfit,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "a fitted module's menu: Unfit, Info (its stats as fitted)", r);
+t.ok(r.dockShown && r.stOpen && r.side === "Hangar|Vera Kestrel's Prospector|Ore Hold|Cargo Hold", "near the station the Dock button shows; docking opens the Station: the hangar and the ship's holds", r);
+t.ok(r.hangar === '{"mining_drones":1}' && r.undocked && r.stClosed, "drag an item onto the hangar to store it; Undock closes the Station", r);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);

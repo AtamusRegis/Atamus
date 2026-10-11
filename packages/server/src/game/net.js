@@ -6,13 +6,15 @@ import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM } from "./constants.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi } from "./persist.js";
 import { ORES } from "./belts.js";
+import { MODULES } from "./modules.js";
+import { DOCK_KM } from "./station.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand } from "../ptr.js";
 import { getState } from "../pilots.js";
 
 const world = new World();
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
-const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES };
+const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM };
 
 export function attachGameServer(httpServer) {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
@@ -71,6 +73,12 @@ export function attachGameServer(httpServer) {
           case "chase": world.cmdChase(pid, m.ship, m.kind, m.id, m.mode); break;
           case "info": world.cmdInfo(pid, m.kind, m.id); break;
           case "rename": world.cmdRename(pid, m.ship, m.name); break;
+          case "fit": world.cmdFit(pid, m.ship, m.item, m.kind, m.slot); break;
+          case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
+          case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on); break;
+          case "dock": world.cmdDock(pid, m.ship); break;
+          case "undock": world.cmdUndock(pid, m.ship); break;
+          case "transfer": world.cmdTransfer(pid, m.from, m.to, m.item, m.qty); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }
       } catch (e) { console.error("command " + m.t, e); }

@@ -802,3 +802,32 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .phone .inv-tabs { margin-bottom: 4px; }
 .phone .si-cell { width: 40px; height: 40px; }
 .phone .si-grid { grid-template-columns: repeat(auto-fill, 40px); }
+/* ---- modules and items (owner) ---- */
+.hb-slot .hb-img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+.hb-slot.filled { cursor: pointer; }
+.hb-slot.on { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.9); background: rgba(255,140,60,0.14); }
+.hb-slot.on::before { content: ""; position: absolute; inset: 0; border-radius: 5px; background: conic-gradient(rgba(255,160,70,0.28) var(--p, 0%), transparent 0); pointer-events: none; }
+.hb-slot.drop, .si-cell.drop, .st-entry.drop, .st-main.drop, .win-body.drop { outline: 1px solid var(--cyan); }
+.inv-ghost { position: fixed; width: 34px; height: 34px; transform: translate(-50%, -50%); pointer-events: none; z-index: 2000000001; opacity: .85; image-rendering: pixelated; object-fit: contain; }
+.si-cell.filled { position: relative; display: grid; place-items: center; cursor: grab; }
+.si-icon { width: 34px; height: 34px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
+.si-qty { position: absolute; right: 3px; bottom: 1px; font-size: 9.5px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
+.fa-dock { display: grid; place-items: center; }
+.fa-dock svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+/* ---- the Station (owner, temporary): the list and the storage scroll on their own ---- */
+.win-body.st-win { display: flex; flex-direction: column; overflow: hidden; gap: 8px; }
+.st-split { flex: 1 1 auto; min-height: 0; display: flex; gap: 10px; }
+.st-side { flex: 0 0 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding-right: 2px; }
+.st-entry { font: inherit; font-size: 11.5px; text-align: left; color: var(--text-dim); background: rgba(255,255,255,0.03); border: none; border-radius: 5px; padding: 6px 8px; cursor: pointer; }
+.st-entry:hover { color: var(--text); background: rgba(255,255,255,0.08); }
+.st-entry.active { color: var(--text); background: rgba(56,198,255,0.16); }
+.st-hold { padding-left: 18px; }
+.st-ship { font-size: 11px; font-weight: 600; color: var(--text); margin: 8px 2px 2px; }
+.st-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; border-radius: 6px; }
+.st-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.st-head .ps-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-used { font-size: 11px; color: var(--text-dim); }
+.st-bar { flex: 1; height: 14px; }
+.st-grid-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.st-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; }
+.st-undock { padding: 6px 14px; }

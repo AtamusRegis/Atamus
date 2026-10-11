@@ -45,8 +45,8 @@ export const SHIP_TYPES = {
     license: "mining_frigate",   // its class license: each level adds a step of the hull bonuses
     desc: "Deep Core Industries' entry-level mining frigate: small, nimble, with a modest ore hold. Every mining career starts in one.",
     // (owner) per level of the class license (5 levels: 20% / 5% / 50% at level 5, the bonuses it had before the reset);
-    // nothing uses them until modules return
-    bonuses: [{ per: 4, what: "Mining Laser yield" }, { per: 1, what: "Mining Laser range" }, { per: 10, what: "Mining Drones yield" }],
+    // (modules.js shipCalc applies them)
+    bonuses: [{ key: "laser_yield", per: 4, what: "Mining Laser yield" }, { key: "laser_range", per: 1, what: "Mining Laser range" }, { key: "drone_yield", per: 10, what: "Mining Drones yield" }],
     req: { licenses: [["mining_frigate", "Mining Frigate", 1]], ark: ["ark_mini", "Light Ark"] },   // [license key, name, level]; (owner) a ship needs an ark that can carry it: the smallest that can [type, name]
   },
 };

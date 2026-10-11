@@ -46,6 +46,8 @@ packages/server/src/
     belts.js      asteroid belts: ores, crescent fields, wasting away
     library.js    the Library POI: every space object's art in rows (props)
     obstacles.js  asteroids and props a destination can't be on (grid index, push a point out)
+    modules.js    modules (active / passive), starter kit, shipCalc (fitted stats with licenses and hull bonuses)
+    station.js    the temporary Station POI: docking range, landing, its prop
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
     persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client
@@ -89,7 +91,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 
 **PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
 
-- `move x y [ship]` (put a ship of yours at x, y km, stopped)
+- `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
 

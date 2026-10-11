@@ -4,7 +4,10 @@
 import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
+import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
 import { Obstacles } from "./obstacles.js";
+import { MODULES, STARTER_KIT, shipCalc } from "./modules.js";
+import { ORES, sizeFor } from "./belts.js";
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -26,6 +29,22 @@ export const cleanShipName = (v) => { if (typeof v !== "string") return null; co
 // just can't stop on an object. A destination is kept DEST_CLEAR_KM clear of touching an asteroid (its whole art: half
 // its size) or a Library prop (its art's box) — the zone the client outlines on hover.
 const DEST_CLEAR_KM = 0.07;
+// ---- ship holds (owner): { ore: { item: qty }, cargo: { item: qty } }; a module is 5 m³ an item, ore 1 m³ a unit ----
+const itemM3 = (k) => (MODULES[k] ? MODULES[k].m3 : 1);
+const isItem = (k) => !!MODULES[k] || (typeof k === "string" && k.startsWith("ore:") && ORES.some((o) => "ore:" + o.key === k));
+export const holdUsed = (h, hold) => Object.entries(h[hold] || {}).reduce((t, [k, n]) => t + itemM3(k) * n, 0);
+function addItem(h, hold, k, n) { h[hold] ||= {}; h[hold][k] = +((h[hold][k] || 0) + n).toFixed(2); }
+function takeItem(h, hold, k, n) { const v = +((h[hold][k] || 0) - n).toFixed(2); if (v <= 0) delete h[hold][k]; else h[hold][k] = v; }
+function loadHolds(v, t) {
+  const h = {}; for (const hd of t.holds) { h[hd.key] = {}; const src = v && typeof v === "object" && v[hd.key]; if (src && typeof src === "object") for (const [k, n] of Object.entries(src)) if (isItem(k) && Number.isFinite(n) && n > 0) h[hd.key][k] = +n.toFixed(2); }
+  return h;
+}
+function loadHangar(v) { const h = {}; if (v && typeof v === "object") for (const [k, n] of Object.entries(v)) if (isItem(k) && Number.isFinite(n) && n > 0) h[k] = +n.toFixed(2); return h; }
+function loadFit(v, t) {
+  const f = { active: Array(t.activeSlots).fill(null), passive: Array(t.passiveSlots).fill(null) };
+  for (const kind of ["active", "passive"]) if (v && Array.isArray(v[kind])) v[kind].slice(0, f[kind].length).forEach((k, i) => { if (MODULES[k] && MODULES[k].slot === kind) f[kind][i] = k; });
+  return f;
+}
 const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
 
 export class World {
@@ -38,12 +57,13 @@ export class World {
     this._ixs = new WeakMap();  // field -> { ver, ix }: each POI's objects indexed for pathing and collisions
     // (owner) the Library: every space object's art in rows, always on the map; its props are solid and nothing else
     this.pois.set(LIBRARY.id, { ...LIBRARY, createdAt: 0, field: { rocks: [], props: libraryProps(), dir: 0, ver: 1 }, retired: false });
+    this.pois.set(STATION.id, { ...STATION, createdAt: 0, field: { rocks: [], props: stationProps(), dir: 0, ver: 1 }, retired: false });   // (owner, temporary) the station
   }
 
   addPlayer(id, name, send, saved = null, pilots = []) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this.setPilots(id, pilots, saved); return existing; }
-    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved };
+    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangar: loadHangar(saved && saved.hangar) };
     this.players.set(id, p);
     this.setPilots(id, pilots, saved);
     return p;
@@ -51,10 +71,10 @@ export class World {
   /** The account's pilots (from the database): each has one Prospector, and a pilot that's gone takes theirs with it. */
   setPilots(id, pilots, saved = null) {
     const p = this.players.get(id); if (!p) return;
-    p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name }));
+    p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name, licenses: (x.licenses && typeof x.licenses === "object") ? x.licenses : {} }));
     const keep = new Set(p.pilots.map((x) => this._sid(id, x.id)));
     for (const [sid, s] of this.ships) if (s.owner === id && !keep.has(sid)) this.ships.delete(sid);
-    for (const pl of p.pilots) this._ensureShip(id, pl.id, saved || p.saved);
+    for (const pl of p.pilots) { const s = this._ensureShip(id, pl.id, saved || p.saved); const key = JSON.stringify(pl.licenses); if (s.licKey !== key) { s.lic = pl.licenses; s.licKey = key; this._recalc(s); } }
   }
   _sid(owner, pilotId) { return `${owner}:ship:${pilotId}`; }
   // a pilot's Prospector: where they left it, or a fresh one near the centre
@@ -66,9 +86,19 @@ export class World {
     if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
-      name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null };
+      name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
+      holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: !!(sv && sv.docked) };
+    if (s.docked) { const st = this._station(); s.x = st.x; s.y = st.y; s.tx = s.x; s.ty = s.y; }
+    if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
+    this._recalc(s);
     this.ships.set(sid, s);
     return s;
+  }
+  // what the ship can do as fitted and as its pilot flies it (modules.js); the afterburner, when on, raises top speed
+  _recalc(s) {
+    const t = SHIP_TYPES[s.type]; s.calc = shipCalc(t, s.fit, s.lic);
+    const ab = s.act.some((a, i) => a && a.on && MODULES[s.fit.active[i]] && MODULES[s.fit.active[i]].speedBonus);
+    s.speed = ab ? s.calc.abSpeed : s.calc.speed; s.accel = s.calc.accel;
   }
   // Logging off (owner: no logged-off presence): after a short grace for reloads the ship leaves the world.
   removePlayer(id) { const p = this.players.get(id); if (!p) return; p.offline = true; p.offlineSince = Date.now(); p.send = () => {}; }
@@ -80,17 +110,18 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}) };
-    return { ships, savedAt: Date.now() };
+    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: true } : {}) };
+    const p = this.players.get(id);
+    return { ships, hangar: p ? p.hangar : {}, savedAt: Date.now() };
   }
 
   // ---- commands (every field hostile) ----
   /** Fly one of your ships to a point (clamped inside the hexagon). */
   cmdMove(pid, shipId, x, y) {
     if (!finite(x) || !finite(y)) return;
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;   // no new orders mid-warp (or docked)
     const t = this._clearPoint(clampToExpanse(x, y, s.radius), s);   // (owner) never a destination inside an object's bounds
-    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true;
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = false;
   }
   // ---- where a destination can't be (obstacles.js): asteroids and Library props ----
   _ix(poi) {                                           // a POI's objects, indexed (rebuilt when its rocks change)
@@ -112,19 +143,137 @@ export class World {
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
    *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
   cmdAlign(pid, shipId, poiId, warp = false) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
     if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
-    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.tx = poi.x; s.ty = poi.y; s.moving = true;
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
+
+  // ---- modules (owner): fit from the cargo hold into a slot of the module's kind, within the ship's power and
+  // disposition; unfit back into the cargo hold; switch active modules on and off ----
+  _notice(pid, text) { const p = this.players.get(pid); if (p) p.send(JSON.stringify({ t: "notice", text })); }
+  cmdFit(pid, shipId, item, kind, slot) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || typeof item !== "string") return;
+    const m = MODULES[item]; if (!m || m.slot !== kind || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length) return;
+    if (!((s.holds.cargo[item] || 0) >= 1)) return;
+    if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
+    const old = s.fit[kind][slot], next = { active: [...s.fit.active], passive: [...s.fit.passive] }; next[kind][slot] = item;
+    const c = shipCalc(SHIP_TYPES[s.type], next, s.lic);
+    if (c.power > c.powerMax + 1e-9) return this._notice(pid, "Not enough power");
+    if (c.disposition > c.dispositionMax + 1e-9) return this._notice(pid, "Not enough disposition");
+    takeItem(s.holds, "cargo", item, 1); if (old) addItem(s.holds, "cargo", old, 1);   // (a swap: same size, so it fits)
+    s.fit = next; this._recalc(s);
+  }
+  cmdUnfit(pid, shipId, kind, slot) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || (kind !== "active" && kind !== "passive") || !Number.isInteger(slot) || slot < 0 || slot >= (s.fit[kind] || []).length) return;
+    const item = s.fit[kind][slot]; if (!item) return;
+    const without = { ...s.fit, [kind]: s.fit[kind].map((k, i) => (i === slot ? null : k)) };   // (an expander out: the holds must still fit what's in them)
+    if (holdUsed(s.holds, "cargo") + MODULES[item].m3 > this._holdCap(s, "cargo", without) + 1e-9) return this._notice(pid, "Cargo hold full");
+    if (holdUsed(s.holds, "ore") > this._holdCap(s, "ore", without) + 1e-9) return this._notice(pid, "Ore hold full");
+    if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
+    s.fit[kind][slot] = null; addItem(s.holds, "cargo", item, 1); this._recalc(s);
+  }
+  _holdCap(s, hold, fit = s.fit) { return shipCalc(SHIP_TYPES[s.type], fit, s.lic).holds[hold] || 0; }
+  /** Switch an active module on or off. Lasers and drones need a locked asteroid in their range (the first such target). */
+  cmdModule(pid, shipId, slot, on) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Number.isInteger(slot) || slot < 0 || slot >= s.fit.active.length) return;
+    const m = MODULES[s.fit.active[slot]]; if (!m) return;
+    if (!on) { this._modOff(s, slot); return; }
+    if (s.wp || s.docked || (s.act[slot] && s.act[slot].on)) return;
+    if (m.yield) {
+      const tg = this._miningTarget(s, m);
+      if (!tg) return this._notice(pid, "No locked asteroid in range");
+      if (holdUsed(s.holds, "ore") >= (s.calc.holds.ore || 0) - 1e-6) return this._notice(pid, "Ore hold full");
+      s.act[slot] = { on: true, at: this.simAt, tg };
+    } else s.act[slot] = { on: true, at: this.simAt };
+    this._recalc(s);
+  }
+  _modOff(s, slot) { if (s.act[slot]) { s.act[slot] = null; this._recalc(s); } }
+  _mcalc(s, m) { return m.key === "mining_drones" ? s.calc.drones : s.calc.laser; }
+  // the first locked asteroid within this module's reach
+  _miningTarget(s, m) {
+    const range = this._mcalc(s, m).rangeKm;
+    for (const g of s.targets) { if (g.kind !== "rock" || !g.locked) continue; const pos = this._objPos("rock", g.id); if (pos && this._range(s, pos) <= range) return g.id; }
+    return null;
+  }
+  // lasers and drones: each cycle's ore lands in the ore hold when it completes; they stop when the rock is gone, unlocked
+  // or out of reach, or the ore hold is full
+  _tickModules(now) {
+    for (const s of this.ships.values()) {
+      if (!s.act || !s.act.some(Boolean)) continue;
+      if (s.wp) { s.act = s.act.map(() => null); this._recalc(s); continue; }   // a warp switches everything off
+      for (let i = 0; i < s.act.length; i++) {
+        const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
+        const c = this._mcalc(s, m), k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };
+        if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
+        if (now - a.at < c.cycleMs) continue;
+        const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(c.yield, k.m3, Math.max(0, free));
+        if (amt > 0) { addItem(s.holds, "ore", "ore:" + k.ore, amt); this._mineRock(a.tg, amt); }
+        a.at += c.cycleMs;
+        if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); }
+      }
+    }
+  }
+  // ore mined out of a rock: it shrinks a size at a time and is gone when empty
+  _mineRock(id, amt) {
+    const poi = this.pois.get(id.split("#")[0]), f = poi && poi.field, k = f && f.rocks.find((r) => r.id === id); if (!k) return;
+    k.mined = +((k.mined || 0) + amt).toFixed(2); k.m3 = Math.max(0, +(k.m3 - amt).toFixed(2));
+    if (k.m3 <= 0) { f.rocks.splice(f.rocks.indexOf(k), 1); f.ver++; return; }
+    const size = sizeFor(k.m3); if (size !== k.size) { k.size = size; k.r = size / 2000; f.ver++; }
+  }
+
+  // ---- the Station (owner, temporary): dock within DOCK_KM (out of range: fly there first, then dock), undock ----
+  _station() { return this.pois.get(STATION.id).field.props[0]; }
+  cmdDock(pid, shipId) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
+    const st = this._station();
+    if (stationRange(s, st) <= DOCK_KM) { this._dock(s); return; }
+    const dx = s.x - st.x, dy = s.y - st.y, d = Math.hypot(dx, dy) || 1, k = Math.max(st.w, st.h) / 2 + 1.5;   // fly to just off it, then dock
+    const t = this._clearPoint({ x: st.x + dx / d * k, y: st.y + dy / d * k }, s);
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = true;
+  }
+  _dock(s) {
+    const st = this._station();
+    Object.assign(s, { docked: true, dockReq: false, moving: false, vx: 0, vy: 0, chase: null, dest: null, warpReq: false, drift: false, targets: [], x: st.x, y: st.y, tx: st.x, ty: st.y });
+    s.act = s.act.map(() => null); this._recalc(s);
+  }
+  cmdUndock(pid, shipId) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
+    const st = this._station(), a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2;   // out the bottom, a couple of km off
+    Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a });
+    s.tx = s.x; s.ty = s.y;
+  }
+  /** Move items (owner): between the hangar and your docked ships' holds, or between one ship's holds. The ore hold
+   *  takes only ore; ship holds take what fits (the rest stays); the hangar takes anything. */
+  cmdTransfer(pid, from, to, item, qty) {
+    const p = this.players.get(pid); if (!p || typeof item !== "string" || !isItem(item)) return;
+    const box = (c) => {
+      if (c === "hangar") return { kind: "hangar", items: p.hangar, docked: true };
+      if (!c || typeof c !== "object" || typeof c.ship !== "string" || typeof c.hold !== "string") return null;
+      const s = this.ships.get(c.ship); if (!s || s.owner !== pid || !s.holds[c.hold]) return null;
+      return { kind: "hold", s, hold: c.hold, items: s.holds[c.hold], docked: !!s.docked };
+    };
+    const A = box(from), B = box(to); if (!A || !B || A.items === B.items) return;
+    if (!(A.kind === "hold" && B.kind === "hold" && A.s === B.s) && !(A.docked && B.docked)) return;   // the hangar only from a docked ship
+    const have = A.items[item] || 0; if (!(have > 0)) return;
+    let n = qty == null ? have : (Number.isFinite(qty) && qty > 0 ? Math.min(qty, have) : 0); if (!(n > 0)) return;
+    if (B.kind === "hold") {
+      if (B.hold === "ore" && !item.startsWith("ore:")) return this._notice(pid, "The ore hold takes only ore");
+      const free = (B.s.calc.holds[B.hold] || 0) - holdUsed(B.s.holds, B.hold), per = itemM3(item);
+      n = Math.min(n, MODULES[item] ? Math.floor(free / per + 1e-9) : Math.floor(free / per * 100) / 100);
+      if (!(n > 0)) return this._notice(pid, "Not enough room");
+    }
+    const take = (o) => { const v = +((o[item] || 0) - n).toFixed(2); if (v <= 0) delete o[item]; else o[item] = v; };
+    take(A.items); B.items[item] = +((B.items[item] || 0) + n).toFixed(2);
+  }
 
   // ---- objects in space (owner): asteroids and ships can be locked, aligned to, moved toward, and looked at ----
   /** Where an object is now: { x, y, r } (r = its solid radius), or null if it's gone (or a ship is in warp). */
   _objPos(kind, id) {
     if (typeof id !== "string" || id.length > 80) return null;
-    if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp ? { x: o.x, y: o.y, r: o.radius } : null; }
+    if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp && !o.docked ? { x: o.x, y: o.y, r: o.radius } : null; }
     if (kind === "rock") { const k = this._rock(id); return k ? { x: k.x, y: k.y, r: k.r } : null; }   // to its edge (owner)
     return null;
   }
@@ -132,7 +281,7 @@ export class World {
   _range(s, pos) { return Math.max(0, Math.hypot(pos.x - s.x, pos.y - s.y) - pos.r - s.radius); }   // edge to edge
   /** Lock Target: within targeting range, up to the hull's maximum; it locks after the hull's lock time. */
   cmdLock(pid, shipId, kind, id) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
     if (kind === "ship" && id === s.id) return;                                   // not itself
     const pos = this._objPos(kind, id); if (!pos) return;
     if (s.targets.some((g) => g.kind === kind && g.id === id) || s.targets.length >= s.maxTargets) return;
@@ -146,9 +295,9 @@ export class World {
   }
   /** Align To (fly at the object at full speed, no braking) or Move towards (fly to its edge and stop; follows a ship). */
   cmdChase(pid, shipId, kind, id, mode) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
     if ((mode !== "align" && mode !== "approach") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
-    s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
+    s.dockReq = false; s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
   }
   /** Info on an object: an asteroid you have a ship beside (its belt), or a ship. */
   cmdInfo(pid, kind, id) {
@@ -182,7 +331,7 @@ export class World {
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
-    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
@@ -222,6 +371,7 @@ export class World {
     if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); }
     this._tickShips(dtSec, now);
     this._tickTargets(now);
+    this._tickModules(now);
     for (const p of [...this.players.values()]) if (p.offline && now - p.offlineSince > LOGOUT_GRACE_MS) this._purge(p.id);
   }
   _tickShips(dtSec, now) {
@@ -229,6 +379,8 @@ export class World {
     const ships = [...this.ships.values()];
     // 1) steer toward the target as fast as it can while still able to brake in time, then integrate
     for (const s of ships) {
+      if (s.docked) continue;                              // (owner) a docked ship is out of space
+      if (s.dockReq && stationRange(s, this._station()) <= DOCK_KM) { this._dock(s); continue; }
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
         s.x = s.wp.fx + (s.wp.tx - s.wp.fx) * e; s.y = s.wp.fy + (s.wp.ty - s.wp.fy) * e; s.vx = 0; s.vy = 0;
@@ -350,6 +502,7 @@ export class World {
     for (const s of this.ships.values()) if (s.owner === p.id) for (const g of s.targets) if (g.kind === "ship") locked.add(g.id);   // your targets are sent wherever they are
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
+      if (!mine && s.docked) continue;
       if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
@@ -360,10 +513,16 @@ export class World {
         e.v = s.wp ? +(Math.hypot(s.wp.tx - s.wp.fx, s.wp.ty - s.wp.fy) * Math.PI / 2 * Math.sin(Math.PI * Math.min(1, (this.simAt - s.wp.at) / s.wp.dur)) / (s.wp.dur / 1000)).toFixed(4) : +Math.hypot(s.vx, s.vy).toFixed(4);
         if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
+        // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
+        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = true; if (s.dockReq) e.dockReq = true;
+        e.act = s.act.map((a, i) => { if (!a) return null; const m = MODULES[s.fit.active[i]], c = m && m.yield ? this._mcalc(s, m) : null; return c ? { p: +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3), tg: a.tg } : { p: 1 }; });
       }
+      { const b = s.act ? s.act.map((a, i) => (a && a.tg ? { m: s.fit.active[i], tg: a.tg } : null)).filter(Boolean) : []; if (b.length) e.beams = b; }   // lasers and drones at work, for everyone to see
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };
       ships.push(e);
     }
-    return { t: "snap", st: this.simAt, ships };
+    const out = { t: "snap", st: this.simAt, ships };
+    if (ships.some((x) => x.docked)) out.hangar = p.hangar;   // (the hangar, while any of your ships is docked)
+    return out;
   }
 }
