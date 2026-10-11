@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atamus</title>
   <meta name="description" content="Atamus is a multiplayer space mining game you play in your browser. Mine the Expanse, train your pilots, grow your fleet.">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1791744662">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=1791746306">
   <script>
     // already signed in: straight to the welcome-back page
     fetch((/(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin) + "/auth/me", { credentials: "include" })
@@ -20,7 +21,7 @@
   </div>
 
   <header class="site-head">
-    <a class="site-logo" href="index.html">ATAMUS</a>
+    <a class="site-logo" href="index.html"><img src="assets/logo.png" srcset="assets/logo.png 1x, assets/logo@2x.png 2x" width="182" height="36" alt="Atamus"></a>
     <a class="btn btn-ghost btn-sm" href="login.html">Log in</a>
   </header>
 

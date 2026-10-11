@@ -534,7 +534,7 @@ export class World {
     const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
     if (persona) {                                        // (owner) an admin speaking as admin: their admin name and picture; no ship says it
       const ch = channel === "corp" ? "corp" : "local";
-      const msg = JSON.stringify({ t: "chat", ch, from: persona.name, admin: persona.key, pic: persona.pic, text: censor(clean), ts: Date.now() });
+      const msg = JSON.stringify({ t: "chat", ch, from: persona.name, admin: persona.key, pic: persona.pic, rank: persona.rank || "admin", text: censor(clean), ts: Date.now() });
       for (const other of this.players.values()) if (!other.offline) other.send(msg);
       if (this.onLine) this.onLine({ ch, fromId: pid, aid: pid, from: persona.name, text: clean });
       return;

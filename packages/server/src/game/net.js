@@ -5,7 +5,7 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
-import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
+import { setGameHooks, isUnlocked, muteOf, logAction, unseenSuspensions } from "../admin.js";
 import { personaOf } from "../personas.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName, roleOf } from "./persist.js";
 import { scan } from "../namefilter.js";
@@ -32,8 +32,8 @@ export function attachGameServer(httpServer) {
   // (owner) the admin is shown by their admin profile (personas.js), resolved when sent: a changed profile changes old lines
   const admDm = new Map();                              // player pid -> { admin, name, log: [{ from, text, ts, a (an admin's line: their account) }], frozen, graceAt }
   const pName = (adminPid) => (personaOf(adminPid) || {}).name || "Admin";
-  const pOut = (adminPid) => { const pe = personaOf(adminPid) || {}; return { name: pe.name || "Admin", pic: pe.pic || 1, key: pe.key || "" }; };
-  const viewLog = (d) => d.log.map((l) => { if (!l.a) return { from: l.from, text: l.text, ts: l.ts }; const pe = pOut(String(l.a)); return { from: pe.name, text: l.text, ts: l.ts, key: pe.key, pic: pe.pic }; });
+  const pOut = (adminPid) => { const pe = personaOf(adminPid) || {}; return { name: pe.name || "Admin", pic: pe.pic || 1, key: pe.key || "", rank: pe.rank || "admin" }; };
+  const viewLog = (d) => d.log.map((l) => { if (!l.a) return { from: l.from, text: l.text, ts: l.ts }; const pe = pOut(String(l.a)); return { from: pe.name, text: l.text, ts: l.ts, key: pe.key, pic: pe.pic, rank: pe.rank }; });
   const saveDm = (pid) => { const d = admDm.get(pid); (d ? saveAdminDm(pid, { ...d, adminName: pName(d.admin) }) : deleteAdminDm(pid)).catch((e) => console.error("admin dm", e)); };
   loadAdminDms().then((rows) => { for (const r of rows) admDm.set(String(r.player_id), { admin: String(r.admin_id), name: r.player_name, log: (r.log || []).map((l) => (l.a || l.from !== r.admin_name ? l : { ...l, a: String(r.admin_id) })), frozen: !!r.frozen }); }).catch((e) => console.error("admin dms", e));
   const onlineByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return { id: p.id, name: p.name }; return null; };
@@ -55,7 +55,7 @@ export function attachGameServer(httpServer) {
     if (typeof m.to === "string" && isUnlocked(pid) && personaOf(pid)) {    // an admin to a player
       let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
       const pe = pOut(pid), line = { from: pe.name, text, ts: Date.now() }; d.log.push({ ...line, a: pid }); if (d.log.length > 100) d.log.shift(); saveDm(to);
-      sendTo(to, { t: "admdm", ...line, key: pe.key, pic: pe.pic, admin: pe.name }); sendTo(pid, { t: "admdm", ...line, key: pe.key, pic: pe.pic, with: d.name });
+      sendTo(to, { t: "admdm", ...line, key: pe.key, pic: pe.pic, rank: pe.rank, admin: pe.name }); sendTo(pid, { t: "admdm", ...line, key: pe.key, pic: pe.pic, rank: pe.rank, with: d.name });
       chatLine({ ch: "admin", fromId: pid, aid: pid, from: pe.name, toId: to, to: d.name, text });
       return;
     }
@@ -126,9 +126,15 @@ export function attachGameServer(httpServer) {
   const admins = () => [...conns.keys()].filter((id) => isUnlocked(id));
   onRelAppeal((id, players) => { for (const p of players) sendTo(p, { t: "relappeal", id }); for (const a of admins()) sendTo(a, { t: "relappealadm", id }); });
   onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else for (const a of admins()) sendTo(a, { t: "ticketadm", id, subject }); });
+  // (owner) a Moderator suspended: their admin DMs end (a freeze they held thaws); every Head Admin online is told now,
+  // the others when they next connect
+  const heads = new Set();                               // Head Admins connected
+  const tellHead = async (pid, onlyId = null) => { try { for (const s of await unseenSuspensions(pid, onlyId)) sendTo(pid, { t: "modsusp", ...s }); } catch (e) { console.error("modsusp", e); } };
   setGameHooks({
+    modSuspended: async (uid) => { for (const [pid2, d] of [...admDm]) if (d.admin === uid) await admEnd(uid, { to: d.name }).catch((e) => console.error("susp dm", e)); },
+    notifyHeads: async (sid) => { for (const pid2 of heads) if (conns.has(pid2)) await tellHead(pid2, sid); },
     // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
-    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
+    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin" }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
       for (const [pid2, d] of admDm) if (d.admin === String(uid)) saveDm(pid2); },
     renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch {} } },
     renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
@@ -183,6 +189,7 @@ export function attachGameServer(httpServer) {
     { const mu = muteOf(user); if (mu) mutes.set(pid, { perm: mu.perm, until: mu.until ? new Date(mu.until).getTime() : 0, reason: mu.reason }); else mutes.delete(pid); }
     { const d = admDm.get(pid); if (d) { const pe = pOut(d.admin); send(JSON.stringify({ t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) })); } }   // an admin conversation still open
     for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen }));
+    if (user.role === "head") { heads.add(pid); tellHead(pid); } else heads.delete(pid);   // (owner) suspensions they haven't been told of
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {

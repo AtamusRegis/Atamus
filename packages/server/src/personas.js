@@ -9,11 +9,15 @@ import { bannedName } from "./names.js";
 
 export const ADMIN_PICS = 6;
 const NAME_RE = /^[A-Za-z0-9_]{3,24}$/;
-const personas = new Map();                                  // account id -> { name, pic, key }
+const personas = new Map();                                  // account id -> { name, pic, key, rank }
+// (owner) the color an admin's lines show in: Moderators orange, Admins (and the Head Admin) red
+const rankOf = (role) => (role === "mod" ? "mod" : "admin");
+/** An admin's role changed: their lines' color follows. */
+export const setRank = (uid, role) => { const p = personas.get(String(uid)); if (p) p.rank = rankOf(role); };
 
 export async function loadPersonas() {
-  const { rows } = await pool.query(`SELECT id, admin_name, admin_pic, admin_key FROM users WHERE admin_name IS NOT NULL`);
-  personas.clear(); for (const r of rows) personas.set(String(r.id), { name: r.admin_name, pic: r.admin_pic || 1, key: r.admin_key });
+  const { rows } = await pool.query(`SELECT id, admin_name, admin_pic, admin_key, role FROM users WHERE admin_name IS NOT NULL`);
+  personas.clear(); for (const r of rows) personas.set(String(r.id), { name: r.admin_name, pic: r.admin_pic || 1, key: r.admin_key, rank: rankOf(r.role) });
 }
 /** An admin's profile ({ name, pic, key }), or null. */
 export const personaOf = (uid) => (uid == null ? null : personas.get(String(uid)) || null);
@@ -39,8 +43,9 @@ export async function setPersona(uid, name, pic) {
     || await q(`SELECT 1 FROM users WHERE lower(username) = lower($1) AND id = $2`)
     || await q(`SELECT 1 FROM pilots WHERE lower(name) = lower($1) AND $2::bigint IS NOT NULL`)) throw new Error("That name is taken.");
   const was = personaOf(uid), key = (was && was.key) || crypto.randomBytes(9).toString("base64url");
-  try { await pool.query(`UPDATE users SET admin_name = $2, admin_pic = $3, admin_key = $4 WHERE id = $1`, [uid, name, pic, key]); }
+  let role = null;
+  try { role = (await pool.query(`UPDATE users SET admin_name = $2, admin_pic = $3, admin_key = $4 WHERE id = $1 RETURNING role`, [uid, name, pic, key])).rows[0].role; }
   catch (e) { if (e.code === "23505") throw new Error("That name is taken."); throw e; }
-  const now = { name, pic, key }; personas.set(String(uid), now);
+  const now = { name, pic, key, rank: rankOf(role) }; personas.set(String(uid), now);
   return { was, now };
 }

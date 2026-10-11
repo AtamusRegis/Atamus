@@ -391,3 +391,6 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .ulog-body { gap: 0; overflow-y: auto; min-height: 0; padding-right: 8px; scrollbar-width: thin; scrollbar-color: rgba(140,170,220,0.35) transparent; }
 /* hidden means hidden, whatever a class's display says (the login page's appeal, the recovery steps) */
 [hidden] { display: none !important; }
+/* (owner) the logo: pixel art, kept crisp */
+.site-logo img { display: block; height: 36px; width: auto; image-rendering: pixelated; filter: drop-shadow(0 0 10px rgba(56,198,255,0.25)); }
+@media (max-width: 420px) { .site-logo img { height: 28px; } }

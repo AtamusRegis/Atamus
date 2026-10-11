@@ -657,7 +657,6 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .admdm-freeze-l { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); cursor: pointer; }
 /* (owner) admin profiles: the picture in chat, the chat's Player / Admin switch, the profile picker */
 .chat-apic { image-rendering: pixelated; object-fit: cover; }
-.chat-line.admin .who { color: #f0b46a; }
 .chat-form:has(.chat-as) { display: flex; gap: 6px; align-items: center; }
 .chat-form .chat-as { flex: none; font: inherit; font-size: 11px; letter-spacing: .06em; padding: 5px 8px; color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); cursor: pointer; }
 .chat-form .chat-as.on { color: #1a1206; background: #f0b46a; border-color: #f0b46a; }
@@ -683,3 +682,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .tk-row { cursor: pointer; }
 .tk-form textarea { resize: vertical; }
 .adm-body > .tab-row { flex-wrap: wrap; justify-content: center; row-gap: 2px; overflow: visible; }
+/* (owner) names in chat: players blue, Moderators orange, Admins (and the Head Admin) red */
+.chat-log .who { color: #5fb2ff; }
+.chat-log .chat-line.rank-mod .who, .admdm-line b.rank-mod { color: #ff9a3c; }
+.chat-log .chat-line.rank-admin .who, .admdm-line b.rank-admin { color: #ff5a5a; }

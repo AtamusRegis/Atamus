@@ -242,8 +242,26 @@ export async function migrate() {
     ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     -- (owner) Nyssary is a Head Admin (and the only one who makes Head Admins); staff: Head Admins and Moderators ('admin')
+    -- (owner, 2026-10-11) three tiers: 'head' (Nyssary only), 'admin' (Admins), 'mod' (Moderators); once: the old 'admin'
+    -- (regular admins, now Moderators) becomes 'mod' and any other Head Admin becomes an Admin
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now());
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM meta WHERE key = 'roles:3tier') THEN
+        UPDATE users SET role = 'mod' WHERE role = 'admin';
+        UPDATE users SET role = 'admin' WHERE role = 'head' AND lower(username) NOT IN ('nyssary', 'ptr');
+        INSERT INTO meta (key, value) VALUES ('roles:3tier', 'done');
+      END IF;
+    END $$;
+    UPDATE users SET role = 'admin' WHERE role = 'head' AND lower(username) NOT IN ('nyssary', 'ptr');   -- the Head Admin is Nyssary alone (the PTR tester stands in)
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;   -- (owner) a staff member's own panel password (scrypt)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;
+    -- (owner) a Moderator's abilities suspended for 24 hours by another staff member, with a reason; Head Admins are told
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS mod_suspended_until TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS mod_suspensions (
+      id BIGSERIAL PRIMARY KEY, mod_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, by_id BIGINT, reason TEXT NOT NULL,
+      at TIMESTAMPTZ NOT NULL DEFAULT now(), until TIMESTAMPTZ NOT NULL, lifted_by BIGINT, lifted_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS mod_susp_seen (susp_id BIGINT NOT NULL REFERENCES mod_suspensions(id) ON DELETE CASCADE, admin_id BIGINT NOT NULL, PRIMARY KEY (susp_id, admin_id));   -- (owner) a staff member's own panel password (scrypt)
   `);
 }
 
