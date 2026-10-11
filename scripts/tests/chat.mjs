@@ -11,7 +11,11 @@ w.cmdChat("a", "  hello   all ", "local");
 t.ok(["a", "b", "c"].every((k) => got[k].some((m) => m.ch === "local" && m.text === "hello all" && m.from === "Alice" && m.portrait)), "Local reaches everyone, as the speaker's character");
 const shA = [...w.ships.values()].find((x) => x.owner === "a"), shB = [...w.ships.values()].find((x) => x.owner === "b");
 w.cmdChat("a", "over here", "local", null, shA.id); w.cmdChat("a", "not mine", "local", null, shB.id); w.cmdChat("a", "corp", "corp", null, shA.id);
-t.ok(got.b.some((m) => m.text === "over here" && m.ship === shA.id) && got.b.some((m) => m.text === "not mine" && !m.ship) && got.b.some((m) => m.text === "corp" && !m.ship), "Local names the speaker's own ship for its bubble (owner); never someone else's, and never in Corp");
+t.ok(got.b.some((m) => m.text === "over here" && m.ships.join() === shA.id) && got.b.some((m) => m.text === "not mine" && !m.ships.includes(shB.id)) && got.b.some((m) => m.text === "corp" && !m.ships), "Local names the speaker's own ship for its bubble (owner); never someone else's, and never in Corp");
+{ w.setPilots("a", [{ id: 1, name: "Alice" }, { id: 2, name: "Ann" }, { id: 3, name: "Amy" }]); const [x1, x2, x3] = [1, 2, 3].map((n) => w.ships.get("a:ship:" + n));
+  Object.assign(x1, { x: 0, y: 0 }); Object.assign(x2, { x: 5, y: 0 }); Object.assign(x3, { x: 3000, y: 0 }); w.cmdChat("a", "two places", "local", null, x2.id);
+  const m = got.b.find((q) => q.text === "two places");
+  t.ok(m && m.ships.length === 2 && m.ships[0] === x2.id && m.ships.includes(x3.id), "with several of your pilots in one place only one speaks (the selected one first); one in each place (owner)", m); }
 w.cmdChat("a", "psst", "dm", "bob");
 t.ok(got.b.some((m) => m.ch === "dm" && m.from === "Alice" && m.text === "psst") && got.a.some((m) => m.ch === "dm" && m.to === "bob") && !got.c.some((m) => m.ch === "dm"), "a DM reaches only them (and echoes to you), names in any case");
 w.cmdChat("a", "hey", "dm", "Nobody");

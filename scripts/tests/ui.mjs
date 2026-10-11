@@ -280,7 +280,14 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   document.querySelector('.wbtn[data-id="fit"]').click(); await s(400); const fw = document.querySelector('.win[data-id="fit"]'); fw.querySelector('.tab[data-tab="fitting"]').click(); await s(200);
   fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
   const kit = [...inv.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item).join();
+  await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]')); const spaceFit = A.myShip.fit.active[0] || null;
+  dev({ cmd: "move", x: 0, y: -1204 }); await s(900); A.send({ t: "dock", ship: A.myShip.id, where: "station" }); await s(900);   // (owner) refit docked
+  for (const id of ["station"]) { const x = document.querySelector('.win[data-id="' + id + '"] .win-close'); if (x && !x.closest(".win").hidden) x.click(); } await s(200);
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
   await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
+  A.send({ t: "undock", ship: A.myShip.id }); await s(900); dev({ cmd: "move", x: 0, y: -20 }); await s(600);
+  for (const id of ["inv", "fit"]) { const w2 = document.querySelector('.win[data-id="' + id + '"]'); if (w2.hidden) document.querySelector('.wbtn[data-id="' + id + '"]').click(); await s(300); }
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; inv.querySelector('.tab[data-hold="cargo"]').click(); await s(200);
   const fitted = A.myShip.fit.active[0], hb = !!document.querySelector('#hud .hb-slot.filled .hb-img'), bars = fw.querySelector(".fit-bar").textContent;
   const flashText = () => document.getElementById("status").textContent;
   dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); const hb0 = document.querySelector("#hud .hb-slot.filled"), noTarget = { sb: !!(A.myShip.act[0] && A.myShip.act[0].sb), cls: hb0.classList.contains("standby") };
@@ -302,13 +309,13 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   const hangar = JSON.stringify(A.snap.hangar);
   st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
   dev({ cmd: "move", x: 0, y: -20 }); await s(300);
-  return { kit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
+  return { kit, spaceFit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
 t.ok(r.kit === "mining_laser,mining_drones,afterburner_1,cargo_expander,inertia_stabilizer,mining_laser_upgrade,mining_beam_extender,mining_overclocker", "the starter kit is in the cargo hold", r.kit);
 t.ok(r.fitted === "mining_laser" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
 t.ok(r.noTarget.sb && r.noTarget.cls && r.noTarget.off, "its hotbar key runs it: with no locked asteroid a laser waits on standby (pulsing), and the key switches it off again (owner)", r.noTarget);
 t.ok(r.oreRefused, "a module dropped on the Ore Hold's tab stays in the cargo hold (the ore hold takes only ore)", r);
 t.ok(r.power.off && r.power.cls && /^Power0 \/ 40/.test(r.power.bars) && r.power.on, "Power Off from a fitted slot's menu: dimmed, no power used; Power On puts it back (owner)", r.power);
-t.ok(r.slotMenu === "Unfit,Power Off,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "a fitted module's menu: Unfit, Power Off, Info (its stats as fitted)", r);
+t.ok(r.spaceFit === null && r.slotMenu === "Power Off,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "in space a module can't be dragged into a slot, and a fitted one's menu is Power Off, Info (owner: refit docked; Info: its stats as fitted)", r);
 t.ok(r.dockShown && r.stOpen && r.side === "Hangar|Vera Kestrel's Prospector|Ore Hold|Cargo Hold", "near the station the Dock button shows; docking opens the Station: the hangar and the ship's holds", r);
 t.ok(r.hangar === '{"mining_drones":1}' && r.undocked && r.stClosed, "drag an item onto the hangar to store it; Undock closes the Station", r);
 

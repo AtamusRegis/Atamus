@@ -6,9 +6,11 @@ import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
 import { Obstacles } from "./obstacles.js";
+import { HOME, homeId, homeProps, homeLanding } from "./home.js";
 import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
 import { readFileSync } from "node:fs";
+const CHAT_GROUP_KM = 150;   // (owner) your pilots this close together share one chat bubble
 // (owner) a laser aims only at the rock itself: points well inside each rock sprite's opaque part, as fractions of its
 // width from its center (v down, as drawn; scripts/gen/rockmasks.py makes them), turned and scaled like the art
 const ROCK_MASKS = JSON.parse(readFileSync(new URL("./rockmasks.json", import.meta.url), "utf8"));
@@ -70,6 +72,7 @@ export class World {
     // (owner) the Library: every space object's art in rows, always on the map; its props are solid and nothing else
     this.pois.set(LIBRARY.id, { ...LIBRARY, createdAt: 0, field: { rocks: [], props: libraryProps(), dir: 0, ver: 1 }, retired: false });
     this.pois.set(STATION.id, { ...STATION, createdAt: 0, field: { rocks: [], props: stationProps(), dir: 0, ver: 1 }, retired: false });   // (owner, temporary) the station
+    this.homesReady = true;     // (the server clears this until the saved player stations are loaded, so none is made twice)
   }
 
   addPlayer(id, name, send, saved = null, pilots = []) {
@@ -77,8 +80,36 @@ export class World {
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this.setPilots(id, pilots, saved); return existing; }
     const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangar: loadHangar(saved && saved.hangar) };
     this.players.set(id, p);
+    this._ensureHome(p);
     this.setPilots(id, pilots, saved);
     return p;
+  }
+  // ---- (owner) player stations (home.js): one per account, made the first time they play ----
+  _home(owner) { const h = this.pois.get(homeId(owner)); return h && h.kind === "home" ? h : null; }
+  _makeHome(d) {
+    const h = { id: homeId(d.owner), kind: "home", owner: d.owner, name: d.name, x: d.x, y: d.y, r: HOME.rKm, createdAt: d.createdAt || Date.now(), size: d.size || HOME.size, arms: !!d.arms, items: loadHangar(d.items), retired: false };
+    h.field = { rocks: [], props: homeProps(h), dir: 0, ver: 1 };
+    return h;
+  }
+  _ensureHome(p) {
+    if (!this.homesReady || this._home(p.id)) return;
+    const at = this._homeSite();
+    this.pois.set(homeId(p.id), this._makeHome({ owner: p.id, name: p.name + "'s Station", x: +at.x.toFixed(3), y: +at.y.toFixed(3) })); this.poiVer++;
+  }
+  /** The saved player stations are in: give everyone online who still has none theirs. */
+  homesLoaded() { this.homesReady = true; for (const p of this.players.values()) this._ensureHome(p); }
+  // (owner) somewhere random, as far as can be found from other players' stations and clear of every other POI
+  _homeSite() {
+    let best = null;
+    for (let i = 0; i < 400; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * EXPANSE_APOTHEM_KM, x = Math.cos(a) * d, y = Math.sin(a) * d;
+      if (!insideExpanse(x, y, HOME.clearKm)) continue;
+      let m = Infinity;
+      for (const o of this.pois.values()) { const dd = Math.hypot(o.x - x, o.y - y); m = Math.min(m, o.kind === "home" ? dd : dd - o.r - HOME.clearKm + HOME.apartKm); }
+      if (!best || m > best.m) best = { x, y, m };
+      if (m > HOME.apartKm * 4) break;                     // plenty of room: no need to keep looking
+    }
+    return best || { x: 0, y: 0 };
   }
   /** The account's pilots (from the database): each has one Prospector, and a pilot that's gone takes theirs with it. */
   setPilots(id, pilots, saved = null) {
@@ -100,8 +131,8 @@ export class World {
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
       name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
-      holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: !!(sv && sv.docked) };
-    if (s.docked) { const st = this._station(); s.x = st.x; s.y = st.y; s.tx = s.x; s.ty = s.y; }
+      holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: false };
+    if (sv && sv.docked) { s.docked = sv.docked === "home" ? "home" : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (true, before player stations: the Station)
     if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
     this._recalc(s);
     this.ships.set(sid, s); this._own = null;
@@ -147,7 +178,7 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: true } : {}) };
+    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}) };
     const p = this.players.get(id);
     return { ships, hangar: p ? p.hangar : {}, savedAt: Date.now() };
   }
@@ -174,7 +205,7 @@ export class World {
   /** A destination moved just outside any object's bounds (the POIs it's in). */
   _clearPoint(p, s) {
     const q = { x: p.x, y: p.y };
-    for (const poi of this.pois.values()) if (Math.hypot(q.x - poi.x, q.y - poi.y) <= poi.r + 2) this._ix(poi).pushOut(q, s.radius + DEST_CLEAR_KM);
+    for (const poi of this._poisNear(q.x, q.y)) if (Math.hypot(q.x - poi.x, q.y - poi.y) <= poi.r + 2) this._ix(poi).pushOut(q, s.radius + DEST_CLEAR_KM);
     return q;
   }
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
@@ -183,6 +214,7 @@ export class World {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
+    if (poi.kind === "home" && poi.owner !== pid) return;   // (owner) someone else's station isn't on your map
     if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
     s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
   }
@@ -195,6 +227,7 @@ export class World {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || typeof item !== "string") return;
     const m = MODULES[item]; if (!m || m.slot !== kind || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length) return;
     if (!((s.holds.cargo[item] || 0) >= 1)) return;
+    if (!s.docked) return this._notice(pid, "Dock to refit");   // (owner) refitting is done docked
     if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
     const old = s.fit[kind][slot], next = cloneFit(s.fit); next[kind][slot] = item; next.off[kind][slot] = false;
     let c = shipCalc(SHIP_TYPES[s.type], next, s.lic);
@@ -205,6 +238,7 @@ export class World {
   }
   cmdUnfit(pid, shipId, kind, slot) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || (kind !== "active" && kind !== "passive") || !Number.isInteger(slot) || slot < 0 || slot >= (s.fit[kind] || []).length) return;
+    if (!s.docked) return this._notice(pid, "Dock to refit");   // (owner) in space you can see the fit, not change it (besides power)
     const item = s.fit[kind][slot]; if (!item) return;
     const without = cloneFit(s.fit); without[kind][slot] = null;   // (an expander out: the holds must still fit what's in them)
     if (holdUsed(s.holds, "cargo") + MODULES[item].m3 > this._holdCap(s, "cargo", without) + 1e-9) return this._notice(pid, "Cargo hold full");
@@ -326,39 +360,44 @@ export class World {
     const size = sizeFor(k.m3); if (size !== k.size) { k.size = size; k.r = size / 2000; f.ver++; }
   }
 
-  // ---- the Station (owner, temporary): dock within DOCK_KM (out of range: fly there first, then dock), undock ----
+  // ---- docking (owner): at the Station (temporary) or at your own station; within DOCK_KM of its edge (out of range:
+  // fly there first, then dock); undock ----
   _station() { return this.pois.get(STATION.id).field.props[0]; }
-  cmdDock(pid, shipId) {
+  _dockProp(owner, where) { if (where === "home") { const h = this._home(owner); return h ? h.field.props[0] : null; } return this._station(); }
+  cmdDock(pid, shipId, where = "station") {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
-    const st = this._station();
-    if (stationRange(s, st) <= DOCK_KM) { this._dock(s); return; }
+    where = where === "home" ? "home" : "station";
+    const st = this._dockProp(pid, where); if (!st) return;
+    if (stationRange(s, st) <= DOCK_KM) { this._dock(s, where); return; }
     const dx = s.x - st.x, dy = s.y - st.y, d = Math.hypot(dx, dy) || 1, k = Math.max(st.w, st.h) / 2 + 1.5;   // fly to just off it, then dock
     const t = this._clearPoint({ x: st.x + dx / d * k, y: st.y + dy / d * k }, s);
-    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = true;
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true; s.dockReq = where;
   }
-  _dock(s) {
-    const st = this._station();
-    Object.assign(s, { docked: true, dockReq: false, moving: false, vx: 0, vy: 0, chase: null, dest: null, warpReq: false, drift: false, targets: [], x: st.x, y: st.y, tx: st.x, ty: st.y });
+  _dock(s, where = "station") {
+    const st = this._dockProp(s.owner, where); if (!st) return;
+    Object.assign(s, { docked: where, dockReq: false, moving: false, vx: 0, vy: 0, chase: null, dest: null, warpReq: false, drift: false, targets: [], x: st.x, y: st.y, tx: st.x, ty: st.y });
     s.act = s.act.map(() => null); this._recalc(s);
   }
   cmdUndock(pid, shipId) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
-    const st = this._station(), a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2;   // out the bottom, a couple of km off
+    const st = this._dockProp(pid, s.docked) || this._station(), a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2;   // out the bottom, a couple of km off
     Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a });
     s.tx = s.x; s.ty = s.y;
   }
-  /** Move items (owner): between the hangar and your docked ships' holds, or between one ship's holds. The ore hold
-   *  takes only ore; ship holds take what fits (the rest stays); the hangar takes anything. */
+  /** Move items (owner): between a station's storage (the Station's hangar, or your own station's) and your ships docked
+   *  there, or between one ship's holds. The ore hold takes only ore; ship holds take what fits (the rest stays);
+   *  storage takes anything. */
   cmdTransfer(pid, from, to, item, qty) {
     const p = this.players.get(pid); if (!p || typeof item !== "string" || !isItem(item)) return;
     const box = (c) => {
-      if (c === "hangar") return { kind: "hangar", items: p.hangar, docked: true };
+      if (c === "hangar") return { kind: "store", items: p.hangar, at: "station" };
+      if (c === "home") { const h = this._home(pid); return h ? { kind: "store", items: h.items, at: "home" } : null; }
       if (!c || typeof c !== "object" || typeof c.ship !== "string" || typeof c.hold !== "string") return null;
       const s = this.ships.get(c.ship); if (!s || s.owner !== pid || !s.holds[c.hold]) return null;
-      return { kind: "hold", s, hold: c.hold, items: s.holds[c.hold], docked: !!s.docked };
+      return { kind: "hold", s, hold: c.hold, items: s.holds[c.hold], at: s.docked || null };
     };
     const A = box(from), B = box(to); if (!A || !B || A.items === B.items) return;
-    if (!(A.kind === "hold" && B.kind === "hold" && A.s === B.s) && !(A.docked && B.docked)) return;   // the hangar only from a docked ship
+    if (!(A.kind === "hold" && B.kind === "hold" && A.s === B.s) && !(A.at && A.at === B.at)) return;   // storage only with ships docked at that station
     const have = A.items[item] || 0; if (!(have > 0)) return;
     let n = qty == null ? have : (Number.isFinite(qty) && qty > 0 ? Math.min(qty, have) : 0); if (!(n > 0)) return;
     if (B.kind === "hold") {
@@ -433,7 +472,7 @@ export class World {
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
-    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : poi.kind === "home" ? homeLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
@@ -465,8 +504,13 @@ export class World {
     }
     const ch = channel === "corp" ? "corp" : "local";
     // (owner) Local is also said aloud by the speaker's (selected) ship: a bubble over it for anyone near it
-    const sh = ch === "local" && typeof ship === "string" ? this.ships.get(ship) : null, from = sh && sh.owner === pid && !sh.docked ? sh.id : null;
-    const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now(), ...(from ? { ship: from } : {}) });
+    // (owner) with several of your pilots in one place, only one of them says it: the selected one, else the first
+    const speakers = [];
+    if (ch === "local") {
+      const mine = this.shipsOf(pid).filter((x) => !x.docked && !x.wp), pref = typeof ship === "string" ? mine.find((x) => x.id === ship) : null;
+      for (const x of [pref, ...mine]) if (x && !speakers.some((o) => Math.hypot(o.x - x.x, o.y - x.y) <= CHAT_GROUP_KM)) speakers.push(x);
+    }
+    const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now(), ...(speakers.length ? { ships: speakers.map((x) => x.id) } : {}) });
     for (const other of this.players.values()) if (!other.offline) other.send(msg);
   }
 
@@ -484,7 +528,7 @@ export class World {
     // 1) steer toward the target as fast as it can while still able to brake in time, then integrate
     for (const s of ships) {
       if (s.docked) continue;                              // (owner) a docked ship is out of space
-      if (s.dockReq && stationRange(s, this._station()) <= DOCK_KM) { this._dock(s); continue; }
+      if (s.dockReq) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) { this._dock(s, s.dockReq); continue; } }
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
         s.x = s.wp.fx + (s.wp.tx - s.wp.fx) * e; s.y = s.wp.fy + (s.wp.ty - s.wp.fy) * e; s.vx = 0; s.vy = 0;
@@ -561,18 +605,33 @@ export class World {
   }
   /** A belt from the database (a restart): back on the map with its rocks as they were. */
   loadPoi(d) {
+    if (d && d.kind === "home" && typeof d.owner === "string" && finite(d.x) && finite(d.y) && d.id === homeId(d.owner) && !this.pois.has(d.id)) { this.pois.set(d.id, this._makeHome(d)); this.poiVer++; return; }   // a player's station
     if (!d || d.kind !== "belt" || !d.field || !Array.isArray(d.field.rocks) || this.pois.has(d.id)) return;
     this.pois.set(d.id, { ...d, retired: !d.field.rocks.length }); this.poiVer++;
   }
   // who has ships in which POI, worked out once per tick (POIs are few; this keeps snapshots cheap with many players)
   _occupancy() {
     if (this._occ && this._occ.at === this.tickN && this._occ.ver === this.poiVer) return this._occ.map;   // once per tick
-    const map = new Map(); for (const poi of this.pois.values()) map.set(poi.id, new Set());
-    for (const s of this.ships.values()) { if (s.wp) continue; for (const poi of this.pois.values()) if (this._inPoi(s, poi)) map.get(poi.id).add(s.owner); }
-    this._occ = { at: this.tickN, ver: this.poiVer, map };
+    const map = new Map(), byOwner = new Map(); for (const poi of this.pois.values()) map.set(poi.id, new Set());
+    for (const s of this.ships.values()) {
+      if (s.wp) continue;
+      for (const poi of this._poisNear(s.x, s.y)) if (this._inPoi(s, poi)) { map.get(poi.id).add(s.owner); let o = byOwner.get(s.owner); if (!o) byOwner.set(s.owner, o = new Set()); o.add(poi); }
+    }
+    this._occ = { at: this.tickN, ver: this.poiVer, map, byOwner };
     return map;
   }
   _shipsIn(poi, owner = null) { const set = this._occupancy().get(poi.id); return !!set && (owner == null ? set.size > 0 : set.has(owner)); }
+  _poisOf(owner) { this._occupancy(); return this._occ.byOwner.get(owner) || new Set(); }   // the POIs this account has ships in
+  // POIs indexed on a coarse grid (every player has a station, so there are as many POIs as players): what's near a point
+  _poisNear(x, y) {
+    const C = 400;
+    if (!this._pg || this._pg.ver !== this.poiVer) {
+      const g = new Map();
+      for (const poi of this.pois.values()) { const r = poi.r + 3; for (let cx = Math.floor((poi.x - r) / C); cx <= Math.floor((poi.x + r) / C); cx++) for (let cy = Math.floor((poi.y - r) / C); cy <= Math.floor((poi.y + r) / C); cy++) { const k = cx + "," + cy; let l = g.get(k); if (!l) g.set(k, l = []); l.push(poi); } }
+      this._pg = { ver: this.poiVer, g };
+    }
+    return this._pg.g.get(Math.floor(x / C) + "," + Math.floor(y / C)) || [];
+  }
   _newBelt(now = Date.now()) {
     // somewhere inside the hexagon, clear of the edge and of other belts
     let x = 0, y = 0;
@@ -586,11 +645,12 @@ export class World {
     return poi;
   }
   // what one player's map shows: every belt still advertising itself, plus a mined-out one their ships are still in
-  poiSig(p) { let sig = String(this.poiVer); for (const poi of this.pois.values()) if (poi.retired && this._shipsIn(poi, p.id)) sig += "," + poi.id; return sig; }
+  poiSig(p) { let sig = String(this.poiVer); for (const poi of this._poisOf(p.id)) if (poi.retired) sig += "," + poi.id; return sig; }
   poisFor(p) {
     const out = [];
     for (const poi of this.pois.values()) {
       if (poi.retired && !this._shipsIn(poi, p.id)) continue;
+      if (poi.kind === "home" && poi.owner !== p.id) continue;   // (owner) only your own station is on your map
       const e = { id: poi.id, kind: poi.kind, name: poi.name, x: poi.x, y: poi.y, r: poi.r };
       if (poi.retired) e.hidden = true;
       out.push(e);
@@ -598,10 +658,10 @@ export class World {
     return out;
   }
   // (owner) a POI's zone and asteroids are only sent while one of your ships is inside it
-  fieldSig(p) { let sig = ""; for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) sig += poi.id + ":" + poi.field.ver + ","; return sig; }
+  fieldSig(p) { let sig = ""; for (const poi of this._poisOf(p.id)) sig += poi.id + ":" + poi.field.ver + ","; return sig; }
   fieldsFor(p) {
     const out = [];
-    for (const poi of this.pois.values()) if (this._shipsIn(poi, p.id)) out.push({ poi: poi.id, rocks: poi.field.rocks.map((k) => ({ id: k.id, x: k.x, y: k.y, size: k.size, ore: k.ore, rot: k.rot })), ...(poi.field.props ? { props: poi.field.props } : {}) });
+    for (const poi of this._poisOf(p.id)) out.push({ poi: poi.id, rocks: poi.field.rocks.map((k) => ({ id: k.id, x: k.x, y: k.y, size: k.size, ore: k.ore, rot: k.rot })), ...(poi.field.props ? { props: poi.field.props } : {}) });
     return { fields: out, sig: this.fieldSig(p) };
   }
 
@@ -625,7 +685,7 @@ export class World {
         if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
         // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
-        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = true; if (s.dockReq) e.dockReq = true;
+        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq;
         e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
       if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle
@@ -647,7 +707,8 @@ export class World {
       ships.push(e);
     }
     const out = { t: "snap", st: this.simAt, ships };
-    if (ships.some((x) => x.docked)) out.hangar = p.hangar;   // (the hangar, while any of your ships is docked)
+    if (ships.some((x) => x.docked === "station")) out.hangar = p.hangar;   // (the hangar, while any of your ships is docked there)
+    if (ships.some((x) => x.docked === "home")) { const h = this._home(p.id); if (h) out.home = h.items; }   // (your station's storage, while docked at it)
     return out;
   }
 }

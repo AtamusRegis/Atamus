@@ -582,7 +582,7 @@
       w.acts.align = el("button", { class: "fa-btn", onclick: () => { const sh = pilotShip(saved.selPilot); if (sh && sh.dest) window.Atamus.align(sh.dest, sh.id); } }, "Align");
       w.acts.warp = el("button", { class: "fa-btn", onclick: () => { const sh = pilotShip(saved.selPilot); if (sh && sh.dest) window.Atamus.warp(sh.dest, sh.id); } }, "Warp");
       // (owner) Dock, while the selected pilot's ship is close enough to the station
-      w.acts.dock = el("button", { class: "fa-btn fa-dock", "aria-label": "Dock", html: '<svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg>', onclick: () => { const sh = pilotShip(saved.selPilot); if (sh) window.Atamus.send({ t: "dock", ship: sh.id }); } });
+      w.acts.dock = el("button", { class: "fa-btn fa-dock", "aria-label": "Dock", html: '<svg viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M6 20V9l6-5 6 5v11"/><path d="M10 20v-6h4v6"/></svg>', onclick: () => { const sh = pilotShip(saved.selPilot), where = sh && window.Atamus.canDock(sh); if (where) window.Atamus.send({ t: "dock", ship: sh.id, where }); } });
       nameTip(w.acts.dock, "Dock");
       w.acts.row.append(w.acts.align, w.acts.warp, w.acts.dock);
       body.append(list, w.acts.row);
@@ -740,9 +740,12 @@
   const fmtQty = (k, n) => (MODS()[k] ? String(n) : (n >= 1000 ? Math.round(n).toLocaleString() : String(Math.floor(n * 10) / 10)));
   const licOf = (sh) => ((state && state.pilots.find((p) => String(p.id) === String(sh && sh.pilot))) || {}).licenses || {};
   function modCost(k, lic) { const m = MODS()[k]; if (!m) return { power: 0, disposition: 0 }; const f = 1 - 0.05 * Math.min(5, lic[m.license] || 0); return { power: Math.round(m.power * f * 100) / 100, disposition: Math.round(m.disposition * f * 100) / 100 }; }
-  // a container: "hangar", or a ship's hold { ship, hold }
-  const contKey = (c) => (c === "hangar" ? "hangar" : c.ship + "|" + c.hold);
-  const contOf = (key) => { if (key === "hangar") return "hangar"; const i = key.lastIndexOf("|"); return { ship: key.slice(0, i), hold: key.slice(i + 1) }; };
+  // a container: a station's storage ("hangar": the Station's; "home": your own station's, owner), or a ship's hold { ship, hold }
+  const isStore = (c) => c === "hangar" || c === "home";
+  const storeAt = (c) => (c === "home" ? "home" : "station");   // where that storage is (what a ship's docked says)
+  const contKey = (c) => (isStore(c) ? c : c.ship + "|" + c.hold);
+  const contOf = (key) => { if (isStore(key)) return key; const i = key.lastIndexOf("|"); return { ship: key.slice(0, i), hold: key.slice(i + 1) }; };
+  const srcCont = (from) => (isStore(from.type) ? from.type : { ship: from.ship, hold: from.hold });   // an item cell's container
   // Drag an item (mouse or finger): from a hold, the hangar or a module slot, onto a slot (fits it), a container in the
   // station's list or the Inventory window (moves it there; a fitted module goes back into the cargo hold)
   // ---- (owner) drag to reorder (items, the training queue, locked targets): while dragging, the others dim a little and
@@ -785,7 +788,7 @@
   }
   // (owner) items keep the order you drag them into, per hold (and the hangar), in this browser
   let itemOrder = {}; try { itemOrder = JSON.parse(localStorage.getItem("atamus.itemOrder") || "{}") || {}; } catch {}
-  const orderKey = (from) => from.type === "hold" ? from.ship + "|" + from.hold : "hangar";
+  const orderKey = (from) => contKey(srcCont(from));
   const orderedItems = (from, items) => { const o = itemOrder[orderKey(from)] || [], at = (k) => { const i = o.indexOf(k); return i < 0 ? 1e9 : i; }; return Object.entries(items).sort((a, b) => at(a[0]) - at(b[0])); };
   function saveItemOrder(from, grid) { itemOrder[orderKey(from)] = [...grid.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item); try { localStorage.setItem("atamus.itemOrder", JSON.stringify(itemOrder)); } catch {} }
   function dragSource(elm, payloadFn, menuFn, clickFn) {
@@ -829,7 +832,7 @@
   }
   // (owner) a hold only takes what it can hold: the ore hold, only ore; a module slot, only a module of its kind
   function accepts(target, pl) {
-    if (target.dataset.mslot != null) { const m = MODS()[pl.item]; return !!m && m.slot === target.dataset.kind; }
+    if (target.dataset.mslot != null) { const m = MODS()[pl.item], sh = hudShip(); return !!m && m.slot === target.dataset.kind && !!(sh && sh.docked); }   // (owner) refit docked
     if (target.dataset.cont && target.dataset.cont.endsWith("|ore")) return pl.item.startsWith("ore:") && pl.from.type !== "slot";
     return true;
   }
@@ -850,7 +853,7 @@
     else if (t.closest('.win[data-id="inv"]')) dest = { ship: sh.id, hold: invHold(sh) };
     if (!dest) return;
     if (pl.from.type === "slot") { A.send({ t: "unfit", ship: sh.id, kind: pl.from.kind, slot: pl.from.slot }); return; }   // back into the cargo hold
-    const from = pl.from.type === "hangar" ? "hangar" : { ship: pl.from.ship, hold: pl.from.hold };
+    const from = srcCont(pl.from);
     if (contKey(from) !== contKey(dest)) A.send({ t: "transfer", from, to: dest, item: pl.item });
   }
   // a module slot (Fitting window and hotbar): its icon; drag it out or onto another slot; right-click: Unfit, Info
@@ -864,7 +867,9 @@
         node.addEventListener("pointerenter", () => { window.Atamus.hoverModule = { key: k, el: node }; });
         node.addEventListener("pointerleave", () => { const h = window.Atamus.hoverModule; if (h && h.el === node) window.Atamus.hoverModule = null; });
       }
-      dragSource(node, () => ({ item: k, from: { type: "slot", kind, slot: i } }), () => [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })],
+      // (owner) refitting is done docked: in space a slot can't be dragged or unfitted, only powered on / off
+      const docked = () => { const x = hudShip(); return !!(x && x.id === sh.id ? x.docked : sh.docked); };   // (live: the slot outlives the snapshot it was built from)
+      dragSource(node, () => (docked() ? { item: k, from: { type: "slot", kind, slot: i } } : null), () => [...(docked() ? [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })]] : []),
         [off ? "Power On" : "Power Off", () => window.Atamus.send({ t: "power", ship: sh.id, kind, slot: i, on: off })], ["Info", () => openModInfo(k)]],   // (owner) powered off: disposition only
         kind === "active" && extraCls === "hb-live" ? () => toggleModule(i) : null);
     }
@@ -877,21 +882,21 @@
     nameTip(cell, itemName(k));
     dragSource(cell, () => ({ item: k, from }), () => {
       const A = window.Atamus, sh = hudShip(), out = [];
-      if (MODS()[k] && from.type === "hold" && sh && from.ship === sh.id && from.hold === "cargo") out.push(["Fit", () => fitFirst(sh, k)]);
-      const dests = moveTargets(from, k); if (dests.length) out.push(["Move to", dests.map(([label, to]) => [label, () => A.send({ t: "transfer", from: from.type === "hangar" ? "hangar" : { ship: from.ship, hold: from.hold }, to, item: k })])]);
+      if (MODS()[k] && from.type === "hold" && sh && sh.docked && from.ship === sh.id && from.hold === "cargo") out.push(["Fit", () => fitFirst(sh, k)]);   // (owner) docked only
+      const dests = moveTargets(from, k); if (dests.length) out.push(["Move to", dests.map(([label, to]) => [label, () => A.send({ t: "transfer", from: srcCont(from), to, item: k })])]);
       if (MODS()[k]) out.push(["Info", () => openModInfo(k)]);
       return out;
     });
     return cell;
   }
   function fitFirst(sh, k) { const m = MODS()[k]; const i = modsOf(sh, m.slot).indexOf(null); if (i < 0) { flash("No free " + m.slot + " slot"); return; } window.Atamus.send({ t: "fit", ship: sh.id, item: k, kind: m.slot, slot: i }); }
-  // where an item can be moved: the same ship's other holds; docked, the hangar and your other docked ships' holds
+  // where an item can be moved: the same ship's other holds; docked, that station's hangar and your other ships docked there
   function moveTargets(from, k) {
-    const A = window.Atamus, ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine), out = [], fromKey = contKey(from.type === "hangar" ? "hangar" : { ship: from.ship, hold: from.hold });
-    const src = from.type === "hangar" ? null : ships.find((x) => x.id === from.ship), docked = from.type === "hangar" || (src && src.docked);
-    if (docked && fromKey !== "hangar") out.push(["Hangar", "hangar"]);
+    const A = window.Atamus, ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine), out = [], src0 = srcCont(from), fromKey = contKey(src0);
+    const src = isStore(src0) ? null : ships.find((x) => x.id === from.ship), at = isStore(src0) ? storeAt(src0) : (src && src.docked) || null, store = at === "home" ? "home" : "hangar";
+    if (at && fromKey !== store) out.push(["Hangar", store]);
     for (const x of ships) {
-      if (!(x.id === (src && src.id) || (docked && x.docked))) continue;
+      if (!(x.id === (src && src.id) || (at && x.docked === at))) continue;
       const T = A.cfg.shipTypes[x.type] || {};
       for (const h of T.holds || []) { const key = x.id + "|" + h.key; if (key === fromKey || (h.key === "ore" && !k.startsWith("ore:"))) continue; out.push([(x.id === (src && src.id) ? "" : shipName(x) + " ") + h.name, { ship: x.id, hold: h.key }]); }
     }
@@ -1057,30 +1062,32 @@
   // the storage on the right scroll on their own. Opens when the selected pilot's ship docks; closes when none is docked.
   const stSel = () => saved.stSel || "hangar";
   function renderStation(body) {
-    const A = window.Atamus, ships = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.docked), hangar = (A.snap && A.snap.hangar) || {};
+    // the station the selected pilot's ship is docked at (else the first of yours that's docked): the Station or your own (owner)
+    const A = window.Atamus, sh = hudShip(), all = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.docked);
+    const at = (sh && sh.docked) || (all[0] && all[0].docked) || "station", store = at === "home" ? "home" : "hangar";
+    const ships = all.filter((x) => x.docked === at), hangar = (A.snap && A.snap[store]) || {};
     let sel = stSel(); const selC = contOf(sel);
-    if (sel !== "hangar" && !ships.some((x) => x.id === selC.ship)) sel = "hangar";
-    const items = sel === "hangar" ? hangar : (((ships.find((x) => x.id === selC.ship) || {}).holds || {})[selC.hold] || {});
-    const sh = hudShip();
-    const sig = sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked);
-    wins.station.slot.textContent = "Station";
+    if (isStore(sel) ? sel !== store : !ships.some((x) => x.id === selC.ship)) sel = store;
+    const items = isStore(sel) ? hangar : (((ships.find((x) => x.id === selC.ship) || {}).holds || {})[selC.hold] || {});
+    const sig = at + "|" + sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked);
+    wins.station.slot.textContent = at === "home" ? (A.homeName() || "Station") : "Station";
     if (wins.station.ssig === sig) return; wins.station.ssig = sig;
     const keepScroll = [...body.querySelectorAll(".st-side, .st-grid-wrap")].map((x) => x.scrollTop);
     body.innerHTML = ""; body.classList.add("st-win");
     const pick = (key) => { saved.stSel = key; persistAll(); wins.station.ssig = null; renderStation(body); };
-    const side = el("div", { class: "st-side" }, el("button", { class: "st-entry" + (sel === "hangar" ? " active" : ""), "data-cont": "hangar", onclick: () => pick("hangar") }, "Hangar"));
+    const side = el("div", { class: "st-side" }, el("button", { class: "st-entry" + (sel === store ? " active" : ""), "data-cont": store, onclick: () => pick(store) }, "Hangar"));
     for (const x of ships) {
       const T = A.cfg.shipTypes[x.type] || {};
       side.append(el("div", { class: "st-ship" }, shipName(x)));
       for (const h of T.holds || []) { const key = x.id + "|" + h.key; side.append(el("button", { class: "st-entry st-hold" + (sel === key ? " active" : ""), "data-cont": key, onclick: () => pick(key) }, h.name)); }
     }
     const main = el("div", { class: "st-main" });
-    if (sel === "hangar") main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, "Hangar"), el("span", { class: "st-used" }, (Math.round(boxUsed(items) * 10) / 10).toLocaleString() + " m³")));
+    if (isStore(sel)) main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, "Hangar"), el("span", { class: "st-used" }, (Math.round(boxUsed(items) * 10) / 10).toLocaleString() + " m³")));
     else {
       const x = ships.find((y) => y.id === selC.ship), T = A.cfg.shipTypes[x.type] || {}, h = (T.holds || []).find((y) => y.key === selC.hold) || {}, cap = (x.calc && x.calc.holds[selC.hold]) || h.m3 || 0, used = boxUsed(items);
       main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, shipName(x) + " · " + (h.name || "")), el("div", { class: "hud-track st-bar" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, (Math.round(used * 10) / 10).toLocaleString() + " / " + cap.toLocaleString() + " m³"))));
     }
-    const from = sel === "hangar" ? { type: "hangar" } : { type: "hold", ship: selC.ship, hold: selC.hold };
+    const from = isStore(sel) ? { type: sel } : { type: "hold", ship: selC.ship, hold: selC.hold };
     main.append(el("div", { class: "st-grid-wrap" }, el("div", { class: "si-grid" }, orderedItems(from, items).map(([k, n]) => itemCell(k, n, from)), el("div", { class: "si-cell empty" }))));
     body.append(el("div", { class: "st-split" }, side, main));
     if (sh && sh.docked) body.append(el("div", { class: "st-foot" }, el("button", { class: "btn-ghost2 st-undock", onclick: () => A.send({ t: "undock", ship: sh.id }) }, "Undock")));

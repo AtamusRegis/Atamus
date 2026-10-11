@@ -51,8 +51,14 @@
     objItems: (kind, id) => objItems(kind, id), ownShipItems: (id) => ownShipItems(id),
     hoverTarget: null,                               // set by the HUD: a thin gray line runs from your ship to it
     rangeTo: (kind, id) => rangeTo(kind, id),
-    // (owner, temporary) the station: can this ship dock right now (within dockKm of its edge, not docked or warping)?
-    canDock: (sh) => { const st = stationProp(); if (!st || !sh || sh.docked || sh.warp) return false; const dx = Math.max(0, Math.abs(sh.x - st.x) - st.w / 2), dy = Math.max(0, Math.abs(sh.y - st.y) - st.h / 2); return Math.hypot(dx, dy) - (hull(sh.type).radiusKm || 0.09) <= ((cfg && cfg.dockKm) || 5); },
+    // can this ship dock right now (within dockKm of a station's edge, not docked or warping), and where: "station" (the
+    // temporary Station) or "home" (your own station, owner)
+    canDock: (sh) => {
+      if (!sh || sh.docked || sh.warp) return false;
+      const near = (st) => { if (!st) return false; const dx = Math.max(0, Math.abs(sh.x - st.x) - st.w / 2), dy = Math.max(0, Math.abs(sh.y - st.y) - st.h / 2); return Math.hypot(dx, dy) - (hull(sh.type).radiusKm || 0.09) <= ((cfg && cfg.dockKm) || 5); };
+      return near(homeProp()) ? "home" : near(stationProp()) ? "station" : false;
+    },
+    homeName: () => { const h = pois.find((p) => p.kind === "home"); return h ? h.name : null; },
   };
   const myShip = () => { const own = (latest.ships || []).filter((x) => x.mine); return own.find((x) => x.pilot === selPilot) || own[0] || null; };   // the selected pilot's ship
 
@@ -103,7 +109,8 @@
         // server clock ≈ local + offset: eased toward the freshest arrivals (never jumped, so motion doesn't skip; a big change, like a sleeping tab, snaps)
         if (clockOffset == null || Math.abs(off - clockOffset) > 1000) clockOffset = off; else clockOffset += (off - clockOffset) * (off > clockOffset ? 0.08 : 0.01);
         for (const s of m.ships) if (s.mine) { const c = heavy.get(s.id) || {}; for (const k of HEAVY) { if (k in s) c[k] = s[k]; else if (k in c) s[k] = c[k]; } heavy.set(s.id, c); }   // the server leaves out what hasn't changed
-        if (m.hangar) heavy.set("hangar", m.hangar); else if (m.ships.some((s) => s.docked)) m.hangar = heavy.get("hangar") || {};
+        if (m.hangar) heavy.set("hangar", m.hangar); else if (m.ships.some((s) => s.mine && s.docked === "station")) m.hangar = heavy.get("hangar") || {};
+        if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
@@ -230,7 +237,11 @@
     const ob = objAt(px, py);
     if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
     const pr = propAt(px, py);
-    if (pr && pr.station) { const own = myShip(); menu(px, py, [own && own.docked ? ["Open Hangar", () => bus.dispatchEvent(new CustomEvent("openstation"))] : ["Dock", () => { if (own) send({ t: "dock", ship: own.id }); }], ["Look At", () => lookAtObj("prop", pr.id)]]); return; }   // (owner) the station
+    if (pr && pr.station) {                          // (owner) the Station, or a player's station: only your own can be docked at
+      const own = myShip(), where = pr.home ? "home" : "station", yours = !pr.home || poiById.has("home:" + pr.home), items = [];
+      if (yours) items.push(own && own.docked === where ? ["Open Hangar", () => bus.dispatchEvent(new CustomEvent("openstation"))] : ["Dock", () => { if (own) send({ t: "dock", ship: own.id, where }); }]);
+      menu(px, py, [...items, ["Look At", () => lookAtObj("prop", pr.id)]]); return;
+    }
     if (pr) { menu(px, py, [["Look At", () => lookAtObj("prop", pr.id)]]); return; }   // a Library prop
     const p = poiAt(px, py);
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
@@ -302,7 +313,8 @@
     }
     return best;
   }
-  const stationProp = () => { for (const f of belts.values()) { const o = (f.props || []).find((x) => x.station); if (o) return o; } return null; };
+  const stationProp = () => { for (const f of belts.values()) { const o = (f.props || []).find((x) => x.station && !x.home); if (o) return o; } return null; };
+  const homeProp = () => { for (const f of belts.values()) { const o = (f.props || []).find((x) => x.home && poiById.has("home:" + x.home)); if (o) return o; } return null; };   // your own station (only yours is on your map)
   const propById = (id) => { for (const f of belts.values()) { const o = (f.props || []).find((x) => x.id === id); if (o) return o; } return null; };
   const rockById = (id) => { for (const f of belts.values()) { const k = f.rocks.find((x) => x.id === id); if (k) return k; } return null; };
   // ---- objects in space (owner): asteroids and ships. Right-click / hold one: Lock Target (Unlock Target once locked),
@@ -410,7 +422,7 @@
     ctx.strokeStyle = "rgba(140,170,220,0.35)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
   // belts: the map marker always; the zone and the rocks only while one of your ships is inside (owner)
-  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
+  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png"), home: img("assets/icons/map/station_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
   const rockArt = (family, size) => img("assets/rocks/rock_" + family + "_" + size + ".webp"), oreIcon = (family) => img("assets/icons/ores/" + (family === "bubble" ? "rubble" : family) + "_s.png");
   function drawBelts(ships) {
     const sc = scale(), ores = oreBy();
@@ -428,15 +440,19 @@
           else { const a = rockArt(o.rock, k.size); if (a.naturalWidth) { ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(a, -wPx / 2, -wPx / 2 * a.naturalHeight / a.naturalWidth, wPx, wPx * a.naturalHeight / a.naturalWidth); } }
           ctx.restore();
         }
-        for (const o of f.props || []) {                // the Library's props (owner): every space object, at true size
-          const px = gx2s(o.x), py = gy2s(o.y), w = o.w * sc, h = o.h * sc;
-          if (px < -w || py < -h || px > innerWidth + w || py > innerHeight + h || w < 1.5) continue;
-          const a = img("assets/" + o.sprite); if (!a.naturalWidth) continue;
-          ctx.save(); ctx.imageSmoothingEnabled = w > 48; ctx.drawImage(a, px - w / 2, py - h / 2, w, h); ctx.restore();
-        }
+        drawProps(f, sc);
       }
       const mapIcon = mapIcons[p.kind] || mapIcons.belt;
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
+    }
+    for (const [id, f] of belts) if (!poiById.has(id)) drawProps(f, sc);   // (owner) someone's station you've flown to: there, though not on your map
+  }
+  function drawProps(f, sc) {                        // a POI's props (the Library's, the stations): space objects at true size
+    for (const o of f.props || []) {
+      const px = gx2s(o.x), py = gy2s(o.y), w = o.w * sc, h = o.h * sc;
+      if (px < -w || py < -h || px > innerWidth + w || py > innerHeight + h || w < 1.5) continue;
+      const a = img("assets/" + o.sprite); if (!a.naturalWidth) continue;
+      ctx.save(); ctx.imageSmoothingEnabled = w > 48; ctx.drawImage(a, px - w / 2, py - h / 2, w, h); ctx.restore();
     }
   }
   // the picked asteroid (owner): gray corner brackets, its ore's name and its distance from the selected pilot's ship
@@ -501,7 +517,7 @@
   }
   // (owner) what a pilot says in Local floats over their ship for anyone with a ship near it
   const BUBBLE_MS = 7000, BUBBLE_NEAR_KM = 150, bubbles = new Map();
-  bus.addEventListener("chat", (e) => { const m = e.detail; if (m && m.ship && m.ch === "local") bubbles.set(m.ship, { text: m.text, at: performance.now() }); });
+  bus.addEventListener("chat", (e) => { const m = e.detail; if (m && m.ch === "local") for (const id of m.ships || []) bubbles.set(id, { text: m.text, at: performance.now() }); });
   function drawBubbles(ships) {
     if (!bubbles.size) return;
     const now = performance.now(), mine = ships.filter((s) => s.mine && !s.docked), sc = scale();

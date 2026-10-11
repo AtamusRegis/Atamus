@@ -15,6 +15,10 @@ const lastNote = () => notes[notes.length - 1];
 t.ok(JSON.stringify(s.holds.cargo) === '{"mining_laser":2,"mining_drones":1,"afterburner_1":1,"cargo_expander":1,"inertia_stabilizer":1,"mining_laser_upgrade":1,"mining_beam_extender":1,"mining_overclocker":1}', "every ship starts with the starter kit in its cargo hold", s.holds.cargo);
 t.ok(["mining_laser", "mining_drones", "afterburner_1"].every((k) => MODULES[k].slot === "active") && ["cargo_expander", "inertia_stabilizer", "mining_laser_upgrade", "mining_beam_extender", "mining_overclocker"].every((k) => MODULES[k].slot === "passive"), "lasers, drones and the afterburner are active; the rest passive");
 
+// (owner) refitting is done docked: in space a fit or unfit is refused
+w.cmdFit("a", s.id, "mining_laser", "active", 0);
+t.ok(!s.fit.active[0] && lastNote() === "Dock to refit" && s.holds.cargo.mining_laser === 2, "in space a module can't be fitted (owner: dock to refit)", lastNote());
+s.docked = "station";
 // fitting: the right kind of slot, from the cargo hold, within power and disposition
 w.cmdFit("a", s.id, "cargo_expander", "active", 0); w.cmdFit("a", s.id, "mining_laser", "passive", 0); w.cmdFit("b", s.id, "mining_laser", "active", 0); w.cmdFit("a", s.id, "mining_laser", "active", 9); w.cmdFit("a", s.id, "nope", "active", 0);
 t.ok(!s.fit.active.some(Boolean) && !s.fit.passive.some(Boolean), "only into a slot of its own kind, on your own ship, a real slot and module");
@@ -30,7 +34,7 @@ t.ok(shipCalc(T, s.fit, s.lic).laser.yield === shipCalc(T, { active: s.fit.activ
 w.cmdPower("a", s.id, "passive", 0, true); t.ok(s.fit.off.passive[0] && lastNote() === "Not enough power", "Power On needs the power");
 w.cmdPower("a", s.id, "active", 3, false); w.cmdPower("a", s.id, "passive", 0, true);
 t.ok(s.fit.off.active[3] && !s.fit.off.passive[0] && s.calc.power === 31, "powering one off makes room for another", s.calc.power);
-notes.length = 0; w.cmdModule("a", s.id, 3, true); t.ok(!s.act[3] && lastNote() === "Powered off", "a powered-off module can't be switched on");
+s.docked = false; notes.length = 0; w.cmdModule("a", s.id, 3, true); t.ok(!s.act[3] && lastNote() === "Powered off", "a powered-off module can't be switched on"); s.docked = "station";
 w.cmdPower("a", s.id, "passive", 0, false); w.cmdPower("a", s.id, "active", 3, true); w.cmdUnfit("a", s.id, "passive", 0); w.cmdFit("a", s.id, "cargo_expander", "passive", 0);
 t.ok(!s.fit.off.active[3] && s.fit.passive[0] === "cargo_expander" && !s.fit.off.passive[0] && s.calc.power === 40, "back to the full-power fit", s.calc);
 t.ok(!s.holds.cargo.mining_laser && s.holds.cargo.mining_laser_upgrade === 1, "fitting takes the module out of the cargo hold");
@@ -54,6 +58,8 @@ w.cmdUnfit("a", s.id, "passive", 0);
 t.ok(!s.fit.passive[0] && s.holds.cargo.inertia_stabilizer === 1, "unfitting puts it back in the cargo hold");
 w.cmdUnfit("b", s.id, "active", 0); w.cmdUnfit("a", s.id, "active", 7); t.ok(s.fit.active[0] === "mining_laser", "only your own ship, a real slot");
 
+s.docked = false; w.cmdUnfit("a", s.id, "active", 0);
+t.ok(s.fit.active[0] === "mining_laser" && lastNote() === "Dock to refit", "or unfitted (power on / off still works in space: below)");
 // running: the afterburner; lasers and drones need a locked rock in range
 w.cmdModule("a", s.id, 3, true);
 t.ok(Math.abs(s.speed - s.calc.abSpeed) < 1e-9 && s.speed > T.speedKmps * 1.7, "the afterburner raises top speed while it's on", s.speed);

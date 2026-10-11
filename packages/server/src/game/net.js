@@ -79,7 +79,7 @@ export function attachGameServer(httpServer) {
           case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
           case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on); break;
           case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
-          case "dock": world.cmdDock(pid, m.ship); break;
+          case "dock": world.cmdDock(pid, m.ship, m.where); break;
           case "undock": world.cmdUndock(pid, m.ship); break;
           case "transfer": world.cmdTransfer(pid, m.from, m.to, m.item, m.qty); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
@@ -96,12 +96,15 @@ export function attachGameServer(httpServer) {
     try { await saveSystem(pid, json); lastSaved.set(pid, json); } catch (e) { console.error("saveSystem", e); }
   };
   world.onBeforePurge = (pid) => { lastSaved.delete(pid); saveSystem(pid, world.exportState(pid)).catch((e) => console.error("saveSystem(purge)", e)); };
-  // belt POIs persist on their own (shared by everyone); a closed one is deleted
+  // belt POIs and player stations persist on their own (a station with its storage); a closed belt is deleted
   const poiSaved = new Map();
-  const persistPois = () => { for (const poi of world.pois.values()) { if (poi.kind !== "belt") continue;   // the Library is built at start-up
+  const persistPois = () => { for (const poi of world.pois.values()) { if (poi.kind !== "belt" && poi.kind !== "home") continue;   // the Library and the Station are built at start-up
       const json = JSON.stringify(poi); if (poiSaved.get(poi.id) === json) continue; poiSaved.set(poi.id, json); savePoi(poi.id, json).catch((e) => console.error("savePoi", e)); } };
   world.onPoiClosed = (poi) => { poiSaved.delete(poi.id); deletePoi(poi.id).catch((e) => console.error("deletePoi", e)); };
-  loadPois().then((list) => { for (const d of list) world.loadPoi(d); }).catch((e) => console.error("loadPois", e));
+  world.homesReady = false;                               // (no player station is made until the saved ones are in)
+  const loadAll = (tries = 0) => loadPois().then((list) => { for (const d of list) world.loadPoi(d); world.homesLoaded(); })
+    .catch((e) => { console.error("loadPois", e); setTimeout(() => loadAll(tries + 1), Math.min(30000, 2000 * (tries + 1))); });   // keep trying: never make stations over saved ones
+  loadAll();
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);
 
   // a ship's fit, holds and fitted stats, and the hangar, are only sent when they change (the client keeps the last ones)
@@ -111,6 +114,7 @@ export function attachGameServer(httpServer) {
     const same = (key, v) => { const j = JSON.stringify(v); if (hv.get(key) === j) return true; hv.set(key, j); return false; };
     for (const e of snap.ships) if (e.mine) for (const k of HEAVY) if (k in e && same(e.id + "|" + k, e[k])) delete e[k];
     if (snap.hangar && same("hangar", snap.hangar)) delete snap.hangar;
+    if (snap.home && same("home", snap.home)) delete snap.home;
     return snap;
   };
   let last = Date.now();
