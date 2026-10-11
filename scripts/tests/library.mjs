@@ -5,7 +5,7 @@ import { BELTS_MIN } from "../../packages/server/src/game/constants.js";
 import { suite } from "./lib.mjs";
 const t = suite("library");
 const ASSETS = new URL("../../website/assets/", import.meta.url).pathname;
-const w = new World(), a = w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "Ann" }]); w.tick(0.05);
+const w = new World(), a = w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "Ann", licenses: { mining_frigate: 5 } }]); w.tick(0.05);
 const lib = w.pois.get("library"), props = lib.field.props, sa = w.ships.get("a:ship:1");
 
 t.ok(lib && lib.kind === "library" && lib.name === "Library", "the Library is a POI");

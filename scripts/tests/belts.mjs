@@ -5,7 +5,7 @@ import { BELT, ORES, decayField, fieldM3, sizeFor } from "../../packages/server/
 import { BELTS_MIN, PLAYERS_PER_BELT, ALIGN_SPEED } from "../../packages/server/src/game/constants.js";
 import { connect, suite, sleep, SHIP } from "./lib.mjs";
 const t = suite("belts");
-const w = new World(), mk = (id) => w.addPlayer(id, id, () => {}, null, [{ id: 1, name: "P" + id }]);
+const w = new World(), mk = (id) => w.addPlayer(id, id, () => {}, null, [{ id: 1, name: "P" + id, licenses: { mining_frigate: 5 } }]);
 const a = mk("a"), sa = w.ships.get("a:ship:1"); w.tick(0.05);
 const belts = () => [...w.pois.values()].filter((p) => p.kind === "belt" && !p.retired);
 t.ok(belts().length === BELTS_MIN, "a few players: " + BELTS_MIN + " belts", belts().length);
@@ -64,7 +64,7 @@ t.ok(!sa.dest && sa.drift && Math.abs(Math.hypot(sa.vx, sa.vy) - v) < 1e-6, "whe
 w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 
 // (owner) ships fly straight to their destination, over any rock on the way, but can't stop on one
-{ const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z" }]); wb.tick(0.05);
+{ const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z", licenses: { mining_frigate: 5 } }]); wb.tick(0.05);
   const bz = [...wb.pois.values()].find((p) => p.kind === "belt"), rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
   Object.assign(sz, { x: rock.x - 3, y: rock.y, tx: rock.x - 3, ty: rock.y, vx: 0, vy: 0, moving: false });
   for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbours

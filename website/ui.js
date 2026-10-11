@@ -94,6 +94,7 @@
     w.win.hidden = !show;
     if (show) { w.win.style.zIndex = ++z; if (w.render) w.render(w.body); fitOnScreen(w.win); }
     persistWin(id); updateBtnActive(); updateChatGlow();
+    if (id === "fit") renderHud();
   }
   function renderOpen() { for (const id in wins) if (isOpen(wins[id]) && wins[id].render) wins[id].render(wins[id].body); }
 
@@ -505,7 +506,7 @@
       const tabs = [["licensing", "Licensing"], ["requirements", "Requirements"], ["requiredFor", "Required For"]];
       inner.append(el("div", { class: "tab-row" }, tabs.map(([k, n]) => el("button", { class: "tab" + (k === pTab ? " active" : ""), onclick: () => { pTab = k; render(); } }, n))));
       const c = el("div", { class: "pop-content" }); inner.append(c);
-      if (pTab === "licensing") c.append(el("p", { class: "pop-desc" }, l.desc), el("p", { class: "pop-bonus" }, ((l.levelBonus && l.levelBonus[pLevel - 1]) || l.bonus) + (l.hull ? " (Lv " + pLevel + ": " + Math.round((Math.min(pLevel, 5) * 0.2 + Math.max(0, pLevel - 5) * 0.05) * 100) + "%)" : " per level")),
+      if (pTab === "licensing") c.append(el("p", { class: "pop-desc" }, l.desc), el("p", { class: "pop-bonus" }, ((l.levelBonus && l.levelBonus[pLevel - 1]) || l.bonus) + (l.hull ? "" : " per level")),
         ...(l.unlocks && l.unlocks[pLevel] ? [el("div", { class: "pop-unlocks" }, el("span", { class: "pop-unlocks-h" }, "Level " + pLevel + " unlocks"), ...l.unlocks[pLevel].map((t) => el("div", {}, t)))] : []),
         el("div", { class: "pop-traintime" }, "Train time (Lv " + pLevel + "): " + fmtTime(l.levelTimes[pLevel - 1])));
       else if (pTab === "requirements") {
@@ -755,6 +756,7 @@
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : null;
     if (!sh || !T) { hud.hidden = true; A.hoverTarget = null; return; }
     hud.hidden = false;
+    hud.classList.toggle("hb-fitting", !!(wins.fit && isOpen(wins.fit)));   // (owner) the Fitting window open: the hotbar's empty slots and keys show
     const tgs = sh.targets || [];
     const sig = sh.id + "|" + tgs.map((g) => g.kind + ":" + g.id + ":" + (g.locked ? 1 : 0)).join(",") + "|" + JSON.stringify(sh.mods || []);
     if (sig !== H.sig) {                              // structure changed: rebuild (owner: never on every snapshot)
@@ -908,10 +910,11 @@
   const kmM = (km) => Math.round(km * 1000).toLocaleString() + " m";
   const statRow = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
   const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
+  // a hull's general stats (owner); max power, disposition and slots are in the Stats tab's Fitting section
   function generalRows(T) {
     return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", (T.armor || 0).toLocaleString()], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
-      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ...(T.holds || []).map((h) => [h.name, h.m3.toLocaleString() + " m³"]),
-      ["Max Power", T.powerMax || 0], ["Max Disposition", T.dispositionMax || 0]].map(([k, v]) => statRow(k, v));
+      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0],
+      ...(T.holds || []).map((h) => [h.name, h.m3.toLocaleString() + " m³"])].map(([k, v]) => statRow(k, v));
   }
   const subHead = (t) => el("div", { class: "skills-sub-head fit-head" }, t);
 
@@ -947,9 +950,10 @@
         el("div", { class: "ps-rows fit-rows fit-scroll" }, generalRows(T)));
     } else if (tab === "hull") {
       c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
-        el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, b))));
+        el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, typeof b === "string" ? b : "+" + b.per + "% " + b.what + " per level"))));   // (owner) per level of its class license
     } else if (tab === "stats") {
-      c.append(subHead("Fitting"), fitBars(T, mods),
+      // (owner) Fitting: the slots by type and the max power / disposition (not bars); then the ship as its pilot flies it
+      c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Active Slots", T.activeSlots || 0), statRow("Passive Slots", T.passiveSlots || 0), statRow("Max Power", T.powerMax || 0), statRow("Max Disposition", T.dispositionMax || 0)),
         subHead("Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Class", T.cls || "-"), statRow("Length", kmM(T.lengthKm || 0)), statRow("Acceleration", kmM(T.accelKmps2 || 0) + "/s²"), generalRows(T)));
     } else {
       // (owner) a green check left of each requirement the player meets: the selected pilot's license level, an ark of that type

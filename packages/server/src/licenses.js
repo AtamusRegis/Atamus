@@ -28,12 +28,23 @@ export const CATEGORIES = [
 
 // Back to basics (owner, 2026-10-10): the license trainer is empty for now. The full catalog is kept in
 // reference/2026-10-10-pre-reset/server/src/licenses.js.
-export const STARTING_LICENSES = {};
-export const LICENSES = [];
+// Ship-class licenses came back on 2026-10-11 (owner): every pilot starts at level 1 in any frigate class.
+const MIN = 60_000;
+export const STARTING_LICENSES = { mining_frigate: 1 };
+export const LICENSES = [
+  {
+    key: "mining_frigate", name: "Mining Frigate", category: "mining_ships", maxLevel: 5, free: true,
+    desc: "Pilot mining frigates. Where every mining career starts.",
+    bonus: "Mining Frigate hull bonuses", hull: true,
+    // (owner) 5 levels, the first known from the start; stepped: level N takes N × 12 min (level 5: an hour)
+    requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN), fixedTimes: true,
+  },
+];
+for (const l of LICENSES) { l.designTimes = l.levelTimes; if (QUICK_TRAINING && !l.fixedTimes) l.levelTimes = l.levelTimes.map((_, i) => (i + 1) * MIN); }
 
-export const hullEfficiency = (lvl) => Math.min(lvl, 5) * 0.2 + Math.max(0, lvl - 5) * 0.05;
-for (const l of LICENSES) l.levelBonus = Array.from({ length: l.maxLevel }, (_, i) =>
-  l.hull ? (i < 5 ? "+20% " : "+5% ") + l.bonus : l.bonus);
+// (owner) ships always fly at their full stats; each level of a ship-class license adds one step of that class's hull
+// bonuses (each hull lists its bonuses per level)
+for (const l of LICENSES) l.levelBonus = Array.from({ length: l.maxLevel }, () => (l.hull ? "+1 level of " : "") + l.bonus);
 
 // What each endorsement level unlocks: licenses it opens for training.
 for (const l of LICENSES) {

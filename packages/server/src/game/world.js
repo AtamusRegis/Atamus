@@ -65,7 +65,8 @@ export class World {
     let x, y, h;
     if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
-    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targets: [], chase: null, name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null };
+    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
+      name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null };
     this.ships.set(sid, s);
     return s;
   }
@@ -133,10 +134,10 @@ export class World {
   cmdLock(pid, shipId, kind, id) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
     if (kind === "ship" && id === s.id) return;                                   // not itself
-    const t = SHIP_TYPES[s.type], pos = this._objPos(kind, id); if (!pos) return;
-    if (s.targets.some((g) => g.kind === kind && g.id === id) || s.targets.length >= t.maxTargets) return;
-    if (this._range(s, pos) > t.targetRangeKm) return;
-    s.targets.push({ kind, id, lockAt: this.simAt + t.lockMs, locked: false });
+    const pos = this._objPos(kind, id); if (!pos) return;
+    if (s.targets.some((g) => g.kind === kind && g.id === id) || s.targets.length >= s.maxTargets) return;
+    if (this._range(s, pos) > s.targetRange) return;
+    s.targets.push({ kind, id, lockAt: this.simAt + s.lockMs, locked: false });
   }
   /** Unlock Target (owner: a lock in progress can't be cancelled). */
   cmdUnlock(pid, shipId, kind, id) {
@@ -165,7 +166,7 @@ export class World {
   _tickTargets(now) {
     for (const s of this.ships.values()) {
       if (!s.targets.length) continue;
-      const range = SHIP_TYPES[s.type].targetRangeKm;
+      const range = s.targetRange;
       s.targets = s.targets.filter((g) => { const pos = this._objPos(g.kind, g.id); return pos && this._range(s, pos) <= range; });
       for (const g of s.targets) if (!g.locked && now >= g.lockAt) g.locked = true;
     }
@@ -357,7 +358,7 @@ export class World {
         if (s.drift) e.drift = true;
         // speed (km/s; in warp, along its eased line), locked targets in the order they were locked, Align To / Move towards
         e.v = s.wp ? +(Math.hypot(s.wp.tx - s.wp.fx, s.wp.ty - s.wp.fy) * Math.PI / 2 * Math.sin(Math.PI * Math.min(1, (this.simAt - s.wp.at) / s.wp.dur)) / (s.wp.dur / 1000)).toFixed(4) : +Math.hypot(s.vx, s.vy).toFixed(4);
-        if (s.targets.length) { const lm = SHIP_TYPES[s.type].lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
+        if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
       }
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };

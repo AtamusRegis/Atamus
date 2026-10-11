@@ -10,7 +10,7 @@ const run = (w, sec) => { for (let i = 0; i < sec * 20; i++) w.tick(0.05); };
 const T0 = SHIP_TYPES.chisel, w = new World(), A = EXPANSE_APOTHEM_KM, R = A / Math.cos(Math.PI / 6);
 t.ok(A === 10_000, "the hexagon is 20,000 km across, flat to flat (1 AU at the map's 20,000 km per AU)");
 t.ok(insideExpanse(0, A - 1) && !insideExpanse(0, A + 1) && insideExpanse(R - 1, 0) && !insideExpanse(R + 1, 0), "flat top and bottom, corners left and right");
-const PA = [{ id: 1, name: "Pa" }];
+const PA = [{ id: 1, name: "Pa", licenses: { mining_frigate: 5 } }];
 const a = w.addPlayer("a", "A", () => {}, null, PA), sa = w.ships.get("a:ship:1");
 t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x, sa.y) <= SPAWN_SPREAD_KM && w.ships.size === 1, "a pilot gets one Prospector near the centre");
 w.addPlayer("a", "A", () => {}, null, PA); t.ok(w.ships.size === 1, "and only ever one");
@@ -35,7 +35,7 @@ t.ok(insideExpanse(sa.x, sa.y, T.radiusKm - 1e-6) && sa.vy === 0, "a ship coasti
 const c = clampToExpanse(R * 2, R * 2); t.ok(insideExpanse(c.x, c.y), "clamping works from any direction, corners too", c);
 
 // (owner) ships pass over each other
-const b = w.addPlayer("b", "B", () => {}, null, [{ id: 2, name: "Pc" }]), sb = w.ships.get("b:ship:2");
+const b = w.addPlayer("b", "B", () => {}, null, [{ id: 2, name: "Pc", licenses: { mining_frigate: 5 } }]), sb = w.ships.get("b:ship:2");
 Object.assign(sa, { x: 100, y: 100, vx: 0, vy: 0, moving: false }); Object.assign(sb, { x: 100.01, y: 100, vx: 0, vy: 0, moving: false });
 w.tick(0.05); t.ok(Math.abs(sa.x - 100) < 1e-9 && Math.abs(sb.x - 100.01) < 1e-9, "ships pass over each other");
 

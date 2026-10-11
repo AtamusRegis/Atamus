@@ -1,17 +1,21 @@
-// Pilots: first is free, each extra costs the pilot price, 3 per account. The license trainer is empty for now.
+// Pilots: first is free, each extra costs the pilot price, 3 per account. The trainer has the Mining Frigate license.
 import { suite, sleep, BASE } from "./lib.mjs";
 const t = suite("pilots");
 const post = (path, body) => fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
 const state = async () => (await fetch(BASE + "/game/state")).json();
 const catalog = await (await fetch(BASE + "/game/catalog")).json();
-t.ok(Array.isArray(catalog.licenses) && catalog.licenses.length === 0, "the license catalog is empty (owner, 2026-10-10)", catalog.licenses.length);
+t.ok(Array.isArray(catalog.licenses) && catalog.licenses.map((l) => l.key + ":" + l.maxLevel).join() === "mining_frigate:5", "the trainer has the Mining Frigate license, 5 levels (owner, 2026-10-11)", catalog.licenses.map((l) => l.key));
 const st0 = await state(), price = st0.profile.pilotPrice, max = st0.profile.maxPilots;
 t.ok(price === 1_000_000 && max === 3, "price 1M, max 3", { price, max });
-t.ok(st0.pilots.length === 1 && Object.keys(st0.pilots[0].licenses).length === 0, "PTR starts with one pilot, no licenses (run a PTR reset if not)", st0.pilots);
+t.ok(st0.pilots.length === 1 && JSON.stringify(st0.pilots[0].licenses) === '{"mining_frigate":1}', "PTR starts with one pilot, Mining Frigate I known (run a PTR reset if not)", st0.pilots[0].licenses);
 let r = await post("/game/pilot/create", { name: "Test Pilot A" });
 t.ok(!r.ok && /costs/.test(r.body.error), "a second pilot needs credits", r);
 r = await post("/game/queue/add", { pilotId: st0.pilots[0].id, key: "small_mining_laser" });
-t.ok(!r.ok, "nothing can be trained", r);
+t.ok(!r.ok, "a license that isn't in the trainer can't be trained", r);
+r = await post("/game/queue/add", { pilotId: st0.pilots[0].id, key: "mining_frigate" });
+const q = (await state()).pilots[0].queue;
+t.ok(r.ok && q.length === 1 && q[0].level === 2, "Mining Frigate II can be queued", { r, q });
+await post("/game/queue/remove", { pilotId: st0.pilots[0].id, key: "mining_frigate" });
 
 // portraits (owner): the account's character and each pilot's, checked against the server's part lists
 const parts = await (await fetch(BASE + "/game/portraits")).json();

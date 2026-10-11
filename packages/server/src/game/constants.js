@@ -42,8 +42,11 @@ export const SHIP_TYPES = {
     // two kinds (owner): active (on the hotbar) and passive, a number of each per hull; power and disposition are the
     // Prospector's capacitor and disposition from before the reset
     armor: 150, activeSlots: 4, passiveSlots: 3, powerMax: 40, dispositionMax: 70,
+    license: "mining_frigate",   // its class license: each level adds a step of the hull bonuses
     desc: "Deep Core Industries' entry-level mining frigate: small, nimble, with a modest ore hold. Every mining career starts in one.",
-    bonuses: ["+20% Mining Laser yield", "+5% Mining Laser range", "+50% Mining Drones yield"],   // as before the reset (nothing uses them until modules return)
+    // (owner) per level of the class license (5 levels: 20% / 5% / 50% at level 5, the bonuses it had before the reset);
+    // nothing uses them until modules return
+    bonuses: [{ per: 4, what: "Mining Laser yield" }, { per: 1, what: "Mining Laser range" }, { per: 10, what: "Mining Drones yield" }],
     req: { licenses: [["mining_frigate", "Mining Frigate", 1]], ark: ["ark_mini", "Light Ark"] },   // [license key, name, level]; (owner) a ship needs an ark that can carry it: the smallest that can [type, name]
   },
 };

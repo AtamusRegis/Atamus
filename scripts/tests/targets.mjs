@@ -7,7 +7,7 @@ const t = suite("targets");
 const T = SHIP_TYPES.chisel;
 const sent = { a: [], b: [] };
 const w = new World(), mk = (id, pilots) => w.addPlayer(id, id.toUpperCase(), (m) => sent[id].push(JSON.parse(m)), null, pilots);
-const a = mk("a", [{ id: 1, name: "Ann" }, { id: 2, name: "Bea" }]), b = mk("b", [{ id: 1, name: "Cid" }]);
+const a = mk("a", [{ id: 1, name: "Ann", licenses: { mining_frigate: 5 } }, { id: 2, name: "Bea", licenses: { mining_frigate: 5 } }]), b = mk("b", [{ id: 1, name: "Cid", licenses: { mining_frigate: 5 } }]);
 w.tick(0.05);
 const sa = w.ships.get("a:ship:1"), sa2 = w.ships.get("a:ship:2"), sb = w.ships.get("b:ship:1");
 const belt = [...w.pois.values()].find((p) => p.kind === "belt"), k = belt.field.rocks[0], k2 = belt.field.rocks[1];
@@ -97,4 +97,11 @@ t.ok(sa.name === "Big Rig" && !sb.name && !sa2.name, "only your own ships can be
 t.ok(w.exportState("a").ships["1"].name === "Big Rig" && w.snapshotFor(a).ships.find((x) => x.id === sa.id).name === "Big Rig", "the name is saved and sent to you");
 w.cmdRename("a", sa.id, "x".repeat(40)); t.ok(sa.name.length === 24, "at most 24 characters");
 w.cmdRename("a", sa.id, "   "); t.ok(sa.name === null, "an empty name puts back the default");
+// (owner) ships always fly at their full stats; the Mining Frigate license (5 levels, level 1 known from the start,
+// level N taking N × 12 min) adds a step of the hull bonuses per level
+{ const L = await import("../../packages/server/src/licenses.js"), mf = L.getLicense("mining_frigate");
+  const we = new World(); we.addPlayer("e", "E", () => {}, null, [{ id: 1, name: "E", licenses: {} }]); const se = we.ships.get("e:ship:1");
+  t.ok(se.speed === T.speedKmps && se.hp === T.hp && se.maxTargets === T.maxTargets && se.targetRange === T.targetRangeKm && se.lockMs === T.lockMs, "a ship always has its hull's full stats, whatever the pilot's license", se);
+  t.ok(mf && mf.maxLevel === 5 && L.STARTING_LICENSES.mining_frigate === 1 && mf.levelTimes.map((x) => x / 60000).join() === "12,24,36,48,60", "Mining Frigate: 5 levels, the first known from the start, stepped (level 5 an hour)", mf && mf.levelTimes);
+  t.ok(T.bonuses.map((b) => b.per + ":" + b.what).join() === "4:Mining Laser yield,1:Mining Laser range,10:Mining Drones yield", "the Prospector's hull bonuses are per level", T.bonuses); }
 t.done();

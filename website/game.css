@@ -725,9 +725,9 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .hb-slot.filled { cursor: pointer; }
 .hb-slot.filled:hover { background: rgba(255,255,255,0.08); }
 .hb-slot.hb-empty { display: none; background: rgba(0,0,0,0.18); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1); }
-#hud.hb-dragging .hb-slot.hb-empty { display: grid; }
+#hud.hb-dragging .hb-slot.hb-empty, #hud.hb-fitting .hb-slot.hb-empty { display: grid; }
 .hud-hotbar.none { display: none; }
-#hud.hb-dragging .hud-hotbar.none { display: flex; }
+#hud.hb-dragging .hud-hotbar.none, #hud.hb-fitting .hud-hotbar.none { display: flex; }
 .hb-num { position: absolute; left: 3px; top: 1px; font-size: 8px; color: var(--text-faint); pointer-events: none; }
 /* inventory window */
 .si-cap { margin-bottom: 8px; }
