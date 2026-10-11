@@ -354,6 +354,9 @@ export async function migrate() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_active_at TIMESTAMPTZ;
     UPDATE users SET staff_active_at = now() WHERE role IS NOT NULL AND staff_active_at IS NULL;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS lapsed_role TEXT;
+    -- (owner) anyone who was staff and isn't any more doesn't see other players' ships either
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS former_staff BOOLEAN NOT NULL DEFAULT false;
+    UPDATE users SET former_staff = true WHERE role IS NULL AND NOT former_staff AND (lapsed_role IS NOT NULL OR id IN (SELECT target_id FROM admin_log WHERE action IN ('remove Moderator', 'remove Admin', 'make Moderator', 'make Admin') AND target_id IS NOT NULL));
     CREATE TABLE IF NOT EXISTS reinstatements (
       id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, role TEXT NOT NULL, reason TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', at TIMESTAMPTZ NOT NULL DEFAULT now(), decided_by BIGINT, decided_at TIMESTAMPTZ

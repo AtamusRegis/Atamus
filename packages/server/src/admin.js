@@ -525,7 +525,7 @@ admin.post("/suspend", guard(true, async (req, res, me) => {
 // no schedules: any staff activity counts. Checked hourly; the Head Admin is told.
 export const INACTIVE_DAYS = 90;
 async function lapse(uid, from, to) {
-  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = NULL, staff_active_at = now(), lapsed_role = coalesce(lapsed_role, $3) WHERE id = $1`, [uid, to, from]);
+  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = NULL, staff_active_at = now(), lapsed_role = coalesce(lapsed_role, $3), former_staff = (former_staff OR $2::text IS NULL) WHERE id = $1`, [uid, to, from]);
   for (const [k, v] of unlocked) if (v.uid === String(uid)) unlocked.delete(k);
   await setRank(String(uid)); if (personaOf(uid)) hooks.persona(String(uid), personaOf(uid)); hooks.renameRequired(String(uid));
 }
@@ -663,7 +663,7 @@ admin.post("/role", head(async (req, res, me) => {
   if (String(t.id) === me.id || isOwner(t.username) || t.role === "head") return fail(res, 403, "You can't change that player's role.");
   if (!isOwner(me.username)) return fail(res, 403, "Only Nyssary can do that.");   // (owner) only Nyssary makes or removes Admins and Moderators
   if ((t.role || null) === want) return res.json({ ok: true });
-  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = $2, promo_from = $3, staff_active_at = now(), lapsed_role = NULL WHERE id = $1`, [t.id, want, t.role || null]);   // (owner) a new role, a new password (its own rules); a promotion waits to be accepted
+  await pool.query(`UPDATE users SET role = $2, admin_pw_hash = NULL, promo_pending = $2, promo_from = $3, staff_active_at = now(), lapsed_role = NULL, former_staff = (former_staff OR $2::text IS NULL) WHERE id = $1`, [t.id, want, t.role || null]);   // (owner) once staff, never back to seeing other ships   // (owner) a new role, a new password (its own rules); a promotion waits to be accepted
   hooks.renameRequired(String(t.id));                // (their game refreshes: the promotion page opens)
   for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);   // their panel locks at once
   await setRank(String(t.id)); if (personaOf(t.id)) hooks.persona(String(t.id), personaOf(t.id));   // (their identity and lines' color follow the role)

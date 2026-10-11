@@ -158,6 +158,8 @@ for (const n of ["WatAnn", "WatCid"]) if (!(await g("/game/state", null, n)).bod
   t.ok(!seen(cm), "an Admin, in player mode, doesn't either"); cm.send({ t: "mode", admin: true }); await sleep(400); t.ok(seen(cm), "in admin mode they do");
   cm.send({ t: "mode", admin: false }); await sleep(400); t.ok(!seen(cm), "and not after");
   const pv = await connect("?as=WatCid"); pv.dev({ cmd: "move", x: 302, y: 300 }); await sleep(300); pv.send({ t: "view", x: 300, y: 300, w: 50 }); await sleep(500); t.ok(seen(pv), "players see each other as before");
-  await db.query(`UPDATE users SET role = 'mod' WHERE id = $1`, [mod]); await pl.close(); await cm.close(); await pv.close(); }
+  r = await g("/game/admin/role", { id: mod, role: null }); cm.send({ t: "pilots" }); await sleep(500); cm.send({ t: "mode", admin: true }); await sleep(400);
+  t.ok(r.body.ok && !seen(cm), "removed from the staff, they still don't see other ships (owner)", r.body);
+  await db.query(`UPDATE users SET role = 'mod', former_staff = false, promo_pending = NULL, admin_pw_hash = $2 WHERE id = $1`, [mod, await hashSecret(MPW)]); await pl.close(); await cm.close(); await pv.close(); }
 await db.end();
 t.done();

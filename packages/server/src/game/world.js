@@ -788,7 +788,7 @@ export class World {
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
       if (!mine && s.docked) continue;
-      if (!mine && p.staffRole && (p.staffRole === "mod" || !p.adminMode)) continue;   // (owner) staff see other players' ships only in admin mode (Admins; Moderators never)
+      if (!mine && p.staffRole && (p.staffRole === "mod" || !p.adminMode)) continue;   // (owner) staff see other players' ships only in admin mode (Admins; Moderators and former staff never)
       if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {

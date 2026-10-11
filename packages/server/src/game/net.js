@@ -1,5 +1,6 @@
 // The game socket: one session per account, a few commands in, snapshots out at 15 Hz.
 import { WebSocketServer } from "ws";
+import { pool } from "../db.js";
 import { recordContact, addPlay } from "../watch.js";
 import { safeText } from "../textsafe.js";
 import { config } from "../config.js";
@@ -30,7 +31,11 @@ import { flag } from "../suspicion.js";
 const world = new World();
 // the commands a client may send (anything else counts as malformed)
 // (owner) a staff member's role, for what they see on the map (the PTR's tester is left out: its tests fly among others)
-const staffRoleOf = async (pid) => { const r = await roleOf(pid); if (!r) return null; if (PTR) { const p = world.players.get(String(pid)); if (p && p.name === "PTR") return null; } return r; };
+const staffRoleOf = async (pid) => {
+  if (PTR) { const p = world.players.get(String(pid)); if (p && p.name === "PTR") return null; }
+  const { rows } = await pool.query(`SELECT role, former_staff FROM users WHERE id = $1`, [String(pid)]); const u = rows[0];
+  return u ? u.role || (u.former_staff ? "former" : null) : null;   // (owner) former staff don't see other ships either
+};
 const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
