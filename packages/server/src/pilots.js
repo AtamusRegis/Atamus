@@ -190,7 +190,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role, rename_required FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role, rename_required, rename_reason FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -206,12 +206,12 @@ export async function getState(userId) {
       active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - elapsed), paused: !!d.paused };
     }
     for (const l of LICENSES) maxByLicense[l.key] = Math.max(maxByLicense[l.key] || 0, d.licenses[l.key] || 0);
-    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused, renameRequired: !!d.renameRequired });
+    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused, renameRequired: !!d.renameRequired, ...(d.renameRequired ? { renameReason: d.renameReason || "" } : {}) });
   }
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, renameRequired: !!user.rename_required, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
+    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, renameRequired: !!user.rename_required, ...(user.rename_required ? { renameReason: user.rename_reason || "" } : {}), pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
     pilots, serverTime: now,
   };
 }
@@ -226,7 +226,7 @@ export async function renameAccount(userId, raw) {
   { const np = await checkName(name); if (np) throw new Error(np); }
   const taken = await pool.query(`SELECT 1 FROM users WHERE lower(username) = lower($1) AND id <> $2`, [name, userId]);
   if (taken.rows[0]) throw new Error("That name is taken.");
-  await pool.query(`UPDATE users SET username = $2, rename_required = false WHERE id = $1`, [userId, name]);
+  await pool.query(`UPDATE users SET username = $2, rename_required = false, rename_reason = NULL WHERE id = $1`, [userId, name]);
   return name;
 }
 export async function renamePilot(userId, pilotId, raw) {
@@ -238,7 +238,7 @@ export async function renamePilot(userId, pilotId, raw) {
   { const np = await checkName(name); if (np) throw new Error(np); }
   const { rows: have } = await pool.query(`SELECT 1 FROM pilots WHERE user_id = $1 AND lower(name) = lower($2) AND id <> $3`, [userId, name, p.id]);
   if (have[0]) throw new Error("You already have a pilot with that name.");
-  delete p.data.renameRequired;
+  delete p.data.renameRequired; delete p.data.renameReason;
   await pool.query(`UPDATE pilots SET name = $2, data = $3 WHERE id = $1`, [p.id, name, p.data]);
   return name;
 }
@@ -271,7 +271,7 @@ export async function publicPilot(idRaw) {
 
 // ---- reports (owner): stored for admin tools to read later ----
 export const REPORT_CATEGORIES = ["Harassment", "Spam", "Cheating", "Offensive name", "Other"];
-export async function fileReport(userId, b) {
+export async function fileReport(userId, b, chatOf = null) {
   const target = await pool.query(`SELECT id, username FROM users WHERE lower(username) = lower($1)`, [typeof b.target === "string" ? b.target.slice(0, 40) : ""]);
   const t = target.rows[0]; if (!t) throw new Error("No such player.");
   if (String(t.id) === String(userId)) throw new Error("You can't report yourself.");
@@ -279,5 +279,6 @@ export async function fileReport(userId, b) {
   const text = typeof b.text === "string" ? b.text.replace(/\s+/g, " ").trim().slice(0, 1000) : "";
   if (!text) throw new Error("Describe the issue.");
   const context = typeof b.context === "string" ? b.context.slice(0, 300) : null;
-  await pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, context) VALUES ($1, $2, $3, $4, $5, $6)`, [userId, t.id, t.username, b.category, text, context]);
+  const extra = chatOf ? chatOf(String(t.id)) : { chat: [], ships: [] };   // (owner) with the last hour of chat and their ship names then
+  await pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, context, chat, ships) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [userId, t.id, t.username, b.category, text, context, JSON.stringify(extra.chat || []), JSON.stringify(extra.ships || [])]);
 }

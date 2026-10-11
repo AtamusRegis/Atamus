@@ -164,8 +164,32 @@ export async function migrate() {
       cats        TEXT[] NOT NULL,
       words       TEXT[] NOT NULL
     );
-    -- (owner) a redeploy (a server start) unfreezes everyone
-    UPDATE users SET frozen = false, frozen_at = NULL, frozen_reason = NULL WHERE frozen;
+    -- (owner) Freeze belongs to an admin's DM with the player: who froze them, and the open admin DMs (kept across restarts)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_by BIGINT;
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS chat JSONB;     -- (owner) the last hour of chat, saved with the report
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS ships JSONB;    -- (owner) and the player's pilots' ship names then
+    CREATE TABLE IF NOT EXISTS admin_dms (
+      player_id   BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      admin_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      admin_name  TEXT NOT NULL,
+      player_name TEXT NOT NULL,
+      log         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      frozen      BOOLEAN NOT NULL DEFAULT false
+    );
+    -- (owner) admins speak and act under an admin name and picture of their own (so they can play unknown); the key
+    -- (random) is how clients know which admin a line is from, so a renamed admin's old lines show the new name
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS rename_reason TEXT;   
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_heat REAL NOT NULL DEFAULT 0;   -- (owner) language heat (language.js)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_heat_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_alert_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS chat_flags_user_idx ON chat_flags (user_id, id DESC);   -- (owner) the player sees why they must rename
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pic SMALLINT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_admin_name_idx ON users (lower(admin_name));
+    ALTER TABLE appeal_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT;
+    ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_id BIGINT;
+    ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     -- (owner) Nyssary is the Head Admin (the only one; only they make admins)
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
     UPDATE users SET role = NULL WHERE role = 'head' AND lower(username) <> 'nyssary';

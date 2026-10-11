@@ -529,15 +529,23 @@ export class World {
 
   /** Local and Corp chat (owner): you speak as your account's character (its portrait and your username), not as a
    *  pilot. Local is everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. */
-  cmdChat(pid, text, channel, to, ship) {
+  cmdChat(pid, text, channel, to, ship, persona = null) {
     const p = this.players.get(pid); if (!p || typeof text !== "string") return;
     const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
+    if (persona) {                                        // (owner) an admin speaking as admin: their admin name and picture; no ship says it
+      const ch = channel === "corp" ? "corp" : "local";
+      const msg = JSON.stringify({ t: "chat", ch, from: persona.name, admin: persona.key, pic: persona.pic, text: clean, ts: Date.now() });
+      for (const other of this.players.values()) if (!other.offline) other.send(msg);
+      if (this.onLine) this.onLine({ ch, fromId: pid, aid: pid, from: persona.name, text: clean });
+      return;
+    }
     if (channel === "dm") {                               // (owner) a direct message: both ends see it in a tab named for the other
       if (typeof to !== "string" || !to || to.length > 40) return;
       const msg = JSON.stringify({ t: "chat", ch: "dm", from: p.name, to, portrait: p.portrait || null, text: clean, ts: Date.now() });
       let sent = false;
-      for (const o of this.players.values()) if (!o.offline && o.id !== pid && o.name.toLowerCase() === to.toLowerCase()) { o.send(msg); sent = true; }
+      let toId = null; for (const o of this.players.values()) if (!o.offline && o.id !== pid && o.name.toLowerCase() === to.toLowerCase()) { o.send(msg); sent = true; toId = o.id; }
       p.send(msg);
+      if (sent && this.onLine) this.onLine({ ch: "dm", fromId: pid, from: p.name, toId, to, text: clean });   // (owner) kept an hour, for kicks, bans and reports
       if (!sent) p.send(JSON.stringify({ t: "sys", text: to + " is not online.", dm: to }));
       return;
     }
@@ -551,7 +559,8 @@ export class World {
     }
     const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now(), ...(speakers.length ? { ships: speakers.map((x) => x.id) } : {}) });
     for (const other of this.players.values()) if (!other.offline) other.send(msg);
-    if (this.onChat) { try { this.onChat(p, ch, clean); } catch (e) { console.error("onChat", e); } }   // (owner) Local / Corp lines are checked for the admins' Chat log
+    if (this.onChat) { try { this.onChat(p, ch, clean); } catch (e) { console.error("onChat", e); } }
+    if (this.onLine) this.onLine({ ch, fromId: pid, from: p.name, text: clean });   // (owner) kept an hour, for kicks, bans and reports   // (owner) Local / Corp lines are checked for the admins' Chat log
   }
 
   tick(dtSec) {

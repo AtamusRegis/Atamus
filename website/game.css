@@ -620,7 +620,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .admdm-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .admdm-line { word-break: break-word; }
 .admdm-line b { color: #f0b46a; font-weight: 600; }
-.frozen-overlay { position: fixed; inset: 0; z-index: 2000000004; background: rgba(70,74,84,0.62); backdrop-filter: grayscale(1) blur(1px); -webkit-backdrop-filter: grayscale(1) blur(1px); }
+.frozen-overlay { position: fixed; inset: 0; z-index: 2000000004; background: rgba(60,6,10,0.66); backdrop-filter: grayscale(1) blur(1px); -webkit-backdrop-filter: grayscale(1) blur(1px); }
 .adm-bar { display: flex; gap: 6px; margin: 0 0 8px; }
 .adm-search { flex: 1; min-width: 0; }
 .adm-sort { width: auto; flex: none; }
@@ -652,3 +652,24 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .st-ship-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-ship-tag { font-size: 10px; font-weight: 400; color: #f0b46a; }
 .st-undock[disabled] { opacity: 0.4; cursor: default; }
+.admdm-head { display: flex; align-items: center; gap: 10px; }
+.admdm-who { flex: 1; font-weight: 600; }
+.admdm-freeze-l { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); cursor: pointer; }
+/* (owner) admin profiles: the picture in chat, the chat's Player / Admin switch, the profile picker */
+.chat-apic { image-rendering: pixelated; object-fit: cover; }
+.chat-line.admin .who { color: #f0b46a; }
+.chat-form:has(.chat-as) { display: flex; gap: 6px; align-items: center; }
+.chat-form .chat-as { flex: none; font: inherit; font-size: 11px; letter-spacing: .06em; padding: 5px 8px; color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); cursor: pointer; }
+.chat-form .chat-as.on { color: #1a1206; background: #f0b46a; border-color: #f0b46a; }
+.chat-form:has(.chat-as) .text-input { flex: 1 1 auto; min-width: 0; }
+.apic-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.apic { padding: 2px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); border-radius: var(--radius-sm); cursor: pointer; }
+.apic img { display: block; width: 100%; aspect-ratio: 1; image-rendering: pixelated; }
+.apic.sel { border-color: #f0b46a; box-shadow: 0 0 0 1px #f0b46a; }
+.admdm-apic { width: 18px; height: 18px; vertical-align: -4px; margin-right: 4px; image-rendering: pixelated; border-radius: 2px; }
+.rename-reason { white-space: normal; word-break: break-word; text-align: right; }
+/* (owner) the language meter */
+.heat { display: inline-block; flex: none; width: 46px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; vertical-align: middle; margin: 0 6px; }
+.heat.big { width: 120px; height: 8px; margin: 0; }
+.heat-fill { display: block; height: 100%; }
+.heat-n { display: inline-block; min-width: 2.2em; text-align: right; margin-left: 6px; color: var(--text-dim); }

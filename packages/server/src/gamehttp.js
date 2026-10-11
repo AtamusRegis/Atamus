@@ -36,7 +36,7 @@ game.get("/pilot-info/:id", auth, async (req, res) => {
 game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES));
 game.post("/report", auth, async (req, res) => {
   if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });
-  try { await pilots.fileReport(req.uid, req.body || {}); res.json({ ok: true }); }
+  try { await pilots.fileReport(req.uid, req.body || {}, (pid) => ({ chat: gameHook("chatLog", pid) || [], ships: gameHook("shipNames", pid) || [] })); res.json({ ok: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 

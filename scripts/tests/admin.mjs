@@ -23,6 +23,16 @@ let r = await q("/players"); t.ok(r.status === 403 && r.body.error === "Locked."
 r = await q("/unlock", { password: "nope" }); t.ok(r.status === 403, "a wrong second password is refused");
 r = await q("/unlock", { password: PW }); t.ok(r.body.ok, "the right one unlocks it", r.body);
 r = await q("/me"); t.ok(r.body.role === "head" && r.body.unlocked, "the PTR tester is the Head Admin", r.body);
+// (owner) the admin profile: an admin name (no one else's) and a picture, made first
+if (!r.body.persona) { r = await q("/players"); t.ok(r.status === 403 && /admin profile/.test(r.body.error), "nothing else until the admin profile is made", r.body); }
+r = await q("/persona", { name: "AdmTestBob", pic: 2 }); t.ok(r.status === 400 && /taken|allowed/.test(r.body.error), "an admin name can't be a player's name", r.body);
+r = await q("/persona", { name: "PTR", pic: 2 }); t.ok(r.status === 400, "nor the admin's own name");
+r = await q("/persona", { name: "Warden_X", pic: 9 }); t.ok(r.status === 400, "one of the pictures");
+r = await q("/persona", { name: "Warden_X", pic: 2 }); t.ok(r.body.ok && r.body.persona.name === "Warden_X", "the admin profile is made", r.body);
+const AN = "Warden_X";
+r = await q("/me"); t.ok(r.body.persona && r.body.persona.name === AN && r.body.persona.pic === 2, "and kept", r.body);
+r = await fetch(BASE + "/game/pilot/create", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ name: AN }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+t.ok(r.status === 400 && /taken/.test(r.body.error), "no one else can take an admin's name", r.body);
 r = await q("/players"); const pl = r.body;
 t.ok(Array.isArray(pl) && pl.some((p) => p.name === "AdmTestBob" && p.role === null) && pl.some((p) => p.name === "AdmTestAnn" && p.role === "admin"), "the player list has everyone, with their role");
 // kick / ban / unban, logged with reasons
@@ -36,7 +46,7 @@ r = await q("/ban", { id: String(bob.id), reason: "cheating", perm: true }); t.o
 lg = await fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "AdmTestBob", password: "bobpassword1" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
 t.ok(lg.status === 403 && /permanently/.test(lg.body.error) && /cheating/.test(lg.body.error), "permanent: said so at login", lg.body);
 r = await q("/log"); const banRow = r.body.find((x) => x.action === "ban" && x.target === "AdmTestBob");
-t.ok(r.body.some((x) => x.action === "kick" && x.reason === "spamming chat" && x.admin === "PTR") && banRow && banRow.reason === "cheating", "kicks and bans go to the admin log: player, action, reason", r.body.slice(0, 3));
+t.ok(r.body.some((x) => x.action === "kick" && x.reason === "spamming chat" && x.admin === AN) && banRow && banRow.reason === "cheating", "kicks and bans go to the admin log: player, action, reason", r.body.slice(0, 3));
 r = await q("/unban", { id: String(bob.id), logId: banRow.id }); t.ok(r.status === 400, "an unban needs a reason too");
 r = await q("/unban", { id: String(bob.id), reason: "appeal accepted", logId: banRow.id }); t.ok(r.body.ok, "unban");
 r = await q("/log"); t.ok(r.body[0].action === "unban" && r.body[0].reason === "appeal accepted", "the unban is its own log entry with its reason", r.body[0]);
@@ -55,7 +65,7 @@ const a1 = r.body.current.id;
 r = await ap("", { token: tok, text: "please look at the chat logs" }); t.ok(r.body.current.id === a1 && r.body.current.messages.length === 2, "and keeps writing in it while it's open");
 { const adm = await connect(); const seen = []; adm.ws.on("message", (b) => { const m = JSON.parse(b); if (m.t === "appealmsg") seen.push(m); });
   r = await q("/appeal/say", { id: a1, text: "Looking into it." }); t.ok(r.body.ok, "an admin answers");
-  r = await q("/appeal/" + a1); t.ok(r.body.lines.length === 3 && r.body.lines[2].admin && r.body.lines[2].name === "PTR" && r.body.subscribed, "every admin sees the whole conversation; answering subscribes you", r.body.lines);
+  r = await q("/appeal/" + a1); t.ok(r.body.lines.length === 3 && r.body.lines[2].admin && r.body.lines[2].name === AN && r.body.subscribed, "every admin sees the whole conversation; answering subscribes you", r.body.lines);
   await ap("", { token: tok, text: "thank you" }); await sleep(500);
   t.ok(seen.some((m) => m.id === a1 && m.text === "thank you" && m.name === "AdmTestBob"), "a subscribed admin is told of the player's new line", seen);
   r = await ap("/state", { token: tok }); t.ok(r.body.current.messages.some((l) => l.admin && l.text === "Looking into it."), "the player sees the admins' answers");
@@ -131,31 +141,59 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
 { await q("/unlock", { password: PW });
   const adm = await connect(), zed = await connect("?as=AdmTestZed"); const zid = (await db.query(`SELECT id FROM users WHERE username = 'AdmTestZed'`)).rows[0].id;
   const got = { a: [], z: [] }; adm.ws.on("message", (b) => got.a.push(JSON.parse(b))); zed.ws.on("message", (b) => got.z.push(JSON.parse(b)));
+  adm.send({ t: "chat", text: "anyone around?", channel: "local" }); zed.send({ t: "chat", text: "yes, me", channel: "local" }); await sleep(200);
+  adm.send({ t: "admstart", to: "AdmTestZed" }); await sleep(400);
+  t.ok(got.z.some((m) => m.t === "admopen" && m.admin === AN && m.pic === 2 && m.key) && got.a.some((m) => m.t === "admopen" && m.with === "AdmTestZed" && m.frozen === false), "an admin opens a DM: both windows open at once (owner)", got.z);
   adm.send({ t: "adm", to: "AdmTestZed", text: "hello there" }); await sleep(300);
-  t.ok(got.z.some((m) => m.t === "admdm" && m.text === "hello there" && m.admin === "PTR") && got.a.some((m) => m.t === "admdm" && m.with === "AdmTestZed"), "an admin DMs a player: it reaches them as an admin conversation", got.z);
-  zed.send({ t: "adm", text: "hi admin" }); zed.send({ t: "adm", to: "PTR", text: "sneaky" }); await sleep(300);
-  t.ok(got.a.some((m) => m.t === "admdm" && m.text === "hi admin" && m.from === "AdmTestZed") && !got.a.some((m) => m.text === "sneaky" && m.with !== "AdmTestZed"), "the player answers into it (a player can't start one)", got.a.filter((m) => m.t === "admdm"));
-  r = await q("/freeze", { id: String(zid), on: true }); t.ok(r.status === 400, "Freeze needs a reason");
-  r = await q("/freeze", { id: String(zid), on: true, reason: "investigating" }); await sleep(300);
-  t.ok(r.body.ok && got.z.some((m) => m.t === "frozen" && m.on), "Freeze: the player is told (their screen grays out)", r.body);
+  t.ok(got.z.some((m) => m.t === "admdm" && m.text === "hello there" && m.admin === AN), "an admin's line reaches the player");
+  zed.send({ t: "adm", text: "hi admin" }); zed.send({ t: "adm", to: "PTR", text: "sneaky" }); zed.send({ t: "admfreeze", to: "PTR", on: true }); await sleep(300);
+  t.ok(got.a.some((m) => m.t === "admdm" && m.text === "hi admin" && m.from === "AdmTestZed") && !got.a.some((m) => m.text === "sneaky" && m.with !== "AdmTestZed") && !got.a.some((m) => m.t === "frozen"), "the player answers into it (a player can't start one or freeze anyone)");
+  r = await q("/freeze", { id: String(zid), on: true }); t.ok(r.status === 400, "Freeze is done in an admin DM, not the panel");
+  // (owner) language: each flagged line goes in the player's log and heats their meters; running hot tells the admins
+  for (const x of ["you retard", "dirty japs", "what a bitch", "you queer"]) { zed.send({ t: "chat", text: x, channel: "local" }); await sleep(120); }
+  await sleep(400);
+  { const L = (await q("/player/" + zid + "/language")).body, P = (await q("/players")).body.find((p) => p.name === "AdmTestZed");
+    t.ok(L.lines.length === 4 && L.kinds.slurs.count === 2 && L.kinds.racist.count === 1 && L.kinds.profanity.count === 1 && L.kinds.slurs.heat > L.kinds.profanity.heat && P.heat >= 6, "a player's language log, a meter per kind, and the overall meter (owner)", { L: L.kinds, h: P.heat });
+    t.ok(got.a.some((m) => m.t === "langalert" && m.name === "AdmTestZed") && got.a.some((m) => m.t === "chatflag"), "running hot: the admins online are told", got.a.filter((m) => m.t === "langalert")); }
+  // (owner) the chat's Admin switch: Local under the admin profile (no ship says it); a DM becomes an admin DM
+  adm.send({ t: "chat", text: "admin here", channel: "local", as: "admin", ship: "1:ship:1" }); adm.send({ t: "chat", text: "as admin dm", channel: "dm", to: "AdmTestZed", as: "admin" }); await sleep(400);
+  const al = got.z.find((m) => m.t === "chat" && m.text === "admin here");
+  t.ok(al && al.from === AN && al.pic === 2 && al.admin && !al.ships && !al.portrait, "speaking as admin: the admin name and picture, no ship (owner)", al);
+  t.ok(got.z.some((m) => m.t === "admdm" && m.text === "as admin dm" && m.admin === AN), "a DM as admin goes into the admin DM");
+  zed.send({ t: "chat", text: "fake", channel: "local", as: "admin" }); await sleep(250); t.ok(!got.a.some((m) => m.t === "chat" && m.text === "fake"), "a player can't speak as admin");
+  r = await q("/persona", { name: "Warden_Y", pic: 4 }); await sleep(300);
+  t.ok(got.z.some((m) => m.t === "adminprofile" && m.key === al.admin && m.name === "Warden_Y" && m.pic === 4), "a changed profile is sent to everyone, so old lines change too (owner)");
+  r = await q("/log"); t.ok(r.body.some((x) => x.action === "kick" && x.admin === "Warden_Y") && r.body.some((x) => x.action === "admin profile changed" && x.detail && x.detail.from === AN), "the log shows the admin's current profile, and the change", r.body.slice(0, 2));
+  { const ap = (await q("/appeals")).body.find((a) => a.lines >= 3); if (ap) { const d = (await q("/appeal/" + ap.id)).body; t.ok(d.lines.some((l) => l.admin && l.name === "Warden_Y") && !d.lines.some((l) => l.admin && l.name === AN), "appeal answers show it too"); } }
+  adm.send({ t: "admfreeze", to: "AdmTestZed", on: true }); await sleep(400);
+  t.ok(got.z.some((m) => m.t === "frozen" && m.on) && got.a.some((m) => m.t === "admstate" && m.frozen), "Freeze: the DM's box, no reason needed; the player's screen grays out (owner)");
   zed.send({ t: "chat", text: "can I talk", channel: "local" }); await sleep(300);
   t.ok(!got.a.some((m) => m.t === "chat" && m.text === "can I talk"), "a frozen player can't chat");
   zed.send({ t: "adm", text: "what happened" }); await sleep(300);
   t.ok(got.a.some((m) => m.t === "admdm" && m.text === "what happened"), "but can still answer the admin");
   r = await q("/players"); t.ok(r.body.some((p) => p.name === "AdmTestZed" && p.frozen && p.online), "the list shows them frozen (and online)");
+  r = await q("/log"); t.ok(r.body.some((x) => x.action === "freeze" && x.target === "AdmTestZed" && x.reason === ""), "the freeze is logged (owner)");
   await zed.close(); const zed2 = await connect("?as=AdmTestZed"); const got2 = []; zed2.ws.on("message", (b) => got2.push(JSON.parse(b))); await sleep(100);
   t.ok(zed2.last.frozen && zed2.last.frozen.on && zed2.last.admopen && zed2.last.admopen.log.length >= 3, "coming back, still frozen and the conversation still open", { f: zed2.last.frozen, o: zed2.last.admopen });
-  await q("/freeze", { id: String(zid), on: false, reason: "cleared" }); await sleep(300);
-  t.ok(got2.some((m) => m.t === "frozen" && !m.on), "unfreeze");
-  adm.send({ t: "admend", to: "AdmTestZed" }); await sleep(300);
-  t.ok(got2.some((m) => m.t === "admend"), "the admin ends the conversation: the player's window closes");
+  { const d = (await db.query(`SELECT frozen, admin_id FROM admin_dms WHERE player_id = $1`, [zid])).rows[0]; t.ok(d && d.frozen && String(d.admin_id) === String(me.id), "the DM and its freeze are saved (they survive a redeploy, owner)", d); }
+  adm.send({ t: "admend", to: "AdmTestZed" }); await sleep(400);
+  t.ok(got2.some((m) => m.t === "admend") && got2.some((m) => m.t === "frozen" && !m.on), "closing the DM ends it and thaws the player (owner)");
+  r = await q("/log"); t.ok(r.body.some((x) => x.action === "unfreeze" && x.target === "AdmTestZed"), "the thaw is logged");
   await q("/mute", { id: String(zid), reason: "quiet", amount: 1, unit: "hours" }); zed2.send({ t: "chat", text: "muted talk", channel: "local" }); await sleep(300);
   t.ok(!got.a.some((m) => m.t === "chat" && m.text === "muted talk") && got2.some((m) => m.t === "notice" && /muted/.test(m.text)), "a muted player can't chat (and is told so) (owner)", got2.filter((m) => m.t === "notice"));
   await q("/unmute", { id: String(zid), reason: "ok" }); zed2.send({ t: "chat", text: "free now", channel: "local" }); await sleep(300);
   t.ok(got.a.some((m) => m.t === "chat" && m.text === "free now"), "unmuted, they can again");
+  // a report on them, then a kick: each keeps the last hour of chat (and their ship names then)
+  r = await fetch(BASE + "/game/report", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ target: "AdmTestZed", category: "Spam", text: "testing reports" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+  const rep = (await q("/reports")).body.find((x) => x.text === "testing reports");
+  const repChat = rep && (await q("/report/" + rep.id + "/chat")).body;
+  t.ok(rep && rep.chat > 0 && Array.isArray(rep.ships) && repChat.some((l) => l.text === "yes, me" && l.ch === "local") && repChat.some((l) => l.ch === "admin" && l.text === "hello there" && l.from === "Warden_Y"), "a report keeps the last hour of chat (Local / Corp, their DMs and admin DMs) and their ships then (owner)", { rep, n: repChat && repChat.length });
+  await q("/report/close", { id: rep.id }); t.ok((await q("/reports")).body.find((x) => x.id === rep.id).status === "closed", "a report can be closed");
   await q("/kick", { id: String(zid), reason: "testing kick" }); await sleep(400);
   t.ok(zed2.closeCode === 4005 && got2.some((m) => m.t === "kicked" && m.reason === "testing kick"), "kick: the reason, then the game closes", zed2.closeCode);
-  r = await q("/log"); t.ok(r.body.some((x) => x.action === "freeze" && x.reason === "investigating") && r.body.some((x) => x.action === "unfreeze"), "freezes go to the admin log");
+  { const k = (await q("/log")).body.find((x) => x.action === "kick" && x.target === "AdmTestZed"), kc = (await q("/log/" + k.id + "/chat")).body;
+    t.ok(k.chat > 0 && kc.some((l) => l.text === "yes, me") && Array.isArray(k.ships), "a kick keeps the last hour of chat too (owner)", k); }
+  await q("/persona", { name: AN, pic: 2 });
   await adm.close(); await db.query(`UPDATE admin_log SET target_id = NULL WHERE target_id = $1`, [zid]); await db.query(`DELETE FROM users WHERE id = $1`, [zid]); }
 await db.query(`DELETE FROM pilots WHERE user_id IN ($1, $2)`, [bob.id, ann.id]); await db.query(`UPDATE admin_log SET target_id = NULL WHERE target_id IN ($1, $2)`, [bob.id, ann.id]); await db.query(`DELETE FROM users WHERE id IN ($1, $2)`, [bob.id, ann.id]);
 await db.end();

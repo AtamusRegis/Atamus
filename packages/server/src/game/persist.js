@@ -14,10 +14,16 @@ export async function saveSystem(userId, data) {
 }
 
 // Belt POIs (shared by everyone), kept in the instances table so a restart doesn't reshuffle them.
-/** (owner) A Local / Corp line the filter flagged, for the admins' Chat log. */
-export async function saveChatFlag(userId, username, channel, text, cats, words) {
-  await pool.query(`INSERT INTO chat_flags (user_id, username, channel, text, cats, words) VALUES ($1, $2, $3, $4, $5, $6)`, [userId, username, channel, text, cats, words]);
+// ---- (owner) admin DMs (one per player) and the Freeze that goes with one, kept across restarts ----
+export async function loadAdminDms() { const { rows } = await pool.query(`SELECT player_id, admin_id, admin_name, player_name, log, frozen FROM admin_dms`); return rows; }
+export async function saveAdminDm(pid, d) {
+  await pool.query(`INSERT INTO admin_dms (player_id, admin_id, admin_name, player_name, log, frozen) VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (player_id) DO UPDATE SET admin_id = $2, admin_name = $3, player_name = $4, log = $5, frozen = $6`, [pid, d.admin, d.adminName, d.name, JSON.stringify(d.log), !!d.frozen]);
 }
+export async function deleteAdminDm(pid) { await pool.query(`DELETE FROM admin_dms WHERE player_id = $1`, [pid]); }
+export async function setFrozenRow(pid, on, adminId) { await pool.query(`UPDATE users SET frozen = $2, frozen_by = $3, frozen_at = CASE WHEN $2 THEN now() END, frozen_reason = NULL WHERE id = $1`, [pid, on, on ? adminId : null]); }
+export async function userByName(name) { const { rows } = await pool.query(`SELECT id, username FROM users WHERE lower(username) = lower($1)`, [name]); return rows[0] ? { id: String(rows[0].id), name: rows[0].username } : null; }
+
 /** Every account (id, username): each gets a player station (owner). */
 export async function loadAccounts() { const { rows } = await pool.query(`SELECT id, username FROM users ORDER BY id`); return rows.map((r) => ({ id: String(r.id), name: r.username })); }
 export async function loadPois() { const { rows } = await pool.query(`SELECT data FROM instances`); return rows.map((r) => r.data); }

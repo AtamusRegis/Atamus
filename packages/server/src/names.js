@@ -6,5 +6,7 @@ import { nameProblem } from "./namefilter.js";
 export async function checkName(name) {
   const p = nameProblem(name); if (p) return p;
   const { rows } = await pool.query(`SELECT 1 FROM banned_names WHERE name_lower = lower($1)`, [name]);
-  return rows[0] ? "That name isn't allowed." : null;
+  if (rows[0]) return "That name isn't allowed.";
+  const { rows: a } = await pool.query(`SELECT 1 FROM users WHERE lower(admin_name) = lower($1)`, [name]);   // (owner) an admin's name
+  return a[0] ? "That name is taken." : null;
 }
