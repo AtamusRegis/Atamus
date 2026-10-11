@@ -35,9 +35,10 @@ export const SHIP_TYPES = {
   chisel: {
     name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
     targetRangeKm: 5, maxTargets: 5, lockMs: 3000, cargoM3: 5000,
-    // (owner, 2026-10-11: the Fitting window) armor is new (a placeholder until the owner sets it); slots = the hotbar's
-    // 12; power and disposition are the Prospector's capacitor and disposition from before the reset
-    armor: 150, slots: 12, powerMax: 40, dispositionMax: 70,
+    // (owner, 2026-10-11: the Fitting window) armor is new (a placeholder until the owner sets it); module slots come in
+    // two kinds (owner): active (on the hotbar) and passive, a number of each per hull; power and disposition are the
+    // Prospector's capacitor and disposition from before the reset
+    armor: 150, activeSlots: 4, passiveSlots: 3, powerMax: 40, dispositionMax: 70,
     desc: "Deep Core Industries' entry-level mining frigate: small, nimble, with a modest ore hold. Every mining career starts in one.",
     bonuses: ["+20% Mining Laser yield", "+5% Mining Laser range", "+50% Mining Drones yield"],   // as before the reset (nothing uses them until modules return)
     req: { licenses: [["Mining Frigate", 1]], ark: "Light Ark" },   // (owner) a ship needs an ark that can carry it; the smallest that can

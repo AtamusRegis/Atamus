@@ -741,7 +741,8 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 /* fitting window */
 .fit-hull { display: grid; place-items: center; padding: 10px 0 14px; }
 .fit-hull img { max-width: 70%; max-height: 90px; image-rendering: pixelated; }
-.fit-slots { grid-template-columns: repeat(6, 40px); }
+.fit-slots { grid-template-columns: repeat(auto-fit, 40px); margin: 6px 0; }
+.fit-hull { padding: 4px 0; }
 .fit-slot.hb-slot { display: grid; background: rgba(0,0,0,0.3); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); }
 .pi-player { cursor: default; }
 .fit-body { margin-top: 8px; }

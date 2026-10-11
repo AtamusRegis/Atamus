@@ -716,9 +716,11 @@
   }
 
   // ---- the HUD (owner), bottom centre, for the selected pilot's ship: locked targets (priority left to right), then
-  // shield, hull and speed, then the Inventory button and the hotbar (12 module slots, keys 1-9, 0, -, =; empty slots
+  // shield, hull and speed, then the hotbar (the hull's active module slots, keys 1-9, 0, -, =; empty slots
   // only show while a module is being dragged) ----
   const HB_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+  // (owner) modules are active (on the hotbar, keyed 1, 2, 3… for as many active slots as the hull has) or passive
+  const modsOf = (sh, kind) => ((sh && sh.mods && sh.mods[kind]) || []);
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   const hud = el("div", { id: "hud", hidden: "" }, hudTargets, hudStatus, el("div", { class: "hud-row" }, hudBar));
   document.body.append(hud);
@@ -776,8 +778,8 @@
         hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), spd); H.status = true;
       }
       hudBar.innerHTML = "";
-      const mods = sh.mods || [];
-      for (let i = 0; i < HB_KEYS.length; i++) {
+      const mods = modsOf(sh, "active");
+      for (let i = 0; i < Math.min(HB_KEYS.length, T.activeSlots || 0); i++) {
         const m = mods[i];
         hudBar.append(el("div", { class: "hb-slot" + (m ? " filled" : " hb-empty") }, el("span", { class: "hb-num" }, HB_KEYS[i])));
       }
@@ -890,17 +892,18 @@
     body.append(el("div", { class: "tab-row tab-row-center" }, FIT_TABS.map(([k, n]) => el("button", { class: "tab" + (k === tab ? " active" : ""), "data-tab": k, onclick: () => { saved.fitTab = k; persistAll(); renderFit(body); } }, n))));
     if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
     const c = el("div", { class: "fit-body" }); body.append(c);
-    const mods = sh.mods || [];
-    if (tab === "fitting") {
-      c.append(el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
-        el("div", { class: "fit-slots" }, HB_KEYS.slice(0, T.slots || 12).map((k, i) => el("div", { class: "hb-slot fit-slot" + (mods[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
+    const act = modsOf(sh, "active"), pas = modsOf(sh, "passive"), mods = [...act, ...pas];
+    if (tab === "fitting") {                         // (owner) active slots above the ship (keyed as on the hotbar), passive below
+      c.append(el("div", { class: "fit-slots fit-active" }, HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
+        el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
+        el("div", { class: "fit-slots fit-passive" }, Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") }))),
         el("div", { class: "ps-rows fit-rows" }, generalRows(T)));
     } else if (tab === "hull") {
       c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
         el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, b))));
     } else if (tab === "stats") {
       const used = (k) => mods.reduce((t, m) => t + ((m && m[k]) || 0), 0);
-      c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Module Slots", mods.filter(Boolean).length + " / " + (T.slots || 12)), statRow("Power", used("power") + " / " + (T.powerMax || 0)), statRow("Disposition", used("disposition") + " / " + (T.dispositionMax || 0))),
+      c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Active Slots", act.filter(Boolean).length + " / " + (T.activeSlots || 0)), statRow("Passive Slots", pas.filter(Boolean).length + " / " + (T.passiveSlots || 0)), statRow("Power", used("power") + " / " + (T.powerMax || 0)), statRow("Disposition", used("disposition") + " / " + (T.dispositionMax || 0))),
         subHead("Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Class", T.cls || "-"), statRow("Length", kmM(T.lengthKm || 0)), statRow("Acceleration", kmM(T.accelKmps2 || 0) + "/s²"), generalRows(T)));
     } else {
       const r = T.req || {};

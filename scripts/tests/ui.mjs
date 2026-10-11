@@ -178,7 +178,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
   const fw = document.querySelector('.win[data-id="fit"]'), tabTo = async (k) => { fw.querySelector('.tab[data-tab="' + k + '"]').click(); await s(150); }, keys = () => [...fw.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
   await tabTo("fitting");
-  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-slot")].map((x) => x.textContent).join(), gen: keys() };
+  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-body").children].map((x) => x.className.split(" ").pop()).slice(0, 3).join(), gen: keys() };
   await tabTo("hull"); fit.desc = !!fw.querySelector(".fit-desc").textContent; fit.bonuses = fw.querySelectorAll(".fit-bonus").length;
   await tabTo("stats"); fit.stats = keys();
   await tabTo("req"); fit.req = [...fw.querySelectorAll(".sheet-row")].map((x) => x.textContent).join();
@@ -197,14 +197,14 @@ t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.tes
 t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
 t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Info", "a target's menu: Unlock Target, Align To, Move towards, Info", r.tmenu);
 t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
-t.ok(r.hbHidden && r.slots.join() === "1,2,3,4,5,6,7,8,9,0,-,=", "no modules: the hotbar's 12 empty slots (1-9, 0, -, =) show only while a module is dragged", r);
+t.ok(r.hbHidden && r.slots.join() === "1,2,3,4", "no modules: the hotbar's empty active slots (the Prospector's 4, keyed 1-4) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
 t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
 const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Storage,Max Power,Max Disposition";
 t.ok(/Prospector$/.test(r.fit.title) && r.fit.tabs === "Fitting,Hull,Stats,Requirements", "the Fitting window's tabs: Fitting, Hull, Stats, Requirements", r.fit);
-t.ok(r.fit.art && r.fit.slots === "1,2,3,4,5,6,7,8,9,0,-,=" && r.fit.gen === GEN, "Fitting: the ship, its 12 hotbar slots and its general stats", r.fit);
+t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-active,fit-hull,fit-passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, then its general stats", r.fit);
 t.ok(r.fit.desc && r.fit.bonuses === 3, "Hull: its description and bonuses", r.fit);
-t.ok(r.fit.stats === "Module Slots,Power,Disposition,Class,Length,Acceleration," + GEN, "Stats: fitting stats, then the ship's", r.fit.stats);
+t.ok(r.fit.stats === "Active Slots,Passive Slots,Power,Disposition,Class,Length,Acceleration," + GEN, "Stats: fitting stats, then the ship's", r.fit.stats);
 t.ok(r.fit.req === "Mining FrigateI,Carried byLight Ark", "Requirements: licenses and the ark that carries it", r.fit.req);
 t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length," + GEN, "a ship's Info is its hull's", r.hull);
 t.ok(r.pinfo.title === "Pilot Info" && r.pinfo.name === "Vera Kestrel" && r.pinfo.rows.join() === "Player,Corp,Day Born,Total Endorsement Level", "Pilot Info: a pilot's portrait, name, player, corp, day born and endorsements", r.pinfo);
