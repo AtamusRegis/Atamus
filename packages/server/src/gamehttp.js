@@ -5,6 +5,7 @@ import { PORTRAIT_PARTS } from "./portraits.js";
 import * as pilots from "./pilots.js";
 import { websiteDeployed, announceUpdate } from "./build.js";
 import { allow } from "./ratelimit.js";
+import { gameHook } from "./admin.js";
 
 export const game = express.Router();
 
@@ -36,6 +37,16 @@ game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES)
 game.post("/report", auth, async (req, res) => {
   if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });
   try { await pilots.fileReport(req.uid, req.body || {}); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// (owner) after an admin's Ban Name: a new name for the account or that pilot (only then)
+game.post("/rename", auth, async (req, res) => {
+  try { const name = await pilots.renameAccount(req.uid, req.body?.name); gameHook("renamed", req.uid, name); res.json({ name }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+game.post("/pilot/rename", auth, async (req, res) => {
+  try { const name = await pilots.renamePilot(req.uid, req.body?.pilotId, req.body?.name); await gameHook("refreshPilots", req.uid); res.json({ name }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 

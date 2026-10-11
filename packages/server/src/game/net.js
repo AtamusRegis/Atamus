@@ -6,7 +6,9 @@ import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
 import { setGameHooks, isUnlocked, muteOf } from "../admin.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, saveChatFlag } from "./persist.js";
+import { scan } from "../namefilter.js";
+import { onAppealLine, subscribers } from "../appeals.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
 import { DOCK_KM } from "./station.js";
@@ -48,7 +50,15 @@ export function attachGameServer(httpServer) {
   // (owner) muted players: no Local, Corp or DMs (an admin conversation still works) until it ends
   const mutes = new Map();                              // pid -> { perm, until (ms), reason }
   const mutedNow = (pid) => { const m = mutes.get(pid); if (!m) return null; if (!m.perm && m.until <= Date.now()) { mutes.delete(pid); return null; } return m; };
+  // (owner) every Local / Corp line goes through the filter; flagged ones are kept for the admins (never DMs)
+  world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) saveChatFlag(p.id, p.name, ch, text, r.cats, r.words).catch((e) => console.error("chat flag", e)); };
+  // (owner) a new line in a ban appeal: every subscribed admin who's online is told (not the one who wrote it)
+  onAppealLine(async (appealId, name, text, except) => {
+    for (const id of await subscribers(appealId)) if (id !== except && conns.has(id) && isUnlocked(id)) sendTo(id, { t: "appealmsg", id: appealId, name, text });
+  });
   setGameHooks({
+    renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch {} } },
+    renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     freeze: (pid, on) => { world.setFrozen(pid, on); sendTo(pid, { t: "frozen", on }); },
     online: () => new Set(conns.keys()),
@@ -116,7 +126,7 @@ export function attachGameServer(httpServer) {
             if (mu) { send(JSON.stringify({ t: "notice", text: mu.perm ? "You're muted." : "You're muted until " + new Date(mu.until).toLocaleString("en-US", { timeZone: "UTC" }) + " UTC." })); break; }   // (owner) muted
             world.cmdChat(pid, m.text, m.channel, m.to, m.ship); break;
           }
-          case "adm": admSay(pid, user.username, m); break;
+          case "adm": admSay(pid, (world.players.get(pid) || {}).name || user.username, m); break;
           case "admend": admEnd(pid, m); break;
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
@@ -131,6 +141,7 @@ export function attachGameServer(httpServer) {
           case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
           case "dock": world.cmdDock(pid, m.ship, m.where); break;
           case "undock": world.cmdUndock(pid, m.ship); break;
+          case "board": world.cmdBoard(pid, m.ship, !!m.on); break;
           case "transfer": world.cmdTransfer(pid, m.from, m.to, m.item, m.qty); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }

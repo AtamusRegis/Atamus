@@ -11,6 +11,7 @@ import { SUN, PLANETS, celestialPois, anchorLanding, celestialClearance } from "
 import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
 import { readFileSync } from "node:fs";
+import { nameProblem } from "../namefilter.js";
 const SPAWN_AT = { x: STATION.x, y: STATION.y - 8 };   // a new ship appears just south of the Station (the sun is at the center)
 const CHAT_GROUP_KM = 150;   // (owner) your pilots this close together share one chat bubble
 // (owner) a laser aims only at the rock itself: points well inside each rock sprite's opaque part, as fractions of its
@@ -90,6 +91,11 @@ export class World {
   }
   /** (owner) Freeze or unfreeze an account: its ships stop where they are, switch everything off and drop their locks, and
    *  no one can target them (net.js also refuses the account's commands while frozen). */
+  /** (owner) A player renamed their account: chat and their station use the new name. */
+  renamePlayer(pid, name) {
+    const p = this.players.get(pid); if (p) p.name = name;
+    const h = this._home(pid); if (h) { h.name = name + "'s Station"; h.field.props = homeProps(h); h.field.ver++; this.poiVer++; }
+  }
   setFrozen(pid, on) {
     if (!on) { this.frozen.delete(pid); return; }
     this.frozen.add(pid);
@@ -153,6 +159,7 @@ export class World {
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
       name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
       holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: false };
+    if (sv && sv.docked && sv.unboarded) s.unboarded = true;   // (owner) its pilot had left it, docked
     if (sv && sv.docked) { s.docked = sv.docked === "home" ? "home" : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (true, before player stations: the Station)
     if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
     this._recalc(s);
@@ -199,7 +206,7 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}) };
+    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}) };
     const p = this.players.get(id);
     return { ships, hangar: p ? p.hangar : {}, savedAt: Date.now() };
   }
@@ -402,9 +409,15 @@ export class World {
   }
   cmdUndock(pid, shipId) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
+    if (s.unboarded) return this._notice(pid, "Board the ship first");   // (owner) a pilot not in their ship can't undock it
     const st = this._dockProp(pid, s.docked) || this._station(), a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2;   // out the bottom, a couple of km off
     Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a });
     s.tx = s.x; s.ty = s.y;
+  }
+  /** (owner) Board or leave your ship while it's docked: a pilot who isn't aboard can't undock it. */
+  cmdBoard(pid, shipId, on) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
+    s.unboarded = !on;
   }
   /** Move items (owner): between a station's storage (the Station's hangar, or your own station's) and your ships docked
    *  there, or between one ship's holds. The ore hold takes only ore; ship holds take what fits (the rest stays);
@@ -503,7 +516,9 @@ export class World {
   /** Rename one of your ships (owner); an empty name puts back the default ("Pilot's Prospector"). */
   cmdRename(pid, shipId, name) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || (name != null && typeof name !== "string") || (typeof name === "string" && name.length > 200)) return;
-    s.name = cleanShipName(name);
+    const clean = cleanShipName(name);
+    if (clean && nameProblem(clean)) return this._notice(pid, "That name isn't allowed.");   // (owner) the name filter
+    s.name = clean;
   }
   /** Where the player's camera is: other ships in view get sent to them. */
   cmdView(pid, x, y, w) {
@@ -536,6 +551,7 @@ export class World {
     }
     const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now(), ...(speakers.length ? { ships: speakers.map((x) => x.id) } : {}) });
     for (const other of this.players.values()) if (!other.offline) other.send(msg);
+    if (this.onChat) { try { this.onChat(p, ch, clean); } catch (e) { console.error("onChat", e); } }   // (owner) Local / Corp lines are checked for the admins' Chat log
   }
 
   tick(dtSec) {
@@ -721,7 +737,7 @@ export class World {
         if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
         // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
-        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq;
+        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq; if (s.unboarded) e.unboarded = true;
         e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
       if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle

@@ -44,7 +44,7 @@
   // ---- data ----
   let serverOffset = 0; // server epoch - client epoch
   async function ensureCatalog() { if (!catalog) catalog = await Api.get("/game/catalog"); }
-  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); ensurePilot(); syncAdminBtn(); renderOpen(); }
+  async function refreshState() { state = await Api.get("/game/state"); if (state.serverTime) serverOffset = state.serverTime - Date.now(); ensurePilot(); syncAdminBtn(); syncRenames(); renderOpen(); }
   // (owner) the Admin button is only for admins and the Head Admin
   function syncAdminBtn() {
     const is = !!(state && state.profile && state.profile.role), has = order.includes("admin");
@@ -724,7 +724,7 @@
   const fmtWhen = (t) => { const d = new Date(t); return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); };
   async function adminLoad() {
     try { AD.me = await Api.get("/game/admin/me"); } catch { AD.me = null; }
-    if (AD.me && AD.me.unlocked) { try { [AD.players, AD.log, AD.appeals] = await Promise.all([Api.get("/game/admin/players"), Api.get("/game/admin/log"), Api.get("/game/admin/appeals")]); } catch (e) { flash(e.message); } }
+    if (AD.me && AD.me.unlocked) { try { [AD.players, AD.log, AD.appeals, AD.flags, AD.names] = await Promise.all(["players", "log", "appeals", "chatflags", "names"].map((x) => Api.get("/game/admin/" + x))); } catch (e) { flash(e.message); } }
     if (wins.admin && isOpen(wins.admin)) renderAdmin(wins.admin.body);   // (rebuilt only when something changed)
   }
   // the tabs (and the search box) are built once per tab; the list under them is redrawn when its data or the search changes
@@ -741,7 +741,7 @@
         setTimeout(() => pw.focus(), 30); return;
       }
       const openN = (AD.appeals || []).filter((a) => a.status === "open").length;
-      body.append(el("div", { class: "tab-row" }, [["players", "Players"], ["appeals", "Appeals" + (openN ? " (" + openN + ")" : "")], ["log", "Log"]].map(([k, n]) => el("button", { class: "tab" + (AD.tab === k ? " active" : ""), "data-atab": k, onclick: () => { AD.tab = k; renderAdmin(body, true); adminLoad(); } }, n))));
+      body.append(el("div", { class: "tab-row" }, [["players", "Players"], ["appeals", "Appeals" + (openN ? " (" + openN + ")" : "")], ["chat", "Chat"], ["names", "Names"], ["log", "Log"]].map(([k, n]) => el("button", { class: "tab" + (AD.tab === k ? " active" : ""), "data-atab": k, onclick: () => { AD.tab = k; renderAdmin(body, true); adminLoad(); } }, n))));
       if (AD.tab === "players") {
         body.append(el("div", { class: "tab-row adm-sub" }, [["players", "Players"], ["admins", "Admins"], ["disc", "Disciplined"]].map(([k, n]) => el("button", { class: "tab" + (AD.sub === k ? " active" : ""), onclick: () => { AD.sub = k; renderAdmin(body, true); } }, n))));
         const q = el("input", { class: "text-input adm-search", type: "search", value: AD.q || "", autocomplete: "off", spellcheck: "false" });
@@ -775,7 +775,7 @@
   }
   function drawAdminList(body) {
     const list = body.querySelector(".adm-list"); if (!list || !AD.me || !AD.me.unlocked) return;
-    const sig = JSON.stringify([AD.tab, AD.sub, AD.q, AD.sort, AD.players, AD.log, AD.appeals]); if (sig === AD.sig) return; AD.sig = sig;
+    const sig = JSON.stringify([AD.tab, AD.sub, AD.q, AD.sort, AD.players, AD.log, AD.appeals, AD.flags, AD.names]); if (sig === AD.sig) return; AD.sig = sig;
     const keep = list.scrollTop; list.innerHTML = "";
     { const openN = (AD.appeals || []).filter((a) => a.status === "open").length, tb = body.querySelector('[data-atab="appeals"]'); if (tb) tb.textContent = "Appeals" + (openN ? " (" + openN + ")" : ""); }
     const needle = (AD.q || "").trim().toLowerCase(), match = (n) => !needle || n.toLowerCase().includes(needle);
@@ -797,15 +797,29 @@
           list.append(row);
         }
       }
-    } else if (AD.tab === "appeals") {                 // (owner) only banned players appeal; open ones first
+    } else if (AD.tab === "chat") {                    // (owner) flagged Local / Corp lines, the flagged words highlighted
+      for (const f of AD.flags || []) {
+        const text = el("div", { class: "adm-reason" });
+        for (const part of f.text.split(/(\s+)/)) text.append(f.words.includes(part) ? el("mark", { class: "adm-mark" }, part) : part);
+        list.append(el("div", { class: "adm-log" },
+          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(f.at)), playerLink(f.userId, f.name), el("span", { class: "adm-when" }, f.channel === "corp" ? "Corp" : "Local"), el("span", { class: "adm-by" }, f.cats.map((c) => c.charAt(0).toUpperCase() + c.slice(1)).join(", "))),
+          text));
+      }
+    } else if (AD.tab === "names") {                   // (owner) names banned by Ban Name: no one can take them
+      for (const n of AD.names || []) {
+        list.append(el("div", { class: "adm-log" },
+          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(n.at)), el("b", {}, n.name), el("span", { class: "adm-when" }, n.kind === "pilot" ? "Pilot" : "Player"), el("span", { class: "adm-by" }, n.admin)),
+          n.reason ? el("div", { class: "adm-reason" }, n.reason) : null,
+          el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Allow " + n.name, (reason) => adminDo("/names/remove", { name: n.name, reason })) }, "Allow")));
+      }
+    } else if (AD.tab === "appeals") {                 // (owner) appeal conversations, open ones first: click one to open it
       for (const a of AD.appeals || []) {
-        const acts = a.status === "open" ? el("div", { class: "adm-acts" },
-          el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Accept " + a.name, (reason) => adminDo("/appeal", { id: a.id, accept: true, reason })) }, "Accept"),
-          el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Deny " + a.name, (reason) => adminDo("/appeal", { id: a.id, accept: false, reason })) }, "Deny")) : null;
-        list.append(el("div", { class: "adm-log" + (a.status === "open" ? " open" : "") },
-          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(a.at)), el("b", {}, a.status === "open" ? "Appeal" : a.status === "accepted" ? "Accepted" : "Denied"), playerLink(a.userId, a.name), a.admin ? el("span", { class: "adm-by" }, a.admin) : null),
-          a.banReason ? el("div", { class: "adm-reason adm-dim" }, "Ban: " + a.banReason) : null, el("div", { class: "adm-reason" }, a.text),
-          a.response ? el("div", { class: "adm-reason adm-dim" }, "Answer: " + a.response) : null, acts));
+        const row = el("div", { class: "adm-log adm-appeal" + (a.status === "open" ? " open" : "") },
+          el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(a.at)), el("b", {}, a.status === "open" ? "Open" : a.status === "accepted" ? "Accepted" : "Closed"), playerLink(a.userId, a.name),
+            el("span", { class: "adm-by" }, (a.subscribed ? "★ " : "") + a.lines + (a.lines === 1 ? " line" : " lines"))),
+          a.last ? el("div", { class: "adm-reason" }, el("b", {}, a.last.name + ": "), a.last.text) : null);
+        row.addEventListener("click", (e) => { if (!e.target.closest(".adm-link")) openAppeal(a.id); });
+        list.append(row);
       }
     } else {
       for (const r of AD.log || []) {
@@ -832,6 +846,7 @@
     if (canAct) {
       out.push(p.frozen ? ["Unfreeze", () => adminReason("Unfreeze " + p.name, (reason) => adminDo("/freeze", { id: p.id, on: false, reason }))] : ["Freeze", () => adminReason("Freeze " + p.name, (reason) => adminDo("/freeze", { id: p.id, on: true, reason }))]);
       out.push(["Kick", () => adminReason("Kick " + p.name, (reason) => adminDo("/kick", { id: p.id, reason }))]);
+      out.push(["Ban Name", () => openBanName(p)]);
       out.push(p.mute ? ["Unmute", () => adminReason("Unmute " + p.name, (reason) => adminDo("/unmute", { id: p.id, reason }))] : ["Mute", () => openBan(p, "mute")]);
       out.push(p.ban ? ["Unban", () => adminReason("Unban " + p.name, (reason) => adminDo("/unban", { id: p.id, reason }))] : ["Ban", () => openBan(p)]);
     }
@@ -848,6 +863,40 @@
     w.body.append(el("div", { class: "report-form" }, el("div", { class: "sheet-k" }, "Reason"), text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("areason", false) }, "Cancel"), ok)));
     toggleWindow("areason", true); setTimeout(() => text.focus(), 30);
   }
+  // (owner) Ban Name: the player's name or one of their pilots'; it goes on the banned names list and they must rename
+  async function openBanName(p) {
+    let d; try { d = await Api.get("/game/admin/player/" + encodeURIComponent(p.id)); } catch (e) { flash(e.message); return; }
+    if (!wins.abanname) createWindow("abanname", { left: Math.round(innerWidth / 2 - 170), top: 150, width: 340, minW: 280, minH: 210, render: () => {}, label: "Ban Name", groupable: false });
+    const w = wins.abanname; w.slot.textContent = "Ban Name"; w.body.innerHTML = "";
+    const which = el("select", { class: "base-sel" }, el("option", { value: "" }, "Player: " + d.name), ...d.pilots.map((pl) => el("option", { value: pl.id }, "Pilot: " + pl.name)));
+    const text = el("textarea", { class: "text-input report-text", maxlength: "500", rows: "3" }), err = el("div", { class: "form-err", hidden: "" });
+    const ok = el("button", { class: "btn-primary2", onclick: async () => {
+      if (!text.value.trim()) { err.textContent = "Write a reason."; err.hidden = false; return; }
+      ok.disabled = true; if (await adminDo("/banname", { id: p.id, reason: text.value, ...(which.value ? { pilotId: which.value } : {}) })) toggleWindow("abanname", false); ok.disabled = false;
+    } }, "Ban Name");
+    w.body.append(el("div", { class: "report-form" }, which, el("div", { class: "sheet-k" }, "Reason"), text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("abanname", false) }, "Cancel"), ok)));
+    toggleWindow("abanname", true);
+  }
+  // (owner) after a Ban Name the player must pick a new name: a window that can't be closed, for the account or each pilot
+  function syncRenames() {
+    if (!state) return;
+    const need = [];
+    if (state.profile && state.profile.renameRequired) need.push({ id: "rename:me", label: "New name", what: "Your name", current: state.profile.username, send: (name) => Api.post("/game/rename", { name }) });
+    for (const pl of state.pilots || []) if (pl.renameRequired) need.push({ id: "rename:" + pl.id, label: "New pilot name", what: "Pilot", current: pl.name, send: (name) => Api.post("/game/pilot/rename", { pilotId: pl.id, name }) });
+    for (const id of Object.keys(wins)) if (id.startsWith("rename:") && !need.some((n) => n.id === id) && isOpen(wins[id])) toggleWindow(id, false);
+    need.forEach((n, i) => {
+      if (!wins[n.id]) createWindow(n.id, { left: Math.round(innerWidth / 2 - 160), top: 140 + i * 30, width: 320, minW: 260, minH: 150, render: () => {}, label: n.label, groupable: false, noClose: true, pinTop: true });
+      const w = wins[n.id]; if (isOpen(w)) return;
+      w.slot.textContent = n.label; w.body.innerHTML = "";
+      const input = el("input", { class: "text-input", maxlength: "24", autocomplete: "off", spellcheck: "false" }), err = el("div", { class: "form-err", hidden: "" });
+      const go = async () => { try { await n.send(input.value.trim()); toggleWindow(n.id, false); await refreshState(); window.Atamus.send({ t: "pilots" }); } catch (e) { err.textContent = e.message; err.hidden = false; } };
+      input.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") go(); });
+      w.body.append(el("div", { class: "report-form" }, el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, n.what), el("span", { class: "sheet-v" }, n.current)), input, err, el("button", { class: "btn-primary2", onclick: go }, "Rename")));
+      toggleWindow(n.id, true);
+    });
+  }
+  window.Atamus.bus.addEventListener("renamereq", () => refreshState().catch(() => {}));
+
   // a ban (or, owner: a mute): permanent, or for a number of hours or days; a ban's reason is what the player sees at login
   function openBan(p, what = "ban") {
     if (!wins.aban) createWindow("aban", { left: Math.round(innerWidth / 2 - 170), top: 150, width: 340, minW: 280, minH: 230, render: () => {}, label: "Ban", groupable: false });
@@ -938,6 +987,66 @@
     else if (!e.detail.on && frozenEl) { frozenEl.remove(); frozenEl = null; }
   });
   addEventListener("keydown", (e) => { if (frozenEl && !(e.target && e.target.closest && e.target.closest(".admdm-body"))) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);   // frozen: no keys but the admin chat's
+
+  // ---- (owner) an appeal conversation: the banned player and every admin; answer, Subscribe (be told of new lines),
+  // Accept (unban), Deny (close), Timeout (close, and no new appeals for a while) ----
+  const appealWins = new Map();                      // appeal id -> its latest data
+  async function openAppeal(id) {
+    const wid = "appeal:" + id;
+    if (!wins[wid]) createWindow(wid, { left: Math.round(innerWidth / 2 - 190), top: 100, width: 380, height: 440, minW: 300, minH: 260, render: () => loadAppeal(id), label: "Appeal", groupable: false });
+    toggleWindow(wid, true);
+  }
+  async function loadAppeal(id) {
+    const wid = "appeal:" + id, w = wins[wid]; if (!w || !isOpen(w)) return;
+    let d; try { d = await Api.get("/game/admin/appeal/" + encodeURIComponent(id)); } catch (e) { flash(e.message); return; }
+    const old = appealWins.get(id); appealWins.set(id, d);
+    if (old && JSON.stringify(old) === JSON.stringify(d) && w.body.querySelector(".appeal-lines")) return;   // nothing new: leave it be
+    w.slot.textContent = "Appeal · " + d.name;
+    const draft = w.body.querySelector(".appeal-input"), keep = draft ? draft.value : "";
+    w.body.innerHTML = ""; w.body.classList.add("appeal-body");
+    const pl = d.player || {};
+    const info = el("div", { class: "appeal-info" },
+      el("div", {}, el("span", { class: "sheet-k" }, "Ban "), pl.ban ? (pl.ban.perm ? "permanent" : "until " + fmtWhen(pl.ban.until)) + " · " + (pl.ban.reason || d.banReason) : "ended"),
+      el("div", {}, el("span", { class: "sheet-k" }, "Appeals "), pl.used + " made, " + pl.left + " left" + (pl.blockedUntil ? " · none until " + fmtWhen(pl.blockedUntil) : "")));
+    const list = el("div", { class: "appeal-lines" });
+    for (const l of d.lines) list.append(el("div", { class: "appeal-line" + (l.admin ? " admin" : "") }, el("span", { class: "adm-when" }, fmtWhen(l.at) + " "), el("b", {}, l.name + ": "), l.text));
+    const sub = el("button", { class: "btn-ghost2 adm-unban", onclick: async () => { try { await Api.post("/game/admin/appeal/subscribe", { id, on: !d.subscribed }); loadAppeal(id); adminLoad(); } catch (e) { flash(e.message); } } }, d.subscribed ? "Unsubscribe" : "Subscribe");
+    const acts = el("div", { class: "adm-acts" }, sub);
+    if (d.status === "open") acts.append(
+      el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Accept " + d.name, async (reason) => { const ok = await adminDo("/appeal", { id, accept: true, reason }); loadAppeal(id); return ok; }) }, "Accept"),
+      el("button", { class: "btn-ghost2 adm-unban", onclick: () => adminReason("Deny " + d.name, async (reason) => { const ok = await adminDo("/appeal", { id, accept: false, reason }); loadAppeal(id); return ok; }) }, "Deny"));
+    acts.append(el("button", { class: "btn-ghost2 adm-unban", onclick: () => openAppealTimeout(id, d.name) }, "Timeout"));
+    w.body.append(info, list, acts);
+    if (d.status === "open") {
+      const input = el("input", { class: "text-input appeal-input", maxlength: "1000", autocomplete: "off" }); input.value = keep;
+      input.addEventListener("keydown", async (e) => { e.stopPropagation(); if (e.key !== "Enter" || !input.value.trim()) return; const text = input.value; input.value = ""; try { await Api.post("/game/admin/appeal/say", { id, text }); loadAppeal(id); } catch (er) { flash(er.message); input.value = text; } });
+      w.body.append(input);
+    } else w.body.append(el("div", { class: "muted" }, d.status === "accepted" ? "Accepted" : "Closed"));
+    list.scrollTop = list.scrollHeight;
+  }
+  // (owner) Timeout: the appeal closes and no new one can be made for days / months / years (then one more is allowed)
+  function openAppealTimeout(id, name) {
+    if (!wins.atimeout) createWindow("atimeout", { left: Math.round(innerWidth / 2 - 170), top: 160, width: 340, minW: 280, minH: 210, render: () => {}, label: "Timeout", groupable: false });
+    const w = wins.atimeout; w.slot.textContent = "Timeout " + name; w.body.innerHTML = "";
+    const amount = el("input", { class: "text-input adm-amount", type: "number", min: "1", max: "100", value: "7" }), unit = el("select", { class: "base-sel" }, el("option", { value: "days" }, "Days"), el("option", { value: "months" }, "Months"), el("option", { value: "years" }, "Years"));
+    const text = el("textarea", { class: "text-input report-text", maxlength: "500", rows: "3" }), err = el("div", { class: "form-err", hidden: "" });
+    const ok = el("button", { class: "btn-primary2", onclick: async () => {
+      if (!text.value.trim()) { err.textContent = "Write a reason."; err.hidden = false; return; }
+      ok.disabled = true; if (await adminDo("/appeal/timeout", { id, amount: Math.round(+amount.value), unit: unit.value, reason: text.value })) { toggleWindow("atimeout", false); loadAppeal(id); } ok.disabled = false;
+    } }, "Timeout");
+    w.body.append(el("div", { class: "report-form" }, el("div", { class: "adm-len" }, amount, unit), el("div", { class: "sheet-k" }, "Reason"), text, err, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("atimeout", false) }, "Cancel"), ok)));
+    toggleWindow("atimeout", true);
+  }
+  setInterval(() => { for (const id of appealWins.keys()) if (wins["appeal:" + id] && isOpen(wins["appeal:" + id])) loadAppeal(id); }, 8000);   // (rebuilt only when it changed)
+  // (owner) a subscribed admin is told of a new line: a note on screen (click it to open the appeal) and the Admin button lights up
+  window.Atamus.bus.addEventListener("appealmsg", (e) => {
+    const m = e.detail, wid = "appeal:" + m.id;
+    if (wins[wid] && isOpen(wins[wid])) { loadAppeal(m.id); return; }
+    const note = el("div", { class: "appeal-note", onclick: () => { note.remove(); openAppeal(m.id); } }, el("b", {}, "Appeal · " + m.name + ": "), m.text.length > 120 ? m.text.slice(0, 120) + "…" : m.text);
+    document.body.append(note); setTimeout(() => note.remove(), 12000);
+    const btn = document.querySelector('.wbtn[data-id="admin"]'); if (btn) btn.classList.add("has-new");
+    adminLoad();
+  });
 
   const ROMAN_LV = (n) => (n ? ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"][n] || String(n) : "0");
 
@@ -1305,17 +1414,23 @@
     let sel = stSel(); const selC = contOf(sel);
     if (isStore(sel) ? sel !== store : !ships.some((x) => x.id === selC.ship)) sel = store;
     const items = isStore(sel) ? hangar : (((ships.find((x) => x.id === selC.ship) || {}).holds || {})[selC.hold] || {});
-    const sig = at + "|" + sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked);
+    const openSet = saved.stOpen || (saved.stOpen = {});   // (owner) which ships in the Ship Bay are expanded to show their holds
+    if (!isStore(sel)) openSet[selC.ship] = true;
+    const sig = at + "|" + sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds, !!x.unboarded, openSet[x.id] !== false])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked) + "|" + !!(sh && sh.unboarded);
     wins.station.slot.textContent = at === "home" ? (A.homeName() || "Station") : "Station";
     if (wins.station.ssig === sig) return; wins.station.ssig = sig;
     const keepScroll = [...body.querySelectorAll(".st-side, .st-grid-wrap")].map((x) => x.scrollTop);
     body.innerHTML = ""; body.classList.add("st-win");
     const pick = (key) => { saved.stSel = key; persistAll(); wins.station.ssig = null; renderStation(body); };
     const side = el("div", { class: "st-side" }, el("button", { class: "st-entry" + (sel === store ? " active" : ""), "data-cont": store, onclick: () => pick(store) }, "Hangar"));
-    for (const x of ships) {
-      const T = A.cfg.shipTypes[x.type] || {};
-      side.append(el("div", { class: "st-ship" }, shipName(x)));
-      for (const h of T.holds || []) { const key = x.id + "|" + h.key; side.append(el("button", { class: "st-entry st-hold" + (sel === key ? " active" : ""), "data-cont": key, onclick: () => pick(key) }, h.name)); }
+    if (ships.length) side.append(el("div", { class: "st-bay" }, "Ship Bay"));
+    for (const x of ships) {                           // (owner) each ship a tab: click to show its holds; right-click (hold): its menu
+      const T = A.cfg.shipTypes[x.type] || {}, open = openSet[x.id] !== false;   // (expanded until you collapse it)
+      const tab = el("button", { class: "st-ship-tab" + (open ? " open" : "") + (x.unboarded ? " empty" : ""), onclick: () => { openSet[x.id] = !open; persistAll(); wins.station.ssig = null; renderStation(body); } },
+        el("span", { class: "st-caret" }, open ? "▾" : "▸"), el("span", { class: "st-ship-name" }, shipName(x)), x.unboarded ? el("span", { class: "st-ship-tag" }, "No pilot") : null);
+      holdMenu(tab, () => bayShipMenu(x));
+      side.append(tab);
+      if (open) for (const h of T.holds || []) { const key = x.id + "|" + h.key; side.append(el("button", { class: "st-entry st-hold" + (sel === key ? " active" : ""), "data-cont": key, onclick: () => pick(key) }, h.name)); }
     }
     const main = el("div", { class: "st-main" });
     if (isStore(sel)) main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, "Hangar"), el("span", { class: "st-used" }, (Math.round(boxUsed(items) * 10) / 10).toLocaleString() + " m³")));
@@ -1326,8 +1441,15 @@
     const from = isStore(sel) ? { type: sel } : { type: "hold", ship: selC.ship, hold: selC.hold };
     main.append(el("div", { class: "st-grid-wrap" }, el("div", { class: "si-grid" }, orderedItems(from, items).map(([k, n]) => itemCell(k, n, from)), el("div", { class: "si-cell empty" }))));
     body.append(el("div", { class: "st-split" }, side, main));
-    if (sh && sh.docked) body.append(el("div", { class: "st-foot" }, el("button", { class: "btn-ghost2 st-undock", onclick: () => A.send({ t: "undock", ship: sh.id }) }, "Undock")));
+    if (sh && sh.docked) body.append(el("div", { class: "st-foot" }, el("button", { class: "btn-ghost2 st-undock", disabled: sh.unboarded ? "" : null, onclick: () => A.send({ t: "undock", ship: sh.id }) }, "Undock")));   // (owner) not without its pilot aboard
     [...body.querySelectorAll(".st-side, .st-grid-wrap")].forEach((x, i) => { x.scrollTop = keepScroll[i] || 0; });
+  }
+  // (owner) a ship in the Ship Bay: its menu (as a ship's), with Board / Unboard Pilot; a pilot not aboard can't undock
+  function bayShipMenu(x) {
+    const A = window.Atamus, out = [["Show Fitting", () => A.bus.dispatchEvent(new CustomEvent("showfitting", { detail: x.pilot }))], ["Info", () => A.bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: x.id } }))], ["Rename", () => openRename(x.id)]];
+    if (!x.unboarded) out.push(["Undock", () => A.send({ t: "undock", ship: x.id })]);
+    out.push(x.unboarded ? ["Board Pilot", () => A.send({ t: "board", ship: x.id, on: true })] : ["Unboard Pilot", () => A.send({ t: "board", ship: x.id, on: false })]);
+    return out;
   }
   let wasDocked = null;
   window.Atamus.bus.addEventListener("snap", () => {
@@ -1544,7 +1666,7 @@
       let h = 0; t.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => menu(e.clientX, e.clientY), 500); });
       for (const ev of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) t.addEventListener(ev, () => clearTimeout(h)); }
     createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
-    createWindow("admin", { left: Math.max(60, Math.round(innerWidth / 2 - 200)), top: 90, width: 400, height: 420, minW: 300, minH: 200, render: (b) => { if (!AD.me) adminLoad(); else renderAdmin(b); }, label: "Admin" });
+    createWindow("admin", { left: Math.max(60, Math.round(innerWidth / 2 - 200)), top: 90, width: 400, height: 420, minW: 300, minH: 200, render: (b) => { const btn = document.querySelector('.wbtn[data-id="admin"]'); if (btn) btn.classList.remove("has-new"); if (!AD.me) adminLoad(); else renderAdmin(b); }, label: "Admin" });
     setInterval(() => { if (wins.admin && isOpen(wins.admin) && AD.me && AD.me.unlocked) adminLoad(); }, 15000);   // (only rebuilt when something changed)
     if (!saved.win.fleet) saved.win.fleet = { open: true };   // (owner) the fleet window is how you switch pilots: open the first time
     dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));   // a bar with no title: dragged by its background

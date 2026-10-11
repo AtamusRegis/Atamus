@@ -43,25 +43,37 @@ r = await q("/log"); t.ok(r.body[0].action === "unban" && r.body[0].reason === "
 lg = await fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "AdmTestBob", password: "bobpassword1" }) });
 t.ok(lg.status === 200, "unbanned: they can log in again", lg.status);
 r = await q("/ban", { id: String(me.id), reason: "self", perm: true }); t.ok(r.status === 403, "no one can ban themselves");
-// (owner) appeals: only a banned player, with their password, one open at a time; accepting unbans
-const appeal = (body) => fetch(BASE + "/auth/appeal", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, body: await x.json() }));
-r = await appeal({ username: "AdmTestBob", password: "bobpassword1", text: "please" }); t.ok(r.status === 400 && /isn't banned/.test(r.body.error), "only a banned player can appeal", r.body);
+// (owner) appeals: a conversation while the ban lasts (the login page gets a token); 3 per ban; Timeout: then 1 more
+const login = (u, p) => fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: u, password: p }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+const ap = (path, body) => fetch(BASE + "/auth/appeal" + path, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+r = await ap("", { token: "nope", text: "hi" }); t.ok(r.status === 401, "an appeal needs the token a banned login gives");
 await q("/ban", { id: String(bob.id), reason: "rude", amount: 3, unit: "hours" });
-r = await appeal({ username: "AdmTestBob", password: "wrong", text: "please" }); t.ok(r.status === 401, "an appeal needs their password");
-r = await appeal({ username: "AdmTestBob", password: "bobpassword1", text: "I was provoked" }); t.ok(r.body.ok, "a banned player sends an appeal (from the login page)", r.body);
-r = await appeal({ username: "AdmTestBob", password: "bobpassword1", text: "again" }); t.ok(r.status === 400, "one open appeal at a time");
-lg = await fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "AdmTestBob", password: "bobpassword1" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
-t.ok(lg.status === 403 && lg.body.appeal && lg.body.appeal.status === "open", "logging in, they're told it's being reviewed", lg.body);
-r = await q("/appeals"); const ap1 = r.body.find((a) => a.name === "AdmTestBob" && a.status === "open");
-t.ok(ap1 && ap1.text === "I was provoked" && ap1.banReason === "rude", "the Appeals tab lists it, with the ban's reason", r.body[0]);
-r = await q("/appeal", { id: ap1.id, accept: false, reason: "no" }); t.ok(r.body.ok, "deny");
-lg = await fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "AdmTestBob", password: "bobpassword1" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
-t.ok(lg.status === 403 && lg.body.appeal.status === "denied" && lg.body.appeal.response === "no", "a denied appeal is shown at login, with the answer", lg.body.appeal);
-await appeal({ username: "AdmTestBob", password: "bobpassword1", text: "second try" }); r = await q("/appeals"); const ap2 = r.body.find((a) => a.text === "second try");
-r = await q("/appeal", { id: ap2.id, accept: true, reason: "fair enough" }); t.ok(r.body.ok, "accept");
-lg = await fetch(BASE + "/auth/login", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "AdmTestBob", password: "bobpassword1" }) });
-t.ok(lg.status === 200, "an accepted appeal unbans");
-r = await q("/log"); t.ok(r.body.some((x) => x.action === "appeal denied") && r.body.some((x) => x.action === "appeal accepted" && x.reason === "fair enough"), "appeal answers go to the log");
+lg = await login("AdmTestBob", "bobpassword1"); const tok = lg.body.appealToken;
+t.ok(lg.status === 403 && tok && lg.body.appeal.canNew && lg.body.appeal.left === 3 && !lg.body.appeal.current, "a banned login: the reason, a token, and 3 appeals to make", lg.body.appeal);
+r = await ap("", { token: tok, text: "I was provoked" }); t.ok(r.body.current && r.body.current.status === "open" && r.body.current.messages.length === 1 && r.body.left === 2, "the player opens an appeal", r.body);
+const a1 = r.body.current.id;
+r = await ap("", { token: tok, text: "please look at the chat logs" }); t.ok(r.body.current.id === a1 && r.body.current.messages.length === 2, "and keeps writing in it while it's open");
+{ const adm = await connect(); const seen = []; adm.ws.on("message", (b) => { const m = JSON.parse(b); if (m.t === "appealmsg") seen.push(m); });
+  r = await q("/appeal/say", { id: a1, text: "Looking into it." }); t.ok(r.body.ok, "an admin answers");
+  r = await q("/appeal/" + a1); t.ok(r.body.lines.length === 3 && r.body.lines[2].admin && r.body.lines[2].name === "PTR" && r.body.subscribed, "every admin sees the whole conversation; answering subscribes you", r.body.lines);
+  await ap("", { token: tok, text: "thank you" }); await sleep(500);
+  t.ok(seen.some((m) => m.id === a1 && m.text === "thank you" && m.name === "AdmTestBob"), "a subscribed admin is told of the player's new line", seen);
+  r = await ap("/state", { token: tok }); t.ok(r.body.current.messages.some((l) => l.admin && l.text === "Looking into it."), "the player sees the admins' answers");
+  await q("/appeal/subscribe", { id: a1, on: false }); seen.length = 0; await ap("", { token: tok, text: "hello?" }); await sleep(500);
+  t.ok(!seen.length, "unsubscribed: no more notes"); await adm.close(); }
+r = await q("/appeal", { id: a1, accept: false, reason: "no" }); t.ok(r.body.ok, "deny closes it");
+r = await ap("", { token: tok, text: "but wait" }); t.ok(r.body.current && r.body.current.id !== a1 && r.body.left === 1, "a closed appeal can't be written in: a new line starts a new appeal", r.body);
+const a2 = r.body.current.id; await q("/appeal", { id: a2, accept: false, reason: "still no" });
+r = await ap("", { token: tok, text: "third" }); const a3 = r.body.current.id; await q("/appeal", { id: a3, accept: false, reason: "final" });
+r = await ap("", { token: tok, text: "fourth?" }); t.ok(r.status === 400 && /No appeals left/.test(r.body.error), "a ban allows 3 appeals", r.body);
+r = await q("/appeal/timeout", { id: a3, amount: 7, unit: "days", reason: "cool off" }); t.ok(r.body.ok, "Timeout on an appeal (days / months / years)");
+r = await ap("", { token: tok, text: "now?" }); t.ok(r.status === 400 && /No new appeals until/.test(r.body.error), "no new appeal while it lasts", r.body);
+await db.query(`UPDATE appeals SET created_at = created_at - interval '2 days' WHERE user_id = $1`, [bob.id]); await db.query(`UPDATE users SET ban_at = ban_at - interval '3 days', appeal_block_until = now() - interval '1 second', appeal_reset_at = now() - interval '1 second' WHERE id = $1`, [bob.id]);   // (as if the timeout had run its course)
+r = await ap("/state", { token: tok }); t.ok(r.body.canNew && r.body.left === 1, "after it, one more appeal (owner)", r.body);
+r = await ap("", { token: tok, text: "last chance" }); const a4 = r.body.current && r.body.current.id;
+r = await q("/appeal", { id: a4, accept: true, reason: "fair enough" }); t.ok(r.body.ok, "accept");
+lg = await login("AdmTestBob", "bobpassword1"); t.ok(lg.status === 200, "an accepted appeal unbans");
+r = await q("/log"); t.ok(r.body.some((x) => x.action === "appeal denied") && r.body.some((x) => x.action === "appeal accepted" && x.reason === "fair enough") && r.body.some((x) => x.action === "appeal timeout"), "appeal answers and timeouts go to the log");
 // (owner) mute: the Disciplined list (temp / perma bans, mutes, Freeze) with when each began
 r = await q("/mute", { id: String(bob.id), reason: "spam", amount: 2, unit: "hours" }); t.ok(r.body.ok, "mute (hours)");
 await q("/ban", { id: String(bob.id), reason: "later", perm: true });
@@ -89,6 +101,32 @@ r = await q("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status ==
 r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick / ban another admin");
 r = await q("/kick", { id: String(bob.id), reason: "afk" }); t.ok(r.body.ok, "but can kick and ban players");
 await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
+// (owner) Ban Name: the name goes on the list and its owner must rename (player or pilot)
+r = await q("/banname", { id: String(bob.id), reason: "offensive" }); t.ok(r.body.ok && (await db.query(`SELECT rename_required FROM users WHERE id = $1`, [bob.id])).rows[0].rename_required, "Ban Name on a player: they must rename", r.body);
+r = await q("/banname", { id: String(bob.id), pilotId: String(bp.id), reason: "offensive pilot" }); t.ok(r.body.ok && (await db.query(`SELECT data FROM pilots WHERE id = $1`, [bp.id])).rows[0].data.renameRequired, "on a pilot: that pilot must be renamed");
+r = await q("/names"); t.ok(r.body.some((n) => n.name === "AdmTestBob" && n.kind === "player") && r.body.some((n) => n.name === "Bob Pilot" && n.kind === "pilot"), "both names are on the banned names list", r.body.slice(0, 2));
+r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "admtestbob", password: "whatever123" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+t.ok(r.status === 400 && /isn't allowed|taken|exists/i.test(r.body.error), "a banned name can't be signed up with", r.body);
+r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "H1tl3r_88", password: "whatever123" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+t.ok(r.status === 400 && /isn't allowed/.test(r.body.error), "the name filter refuses bad usernames at signup", r.body);
+await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = await q("/names"); t.ok(!r.body.some((n) => n.name === "Bob Pilot"), "a banned name can be allowed again");
+// forced renames, as the PTR tester (its own name and pilot flagged straight in the database)
+{ const g = (path, body) => fetch(BASE + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", origin: BASE }, body: body ? JSON.stringify(body) : undefined }).then(async (x) => ({ status: x.status, body: await x.json() }));
+  r = await g("/game/rename", { name: "PTRtest" }); t.ok(r.status === 400, "no rename unless it's required");
+  await db.query(`UPDATE users SET rename_required = true WHERE id = $1`, [me.id]);
+  r = await g("/game/state"); t.ok(r.body.profile.renameRequired, "the game is told a rename is required");
+  r = await g("/game/rename", { name: "Fuck_You" }); t.ok(r.status === 400 && /isn't allowed/.test(r.body.error), "the new name goes through the filter too");
+  r = await g("/game/rename", { name: "PTRtest" }); t.ok(r.body.name === "PTRtest" && !(await g("/game/state")).body.profile.renameRequired, "renamed; no longer required", r.body);
+  await db.query(`UPDATE users SET username = 'PTR' WHERE id = $1`, [me.id]);
+  const vid = (await db.query(`SELECT id, data FROM pilots WHERE user_id = $1 ORDER BY id LIMIT 1`, [me.id])).rows[0];
+  if (vid) { const d = vid.data; d.renameRequired = true; await db.query(`UPDATE pilots SET data = $2 WHERE id = $1`, [vid.id, d]);
+    r = await g("/game/pilot/rename", { pilotId: String(vid.id), name: "Vera K" }); t.ok(r.body.name === "Vera K", "a pilot flagged by Ban Name is renamed", r.body);
+    await db.query(`UPDATE pilots SET name = 'Vera Kestrel' WHERE id = $1`, [vid.id]); } }
+// (owner) the Chat log: flagged Local / Corp lines, never DMs
+{ const c = await connect(); c.send({ t: "chat", text: "you are a n4zi lol", channel: "local" }); c.send({ t: "chat", text: "porn porn", channel: "dm", to: "Nobody" }); c.send({ t: "chat", text: "nice day", channel: "local" }); await sleep(600);
+  r = await q("/chatflags"); t.ok(r.body[0] && r.body[0].text === "you are a n4zi lol" && r.body[0].cats.includes("extremist") && r.body[0].words.includes("n4zi") && !r.body.some((f) => f.text === "porn porn" || f.text === "nice day"), "flagged Local lines go to the admins' Chat log (DMs and clean lines don't)", r.body.slice(0, 2));
+  c.send({ t: "rename", ship: "1:ship:1", name: "N1gg3r Hunter" }); await sleep(300); t.ok(!(c.ship() && c.ship().name === "N1gg3r Hunter"), "ship names go through the filter");
+  await c.close(); }
 // (owner) admin DMs and Freeze, between the PTR tester (an unlocked admin) and a second test account on the socket
 { await q("/unlock", { password: PW });
   const adm = await connect(), zed = await connect("?as=AdmTestZed"); const zid = (await db.query(`SELECT id FROM users WHERE username = 'AdmTestZed'`)).rows[0].id;

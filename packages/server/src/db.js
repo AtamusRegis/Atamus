@@ -121,6 +121,51 @@ export async function migrate() {
       reason      TEXT NOT NULL DEFAULT '',
       detail      JSONB
     );
+    -- (owner) an appeal is a conversation while the ban lasts: the player and every admin, each line kept; admins
+    -- subscribe to be told of new lines. A ban allows 3 appeals; after that an admin can set "no new appeals" for a
+    -- time (appeal_block_until), after which the count starts again (appeal_reset_at)
+    CREATE TABLE IF NOT EXISTS appeal_messages (
+      id          BIGSERIAL PRIMARY KEY,
+      appeal_id   BIGINT NOT NULL REFERENCES appeals(id) ON DELETE CASCADE,
+      at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      from_admin  BOOLEAN NOT NULL DEFAULT false,
+      name        TEXT NOT NULL,
+      text        TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS appeal_messages_appeal_idx ON appeal_messages (appeal_id);
+    INSERT INTO appeal_messages (appeal_id, at, from_admin, name, text)
+      SELECT a.id, a.created_at, false, a.username, a.text FROM appeals a WHERE NOT EXISTS (SELECT 1 FROM appeal_messages m WHERE m.appeal_id = a.id);
+    CREATE TABLE IF NOT EXISTS appeal_subs (
+      appeal_id   BIGINT NOT NULL REFERENCES appeals(id) ON DELETE CASCADE,
+      admin_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (appeal_id, admin_id)
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS appeal_block_until TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS appeal_reset_at TIMESTAMPTZ;
+
+    -- (owner) Ban Name: the name goes on this list (no one can take it again) and its owner must pick a new one
+    CREATE TABLE IF NOT EXISTS banned_names (
+      name_lower  TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      kind        TEXT NOT NULL,                     -- player | pilot
+      admin_name  TEXT NOT NULL,
+      reason      TEXT NOT NULL DEFAULT '',
+      at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS rename_required BOOLEAN NOT NULL DEFAULT false;
+    -- (owner) Local / Corp lines the name filter flags (namefilter.js), for admins to glance at; never DMs
+    CREATE TABLE IF NOT EXISTS chat_flags (
+      id          BIGSERIAL PRIMARY KEY,
+      at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      user_id     BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      username    TEXT NOT NULL,
+      channel     TEXT NOT NULL,
+      text        TEXT NOT NULL,
+      cats        TEXT[] NOT NULL,
+      words       TEXT[] NOT NULL
+    );
+    -- (owner) a redeploy (a server start) unfreezes everyone
+    UPDATE users SET frozen = false, frozen_at = NULL, frozen_reason = NULL WHERE frozen;
     -- (owner) Nyssary is the Head Admin (the only one; only they make admins)
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
     UPDATE users SET role = NULL WHERE role = 'head' AND lower(username) <> 'nyssary';

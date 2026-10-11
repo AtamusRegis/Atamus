@@ -572,7 +572,6 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .st-entry:hover { color: var(--text); background: rgba(255,255,255,0.08); }
 .st-entry.active { color: var(--text); background: rgba(56,198,255,0.16); }
 .st-hold { padding-left: 18px; }
-.st-ship { font-size: 11px; font-weight: 600; color: var(--text); margin: 8px 2px 2px; }
 .st-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; border-radius: 6px; }
 .st-head { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .st-head .ps-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -632,3 +631,24 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .adm-dim { color: var(--text-dim); }
 .adm-acts { display: flex; gap: 6px; }
 .adm-log.open { box-shadow: inset 2px 0 0 #f0b46a; }
+.adm-mark { background: rgba(240,90,90,0.28); color: #ffd0d0; border-radius: 3px; padding: 0 2px; }
+/* (owner) appeal conversations */
+.appeal-body { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.appeal-info { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.appeal-lines { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; font-size: 12px; padding: 6px; background: rgba(0,0,0,0.2); border-radius: 6px; }
+.appeal-line { word-break: break-word; }
+.appeal-line b { color: #9fd0ff; font-weight: 600; }
+.appeal-line.admin b { color: #f0b46a; }
+.adm-appeal { cursor: pointer; }
+.adm-appeal:hover { background: rgba(255,255,255,0.07); }
+.appeal-note { position: fixed; top: 14px; right: 14px; z-index: 2000000003; max-width: 320px; padding: 10px 12px; font-size: 12px; background: var(--panel-grad); border-radius: var(--radius-sm); box-shadow: var(--shadow); cursor: pointer; border-left: 2px solid #f0b46a; }
+.wbtn.has-new { box-shadow: 0 0 0 2px #f0b46a; }
+/* (owner) the Station's Ship Bay: each docked ship a tab that expands to its holds */
+.st-bay { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); margin: 10px 4px 4px; }
+.st-ship-tab { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 12px; font-weight: 600; color: var(--text); background: rgba(255,255,255,0.04); border: none; border-radius: 6px; padding: 7px 8px; cursor: pointer; text-align: left; touch-action: manipulation; }
+.st-ship-tab:hover { background: rgba(255,255,255,0.08); }
+.st-ship-tab.open { background: rgba(255,255,255,0.07); }
+.st-caret { width: 10px; color: var(--text-dim); font-size: 10px; }
+.st-ship-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-ship-tag { font-size: 10px; font-weight: 400; color: #f0b46a; }
+.st-undock[disabled] { opacity: 0.4; cursor: default; }

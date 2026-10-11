@@ -51,19 +51,23 @@
         <a class="link-small" href="recover.html">Forgot your password?</a>
       </form>
 
-      <!-- (owner) a banned player can appeal (one at a time) -->
-      <form id="appeal-form" class="form" novalidate hidden>
-        <label class="field">
-          <span>Appeal</span>
-          <textarea name="text" rows="5" maxlength="1000" required></textarea>
-        </label>
-        <p class="msg" id="appeal-msg" role="alert" hidden></p>
-        <button type="submit" class="btn btn-primary">Send appeal</button>
-      </form>
+      <!-- (owner) a banned player's appeal: a conversation with the admins while the ban lasts -->
+      <div id="appeal" class="appeal" hidden>
+        <div class="appeal-lines" id="appeal-lines"></div>
+        <p class="appeal-state" id="appeal-state"></p>
+        <form id="appeal-form" class="form" novalidate>
+          <label class="field">
+            <span id="appeal-label">Appeal</span>
+            <textarea name="text" rows="3" maxlength="1000" required></textarea>
+          </label>
+          <p class="msg" id="appeal-msg" role="alert" hidden></p>
+          <button type="submit" class="btn btn-primary" id="appeal-send">Send</button>
+        </form>
+      </div>
     </section>
   </main>
 
   <script src="api.js?v=1791738602"></script>
-  <script src="login.js?v=1791738602" defer></script>
+  <script src="login.js?v=1791739839" defer></script>
 </body>
 </html>

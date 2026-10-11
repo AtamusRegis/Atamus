@@ -24,6 +24,7 @@ def sprites(path):
 
 def crop_near(img, boxes, w, h, x0=None, y0=None):
     """The sprite of exactly w × h (its label may be stuck to it: then the bottom w × h of that box)."""
+    if x0 is not None: boxes = sorted(boxes, key=lambda b: abs(b[0] - x0) + abs(b[1] - y0))
     for (x, y, bw, bh) in boxes:
         if x0 is not None and abs(x - x0) > 40: continue
         if y0 is not None and abs(y - y0) > 60: continue
@@ -55,10 +56,27 @@ SIZES = {   # body w × h (parts sheet), retracted, extended (from the sheets' l
     "large": ((1551, 1401), (1551, 1401), (1760, 1401)),
 }
 manifest = {"mPerPx": M_PER_PX, "sizes": {}}
+# where each arm part sits on the parts sheet (under its label), so a label of the same size is never taken for it
+PART_AT = {"small_arm_full_extended": (1384, 1741), "small_arm_tip_cap": (24, 1835), "medium_arm_full_extended": (1744, 1501), "medium_arm_tip_cap": (277, 1835),
+           "large_arm_full_extended": (374, 1501), "large_arm_tip_cap": (1471, 1501)}
+
+def small_station(state):
+    """(owner) The small station is built from its full body on the parts sheet (the arms sheet's retracted one is missing
+    its docking port): the arm's tip cap (retracted) or the whole arm (extended) out of the socket on its left."""
+    body = crop_near(parts, pb, 157, 228)
+    a = np.array(body)[:, :, 3] > 0; ys = np.nonzero(a[:, 0])[0]; cy = (ys.min() + ys.max() + 1) // 2   # the socket's middle
+    piece = crop_near(parts, pb, 3, 12, *PART_AT["small_arm_tip_cap"]) if state == "retracted" else crop_near(parts, pb, 37, 16, *PART_AT["small_arm_full_extended"])
+    out_w = 3 if state == "retracted" else 25                                                          # how far it sticks out
+    comp = Image.new("RGBA", (body.width + out_w, body.height), (0, 0, 0, 0))
+    comp.alpha_composite(piece, (0, cy - piece.height // 2))
+    comp.alpha_composite(body, (out_w, 0))
+    return comp
+
 for name, (bwh, rwh, ewh) in SIZES.items():
     entry = {}
     for state, wh in (("retracted", rwh), ("extended", ewh)):
-        comp = crop_near(arms, ab, *wh)
+        comp = small_station(state) if name == "small" else crop_near(arms, ab, *wh)
+        wh = comp.size
         hx, hy = hub(comp)
         comp.save(OUT + f"{name}_{state}.webp", lossless=True)
         # the sprite's center relative to the hub (the station's position), in px, so extending the arms moves nothing else
@@ -67,5 +85,5 @@ for name, (bwh, rwh, ewh) in SIZES.items():
     manifest["sizes"][name] = entry
 for nm, wh in {"small_arm_full_extended": (37, 16), "small_arm_tip_cap": (3, 12), "medium_arm_full_extended": (40, 124), "medium_arm_tip_cap": (28, 6),
                "large_arm_full_extended": (364, 190), "large_arm_tip_cap": (16, 130)}.items():
-    crop_near(parts, pb, *wh).save(OUT + nm + ".webp", lossless=True)
+    crop_near(parts, pb, *wh, *PART_AT[nm]).save(OUT + nm + ".webp", lossless=True)
 json.dump(manifest, open("packages/server/src/game/stations.json", "w"), indent=1)

@@ -121,7 +121,7 @@
         if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
-      } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
+      } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen" || m.t === "renamereq" || m.t === "appealmsg") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
       } else if (m.t === "kicked" || m.t === "banned") { kickedWhy = m.reason || "";
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
@@ -371,7 +371,7 @@
   function ownShipItems(id) {
     const sh = (latest.ships || []).find((x) => x.id === id); if (!sh) return [];
     const items = sh.pilot === selPilot ? [["Look At", () => lookAtObj("ship", id)], ["Show Fitting", () => bus.dispatchEvent(new CustomEvent("showfitting", { detail: sh.pilot }))], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id } }))]] : objItems("ship", id);
-    if (sh.docked) items.unshift(["Undock", () => send({ t: "undock", ship: id })]);
+    if (sh.docked) { items.unshift(...(sh.unboarded ? [] : [["Undock", () => send({ t: "undock", ship: id })]])); items.push(sh.unboarded ? ["Board Pilot", () => send({ t: "board", ship: id, on: true })] : ["Unboard Pilot", () => send({ t: "board", ship: id, on: false })]); }   // (owner) a pilot not aboard can't undock
     items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: id }))]);
     return items;
   }
@@ -462,7 +462,7 @@
         }
         drawProps(f, sc);
       }
-      if (p.ax != null) { if (showAnchor(p, sc)) drawAnchor(p); continue; }   // a celestial: the body is its marker; its anchor shows once clear of it
+      if (p.ax != null) { if (showAnchor(p, sc) && ships.some((x) => x.mine && !x.docked && window.Atamus.inPoi(x, p))) drawAnchor(p); continue; }   // a celestial: the body is its marker; (owner) its anchor marker only once one of your ships is inside it
       const mapIcon = mapIcons[p.kind] || mapIcons.belt;
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }

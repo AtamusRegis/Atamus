@@ -31,6 +31,8 @@ t.ok(!a.hangar.afterburner_1, "not into the Station's hangar from there");
 const snap = w.snapshotFor(a); t.ok(snap.home && snap.home.mining_laser === 1 && !snap.hangar && snap.ships.find((x) => x.id === sa.id).docked === "home", "docked there, you're sent its storage", snap.home);
 w.cmdFit("a", sa.id, "mining_laser", "active", 0); t.ok(sa.fit.active[0] === "mining_laser", "and can refit (owner)");
 t.ok(w.exportState("a").ships["1"].docked === "home", "a ship saved docked remembers where");
+w.cmdBoard("a", sa.id, false); w.cmdUndock("a", sa.id); t.ok(sa.docked && sa.unboarded && w.snapshotFor(a).ships.find((x) => x.id === sa.id).unboarded && w.exportState("a").ships["1"].unboarded, "a pilot who leaves their docked ship can't undock it (owner)");
+w.cmdBoard("a", sa.id, true); t.ok(!sa.unboarded, "boarding again");
 w.cmdUndock("a", sa.id); t.ok(!sa.docked && Math.hypot(sa.x - prop.x, sa.y - prop.y) < 5, "undock beside it");
 w.cmdTransfer("a", "home", { ship: sa.id, hold: "cargo" }, "mining_laser", 1); t.ok(ha.items.mining_laser === 1, "undocked, its storage is out of reach");
 // a visitor who flies there sees it, though it isn't on their map

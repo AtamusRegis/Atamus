@@ -14,6 +14,10 @@ export async function saveSystem(userId, data) {
 }
 
 // Belt POIs (shared by everyone), kept in the instances table so a restart doesn't reshuffle them.
+/** (owner) A Local / Corp line the filter flagged, for the admins' Chat log. */
+export async function saveChatFlag(userId, username, channel, text, cats, words) {
+  await pool.query(`INSERT INTO chat_flags (user_id, username, channel, text, cats, words) VALUES ($1, $2, $3, $4, $5, $6)`, [userId, username, channel, text, cats, words]);
+}
 /** Every account (id, username): each gets a player station (owner). */
 export async function loadAccounts() { const { rows } = await pool.query(`SELECT id, username FROM users ORDER BY id`); return rows.map((r) => ({ id: String(r.id), name: r.username })); }
 export async function loadPois() { const { rows } = await pool.query(`SELECT data FROM instances`); return rows.map((r) => r.data); }

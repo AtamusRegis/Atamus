@@ -1,6 +1,7 @@
 import { pool } from "./db.js";
 import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 import { cleanPortrait, randomPortrait } from "./portraits.js";
+import { checkName } from "./names.js";
 
 export const CORP = "Deep Core Industries";   // everyone's corporation for now (users.corp NULL)
 
@@ -68,6 +69,7 @@ export async function createPilot(userId, nameRaw, portraitRaw) {
   if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
   const name = nameRaw.replace(/\s+/g, " ").trim().slice(0, 24);
   if (!name) throw new Error("Pilot name required.");
+  { const np = await checkName(name); if (np) throw new Error(np); }   // (owner) the name filter and banned names
   const portrait = portraitRaw == null ? randomPortrait() : cleanPortrait(portraitRaw);   // the website always sends one
   if (!portrait) throw new Error("That portrait isn't valid.");
   const c = await pool.connect(); let taken = false;
@@ -188,7 +190,7 @@ export async function queueReorder(userId, pilotId, order) {
 
 export async function getState(userId) {
   const now = Date.now();
-  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role FROM users WHERE id = $1`, [userId]);
+  const { rows: urows } = await pool.query(`SELECT username, created_at, credits, portrait, corp, role, rename_required FROM users WHERE id = $1`, [userId]);
   const user = urows[0] || { username: "?", created_at: new Date() };
   const pilotRows = await listPilotRows(userId);
 
@@ -204,14 +206,41 @@ export async function getState(userId) {
       active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - elapsed), paused: !!d.paused };
     }
     for (const l of LICENSES) maxByLicense[l.key] = Math.max(maxByLicense[l.key] || 0, d.licenses[l.key] || 0);
-    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused });
+    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused, renameRequired: !!d.renameRequired });
   }
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 
   return {
-    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
+    profile: { username: user.username, createdAt: user.created_at, corp: user.corp || CORP, role: user.role || null, renameRequired: !!user.rename_required, pilotCount: pilots.length, maxPilots: MAX_PILOTS, pilotPrice: PILOT_PRICE, totalSkillLevel, credits: Number(user.credits || 0), portrait: user.portrait || null },
     pilots, serverTime: now,
   };
+}
+
+// ---- (owner) after an admin's Ban Name: the player picks a new name for their account or that pilot ----
+const USERNAME_RE = /^[A-Za-z0-9_]{3,24}$/;
+export async function renameAccount(userId, raw) {
+  const name = typeof raw === "string" ? raw.trim() : "";
+  const { rows } = await pool.query(`SELECT rename_required FROM users WHERE id = $1`, [userId]);
+  if (!rows[0] || !rows[0].rename_required) throw new Error("Your name doesn't need changing.");
+  if (!USERNAME_RE.test(name)) throw new Error("Names are 3–24 characters: letters, numbers and underscores.");
+  { const np = await checkName(name); if (np) throw new Error(np); }
+  const taken = await pool.query(`SELECT 1 FROM users WHERE lower(username) = lower($1) AND id <> $2`, [name, userId]);
+  if (taken.rows[0]) throw new Error("That name is taken.");
+  await pool.query(`UPDATE users SET username = $2, rename_required = false WHERE id = $1`, [userId, name]);
+  return name;
+}
+export async function renamePilot(userId, pilotId, raw) {
+  const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 24) : "";
+  if (typeof pilotId !== "string" && typeof pilotId !== "number") throw new Error("Pilot not found.");
+  const p = await getOwnedPilot(userId, String(pilotId));
+  if (!p.data.renameRequired) throw new Error("That pilot's name doesn't need changing.");
+  if (!name) throw new Error("Pilot name required.");
+  { const np = await checkName(name); if (np) throw new Error(np); }
+  const { rows: have } = await pool.query(`SELECT 1 FROM pilots WHERE user_id = $1 AND lower(name) = lower($2) AND id <> $3`, [userId, name, p.id]);
+  if (have[0]) throw new Error("You already have a pilot with that name.");
+  delete p.data.renameRequired;
+  await pool.query(`UPDATE pilots SET name = $2, data = $3 WHERE id = $1`, [p.id, name, p.data]);
+  return name;
 }
 
 /** The account's character (owner): one portrait for the player, used in chat; its name is the username. */

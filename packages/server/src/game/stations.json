@@ -6,7 +6,7 @@
     "sprite": "stations/small_retracted.webp",
     "w": 160,
     "h": 228,
-    "dx": -17.0,
+    "dx": 5.0,
     "dy": -0.03
    },
    "extended": {

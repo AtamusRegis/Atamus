@@ -304,19 +304,26 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(300);
   const dockBtn = document.querySelector(".fa-dock"), dockShown = !dockBtn.hidden && !dockBtn.parentNode.hidden; dockBtn.click(); await s(900);
   const st = document.querySelector('.win[data-id="station"]'), stOpen = !st.hidden, side = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|");
+  const bay = {}, tab = () => st.querySelector(".st-ship-tab");
+  tab().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 200 })); await s(150);
+  bay.menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Unboard Pilot").click(); await s(500);
+  bay.unboarded = !!A.myShip.unboarded && /No pilot/.test(tab().textContent); bay.noUndock = st.querySelector(".st-undock").disabled;
+  A.send({ t: "undock", ship: A.myShip.id }); await s(400); bay.noUndock = bay.noUndock && !!A.myShip.docked;
+  tab().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 200 })); await s(150); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Board Pilot").click(); await s(500); bay.boarded = !A.myShip.unboarded;
+  tab().click(); await s(200); bay.collapsed = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|"); tab().click(); await s(200);
   [...st.querySelectorAll(".st-entry")].find((x) => x.textContent === "Cargo Hold").click(); await s(300);
   await drag(st.querySelector('.st-main .si-cell[data-item="mining_drones"]'), st.querySelector('.st-entry[data-cont="hangar"]'));
   const hangar = JSON.stringify(A.snap.hangar);
   st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
   dev({ cmd: "move", x: 1500, y: -1520 }); await s(300);
-  return { kit, spaceFit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
+  return { bay, kit, spaceFit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
 t.ok(r.kit === "mining_laser,mining_drones,afterburner_1,cargo_expander,inertia_stabilizer,mining_laser_upgrade,mining_beam_extender,mining_overclocker", "the starter kit is in the cargo hold", r.kit);
 t.ok(r.fitted === "mining_laser" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
 t.ok(r.noTarget.sb && r.noTarget.cls && r.noTarget.off, "its hotbar key runs it: with no locked asteroid a laser waits on standby (pulsing), and the key switches it off again (owner)", r.noTarget);
 t.ok(r.oreRefused, "a module dropped on the Ore Hold's tab stays in the cargo hold (the ore hold takes only ore)", r);
 t.ok(r.power.off && r.power.cls && /^Power0 \/ 40/.test(r.power.bars) && r.power.on, "Power Off from a fitted slot's menu: dimmed, no power used; Power On puts it back (owner)", r.power);
 t.ok(r.spaceFit === null && r.slotMenu === "Power Off,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "in space a module can't be dragged into a slot, and a fitted one's menu is Power Off, Info (owner: refit docked; Info: its stats as fitted)", r);
-t.ok(r.dockShown && r.stOpen && r.side === "Hangar|Vera Kestrel's Prospector|Ore Hold|Cargo Hold", "near the station the Dock button shows; docking opens the Station: the hangar and the ship's holds", r);
+t.ok(r.dockShown && r.stOpen && r.side === "Hangar|Ship Bay|▾Vera Kestrel's Prospector|Ore Hold|Cargo Hold" && r.bay.menu === "Show Fitting,Info,Rename,Undock,Unboard Pilot" && r.bay.collapsed === "Hangar|Ship Bay|▸Vera Kestrel's Prospector" && r.bay.unboarded && r.bay.noUndock && r.bay.boarded, "near the station the Dock button shows; docking opens the Station: the hangar, then the Ship Bay with each ship's holds; a ship's tab collapses, and right-click: its menu with Unboard / Board Pilot; no undocking without a pilot (owner)", r);
 t.ok(r.hangar === '{"mining_drones":1}' && r.undocked && r.stClosed, "drag an item onto the hangar to store it; Undock closes the Station", r);
 
 // reload keeps the windows that were open
@@ -340,7 +347,7 @@ r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: 
   [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
   return { btn: true, masked, tabs, rows, info, lic, log };`);
-t.ok(r.btn && r.masked && r.tabs === "Players,Appeals,Log,Players,Admins,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins / Disciplined), Appeals and Log (owner)", r);
+t.ok(r.btn && r.masked && r.tabs === "Players,Appeals,Chat,Names,Log,Players,Admins,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins / Disciplined), Appeals, Chat, Names and Log (owner)", r);
 t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.lic >= 6 && r.log, "a player's admin info and their pilots' licenses", r);
 await page.close();
 

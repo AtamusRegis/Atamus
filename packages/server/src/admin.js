@@ -14,6 +14,7 @@ import { allow } from "./ratelimit.js";
 import { PTR } from "./ptr.js";
 import { LICENSES, STARTING_LICENSES, getLicense } from "./licenses.js";
 import { CORP } from "./pilots.js";
+import { appealState, lines, subscribers, subscribe, adminWrite, closeAppeal, timeoutAppeal } from "./appeals.js";
 
 const ADMIN_PASSWORD_HASH = "scrypt$16384$8$1$4c30f6abf27a79c489f12869811f1ae9$cc0bd80ad3565c3c6b6404e4af96c61c06bba810a36133290e6c02b30970294b";
 const UNLOCK_MS = 8 * 3600_000;                     // the second password lasts this long per session
@@ -21,7 +22,9 @@ const REASON_MAX = 500;
 const unlocked = new Map();                         // session key -> { uid, until }
 
 // the game socket's side (net.js registers these): who's online, kicking, and refreshing a player's pilots in the world
-let hooks = { online: () => new Set(), kick: () => {}, refreshPilots: async () => {}, freeze: () => {}, mute: () => {} };
+let hooks = { online: () => new Set(), kick: () => {}, refreshPilots: async () => {}, freeze: () => {}, mute: () => {}, renameRequired: () => {}, renamed: () => {} };
+/** For the other HTTP routes: tell the game something changed (a player renamed themselves or a pilot). */
+export const gameHook = (name, ...args) => hooks[name] && hooks[name](...args);
 /** Has this account opened the admin panel (the second password) in any of its sessions? (admin DMs over the socket) */
 export const isUnlocked = (uid) => { for (const v of unlocked.values()) if (v.uid === String(uid) && v.until > Date.now()) return true; return false; };
 export const setGameHooks = (h) => { hooks = { ...hooks, ...h }; };
@@ -61,7 +64,7 @@ const lengthOf = (b) => { const n = Number(b.amount), unit = b.unit === "days" ?
 // ---- the second password ----
 admin.get("/me", guard(false, async (req, res, me) => { const un = unlocked.get(me.key); res.json({ role: me.role, unlocked: !!(un && un.uid === me.id && un.until > Date.now()) }); }));
 admin.post("/unlock", guard(false, async (req, res, me) => {
-  if (!allow("admin-unlock", me.id, 5, 15 * 60_000)) return fail(res, 429, "Too many tries. Wait a few minutes.");
+  if (!PTR && !allow("admin-unlock", me.id, 5, 15 * 60_000)) return fail(res, 429, "Too many tries. Wait a few minutes.");   // (not in the PTR: its tests unlock often)
   const pw = req.body && req.body.password;
   if (typeof pw !== "string" || pw.length > 200 || !(await verifySecret(pw, ADMIN_PASSWORD_HASH))) return fail(res, 403, "Wrong password.");
   unlocked.set(me.key, { uid: me.id, until: Date.now() + UNLOCK_MS }); res.json({ ok: true });
@@ -107,7 +110,7 @@ admin.post("/unban", guard(true, async (req, res, me) => {
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write why.");
   if (!banOf(t)) return fail(res, 400, "That player isn't banned.");
   await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
-  await pool.query(`UPDATE appeals SET status = 'accepted', admin_name = $2, response = $3, handled_at = now() WHERE user_id = $1 AND status = 'open'`, [t.id, me.name, reason]);   // (an open appeal is answered by it)
+  { const { rows } = await pool.query(`SELECT id FROM appeals WHERE user_id = $1 AND status = 'open'`, [t.id]); for (const r of rows) await closeAppeal(String(r.id), me, true, reason); }   // (an open appeal is answered by it)
   await log(me, t, "unban", reason, isId(b.logId) ? { of: String(b.logId) } : null); res.json({ ok: true });
 }));
 // (owner) Mute: no chat, permanent or for hours / days, with a reason
@@ -128,23 +131,55 @@ admin.post("/unmute", guard(true, async (req, res, me) => {
   hooks.mute(String(t.id), null);
   await log(me, t, "unmute", reason); res.json({ ok: true });
 }));
-// (owner) appeals: only banned players have them (sent from the login page); accepting one unbans, denying answers it
-admin.get("/appeals", guard(true, async (req, res) => {
-  const { rows } = await pool.query(`SELECT id, user_id, username, ban_reason, text, status, admin_name, response, created_at, handled_at FROM appeals ORDER BY (status = 'open') DESC, id DESC LIMIT 300`);
-  res.json(rows.map((a) => ({ id: String(a.id), userId: a.user_id == null ? null : String(a.user_id), name: a.username, banReason: a.ban_reason, text: a.text, status: a.status, admin: a.admin_name, response: a.response, at: a.created_at, handledAt: a.handled_at })));
+// (owner) appeals (appeals.js): a conversation with a banned player while the ban lasts; every admin sees it all and can
+// answer (answering subscribes you: you're told of new lines in the game). Accept unbans, Deny closes it; a Timeout
+// closes it and blocks new appeals for days / months / years (then one more is allowed).
+admin.get("/appeals", guard(true, async (req, res, me) => {
+  const { rows } = await pool.query(`SELECT a.id, a.user_id, a.username, a.ban_reason, a.status, a.admin_name, a.response, a.created_at,
+      (SELECT count(*) FROM appeal_messages m WHERE m.appeal_id = a.id) AS n,
+      (SELECT row_to_json(m) FROM (SELECT name, text, at, from_admin FROM appeal_messages WHERE appeal_id = a.id ORDER BY id DESC LIMIT 1) m) AS last,
+      EXISTS(SELECT 1 FROM appeal_subs s WHERE s.appeal_id = a.id AND s.admin_id = $1) AS sub
+    FROM appeals a ORDER BY (a.status = 'open') DESC, a.id DESC LIMIT 300`, [me.id]);
+  res.json(rows.map((a) => ({ id: String(a.id), userId: a.user_id == null ? null : String(a.user_id), name: a.username, banReason: a.ban_reason, status: a.status, admin: a.admin_name, response: a.response, at: a.created_at, lines: Number(a.n), last: a.last, subscribed: a.sub })));
+}));
+async function appealOf(id) { if (!isId(id)) return null; const { rows } = await pool.query(`SELECT * FROM appeals WHERE id = $1`, [String(id)]); return rows[0] || null; }
+admin.get("/appeal/:id", guard(true, async (req, res, me) => {
+  const a = await appealOf(req.params.id); if (!a) return fail(res, 404, "No such appeal.");
+  const st = a.user_id ? await appealState(String(a.user_id)) : null, subs = await subscribers(String(a.id));
+  res.json({ id: String(a.id), userId: a.user_id == null ? null : String(a.user_id), name: a.username, banReason: a.ban_reason, status: a.status, at: a.created_at,
+    lines: await lines(String(a.id)), subscribed: subs.includes(me.id), player: st && { banned: st.banned, ban: st.ban, used: st.used, left: st.left, blockedUntil: st.blockedUntil } });
+}));
+admin.post("/appeal/say", guard(true, async (req, res, me) => {
+  const b = req.body || {}, a = await appealOf(b.id); if (!a) return fail(res, 404, "No such appeal.");
+  try { await adminWrite(String(a.id), me, b.text); res.json({ ok: true }); } catch (e) { fail(res, 400, e.message); }
+}));
+admin.post("/appeal/subscribe", guard(true, async (req, res, me) => {
+  const b = req.body || {}, a = await appealOf(b.id); if (!a) return fail(res, 404, "No such appeal.");
+  await subscribe(String(a.id), me.id, !!b.on); res.json({ ok: true });
 }));
 admin.post("/appeal", guard(true, async (req, res, me) => {
-  const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request.");
-  const { rows } = await pool.query(`SELECT * FROM appeals WHERE id = $1`, [String(b.id)]); const a = rows[0];
+  const b = req.body || {}, a = await appealOf(b.id);
   if (!a || a.status !== "open") return fail(res, 404, "That appeal isn't open.");
   const t = await target(String(a.user_id)); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
   const accept = !!b.accept;
-  await pool.query(`UPDATE appeals SET status = $2, admin_name = $3, response = $4, handled_at = now() WHERE id = $1`, [a.id, accept ? "accepted" : "denied", me.name, reason]);
+  await closeAppeal(String(a.id), me, accept, reason);
   if (accept) await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
   await log(me, t, accept ? "appeal accepted" : "appeal denied", reason, { appeal: String(a.id) }); res.json({ ok: true });
 }));
+admin.post("/appeal/timeout", guard(true, async (req, res, me) => {
+  const b = req.body || {}, a = await appealOf(b.id); if (!a) return fail(res, 404, "No such appeal.");
+  const t = await target(String(a.user_id)); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  const n = Number(b.amount), unit = { days: 1, months: 30, years: 365 }[b.unit];
+  if (!(Number.isInteger(n) && n >= 1 && n <= 100 && unit)) return fail(res, 400, "Give the timeout a length.");
+  const until = new Date(Date.now() + n * unit * 86400_000);
+  await timeoutAppeal(String(a.id), String(t.id), me, until, reason);
+  await log(me, t, "appeal timeout", reason, { appeal: String(a.id), amount: n, unit: b.unit, until }); res.json({ ok: true });
+}));
+
 // (owner) Freeze: the player's ships, station, chat and the rest are suspended (their ships can't be targeted) and their
 // screen is grayed out but for an admin DM, until unfrozen
 admin.post("/freeze", guard(true, async (req, res, me) => {
@@ -155,6 +190,39 @@ admin.post("/freeze", guard(true, async (req, res, me) => {
   await pool.query(`UPDATE users SET frozen = $2, frozen_at = CASE WHEN $2 THEN now() END, frozen_reason = CASE WHEN $2 THEN $3 END WHERE id = $1`, [t.id, on, reason]);
   hooks.freeze(String(t.id), on);
   await log(me, t, on ? "freeze" : "unfreeze", reason); res.json({ ok: true });
+}));
+// (owner) Ban Name: the player's name, or one of their pilots', goes on the banned names list, and they must pick a new one
+admin.post("/banname", guard(true, async (req, res, me) => {
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  let name, kind;
+  if (b.pilotId == null) { name = t.username; kind = "player"; await pool.query(`UPDATE users SET rename_required = true WHERE id = $1`, [t.id]); }
+  else {
+    if (!isId(b.pilotId)) return fail(res, 400, "Bad request.");
+    const { rows } = await pool.query(`SELECT id, name, data FROM pilots WHERE id = $1 AND user_id = $2`, [String(b.pilotId), t.id]); const p = rows[0];
+    if (!p) return fail(res, 404, "No such pilot.");
+    name = p.name; kind = "pilot"; const d = p.data || {}; d.renameRequired = true;
+    await pool.query(`UPDATE pilots SET data = $2 WHERE id = $1`, [p.id, d]);
+  }
+  await pool.query(`INSERT INTO banned_names (name_lower, name, kind, admin_name, reason) VALUES (lower($1), $1, $2, $3, $4) ON CONFLICT (name_lower) DO NOTHING`, [name, kind, me.name, reason]);
+  hooks.renameRequired(String(t.id));
+  await log(me, t, "ban name", reason, { name, kind }); res.json({ ok: true });
+}));
+admin.get("/names", guard(true, async (req, res) => {
+  const { rows } = await pool.query(`SELECT name, kind, admin_name, reason, at FROM banned_names ORDER BY at DESC LIMIT 500`);
+  res.json(rows.map((r) => ({ name: r.name, kind: r.kind, admin: r.admin_name, reason: r.reason, at: r.at })));
+}));
+admin.post("/names/remove", guard(true, async (req, res, me) => {
+  const b = req.body || {}; if (typeof b.name !== "string" || b.name.length > 40) return fail(res, 400, "Bad request.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write why.");
+  const { rowCount } = await pool.query(`DELETE FROM banned_names WHERE name_lower = lower($1)`, [b.name]); if (!rowCount) return fail(res, 404, "That name isn't banned.");
+  await log(me, { id: null, username: b.name }, "unban name", reason); res.json({ ok: true });
+}));
+// (owner) Local / Corp lines the filter flagged (sexual, racist, extremist), newest first; DMs are never recorded
+admin.get("/chatflags", guard(true, async (req, res) => {
+  const { rows } = await pool.query(`SELECT id, at, user_id, username, channel, text, cats, words FROM chat_flags ORDER BY id DESC LIMIT 300`);
+  res.json(rows.map((r) => ({ id: String(r.id), at: r.at, userId: r.user_id == null ? null : String(r.user_id), name: r.username, channel: r.channel, text: r.text, cats: r.cats, words: r.words })));
 }));
 admin.get("/log", guard(true, async (req, res) => {
   const { rows } = await pool.query(`SELECT id, at, admin_name, target_id, target_name, action, reason, detail FROM admin_log ORDER BY id DESC LIMIT 300`);
