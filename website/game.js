@@ -20,17 +20,19 @@
   let warpView = null;                             // the zoom to come back to after following a ship through a warp
   const ZOOM_MIN_W = 3.25;                         // km across the screen at the closest zoom (owner: the Prospector at about 1/25 of the width)
   const cam = { cx: 0, cy: 0, viewW: ZOOM_MIN_W }; let viewWTarget = ZOOM_MIN_W, follow = null, camInit = false, zoomAt = null;
+  let lookAt = null;                               // (owner) Look At: { kind: "rock" | "prop", id } the camera follows (a ship is followed by id)
   let selPilot = null;                             // the selected pilot (ui.js keeps it; one is always selected)
 
   window.Atamus = {
     send: (o) => send(o), bus, get me() { return me; }, get cfg() { return cfg; }, get snap() { return latest; },
     ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); }, get picked() { return picked; },
-    get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow }; },
+    get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow, lookAt }; },
     get selectedPilot() { return selPilot; },
     selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
-    followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; zoomAt = null; return true; },
+    followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; lookAt = null; zoomAt = null; return true; },
+    lookAt: (kind, id) => lookAtObj(kind, id),
     // (owner) Tab: centre on that pilot's ship and zoom to show a whole POI around it
-    focusShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; zoomAt = null; viewWTarget = POI_VIEW_KM * Math.max(1, innerWidth / innerHeight); warpView = null; return true; },
+    focusShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; lookAt = null; zoomAt = null; viewWTarget = POI_VIEW_KM * Math.max(1, innerWidth / innerHeight); warpView = null; return true; },
     get pois() { return pois; }, poi: (id) => poiById.get(id) || null, get belts() { return belts; },
     align: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "align", ship: sh.id, poi: poiId }); },
     warp: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "warp", ship: sh.id, poi: poiId }); },
@@ -207,8 +209,13 @@
   };
   function openMenu(px, py) {
     const menu = window.Atamus.ctxMenu; if (!menu) return;
+    // one of your ships: its menu (the selected pilot's own: Info) plus Rename (owner)
+    const mine = shipAt(px, py, drawn);
+    if (mine) { const items = mine.pilot === selPilot ? [["Look At", () => lookAtObj("ship", mine.id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: mine.id } }))]] : objItems("ship", mine.id); items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: mine.id }))]); menu(px, py, items); return; }
     const ob = objAt(px, py);
     if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
+    const pr = propAt(px, py);
+    if (pr) { menu(px, py, [["Look At", () => lookAtObj("prop", pr.id)]]); return; }   // a Library prop
     const p = poiAt(px, py);
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
@@ -234,7 +241,7 @@
     if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (!drag) return;
     if (drag.pinch) { if (ptrs.size < 2) return; const [a, b] = [...ptrs.values()]; zoomTo(drag.w * (drag.d || 1) / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
-    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = null; zoomAt = null; clearTimeout(hold); }
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 6) { drag.moved = true; follow = null; lookAt = null; zoomAt = null; clearTimeout(hold); }
     if (drag.moved) { cam.cx = drag.cx - (e.clientX - drag.x0) / scale(); cam.cy = drag.cy + (e.clientY - drag.y0) / scale(); clampCamera(); }
   });
   const up = (e) => {
@@ -304,6 +311,13 @@
     const own = drawn.find((s) => s.mine && s.pilot === selPilot) || myShip(), pos = objPos(kind, id); if (!own || !pos) return null;
     return Math.max(0, Math.hypot(own.x - pos.x, own.y - pos.y) - pos.r - (hull(own.type).radiusKm || 0.09));
   }
+  // (owner) Look At: the camera follows the object (zooming about its centre) until you pan or follow something else
+  const lookPos = (o) => o.kind === "prop" ? propById(o.id) : objPos(o.kind, o.id);
+  function lookAtObj(kind, id) {
+    if (kind === "ship") return window.Atamus.followShip(id);
+    if (!lookPos({ kind, id })) return false;
+    lookAt = { kind, id }; follow = null; zoomAt = null; return true;
+  }
   function objItems(kind, id) {
     const own = myShip(), out = [], A = window.Atamus;
     if (own && !own.warp) {
@@ -312,7 +326,7 @@
       else if (r != null && r <= (t.targetRangeKm || 0) && (own.targets || []).length < (t.maxTargets || 0) && !(kind === "ship" && id === own.id)) out.push(["Lock Target", () => A.lock(kind, id)]);
       if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)]);
     }
-    out.push(["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
+    out.push(["Look At", () => lookAtObj(kind, id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
     const sh = kind === "ship" && (latest.ships || []).find((x) => x.id === id);
     if (sh && !sh.mine) out.push(["Pilot Info", () => bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: id.split(":")[2] }))]);   // (owner) another player's ship: its pilot
     return out;
@@ -353,7 +367,7 @@
   // zoom toward the pointer (or about your ship while following it)
   function zoomTo(w, px, py) {
     viewWTarget = Math.max(ZOOM_MIN_W, Math.min(fitWidth(), w));
-    if (follow) { zoomAt = null; return; }
+    if (follow || lookAt) { zoomAt = null; return; }   // zoom about what the camera follows
     const p = s2w(px, py); zoomAt = { wx: p.x, wy: p.y, px, py };
   }
   document.addEventListener("contextmenu", (e) => e.preventDefault());   // no browser menu anywhere in the game (owner)
@@ -433,8 +447,12 @@
       for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
       ctx.restore();
     }
+    // (owner) from the hovered target's ring on the HUD to the object, thin and faint
     const h = window.Atamus.hoverTarget, hp = h && objPos(h.kind, h.id);
-    if (hp) { ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(gx2s(own.x), gy2s(own.y)); ctx.lineTo(gx2s(hp.x), gy2s(hp.y)); ctx.stroke(); ctx.restore(); }
+    if (hp && h.el && h.el.isConnected) {
+      const r = h.el.getBoundingClientRect();
+      ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.3)"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(r.left + r.width / 2, r.top); ctx.lineTo(gx2s(hp.x), gy2s(hp.y)); ctx.stroke(); ctx.restore();
+    }
   }
   function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
     for (const sh of ships) {
@@ -486,8 +504,9 @@
       }
       if (keys.size) {                                 // WASD
         let dx = 0, dy = 0; if (keys.has("a")) dx -= 1; if (keys.has("d")) dx += 1; if (keys.has("w")) dy += 1; if (keys.has("s")) dy -= 1;
-        if (dx || dy) { const l = Math.hypot(dx, dy); follow = null; zoomAt = null; cam.cx += dx / l * cam.viewW * 0.9 * dt; cam.cy += dy / l * cam.viewW * 0.9 * dt; }
+        if (dx || dy) { const l = Math.hypot(dx, dy); follow = null; lookAt = null; zoomAt = null; cam.cx += dx / l * cam.viewW * 0.9 * dt; cam.cy += dy / l * cam.viewW * 0.9 * dt; }
       }
+      if (lookAt) { const p = lookPos(lookAt); if (!p) lookAt = null; else { const e = 1 - Math.exp(-12 * dt); cam.cx += (p.x - cam.cx) * e; cam.cy += (p.y - cam.cy) * e; } }   // (owner) Look At
       const fs = follow && ships.find((s) => s.id === follow);
       if (follow && !fs && latest.ships && !latest.ships.some((s) => s.id === follow)) follow = null;   // that ship is gone
       // (owner) following a ship through a warp: zoom all the way out and hold the map still; zoom back onto it after

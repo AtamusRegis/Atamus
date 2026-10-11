@@ -752,3 +752,16 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .fit-cls { font-size: 11px; color: var(--text-dim); }
 .fit-desc { margin: 0 2px 4px; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 .fit-bonus { font-size: 12px; color: var(--cyan); padding: 3px 4px; }
+/* fitting window (owner): tabs fixed at the top, only the stats (or a tab's content) scroll */
+.win-body.fit-win { display: flex; flex-direction: column; overflow: hidden; }
+.fit-tabs { flex: 0 0 auto; }
+.fit-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.fit-body > * { flex: 0 0 auto; }
+.fit-body.fit-scroll { overflow-y: auto; display: block; }
+.fit-body .fit-rows.fit-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.fit-body .fit-head:first-child { margin-top: 2px; }
+.fit-active, .fit-passive { margin: 2px 0 4px; }
+.req-check { width: 16px; flex: 0 0 16px; color: #49d17d; font-weight: 700; }
+.req-row .sheet-k { flex: 1; }
+.si-hold { font-size: 10.5px; color: var(--text-dim); margin: 0 2px 3px; }
+.si-cap + .si-cap { margin-top: -2px; }

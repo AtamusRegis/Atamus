@@ -178,7 +178,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
   const fw = document.querySelector('.win[data-id="fit"]'), tabTo = async (k) => { fw.querySelector('.tab[data-tab="' + k + '"]').click(); await s(150); }, keys = () => [...fw.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
   await tabTo("fitting");
-  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-body").children].map((x) => x.className.split(" ").pop()).slice(0, 3).join(), gen: keys() };
+  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-body").children].map((x) => x.className.split(" ").pop()).slice(0, 5).join(), labels: [...fw.querySelectorAll(".fit-head")].map((x) => x.textContent).join(), gen: keys() };
   await tabTo("hull"); fit.desc = !!fw.querySelector(".fit-desc").textContent; fit.bonuses = fw.querySelectorAll(".fit-bonus").length;
   await tabTo("stats"); fit.stats = keys();
   await tabTo("req"); fit.req = [...fw.querySelectorAll(".sheet-row")].map((x) => x.textContent).join();
@@ -192,17 +192,17 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   pw.querySelector(".win-close").click();
   const pilotTitle = (document.querySelector('.wbtn[data-id="pilot"]').click(), await s(300), document.querySelector('.win[data-id="pilot"] .win-title-slot, .win-group .win-title-slot:not([hidden])').textContent); document.querySelector('.wbtn[data-id="pilot"]').click(); await s(200);
   return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap, hudInv, fit, hull, pinfo, pilotTitle };`);
-t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Info", r.menu);
+t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Look At,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Look At, Info", r.menu);
 t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be cancelled), then gets its × and distance", r);
 t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
-t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Info", "a target's menu: Unlock Target, Align To, Move towards, Info", r.tmenu);
+t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Look At,Info", "a target's menu: Unlock Target, Align To, Move towards, Look At, Info", r.tmenu);
 t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
 t.ok(r.hbHidden && r.slots.join() === "1,2,3,4", "no modules: the hotbar's empty active slots (the Prospector's 4, keyed 1-4) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
 t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
-const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Storage,Max Power,Max Disposition";
+const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Ore Hold,Cargo Hold,Max Power,Max Disposition";
 t.ok(/Prospector$/.test(r.fit.title) && r.fit.tabs === "Fitting,Hull,Stats,Requirements", "the Fitting window's tabs: Fitting, Hull, Stats, Requirements", r.fit);
-t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-active,fit-hull,fit-passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, then its general stats", r.fit);
+t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-head,fit-active,fit-hull,fit-head,fit-passive" && r.fit.labels === "Active,Passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, each row labeled, then its general stats", r.fit);
 t.ok(r.fit.desc && r.fit.bonuses === 3, "Hull: its description and bonuses", r.fit);
 t.ok(r.fit.stats === "Active Slots,Passive Slots,Power,Disposition,Class,Length,Acceleration," + GEN, "Stats: fitting stats, then the ship's", r.fit.stats);
 t.ok(r.fit.req === "Mining FrigateI,Carried byLight Ark", "Requirements: licenses and the ark that carries it", r.fit.req);
@@ -226,6 +226,36 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
 t.ok(r.locked, "double-clicking an asteroid locks it", r);
 t.ok(r.ctrl === "align" && r.shift === "approach", "Ctrl + click: Align To; Shift + click: Move towards", r);
 t.ok(r.space.moving && !r.space.chase, "Shift + click on space flies there", r.space);
+
+// (owner) Look At: the camera follows the object and zooms about its centre; the Fitting window's minimum; Rename
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600);
+  A.objItems("rock", k.id).find((x) => x[0] === "Look At")[1](); await s(1200);
+  const v1 = A.view, near1 = Math.hypot(v1.cx - k.x, v1.cy - k.y) < 0.05 && v1.lookAt && v1.lookAt.id === k.id && !v1.follow;
+  c.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, clientX: 100, clientY: 100, bubbles: true, cancelable: true })); await s(800);
+  const v2 = A.view, zoomed = v2.w > v1.w && Math.hypot(v2.cx - k.x, v2.cy - k.y) < 0.05;
+  ev("pointerdown", 400, 300); ev("pointermove", 480, 300); ev("pointerup", 480, 300); await s(100);
+  const dropped = !A.view.lookAt;
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(400);
+  const fw = document.querySelector('.win[data-id="fit"]'); fw.querySelector('.tab[data-tab="fitting"]').click(); await s(200);
+  const knob = fw.querySelector(".rz-se"), kr = knob.getBoundingClientRect();
+  knob.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 5, button: 0, clientX: kr.left + 5, clientY: kr.top + 5, bubbles: true }));
+  dispatchEvent(new PointerEvent("pointermove", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); await s(200);
+  const sc = fw.querySelector(".fit-rows.fit-scroll"), rowH = sc.querySelector(".sheet-row").offsetHeight, slotsW = fw.querySelector(".fit-active").offsetWidth;
+  const min = { rows: sc.clientHeight / rowH, scrolls: sc.scrollHeight > sc.clientHeight, body: fw.querySelector(".win-body").scrollHeight <= fw.querySelector(".win-body").clientHeight + 1, sixSlots: slotsW >= 6 * 40 + 5 * 6, tabsTop: fw.querySelector(".fit-tabs").getBoundingClientRect().top - fw.getBoundingClientRect().top < 60 };
+  fw.querySelector('.tab[data-tab="req"]').click(); await s(200); const checks = [...fw.querySelectorAll(".req-check")].map((x) => x.textContent).join("|");
+  fw.querySelector(".win-title-slot").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 120 })); await s(100);
+  const tmenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); document.querySelector(".ctx-item").click(); await s(200);
+  const inp = document.querySelector('.win[data-id="rename"] input'), prefill = inp.value; inp.value = "  Rock   Hopper "; inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(600);
+  const renamed = { title: fw.querySelector(".win-title-slot").textContent, snap: A.myShip.name };
+  A.send({ t: "rename", ship: A.myShip.id, name: "" }); await s(500); const back = fw.querySelector(".win-title-slot").textContent;
+  fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
+  return { near1, zoomed, dropped, min, checks, tmenu, prefill, renamed, back };`);
+t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its centre, until you pan", r);
+t.ok(r.min.rows >= 3.9 && r.min.rows < 5 && r.min.scrolls && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide, 4 stat rows; only the stats scroll, the tabs stay on top", r.min);
+t.ok(r.checks === "|", "Requirements: no check for what the pilot doesn't have yet", r.checks);
+t.ok(r.tmenu === "Rename" && /Prospector$/.test(r.prefill) && r.renamed.title === "Rock Hopper" && r.renamed.snap === "Rock Hopper" && /Prospector$/.test(r.back), "Rename from the Fitting window's title; an empty name puts back the default", r);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);

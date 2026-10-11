@@ -91,4 +91,10 @@ t.ok(ri && ri.ore === k.ore && ri.m3 === k.m3 && ri.size === k.size && ri.belt =
 t.ok(si && si.pilot === "Cid" && si.owner === "B" && si.type === "chisel", "Info on a ship: its hull, its pilot and their player", si);
 put(sb, 9000, 0); w.tick(0.05); sent.b.length = 0; w.cmdInfo("b", "rock", k.id); w.cmdInfo("b", "rock", 7); w.cmdInfo("b", "ship", {});
 t.ok(!sent.b.length, "no Info on an asteroid in a belt you have no ship in, or on nonsense");
+// (owner) renaming a ship: only your own, cleaned up; kept with the ship
+w.cmdRename("a", sa.id, "  Big\n Rig\u200b "); w.cmdRename("b", sa.id, "Stolen"); w.cmdRename("a", sb.id, "Mine now"); w.cmdRename("a", sa2.id, { x: 1 }); w.cmdRename("a", sa2.id, 42);
+t.ok(sa.name === "Big Rig" && !sb.name && !sa2.name, "only your own ships can be renamed, and names are cleaned up", [sa.name, sb.name, sa2.name]);
+t.ok(w.exportState("a").ships["1"].name === "Big Rig" && w.snapshotFor(a).ships.find((x) => x.id === sa.id).name === "Big Rig", "the name is saved and sent to you");
+w.cmdRename("a", sa.id, "x".repeat(40)); t.ok(sa.name.length === 24, "at most 24 characters");
+w.cmdRename("a", sa.id, "   "); t.ok(sa.name === null, "an empty name puts back the default");
 t.done();

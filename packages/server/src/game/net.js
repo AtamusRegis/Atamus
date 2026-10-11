@@ -70,6 +70,7 @@ export function attachGameServer(httpServer) {
           case "unlock": world.cmdUnlock(pid, m.ship, m.kind, m.id); break;
           case "chase": world.cmdChase(pid, m.ship, m.kind, m.id, m.mode); break;
           case "info": world.cmdInfo(pid, m.kind, m.id); break;
+          case "rename": world.cmdRename(pid, m.ship, m.name); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }
       } catch (e) { console.error("command " + m.t, e); }

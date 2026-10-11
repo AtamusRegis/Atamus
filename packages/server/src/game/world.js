@@ -20,6 +20,8 @@ export function clampToExpanse(x, y, margin = 0) {
   return { x, y };
 }
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
+/** A ship's name (owner: ships can be renamed): printable, squashed whitespace, 1-24 characters; null if nothing's left. */
+export const cleanShipName = (v) => { if (typeof v !== "string") return null; const t = v.replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "").replace(/ +/g, " ").trim().slice(0, 24).trim(); return t || null; };
 // (owner, 2026-10-11) ships fly straight to their destination, over anything in the way, until given another; they
 // just can't stop on an object. A destination is kept DEST_CLEAR_KM clear of touching an asteroid (its whole art: half
 // its size) or a Library prop (its art's box) — the zone the client outlines on hover.
@@ -63,7 +65,7 @@ export class World {
     let x, y, h;
     if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
-    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targets: [], chase: null };
+    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targets: [], chase: null, name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null };
     this.ships.set(sid, s);
     return s;
   }
@@ -77,7 +79,7 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3) };
+    for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}) };
     return { ships, savedAt: Date.now() };
   }
 
@@ -182,6 +184,11 @@ export class World {
     const to = poi.kind === "library" ? libraryLanding(poi.field.props) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
+  }
+  /** Rename one of your ships (owner); an empty name puts back the default ("Pilot's Prospector"). */
+  cmdRename(pid, shipId, name) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || (name != null && typeof name !== "string") || (typeof name === "string" && name.length > 200)) return;
+    s.name = cleanShipName(name);
   }
   /** Where the player's camera is: other ships in view get sent to them. */
   cmdView(pid, x, y, w) {
@@ -345,7 +352,7 @@ export class World {
       if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
-        e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
+        e.pilot = s.pilot; if (s.name) e.name = s.name; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
         if (s.dest) { e.dest = s.dest; if (s.warpReq) e.warpReq = true; }
         if (s.drift) e.drift = true;
         // speed (km/s; in warp, along its eased line), locked targets in the order they were locked, Align To / Move towards

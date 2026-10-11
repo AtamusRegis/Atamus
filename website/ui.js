@@ -762,7 +762,8 @@
         const menu = (x, y) => showCtxMenu(x, y, A.objItems(g.kind, g.id));
         cell.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
         let hold = 0;
-        const over = () => { A.hoverTarget = { kind: g.kind, id: g.id }; tipAbove(ring, A.objName(g.kind, g.id)); }, out = () => { if (A.hoverTarget && A.hoverTarget.id === g.id) A.hoverTarget = null; tooltip.hidden = true; };
+        const over = () => { A.hoverTarget = { kind: g.kind, id: g.id, el: ring };   // (owner) the line runs from this ring to the object
+          tipAbove(ring, A.objName(g.kind, g.id)); }, out = () => { if (A.hoverTarget && A.hoverTarget.id === g.id) A.hoverTarget = null; tooltip.hidden = true; };
         cell.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") over(); });
         cell.addEventListener("pointerleave", out);
         cell.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; over(); clearTimeout(hold); hold = setTimeout(() => { out(); menu(e.clientX, e.clientY); }, 500); });   // hold = right-click
@@ -799,17 +800,40 @@
   window.Atamus.bus.addEventListener("pilotselect", () => { H.sig = null; renderHud(); });
 
   // ---- ship inventory (owner: the button left of the hotbar): the selected pilot's ship's cargo ----
+  // (owner) a ship's name: what it was renamed to, else "Pilot's Hull"
+  function shipName(sh) {
+    const A = window.Atamus, T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
+    if (!sh) return "";
+    if (sh.name) return sh.name;
+    const pilot = state && state.pilots.find((p) => String(p.id) === String(sh.pilot));
+    return (pilot ? pilot.name + "'s " : "") + (T.name || "Ship");
+  }
+  // ---- Rename a ship (owner: right-click it in space, or its name on the Fitting window) ----
+  function openRename(shipId) {
+    const A = window.Atamus, sh = A.ship(shipId); if (!sh || !sh.mine) return;
+    if (!wins.rename) createWindow("rename", { left: Math.round(innerWidth / 2 - 140), top: 160, width: 280, minW: 240, minH: 120, render: () => {}, label: "Rename Ship", groupable: false });
+    const w = wins.rename; w.slot.textContent = "Rename Ship"; w.body.innerHTML = "";
+    const input = el("input", { class: "text-input rename-input", maxlength: "24", value: shipName(sh) });
+    const save = () => { const v = input.value.trim(); A.send({ t: "rename", ship: shipId, name: v }); toggleWindow("rename", false); };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); if (e.key === "Escape") toggleWindow("rename", false); });
+    w.body.append(el("div", { class: "report-form" }, input, el("div", { class: "report-btns" }, el("button", { class: "btn-ghost2", onclick: () => toggleWindow("rename", false) }, "Cancel"), el("button", { class: "btn-primary2", onclick: save }, "Rename"))));
+    toggleWindow("rename", true); input.focus(); input.select();
+  }
+  window.Atamus.bus.addEventListener("rename", (e) => openRename(e.detail));
+
   function renderInv(body) {
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
-    const pilot = state && state.pilots.find((p) => String(p.id) === String(saved.selPilot));
-    const sig = (sh ? sh.id : "-") + "|" + JSON.stringify((sh && sh.inv) || []);
-    wins.inv.slot.textContent = pilot ? pilot.name + "'s " + (T.name || "Ship") : "Inventory";
+    const sig = (sh ? sh.id + ":" + (sh.name || "") : "-") + "|" + JSON.stringify((sh && sh.inv) || []);
+    wins.inv.slot.textContent = sh ? shipName(sh) : "Inventory";
     if (wins.inv.isig === sig) return; wins.inv.isig = sig;
     body.innerHTML = "";
     if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
-    const items = sh.inv || [], used = items.reduce((t, it) => t + (it.m3 || 0), 0), cap = T.cargoM3 || 0;
-    body.append(el("div", { class: "si-cap" }, el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, Math.round(used).toLocaleString() + " / " + cap.toLocaleString() + " m³"))),
-      el("div", { class: "si-grid" }, items.map((it) => el("div", { class: "si-cell" }, it.name || "")), el("div", { class: "si-cell empty" })));
+    const items = sh.inv || [];
+    for (const h of T.holds || []) {                 // (owner) every storage type the ship has
+      const used = items.filter((it) => it.hold === h.key).reduce((t, it) => t + (it.m3 || 0), 0);
+      body.append(el("div", { class: "si-cap" }, el("div", { class: "si-hold" }, h.name), el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (h.m3 ? Math.min(100, used / h.m3 * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, Math.round(used).toLocaleString() + " / " + h.m3.toLocaleString() + " m³"))));
+    }
+    body.append(el("div", { class: "si-grid" }, items.map((it) => el("div", { class: "si-cell" }, it.name || "")), el("div", { class: "si-cell empty" })));
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.inv && isOpen(wins.inv)) renderInv(wins.inv.body); });
 
@@ -873,7 +897,7 @@
   const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
   function generalRows(T) {
     return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", (T.armor || 0).toLocaleString()], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
-      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ["Storage", (T.cargoM3 || 0).toLocaleString() + " m³"],
+      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ...(T.holds || []).map((h) => [h.name, h.m3.toLocaleString() + " m³"]),
       ["Max Power", T.powerMax || 0], ["Max Disposition", T.dispositionMax || 0]].map(([k, v]) => statRow(k, v));
   }
   const subHead = (t) => el("div", { class: "skills-sub-head fit-head" }, t);
@@ -884,20 +908,22 @@
   function renderFit(body) {
     const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
     const pilot = state && state.pilots.find((p) => String(p.id) === String(saved.selPilot));
-    wins.fit.slot.textContent = pilot ? pilot.name + "'s " + (T.name || "Ship") : "Fitting";
+    wins.fit.slot.textContent = sh ? shipName(sh) : "Fitting";
     const tab = FIT_TABS.some(([k]) => k === saved.fitTab) ? saved.fitTab : "fitting";
-    const sig = tab + "|" + (sh ? sh.id + ":" + sh.type : "-") + "|" + JSON.stringify((sh && sh.mods) || []);
+    const owned = new Set(((A.snap && A.snap.ships) || []).filter((x) => x.mine).map((x) => x.type));
+    const sig = tab + "|" + (sh ? sh.id + ":" + sh.type + ":" + (sh.name || "") : "-") + "|" + JSON.stringify((sh && sh.mods) || []) + "|" + JSON.stringify((pilot && pilot.licenses) || {}) + "|" + [...owned].join();
     if (wins.fit.fsig === sig) return; wins.fit.fsig = sig;
-    body.innerHTML = "";
-    body.append(el("div", { class: "tab-row tab-row-center" }, FIT_TABS.map(([k, n]) => el("button", { class: "tab" + (k === tab ? " active" : ""), "data-tab": k, onclick: () => { saved.fitTab = k; persistAll(); renderFit(body); } }, n))));
+    body.innerHTML = ""; body.classList.add("fit-win");
+    // (owner) the tabs stay at the top; below them only the stats (or a tab's content) scroll
+    body.append(el("div", { class: "tab-row tab-row-center fit-tabs" }, FIT_TABS.map(([k, n]) => el("button", { class: "tab" + (k === tab ? " active" : ""), "data-tab": k, onclick: () => { saved.fitTab = k; persistAll(); renderFit(body); } }, n))));
     if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
-    const c = el("div", { class: "fit-body" }); body.append(c);
+    const c = el("div", { class: "fit-body" + (tab === "fitting" ? "" : " fit-scroll") }); body.append(c);
     const act = modsOf(sh, "active"), pas = modsOf(sh, "passive"), mods = [...act, ...pas];
-    if (tab === "fitting") {                         // (owner) active slots above the ship (keyed as on the hotbar), passive below
-      c.append(el("div", { class: "fit-slots fit-active" }, HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
+    if (tab === "fitting") {                         // (owner) active slots above the ship (keyed as on the hotbar), passive below, each row labeled
+      c.append(subHead("Active"), el("div", { class: "fit-slots fit-active" }, HB_KEYS.slice(0, T.activeSlots || 0).map((k, i) => el("div", { class: "hb-slot fit-slot" + (act[i] ? " filled" : "") }, el("span", { class: "hb-num" }, k)))),
         el("div", { class: "fit-hull" }, el("img", { src: "assets/ships/" + (T.sprite || "chisel") + "_blue.webp", alt: "", draggable: "false" })),
-        el("div", { class: "fit-slots fit-passive" }, Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") }))),
-        el("div", { class: "ps-rows fit-rows" }, generalRows(T)));
+        subHead("Passive"), el("div", { class: "fit-slots fit-passive" }, Array.from({ length: T.passiveSlots || 0 }, (_, i) => el("div", { class: "hb-slot fit-slot" + (pas[i] ? " filled" : "") }))),
+        el("div", { class: "ps-rows fit-rows fit-scroll" }, generalRows(T)));
     } else if (tab === "hull") {
       c.append(el("div", { class: "fit-title" }, el("span", { class: "ps-name" }, T.name || ""), el("span", { class: "fit-cls" }, T.cls || "")),
         el("p", { class: "fit-desc" }, T.desc || ""), subHead("Hull Bonuses"), el("div", { class: "fit-bonuses" }, (T.bonuses || []).map((b) => el("div", { class: "fit-bonus" }, b))));
@@ -906,10 +932,22 @@
       c.append(subHead("Fitting"), el("div", { class: "ps-rows fit-rows" }, statRow("Active Slots", act.filter(Boolean).length + " / " + (T.activeSlots || 0)), statRow("Passive Slots", pas.filter(Boolean).length + " / " + (T.passiveSlots || 0)), statRow("Power", used("power") + " / " + (T.powerMax || 0)), statRow("Disposition", used("disposition") + " / " + (T.dispositionMax || 0))),
         subHead("Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Class", T.cls || "-"), statRow("Length", kmM(T.lengthKm || 0)), statRow("Acceleration", kmM(T.accelKmps2 || 0) + "/s²"), generalRows(T)));
     } else {
-      const r = T.req || {};
-      c.append(subHead("Licenses"), el("div", { class: "ps-rows fit-rows" }, (r.licenses || []).map(([n, lv]) => statRow(n, ROMAN[lv] || lv))),
-        subHead("Ark Ship"), el("div", { class: "ps-rows fit-rows" }, statRow("Carried by", r.ark || "-")));
+      // (owner) a green check left of each requirement the player meets: the selected pilot's license level, an ark of that type
+      const r = T.req || {}, lic = (pilot && pilot.licenses) || {};
+      const reqRow = (ok, k, v) => el("div", { class: "sheet-row req-row" }, el("span", { class: "req-check" + (ok ? " ok" : "") }, ok ? "✓" : ""), el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+      c.append(subHead("Licenses"), el("div", { class: "ps-rows fit-rows" }, (r.licenses || []).map(([key, n, lv]) => reqRow((lic[key] || 0) >= lv, n, ROMAN[lv] || lv))),
+        subHead("Ark Ship"), el("div", { class: "ps-rows fit-rows" }, r.ark ? reqRow(owned.has(r.ark[0]), "Carried by", r.ark[1]) : statRow("Carried by", "-")));
     }
+    requestAnimationFrame(() => { const m = fitMin(), e = wins.fit.win; if (!m || e.hidden || wins.fit.group) return; if (e.offsetWidth < m.w) e.style.width = m.w + "px"; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; });
+  }
+  // (owner) the Fitting window can't be narrower than 6 module slots, or shorter than its slots plus 4 stat rows
+  function fitMin() {
+    const w = wins.fit, b = w && w.body; if (!b) return null;
+    const cs = getComputedStyle(b), px = (k) => parseFloat(cs[k]) || 0;
+    const width = Math.ceil(6 * 40 + 5 * 6 + 20 + px("paddingLeft") + px("paddingRight") + 6);
+    const sc = b.querySelector(".fit-rows.fit-scroll"), row = sc && sc.querySelector(".sheet-row");
+    if (sc && row) w.fitMinH = Math.ceil(sc.getBoundingClientRect().top - w.win.getBoundingClientRect().top + sc.scrollTop * 0 + 4 * row.offsetHeight + px("paddingBottom") + 4);
+    return { w: width, h: w.fitMinH || 360 };
   }
   window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.fit && isOpen(wins.fit)) renderFit(wins.fit.body); });
   window.Atamus.bus.addEventListener("snap", () => { for (const [id, r] of [["fit", renderFit], ["inv", renderInv]]) if (wins[id] && isOpen(wins[id])) r(wins[id].body); });   // only rebuilt when their signature changes
@@ -974,7 +1012,11 @@
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
     createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory" });
-    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - 160)), top: 90, width: 320, minW: 290, minH: 200, render: renderFit, label: "Fitting" });
+    createWindow("fit", { left: Math.max(60, Math.round(innerWidth / 2 - 160)), top: 90, width: 320, minW: 290, minH: 200, render: renderFit, label: "Fitting", dynMin: fitMin });
+    { const t = wins.fit.slot, menu = (x, y) => { const sh = hudShip(); if (sh) showCtxMenu(x, y, [["Rename", () => openRename(sh.id)]]); };   // (owner) right-click (hold) the ship's name: Rename
+      t.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); menu(e.clientX, e.clientY); });
+      let h = 0; t.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => menu(e.clientX, e.clientY), 500); });
+      for (const ev of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) t.addEventListener(ev, () => clearTimeout(h)); }
     createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
     if (!saved.win.fleet) saved.win.fleet = { open: true };   // (owner) the fleet window is how you switch pilots: open the first time
     dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));   // a bar with no title: dragged by its background
