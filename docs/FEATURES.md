@@ -36,7 +36,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 - **Warp to a POI:** align, and warp as soon as aligned: at least 75% of top speed, heading within 5° of the POI. You can't warp to a POI you're already in.
 - **The warp:** a straight line, easing in and out, taking 2 s plus the distance at about 714 km/s (owner: crossing the system takes about 30 s). It drops out 30 km from the belt's centre on the inside of its crescent (give or take a couple of km), at a dead stop, and the destination is cleared. No orders are taken mid-warp; ships in warp don't collide. A warping ship leaves a short fading streak.
 - **Camera (owner):** following a ship through a warp zooms all the way out and holds the whole map still; when it drops out, the camera zooms back to where it was, onto the ship.
-- **Where you order it:** right-click (or hold) a belt's map marker → **Warp to name / Align to name**; or right-click (hold) space → **Belts ›** name › **Warp to / Align to**. Under the Fleet window (below).
+- **Where you order it:** right-click (or hold) a belt's map marker → **Warp to name / Align to name**; or right-click (hold) space → **Belts ›**, a list of the belts: right-click (hold) one for its own menu, **Warp to / Align to** (owner: a list, not a third layer of submenus; a plain click on a name opens it too). Under the Fleet window (below).
 
 ## The game screen
 
@@ -46,7 +46,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
   - **click / tap** empty space: the selected pilot's ship flies there;
   - **drag**, or **WASD** (owner): pan the camera (it stops following);
   - **click / tap one of your ships:** select its pilot (owner: this never centres the camera; the camera follows the selected pilot's ship from the start);
-  - **right-click / hold:** on a belt's map marker, Warp to / Align to it; anywhere else, the space menu: **Center on ship** (follow the selected pilot's ship) and **Belts ›** (each belt › Warp to, Align to). Menus sit centred above the press (below it near the top; to the right of it near the left edge, to the left near the right edge); submenus open beside their row on hover or tap;
+  - **right-click / hold:** on a belt's map marker, Warp to / Align to it; anywhere else, the space menu: **Center on ship** (follow the selected pilot's ship) and **Belts ›** (the list of belts; right-click or hold one for its Warp to / Align to menu). Menus sit centred above the press (below it near the top; to the right of it near the left edge, to the left near the right edge); submenus open beside their row on hover or tap;
   - **wheel / pinch:** zoom, from **3.25 km across the screen** (owner: the Prospector about 1/25 of the screen's width) out to the whole hexagon. The wheel zooms toward the pointer, or about the followed ship.
   - The browser's own right-click menu never opens anywhere in the game (owner).
 - **Space backdrop (owner):** no nebula image in the game. It's built from these layers, redrawn every frame:

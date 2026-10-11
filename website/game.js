@@ -199,7 +199,7 @@
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
     menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
-      ["Belts", belts.map((q) => [q.name, poiItems(q).map(([label, fn]) => [label.replace(" " + q.name, ""), fn])])]]);
+      ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])]]);   // (owner) a list: right-click (hold) a belt for its menu
   }
   canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer

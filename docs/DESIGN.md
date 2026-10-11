@@ -2,6 +2,27 @@
 
 Status: **phase 1 in progress** (rev. 2, 2026-10-09): the Expanse's POIs, warp-to, belts by population, hidden and spawn-in POIs, camera-following updates, per-POI collisions and logout despawn are built (FEATURES.md › The Expanse). Still to do in phase 1: per-POI clocks and time dilation, changes-only updates, POI caps, worker seams and the bot load tests. `docs/FEATURES.md` still describes the live game. This file is the agreed target. As each phase ships, its rules move into FEATURES.md and get marked done here.
 
+## Vertical slice goals (owner, 2026-10-11)
+
+The owner's goals for the vertical slice, in their words and order:
+
+- Home System
+- Nomad Space
+- Ark Ships To Nav Nomad space
+- 1-5 Pilots per Player (live today: up to 3, `MAX_PILOTS`)
+- Mining Gameplay
+- Combat Gameplay
+- Building Gameplay
+- License Training
+- Local Chat
+- Ship Fitting
+- NPC Frigate Seed Market
+- Player Driven Higher Market
+- Missions
+- PC / Mobile Optimization
+- Intuitive Reusable UI
+- Game optimized for 1000 Concurrent Players even if they all decide to meet up.
+
 ## Goal
 
 The game must hold **1,000 concurrent players**: the likeliest launch stress test, driven by marketing. Every engine decision below serves that number, and the server grows in stages (100 → 500 → 1,000+). Each stage is **proven by a bot load test**, not assumed.

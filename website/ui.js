@@ -619,14 +619,15 @@
 
   // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near
   // the left edge, to the left near the right edge). An item is [label, fn] or [label, [items…]]: a submenu opens beside
-  // it on hover or tap, and submenus nest. ----
+  // it on hover or tap, and submenus nest. [label, fn, { menu: [items…] }]: right-click (or hold) that row to open its
+  // own menu in place of this one (owner: a list, not a third layer of submenus). ----
   let ctxMenu = null;
   function closeCtxMenu() { if (ctxMenu) { ctxMenu.remove(); ctxMenu = null; } }
   function showCtxMenu(x, y, items) {
     closeCtxMenu();
     ctxMenu = el("div", { class: "ctx-root" }); ctxMenu.style.zIndex = z + 100000;
     const M = 6, GAP = 8;
-    const build = (list, depth) => el("div", { class: "ctx-menu" + (depth ? " ctx-sub" : "") }, list.length ? list.map(([label, fn]) => {
+    const build = (list, depth) => el("div", { class: "ctx-menu" + (depth ? " ctx-sub" : "") }, list.length ? list.map(([label, fn, opt]) => {
       if (Array.isArray(fn)) {
         const row = el("div", { class: "ctx-item ctx-has-sub" }, label);
         const open = () => {
@@ -639,8 +640,13 @@
         row.addEventListener("mouseenter", open); row.addEventListener("click", (e) => { e.stopPropagation(); open(); });
         return row;
       }
-      const row = el("div", { class: "ctx-item", onclick: () => { closeCtxMenu(); fn(); } }, label);
+      const row = el("div", { class: "ctx-item", onclick: (e) => { if (fn) { closeCtxMenu(); fn(); } else if (opt && opt.menu) showCtxMenu(e.clientX, e.clientY, opt.menu); } }, label);
       row.addEventListener("mouseenter", () => { for (const o of [...ctxMenu.querySelectorAll(".ctx-sub")]) if (+o.dataset.depth > depth) o.remove(); });
+      if (opt && opt.menu) {                         // its own menu: right-click, or hold on touch
+        row.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); showCtxMenu(e.clientX, e.clientY, opt.menu); });
+        let t = 0; row.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(t); t = setTimeout(() => showCtxMenu(e.clientX, e.clientY, opt.menu), 500); });
+        for (const ev of ["pointerup", "pointercancel", "pointerleave"]) row.addEventListener(ev, () => clearTimeout(t));
+      }
       return row;
     }) : [el("div", { class: "ctx-item ctx-empty" }, "—")]);
     const top = build(items, 0); ctxMenu.append(top); document.body.append(ctxMenu);
