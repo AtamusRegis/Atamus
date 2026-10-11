@@ -720,9 +720,6 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .hud-txt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 9.5px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px #000; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-speed { min-width: 52px; font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-row { display: flex; align-items: center; gap: 6px; }
-.hud-inv { width: 42px; height: 42px; border: none; border-radius: 7px; background: rgba(14,19,30,0.82); color: var(--text-dim); cursor: pointer; display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,0.45); touch-action: manipulation; }
-.hud-inv:hover { color: var(--text); background: rgba(30,40,58,0.9); }
-.hud-inv svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .hud-hotbar { display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: 0 4px 14px rgba(0,0,0,0.45); }
 .hb-slot { position: relative; width: 36px; height: 36px; border-radius: 5px; background: rgba(0,0,0,0.35); display: grid; place-items: center; user-select: none; }
 .hb-slot.filled { cursor: pointer; }
@@ -741,3 +738,9 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 /* object info window */
 .oi-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .oi-icon { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; }
+/* fitting window */
+.fit-hull { display: grid; place-items: center; padding: 10px 0 14px; }
+.fit-hull img { max-width: 70%; max-height: 90px; image-rendering: pixelated; }
+.fit-slots { grid-template-columns: repeat(6, 40px); }
+.fit-slot.hb-slot { display: grid; background: rgba(0,0,0,0.3); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.07); }
+.pi-player { cursor: default; }

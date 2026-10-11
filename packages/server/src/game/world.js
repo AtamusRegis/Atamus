@@ -4,7 +4,7 @@
 import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
-import { Obstacles, findPath } from "./pathing.js";
+import { Obstacles } from "./obstacles.js";
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -20,11 +20,10 @@ export function clampToExpanse(x, y, margin = 0) {
   return { x, y };
 }
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
-// (owner) ships keep clear of an object's whole art (no clipping into it): a rock is solid out to half its size, a
-// Library prop to its whole box. A destination can't be set within DEST_CLEAR_KM of touching one (the red outline the
-// client draws on hover), and paths keep PATH_CLEAR_KM clear (just inside that, so a destination is always reachable).
-const DEST_CLEAR_KM = 0.07, PATH_CLEAR_KM = 0.06;
-const REPATH_MS = 1000;                               // Move towards a ship: its path is redone this often
+// (owner, 2026-10-11) ships fly straight to their destination, over anything in the way, until given another; they
+// just can't stop on an object. A destination is kept DEST_CLEAR_KM clear of touching an asteroid (its whole art: half
+// its size) or a Library prop (its art's box) — the zone the client outlines on hover.
+const DEST_CLEAR_KM = 0.07;
 const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
 
 export class World {
@@ -88,11 +87,9 @@ export class World {
     if (!finite(x) || !finite(y)) return;
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
     const t = this._clearPoint(clampToExpanse(x, y, s.radius), s);   // (owner) never a destination inside an object's bounds
-    s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true;
-    this._route(s, t);
+    s.tx = t.x; s.ty = t.y; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null; s.moving = true;
   }
-  // ---- pathfinding (pathing.js): around asteroids and Library props, never around ships ----
-  _clearLine(s, p) { const ix = this._ixNear(s.x, s.y, p.x, p.y); return !ix || ix.firstHit(s.x, s.y, p.x, p.y, s.radius + PATH_CLEAR_KM, new Set(ix.containing(s.x, s.y, s.radius + PATH_CLEAR_KM))) < 0; }
+  // ---- where a destination can't be (obstacles.js): asteroids and Library props ----
   _ix(poi) {                                           // a POI's objects, indexed (rebuilt when its rocks change)
     const f = poi.field; let c = this._ixs.get(f);
     if (!c || c.ver !== f.ver) {
@@ -103,23 +100,11 @@ export class World {
     }
     return c.ix;
   }
-  // the objects near a segment: one POI's index, or (rarely) several merged
-  _ixNear(ax, ay, bx, by) {
-    const near = [];
-    for (const poi of this.pois.values()) {
-      const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((poi.x - ax) * dx + (poi.y - ay) * dy) / L)) : 0;
-      if (Math.hypot(ax + dx * t - poi.x, ay + dy * t - poi.y) <= poi.r + 2) near.push(poi);
-    }
-    if (near.length < 2) return near.length ? this._ix(near[0]) : null;
-    const ix = new Obstacles(); for (const poi of near) for (const o of this._ix(poi).list) ix.add(o); return ix;
-  }
-  _clearPoint(p, s) { const ix = this._ixNear(p.x, p.y, p.x, p.y); return ix ? ix.pushOut({ x: p.x, y: p.y }, s.radius + DEST_CLEAR_KM) : p; }
-  /** Fly s to `goal` along a path around the objects (straight when there's nothing in the way, or no path). */
-  _route(s, goal) {
-    const ix = this._ixNear(s.x, s.y, goal.x, goal.y);
-    const path = ix ? findPath(ix, { x: s.x, y: s.y }, goal, s.radius + PATH_CLEAR_KM) : null;
-    s.path = path && path.length ? path : [{ x: goal.x, y: goal.y }];
-    s.tx = s.path[0].x; s.ty = s.path[0].y; s.pathAt = this.simAt;
+  /** A destination moved just outside any object's bounds (the POIs it's in). */
+  _clearPoint(p, s) {
+    const q = { x: p.x, y: p.y };
+    for (const poi of this.pois.values()) if (Math.hypot(q.x - poi.x, q.y - poi.y) <= poi.r + 2) this._ix(poi).pushOut(q, s.radius + DEST_CLEAR_KM);
+    return q;
   }
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
    *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
@@ -128,7 +113,7 @@ export class World {
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
     if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
-    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.path = null; s.tx = poi.x; s.ty = poi.y; s.moving = true;
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.tx = poi.x; s.ty = poi.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
 
@@ -160,7 +145,7 @@ export class World {
   cmdChase(pid, shipId, kind, id, mode) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
     if ((mode !== "align" && mode !== "approach") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
-    s.chase = { kind, id, mode }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = true; s.path = null; s.pathAt = 0;
+    s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
   }
   /** Info on an object: an asteroid you have a ship beside (its belt), or a ship. */
   cmdInfo(pid, kind, id) {
@@ -183,23 +168,6 @@ export class World {
       for (const g of s.targets) if (!g.locked && now >= g.lockAt) g.locked = true;
     }
   }
-  // push a ship out of a circle (cx, cy, minD), taking away the velocity that carried it in
-  _pushOut(s, cx, cy, minD) {
-    let dx = s.x - cx, dy = s.y - cy, d = Math.hypot(dx, dy); if (d >= minD) return false;
-    if (d < 1e-6) { dx = 1; dy = 0; d = 1; }
-    const nx = dx / d, ny = dy / d; s.x = cx + nx * minD; s.y = cy + ny * minD;
-    const vn = s.vx * nx + s.vy * ny; if (vn < 0) { s.vx -= vn * nx; s.vy -= vn * ny; }
-    return true;
-  }
-  // push a ship out of a box ({ x, y, hx, hy }) plus `pad`, along the shallower side
-  _pushRect(s, o, pad) {
-    const hx = o.hx + pad, hy = o.hy + pad, dx = s.x - o.x, dy = s.y - o.y;
-    if (Math.abs(dx) >= hx || Math.abs(dy) >= hy) return false;
-    const vx = s.vx || 0, vy = s.vy || 0;
-    if (hx - Math.abs(dx) < hy - Math.abs(dy)) { const sg = dx < 0 ? -1 : 1; s.x = o.x + sg * hx; if (vx * sg < 0 && "vx" in s) s.vx = 0; }
-    else { const sg = dy < 0 ? -1 : 1; s.y = o.y + sg * hy; if (vy * sg < 0 && "vy" in s) s.vy = 0; }
-    return true;
-  }
   _inPoi(s, poi) { return Math.hypot(s.x - poi.x, s.y - poi.y) <= poi.r; }
   // aligned (owner, EVE-like): heading within ALIGN_DEG of the destination and at ALIGN_SPEED of top speed
   _aligned(s, poi) {
@@ -213,7 +181,7 @@ export class World {
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
     const to = poi.kind === "library" ? libraryLanding(poi.field.props) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
-    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.path = null; s.targets = [];   // a warp drops every lock
+    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
   /** Where the player's camera is: other ships in view get sent to them. */
   cmdView(pid, x, y, w) {
@@ -256,7 +224,7 @@ export class World {
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
         s.x = s.wp.fx + (s.wp.tx - s.wp.fx) * e; s.y = s.wp.fy + (s.wp.ty - s.wp.fy) * e; s.vx = 0; s.vy = 0;
-        if (k >= 1) { s.wp = null; s.dest = null; s.moving = false; s.path = null; s.tx = s.x; s.ty = s.y; }
+        if (k >= 1) { s.wp = null; s.dest = null; s.moving = false; s.tx = s.x; s.ty = s.y; }
         continue;
       }
       if (s.dest) {                                        // aligning: the POI must still advertise itself, or the ship drifts on
@@ -267,25 +235,28 @@ export class World {
       if (s.chase) {                                       // Align To / Move towards an object: its position, every tick
         const pos = this._objPos(s.chase.kind, s.chase.id);
         if (!pos) { s.chase = null; s.moving = false; }
-        else if (s.chase.mode === "align") { s.tx = pos.x; s.ty = pos.y; s.moving = true; s.path = null; }   // straight at it
-        else {                                             // Move towards: a path to just off its edge, redone as a ship moves
-          if (!s.path || (s.chase.kind === "ship" && now - s.pathAt >= REPATH_MS)) {
-            const dx = s.x - pos.x, dy = s.y - pos.y, d = Math.hypot(dx, dy) || 1, keep = pos.r + s.radius + DEST_CLEAR_KM + 0.01;
-            const goal = this._clearPoint({ x: pos.x + dx / d * keep, y: pos.y + dy / d * keep }, s), end = s.path && s.path[s.path.length - 1];
-            if (!end || Math.hypot(end.x - goal.x, end.y - goal.y) > 0.05) { this._route(s, goal); s.moving = true; } else s.pathAt = now;
+        else if (s.chase.mode === "align") {               // (owner) Align To: face it at the speed it had (standing still: just turn), stopping at its no-destination line
+          const dx = pos.x - s.x, dy = pos.y - s.y, d = Math.hypot(dx, dy), room = d - (pos.r + s.radius + DEST_CLEAR_KM);
+          if (d > 1e-6) {
+            s.h = Math.atan2(dy, dx); s.moving = false;
+            const spd = Math.min(s.chase.v, room > 0 ? Math.sqrt(2 * s.accel * room) * 0.95 : 0);
+            const dvx = dx / d * spd - s.vx, dvy = dy / d * spd - s.vy, dv = Math.hypot(dvx, dvy), step = s.accel * dtSec;
+            if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }
+            s.x += s.vx * dtSec; s.y += s.vy * dtSec;
+            continue;
           }
         }
-      }
-      if (s.moving && s.path && s.path.length > 1) {     // on to the next waypoint once it's close, or the one after is in clear view
-        const w0 = s.path[0], near = Math.hypot(w0.x - s.x, w0.y - s.y) < 0.03;
-        if (near || (this.tickN % 4 === 0 && this._clearLine(s, s.path[1]))) { s.path.shift(); s.tx = s.path[0].x; s.ty = s.path[0].y; }
+        else {                                             // Move towards: to just off its edge (its no-destination line), and stop
+          const dx = s.x - pos.x, dy = s.y - pos.y, d = Math.hypot(dx, dy) || 1, keep = pos.r + s.radius + DEST_CLEAR_KM + 0.01;
+          const goal = this._clearPoint({ x: pos.x + dx / d * keep, y: pos.y + dy / d * keep }, s);
+          s.tx = goal.x; s.ty = goal.y; s.moving = true;
+        }
       }
       if (s.moving) {
-        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), full = s.chase && s.chase.mode === "align";
-        let rest = d; if (s.path) for (let i = 1; i < s.path.length; i++) rest += Math.hypot(s.path[i].x - s.path[i - 1].x, s.path[i].y - s.path[i - 1].y);   // brake for the end of the path, not each corner
-        if (rest <= SHIP_ARRIVE_EPS_KM && !full) { s.moving = false; if (!s.chase) s.path = null; }   // (chasing: kept, so it isn't redone every tick)
-        else if (d > 1e-6) {
-          const spd = full ? s.speed : Math.min(s.speed, Math.sqrt(2 * s.accel * rest) * 0.95);
+        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
+        if (d <= SHIP_ARRIVE_EPS_KM) s.moving = false;
+        else {
+          const spd = Math.min(s.speed, Math.sqrt(2 * s.accel * d) * 0.95);
           const dvx = (dx / d) * spd - s.vx, dvy = (dy / d) * spd - s.vy, dv = Math.hypot(dvx, dvy), step = s.accel * dtSec;
           if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
         }
@@ -294,17 +265,8 @@ export class World {
       s.x += s.vx * dtSec; s.y += s.vy * dtSec;
       if (Math.hypot(s.vx, s.vy) > 0.05) s.h = Math.atan2(s.vy, s.vx);   // face the way it's going
     }
-    // 2) (owner) ships pass over each other, but asteroids and Library props are solid (only a warp passes through)
-    const occ = this._occupancy();
-    for (const poi of this.pois.values()) {
-      if (!occ.get(poi.id) || !occ.get(poi.id).size) continue;
-      const ix = this._ix(poi);
-      for (const s of ships) {
-        if (s.wp || Math.hypot(s.x - poi.x, s.y - poi.y) > poi.r + 1) continue;
-        for (const i of ix.containing(s.x, s.y, s.radius)) { const o = ix.list[i]; if (o.r != null) this._pushOut(s, o.x, o.y, o.r + s.radius); else this._pushRect(s, o, s.radius); }
-      }
-    }
-    // 3) the hexagon's edge stops ships (and whatever velocity was carrying them out)
+    // 2) (owner) ships pass over each other and over every object on the way; only a destination stays off them.
+    //    The hexagon's edge stops ships (and whatever velocity was carrying them out)
     for (const s of ships) {
       if (insideExpanse(s.x, s.y, s.radius)) continue;
       const c = clampToExpanse(s.x, s.y, s.radius); s.x = c.x; s.y = c.y; s.vx = 0; s.vy = 0; s.drift = false;
@@ -383,7 +345,7 @@ export class World {
       if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
-        e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); if (s.path && s.path.length > 1) e.path = s.path.slice(0, 24).map((p) => [+p.x.toFixed(3), +p.y.toFixed(3)]); }
+        e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
         if (s.dest) { e.dest = s.dest; if (s.warpReq) e.warpReq = true; }
         if (s.drift) e.drift = true;
         // speed (km/s; in warp, along its eased line), locked targets in the order they were locked, Align To / Move towards

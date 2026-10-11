@@ -23,7 +23,7 @@ const overlap = props.some((o, i) => props.some((q, j) => j > i && Math.abs(o.x 
 t.ok(!overlap, "nothing overlaps");
 t.ok(props.every((o) => Math.hypot(Math.abs(o.x - lib.x) + o.w / 2, Math.abs(o.y - lib.y) + o.h / 2) <= lib.r), "all inside the POI");
 
-// only sent to players with a ship inside; warping in lands clear of the shelves; the props are solid
+// only sent to players with a ship inside; warping in lands clear of the shelves; no destination on a prop
 t.ok(!w.fieldsFor(a).fields.some((f) => f.poi === "library"), "its objects aren't sent from outside");
 Object.assign(sa, { x: 0, y: 0, vx: 0, vy: 0 }); w._startWarp(sa, lib, Date.now());
 const land = { x: sa.wp.tx, y: sa.wp.ty };
@@ -34,8 +34,9 @@ t.ok(f && f.props.length === props.length && !f.rocks.length, "inside, its objec
 const st = props.find((o) => o.name === "Station");
 Object.assign(sa, { x: st.x - st.w, y: st.y, vx: 0, vy: 0 }); w.cmdMove("a", sa.id, st.x, st.y);
 t.ok(Math.abs(sa.tx - st.x) >= st.w * 0.45 || Math.abs(sa.ty - st.y) >= st.h * 0.45, "a move order into one stops at its edge", [sa.tx - st.x, sa.ty - st.y]);
-Object.assign(sa, { x: st.x, y: st.y + 0.01, moving: false }); w.tick(0.05);
-t.ok(Math.abs(sa.x - st.x) >= st.w * 0.45 - 1e-6 || Math.abs(sa.y - st.y) >= st.h * 0.45 - 1e-6, "a ship can't sit inside one");
+Object.assign(sa, { x: st.x - st.w, y: st.y, vx: 0, vy: 0 }); w.cmdMove("a", sa.id, st.x + st.w, st.y); let over = false;
+for (let i = 0; i < 400; i++) { w.tick(0.05); if (Math.abs(sa.x - st.x) < st.w / 4 && Math.abs(sa.y - st.y) < st.h / 4) over = true; }
+t.ok(over, "ships fly over them on the way");
 for (let i = 0; i < 20; i++) w.tick(0.05); w.nextPoiTick = 0; w.tick(0.05);
 t.ok(w.pois.has("library") && !lib.retired, "it never wastes away or closes");
 t.done();

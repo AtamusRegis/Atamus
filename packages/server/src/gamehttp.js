@@ -28,6 +28,10 @@ game.get("/player/:name", auth, async (req, res) => {
   try { const p = await pilots.publicProfile(req.params.name); if (!p) return res.status(404).json({ error: "No such player." }); res.json(p); }
   catch (e) { console.error("player", e); res.status(500).json({ error: "Could not load that player." }); }
 });
+game.get("/pilot-info/:id", auth, async (req, res) => {
+  try { const p = await pilots.publicPilot(req.params.id); if (!p) return res.status(404).json({ error: "No such pilot." }); res.json(p); }
+  catch (e) { console.error("pilot-info", e); res.status(500).json({ error: "Could not load that pilot." }); }
+});
 game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES));
 game.post("/report", auth, async (req, res) => {
   if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });

@@ -304,6 +304,8 @@
       if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)]);
     }
     out.push(["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
+    const sh = kind === "ship" && (latest.ships || []).find((x) => x.id === id);
+    if (sh && !sh.mine) out.push(["Pilot Info", () => bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: id.split(":")[2] }))]);   // (owner) another player's ship: its pilot
     return out;
   }
   // the object under the pointer: a ship (not the selected pilot's own) or an asteroid
@@ -438,9 +440,9 @@
     const sc = scale();
     for (const sh of ships) {
       const sx = gx2s(sh.x), sy = gy2s(sh.y);
-      if (sh.mine && sh.moving && sh.tx != null && !sh.dest) {   // where it's headed, along its path (drawn even with the ship off screen)
-        const pts = sh.path && sh.path.length ? sh.path.map(([x, y]) => [gx2s(x), gy2s(y)]) : [[gx2s(sh.tx), gy2s(sh.ty)]], [tx, ty] = pts[pts.length - 1];
-        ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); for (const [x, y] of pts) ctx.lineTo(x, y);
+      if (sh.mine && sh.moving && sh.tx != null && !sh.dest) {   // where it's headed (drawn even with the ship off screen)
+        const tx = gx2s(sh.tx), ty = gy2s(sh.ty);
+        ctx.save(); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(tx, ty);
         ctx.strokeStyle = "rgba(200,205,215,0.28)"; ctx.lineWidth = 1; ctx.setLineDash([4, 5]); ctx.stroke();
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
       }

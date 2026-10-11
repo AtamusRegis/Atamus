@@ -62,16 +62,24 @@ w.cmdLock("a", sa.id, "rock", k.id);
 t.ok(!sa.targets.length, "no locking mid-warp");
 sa.wp = null; put(sa, ...nearK(2));
 
-// Move towards: to the object's edge, then stop; Align To: at it at full speed; a move order replaces either
+// Move towards: to the object's edge, then stop; a move order replaces it (and Align To)
 w.cmdChase("a", sa.id, "rock", k.id, "approach"); ticks(600);
 const gap = Math.hypot(sa.x - k.x, sa.y - k.y) - solid - sa.radius;
 t.ok(gap < 0.15 && Math.hypot(sa.vx, sa.vy) < 0.01, "Move towards stops at the object's edge", { gap, v: Math.hypot(sa.vx, sa.vy) });
 put(sa, belt.x - 3, belt.y); put(sb, belt.x + 3, belt.y + 3); w.cmdChase("a", sa.id, "ship", sb.id, "approach"); ticks(900);   // (the belt's middle is clear of rocks)
 t.ok(Math.hypot(sa.x - sb.x, sa.y - sb.y) < sa.radius + sb.radius + 0.2, "and follows a ship to it");
-put(sb, belt.x + 20, belt.y); put(sa, belt.x - 20, belt.y); w.cmdChase("a", sa.id, "ship", sb.id, "align"); ticks(80);
-t.ok(Math.hypot(sa.vx, sa.vy) > sa.speed * 0.99 && sa.vx > 0, "Align To flies at it at full speed", Math.hypot(sa.vx, sa.vy));
+// (owner) Align To: face it at the speed it had; standing still it only turns
+put(sb, belt.x + 20, belt.y); put(sa, belt.x - 20, belt.y + 5); sa.h = 0; w.cmdChase("a", sa.id, "ship", sb.id, "align"); ticks(40);
+t.ok(Math.hypot(sa.x - (belt.x - 20), sa.y - (belt.y + 5)) < 1e-9 && Math.abs(sa.h - Math.atan2(-5, 40)) < 1e-6, "Align To from a standstill only turns the ship to face it", { h: sa.h });
+put(sa, belt.x - 20, belt.y + 5); sa.vx = 0; sa.vy = -0.2; w.cmdChase("a", sa.id, "ship", sb.id, "align"); ticks(80);
+const av = Math.hypot(sa.vx, sa.vy), adir = Math.atan2(sa.vy, sa.vx), want = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+t.ok(Math.abs(av - 0.2) < 0.01 && Math.abs(adir - want) < 0.02, "moving, it turns toward it and keeps its speed", { av, adir, want });
 w.cmdMove("a", sa.id, sa.x, sa.y + 1);
 t.ok(!sa.chase, "a move order replaces it");
+put(sa, ...nearK(3)); sa.vx = Math.cos(inb + Math.PI) * 0.3; sa.vy = Math.sin(inb + Math.PI) * 0.3; w.cmdChase("a", sa.id, "rock", k.id, "align"); ticks(600);
+const agap = Math.hypot(sa.x - k.x, sa.y - k.y) - k.r - sa.radius;
+t.ok(agap >= 0.07 - 1e-3 && agap < 0.15 && Math.hypot(sa.vx, sa.vy) < 0.01, "Align To an asteroid stops at its no-destination line (owner), not over it", agap);
+w.cmdMove("a", sa.id, sa.x, sa.y);
 w.cmdChase("a", sa.id, "ship", sa.id, "align"); w.cmdChase("a", sa.id, "ship", sb.id, "orbit"); w.cmdChase("b", sa.id, "ship", sb.id, "align"); w.cmdChase("a", sa.id, "rock", "belt:none#1", "align");
 t.ok(!sa.chase, "not at itself, no unknown modes, not someone else's ship, nothing that isn't there");
 

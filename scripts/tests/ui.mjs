@@ -22,7 +22,7 @@ const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new 
 let page = await open(1280, 800);
 let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(500);
   return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
-t.ok(r.btns.join() === "player,pilot,chat,fleet", "the left panel has the Player, Pilot, Chat and Fleet windows", r.btns);
+t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory and Fitting windows", r.btns);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   return { wins: wins(), player: document.querySelector('.win[data-id="player"]').innerText, pilot: document.querySelector('.win[data-id="pilot"]').innerText };`);
 t.ok(r.wins.includes("player") && r.wins.includes("pilot"), "both open from the panel", r.wins);
@@ -172,10 +172,20 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   document.getElementById("hud").classList.remove("hb-dragging");
   document.querySelector("#hud .tgt-x").click(); await s(400);
   const after = document.querySelectorAll("#hud .tgt").length;
-  document.querySelector("#hud .hud-inv").click(); await s(300);
+  const hudInv = !!document.querySelector("#hud .hud-inv"); document.querySelector('.wbtn[data-id="inv"]').click(); await s(300);
   const inv = document.querySelector('.win[data-id="inv"]'), invTitle = inv.querySelector(".win-title-slot").textContent, invCap = inv.querySelector(".hud-txt").textContent;
   inv.querySelector(".win-close").click();
-  return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap };`);
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
+  const fw = document.querySelector('.win[data-id="fit"]'), fit = { title: fw.querySelector(".win-title-slot").textContent, art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-slot")].map((x) => x.textContent).join() };
+  fw.querySelector(".win-close").click();
+  A.bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: A.myShip.id } })); await s(500);
+  const ow = document.querySelector('.win[data-id="oinfo"]'), hull = { title: ow.querySelector(".win-title-slot").textContent, rows: [...ow.querySelectorAll(".sheet-k")].map((x) => x.textContent) };
+  ow.querySelector(".win-close").click();
+  A.bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: A.selectedPilot })); await s(600);
+  const pw = document.querySelector('.win[data-id="ppinfo"]'), pinfo = { title: pw.querySelector(".win-title-slot").textContent, name: pw.querySelector(".ps-name").textContent, rows: [...pw.querySelectorAll(".sheet-k")].map((x) => x.textContent) };
+  pw.querySelector(".win-close").click();
+  const pilotTitle = (document.querySelector('.wbtn[data-id="pilot"]').click(), await s(300), document.querySelector('.win[data-id="pilot"] .win-title-slot, .win-group .win-title-slot:not([hidden])').textContent); document.querySelector('.wbtn[data-id="pilot"]').click(); await s(200);
+  return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap, hudInv, fit, hull, pinfo, pilotTitle };`);
 t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Info", r.menu);
 t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be cancelled), then gets its × and distance", r);
 t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
@@ -183,7 +193,11 @@ t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Info", "a target's 
 t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
 t.ok(r.hbHidden && r.slots.join() === "1,2,3,4,5,6,7,8,9,0,-,=", "no modules: the hotbar's 12 empty slots (1-9, 0, -, =) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
-t.ok(/Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory button opens the ship's inventory", r);
+t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
+t.ok(/Prospector$/.test(r.fit.title) && r.fit.art && r.fit.slots === "1,2,3,4,5,6,7,8,9,0,-,=", "the Fitting window: the ship and its 12 module slots", r.fit);
+t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length,Max speed,Acceleration,Shield,Hull,Targeting range,Max targets,Lock time,Cargo", "a ship's Info is its hull's", r.hull);
+t.ok(r.pinfo.title === "Pilot Info" && r.pinfo.name === "Vera Kestrel" && r.pinfo.rows.join() === "Player,Corp,Day Born,Total Endorsement Level", "Pilot Info: a pilot's portrait, name, player, corp, day born and endorsements", r.pinfo);
+t.ok(r.pilotTitle === "Pilot Info", "the pilot window is titled Pilot Info", r.pilotTitle);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
@@ -195,7 +209,8 @@ await page.close();
 
 // phone: windows fit the screen, a pinch zooms, a tap flies
 page = await open(844, 390, true);
-r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
+r = await run(page, `A.send({ t: "dev", cmd: "move", x: 0, y: -20 }); await s(400);   // open space: a tap mustn't land on an asteroid
+  for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   const over = [...document.querySelectorAll(".win:not([hidden])")].filter((w) => { const b = w.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1; }).map((w) => w.dataset.id);
   for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);
   const w0 = A.view.w; ev("pointerdown", 400, 200, 1, "touch"); ev("pointerdown", 500, 200, 2, "touch"); ev("pointermove", 440, 200, 1, "touch"); ev("pointermove", 460, 200, 2, "touch"); ev("pointerup", 440, 200, 1, "touch"); ev("pointerup", 460, 200, 2, "touch"); await s(500);

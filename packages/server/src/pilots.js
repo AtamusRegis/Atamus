@@ -231,6 +231,15 @@ export async function publicProfile(nameRaw) {
   return { username: u.username, createdAt: u.created_at, portrait: u.portrait || null, corp: CORP, pilotCount: pilotRows.length, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (maxBy[l.key] || 0), 0) };
 }
 
+/** (owner) Pilot Info on another player's ship: what anyone may see of a pilot. */
+export async function publicPilot(idRaw) {
+  if (typeof idRaw !== "string" || !/^[0-9]{1,15}$/.test(idRaw)) return null;
+  const { rows } = await pool.query(`SELECT p.id, p.name, p.data, p.created_at, u.username FROM pilots p JOIN users u ON u.id = p.user_id WHERE p.id = $1`, [idRaw]);
+  const r = rows[0]; if (!r) return null;
+  const lic = r.data.licenses || {};
+  return { id: String(r.id), name: r.name, portrait: r.data.portrait || null, player: r.username, corp: CORP, createdAt: r.created_at, totalSkillLevel: LICENSES.reduce((s2, l) => s2 + (lic[l.key] || 0), 0) };
+}
+
 // ---- reports (owner): stored for admin tools to read later ----
 export const REPORT_CATEGORIES = ["Harassment", "Spam", "Cheating", "Offensive name", "Other"];
 export async function fileReport(userId, b) {
