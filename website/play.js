@@ -49,7 +49,12 @@ async function waitForUpdate() {
     if (done || Date.now() - started > 120_000) break;
     await new Promise((r) => setTimeout(r, 2000));
   }
-  for (let i = 0; i < 30; i++) { try { await showSteps(); break; } catch { await new Promise((r) => setTimeout(r, 2000)); } }   // server may still be warming up
+  let ok = false;
+  for (let i = 0; i < 30 && !ok; i++) {                // the server may still be warming up: retry; signed out: log in
+    try { await showSteps(); ok = true; }
+    catch (e) { if (e.status === 401) { location.href = "login.html"; return; } await new Promise((r) => setTimeout(r, 2000)); }
+  }
+  if (!ok) { location.href = "login.html"; return; }   // never a dead end with no way in
   updateStep.hidden = true;
   history.replaceState(null, "", "play.html");
 }

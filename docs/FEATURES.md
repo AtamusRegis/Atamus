@@ -100,7 +100,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 ## Live updates (owner)
 
 - Every push to `main` shows **every** player a 30 s "Update incoming" panel near the top of the screen. The number bounces each second.
-- At zero, players are logged out to `play.html?updating=1`. It waits for the new build, then shows Enter System. Enter System always loads a fresh (cache-busted) game page.
+- At zero, players are logged out to `play.html?updating=1`. It waits for the new build, then shows Enter System. If you're signed out by then (or the server doesn't answer for a minute), it goes to the login page instead. Enter System always loads a fresh (cache-busted) game page.
 - Players who join mid-countdown see the time that's left.
 - The server only starts a countdown if `main` is really ahead of what's live, once per commit. If it can't read GitHub, it counts down anyway.
 
