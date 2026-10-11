@@ -70,7 +70,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 
 - **Website (owner):** styled like the game's panels and buttons, over a nebula backdrop. The game itself no longer uses the nebula.
   - **Front page** (`index.html`): a header with the logo and Log in on the right; a description card ("The Expanse") with **Play now**, which goes to account creation; and an **Updates** card.
-  - **Updates (owner): one entry per day**, newest first: the date, then a bullet per **new feature** that day (owner: never minor changes or fixes). Add to today's `<article class="update">` in index.html, or start a new one. Entries before the 2026-10-10 reset were removed (owner).
+  - **Updates (owner): one entry per day**, newest first: the date, then a bullet per **new feature** that day (owner: never minor changes or fixes). Bullets say what was added or reworked, never how a system works (no timers, thresholds or rules), e.g. "Added wormholes to travel between solar systems", "Reworked wormholes". Add to today's `<article class="update">` in index.html, or start a new one. Entries before the 2026-10-10 reset were removed (owner).
   - Signed-in visitors skip the front page and go straight to play.html: "Welcome back, name" (or "Welcome" before the first pilot exists), with Enter System and Log out.
   - Pages: `login.html`, `signup.html`, `recover.html` and `play.html`. An expired session returns to login.html.
 - **Character, then first pilot (owner):** both are made on the website (play.html), not in the game, in this order:

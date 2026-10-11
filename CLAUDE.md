@@ -23,7 +23,7 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag.
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling that is saved in player data: leave it as it is.
 - **Test in the PTR before pushing to live.** Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown.
-- **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first; start a new day's entry if there isn't one).
+- **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first; start a new day's entry if there isn't one). Say what was added or changed, never how it works: no timers, thresholds, counts or rules ("Added wormholes to travel between solar systems", "Reworked wormholes"; not "closes after x minutes or y people").
 - **Read the real game files.** Don't guess at behavior. Read the code, or ask when it's a design decision.
 
 ## Layout
