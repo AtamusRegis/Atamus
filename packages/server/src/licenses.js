@@ -1,15 +1,9 @@
 // License catalog. Static game design data, served to the client and used
 // to validate training. Times are per endorsement level, in milliseconds.
 
-// ---- real design train times (the Expanse design doc) ----
-// Authored in HOURS per level. DEV_TIME_SCALE compresses them so training is
-// testable during development; set it to 1 for the real multi-week timeline.
-const HOUR = 3600 * 1000;
-const DEV_TIME_SCALE = 1; // 1 = real design times. (1/3600 trains a design-hour per second for testing.)
-const hrs = (...perLevel) => perLevel.map((h) => Math.round(h * HOUR * DEV_TIME_SCALE));
-// For now (owner): every license trains fast: level N takes N minutes. The design times above are kept in
-// designTimes (manual prices still come from them); set QUICK_TRAINING = false to go back to them.
-const QUICK_TRAINING = true;
+// (owner) the one knob for training speed: every license level takes its listed time × this. 1 = the real times;
+// 0.2 = 5× as fast (for the time being, owner 2026-10-11). Change only this when testing.
+export const TRAINING_TIME_MODIFIER = 0.2;
 
 // License categories (owner): ship licenses first, then module licenses. Categories without licenses yet
 // (the weapon types) are defined so they slot in later; the client hides empty ones.
@@ -38,7 +32,7 @@ export const LICENSES = [
     desc: "Pilot mining frigates. Where every mining career starts.",
     bonus: "Mining Frigate hull bonuses", hull: true,
     // (owner) 5 levels, the first known from the start; stepped: level N takes N × 12 min (level 5: an hour)
-    requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN), fixedTimes: true,
+    requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN)
   },
   // (owner, 2026-10-11) module licenses, 5 levels each, stepped like Mining Frigate; none is needed to fit a module.
   // Each one's power / disposition cut applies to the modules it names, not to what they upgrade (modules.js).
@@ -48,12 +42,9 @@ export const LICENSES = [
     ["mining_upgrades", "Mining Upgrades", "mining", "Get more out of mining laser upgrades.", "+10% to Mining Laser Upgrade, Mining Beam Extender and Mining Overclocker bonuses, −5% their power and disposition"],
     ["engineering_upgrades", "Engineering Upgrades", "engineering", "Get more out of the ship's engineering upgrades.", "+10% to Cargo Expander and Inertia Stabilizer bonuses, −5% their power and disposition"],
     ["engines", "Engines", "engineering", "Push the afterburner harder.", "+10% to the Afterburner's speed bonus, −5% its power and disposition"],
-  ].map(([key, name, category, desc, bonus]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus, requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN), fixedTimes: true })),
+  ].map(([key, name, category, desc, bonus]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus, requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
 ];
-for (const l of LICENSES) { l.designTimes = l.levelTimes; if (QUICK_TRAINING && !l.fixedTimes) l.levelTimes = l.levelTimes.map((_, i) => (i + 1) * MIN); }
-// (owner, 2026-10-11) for the time being, everything trains 5× as fast (level N of a stepped license: N × 2.4 min)
-const TRAIN_SPEED = 5;
-for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms / TRAIN_SPEED));
+for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms * TRAINING_TIME_MODIFIER));   // the times everything uses (server and trainer)
 
 // (owner) ships always fly at their full stats; each level of a ship-class license adds one step of that class's hull
 // bonuses (each hull lists its bonuses per level)
