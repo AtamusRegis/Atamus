@@ -6,6 +6,7 @@
 // one more appeal (owner).
 import crypto from "node:crypto";
 import { pool } from "./db.js";
+import { adminShown } from "./personas.js";
 
 export const APPEALS_PER_BAN = 3;
 const TOKEN_MS = 3 * 3600_000;
@@ -41,8 +42,8 @@ export async function appealState(uid) {
   };
 }
 export async function lines(appealId) {
-  const { rows } = await pool.query(`SELECT id, at, from_admin, name, text FROM appeal_messages WHERE appeal_id = $1 ORDER BY id`, [appealId]);
-  return rows.map((m) => ({ id: String(m.id), at: m.at, admin: m.from_admin, name: m.name, text: m.text }));
+  const { rows } = await pool.query(`SELECT id, at, from_admin, admin_id, name, text FROM appeal_messages WHERE appeal_id = $1 ORDER BY id`, [appealId]);
+  return rows.map((m) => ({ id: String(m.id), at: m.at, admin: m.from_admin, name: m.from_admin ? adminShown(m.admin_id, m.name) : m.name, text: m.text }));   // (owner) an admin's lines: their admin profile now
 }
 export async function subscribers(appealId) { const { rows } = await pool.query(`SELECT admin_id FROM appeal_subs WHERE appeal_id = $1`, [appealId]); return rows.map((r) => String(r.admin_id)); }
 export async function subscribe(appealId, adminId, on) {
@@ -50,7 +51,7 @@ export async function subscribe(appealId, adminId, on) {
   else await pool.query(`DELETE FROM appeal_subs WHERE appeal_id = $1 AND admin_id = $2`, [appealId, adminId]);
 }
 async function addLine(appealId, fromAdmin, name, text, exceptAdmin = null) {
-  await pool.query(`INSERT INTO appeal_messages (appeal_id, from_admin, name, text) VALUES ($1, $2, $3, $4)`, [appealId, fromAdmin, name, text]);
+  await pool.query(`INSERT INTO appeal_messages (appeal_id, from_admin, name, text, admin_id) VALUES ($1, $2, $3, $4, $5)`, [appealId, fromAdmin, name, text, fromAdmin ? exceptAdmin : null]);
   try { notify(String(appealId), name, text, exceptAdmin); } catch (e) { console.error("appeal notify", e); }
 }
 
@@ -76,7 +77,7 @@ export async function adminWrite(appealId, admin, raw) {
 }
 /** An appeal closes (accepted or denied): a last line says so; no one writes in it after. */
 export async function closeAppeal(appealId, admin, accepted, reason) {
-  await pool.query(`UPDATE appeals SET status = $2, admin_name = $3, response = $4, handled_at = now() WHERE id = $1`, [appealId, accepted ? "accepted" : "denied", admin.name, reason]);
+  await pool.query(`UPDATE appeals SET status = $2, admin_name = $3, response = $4, handled_at = now(), admin_id = $5 WHERE id = $1`, [appealId, accepted ? "accepted" : "denied", admin.name, reason, admin.id]);
   await addLine(appealId, true, admin.name, (accepted ? "Accepted: " : "Closed: ") + reason, admin.id);
 }
 /** (owner) An appeal timeout: the appeal closes (if open) and no new one can be made until `until`; then one more is allowed. */

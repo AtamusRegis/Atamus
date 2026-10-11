@@ -5,8 +5,10 @@ import { config } from "./config.js";
 import { migrate, cleanupExpired, runWipes } from "./db.js";
 import { auth } from "./auth.js";
 import { game } from "./gamehttp.js";
-import { admin } from "./admin.js";
+import { admin, loadPersonas } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
+import { loadNameData } from "./names.js";
+import { loadRelations } from "./relations.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -43,6 +45,9 @@ app.use((err, _req, res, _next) => {
 
 async function main() {
   await migrate();
+  await loadPersonas();
+  await loadNameData();
+  await loadRelations();                                 // (owner) players' mutes and blocks                                  // (owner) banned names' keys, approved filter words                                  // (owner) admins' profiles
   await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();

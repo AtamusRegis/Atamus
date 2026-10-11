@@ -9,5 +9,7 @@ t.ok(bad.every((x) => nameProblem(x)), "bad names are refused, however they're s
 t.ok(good.every((x) => !nameProblem(x)), "ordinary names that contain those letters are fine", good.filter((x) => nameProblem(x)));
 const c = scan("you n1gger, nice porn lol");
 t.ok(c.bad && c.cats.includes("racist") && c.cats.includes("sexual") && c.words.join() === "n1gger,porn", "a chat line: its categories and the words to highlight", c);
-t.ok(!scan("well shit, that was close").bad && nameProblem("ShitLord"), "plain profanity is flagged in names, not chat (owner: chat is free)");
+t.ok(scan("well shit, that was close").cats.join() === "profanity" && nameProblem("ShitLord"), "plain profanity: refused in names, flagged in chat (owner)");
+{ const g = scan("the jews and mexicans"), q = scan("you queer retard"), j = scan("dirty japs");
+  t.ok(g.cats.join() === "groups" && !nameProblem("Mexican") && q.cats.join() === "slurs" && nameProblem("Queer") && j.cats.join() === "racist", "chat: a people named (Groups), slurs, racist names; names refuse slurs but not a people (owner)", { g, q, j }); }
 t.done();

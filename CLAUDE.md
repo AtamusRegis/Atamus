@@ -40,6 +40,14 @@ packages/server/src/
   portraits.js    portrait part lists (served at /game/portraits) and validation
   ptr.js          PTR flag, PTR user, dev commands
   admin.js        the admin panel's API (/game/admin/*): second password, players, kick / ban / unban, roles, license / credit / corp changes, admin log
+  personas.js     admin profiles (admin name + picture), shown for every line and log entry an admin made
+  language.js     language log heat: each flagged chat line heats a player's meter, cooling over time
+  names.js        name checks (filter, banned names by leet key, admin names), approved filter words
+  namefilter.js   the word filter (categories, leet, censor for chat)
+  appeals.js      ban appeal conversations
+  relations.js    players' mutes and blocks (own and admin-set)
+  relappeals.js   appeals of admin-set mutes / blocks (both players, a message each)
+  tickets.js      support tickets
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz

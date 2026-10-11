@@ -164,8 +164,81 @@ export async function migrate() {
       cats        TEXT[] NOT NULL,
       words       TEXT[] NOT NULL
     );
-    -- (owner) a redeploy (a server start) unfreezes everyone
-    UPDATE users SET frozen = false, frozen_at = NULL, frozen_reason = NULL WHERE frozen;
+    -- (owner) Freeze belongs to an admin's DM with the player: who froze them, and the open admin DMs (kept across restarts)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS frozen_by BIGINT;
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS chat JSONB;     -- (owner) the last hour of chat, saved with the report
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS ships JSONB;    -- (owner) and the player's pilots' ship names then
+    CREATE TABLE IF NOT EXISTS admin_dms (
+      player_id   BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      admin_id    BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      admin_name  TEXT NOT NULL,
+      player_name TEXT NOT NULL,
+      log         JSONB NOT NULL DEFAULT '[]'::jsonb,
+      frozen      BOOLEAN NOT NULL DEFAULT false
+    );
+    -- (owner) admins speak and act under an admin name and picture of their own (so they can play unknown); the key
+    -- (random) is how clients know which admin a line is from, so a renamed admin's old lines show the new name
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS rename_reason TEXT;   
+    ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS name_key TEXT;   -- (owner) the name as the filter reads it (leet spellings match)
+    CREATE INDEX IF NOT EXISTS banned_names_key_idx ON banned_names (name_key);
+    -- (owner) words an admin asked to add to the filter, in a category; the Head Admin approves (maybe in another category) or denies
+    CREATE TABLE IF NOT EXISTS filter_words (
+      id            BIGSERIAL PRIMARY KEY,
+      word          TEXT NOT NULL,
+      cat           TEXT NOT NULL,
+      status        TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | denied
+      requested_by  BIGINT,
+      requested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      asked_cat     TEXT NOT NULL,
+      decided_by    BIGINT,
+      decided_at    TIMESTAMPTZ
+    );
+    -- (owner) players' mutes and blocks (relations.js); admin_id: set by an admin (on both players' lists, appeal only)
+    CREATE TABLE IF NOT EXISTS player_relations (
+      owner_id  BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      other_id  BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind      TEXT NOT NULL,                       -- mute | block
+      admin_id  BIGINT,
+      at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (owner_id, other_id, kind)
+    );
+    -- (owner) appeals of an admin-set mute / block (relappeals.js): both players and the admins; a message each, more when given
+    CREATE TABLE IF NOT EXISTS rel_appeals (
+      id BIGSERIAL PRIMARY KEY, a_id BIGINT NOT NULL, b_id BIGINT NOT NULL, kind TEXT NOT NULL, opened_by BIGINT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open', admin_id BIGINT, response TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), closed_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS rel_appeal_messages (
+      id BIGSERIAL PRIMARY KEY, appeal_id BIGINT NOT NULL REFERENCES rel_appeals(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      from_admin BOOLEAN NOT NULL DEFAULT false, user_id BIGINT, admin_id BIGINT, name TEXT NOT NULL, text TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS rel_appeal_turns (
+      appeal_id BIGINT NOT NULL REFERENCES rel_appeals(id) ON DELETE CASCADE, user_id BIGINT NOT NULL, left_n INT NOT NULL DEFAULT 0,
+      PRIMARY KEY (appeal_id, user_id)
+    );
+    -- (owner) support tickets (tickets.js): subject, category, then a conversation with the admins
+    CREATE TABLE IF NOT EXISTS tickets (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id) ON DELETE SET NULL, username TEXT NOT NULL, subject TEXT NOT NULL,
+      category TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), closed_by BIGINT, closed_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS ticket_messages (
+      id BIGSERIAL PRIMARY KEY, ticket_id BIGINT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      from_admin BOOLEAN NOT NULL DEFAULT false, admin_id BIGINT, name TEXT NOT NULL, text TEXT NOT NULL
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS name_offer TEXT;   -- (owner) a banned name allowed again: offered back (revert or keep)
+    ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS owner_id BIGINT;
+    ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS pilot_id BIGINT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_heat REAL NOT NULL DEFAULT 0;   -- (owner) language heat (language.js)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_heat_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS lang_alert_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS chat_flags_user_idx ON chat_flags (user_id, id DESC);   -- (owner) the player sees why they must rename
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_name TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pic SMALLINT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS users_admin_name_idx ON users (lower(admin_name));
+    ALTER TABLE appeal_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT;
+    ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_id BIGINT;
+    ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     -- (owner) Nyssary is the Head Admin (the only one; only they make admins)
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
     UPDATE users SET role = NULL WHERE role = 'head' AND lower(username) <> 'nyssary';

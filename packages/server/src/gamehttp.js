@@ -6,11 +6,17 @@ import * as pilots from "./pilots.js";
 import { websiteDeployed, announceUpdate } from "./build.js";
 import { allow } from "./ratelimit.js";
 import { gameHook } from "./admin.js";
+import { PTR, ptrAs } from "./ptr.js";
+import { pool } from "./db.js";
+import { setRelation, relationsOf } from "./relations.js";
+import * as relAp from "./relappeals.js";
+import * as tickets from "./tickets.js";
 
 export const game = express.Router();
 
 async function auth(req, res, next) {
-  const u = await getSessionUser(readCookie(req));
+  let u = await getSessionUser(readCookie(req));
+  if (PTR && req.headers["x-ptr-as"]) u = await ptrAs(String(req.headers["x-ptr-as"]));   // (PTR only: tests act as a second account)
   if (!u) return res.status(401).json({ error: "Not logged in." });
   req.uid = String(u.id);
   next();
@@ -33,16 +39,45 @@ game.get("/pilot-info/:id", auth, async (req, res) => {
   try { const p = await pilots.publicPilot(req.params.id); if (!p) return res.status(404).json({ error: "No such pilot." }); res.json(p); }
   catch (e) { console.error("pilot-info", e); res.status(500).json({ error: "Could not load that pilot." }); }
 });
+// (owner) a player's mutes and blocks (their own, and any an admin set between them and someone: those only appealed)
+async function nameOf(uid) { const { rows } = await pool.query(`SELECT username FROM users WHERE id = $1`, [uid]); return rows[0] ? rows[0].username : "?"; }
+async function idByName(name) { if (typeof name !== "string" || !name || name.length > 40) return null; const { rows } = await pool.query(`SELECT id FROM users WHERE lower(username) = lower($1)`, [name]); return rows[0] ? String(rows[0].id) : null; }
+const fail400 = (res, e) => res.status(400).json({ error: e.message });
+game.get("/relations", auth, async (req, res) => { try { res.json({ list: await relationsOf(req.uid), appeals: await relAp.playerAppeals(req.uid) }); } catch (e) { fail400(res, e); } });
+game.post("/relation", auth, async (req, res) => {
+  try { const b = req.body || {}, other = await idByName(b.name); if (!other) throw new Error("No such player.");
+    await setRelation(req.uid, other, b.kind, b.on === true); gameHook("relations"); res.json({ ok: true }); } catch (e) { fail400(res, e); }
+});
+game.post("/relappeal", auth, async (req, res) => {
+  if (!allow("relappeal", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many. Try again later." });
+  try { const b = req.body || {}, other = await idByName(b.name); if (!other) throw new Error("No such player.");
+    res.json({ id: await relAp.openRelAppeal(req.uid, await nameOf(req.uid), other, b.kind, b.text) }); } catch (e) { fail400(res, e); }
+});
+game.post("/relappeal/say", auth, async (req, res) => { try { await relAp.playerSay(req.uid, await nameOf(req.uid), (req.body || {}).id, (req.body || {}).text); res.json({ ok: true }); } catch (e) { fail400(res, e); } });
+// (owner) support tickets
+game.get("/tickets", auth, async (req, res) => { try { res.json({ categories: tickets.TICKET_CATEGORIES, list: await tickets.playerTickets(req.uid) }); } catch (e) { fail400(res, e); } });
+game.post("/ticket", auth, async (req, res) => {
+  if (!allow("ticket", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many tickets. Try again later." });
+  try { res.json({ id: await tickets.openTicket(req.uid, await nameOf(req.uid), req.body || {}) }); } catch (e) { fail400(res, e); }
+});
+game.post("/ticket/say", auth, async (req, res) => { try { await tickets.playerSay(req.uid, await nameOf(req.uid), (req.body || {}).id, (req.body || {}).text); res.json({ ok: true }); } catch (e) { fail400(res, e); } });
 game.get("/report-categories", (_req, res) => res.json(pilots.REPORT_CATEGORIES));
 game.post("/report", auth, async (req, res) => {
   if (!allow("report", req.uid, 10, 3600_000)) return res.status(429).json({ error: "Too many reports. Try again later." });
-  try { await pilots.fileReport(req.uid, req.body || {}); res.json({ ok: true }); }
+  try { await pilots.fileReport(req.uid, req.body || {}, (pid) => ({ chat: gameHook("chatLog", pid) || [], ships: gameHook("shipNames", pid) || [] })); res.json({ ok: true }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // (owner) after an admin's Ban Name: a new name for the account or that pilot (only then)
 game.post("/rename", auth, async (req, res) => {
   try { const name = await pilots.renameAccount(req.uid, req.body?.name); gameHook("renamed", req.uid, name); res.json({ name }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+// (owner) an allowed name offered back: Revert (take it) or Keep (the name they have)
+game.post("/name-offer", auth, async (req, res) => {
+  try { const b = req.body || {}, r = await pilots.answerNameOffer(req.uid, b.pilotId == null ? null : b.pilotId, b.take === true);
+    if (b.pilotId == null) { if (r.changed) gameHook("renamed", req.uid, r.name); } else await gameHook("refreshPilots", req.uid);
+    res.json({ name: r.name }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 game.post("/pilot/rename", auth, async (req, res) => {

@@ -124,7 +124,7 @@ r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); aw
   const after = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((x) => x.textContent);
   document.querySelector('.win[data-id="chat"] .win-close').click();
   return { menu, tabs, ph, parts, title: rep.querySelector(".win-title-slot").textContent, closed: rep.hidden, after };`);
-t.ok(r.menu.join() === "Info,DM,Report", "a player's name: Info, DM, Report", r.menu);
+t.ok(r.menu.join() === "Info,DM,Report,Mute,Block,Admin", "a player's name: Info, DM, Report, Mute, Block (and Admin for an admin)", r.menu);
 t.ok(r.tabs.join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab named for them", r);
 t.ok(r.parts[0] && r.parts[1] && r.parts[2] === "Cancel,Send report" && r.title === "Report Zed" && r.closed, "Report: what it's about, what happened, Cancel / Send report", r);
 t.ok(r.after.join() === "Local,Corp", "a DM tab closes with its ×", r.after);
@@ -337,18 +337,33 @@ r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: 
   const btn = document.querySelector('.wbtn[data-id="admin"]'); if (!btn) return { btn: false };
   btn.click(); await s(800); const w = document.querySelector('.win[data-id="admin"]'), pw = w.querySelector('input[type="password"]');
   const masked = !!pw; pw.value = "Cinder@Hollow6021=Magnet~Captain%Creek"; pw.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(1200);
+  // (owner) the first time: the admin profile (a name and one of the pictures)
+  let prof = { pics: w.querySelectorAll(".apic").length };
+  if (prof.pics) { const n = w.querySelector(".apic-form .text-input"); n.value = "Warden_Q"; w.querySelectorAll(".apic")[2].click(); [...w.querySelectorAll("button")].find((b) => b.textContent === "Save").click(); await s(1200); }
+  prof.after = !!w.querySelector(".tab");
+  w.querySelector(".win-title-slot").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 100 })); await s(100);
+  prof.menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); await s(100);
   const tabs = [...w.querySelectorAll(".tab")].map((x) => x.textContent).join();
   [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Admins").click(); await s(300);
   const r0 = w.querySelector(".adm-row"), rows = [...w.querySelectorAll(".adm-row")].map((x) => x.textContent), b = r0.getBoundingClientRect();
   r0.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: b.left + 20, clientY: b.top + 5 })); await s(150);
   [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(900);
   const ap = document.querySelector('.win[data-id="aplayer"]'), info = [...ap.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
-  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Pilots").click(); await s(300); const lic = ap.querySelectorAll(".adm-lic").length;
+  const apTabs = [...ap.querySelectorAll(".tab")].map((x) => x.textContent).join();
+  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Pilots").click(); await s(300); const lic = ap.querySelectorAll(".lic-row").length, cards = ap.querySelectorAll(".pp-card").length;
+  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Language").click(); await s(600); const meters = ap.querySelectorAll(".heat").length;
+  // (owner) the chat's Player / Admin switch: as Admin, a line under the admin profile
+  document.querySelector('.wbtn[data-id="chat"]').click(); await s(300); const cw = document.querySelector('.win[data-id="chat"]'), sw = cw.querySelector(".chat-as");
+  let said = null; if (sw) { sw.click(); const inp = cw.querySelector(".chat-form .text-input"); inp.value = "admin hello"; cw.querySelector(".chat-form").requestSubmit(); await s(600);
+    const ln = [...cw.querySelectorAll(".chat-line")].pop(); said = { admin: ln.classList.contains("admin"), pic: !!ln.querySelector(".chat-apic"), who: ln.querySelector(".who").textContent, sw: sw.textContent }; sw.click(); }
   [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
-  return { btn: true, masked, tabs, rows, info, lic, log };`);
-t.ok(r.btn && r.masked && r.tabs === "Players,Appeals,Chat,Names,Log,Players,Admins,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins / Disciplined), Appeals, Chat, Names and Log (owner)", r);
-t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.lic >= 6 && r.log, "a player's admin info and their pilots' licenses", r);
+  return { btn: true, masked, tabs, rows, info, lic, cards, meters, apTabs, prof, said, log };`);
+t.ok(r.btn && r.masked && r.tabs === "Players,Reports,Appeals,Chat,Names,Words,Support,Log,Players,Admins,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Admins / Disciplined), Reports, Appeals, Chat, Names, Words and Log (owner)", r);
+t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.apTabs === "Player,Pilots,Language" && r.cards >= 1 && r.lic >= 1 && r.log, "a player's admin info; their pilots as on the Pilot window, with their licenses (owner)", r);
+t.ok(r.meters === 7, "the Language tab: the overall meter and one per kind of word (owner)", r.meters);
+t.ok((r.prof.pics === 6 || r.prof.pics === 0) && r.prof.after && r.prof.menu === "Admin Profile", "first the admin profile (6 pictures); the panel's menu changes it (owner)", r.prof);
+t.ok(r.said && r.said.admin && r.said.pic && /^Warden_/.test(r.said.who) && r.said.sw === "Admin", "the chat's Player / Admin switch: as Admin, a line under the admin name and picture (owner)", r.said);
 await page.close();
 
 // phone: windows fit the screen, a pinch zooms, a tap flies

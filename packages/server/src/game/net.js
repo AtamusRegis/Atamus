@@ -5,10 +5,15 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
-import { setGameHooks, isUnlocked, muteOf } from "../admin.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, saveChatFlag } from "./persist.js";
+import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
+import { personaOf } from "../personas.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName } from "./persist.js";
 import { scan } from "../namefilter.js";
+import { flagLine, HEAT_MAX } from "../language.js";
 import { onAppealLine, subscribers } from "../appeals.js";
+import { hears } from "../relations.js";
+import { onRelAppeal } from "../relappeals.js";
+import { onTicket } from "../tickets.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
 import { DOCK_KM } from "./station.js";
@@ -24,43 +29,112 @@ export function attachGameServer(httpServer) {
   const sendTo = (pid, o) => { const s = JSON.stringify(o); for (const c of conns.get(pid) || []) if (c.readyState === c.OPEN && !c.replaced) c.send(s); };
   // (owner) admin DMs: an admin (with the panel open) messages an online player; the player's side is a window of its own
   // that they can't close, until the admin ends it. One admin conversation per player (kept in memory).
-  const admDm = new Map();                              // player pid -> { admin, adminName, name, log: [{ from, text, ts }] }
-  const pidByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return p.id; return null; };
+  // (owner) the admin is shown by their admin profile (personas.js), resolved when sent: a changed profile changes old lines
+  const admDm = new Map();                              // player pid -> { admin, name, log: [{ from, text, ts, a (an admin's line: their account) }], frozen, graceAt }
+  const pName = (adminPid) => (personaOf(adminPid) || {}).name || "Admin";
+  const pOut = (adminPid) => { const pe = personaOf(adminPid) || {}; return { name: pe.name || "Admin", pic: pe.pic || 1, key: pe.key || "" }; };
+  const viewLog = (d) => d.log.map((l) => { if (!l.a) return { from: l.from, text: l.text, ts: l.ts }; const pe = pOut(String(l.a)); return { from: pe.name, text: l.text, ts: l.ts, key: pe.key, pic: pe.pic }; });
+  const saveDm = (pid) => { const d = admDm.get(pid); (d ? saveAdminDm(pid, { ...d, adminName: pName(d.admin) }) : deleteAdminDm(pid)).catch((e) => console.error("admin dm", e)); };
+  loadAdminDms().then((rows) => { for (const r of rows) admDm.set(String(r.player_id), { admin: String(r.admin_id), name: r.player_name, log: (r.log || []).map((l) => (l.a || l.from !== r.admin_name ? l : { ...l, a: String(r.admin_id) })), frozen: !!r.frozen }); }).catch((e) => console.error("admin dms", e));
+  const onlineByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return { id: p.id, name: p.name }; return null; };
   const cleanText = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 500) : "");
-  function admSay(pid, name, m) {
+  const dmFor = (adminPid, name) => { for (const [pid, d] of admDm) if (d.admin === adminPid && d.name.toLowerCase() === String(name).toLowerCase()) return [pid, d]; return [null, null]; };
+  // (owner) an admin opens a DM with a player (by name, online or not): both windows open at once
+  async function admStart(pid, to) {
+    if (!isUnlocked(pid) || !personaOf(pid) || typeof to !== "string" || to.length > 40) return null;
+    const t = onlineByName(to) || await userByName(to); if (!t || t.id === pid) return null;
+    let d = admDm.get(t.id);
+    if (d && d.admin !== pid) { sendTo(d.admin, { t: "admend", with: d.name }); if (d.frozen) logAction(pid, pName(pid), t.id, t.name, "freeze taken over", "", { from: pName(d.admin) }).catch(() => {}); }   // another admin takes it over (and the freeze with it)
+    if (!d || d.admin !== pid) { d = { admin: pid, name: t.name, log: d ? d.log : [], frozen: !!(d && d.frozen) }; admDm.set(t.id, d); saveDm(t.id); if (d.frozen) setFrozenRow(t.id, true, pid).catch(() => {}); }
+    const pe = pOut(pid);
+    sendTo(t.id, { t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) }); sendTo(pid, { t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen });
+    return [t.id, d];
+  }
+  async function admSay(pid, name, m) {
     const text = cleanText(m.text); if (!text) return;
-    if (typeof m.to === "string" && isUnlocked(pid)) {    // an admin to a player
-      const to = pidByName(m.to); if (!to || to === pid) return;
-      let d = admDm.get(to);
-      if (d && d.admin !== pid) sendTo(d.admin, { t: "admend", with: d.name });   // another admin takes it over
-      if (!d || d.admin !== pid) { d = { admin: pid, adminName: name, name: world.players.get(to).name, log: [] }; admDm.set(to, d); }
-      const line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift();
-      sendTo(to, { t: "admdm", ...line, admin: name }); sendTo(pid, { t: "admdm", ...line, with: d.name });
+    if (typeof m.to === "string" && isUnlocked(pid) && personaOf(pid)) {    // an admin to a player
+      let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
+      const pe = pOut(pid), line = { from: pe.name, text, ts: Date.now() }; d.log.push({ ...line, a: pid }); if (d.log.length > 100) d.log.shift(); saveDm(to);
+      sendTo(to, { t: "admdm", ...line, key: pe.key, pic: pe.pic, admin: pe.name }); sendTo(pid, { t: "admdm", ...line, key: pe.key, pic: pe.pic, with: d.name });
+      chatLine({ ch: "admin", fromId: pid, aid: pid, from: pe.name, toId: to, to: d.name, text });
       return;
     }
     const d = admDm.get(pid); if (!d) return;            // the player answering
-    const line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift();
-    sendTo(pid, { t: "admdm", ...line, admin: d.adminName }); sendTo(d.admin, { t: "admdm", ...line, with: d.name });
+    const pe = pOut(d.admin), line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift(); saveDm(pid);
+    sendTo(pid, { t: "admdm", ...line, admin: pe.name }); sendTo(d.admin, { t: "admdm", ...line, with: d.name });
+    chatLine({ ch: "admin", fromId: pid, from: name, toId: d.admin, toAid: d.admin, to: pe.name, text });
   }
-  function admEnd(pid, m) {
-    const to = pidByName(m.to), d = to && admDm.get(to); if (!d || d.admin !== pid) return;
-    admDm.delete(to); sendTo(to, { t: "admend" }); sendTo(pid, { t: "admend", with: d.name });
+  // (owner) Freeze is a box in the admin's DM: no reason needed (it's logged); it lasts while that admin is around with the DM open
+  async function setFreeze(playerPid, on, by, note = "") {
+    const d = admDm.get(playerPid); if (d) { d.frozen = on; d.graceAt = null; saveDm(playerPid); sendTo(d.admin, { t: "admstate", with: d.name, frozen: on }); }
+    await setFrozenRow(playerPid, on, by.id);
+    world.setFrozen(playerPid, on); sendTo(playerPid, { t: "frozen", on });
+    const name = (d && d.name) || (world.players.get(playerPid) || {}).name || "?";
+    await logAction(by.id, by.name, playerPid, name, on ? "freeze" : "unfreeze", note).catch((e) => console.error("freeze log", e));
+  }
+  async function admFreeze(pid, m) {
+    if (!isUnlocked(pid) || !personaOf(pid)) return;
+    let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
+    if (!!m.on === !!d.frozen) return;
+    await setFreeze(to, !!m.on, { id: pid, name: pName(pid) });
+  }
+  async function admEnd(pid, m) {                      // (owner) closing the DM ends it, and thaws the player
+    const [to, d] = dmFor(pid, m.to); if (!d) return;
+    if (d.frozen) await setFreeze(to, false, { id: pid, name: pName(pid) }, "admin DM closed");
+    admDm.delete(to); saveDm(to); sendTo(to, { t: "admend" }); sendTo(pid, { t: "admend", with: d.name });
+  }
+  // (owner) the freezing admin gone (logged off) for 5 minutes: the player thaws. A frozen player back before the admin starts
+  // the same 5 minutes.
+  const THAW_MS = 5 * 60_000;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [pid, d] of admDm) {
+      if (!d.frozen) continue;
+      if (conns.has(d.admin)) { d.graceAt = null; continue; }
+      if (!d.graceAt && (conns.has(pid) || d.wasOnline)) d.graceAt = now;
+      if (d.graceAt && now - d.graceAt > THAW_MS) setFreeze(pid, false, { id: d.admin, name: pName(d.admin) }, "admin away 5 minutes").catch((e) => console.error("thaw", e));
+    }
+  }, 10_000);
+  // (owner) a player's ships as named right now (their pilot, the ship's name, its hull), saved with a kick, ban or report
+  const shipNamesOf = (pid) => world.shipsOf(pid).map((sh) => { const pl = ((world.players.get(pid) || {}).pilots || []).find((x) => x.id === sh.pilot); return { pilot: pl ? pl.name : sh.pilot, ship: sh.name || (pl ? pl.name + "'s " : "") + (SHIP_TYPES[sh.type] || {}).name, hull: (SHIP_TYPES[sh.type] || {}).name }; });
+  // (owner) the last hour of chat (Local, Corp, DMs and admin DMs), saved with a kick, a ban or a report on a player
+  const CHAT_KEEP_MS = 3600_000, chatBuf = [];
+  function chatLine(l) { chatBuf.push({ ts: Date.now(), ...l }); while (chatBuf.length && chatBuf[0].ts < Date.now() - CHAT_KEEP_MS) chatBuf.shift(); if (chatBuf.length > 20000) chatBuf.shift(); }
+  world.onLine = (l) => chatLine(l);
+  function chatLogFor(pid) {                            // Local and Corp (everyone's), and the player's own DMs and admin DMs
+    const since = Date.now() - CHAT_KEEP_MS;
+    return chatBuf.filter((l) => l.ts >= since && (l.ch === "local" || l.ch === "corp" || l.fromId === pid || l.toId === pid)).slice(-600)
+      .map((l) => ({ ts: l.ts, ch: l.ch, from: l.from, ...(l.to ? { to: l.to } : {}), ...(l.aid ? { aid: l.aid } : {}), ...(l.toAid ? { toAid: l.toAid } : {}), text: l.text }));   // (an admin's lines keep who: shown as their profile when read)
   }
   // (owner) the admin panel: who's online, kicking (a message, then the socket closes), and a player's pilots changed
   // (owner) muted players: no Local, Corp or DMs (an admin conversation still works) until it ends
   const mutes = new Map();                              // pid -> { perm, until (ms), reason }
   const mutedNow = (pid) => { const m = mutes.get(pid); if (!m) return null; if (!m.perm && m.until <= Date.now()) { mutes.delete(pid); return null; } return m; };
   // (owner) every Local / Corp line goes through the filter; flagged ones are kept for the admins (never DMs)
-  world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) saveChatFlag(p.id, p.name, ch, text, r.cats, r.words).catch((e) => console.error("chat flag", e)); };
+  world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) flagLine(p.id, p.name, ch, text, r.cats, r.words).then((h) => {   // (owner) the player's log and heat; admins' Chat tab updates at once
+    for (const id of conns.keys()) if (isUnlocked(id)) { sendTo(id, { t: "chatflag" }); if (h.alert) sendTo(id, { t: "langalert", id: p.id, name: p.name, heat: Math.min(HEAT_MAX, Math.round(h.heat * 10) / 10), text }); }
+  }).catch((e) => console.error("chat flag", e)); };
   // (owner) a new line in a ban appeal: every subscribed admin who's online is told (not the one who wrote it)
   onAppealLine(async (appealId, name, text, except) => {
     for (const id of await subscribers(appealId)) if (id !== except && conns.has(id) && isUnlocked(id)) sendTo(id, { t: "appealmsg", id: appealId, name, text });
   });
+  // (owner) mutes and blocks: a player doesn't get the chat lines or DMs of someone they muted or blocked
+  world.hears = hears;
+  // (owner) a mute / block appeal changed: both players and the admins online are told; a support ticket's new line: its
+  // player (an admin's answer) or the admins online (the player's)
+  const admins = () => [...conns.keys()].filter((id) => isUnlocked(id));
+  onRelAppeal((id, players) => { for (const p of players) sendTo(p, { t: "relappeal", id }); for (const a of admins()) sendTo(a, { t: "relappealadm", id }); });
+  onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else for (const a of admins()) sendTo(a, { t: "ticketadm", id, subject }); });
   setGameHooks({
+    // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
+    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
+      for (const [pid2, d] of admDm) if (d.admin === String(uid)) saveDm(pid2); },
     renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch {} } },
     renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
-    freeze: (pid, on) => { world.setFrozen(pid, on); sendTo(pid, { t: "frozen", on }); },
+    freeze: async (pid, on, by) => { await setFreeze(pid, on, by); },   // (the panel: unfreeze)
+    chatLog: (pid) => chatLogFor(String(pid)),
+    shipNames: (pid) => shipNamesOf(String(pid)),
     online: () => new Set(conns.keys()),
     kick: (pid, code, msg) => { for (const c of conns.get(pid) || []) { try { c.send(JSON.stringify(msg)); c.close(code, msg.t); } catch {} } },
     refreshPilots: async (pid) => { if (!world.players.has(pid)) return; try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch (e) { console.error("admin refresh", e); } },
@@ -102,10 +176,12 @@ export function attachGameServer(httpServer) {
     });
     const fl = world.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = world.poiSig(player);
     send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, pois: world.poisFor(player), belts: fl.fields }));
-    world.setFrozen(pid, !!user.frozen); if (user.frozen) send(JSON.stringify({ t: "frozen", on: true }));   // (owner) still frozen
+    { const d = admDm.get(pid), frozen = !!(user.frozen && d && d.frozen);   // (owner) still frozen (only while an admin DM holds it)
+      if (user.frozen && !frozen) setFrozenRow(pid, false, null).catch(() => {});
+      world.setFrozen(pid, frozen); if (frozen) { send(JSON.stringify({ t: "frozen", on: true })); d.wasOnline = true; } }
     { const mu = muteOf(user); if (mu) mutes.set(pid, { perm: mu.perm, until: mu.until ? new Date(mu.until).getTime() : 0, reason: mu.reason }); else mutes.delete(pid); }
-    { const d = admDm.get(pid); if (d) send(JSON.stringify({ t: "admopen", admin: d.adminName, log: d.log })); }   // an admin conversation still open
-    for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: d.log }));
+    { const d = admDm.get(pid); if (d) { const pe = pOut(d.admin); send(JSON.stringify({ t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) })); } }   // an admin conversation still open
+    for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen }));
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
@@ -122,12 +198,19 @@ export function attachGameServer(httpServer) {
           case "pilots": refreshPilots(); break;
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
           case "chat": {
+            // (owner) an admin's Admin switch: they speak under their admin profile (no ship says it); a DM becomes an admin DM
+            if (m.as === "admin") { const pe = isUnlocked(pid) && personaOf(pid); if (!pe) break;
+              if (m.channel === "dm") admSay(pid, pe.name, { to: m.to, text: m.text }).catch((e) => console.error("adm", e));
+              else world.cmdChat(pid, m.text, m.channel, null, null, pe);
+              break; }
             const mu = mutedNow(pid);
             if (mu) { send(JSON.stringify({ t: "notice", text: mu.perm ? "You're muted." : "You're muted until " + new Date(mu.until).toLocaleString("en-US", { timeZone: "UTC" }) + " UTC." })); break; }   // (owner) muted
             world.cmdChat(pid, m.text, m.channel, m.to, m.ship); break;
           }
-          case "adm": admSay(pid, (world.players.get(pid) || {}).name || user.username, m); break;
-          case "admend": admEnd(pid, m); break;
+          case "adm": admSay(pid, (world.players.get(pid) || {}).name || user.username, m).catch((e) => console.error("adm", e)); break;
+          case "admstart": admStart(pid, m.to).catch((e) => console.error("admstart", e)); break;
+          case "admfreeze": admFreeze(pid, m).catch((e) => console.error("admfreeze", e)); break;
+          case "admend": admEnd(pid, m).catch((e) => console.error("admend", e)); break;
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
           case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
