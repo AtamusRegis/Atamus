@@ -48,6 +48,7 @@ packages/server/src/
   relations.js    players' mutes and blocks (own and admin-set)
   relappeals.js   appeals of admin-set mutes / blocks (both players, a message each)
   tickets.js      support tickets
+  staff.js        staff notifications (Admin chat lines or kept for later), the Admin chat, unread counts per admin tab
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz

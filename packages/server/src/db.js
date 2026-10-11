@@ -257,6 +257,14 @@ export async function migrate() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;
     -- (owner) a Moderator's abilities suspended for 24 hours by another staff member, with a reason; Head Admins are told
     ALTER TABLE users ADD COLUMN IF NOT EXISTS mod_suspended_until TIMESTAMPTZ;
+    -- (owner) staff notifications kept for when they're away, the Admin chat, and when each last opened each admin tab
+    CREATE TABLE IF NOT EXISTS staff_notes (
+      id BIGSERIAL PRIMARY KEY, admin_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      kind TEXT NOT NULL, text TEXT NOT NULL, ref JSONB, read BOOLEAN NOT NULL DEFAULT false
+    );
+    CREATE INDEX IF NOT EXISTS staff_notes_admin_idx ON staff_notes (admin_id, id DESC);
+    CREATE TABLE IF NOT EXISTS staff_chat (id BIGSERIAL PRIMARY KEY, admin_id BIGINT, at TIMESTAMPTZ NOT NULL DEFAULT now(), text TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS staff_seen (admin_id BIGINT NOT NULL, tab TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, PRIMARY KEY (admin_id, tab));
     CREATE TABLE IF NOT EXISTS mod_suspensions (
       id BIGSERIAL PRIMARY KEY, mod_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, by_id BIGINT, reason TEXT NOT NULL,
       at TIMESTAMPTZ NOT NULL DEFAULT now(), until TIMESTAMPTZ NOT NULL, lifted_by BIGINT, lifted_at TIMESTAMPTZ

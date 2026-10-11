@@ -24,7 +24,7 @@ export async function relAppealView(id) {
 }
 async function addLine(a, fromAdmin, who, name, text) {
   await pool.query(`INSERT INTO rel_appeal_messages (appeal_id, from_admin, user_id, admin_id, name, text) VALUES ($1, $2, $3, $4, $5, $6)`, [a.id, fromAdmin, fromAdmin ? null : who, fromAdmin ? who : null, name, text]);
-  try { notify(String(a.id), players(a)); } catch (e) { console.error("relappeal notify", e); }
+  try { notify(String(a.id), players(a), !fromAdmin); } catch (e) { console.error("relappeal notify", e); }
 }
 /** A player opens an appeal against an admin-set mute or block with the other player: their one message. */
 export async function openRelAppeal(uid, name, otherId, kind, raw) {
@@ -62,7 +62,7 @@ export async function giveTurn(id, uid) {
   const a = await row(id); if (!a || !players(a).includes(String(uid))) throw new Error("No such appeal.");
   if (a.status !== "open") throw new Error("That appeal is closed.");
   await pool.query(`UPDATE rel_appeal_turns SET left_n = 1 WHERE appeal_id = $1 AND user_id = $2 AND left_n = 0`, [a.id, uid]);
-  try { notify(String(a.id), players(a)); } catch {}
+  try { notify(String(a.id), players(a), false); } catch {}
 }
 /** Accept (lift the mute / block on both lists) or deny; a last line says so. */
 export async function closeRelAppeal(admin, id, accept, reason) {

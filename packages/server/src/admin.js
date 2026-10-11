@@ -18,6 +18,7 @@ import { LICENSES, STARTING_LICENSES, getLicense } from "./licenses.js";
 import { CORP, offerName } from "./pilots.js";
 import { nameKey, filterForm, CATEGORY_KEYS } from "./namefilter.js";
 import { reloadWords } from "./names.js";
+import { unreadNoteCount, notesOf, readNotes, staffChatRecent, unreadCounts, markSeen } from "./staff.js";
 import { setRelation, relationsOf } from "./relations.js";
 import * as relAp from "./relappeals.js";
 import * as tickets from "./tickets.js";
@@ -32,7 +33,7 @@ const REASON_MAX = 500;
 const unlocked = new Map();                         // session key -> { uid, until }
 
 // the game socket's side (net.js registers these): who's online, kicking, and refreshing a player's pilots in the world
-let hooks = { modSuspended: async () => {}, notifyHeads: async () => {}, relations: () => {}, persona: () => {}, online: () => new Set(), chatLog: () => [], shipNames: () => [], kick: () => {}, refreshPilots: async () => {}, freeze: () => {}, mute: () => {}, renameRequired: () => {}, renamed: () => {} };
+let hooks = { modSuspended: async () => {}, staffNotify: async () => {}, relations: () => {}, persona: () => {}, online: () => new Set(), chatLog: () => [], shipNames: () => [], kick: () => {}, refreshPilots: async () => {}, freeze: () => {}, mute: () => {}, renameRequired: () => {}, renamed: () => {} };
 /** For the other HTTP routes: tell the game something changed (a player renamed themselves or a pilot). */
 export const gameHook = (name, ...args) => hooks[name] && hooks[name](...args);
 /** Has this account opened the admin panel (the second password) in any of its sessions? (admin DMs over the socket) */
@@ -99,7 +100,7 @@ const lengthOf = (b) => { const n = Number(b.amount), unit = b.unit === "days" ?
 admin.get("/me", guard(false, async (req, res, me) => {
   const un = unlocked.get(me.key), un2 = !!(un && un.uid === me.id && un.until > Date.now()), h = await pwHashOf(me.id);
   const sus = me.role === "mod" ? (await pool.query(`SELECT mod_suspended_until FROM users WHERE id = $1 AND mod_suspended_until > now()`, [me.id])).rows[0] : null;
-  res.json({ role: me.role, owner: isOwner(me.username), suspendedUntil: sus ? sus.mod_suspended_until : null, needPassword: !h.admin_pw_hash && !isOwner(me.username), unlocked: un2, persona: un2 && me.persona ? { name: me.persona.name, pic: me.persona.pic } : null });
+  res.json({ role: me.role, owner: isOwner(me.username), notes: await unreadNoteCount(me.id), suspendedUntil: sus ? sus.mod_suspended_until : null, needPassword: !h.admin_pw_hash && !isOwner(me.username), unlocked: un2, persona: un2 && me.persona ? { name: me.persona.name, pic: me.persona.pic } : null });
 }));
 // (owner) new staff make their own panel password (not their login's); it unlocks the panel from then on
 admin.post("/password", guard(false, async (req, res, me) => {
@@ -390,7 +391,8 @@ admin.post("/suspend", guard(true, async (req, res, me) => {
   for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);
   await hooks.modSuspended(String(t.id));
   await log(me, t, "suspend moderator", reason, { until });
-  await hooks.notifyHeads(String(s.id)); res.json({ ok: true, until });
+  await hooks.staffNotify(["head"], "suspension", "Moderator " + t.username + (personaOf(t.id) ? " (" + personaOf(t.id).name + ")" : "") + " suspended by " + me.name + ": " + reason, { player: String(t.id) });   // (owner) the Head Admin is told
+  res.json({ ok: true, until });
 }));
 admin.post("/unsuspend", guard(true, async (req, res, me) => {
   if (!high(me)) return fail(res, 403, "Only an Admin can do that.");
@@ -400,13 +402,14 @@ admin.post("/unsuspend", guard(true, async (req, res, me) => {
   await pool.query(`UPDATE mod_suspensions SET lifted_by = $2, lifted_at = now() WHERE mod_id = $1 AND lifted_at IS NULL AND until > now()`, [t.id, me.id]);
   await log(me, t, "lift moderator suspension", reason); res.json({ ok: true });
 }));
-/** (net.js) the suspensions a Head Admin hasn't been told of (the last week), marked told */
-export async function unseenSuspensions(adminId, onlyId = null) {
-  const { rows } = await pool.query(`SELECT s.id, s.mod_id, u.username AS mod_name, s.by_id, s.reason, s.at, s.until FROM mod_suspensions s JOIN users u ON u.id = s.mod_id
-    WHERE s.at > now() - interval '7 days' AND ($2::bigint IS NULL OR s.id = $2) AND NOT EXISTS (SELECT 1 FROM mod_susp_seen x WHERE x.susp_id = s.id AND x.admin_id = $1) ORDER BY s.id`, [adminId, onlyId]);
-  for (const r of rows) await pool.query(`INSERT INTO mod_susp_seen (susp_id, admin_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [r.id, adminId]);
-  return rows.map((r) => ({ id: String(r.id), modId: String(r.mod_id), mod: r.mod_name + (personaOf(r.mod_id) ? " (" + personaOf(r.mod_id).name + ")" : ""), by: adminShown(r.by_id, "?"), reason: r.reason, at: r.at, until: r.until }));
-}
+
+// (owner) a staff member's notifications (kept while they were away; read only with the panel unlocked), the Admin chat's
+// recent lines, and what's new on each tab since they last opened it
+admin.get("/notes", guard(true, async (req, res, me) => res.json(await notesOf(me.id))));
+admin.post("/notes/read", guard(true, async (req, res, me) => { await readNotes(me.id); res.json({ ok: true }); }));
+admin.get("/staffchat", guard(true, async (req, res) => res.json(await staffChatRecent())));
+admin.get("/unread", guard(true, async (req, res, me) => res.json(await unreadCounts(me.id))));
+admin.post("/seen", guard(true, async (req, res, me) => { await markSeen(me.id, String((req.body || {}).tab || "")); res.json({ ok: true }); }));
 
 // ---- the Head Admin only ----
 const head = (fn) => guard(true, async (req, res, me) => { if (!high(me)) return fail(res, 403, "Only an Admin can do that."); await fn(req, res, me); });   // Admins and the Head Admin

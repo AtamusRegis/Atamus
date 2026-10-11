@@ -63,11 +63,11 @@ t.ok(lg.status === 403 && tok && lg.body.appeal.canNew && lg.body.appeal.left ==
 r = await ap("", { token: tok, text: "I was provoked" }); t.ok(r.body.current && r.body.current.status === "open" && r.body.current.messages.length === 1 && r.body.left === 2, "the player opens an appeal", r.body);
 const a1 = r.body.current.id;
 r = await ap("", { token: tok, text: "please look at the chat logs" }); t.ok(r.body.current.id === a1 && r.body.current.messages.length === 2, "and keeps writing in it while it's open");
-{ const adm = await connect(); const seen = []; adm.ws.on("message", (b) => { const m = JSON.parse(b); if (m.t === "appealmsg") seen.push(m); });
+{ const adm = await connect(); const seen = []; adm.ws.on("message", (b) => { const m = JSON.parse(b); if (m.t === "staffsys" && m.kind === "appeal") seen.push(m); });
   r = await q("/appeal/say", { id: a1, text: "Looking into it." }); t.ok(r.body.ok, "an admin answers");
   r = await q("/appeal/" + a1); t.ok(r.body.lines.length === 3 && r.body.lines[2].admin && r.body.lines[2].name === AN && r.body.subscribed, "every admin sees the whole conversation; answering subscribes you", r.body.lines);
   await ap("", { token: tok, text: "thank you" }); await sleep(500);
-  t.ok(seen.some((m) => m.id === a1 && m.text === "thank you" && m.name === "AdmTestBob"), "a subscribed admin is told of the player's new line", seen);
+  t.ok(seen.some((m) => m.ref && m.ref.appeal === a1 && /AdmTestBob: thank you/.test(m.text)), "a subscribed admin is told of the player's new line (in the Admin chat)", seen);
   r = await ap("/state", { token: tok }); t.ok(r.body.current.messages.some((l) => l.admin && l.text === "Looking into it."), "the player sees the admins' answers");
   await q("/appeal/subscribe", { id: a1, on: false }); seen.length = 0; await ap("", { token: tok, text: "hello?" }); await sleep(500);
   t.ok(!seen.length, "unsubscribed: no more notes"); await adm.close(); }
@@ -118,11 +118,11 @@ await q("/role", { id: String(bob.id), role: null });
   // (owner) an Admin suspends a Moderator for 24 hours (a reason); the Head Admin is told at once (or on connect)
   { const qb = (path, body) => fetch(BASE + "/game/admin" + path, body ? { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestBob" }, body: JSON.stringify(body) } : { headers: { "x-ptr-as": "AdmTestBob" } }).then(async (x) => ({ status: x.status, body: await x.json() }));
     await db.query(`UPDATE users SET role = 'mod', mod_suspended_until = NULL WHERE id = $1`, [bob.id]);
-    const hd = await connect(), heard = []; hd.ws.on("message", (x) => { const m = JSON.parse(x); if (m.t === "modsusp") heard.push(m); }); await sleep(300); heard.length = 0;
+    const hd = await connect(), heard = []; hd.ws.on("message", (x) => { const m = JSON.parse(x); if (m.t === "staffsys" && m.kind === "suspension") heard.push(m); }); await sleep(300); heard.length = 0;
     r = await qa("/suspend", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't suspend (only Admins) (owner)", r.body);
     r = await q("/suspend", { id: String(bob.id) }); t.ok(r.status === 400, "a suspension needs a reason");
     r = await q("/suspend", { id: String(bob.id), reason: "banning players for fun" }); t.ok(r.body.ok && r.body.until, "an Admin suspends a Moderator for 24 hours", r.body); await sleep(400);
-    t.ok(heard.some((m) => m.modId === String(bob.id) && m.by === AN && m.reason === "banning players for fun"), "the Head Admin online is told at once: who, by whom, why (owner)", heard);
+    t.ok(heard.some((m) => /AdmTestBob/.test(m.text) && m.text.includes(AN) && /banning players for fun/.test(m.text) && m.ref && m.ref.player === String(bob.id)), "the Head Admin online is told at once in the Admin chat: who, by whom, why (owner)", heard);
     r = await qb("/me"); t.ok(r.body.suspendedUntil, "the suspended Moderator sees until when", r.body);
     r = await qb("/unlock", { password: "whatever" }); t.ok(r.status === 403 && /suspended/.test(r.body.error), "and can't open the panel", r.body);
     await db.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [ann.id]);
@@ -134,10 +134,30 @@ await q("/role", { id: String(bob.id), role: null });
     r = await q("/unsuspend", { id: String(bob.id), reason: "talked it over" }); t.ok(r.body.ok && !(await qb("/me")).body.suspendedUntil, "an Admin lifts it early");
     await hd.close(); await sleep(300);
     await q("/suspend", { id: String(bob.id), reason: "again" });
-    const hd2 = await connect(), heard2 = []; hd2.ws.on("message", (x) => { const m = JSON.parse(x); if (m.t === "modsusp") heard2.push(m); }); await sleep(600);
-    t.ok(heard2.some((m) => m.reason === "again") || (hd2.last.modsusp && hd2.last.modsusp.reason === "again"), "the Head Admin, if away, is told when they connect", { heard2, last: hd2.last.modsusp });
+    const hd2 = await connect(); await sleep(300);
+    { const me1 = (await q("/me")).body, ns = (await q("/notes")).body;
+      t.ok(me1.notes >= 1 && ns.some((n) => !n.read && n.kind === "suspension" && /again/.test(n.text)), "the Head Admin, if away, finds it in their Notifications (the Admin button's count) (owner)", { n: me1.notes, ns: ns.slice(0, 2) });
+      await q("/notes/read", {}); t.ok((await q("/me")).body.notes === 0, "read once opened"); }
     r = await q("/log"); t.ok(r.body.some((x) => x.action === "suspend moderator" && x.target === "AdmTestBob") && r.body.some((x) => x.action === "lift moderator suspension"), "suspensions and lifts are logged");
     await hd2.close(); await db.query(`UPDATE users SET role = NULL, mod_suspended_until = NULL WHERE id = $1`, [bob.id]); }
+  // (owner) the Admin chat: staff online with the panel unlocked; @name pings (kept for them if away); reports, tickets and
+  // the rest as lines; unread counts per tab
+  { const hs = await connect(), seen = []; hs.ws.on("message", (x) => seen.push(JSON.parse(x)));
+    const pl = await connect("?as=AdmTestCal"), seenP = []; pl.ws.on("message", (x) => seenP.push(JSON.parse(x))); await sleep(300);
+    const before = (await qa("/me")).body.notes;
+    hs.send({ t: "chat", channel: "staff", text: "heads up @Mod_Ann" }); pl.send({ t: "chat", channel: "staff", text: "let me in" }); await sleep(500);
+    const ln = seen.find((m) => m.t === "chat" && m.ch === "staff" && m.text === "heads up @Mod_Ann");
+    t.ok(ln && ln.from === AN && ln.rank === "admin" && ln.pic === 2, "staff talk in the Admin chat under their profiles (owner)", ln);
+    t.ok(!seenP.some((m) => m.ch === "staff") && !seen.some((m) => m.text === "let me in"), "players can't read or write in it");
+    let an = (await qa("/notes")).body; t.ok((await qa("/me")).body.notes === before + 1 && an.some((n) => n.kind === "mention" && /heads up/.test(n.text)), "an @mention of someone away goes to their Notifications (owner)", an.slice(0, 2));
+    r = await q("/staffchat"); t.ok(r.body.some((l) => l.text === "heads up @Mod_Ann" && l.from === AN), "the recent Admin chat lines are kept for those coming online");
+    await q("/seen", { tab: "reports" }); const u0 = (await q("/unread")).body;
+    await fetch(BASE + "/game/report", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ target: "AdmTestCal", category: "Spam", text: "testing unread" }) }); await sleep(400);
+    const u1 = (await q("/unread")).body;
+    t.ok(u0.reports === 0 && u1.reports === 1 && ["appeals", "chat", "names", "words", "support", "disc"].every((k) => k in u1), "unread counts per tab: a new report shows on Reports (owner)", { u0, u1 });
+    t.ok(seen.some((m) => m.t === "staffsys" && m.kind === "report" && /AdmTestCal/.test(m.text)), "and as a line in the Admin chat for staff online");
+    await q("/seen", { tab: "reports" }); t.ok((await q("/unread")).body.reports === 0, "opening the tab clears it");
+    await hs.close(); await pl.close(); await db.query(`DELETE FROM users WHERE username = 'AdmTestCal'`); }
   r = await qa("/kick", { id: String(me.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't kick the Head Admin");
   r = await qa("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or change credits (Admins only)");
   r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403, "or make Moderators");
@@ -256,7 +276,7 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
   await sleep(400);
   { const L = (await q("/player/" + zid + "/language")).body, P = (await q("/players")).body.find((p) => p.name === "AdmTestZed");
     t.ok(L.lines.length === 4 && L.kinds.slurs.count === 2 && L.kinds.racist.count === 1 && L.kinds.profanity.count === 1 && L.kinds.slurs.heat > L.kinds.profanity.heat && P.heat >= 6, "a player's language log, a meter per kind, and the overall meter (owner)", { L: L.kinds, h: P.heat });
-    t.ok(got.a.some((m) => m.t === "langalert" && m.name === "AdmTestZed") && got.a.some((m) => m.t === "chatflag"), "running hot: the admins online are told", got.a.filter((m) => m.t === "langalert")); }
+    t.ok(got.a.some((m) => m.t === "staffsys" && m.kind === "language" && /AdmTestZed/.test(m.text)) && got.a.some((m) => m.t === "chatflag"), "running hot: the Admins online are told in the Admin chat (owner)", got.a.filter((m) => m.t === "langalert")); }
   // (owner) the chat's Admin switch: Local under the admin profile (no ship says it); a DM becomes an admin DM
   adm.send({ t: "chat", text: "admin here", channel: "local", as: "admin", ship: "1:ship:1" }); adm.send({ t: "chat", text: "as admin dm", channel: "dm", to: "AdmTestZed", as: "admin" }); await sleep(400);
   const al = got.z.find((m) => m.t === "chat" && m.text === "admin here");

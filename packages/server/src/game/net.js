@@ -5,7 +5,8 @@ import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
-import { setGameHooks, isUnlocked, muteOf, logAction, unseenSuspensions } from "../admin.js";
+import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
+import { staffIds, storeNote, unreadNoteCount, saveStaffLine, mentioned, STAFF_ROLES, HIGH_ROLES } from "../staff.js";
 import { personaOf } from "../personas.js";
 import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName, roleOf } from "./persist.js";
 import { scan } from "../namefilter.js";
@@ -111,28 +112,42 @@ export function attachGameServer(httpServer) {
   // (owner) muted players: no Local, Corp or DMs (an admin conversation still works) until it ends
   const mutes = new Map();                              // pid -> { perm, until (ms), reason }
   const mutedNow = (pid) => { const m = mutes.get(pid); if (!m) return null; if (!m.perm && m.until <= Date.now()) { mutes.delete(pid); return null; } return m; };
-  // (owner) every Local / Corp line goes through the filter; flagged ones are kept for the admins (never DMs)
-  world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) flagLine(p.id, p.name, ch, text, r.cats, r.words).then((h) => {   // (owner) the player's log and heat; admins' Chat tab updates at once
-    for (const id of conns.keys()) if (isUnlocked(id)) { sendTo(id, { t: "chatflag" }); if (h.alert) sendTo(id, { t: "langalert", id: p.id, name: p.name, heat: Math.min(HEAT_MAX, Math.round(h.heat * 10) / 10), text }); }
+  // (owner) staff notifications: a line in the Admin chat for staff online with the panel unlocked, else kept in their
+  // Notifications (the Admin button's red count) for when they're back
+  async function deliver(id, kind, text, ref) {
+    if (conns.has(id) && isUnlocked(id)) { sendTo(id, { t: "staffsys", kind, text, ref, ts: Date.now() }); return; }
+    await storeNote(id, kind, text, ref); if (conns.has(id)) sendTo(id, { t: "staffnotes", n: await unreadNoteCount(id) });
+  }
+  async function staffNotify(roles, kind, text, ref = null, except = null) {
+    try { for (const id of await staffIds(roles)) if (id !== except) await deliver(id, kind, text, ref); } catch (e) { console.error("staff notify", e); }
+  }
+  // (owner) the Admin chat: staff talk under their admin profiles; "@name" pings that staff member (kept for them if away)
+  async function staffSay(pid, raw) {
+    const pe = isUnlocked(pid) && personaOf(pid), text = cleanText(raw); if (!pe || !text) return;
+    await saveStaffLine(pid, text);
+    const msg = { t: "chat", ch: "staff", from: pe.name, admin: pe.key, pic: pe.pic, rank: pe.rank || "admin", text, ts: Date.now() };
+    for (const id of conns.keys()) if (isUnlocked(id)) sendTo(id, msg);
+    for (const id of await mentioned(text)) if (id !== pid && !(conns.has(id) && isUnlocked(id))) { await storeNote(id, "mention", pe.name + ": " + text, { tab: "staffchat" }); if (conns.has(id)) sendTo(id, { t: "staffnotes", n: await unreadNoteCount(id) }); }
+  }
+  // (owner) every Local / Corp line goes through the filter; flagged ones are kept for the admins (never DMs); a player's
+  // language running hot is a notification for the Admins and the Head Admin
+  world.onChat = (p, ch, text) => { if (ch === "dm") return; const r = scan(text); if (r.bad) flagLine(p.id, p.name, ch, text, r.cats, r.words).then((h) => {
+    for (const id of conns.keys()) if (isUnlocked(id)) sendTo(id, { t: "chatflag" });
+    if (h.alert) staffNotify(HIGH_ROLES, "language", "High profanity: " + p.name + " (" + Math.min(HEAT_MAX, Math.round(h.heat * 10) / 10) + "): " + text, { player: p.id, tab: "high" });
   }).catch((e) => console.error("chat flag", e)); };
-  // (owner) a new line in a ban appeal: every subscribed admin who's online is told (not the one who wrote it)
+  // (owner) a new line in a ban appeal: the admins subscribed to it (not the one who wrote it)
   onAppealLine(async (appealId, name, text, except) => {
-    for (const id of await subscribers(appealId)) if (id !== except && conns.has(id) && isUnlocked(id)) sendTo(id, { t: "appealmsg", id: appealId, name, text });
+    for (const id of await subscribers(appealId)) if (id !== except) await deliver(id, "appeal", "Appeal · " + name + ": " + text, { appeal: appealId });
   });
   // (owner) mutes and blocks: a player doesn't get the chat lines or DMs of someone they muted or blocked
   world.hears = hears;
-  // (owner) a mute / block appeal changed: both players and the admins online are told; a support ticket's new line: its
-  // player (an admin's answer) or the admins online (the player's)
-  const admins = () => [...conns.keys()].filter((id) => isUnlocked(id));
-  onRelAppeal((id, players) => { for (const p of players) sendTo(p, { t: "relappeal", id }); for (const a of admins()) sendTo(a, { t: "relappealadm", id }); });
-  onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else for (const a of admins()) sendTo(a, { t: "ticketadm", id, subject }); });
-  // (owner) a Moderator suspended: their admin DMs end (a freeze they held thaws); every Head Admin online is told now,
-  // the others when they next connect
-  const heads = new Set();                               // Head Admins connected
-  const tellHead = async (pid, onlyId = null) => { try { for (const s of await unseenSuspensions(pid, onlyId)) sendTo(pid, { t: "modsusp", ...s }); } catch (e) { console.error("modsusp", e); } };
+  // (owner) a mute / block appeal changed: both players are told; a player's line is a notification for the staff. A support
+  // ticket's new line: its player (an admin's answer) or the staff (the player's)
+  onRelAppeal((id, players, fromPlayer) => { for (const p of players) sendTo(p, { t: "relappeal", id }); if (fromPlayer) staffNotify(STAFF_ROLES, "relappeal", "Mute / block appeal: a new line", { relappeal: id }); });
+  onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else staffNotify(STAFF_ROLES, "ticket", "Support: " + subject, { ticket: id }); });
   setGameHooks({
     modSuspended: async (uid) => { for (const [pid2, d] of [...admDm]) if (d.admin === uid) await admEnd(uid, { to: d.name }).catch((e) => console.error("susp dm", e)); },
-    notifyHeads: async (sid) => { for (const pid2 of heads) if (conns.has(pid2)) await tellHead(pid2, sid); },
+    staffNotify: (roles, kind, text, ref) => staffNotify(roles, kind, text, ref),
     // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
     persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin" }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
       for (const [pid2, d] of admDm) if (d.admin === String(uid)) saveDm(pid2); },
@@ -189,7 +204,7 @@ export function attachGameServer(httpServer) {
     { const mu = muteOf(user); if (mu) mutes.set(pid, { perm: mu.perm, until: mu.until ? new Date(mu.until).getTime() : 0, reason: mu.reason }); else mutes.delete(pid); }
     { const d = admDm.get(pid); if (d) { const pe = pOut(d.admin); send(JSON.stringify({ t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) })); } }   // an admin conversation still open
     for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen }));
-    if (user.role === "head") { heads.add(pid); tellHead(pid); } else heads.delete(pid);   // (owner) suspensions they haven't been told of
+
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
     ws.on("message", (buf) => {
@@ -206,6 +221,7 @@ export function attachGameServer(httpServer) {
           case "pilots": refreshPilots(); break;
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
           case "chat": {
+            if (m.channel === "staff") { staffSay(pid, m.text).catch((e) => console.error("staff chat", e)); break; }   // (owner) the Admin chat
             // (owner) an admin's Admin switch: they speak under their admin profile (no ship says it); a DM becomes an admin DM
             if (m.as === "admin") { const pe = isUnlocked(pid) && personaOf(pid); if (!pe) break;
               if (m.channel === "dm") admSay(pid, pe.name, { to: m.to, text: m.text }).catch((e) => console.error("adm", e));

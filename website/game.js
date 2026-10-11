@@ -121,7 +121,7 @@
         if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
-      } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen" || m.t === "renamereq" || m.t === "appealmsg" || m.t === "admstate" || m.t === "adminprofile" || m.t === "chatflag" || m.t === "langalert" || m.t === "relappeal" || m.t === "relappealadm" || m.t === "ticket" || m.t === "ticketadm" || m.t === "modsusp") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
+      } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen" || m.t === "renamereq" || m.t === "appealmsg" || m.t === "admstate" || m.t === "adminprofile" || m.t === "chatflag" || m.t === "langalert" || m.t === "relappeal" || m.t === "relappealadm" || m.t === "ticket" || m.t === "staffsys" || m.t === "staffnotes") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
       } else if (m.t === "kicked" || m.t === "banned") { kickedWhy = m.reason || "";
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
