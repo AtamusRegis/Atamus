@@ -557,12 +557,6 @@
   const onScreenRing = (x, y, r) => { const d = Math.hypot(x - innerWidth / 2, y - innerHeight / 2); return Math.abs(d - r) < Math.hypot(innerWidth, innerHeight) / 2 + 2 && r < 3e6; };
   function ring(x, y, r, color) { if (!onScreenRing(x, y, r)) return; ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
   const bodyPx = (c, sc) => Math.max(c.kind === "moon" ? 1.5 : 3, c.r * sc);
-  // (owner, 2026-10-11) a planet's orbit is its real ellipse (the Sun at a focus): a, eccentricity, where the perihelion points
-  function orbitEllipse(p, color) {
-    const sc = scale(), a = p.orbit, e = p.e || 0, b = a * Math.sqrt(1 - e * e), w = p.w || 0, cx = -a * e * Math.cos(w), cy = -a * e * Math.sin(w);
-    const x = gx2s(cx), y = gy2s(cy); if (!onScreenRing(x, y, a * sc) && !onScreenRing(x, y, b * sc)) return;
-    ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y, a * sc, b * sc, -w, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
-  }
   // (owner) a ringed planet's rings: Saturn's bright and banded, the others faint
   function drawRings(p, sc) {
     const R = p.rings, x = gx2s(p.x), y = gy2s(p.y), ri = R.in * sc, ro = R.out * sc; if (ro < 2) return;
@@ -571,26 +565,25 @@
     const g = ctx.createRadialGradient(x, y, ri, x, y, ro);
     if (R.bright) { g.addColorStop(0, "rgba(160,140,110,0.18)"); g.addColorStop(0.25, "rgba(215,195,160,0.45)"); g.addColorStop(0.55, "rgba(230,212,175,0.55)"); g.addColorStop(0.62, "rgba(40,35,30,0.1)"); g.addColorStop(0.68, "rgba(220,200,165,0.45)"); g.addColorStop(1, "rgba(200,180,150,0.2)"); }
     else { g.addColorStop(0, "rgba(170,175,190,0.05)"); g.addColorStop(0.5, "rgba(170,175,190,0.16)"); g.addColorStop(1, "rgba(170,175,190,0.05)"); }
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, ro, 0, Math.PI * 2); ctx.arc(x, y, Math.max(0, ri), 0, Math.PI * 2, true); ctx.fill("evenodd");
+    ctx.fillStyle = g;
+    if (ro < BIG_PX) { ctx.beginPath(); ctx.arc(x, y, ro, 0, Math.PI * 2); ctx.arc(x, y, Math.max(0, ri), 0, Math.PI * 2, true); ctx.fill("evenodd"); }
+    else if (bodyPath(x, y, ro)) { ctx.clip(); if (bodyPath(x, y, ri)) { ctx.rect(-10, -10, innerWidth + 20, innerHeight + 20); ctx.clip("evenodd"); } ctx.fillRect(0, 0, innerWidth, innerHeight); }   // (huge on screen: only what shows)
     ctx.restore();
   }
   function drawCelestials() {
     const sc = scale(), cc = celestials();
     if (cc.sun) { const r = cc.sun.r * sc, x = gx2s(0), y = gy2s(0);   // (the Sun's disc, once it's big enough to see; its glow is SunFX)
-      if (r > 6 && x + r > 0 && y + r > 0 && x - r < innerWidth && y - r < innerHeight) { ctx.save(); const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,252,235,1)"); g.addColorStop(0.8, "rgba(255,226,150,1)"); g.addColorStop(1, "rgba(255,180,80,0.9)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.restore(); } }
-    for (const p of cc.planets) {
-      orbitEllipse(p, "rgba(150,175,215,0.16)");                                     // the planet's orbit around the Sun
-      const px = gx2s(p.x), py = gy2s(p.y);
-      for (const m of p.moons) if (m.major) ring(px, py, m.orbit * sc, "rgba(150,175,215,0.11)");   // its major moons' orbits
-      if (p.rings) drawRings(p, sc);
-    }
+      if (r > 6 && x + r > 0 && y + r > 0 && x - r < innerWidth && y - r < innerHeight) { ctx.save(); const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,252,235,1)"); g.addColorStop(0.8, "rgba(255,226,150,1)"); g.addColorStop(1, "rgba(255,180,80,0.9)"); ctx.fillStyle = g; if (bodyPath(x, y, r)) ctx.fill(); ctx.restore(); } }
+    for (const p of cc.planets) if (p.rings) drawRings(p, sc);   // (owner: no orbit lines)
     for (const p of cc.planets) for (const c of [p, ...p.moons]) {
       const x = gx2s(c.x), y = gy2s(c.y), r = bodyPx(c, sc);
       if (x < -r * 1.3 || y < -r * 1.3 || x > innerWidth + r * 1.3 || y > innerHeight + r * 1.3) continue;
       if (c.kind === "moon" && !c.major && c.r * sc < 1.5) { ctx.fillStyle = "rgba(190,195,205,0.55)"; ctx.fillRect(x - 0.5, y - 0.5, 1, 1); continue; }   // (a small moon far off: a speck)
+      if (r < 6) { ctx.fillStyle = BODY_DOT[c.world] || "#9aa"; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); continue; }   // (small on screen: a plain disc; no texture to make)
       drawPlanet(x, y, r, c);
     }
   }
+  const BODY_DOT = { Ocean: "#4f86c6", Desert: "#c79a6a", Ice: "#cfe3ee", "Gas giant": "#c9a27e" };
   // procedural worlds: a texture per body (its seed and kind pick the look), lit from the sun at the center (before the reset)
   const planetTex = new Map();
   const PLANET_KINDS = {
@@ -615,16 +608,36 @@
     }
     g.putImageData(img, 0, 0); const out = { c, kind }; planetTex.set(key, out); return out;
   }
+  // (a body far bigger than the screen, zoomed in on it: only the part that shows is drawn, as a polygon along its
+  // visible edge; drawing it whole at that size stalls the browser)
+  const BIG_PX = 3000;
+  function bodyPath(x, y, r) {
+    ctx.beginPath();
+    if (r < BIG_PX) { ctx.arc(x, y, r, 0, Math.PI * 2); return true; }
+    const W = innerWidth, H = innerHeight, cx = W / 2, cy = H / 2, dist = Math.hypot(cx - x, cy - y), diag = Math.hypot(W, H) / 2 + 20;
+    if (dist - diag > r) return false;                       // nowhere on screen
+    if (dist + diag < r) { ctx.rect(-10, -10, W + 20, H + 20); return true; }   // the whole screen inside it
+    const phi = Math.atan2(cy - y, cx - x), span = Math.min(Math.PI, 2.2 * diag / r + 0.002), n = 96;
+    for (let k = 0; k <= n; k++) { const a = phi - span + 2 * span * k / n; (k ? ctx.lineTo : ctx.moveTo).call(ctx, x + Math.cos(a) * r, y + Math.sin(a) * r); }
+    ctx.lineTo(x + Math.cos(phi) * (r - 3 * diag), y + Math.sin(phi) * (r - 3 * diag)); ctx.closePath();   // (closed well inside it, off screen)
+    return true;
+  }
   function drawPlanet(x, y, rPx, b) {
-    const { c, kind } = planetTexture(b.seed || 1, b.world), d = Math.hypot(b.x, b.y) || 1, lx = -b.x / d, ly = b.y / d;   // toward the sun (screen y is down)
+    const { c, kind } = planetTexture(b.kind === "moon" && !b.major ? 900 + ((b.seed || 1) % 6) : b.seed || 1, b.world);   // (small moons share a few looks: each texture takes a moment to make)
+    const d = Math.hypot(b.x, b.y) || 1, lx = -b.x / d, ly = b.y / d, big = rPx >= BIG_PX, W = innerWidth, H = innerHeight;   // toward the sun (screen y is down)
     ctx.save();
-    const atm = ctx.createRadialGradient(x, y, rPx * 0.9, x, y, rPx * 1.25); atm.addColorStop(0, "rgba(" + kind.atm + ",0.35)"); atm.addColorStop(1, "rgba(" + kind.atm + ",0)");
-    ctx.fillStyle = atm; ctx.beginPath(); ctx.arc(x, y, rPx * 1.25, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.clip();
-    ctx.imageSmoothingEnabled = true; ctx.drawImage(c, x - rPx, y - rPx, rPx * 2, rPx * 2);
+    if (!big) { const atm = ctx.createRadialGradient(x, y, rPx * 0.9, x, y, rPx * 1.25); atm.addColorStop(0, "rgba(" + kind.atm + ",0.35)"); atm.addColorStop(1, "rgba(" + kind.atm + ",0)");
+      ctx.fillStyle = atm; ctx.beginPath(); ctx.arc(x, y, rPx * 1.25, 0, Math.PI * 2); ctx.fill(); }
+    if (!bodyPath(x, y, rPx)) { ctx.restore(); return; }
+    ctx.clip(); ctx.imageSmoothingEnabled = true;
+    if (!big) ctx.drawImage(c, x - rPx, y - rPx, rPx * 2, rPx * 2);
+    else {                                                   // just the texture under the screen
+      const N = c.width, k = N / (2 * rPx), sx = Math.max(0, (0 - (x - rPx)) * k), sy = Math.max(0, (0 - (y - rPx)) * k), ex = Math.min(N, (W - (x - rPx)) * k), ey = Math.min(N, (H - (y - rPx)) * k);
+      if (ex > sx && ey > sy) ctx.drawImage(c, sx, sy, Math.max(0.01, ex - sx), Math.max(0.01, ey - sy), x - rPx + sx / k, y - rPx + sy / k, (ex - sx) / k, (ey - sy) / k);
+    }
     const sh = ctx.createRadialGradient(x + lx * rPx * 0.45, y + ly * rPx * 0.45, rPx * 0.15, x + lx * rPx * 0.2, y + ly * rPx * 0.2, rPx * 1.45);
     sh.addColorStop(0, "rgba(255,250,240,0.12)"); sh.addColorStop(0.45, "rgba(0,0,0,0.1)"); sh.addColorStop(0.75, "rgba(0,0,8,0.7)"); sh.addColorStop(1, "rgba(0,0,8,0.95)");
-    ctx.fillStyle = sh; ctx.fillRect(x - rPx, y - rPx, rPx * 2, rPx * 2);
+    ctx.fillStyle = sh; if (big) ctx.fillRect(0, 0, W, H); else ctx.fillRect(x - rPx, y - rPx, rPx * 2, rPx * 2);
     ctx.restore();
   }
   // the planet or moon under the pointer (its body), for its menu
@@ -905,7 +918,7 @@
     bgCtx.globalAlpha = 1; bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // a very thin world grid (step chosen so lines sit ~70+ px apart; every 5th line a touch brighter)
     if (cfg) {
-      const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]; let step = steps.find((v) => v * sc >= 70) || 20000;
+      const sc = scale(), steps = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000]; let step = steps.find((v) => v * sc >= 70) || 1000000;   // (the system is 1.4 million km across)
       const x0 = cam.cx - W / 2 / sc, x1 = cam.cx + W / 2 / sc, y0 = cam.cy - H / 2 / sc, y1 = cam.cy + H / 2 / sc;
       bgCtx.lineWidth = 1;
       for (let gx = Math.floor(x0 / step) * step; gx <= x1; gx += step) { const x = Math.round(gx2s(gx)) + 0.5; bgCtx.strokeStyle = Math.round(gx / step) % 5 === 0 ? "rgba(140,170,220,0.07)" : "rgba(140,170,220,0.035)"; bgCtx.beginPath(); bgCtx.moveTo(x, 0); bgCtx.lineTo(x, H); bgCtx.stroke(); }
