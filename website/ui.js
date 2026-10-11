@@ -676,7 +676,7 @@
     const input = el("input", { class: "text-input", maxlength: "240", placeholder: dm ? dm.name : chatTab === "corp" ? "Deep Core Industries" : "Local" });
     const form = el("form", { class: "chat-form", onsubmit: (e) => {
       e.preventDefault(); const t = input.value.trim(); if (!t) return;
-      window.Atamus.send(dm ? { t: "chat", text: t, channel: "dm", to: dm.name } : { t: "chat", text: t, channel: chatTab }); input.value = "";
+      const own = window.Atamus.myShip; window.Atamus.send(dm ? { t: "chat", text: t, channel: "dm", to: dm.name } : { t: "chat", text: t, channel: chatTab, ...(own ? { ship: own.id } : {}) }); input.value = "";
     } }, input);
     body.append(log, form); log.scrollTop = log.scrollHeight;
     updateChatGlow();
@@ -808,6 +808,10 @@
       label ? el("span", { class: "hb-num" }, label) : null, k ? el("img", { class: "hb-img", src: itemIcon(k), alt: "", draggable: "false" }) : null);
     if (k) {
       nameTip(node, itemName(k));
+      if (kind === "active") {                           // (owner) hovering it (touch: pressing it) lights up its range around the ship
+        node.addEventListener("pointerenter", () => { window.Atamus.hoverModule = { key: k, el: node }; });
+        node.addEventListener("pointerleave", () => { const h = window.Atamus.hoverModule; if (h && h.el === node) window.Atamus.hoverModule = null; });
+      }
       dragSource(node, () => ({ item: k, from: { type: "slot", kind, slot: i } }), () => [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })],
         [off ? "Power On" : "Power Off", () => window.Atamus.send({ t: "power", ship: sh.id, kind, slot: i, on: off })], ["Info", () => openModInfo(k)]],   // (owner) powered off: disposition only
         kind === "active" && extraCls === "hb-live" ? () => toggleModule(i) : null);

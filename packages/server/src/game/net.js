@@ -66,7 +66,7 @@ export function attachGameServer(httpServer) {
           case "move": world.cmdMove(pid, m.ship, m.x, m.y); break;
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
           case "pilots": refreshPilots(); break;
-          case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
+          case "chat": world.cmdChat(pid, m.text, m.channel, m.to, m.ship); break;
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
           case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;

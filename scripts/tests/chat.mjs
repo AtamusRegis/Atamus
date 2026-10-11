@@ -9,6 +9,9 @@ const mk = (id, name) => { got[id] = []; const p = w.addPlayer(id, name, (s) => 
 mk("a", "Alice"); mk("b", "Bob"); mk("c", "Cat");
 w.cmdChat("a", "  hello   all ", "local");
 t.ok(["a", "b", "c"].every((k) => got[k].some((m) => m.ch === "local" && m.text === "hello all" && m.from === "Alice" && m.portrait)), "Local reaches everyone, as the speaker's character");
+const shA = [...w.ships.values()].find((x) => x.owner === "a"), shB = [...w.ships.values()].find((x) => x.owner === "b");
+w.cmdChat("a", "over here", "local", null, shA.id); w.cmdChat("a", "not mine", "local", null, shB.id); w.cmdChat("a", "corp", "corp", null, shA.id);
+t.ok(got.b.some((m) => m.text === "over here" && m.ship === shA.id) && got.b.some((m) => m.text === "not mine" && !m.ship) && got.b.some((m) => m.text === "corp" && !m.ship), "Local names the speaker's own ship for its bubble (owner); never someone else's, and never in Corp");
 w.cmdChat("a", "psst", "dm", "bob");
 t.ok(got.b.some((m) => m.ch === "dm" && m.from === "Alice" && m.text === "psst") && got.a.some((m) => m.ch === "dm" && m.to === "bob") && !got.c.some((m) => m.ch === "dm"), "a DM reaches only them (and echoes to you), names in any case");
 w.cmdChat("a", "hey", "dm", "Nobody");

@@ -102,6 +102,6 @@ w.cmdRename("a", sa.id, "   "); t.ok(sa.name === null, "an empty name puts back 
 { const L = await import("../../packages/server/src/licenses.js"), mf = L.getLicense("mining_frigate");
   const we = new World(); we.addPlayer("e", "E", () => {}, null, [{ id: 1, name: "E", licenses: {} }]); const se = we.ships.get("e:ship:1");
   t.ok(se.speed === T.speedKmps && se.hp === T.hp && se.maxTargets === T.maxTargets && se.targetRange === T.targetRangeKm && se.lockMs === T.lockMs, "a ship always has its hull's full stats, whatever the pilot's license", se);
-  t.ok(mf && mf.maxLevel === 5 && L.STARTING_LICENSES.mining_frigate === 1 && mf.levelTimes.map((x) => x / 60000).join() === "12,24,36,48,60", "Mining Frigate: 5 levels, the first known from the start, stepped (level 5 an hour)", mf && mf.levelTimes);
+  t.ok(mf && mf.maxLevel === 5 && L.STARTING_LICENSES.mining_frigate === 1 && mf.levelTimes.map((x) => x / 60000).join() === "2.4,4.8,7.2,9.6,12", "Mining Frigate: 5 levels, the first known from the start, stepped (level 5 an hour, 5× faster for now: 12 min)", mf && mf.levelTimes);
   t.ok(T.bonuses.map((b) => b.per + ":" + b.what).join() === "4:Mining Laser yield,1:Mining Laser range,10:Mining Drones yield", "the Prospector's hull bonuses are per level", T.bonuses); }
 t.done();

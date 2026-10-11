@@ -14,7 +14,7 @@
   const bus = new EventTarget();
   // snapshots: the last few, each with the server time its positions are for; ships are drawn RENDER_DELAY_MS in
   // the past, interpolated between the two snapshots around that moment
-  const RENDER_DELAY_MS = 110, snaps = []; let clockOffset = null, latest = { ships: [] }, snapAt = 0;
+  const RENDER_DELAY_MS = 150, snaps = []; let clockOffset = null, latest = { ships: [] }, snapAt = 0;
   const HEAVY = ["fit", "holds", "calc"], heavy = new Map();   // the last fit / holds / stats per own ship, and the hangar
   // follow: the id of the ship the camera follows, or null. Selecting a pilot doesn't move the camera (owner).
   const POI_VIEW_KM = 110;                         // a whole 100 km POI with a little margin
@@ -26,6 +26,8 @@
 
   window.Atamus = {
     send: (o) => send(o), bus, get me() { return me; }, get cfg() { return cfg; }, get snap() { return latest; },
+    get drawn() { return drawn; },                    // the ships as drawn this frame (positions interpolated)
+    hoverModule: null,                               // set by the UI: { key, el } of the active module the pointer is on (its range lights up)
     ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); }, get picked() { return picked; },
     get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow, lookAt }; },
     get selectedPilot() { return selPilot; },
@@ -98,7 +100,8 @@
       } else if (m.t === "belts") { setBelts(m.belts);
       } else if (m.t === "snap") {
         const now = performance.now(), off = m.st - now;
-        clockOffset = clockOffset == null ? off : Math.max(off, clockOffset + (off - clockOffset) * 0.02);   // server clock ≈ local + offset (the freshest arrival)
+        // server clock ≈ local + offset: eased toward the freshest arrivals (never jumped, so motion doesn't skip; a big change, like a sleeping tab, snaps)
+        if (clockOffset == null || Math.abs(off - clockOffset) > 1000) clockOffset = off; else clockOffset += (off - clockOffset) * (off > clockOffset ? 0.08 : 0.01);
         for (const s of m.ships) if (s.mine) { const c = heavy.get(s.id) || {}; for (const k of HEAVY) { if (k in s) c[k] = s[k]; else if (k in c) s[k] = c[k]; } heavy.set(s.id, c); }   // the server leaves out what hasn't changed
         if (m.hangar) heavy.set("hangar", m.hangar); else if (m.ships.some((s) => s.docked)) m.hangar = heavy.get("hangar") || {};
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
@@ -183,14 +186,19 @@
   }
 
   // ---- where each ship is drawn right now ----
+  const renderTime = () => performance.now() + (clockOffset || 0) - RENDER_DELAY_MS;   // the server moment being drawn
   function shipsNow() {
     if (!snaps.length || clockOffset == null) return [];
-    const rt = performance.now() + clockOffset - RENDER_DELAY_MS;
-    let a = snaps[0], b = null;
-    for (let i = snaps.length - 1; i >= 0; i--) if (snaps[i].st <= rt) { a = snaps[i]; b = snaps[i + 1] || null; break; }
+    const rt = renderTime();
+    let i = snaps.length - 1; while (i > 0 && snaps[i].st > rt) i--;
+    const a = snaps[i], b = a.st <= rt ? snaps[i + 1] || null : null, pre = !b && a.st <= rt && i > 0 ? snaps[i - 1] : null;
     const out = [];
     for (const s of (b || a).ships.values()) {
       const p = a.ships.get(s.id);
+      if (!b && pre) {                               // a snapshot is late: carry on along the last motion for a moment rather than stop and jump
+        const q = pre.ships.get(s.id), f = Math.min(rt - a.st, 150) / Math.max(1, a.st - pre.st);
+        if (q && !s.warp && !q.warp && Math.hypot(s.x - q.x, s.y - q.y) < 5) { out.push({ ...s, x: s.x + (s.x - q.x) * f, y: s.y + (s.y - q.y) * f }); continue; }
+      }
       if (!b || !p) { out.push({ ...s }); continue; }
       const k = Math.max(0, Math.min(1, (rt - a.st) / Math.max(1, b.st - a.st)));
       let dh = s.h - p.h; while (dh > Math.PI) dh -= 2 * Math.PI; while (dh < -Math.PI) dh += 2 * Math.PI;
@@ -476,12 +484,48 @@
   // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
   // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
   // along its no-destination line, facing it.
+  // (owner) the selected ship's targeting range (a faint gray dash-dot ring) and, fainter, one dashed ring per kind of
+  // fitted module that works on a target; the one under the pointer on the hotbar / Fitting lights up orange
+  function drawRanges(own) {
+    if (!own || own.docked || own.warp) return;
+    const T = hull(own.type), sc = scale(), x = gx2s(own.x), y = gy2s(own.y), rr = T.radiusKm || 0.09, far = Math.hypot(innerWidth, innerHeight) * 3;
+    const ring = (km, dash, color, w) => { const r = (km + rr) * sc; if (r < 10 || r > far) return; ctx.save(); ctx.setLineDash(dash); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); };
+    if (T.targetRangeKm) ring(T.targetRangeKm, [10, 5, 2, 5], "rgba(170,178,190,0.32)", 1);
+    let hv = window.Atamus.hoverModule; if (hv && !hv.el.isConnected) hv = window.Atamus.hoverModule = null;
+    const mods = (cfg && cfg.modules) || {}, seen = new Set(), c = own.calc || {};
+    for (const k of (own.fit && own.fit.active) || []) {
+      const m = mods[k]; if (!m || !m.rangeKm || seen.has(k)) continue; seen.add(k);
+      const mc = k === "mining_drones" ? c.drones : c.laser, hot = hv && hv.key === k;
+      ring((mc && mc.rangeKm) || m.rangeKm, [4, 7], hot ? "rgba(255,150,60,0.75)" : "rgba(170,178,190,0.12)", hot ? 1.5 : 1);
+    }
+  }
+  // (owner) what a pilot says in Local floats over their ship for anyone with a ship near it
+  const BUBBLE_MS = 7000, BUBBLE_NEAR_KM = 150, bubbles = new Map();
+  bus.addEventListener("chat", (e) => { const m = e.detail; if (m && m.ship && m.ch === "local") bubbles.set(m.ship, { text: m.text, at: performance.now() }); });
+  function drawBubbles(ships) {
+    if (!bubbles.size) return;
+    const now = performance.now(), mine = ships.filter((s) => s.mine && !s.docked), sc = scale();
+    for (const [id, bb] of bubbles) {
+      const age = now - bb.at; if (age > BUBBLE_MS) { bubbles.delete(id); continue; }
+      const s = ships.find((x) => x.id === id); if (!s || s.docked || !mine.some((o) => Math.hypot(o.x - s.x, o.y - s.y) <= BUBBLE_NEAR_KM)) continue;
+      const x = gx2s(s.x), y = gy2s(s.y) - Math.max(14, hull(s.type).lengthKm * sc * 0.6) - 10;
+      ctx.save(); ctx.globalAlpha = Math.min(1, (BUBBLE_MS - age) / 800, age / 150); ctx.font = "12px Inter, system-ui, sans-serif";
+      const words = bb.text.split(" "), lines = []; let line = "";
+      for (const w of words) { const tl = line ? line + " " + w : w; if (ctx.measureText(tl).width > 200 && line) { lines.push(line); line = w; } else line = tl; } if (line) lines.push(line);
+      const shown = lines.slice(0, 4); if (lines.length > 4) shown[3] += "…";
+      const W = Math.min(216, Math.max(...shown.map((l) => ctx.measureText(l).width)) + 16), H = shown.length * 15 + 10, bx = x - W / 2, by = y - H;
+      ctx.fillStyle = "rgba(12,18,30,0.88)"; ctx.strokeStyle = s.mine ? "rgba(120,180,255,0.55)" : "rgba(255,130,130,0.5)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(bx, by, W, H, 6); ctx.moveTo(x - 5, by + H); ctx.lineTo(x, by + H + 6); ctx.lineTo(x + 5, by + H); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#dfe6f2"; ctx.textAlign = "center"; ctx.textBaseline = "top"; shown.forEach((l, i) => ctx.fillText(l, x, by + 6 + i * 15));
+      ctx.restore();
+    }
+  }
   // a square of the rock's ore riding a beam from (fx, fy) to (tx, ty), p of the way through the cycle
   function drawChunk(fx, fy, tx, ty, p, color, qs) {
     ctx.save(); ctx.translate(fx + (tx - fx) * p, fy + (ty - fy) * p); ctx.rotate(p * 6); ctx.fillStyle = color || "#b9a98c"; ctx.fillRect(-qs / 2, -qs / 2, qs, qs); ctx.strokeStyle = "rgba(255,225,180,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(-qs / 2, -qs / 2, qs, qs); ctx.restore();
   }
   function drawBeams(ships) {
-    const sc = scale(), now = performance.now(), t = now / 1000, ores = oreBy();
+    const sc = scale(), now = performance.now(), t = now / 1000, ores = oreBy(), rt = renderTime();
     for (const sh of ships) {
       if (!sh.beams || sh.docked || sh.warp) continue;
       const T = hull(sh.type), L = (T.lengthKm || 0.128) * sc, hps = T.hardpoints || [[0, 0]], ch = Math.cos(-sh.h), sn = Math.sin(-sh.h);
@@ -491,7 +535,7 @@
         const qs = Math.max(2.5, Math.min(6, L * 0.12));
         if (b.m === "mining_drones" && b.hl != null) {   // (owner) hauling: out to the ship with the ore, then back to the rock
           const art = sh.mine ? droneArt.blue : droneArt.red, w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
-          const hl = Math.min(1, b.hl + (now - snapAt) / (b.hd || 10000)), out = hl < 0.5, q = out ? hl * 2 : 2 - hl * 2, e = 0.5 - 0.5 * Math.cos(Math.PI * q);
+          const hl = Math.max(0, Math.min(1, b.h0 != null ? (rt - b.h0) / (b.hd || 10000) : b.hl + (now - snapAt) / (b.hd || 10000))), out = hl < 0.5, q = out ? hl * 2 : 2 - hl * 2, e = 0.5 - 0.5 * Math.cos(Math.PI * q);
           const rx = gx2s(b.rx), ry = gy2s(b.ry), R = (b.rs / 2000 + (T.radiusKm || 0.09) + 0.07) * sc, o = ores.get(b.ore);
           for (let d = 0; d < 2; d++) {
             const tq = (now - hl * (b.hd || 10000) + (out ? 0 : (b.hd || 10000))) / 1000, a0 = tq * 0.25 + d * Math.PI + n * 0.7, x0 = rx + Math.cos(a0) * R, y0 = ry + Math.sin(a0) * R;   // leaves from / returns to its place in the orbit
@@ -503,7 +547,7 @@
           n++; continue;
         }
         const k = rockById(b.tg); if (!k) continue;
-        const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.min(1, (b.p || 0) + (now - snapAt) / (b.c || 15000)), o = ores.get(k.ore);
+        const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.max(0, Math.min(1, b.t0 != null ? (rt - b.t0) / (b.c || 15000) : (b.p || 0) + (now - snapAt) / (b.c || 15000))), o = ores.get(k.ore);
         if (b.m === "mining_drones") {
           const R = (k.size / 2000 + (T.radiusKm || 0.09) + 0.07) * sc, art = sh.mine ? droneArt.blue : droneArt.red;
           const w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
@@ -594,7 +638,7 @@
     }
     drawBackground();
     drawn = ships;
-    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawBeams(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); }
+    if (cfg) { drawHex(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
     requestAnimationFrame(frame);
   }
 

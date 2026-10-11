@@ -419,7 +419,7 @@ export class World {
 
   /** Local and Corp chat (owner): you speak as your account's character (its portrait and your username), not as a
    *  pilot. Local is everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. */
-  cmdChat(pid, text, channel, to) {
+  cmdChat(pid, text, channel, to, ship) {
     const p = this.players.get(pid); if (!p || typeof text !== "string") return;
     const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
     if (channel === "dm") {                               // (owner) a direct message: both ends see it in a tab named for the other
@@ -432,7 +432,9 @@ export class World {
       return;
     }
     const ch = channel === "corp" ? "corp" : "local";
-    const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now() });
+    // (owner) Local is also said aloud by the speaker's (selected) ship: a bubble over it for anyone near it
+    const sh = ch === "local" && typeof ship === "string" ? this.ships.get(ship) : null, from = sh && sh.owner === pid && !sh.docked ? sh.id : null;
+    const msg = JSON.stringify({ t: "chat", ch, from: p.name, portrait: p.portrait || null, text: clean, ts: Date.now(), ...(from ? { ship: from } : {}) });
     for (const other of this.players.values()) if (!other.offline) other.send(msg);
   }
 
@@ -598,8 +600,8 @@ export class World {
         const b = []; s.act.forEach((a, i) => {
           if (!a || !a.tg) return;
           const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = a.haul ? 1 : +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3);
-          const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs };
-          if (a.haul) { const h = a.haul; Object.assign(e, { hl: +Math.min(1, (this.simAt - h.at) / (2 * h.leg)).toFixed(3), hd: 2 * h.leg, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore }); }   // drones hauling: how far through the round trip
+          const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs, t0: a.at };   // t0: when the cycle began (server time), so clients run it smoothly
+          if (a.haul) { const h = a.haul; Object.assign(e, { hl: +Math.min(1, (this.simAt - h.at) / (2 * h.leg)).toFixed(3), hd: 2 * h.leg, h0: h.at, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore }); }   // drones hauling: how far through the round trip
           b.push(e);
         });
         if (b.length) e.beams = b;

@@ -51,6 +51,9 @@ export const LICENSES = [
   ].map(([key, name, category, desc, bonus]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus, requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN), fixedTimes: true })),
 ];
 for (const l of LICENSES) { l.designTimes = l.levelTimes; if (QUICK_TRAINING && !l.fixedTimes) l.levelTimes = l.levelTimes.map((_, i) => (i + 1) * MIN); }
+// (owner, 2026-10-11) for the time being, everything trains 5× as fast (level N of a stepped license: N × 2.4 min)
+const TRAIN_SPEED = 5;
+for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms / TRAIN_SPEED));
 
 // (owner) ships always fly at their full stats; each level of a ship-class license adds one step of that class's hull
 // bonuses (each hull lists its bonuses per level)
