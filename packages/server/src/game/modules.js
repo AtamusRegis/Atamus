@@ -35,6 +35,8 @@ for (const [k, m] of Object.entries(MODULES)) m.key = k;
 // (owner) every ship starts with these in its cargo hold, once
 export const STARTER_KIT = [["mining_laser", 2], ["mining_drones", 1], ["afterburner_1", 1], ["cargo_expander", 1], ["inertia_stabilizer", 1], ["mining_laser_upgrade", 1], ["mining_beam_extender", 1], ["mining_overclocker", 1]];
 
+/** (owner) a fitted module can be powered off: it keeps its disposition, uses no power and does nothing. */
+export const isOff = (fit, kind, i) => !!(fit && fit.off && fit.off[kind] && fit.off[kind][i]);
 export const stackPenalty = (n) => Math.exp(-((n / 2.67) ** 2));   // the nth (from 0) of the same kind counts this much
 const lv = (lic, k) => Math.max(0, Math.min(5, Math.floor(+((lic || {})[k]) || 0)));
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -46,22 +48,22 @@ export function moduleCost(key, lic) {
 }
 // sum of a passive bonus over fitted modules of a kind, with diminishing returns
 function stacked(fit, field, strength) {
-  const vals = fit.passive.map((k) => MODULES[k]).filter((m) => m && m[field]).map((m) => m[field] * strength).sort((a, b) => b - a);
+  const vals = fit.passive.filter((k, i) => !isOff(fit, "passive", i)).map((k) => MODULES[k]).filter((m) => m && m[field]).map((m) => m[field] * strength).sort((a, b) => b - a);
   return vals.reduce((t, v, i) => t + v * stackPenalty(i), 0);
 }
 /** Everything a fitted ship can do, for this pilot: what's used of power / disposition, the hold capacities, top
  *  speed (and with the afterburner on), acceleration, and each mining module's yield / cycle / range. */
 export function shipCalc(T, fit, lic) {
-  fit = { active: (fit && fit.active) || [], passive: (fit && fit.passive) || [] };
+  fit = { active: (fit && fit.active) || [], passive: (fit && fit.passive) || [], off: (fit && fit.off) || null };
   let power = 0, disposition = 0;
-  for (const k of [...fit.active, ...fit.passive]) if (k) { const c = moduleCost(k, lic); power += c.power; disposition += c.disposition; }
+  for (const kind of ["active", "passive"]) fit[kind].forEach((k, i) => { if (!k) return; const c = moduleCost(k, lic); disposition += c.disposition; if (!isOff(fit, kind, i)) power += c.power; });   // (owner) a module powered off uses disposition, not power
   const MF = lv(lic, T.license), ML = lv(lic, "mining_lasers"), MD = lv(lic, "mining_drones"), MU = lv(lic, "mining_upgrades"), EU = lv(lic, "engineering_upgrades"), EN = lv(lic, "engines");
   const hb = Object.fromEntries((T.bonuses || []).map((b) => [b.key, b.per * MF / 100]));   // the hull's bonuses, per level of its class license
   const mu = 1 + 0.1 * MU, eu = 1 + 0.1 * EU;
   const holdK = 1 + stacked(fit, "holdBonus", eu), accelK = 1 + stacked(fit, "accelBonus", eu);
   const L = MODULES.mining_laser, D = MODULES.mining_drones;
   // the cycle upgrade cuts time: each one multiplies the cycle by (1 − its bonus), with the same diminishing returns
-  const cyc = fit.passive.map((k) => MODULES[k]).filter((m) => m && m.laserCycle).map((m) => m.laserCycle * mu).sort((a, b) => b - a).reduce((t, v, i) => t * (1 - v * stackPenalty(i)), 1);
+  const cyc = fit.passive.filter((k, i) => !isOff(fit, "passive", i)).map((k) => MODULES[k]).filter((m) => m && m.laserCycle).map((m) => m.laserCycle * mu).sort((a, b) => b - a).reduce((t, v, i) => t * (1 - v * stackPenalty(i)), 1);
   return {
     power: r2(power), disposition: r2(disposition), powerMax: T.powerMax, dispositionMax: T.dispositionMax,
     holds: Object.fromEntries((T.holds || []).map((h) => [h.key, Math.round(h.m3 * holdK)])),

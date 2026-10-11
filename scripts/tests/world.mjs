@@ -2,7 +2,7 @@
 // stops ships, ships pass over each other, what each player is sent, saving and logging off. Part 1 drives the World
 // directly; part 2 flies on the PTR.
 import { World, insideExpanse, clampToExpanse } from "../../packages/server/src/game/world.js";
-import { EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, LOGOUT_GRACE_MS, SHIP_TYPES } from "../../packages/server/src/game/constants.js";
+import { EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, SHIP_TYPES } from "../../packages/server/src/game/constants.js";
 import { connect, suite, sleep, SHIP } from "./lib.mjs";
 const t = suite("world");
 const run = (w, sec) => { for (let i = 0; i < sec * 20; i++) w.tick(0.05); };
@@ -12,7 +12,7 @@ t.ok(A === 10_000, "the hexagon is 20,000 km across, flat to flat (1 AU at the m
 t.ok(insideExpanse(0, A - 1) && !insideExpanse(0, A + 1) && insideExpanse(R - 1, 0) && !insideExpanse(R + 1, 0), "flat top and bottom, corners left and right");
 const PA = [{ id: 1, name: "Pa", licenses: { mining_frigate: 5 } }];
 const a = w.addPlayer("a", "A", () => {}, null, PA), sa = w.ships.get("a:ship:1");
-t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x, sa.y) <= SPAWN_SPREAD_KM && w.ships.size === 1, "a pilot gets one Prospector near the centre");
+t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x, sa.y) <= SPAWN_SPREAD_KM && w.ships.size === 1, "a pilot gets one Prospector near the center");
 w.addPlayer("a", "A", () => {}, null, PA); t.ok(w.ships.size === 1, "and only ever one");
 w.setPilots("a", [...PA, { id: 7, name: "Pb" }]); t.ok(w.ships.has("a:ship:7") && w.ships.size === 2, "a new pilot gets their own");
 w.setPilots("a", PA); t.ok(!w.ships.has("a:ship:7") && w.ships.size === 1, "a pilot that's gone takes theirs with them");
@@ -53,7 +53,13 @@ w.cmdMove("a", sa.id, 120, 100); run(w, 2);
 const saved = JSON.parse(JSON.stringify(w.exportState("a")));
 w.removePlayer("a"); run(w, 0.1); t.ok(w.ships.has(sa.id), "a reload within the grace keeps the ship in space");
 w.players.get("a").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; w.tick(0.05);
-t.ok(!w.players.has("a") && !w.ships.has(sa.id), "logging off takes the ship out of the world");
+t.ok(w.ships.has(sa.id), "undocked ships aren't a safe log off: they carry on (owner)");
+w.players.get("a").offlineSince = Date.now() - UNSAFE_LOGOFF_MS - 1; const x0 = sa.x, y0 = sa.y; w.tick(0.05);
+t.ok(sa.wp && Math.abs(Math.hypot(sa.wp.tx - x0, sa.wp.ty - y0) - SAFE_WARP_KM) < 60, "after 5 minutes they warp to a safe spot", sa.wp);
+const safe = { x: sa.wp.tx, y: sa.wp.ty }; sa.wp.at -= 1e6; w.tick(0.05); w.tick(0.05);
+t.ok(!w.players.has("a") && !w.ships.has(sa.id), "and then leave the world");
+{ const wd = new World(); wd.addPlayer("d", "D", () => {}, null, PA); const sd = wd.ships.get("d:ship:1"); wd._dock(sd); wd.removePlayer("d"); wd.players.get("d").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; wd.tick(0.05);
+  t.ok(!wd.players.has("d"), "with every ship docked, logging off is safe: gone after the short grace"); }
 w.addPlayer("a", "A", () => {}, saved, PA); const back = w.ships.get("a:ship:1");
 t.ok(Math.abs(back.x - saved.ships["1"].x) < 1e-3 && Math.abs(back.y - saved.ships["1"].y) < 1e-3, "logging back in puts it where it was");
 const w2 = new World(); w2.addPlayer("z", "Z", () => {}, { ships: { 3: { x: 1e9, y: -1e9, h: 0 } } }, [{ id: 3, name: "Z" }]); const sz = w2.ships.get("z:ship:3");

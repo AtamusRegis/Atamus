@@ -41,7 +41,7 @@ r = await run(page, `for (const b of document.querySelectorAll(".win:not([hidden
   return { single, moving, tx, afterDrag, refollow: A.view.follow };`);
 t.ok(!r.single && r.moving && r.tx > 0, "a single click on space doesn't move the ship; a double click flies it there (owner)", r);
 t.ok(r.afterDrag === null, "dragging pans the camera off the ship", r);
-t.ok(r.refollow === null, "clicking your ship selects its pilot but doesn't centre on it (owner)", r);
+t.ok(r.refollow === null, "clicking your ship selects its pilot but doesn't center on it (owner)", r);
 // right-click / hold menus (owner): space → Center on ship, Belts › name › Warp to / Align to; Align shows the fleet's Align / Warp
 r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(200);
   c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); await s(200);
@@ -56,12 +56,12 @@ r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden)
   const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent); const dest0 = A.myShip.dest || null, acts0 = !acts.hidden;
   const centerRow = () => { c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); return [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Center on ship"); };
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
-  const centred = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
-  return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centred };`);
+  const centered = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
+  return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centered };`);
 t.ok(r.top.join() === "Center on ship,Belts" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts", r);
 t.ok(r.opts.join() === "Warp to,Align to" && r.kept === 3, "right-click a belt in the list: its own menu beside it, Warp to / Align to, the menus before it kept open (owner)", r);
 t.ok(r.dest && r.acts && r.btns.join() === "Align,Warp", "aligning shows Align and Warp under the fleet", r);
-t.ok(r.centred === A_SHIP, "Center on ship follows the selected pilot's ship", r);
+t.ok(r.centered === A_SHIP, "Center on ship follows the selected pilot's ship", r);
 r = await run(page, `const card = document.querySelector(".fleet-card"); const parts = card && [card.querySelector("canvas.portrait"), card.querySelector(".fc-ship img"), card.querySelector(".fc-sh i"), card.querySelector(".fc-hp i"), card.querySelector(".fc-name")].map(Boolean);
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); const off = A.view.follow;
   card.click(); await s(200); const afterClick = A.view.follow; card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); await s(200); const afterDbl = A.view.follow;
@@ -200,10 +200,10 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   pw.querySelector(".win-close").click();
   const pilotTitle = (document.querySelector('.wbtn[data-id="pilot"]').click(), await s(300), document.querySelector('.win[data-id="pilot"] .win-title-slot, .win-group .win-title-slot:not([hidden])').textContent); document.querySelector('.wbtn[data-id="pilot"]').click(); await s(200);
   return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap, hudInv, invTabs, invCargo, invSlot, invBars, cardMenu, fit, hull, pinfo, pilotTitle };`);
-t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Look At,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Look At, Info", r.menu);
-t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be cancelled), then gets its × and distance", r);
+t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Orbit,Look At,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Orbit, Look At, Info", r.menu);
+t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be canceled), then gets its × and distance", r);
 t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
-t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Look At,Info", "a target's menu: Unlock Target, Align To, Move towards, Look At, Info", r.tmenu);
+t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Orbit,Look At,Info", "a target's menu: Unlock Target, Align To, Move towards, Orbit, Look At, Info", r.tmenu);
 t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
 t.ok(r.hbHidden && r.slots.join() === "1,2,3,4", "no modules: the hotbar's empty active slots (the Prospector's 4, keyed 1-4) show only while a module is dragged", r);
 t.ok(r.after === 0, "the × unlocks it", r.after);
@@ -240,7 +240,7 @@ t.ok(r.locked, "double-clicking an asteroid locks it", r);
 t.ok(r.ctrl === "align" && r.shift === "approach", "Ctrl + click: Align To; Shift + click: Move towards", r);
 t.ok(r.space.moving && !r.space.chase, "Shift + click on space flies there", r.space);
 
-// (owner) Look At: the camera follows the object and zooms about its centre; the Fitting window's minimum; Rename
+// (owner) Look At: the camera follows the object and zooms about its center; the Fitting window's minimum; Rename
 r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
   dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
   const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600);
@@ -266,7 +266,7 @@ r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden
   A.send({ t: "rename", ship: A.myShip.id, name: "" }); await s(500); const back = fw.querySelector(".win-title-slot").textContent;
   fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 0, y: -20 }); await s(300);
   return { near1, zoomed, dropped, min, checks, tmenu, prefill, renamed, back };`);
-t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its centre, until you pan", r);
+t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its center, until you pan", r);
 t.ok(r.min.scrolls && r.min.barsIn && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide (plus the stats beside), down to the Power / Disposition bars; the stats scroll, the tabs stay on top", r.min);
 t.ok(r.checks === "✓|", "Requirements: a green check for what the pilot has (Mining Frigate I), none for what it doesn't (an ark)", r.checks);
 t.ok(r.tmenu === "Rename" && /Prospector$/.test(r.prefill) && r.renamed.title === "Rock Hopper" && r.renamed.snap === "Rock Hopper" && /Prospector$/.test(r.back), "Rename from the Fitting window's title; an empty name puts back the default", r);
@@ -283,9 +283,14 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   await drag(inv.querySelector('.si-cell[data-item="mining_laser"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
   const fitted = A.myShip.fit.active[0], hb = !!document.querySelector('#hud .hb-slot.filled .hb-img'), bars = fw.querySelector(".fit-bar").textContent;
   const flashText = () => document.getElementById("status").textContent;
-  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); const noTarget = flashText();
+  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); const hb0 = document.querySelector("#hud .hb-slot.filled"), noTarget = { sb: !!(A.myShip.act[0] && A.myShip.act[0].sb), cls: hb0.classList.contains("standby") };
+  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); noTarget.off = !A.myShip.act[0];
+  await drag(inv.querySelector('.si-cell[data-item="mining_drones"]'), inv.querySelector('.tab[data-hold="ore"]')); const oreRefused = !!A.myShip.holds.cargo.mining_drones && !A.myShip.holds.ore.mining_drones;
   fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100);
-  const slotMenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const slotMenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Power Off").click(); await s(500);
+  const pslot = fw.querySelector('.fit-active [data-mslot="0"]'), power = { off: A.myShip.fit.off.active[0], cls: pslot.classList.contains("off"), bars: fw.querySelector(".fit-bar").textContent };
+  pslot.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Power On").click(); await s(500); power.on = !A.myShip.fit.off.active[0];
+  fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
   const mi = document.querySelector('.win[data-id="minfo"]'), minfo = [...mi.querySelectorAll(".sheet-k")].map((x) => x.textContent).join(); mi.querySelector(".win-close").click();
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
   dev({ cmd: "move", x: 0, y: -1204 }); await s(1300); A.followShip(A.myShip.id);
@@ -297,11 +302,13 @@ r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden
   const hangar = JSON.stringify(A.snap.hangar);
   st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
   dev({ cmd: "move", x: 0, y: -20 }); await s(300);
-  return { kit, fitted, hb, bars, noTarget, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
+  return { kit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
 t.ok(r.kit === "mining_laser,mining_drones,afterburner_1,cargo_expander,inertia_stabilizer,mining_laser_upgrade,mining_beam_extender,mining_overclocker", "the starter kit is in the cargo hold", r.kit);
 t.ok(r.fitted === "mining_laser" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
-t.ok(r.noTarget === "No locked asteroid in range", "its hotbar key runs it (a laser needs a locked asteroid)", r.noTarget);
-t.ok(r.slotMenu === "Unfit,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "a fitted module's menu: Unfit, Info (its stats as fitted)", r);
+t.ok(r.noTarget.sb && r.noTarget.cls && r.noTarget.off, "its hotbar key runs it: with no locked asteroid a laser waits on standby (pulsing), and the key switches it off again (owner)", r.noTarget);
+t.ok(r.oreRefused, "a module dropped on the Ore Hold's tab stays in the cargo hold (the ore hold takes only ore)", r);
+t.ok(r.power.off && r.power.cls && /^Power0 \/ 40/.test(r.power.bars) && r.power.on, "Power Off from a fitted slot's menu: dimmed, no power used; Power On puts it back (owner)", r.power);
+t.ok(r.slotMenu === "Unfit,Power Off,Info" && r.minfo === "Slot,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "a fitted module's menu: Unfit, Power Off, Info (its stats as fitted)", r);
 t.ok(r.dockShown && r.stOpen && r.side === "Hangar|Vera Kestrel's Prospector|Ore Hold|Cargo Hold", "near the station the Dock button shows; docking opens the Station: the hangar and the ship's holds", r);
 t.ok(r.hangar === '{"mining_drones":1}' && r.undocked && r.stClosed, "drag an item onto the hangar to store it; Undock closes the Station", r);
 

@@ -13,7 +13,7 @@ const sa = w.ships.get("a:ship:1"), sa2 = w.ships.get("a:ship:2"), sb = w.ships.
 const belt = [...w.pois.values()].find((p) => p.kind === "belt"), k = belt.field.rocks[0], k2 = belt.field.rocks[1];
 const put = (s, x, y) => Object.assign(s, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false, chase: null });
 const solid = k.r;   // (owner) an object's edge: its whole art
-// a point d km from the rock's edge, on the belt's centre side (so it's always inside the belt)
+// a point d km from the rock's edge, on the belt's center side (so it's always inside the belt)
 const inb = Math.atan2(belt.y - k.y, belt.x - k.x), nearK = (d) => [k.x + Math.cos(inb) * (solid + sa.radius + d), k.y + Math.sin(inb) * (solid + sa.radius + d)];
 put(sa, ...nearK(2)); put(sb, sa.x + Math.cos(inb + 1.2), sa.y + Math.sin(inb + 1.2)); put(sa2, sa.x + Math.cos(inb - 1.2), sa.y + Math.sin(inb - 1.2)); w.tick(0.05);
 const ticks = (n, dt = 0.05) => { for (let i = 0; i < n; i++) w.tick(dt); };
@@ -22,7 +22,7 @@ const ticks = (n, dt = 0.05) => { for (let i = 0; i < n; i++) w.tick(dt); };
 w.cmdLock("a", sa.id, "rock", k.id);
 t.ok(sa.targets.length === 1 && !sa.targets[0].locked && Math.abs(sa.targets[0].lockAt - w.simAt - T.lockMs) < 5, "Lock Target starts a lock that takes the hull's lock time", sa.targets);
 w.cmdUnlock("a", sa.id, "rock", k.id);
-t.ok(sa.targets.length === 1, "a lock in progress can't be cancelled (owner)");
+t.ok(sa.targets.length === 1, "a lock in progress can't be canceled (owner)");
 sa.targets[0].lockAt = Date.now() - 1; w.tick(0.05);
 t.ok(sa.targets[0].locked, "then it's locked");
 w.cmdUnlock("a", sa.id, "rock", k.id);
@@ -80,7 +80,7 @@ put(sa, ...nearK(3)); sa.vx = Math.cos(inb + Math.PI) * 0.3; sa.vy = Math.sin(in
 const agap = Math.hypot(sa.x - k.x, sa.y - k.y) - k.r - sa.radius;
 t.ok(agap >= 0.07 - 1e-3 && agap < 0.15 && Math.hypot(sa.vx, sa.vy) < 0.01, "Align To an asteroid stops at its no-destination line (owner), not over it", agap);
 w.cmdMove("a", sa.id, sa.x, sa.y);
-w.cmdChase("a", sa.id, "ship", sa.id, "align"); w.cmdChase("a", sa.id, "ship", sb.id, "orbit"); w.cmdChase("b", sa.id, "ship", sb.id, "align"); w.cmdChase("a", sa.id, "rock", "belt:none#1", "align");
+w.cmdChase("a", sa.id, "ship", sa.id, "align"); w.cmdChase("a", sa.id, "ship", sb.id, "spin"); w.cmdChase("b", sa.id, "ship", sb.id, "align"); w.cmdChase("a", sa.id, "rock", "belt:none#1", "align");
 t.ok(!sa.chase, "not at itself, no unknown modes, not someone else's ship, nothing that isn't there");
 
 // Info

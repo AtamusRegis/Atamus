@@ -14,7 +14,8 @@
   const bus = new EventTarget();
   // snapshots: the last few, each with the server time its positions are for; ships are drawn RENDER_DELAY_MS in
   // the past, interpolated between the two snapshots around that moment
-  const RENDER_DELAY_MS = 110, snaps = []; let clockOffset = null, latest = { ships: [] };
+  const RENDER_DELAY_MS = 110, snaps = []; let clockOffset = null, latest = { ships: [] }, snapAt = 0;
+  const HEAVY = ["fit", "holds", "calc"], heavy = new Map();   // the last fit / holds / stats per own ship, and the hangar
   // follow: the id of the ship the camera follows, or null. Selecting a pilot doesn't move the camera (owner).
   const POI_VIEW_KM = 110;                         // a whole 100 km POI with a little margin
   let warpView = null;                             // the zoom to come back to after following a ship through a warp
@@ -31,7 +32,7 @@
     selectPilot: (id) => { selPilot = id == null ? null : String(id); bus.dispatchEvent(new CustomEvent("pilotselect", { detail: selPilot })); },
     followShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; lookAt = null; zoomAt = null; return true; },
     lookAt: (kind, id) => lookAtObj(kind, id),
-    // (owner) Tab: centre on that pilot's ship and zoom to show a whole POI around it
+    // (owner) Tab: center on that pilot's ship and zoom to show a whole POI around it
     focusShip: (id) => { if (!(latest.ships || []).some((x) => x.id === id)) return false; follow = id; lookAt = null; zoomAt = null; viewWTarget = POI_VIEW_KM * Math.max(1, innerWidth / innerHeight); warpView = null; return true; },
     get pois() { return pois; }, poi: (id) => poiById.get(id) || null, get belts() { return belts; },
     align: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "align", ship: sh.id, poi: poiId }); },
@@ -42,10 +43,11 @@
     unlock: (kind, id) => { const sh = myShip(); if (sh) send({ t: "unlock", ship: sh.id, kind, id }); },
     alignTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "align" }); },
     moveTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "approach" }); },
+    orbit: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "orbit" }); },   // (owner) circle it
     info: (kind, id) => send({ t: "info", kind, id }),
     objPos: (kind, id) => objPos(kind, id), objName: (kind, id) => objName(kind, id), objIcon: (kind, id) => objIcon(kind, id),
     objItems: (kind, id) => objItems(kind, id), ownShipItems: (id) => ownShipItems(id),
-    hoverTarget: null,                               // set by the HUD: a thin grey line runs from your ship to it
+    hoverTarget: null,                               // set by the HUD: a thin gray line runs from your ship to it
     rangeTo: (kind, id) => rangeTo(kind, id),
     // (owner, temporary) the station: can this ship dock right now (within dockKm of its edge, not docked or warping)?
     canDock: (sh) => { const st = stationProp(); if (!st || !sh || sh.docked || sh.warp) return false; const dx = Math.max(0, Math.abs(sh.x - st.x) - st.w / 2), dy = Math.max(0, Math.abs(sh.y - st.y) - st.h / 2); return Math.hypot(dx, dy) - (hull(sh.type).radiusKm || 0.09) <= ((cfg && cfg.dockKm) || 5); },
@@ -91,14 +93,16 @@
           serverBuild = m.build;
           if (m.countdown && !pending) { pending = { at: Date.now() + m.countdown.in, parts: m.countdown.parts }; startCountdown(pending.at); }   // joined mid-countdown
         }
-        cfg = m.cfg; me = m.you; sentView = ""; setPois(m.pois); setBelts(m.belts); bus.dispatchEvent(new CustomEvent("hello"));
+        heavy.clear(); cfg = m.cfg; me = m.you; sentView = ""; setPois(m.pois); setBelts(m.belts); bus.dispatchEvent(new CustomEvent("hello"));
       } else if (m.t === "pois") { setPois(m.pois); bus.dispatchEvent(new CustomEvent("pois"));
       } else if (m.t === "belts") { setBelts(m.belts);
       } else if (m.t === "snap") {
         const now = performance.now(), off = m.st - now;
         clockOffset = clockOffset == null ? off : Math.max(off, clockOffset + (off - clockOffset) * 0.02);   // server clock ≈ local + offset (the freshest arrival)
+        for (const s of m.ships) if (s.mine) { const c = heavy.get(s.id) || {}; for (const k of HEAVY) { if (k in s) c[k] = s[k]; else if (k in c) s[k] = c[k]; } heavy.set(s.id, c); }   // the server leaves out what hasn't changed
+        if (m.hangar) heavy.set("hangar", m.hangar); else if (m.ships.some((s) => s.docked)) m.hangar = heavy.get("hangar") || {};
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
-        latest = m; bus.dispatchEvent(new CustomEvent("snap"));
+        latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
@@ -168,7 +172,7 @@
   const gx2s = (x) => innerWidth / 2 + (x - cam.cx) * scale();
   const gy2s = (y) => innerHeight / 2 - (y - cam.cy) * scale();
   const s2w = (px, py) => ({ x: cam.cx + (px - innerWidth / 2) / scale(), y: cam.cy - (py - innerHeight / 2) / scale() });
-  const HEX_R = () => ((cfg && cfg.expanseApothemKm) || 10000) / Math.cos(Math.PI / 6);   // centre to a corner
+  const HEX_R = () => ((cfg && cfg.expanseApothemKm) || 10000) / Math.cos(Math.PI / 6);   // center to a corner
   function fitWidth() { const R = HEX_R(), aspect = innerWidth / innerHeight; return Math.max(2 * R, 2 * R * Math.cos(Math.PI / 6) * aspect) * 1.08; }   // the whole hexagon on screen
   function clampCamera() { const R = HEX_R(), d = Math.hypot(cam.cx, cam.cy); if (d > R) { cam.cx = cam.cx / d * R; cam.cy = cam.cy / d * R; } }
   let sentView = "", viewAt = 0;
@@ -198,7 +202,7 @@
   function setPois(list) { pois = list || []; poiById = new Map(pois.map((p) => [p.id, p])); }
   function setBelts(list) { belts = new Map((list || []).map((f) => [f.poi, f])); }
 
-  // ---- input: click / tap = fly the selected ship there (on one of your ships: select its pilot, owner: no centring);
+  // ---- input: click / tap = fly the selected ship there (on one of your ships: select its pilot, owner: no centering);
   // right-click or hold = the menu (on a belt's map marker: Warp to / Align to; elsewhere: Center on ship, Belts ›);
   // drag or WASD = pan; wheel / pinch = zoom ----
   const ptrs = new Map(); let drag = null, hold = 0;
@@ -316,7 +320,7 @@
     const own = drawn.find((s) => s.mine && s.pilot === selPilot) || myShip(), pos = objPos(kind, id); if (!own || !pos) return null;
     return Math.max(0, Math.hypot(own.x - pos.x, own.y - pos.y) - pos.r - (hull(own.type).radiusKm || 0.09));
   }
-  // (owner) Look At: the camera follows the object (zooming about its centre) until you pan or follow something else
+  // (owner) Look At: the camera follows the object (zooming about its center) until you pan or follow something else
   const lookPos = (o) => o.kind === "prop" ? propById(o.id) : objPos(o.kind, o.id);
   function lookAtObj(kind, id) {
     if (kind === "ship") return window.Atamus.followShip(id);
@@ -337,7 +341,7 @@
       const tg = (own.targets || []).find((g) => g.kind === kind && g.id === id), t = hull(own.type), r = rangeTo(kind, id);
       if (tg) { if (tg.locked) out.push(["Unlock Target", () => A.unlock(kind, id)]); }
       else if (r != null && r <= (t.targetRangeKm || 0) && (own.targets || []).length < (t.maxTargets || 0) && !(kind === "ship" && id === own.id)) out.push(["Lock Target", () => A.lock(kind, id)]);
-      if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)]);
+      if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)], ["Orbit", () => A.orbit(kind, id)]);
     }
     out.push(["Look At", () => lookAtObj(kind, id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
     const sh = kind === "ship" && (latest.ships || []).find((x) => x.id === id);
@@ -427,7 +431,7 @@
       if (!p.hidden && mapIcon.naturalWidth) { ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = rPx > 200 ? 0.5 : 1; ctx.drawImage(mapIcon, Math.round(x - mapIcon.naturalWidth / 2), Math.round(y - mapIcon.naturalHeight / 2)); ctx.restore(); }
     }
   }
-  // the picked asteroid (owner): grey corner brackets, its ore's name and its distance from the selected pilot's ship
+  // the picked asteroid (owner): gray corner brackets, its ore's name and its distance from the selected pilot's ship
   function drawPicked(ships) {
     if (!picked) return;
     const own = ships.find((s) => s.mine && s.pilot === selPilot);
@@ -442,14 +446,14 @@
       const o = ((cfg && cfg.ores) || []).find((q) => q.key === k.ore); name = o ? o.name : k.ore;
       dist = own ? Math.max(0, Math.hypot(own.x - k.x, own.y - k.y) - k.size / 2000 - shipR(own)) : null;
     }
-    ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.85)"; ctx.lineWidth = 1.5; const c = Math.min(8, r * 0.5);   // (owner) grey = selected; orange is kept for targeted
+    ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.85)"; ctx.lineWidth = 1.5; const c = Math.min(8, r * 0.5);   // (owner) gray = selected; orange is kept for targeted
     for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
     ctx.font = "12px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.fillStyle = "rgba(230,235,245,0.95)"; ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 3;
     ctx.fillText(name + (dist != null ? " - " + (dist < 10 ? dist.toFixed(1) : Math.round(dist)) + " km" : ""), x, y - r - 6);
     ctx.restore();
   }
   // locked targets (owner: orange = targeted): orange corner brackets, blinking while the lock comes on; hovering a
-  // target on the HUD draws a thin, faint grey line from your ship to it
+  // target on the HUD draws a thin, faint gray line from your ship to it
   function drawTargets(ships) {
     const own = ships.find((s) => s.mine && s.pilot === selPilot); if (!own) return;
     const sc = scale(), t = performance.now();
@@ -469,26 +473,37 @@
   }
   // (owner) modules at work: a mining laser's beam from the ship to its rock; a pair of mining drones circling the rock
   const droneArt = { blue: img("assets/ships/drone_blue.webp"), red: img("assets/ships/drone_red.webp") };
+  // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
+  // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
+  // along its no-destination line, facing it.
   function drawBeams(ships) {
-    const sc = scale(), t = performance.now() / 1000;
+    const sc = scale(), now = performance.now(), t = now / 1000, ores = oreBy();
     for (const sh of ships) {
       if (!sh.beams || sh.docked || sh.warp) continue;
+      const T = hull(sh.type), L = (T.lengthKm || 0.128) * sc, hps = T.hardpoints || [[0, 0]], ch = Math.cos(-sh.h), sn = Math.sin(-sh.h);
+      const sx = gx2s(sh.x), sy = gy2s(sh.y);
       let n = 0;
       for (const b of sh.beams) {
         const k = rockById(b.tg); if (!k) continue;
-        const sx = gx2s(sh.x), sy = gy2s(sh.y), rx = gx2s(k.x), ry = gy2s(k.y), rr = k.size / 2000 * sc;
+        const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.min(1, (b.p || 0) + (now - snapAt) / (b.c || 15000));
         if (b.m === "mining_drones") {
-          const art = sh.mine ? droneArt.blue : droneArt.red, w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
+          const R = (k.size / 2000 + (T.radiusKm || 0.09) + 0.07) * sc, art = sh.mine ? droneArt.blue : droneArt.red;
+          const w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
           for (let d = 0; d < 2; d++) {
-            const a = t * 0.6 + d * Math.PI + (n * 0.7), x = rx + Math.cos(a) * (rr * 0.7 + 6), y = ry + Math.sin(a) * (rr * 0.7 + 6);
-            if (art.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(-(a + Math.PI / 2)); ctx.imageSmoothingEnabled = w > 24; ctx.drawImage(art, -w / 2, -hgt / 2, w, hgt); ctx.restore(); }
-            ctx.save(); ctx.strokeStyle = "rgba(255,190,110," + (0.35 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx + (x - rx) * 0.35, ry + (y - ry) * 0.35); ctx.stroke(); ctx.restore();
+            const a = t * 0.25 + d * Math.PI + n * 0.7, x = rx + Math.cos(a) * R, y = ry + Math.sin(a) * R;
+            ctx.save(); ctx.strokeStyle = "rgba(255,190,110," + (0.3 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx + (x - rx) * 0.3, ry + (y - ry) * 0.3); ctx.stroke(); ctx.restore();
+            if (art.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(a + Math.PI); ctx.imageSmoothingEnabled = w > 24; ctx.drawImage(art, -w / 2, -hgt / 2, w, hgt); ctx.restore(); }   // nose toward the rock
           }
         } else {
-          const jx = Math.cos(t * 1.7 + n) * rr * 0.25, jy = Math.sin(t * 2.3 + n) * rr * 0.25, g = ctx.createLinearGradient(sx, sy, rx, ry);
-          g.addColorStop(0, "rgba(255,170,80,0.9)"); g.addColorStop(1, "rgba(255,120,40,0.6)");
-          ctx.save(); ctx.strokeStyle = g; ctx.lineWidth = 1.6 + 0.5 * Math.sin(t * 12 + n); ctx.shadowColor = "rgba(255,140,60,0.8)"; ctx.shadowBlur = 6;
-          ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(rx + jx, ry + jy); ctx.stroke(); ctx.restore();
+          const hp = hps[b.hp] || hps[0], ox = sx + (hp[0] * ch - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * ch) * L;
+          const ex = gx2s(k.x + (b.ax || 0)), ey = gy2s(k.y + (b.ay || 0));
+          ctx.save(); ctx.globalCompositeOperation = "lighter";
+          ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,140,60,0.35)"; ctx.lineWidth = 3.5 + Math.sin(t * 14 + n); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.1; ctx.stroke();
+          ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,240,200,0.85)"; ctx.fill();
+          ctx.restore();
+          const o = ores.get(k.ore), qx = ex + (ox - ex) * p, qy = ey + (oy - ey) * p, qs = Math.max(2.5, Math.min(6, L * 0.12));
+          ctx.save(); ctx.translate(qx, qy); ctx.rotate(p * 6); ctx.fillStyle = (o && o.color) || "#b9a98c"; ctx.fillRect(-qs / 2, -qs / 2, qs, qs); ctx.strokeStyle = "rgba(255,225,180,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(-qs / 2, -qs / 2, qs, qs); ctx.restore();
         }
         n++;
       }
@@ -592,7 +607,7 @@
     if (lastCam) { const sc = scale(), cl = (v) => Math.max(-80, Math.min(80, v)); bgPan.x += cl((cam.cx - lastCam.x) * sc); bgPan.y += cl(-(cam.cy - lastCam.y) * sc); }
     lastCam = { x: cam.cx, y: cam.cy };
     const t = performance.now() / 1000, px = bgPan.x * PARALLAX_K, py = bgPan.y * PARALLAX_K;
-    const gr = bgCtx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.hypot(W, H) * 0.7);   // deep blue centre to near black
+    const gr = bgCtx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.hypot(W, H) * 0.7);   // deep blue center to near black
     gr.addColorStop(0, "#09111f"); gr.addColorStop(0.55, "#050912"); gr.addColorStop(1, "#010205");
     bgCtx.fillStyle = gr; bgCtx.fillRect(0, 0, W, H);
     // slow drifting noise: two layers moving different ways, barely there

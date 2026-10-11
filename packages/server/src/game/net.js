@@ -42,6 +42,7 @@ export function attachGameServer(httpServer) {
     if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }
     const player = world.addPlayer(pid, user.username, sendAll, saved, st0 ? st0.pilots : []);
     player.portrait = st0 && st0.profile.portrait;          // the account's character: who you are in chat
+    player.heavy = new Map();                              // a new session gets the whole fit / holds / hangar again
     // a pilot made or gone while you play (the client says so; and once a minute anyway)
     const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; } catch (e) { console.error("pilots", e); } };
     const pilotTimer = setInterval(refreshPilots, 60000);
@@ -76,6 +77,7 @@ export function attachGameServer(httpServer) {
           case "fit": world.cmdFit(pid, m.ship, m.item, m.kind, m.slot); break;
           case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
           case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on); break;
+          case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
           case "dock": world.cmdDock(pid, m.ship); break;
           case "undock": world.cmdUndock(pid, m.ship); break;
           case "transfer": world.cmdTransfer(pid, m.from, m.to, m.item, m.qty); break;
@@ -101,6 +103,15 @@ export function attachGameServer(httpServer) {
   loadPois().then((list) => { for (const d of list) world.loadPoi(d); }).catch((e) => console.error("loadPois", e));
   setInterval(() => { for (const pid of world.players.keys()) persist(pid); persistPois(); }, 10000);
 
+  // a ship's fit, holds and fitted stats, and the hangar, are only sent when they change (the client keeps the last ones)
+  const HEAVY = ["fit", "holds", "calc"];
+  const lighten = (p, snap) => {
+    const hv = p.heavy || (p.heavy = new Map());
+    const same = (key, v) => { const j = JSON.stringify(v); if (hv.get(key) === j) return true; hv.set(key, j); return false; };
+    for (const e of snap.ships) if (e.mine) for (const k of HEAVY) if (k in e && same(e.id + "|" + k, e[k])) delete e[k];
+    if (snap.hangar && same("hangar", snap.hangar)) delete snap.hangar;
+    return snap;
+  };
   let last = Date.now();
   setInterval(() => { const now = Date.now(), dt = Math.min(0.25, (now - last) / 1000); last = now; world.tick(dt); }, TICK_MS);
   setInterval(() => {
@@ -108,7 +119,7 @@ export function attachGameServer(httpServer) {
       if (p.offline) continue;
       const ps = world.poiSig(p); if (ps !== p.poiSig) { p.poiSig = ps; p.send(JSON.stringify({ t: "pois", pois: world.poisFor(p) })); }   // the map's POIs changed
       const fs = world.fieldSig(p); if (fs !== p.fieldSig) { const fl = world.fieldsFor(p); p.fieldSig = fl.sig; p.send(JSON.stringify({ t: "belts", belts: fl.fields })); }   // a belt came into reach, or its rocks changed
-      p.send(JSON.stringify(world.snapshotFor(p)));
+      p.send(JSON.stringify(lighten(p, world.snapshotFor(p))));
     }
   }, SNAPSHOT_MS);
 

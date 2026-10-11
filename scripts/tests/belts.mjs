@@ -56,7 +56,7 @@ w.cmdMove("a", sa.id, 0, 0); t.ok(!sa.moving, "no new orders mid-warp");
 for (let i = 0; i < 200 && sa.wp; i++) { sa.wp.at -= 60000; w.tick(0.05); }
 t.ok(!sa.wp && w._inPoi(sa, tgt) && !sa.dest, "it drops out inside the belt", Math.hypot(sa.x - tgt.x, sa.y - tgt.y));
 w.cmdWarp("a", sa.id, tgt.id); t.ok(!sa.warpReq, "no warping to the POI you're already in");
-const t2 = belts()[1]; Object.assign(sa, { x: 300, y: -300, vx: 0, vy: 0 });   // (clear of everyone else's ships near the centre)
+const t2 = belts()[1]; Object.assign(sa, { x: 300, y: -300, vx: 0, vy: 0 });   // (clear of everyone else's ships near the center)
 w.cmdAlign("a", sa.id, t2.id); for (let i = 0; i < 80; i++) w.tick(0.05);
 const v = Math.hypot(sa.vx, sa.vy); decayField(t2.field, Date.now() + 10 * 3600e3); w.nextPoiTick = 0; w.tick(0.05);
 for (let i = 0; i < 40; i++) w.tick(0.05);
@@ -67,7 +67,7 @@ w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 { const wb = new World(); wb.addPlayer("z", "Z", () => {}, null, [{ id: 1, name: "Z", licenses: { mining_frigate: 5 } }]); wb.tick(0.05);
   const bz = [...wb.pois.values()].find((p) => p.kind === "belt"), rock = bz.field.rocks.find((k) => k.size === 1000) || bz.field.rocks[0], sz = wb.ships.get("z:ship:1");
   Object.assign(sz, { x: rock.x - 3, y: rock.y, tx: rock.x - 3, ty: rock.y, vx: 0, vy: 0, moving: false });
-  for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbours
+  for (const k of bz.field.rocks) if (k !== rock && Math.hypot(k.x - rock.x, k.y - rock.y) < 8) k.x += 1000;   // clear the neighbors
   bz.field.ver++;
   wb.cmdMove("z", sz.id, rock.x + 3, rock.y); let minD = Infinity;
   for (let i = 0; i < 600; i++) { wb.tick(0.05); minD = Math.min(minD, Math.hypot(sz.x - rock.x, sz.y - rock.y)); }

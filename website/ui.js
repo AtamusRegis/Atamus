@@ -545,12 +545,12 @@
     const ps = (state && state.pilots) || []; if (ps.length < 2) return;
     const i = ps.findIndex((p) => String(p.id) === String(saved.selPilot)), next = ps[(i + 1) % ps.length];
     selectPilot(next.id);
-    const sh = pilotShip(next.id); if (sh) window.Atamus.focusShip(sh.id);   // (owner) Tab centres on them, zoomed to show a whole POI
+    const sh = pilotShip(next.id); if (sh) window.Atamus.focusShip(sh.id);   // (owner) Tab centers on them, zoomed to show a whole POI
   });
 
   // ---- Fleet window (owner): how you switch pilots. Each card: the pilot's portrait on the left; their ship with its
   // shield and hull bars on the right, the pilot's name beneath. Click a card to select that pilot; double-click (or
-  // double-tap) it to also centre the camera on their ship and follow it. ----
+  // double-tap) it to also center the camera on their ship and follow it. ----
   const pilotShip = (id) => ((window.Atamus.snap && window.Atamus.snap.ships) || []).find((x) => x.mine && String(x.pilot) === String(id)) || null;
   function renderFleet(body) {
     const w = wins.fleet, pilots = (state && state.pilots) || [], cfgT = (window.Atamus.cfg && window.Atamus.cfg.shipTypes) || {};
@@ -725,7 +725,7 @@
     toggleWindow("report", true);
   }
 
-  // ---- the HUD (owner), bottom centre, for the selected pilot's ship: locked targets (priority left to right), then
+  // ---- the HUD (owner), bottom center, for the selected pilot's ship: locked targets (priority left to right), then
   // shield, hull and speed, then the hotbar (the hull's active module slots, keys 1-9, 0, -, =; empty slots
   // only show while a module is being dragged) ----
   const HB_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
@@ -761,7 +761,8 @@
         }
         if (!st.started) return;
         st.ghost.style.left = ev.clientX + "px"; st.ghost.style.top = ev.clientY + "px";
-        const t = document.elementFromPoint(ev.clientX, ev.clientY), over = t && t.closest("[data-mslot], [data-cont], .win[data-id=\"inv\"] .win-body, .win[data-id=\"station\"] .st-main");
+        const t = document.elementFromPoint(ev.clientX, ev.clientY); let over = t && t.closest("[data-mslot], [data-cont], .win[data-id=\"inv\"] .win-body, .win[data-id=\"station\"] .st-main");
+        if (over && !accepts(over, payload)) over = null;
         if (over !== st.over) { if (st.over) st.over.classList.remove("drop"); st.over = over; if (over) over.classList.add("drop"); }
       };
       const up = (ev) => {
@@ -774,9 +775,17 @@
       addEventListener("pointermove", mv); addEventListener("pointerup", up); addEventListener("pointercancel", up);
     });
   }
+  // (owner) a hold only takes what it can hold: the ore hold, only ore; a module slot, only a module of its kind
+  function accepts(target, pl) {
+    if (target.dataset.mslot != null) { const m = MODS()[pl.item]; return !!m && m.slot === target.dataset.kind; }
+    if (target.dataset.cont && target.dataset.cont.endsWith("|ore")) return pl.item.startsWith("ore:") && pl.from.type !== "slot";
+    return true;
+  }
   function dropItem(pl, t) {
     const A = window.Atamus, sh = hudShip(); if (!t || !sh) return;
     const slotEl = t.closest("[data-mslot]");
+    if (slotEl && !accepts(slotEl, pl)) return;
+    const contEl = t.closest("[data-cont]"); if (contEl && !accepts(contEl, pl)) return;
     if (slotEl) {                                     // onto a module slot: fit it (from the ship's cargo hold, or from another slot)
       const kind = slotEl.dataset.kind, slot = +slotEl.dataset.mslot;
       if (pl.from.type === "slot") { if (pl.from.kind === kind && pl.from.slot === slot) return; A.send({ t: "unfit", ship: sh.id, kind: pl.from.kind, slot: pl.from.slot }); }
@@ -794,11 +803,13 @@
   }
   // a module slot (Fitting window and hotbar): its icon; drag it out or onto another slot; right-click: Unfit, Info
   function modSlot(sh, kind, i, label, extraCls) {
-    const k = modsOf(sh, kind)[i], node = el("div", { class: "hb-slot" + (extraCls === "hb-live" ? "" : " fit-slot") + (k ? " filled" : " hb-empty") + (extraCls ? " " + extraCls : ""), "data-mslot": i, "data-kind": kind },
+    const k = modsOf(sh, kind)[i], off = !!(sh.fit && sh.fit.off && sh.fit.off[kind] && sh.fit.off[kind][i]);
+    const node = el("div", { class: "hb-slot" + (extraCls === "hb-live" ? "" : " fit-slot") + (k ? " filled" : " hb-empty") + (off ? " off" : "") + (extraCls ? " " + extraCls : ""), "data-mslot": i, "data-kind": kind },
       label ? el("span", { class: "hb-num" }, label) : null, k ? el("img", { class: "hb-img", src: itemIcon(k), alt: "", draggable: "false" }) : null);
     if (k) {
       nameTip(node, itemName(k));
-      dragSource(node, () => ({ item: k, from: { type: "slot", kind, slot: i } }), () => [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })], ["Info", () => openModInfo(k)]],
+      dragSource(node, () => ({ item: k, from: { type: "slot", kind, slot: i } }), () => [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })],
+        [off ? "Power On" : "Power Off", () => window.Atamus.send({ t: "power", ship: sh.id, kind, slot: i, on: off })], ["Info", () => openModInfo(k)]],   // (owner) powered off: disposition only
         kind === "active" && extraCls === "hb-live" ? () => toggleModule(i) : null);
     }
     return node;
@@ -891,7 +902,7 @@
       for (const g of tgs) {
         const key = g.kind + ":" + g.id, ring = el("div", { class: "tgt-ring" }, el("img", { src: A.objIcon(g.kind, g.id), alt: "", draggable: "false" }));
         const dist = el("div", { class: "tgt-dist" }), cell = el("div", { class: "tgt" + (g.locked ? " locked" : "") }, ring);
-        if (g.locked) cell.append(el("button", { class: "tgt-x", "aria-label": "Unlock Target", onclick: (e) => { e.stopPropagation(); A.unlock(g.kind, g.id); } }, "×"));   // (owner) a lock in progress can't be cancelled
+        if (g.locked) cell.append(el("button", { class: "tgt-x", "aria-label": "Unlock Target", onclick: (e) => { e.stopPropagation(); A.unlock(g.kind, g.id); } }, "×"));   // (owner) a lock in progress can't be canceled
         cell.append(dist);
         const menu = (x, y) => showCtxMenu(x, y, A.objItems(g.kind, g.id));
         cell.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
@@ -919,7 +930,7 @@
     }
     for (let i = 0; i < hudBar.children.length; i++) {  // live: which modules are running, and how far through their cycle
       const a = sh.act && sh.act[i], n = hudBar.children[i];
-      n.classList.toggle("on", !!a); n.style.setProperty("--p", Math.round(((a && a.p) || 0) * 100) + "%");
+      n.classList.toggle("on", !!a && !a.sb); n.classList.toggle("standby", !!(a && a.sb)); n.style.setProperty("--p", Math.round(((a && a.p) || 0) * 100) + "%");   // (owner) standby: waiting for a lock
     }
     for (const g of tgs) {                            // live: lock progress and distance
       const c = H.cards[g.kind + ":" + g.id]; if (!c) continue;
@@ -968,7 +979,7 @@
     body.innerHTML = ""; body.classList.add("inv-win");
     if (!sh || !hold) { body.append(el("div", { class: "muted" }, "No ship")); return; }
     const used = boxUsed(items);
-    body.append(el("div", { class: "tab-row inv-tabs" }, holds.map((h) => el("button", { class: "tab" + (h === hold ? " active" : ""), "data-hold": h.key, onclick: () => { saved.invTab = h.key; persistAll(); renderInv(body); } }, h.name))),
+    body.append(el("div", { class: "tab-row inv-tabs" }, holds.map((h) => el("button", { class: "tab" + (h === hold ? " active" : ""), "data-hold": h.key, "data-cont": sh.id + "|" + h.key, onclick: () => { saved.invTab = h.key; persistAll(); renderInv(body); } }, h.name))),   // (owner) drop an item on a hold's tab to move it there
       el("div", { class: "si-cap" }, el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, (Math.round(used * 10) / 10).toLocaleString() + " / " + cap.toLocaleString() + " m³"))),
       el("div", { class: "si-scroll" }, el("div", { class: "si-grid" }, Object.entries(items).map(([k, n]) => itemCell(k, n, { type: "hold", ship: sh.id, hold: hold.key })), el("div", { class: "si-cell empty" }))));
     requestAnimationFrame(() => { const m = invMin(), e = wins.inv.win; if (!m || e.hidden || wins.inv.group) return; if (e.offsetHeight < m.h) e.style.height = m.h + "px"; fitOnScreen(e); });
@@ -1155,7 +1166,7 @@
   window.Atamus.bus.addEventListener("showfitting", (e) => showFitting(e.detail));
   window.Atamus.bus.addEventListener("snap", () => { for (const [id, r] of [["fit", renderFit], ["inv", renderInv]]) if (wins[id] && isOpen(wins[id])) r(wins[id].body); });   // only rebuilt when their signature changes
 
-  // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near
+  // ---- right-click / hold menu (owner: placement centered above the press; below it near the top; to the right near
   // the left edge, to the left near the right edge). An item is [label, fn] or [label, [items…]]: a submenu opens beside
   // it on hover or tap, and submenus nest. [label, fn, { menu: [items…] }]: right-click (or hold) that row to open its
   // own menu in place of this one (owner: a list, not a third layer of submenus). ----

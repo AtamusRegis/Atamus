@@ -27,12 +27,12 @@ ROWS.push(FAMILIES.flatMap(([n, f]) => [200, 500, 1000].map((size) => { const [w
 
 export const LIBRARY = { id: "library", kind: "library", name: "Library", x: 0, y: 1200, r: 30 };
 const GAP_KM = 0.6, ROW_GAP_KM = 1.5, SHELF_UP_KM = 10;
-/** The props, laid out in centred rows from the top down (km, relative to the world). */
+/** The props, laid out in centered rows from the top down (km, relative to the world). */
 export function libraryProps() {
   const rows = ROWS.map((row) => row.map(([name, sprite, pw, ph, km]) => { const w = km || pw * M_PER_PX / 1000; return { name, sprite, w: +w.toFixed(4), h: +(w * ph / pw).toFixed(4) }; }));
   const heights = rows.map((r) => Math.max(...r.map((o) => o.h)));
   const total = heights.reduce((a, b) => a + b, 0) + ROW_GAP_KM * (rows.length - 1);
-  const out = []; let top = LIBRARY.y + SHELF_UP_KM + total / 2;   // the shelves sit above the centre, clear of its map marker
+  const out = []; let top = LIBRARY.y + SHELF_UP_KM + total / 2;   // the shelves sit above the center, clear of its map marker
   rows.forEach((row, i) => {
     const cy = top - heights[i] / 2, width = row.reduce((a, o) => a + o.w, 0) + GAP_KM * (row.length - 1);
     let x = LIBRARY.x - width / 2;

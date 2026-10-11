@@ -33,7 +33,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
   box-shadow: 2px 0 18px rgba(0,0,0,0.5);
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0;
 }
-.panel-clock { margin-top: auto; font-size: 10.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; letter-spacing: .04em; padding-bottom: 2px; }
+
 .wbtn { width: 30px; height: 30px; border: none; background: transparent; color: var(--text-dim); cursor: pointer; display: grid; place-items: center; border-radius: 10px; transition: background .15s, color .15s; }
 .wbtn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .wbtn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
@@ -68,15 +68,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .sheet-k { color: var(--text-dim); font-size: 11px; }
 .sheet-v { color: var(--text); font-weight: 600; }
 
-/* header-embedded controls */
-.win-title-slot .pilot-select { display: block; width: auto; max-width: 74%; margin: 0 auto; padding: 4px 8px; background: rgba(0,0,0,0.25); text-align: center; text-align-last: center; }
 .win-title-slot .tab-row { margin: 0; }
 .win-title-slot .tab { padding: 4px 10px 5px; }
-.pilot-select, .text-input { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: none; padding: 9px 11px; outline: none; border-radius: var(--radius-sm); }
-.pilot-select { flex: 1; } .text-input { width: 100%; }
-.text-input:focus, .pilot-select:focus { box-shadow: 0 0 0 2px rgba(56,198,255,0.5); }
+.text-input { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: none; padding: 9px 11px; outline: none; border-radius: var(--radius-sm); }
+ .text-input { width: 100%; }
+.text-input:focus { box-shadow: 0 0 0 2px rgba(56,198,255,0.5); }
 
-.tab-row { display: flex; gap: 3px; margin-bottom: 10px; }
+.tab-row { display: flex; gap: 3px; margin-bottom: 10px; justify-content: center; }   /* (owner) tab rows are centered unless stated */
 .tab { position: relative; font: inherit; font-size: 11.5px; color: var(--text-dim); background: none; border: none; padding: 5px 9px 7px; cursor: pointer; border-radius: 8px; }
 .tab:hover:not(.disabled) { color: var(--text); background: var(--card); }
 .tab.active { color: var(--text); }
@@ -137,7 +135,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .license-popup .tab-row { margin: 12px 14px 0; }
 .pop-content { padding: 14px; min-height: 84px; overflow-x: hidden; overflow-y: auto; flex: 1 1 auto; }
 .pop-desc { margin: 0 0 10px; font-size: 12px; line-height: 1.55; }
-.pop-effect { margin: 0 0 10px; font-size: 12.5px; color: var(--cyan); }
+
 .pop-traintime { font-size: 12.5px; color: #ffcf6a; }
 .req-list { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.8; }
 .req-list .met { color: #5fe3a1; } .req-list .unmet { color: #ff9a6a; } .req-list .test { color: var(--text-dim); }
@@ -192,44 +190,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .q-cancel { width: 20px; height: 20px; font-size: 12px; line-height: 1; color: var(--text-dim); background: rgba(255,255,255,0.07); border: none; border-radius: 5px; cursor: pointer; }
 .q-cancel:hover { color: #ff9a6a; background: rgba(255,154,106,0.14); }
 
-/* selected-unit window */
-.unit-btn { width: 100%; margin-top: 7px; }
-.unit-btn.off { color: var(--text); background: rgba(255,255,255,0.1); }
-.unit-btn.off:hover { background: rgba(255,154,106,0.18); color: #ff9a6a; }
-
-/* unit panel buttons */
-.unit-btns { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
-.unit-btns .unit-btn { margin-top: 0; }
-/* inventory */
-.inv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 7px; }
-.inv-cap { flex: 1; height: 6px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
-.inv-cap-fill { height: 100%; border-radius: 6px; background: var(--accent-grad); }
-.inv-stat { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.inv-sort { width: 22px; height: 20px; font-size: 12px; }
 .inv-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
-.inv-cell { aspect-ratio: 1; border-radius: 5px; background: rgba(0,0,0,0.28); position: relative; min-width: 0; }
-.inv-cell.filled { cursor: grab; }
-.inv-cell.drop { outline: 1px solid var(--cyan); background: rgba(56,198,255,0.12); }
-.inv-item { position: absolute; inset: 3px; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #0b0f16; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-shadow: 0 0 2px rgba(255,255,255,0.35); overflow: hidden; }
-.inv-abbr { text-transform: uppercase; }
-.inv-qty { font-size: 9px; font-weight: 600; opacity: .9; }
+
 .tab.drop { background: rgba(56,198,255,0.18); color: var(--text); }
-
-/* unit panel bars (shield / hull / holds) */
-.ubar { position: relative; flex: 1; max-width: 130px; height: 11px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; align-self: center; }
-.ubar-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 4px; transition: width .25s; }
-.ubar-fill.shield { background: linear-gradient(90deg, #3d8dff, #7fc2ff); }
-.ubar-fill.hull { background: linear-gradient(90deg, #c8783c, #e8a55a); }
-.ubar-fill.hold { background: linear-gradient(90deg, #4a7fb8, #4fd2ff); }
-.ubar-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); white-space: nowrap; }
-
-/* inventory icons + sell panel */
-.inv-item { background: color-mix(in srgb, var(--c, #888) 22%, rgba(0,0,0,0.25)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, #888) 45%, transparent); color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
-.inv-icon { width: 78%; height: 78%; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
-.inv-item .inv-qty { position: absolute; right: 2px; bottom: 1px; font-size: 9px; }
-.sell-range { width: 100%; margin: 8px 0 4px; accent-color: #4fd2ff; }
-.sell-num { width: 90px; font: inherit; font-size: 12px; font-weight: 600; color: var(--text); background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 3px 6px; text-align: right; }
-.unit-btns.row2 { flex-direction: row; }
 
 /* touch */
 #view { touch-action: none; }
@@ -242,7 +205,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
   .wbtn { width: 44px; height: 44px; }
   .win-close { min-width: 32px; min-height: 32px; }
   .tab { padding: 9px 12px 11px; }
-  .inv-cell { min-height: 40px; }
+  
 }
 
 /* bottom HUD: targets / status / hotbar for the selected ship */
@@ -258,13 +221,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .tgt-x:hover { color: #ff9a6a; }
 .tgt-dist { margin-top: 2px; font-size: 9px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tgt.drop .tgt-ring { border-color: var(--cyan); }
-.tgt-tip { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: rgba(14,19,30,0.95); border-radius: 6px; padding: 5px 8px; font-size: 11px; white-space: nowrap; box-shadow: var(--shadow); pointer-events: none; }
-.tgt-tip-name { font-weight: 600; color: var(--text); }
-.tgt-tip-sub { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
 @keyframes tgtBlink { from { opacity: .35; } to { opacity: 1; } }
 .hud-status { display: flex; gap: 10px; align-items: center; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px 8px; box-shadow: var(--shadow); }
 .hud-bar { display: flex; align-items: center; gap: 6px; }
-.hud-bar .ubar { width: 90px; max-width: none; }
+
 .hud-k { font-size: 10px; color: var(--text-dim); }
 .hud-speed { font-size: 11px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .hud-hotbar { display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: var(--shadow); }
@@ -273,8 +234,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 .hb-slot.filled:hover { background: rgba(255,255,255,0.08); }
 .hb-slot.on { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.9); background: rgba(255,140,60,0.14); }
 .hb-slot.drop { outline: 1px solid var(--cyan); }
-.hb-icon { width: 27px; height: 27px; border-radius: 5px; display: grid; place-items: center; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
-.hb-icon.laser { background: linear-gradient(135deg, #5a3a1c, #c8783c); color: #fff2dc; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+
 .hb-num { position: absolute; left: 2px; top: 0; font-size: 8px; color: var(--text-faint); pointer-events: none; }
 @media (pointer: coarse) { .hb-slot { width: 44px; height: 44px; } .tgt-ring { width: 42px; height: 42px; } }
 
@@ -287,49 +247,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-0);
 
 /* hotbar cycle progress + auto miner, item menu windows, market, hangar ship buttons */
 .hb-slot.on::before { content: ""; position: absolute; inset: 0; border-radius: 5px; background: conic-gradient(rgba(255,160,70,0.28) var(--p, 0%), transparent 0); pointer-events: none; }
-.hb-slot.stopping { box-shadow: inset 0 0 0 1.5px rgba(200,140,100,0.6); }
-.hb-slot.stopping .hb-icon { opacity: .6; }
-.hb-icon.auto { background: linear-gradient(135deg, #1e4a5a, #3aa0c8); color: #e8f8ff; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
-.info-desc { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--text); padding: 4px 2px 10px; }
-.info-icon { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; flex: none; }
-.mk-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 12px; }
-.mk-row:nth-child(even) { background: var(--card); }
-.mk-row.known { opacity: .55; }
-.mk-name { flex: 1; font-weight: 600; }
-.mk-sub { font-size: 10px; color: var(--text-dim); font-weight: 400; text-transform: capitalize; }
-.mk-price { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mk-price.poor { color: #ff9a6a; }
-.mk-buy { width: auto; margin: 0; padding: 5px 10px; }
-.mk-buy:disabled { opacity: .35; cursor: default; filter: none; }
-.ship-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
-.ship-ico { height: 18px; width: auto; image-rendering: pixelated; }
 
 /* hud must really hide */
 #hud[hidden] { display: none; }
-
-/* station hangar list */
-.hangar-head { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 8px 2px 4px; }
-.hangar-ship { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; font-size: 12px; color: var(--text); background: rgba(255,255,255,0.05); border: none; border-radius: var(--radius-sm); padding: 6px 8px; margin-bottom: 4px; cursor: pointer; text-align: left; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
-.hangar-ship:hover { background: rgba(255,255,255,0.1); }
-.hangar-ship .ship-ico { height: 16px; flex: none; }
-.hs-name { font-weight: 600; }
-.hs-pilot { margin-left: auto; font-size: 11px; color: var(--text-dim); }
-.hs-pilot.none { color: #ff9a6a; }
-.ship-hero { display: grid; place-items: center; padding: 6px 0 10px; }
-.ship-hero-img { max-width: 100%; height: 44px; object-fit: contain; image-rendering: pixelated; }
-
-/* market groups */
-.mk-cat, .mk-sub-h { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; border-radius: var(--radius-sm); }
-.mk-cat { margin-top: 8px; padding: 6px 8px; font-size: 12px; font-weight: 600; letter-spacing: .04em; background: rgba(255,255,255,0.06); }
-.mk-sub-h { margin: 4px 0 2px 10px; padding: 4px 8px; font-size: 11px; color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,0.06); border-radius: 0; }
-.mk-cat:hover, .mk-sub-h:hover { color: var(--text); }
-.mk-caret { display: inline-block; font-size: 9px; transition: transform .15s; }
-.mk-cat.open .mk-caret, .mk-sub-h.open .mk-caret { transform: rotate(90deg); }
-.mk-count { margin-left: auto; font-size: 10px; color: var(--text-faint); font-weight: 400; }
-.mk-row { margin-left: 10px; }
-.mk-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mk-ship { height: 14px; image-rendering: pixelated; }
-.mk-name .mk-sub { width: 100%; }
 
 /* no text selection / long-press callouts in the game UI (Android tap-to-search) */
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -337,58 +257,21 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 
 /* hud action buttons beside the hotbar */
 .hud-row { display: flex; align-items: center; gap: 6px; }
-.hud-actions { display: flex; gap: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 3px; box-shadow: var(--shadow); }
-.hud-act { width: 36px; height: 36px; border: none; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; display: grid; place-items: center; touch-action: manipulation; }
-.hud-act:hover { background: rgba(255,255,255,0.1); color: var(--text); }
-.hud-act svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-@media (pointer: coarse) { .hud-act { width: 44px; height: 44px; } }
-
-/* station inventory: ship list + hangar grid */
-.inv-split { display: flex; gap: 8px; align-items: flex-start; }
-.inv-side { width: 120px; flex: none; display: flex; flex-direction: column; gap: 2px; }
-.inv-side-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 2px 2px 4px; }
-.inv-side-empty { font-size: 11px; color: var(--text-dim); padding: 4px; }
-.inv-side-ship, .inv-side-c { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 11.5px; color: var(--text); background: none; border: none; border-radius: 5px; padding: 5px 6px; cursor: pointer; text-align: left; }
-.inv-side-ship { background: rgba(255,255,255,0.05); font-weight: 600; }
-.inv-side-ship .ship-ico { height: 12px; }
-.inv-side-ship.open .mk-caret { transform: rotate(90deg); }
-.iss-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inv-side-c { padding-left: 24px; color: var(--text-dim); }
-.inv-side-c:hover, .inv-side-ship:hover { background: rgba(255,255,255,0.09); color: var(--text); }
-.inv-side-c.active { color: var(--text); background: rgba(56,198,255,0.14); }
-.inv-side-c.drop { outline: 1px solid var(--cyan); background: rgba(56,198,255,0.18); }
-.inv-main { flex: 1; min-width: 0; }
-.inv-viewing { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
-.tab-rename { font: inherit; font-size: 11.5px; width: 90px; color: var(--text); background: rgba(0,0,0,0.4); border: 1px solid rgba(56,198,255,0.5); border-radius: 4px; padding: 1px 4px; }
 
 /* fleet bar */
 .win[data-id="fleet"] { min-width: 0; }
 .win[data-id="fleet"] .win-title { display: none; }
 .win[data-id="fleet"] .win-body { padding: 4px; display: flex; flex-direction: row; align-items: stretch; gap: 4px; overflow: hidden; }
-.win[data-id="fleet"].vertical .win-body { flex-direction: column; }
+
 .win[data-id="fleet"] { max-height: none; }
 .win[data-id="fleet"] .rz { display: none; }
-
 
 /* ship actions anchored to the fleet bar */
 .win[data-id="fleet"] .win-body { cursor: move; }
 
-/* station inventory: ship list on top, deliveries anchored to the bottom */
-.win-body:has(> .inv-split) { display: flex; flex-direction: column; }
-.inv-split { flex: 1 0 auto; align-items: stretch; }
-.inv-side-fill { flex: 1; min-height: 10px; }
-.inv-side-div { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 2px; }
-.inv-side-deliv { display: flex; align-items: center; gap: 6px; width: 100%; font: inherit; font-size: 11.5px; font-weight: 600; color: #e8c27a; background: rgba(232,194,122,0.10); border: none; border-radius: 5px; padding: 6px; cursor: pointer; text-align: left; }
-.inv-side-deliv:hover { background: rgba(232,194,122,0.18); }
-.inv-side-deliv.active { box-shadow: inset 0 0 0 1px rgba(232,194,122,0.7); }
-.inv-side-deliv.drop { outline: 1px solid #e8c27a; }
-.deliv-count { margin-left: auto; font-size: 10px; background: #e8c27a; color: #1a1408; border-radius: 8px; padding: 0 6px; }
-.mk-deliver { font: inherit; font-size: 12px; color: var(--text); background: rgba(0,0,0,0.3); border: none; border-radius: 5px; padding: 2px 6px; }
-
 /* module icons on the hotbar */
 .hb-img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; pointer-events: none; }
-.hb-badge { position: absolute; right: 2px; bottom: 1px; font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; pointer-events: none; }
-.hb-slot.stopping .hb-img { opacity: .55; }
+
 .hb-slot.off .hb-img { opacity: .3; filter: grayscale(1); }
 .hb-slot.off { background: rgba(0,0,0,0.35); }
 @media (pointer: coarse) { .hb-img { width: 36px; height: 36px; } }
@@ -396,22 +279,11 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 /* the fleet bar drags by its background on touch too (no scroll takeover) */
 .win[data-id="fleet"], .win[data-id="fleet"] .win-body, .win[data-id="fleet"] .fleet-list, .fleet-card { touch-action: none; }
 
-/* fleet actions sit on the side of the bar that faces the centre of the screen */
-
-.status.warn { color: #ffd59a; box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,190,110,0.45); }
-
-/* fleet action buttons: compact */
-
-/* hull bars read red */
-.ubar-fill.hull { background: linear-gradient(90deg, #a8262b, #e0484a); }
-
 /* fleet bar: roomier ends to grab it by */
 .win[data-id="fleet"] .win-body { padding: 4px 16px; }
-.win[data-id="fleet"].vertical .win-body { padding: 16px 4px; }
 
-/* status / update countdown: top centre, above every window and the HUD */
+/* status / update countdown: top center, above every window and the HUD */
 .status { top: 12px; bottom: auto; z-index: 2000000002; }
-.status.warn { font-size: 14px; font-weight: 600; padding: 9px 18px; color: #ffd59a; background: rgba(40,28,10,0.92); }
 
 /* update countdown panel */
 #update-cd { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 2000000003; pointer-events: none;
@@ -423,15 +295,10 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .ucd-num.bounce { animation: ucdBounce .38s cubic-bezier(.3,1.6,.5,1); }
 @keyframes ucdBounce { 0% { transform: scale(1); } 35% { transform: scale(1.28) translateY(-3px); } 100% { transform: scale(1); } }
 
-.ask-input { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
-.unit-btn.danger { background: linear-gradient(90deg, #a8262b, #e0484a); color: #fff; }
-
 /* credit amounts read gold */
 .credits { color: #f2c94c; font-weight: 600; }
-.credits.poor { color: #ff8a6a; }
-.mk-price .credits { font-weight: 600; }
 
-/* fleet actions centred on the side of the bar that faces the screen */
+/* fleet actions centered on the side of the bar that faces the screen */
 
 /* endorsement levels that unlock something get a white box outline */
 .lvl-box.unlock { box-shadow: inset 0 0 0 1.5px #fff; }
@@ -442,120 +309,44 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 /* inventory windows can be as narrow as one slot */
 .win[data-id^="inv:"] { min-width: 0; }
 .win[data-id^="inv:"] .win-title-slot { overflow: hidden; }
-.win[data-id^="inv:"] .inv-cap { min-width: 24px; }
-.inv-split.stacked { flex-direction: column; }
-.inv-split.stacked .inv-side { width: auto; }
-.inv-split.stacked .inv-side-fill { display: none; }
+
 .win[data-id^="inv:"] .win-title-slot .tab { white-space: nowrap; flex: none; }
-/* market search, buy window */
-.mk-search { width: 100%; margin-bottom: 8px; box-sizing: border-box; }
-.mk-row { cursor: pointer; }
-.mk-row:hover { background: rgba(255,255,255,0.06); }
-.buy-div { height: 1px; background: rgba(255,255,255,0.12); margin: 10px 0; }
-.buy-qty { display: inline-flex; align-items: center; gap: 4px; }
-.buy-num { width: 80px; text-align: center; -moz-appearance: textfield; }
-.buy-num::-webkit-outer-spin-button, .buy-num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.unit-btn:disabled { opacity: .45; cursor: default; filter: grayscale(1); }
-.fit-list { display: flex; flex-direction: column; gap: 4px; }
-.fit-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: rgba(0,0,0,0.25); font-size: 12px; }
-.fit-ico { width: 26px; height: 26px; image-rendering: pixelated; }
-.fit-n { margin-left: auto; color: var(--text-dim); }
-.ship-tabs .tab-row { margin-bottom: 8px; }
-.buy-ship-ico { width: 56px; height: auto; object-fit: contain; image-rendering: pixelated; }
+
 /* fitting: proportional hotbar, capacitor bar, fitting window */
 .hud-hotbar { width: auto; }
 .hb-slot.passive { cursor: default; }
-.hb-abbr { font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: .04em; }
-.hb-free { height: 36px; border-radius: 5px; border: 1px dashed rgba(255,255,255,0.12); box-sizing: border-box; }
-@media (pointer: coarse) { .hb-free { height: 44px; } }
-.hud-cap { display: flex; align-items: center; gap: 6px; background: rgba(14,19,30,0.82); border-radius: 7px; padding: 2px 8px; box-shadow: var(--shadow); width: 300px; box-sizing: border-box; }
-.cap-bar { position: relative; flex: 1; height: 9px; border-radius: 4px; background: rgba(255,255,255,0.07); overflow: hidden; }
-.cap-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #c9a227, #ffe27a); transition: width .25s; }
-.cap-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9); }
-.fit-drop { min-height: 60px; border-radius: 6px; }
-.fit-drop.drop { outline: 1px solid var(--cyan); }
-.fit-empty { padding: 10px 4px; }
-/* fitting gauge (PTR comparison) */
-.hb-slot.hb-open { background: rgba(0,0,0,0.18); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08); }
-.fg-ring { position: relative; width: 44px; height: 44px; padding: 0; border: none; cursor: pointer; align-self: center; background: rgba(14,19,30,0.82); border-radius: 50%; box-shadow: var(--shadow); touch-action: manipulation; }
-.fg-ring:hover { background: rgba(30,38,56,0.9); }
-.fg-ring svg { width: 100%; height: 100%; }
-.fg-ring path { fill: none; stroke-width: 4; stroke-linecap: round; }
-.fr-bg { stroke: rgba(255,255,255,0.1); }
-.fr-disp { stroke: #f2f5fa; stroke-dasharray: 0 100; transition: stroke-dasharray .25s; }
-.fr-cap { stroke: #ffd24a; stroke-dasharray: 0 100; transition: stroke-dasharray .25s, stroke .4s; }
-.fr-cap.burning { animation: frBurn .6s ease-in-out infinite alternate; }
+
 @keyframes frBurn { from { stroke: #ff1414; } to { stroke: #a80000; } }
-.fr-tick { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
-.fr-num { position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.fit-key { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-.fit-key.disp { background: #f2f5fa; }
-.fit-key.cap { background: #ffd24a; }
-.fit-sub .sheet-k { padding-left: 14px; font-size: 11px; }
-.fit-sub .sheet-v { font-size: 11px; color: var(--text-dim); }
-.fit-row.running { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.9); }
-.mk-ico { width: 22px; height: 22px; image-rendering: pixelated; margin-right: 6px; vertical-align: middle; }
-.hb-hp { position: absolute; left: 3px; right: 3px; bottom: 2px; height: 3px; border-radius: 2px; background: rgba(0,0,0,0.6); overflow: hidden; pointer-events: none; }
-.hb-hp[hidden] { display: none; }
-.hb-hp-fill { height: 100%; background: linear-gradient(90deg, #ff4b3b, #ffb04b); }
-.hb-slot.burnt { background: rgba(60,8,8,0.6); box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
-.hb-slot.burnt .hb-img { opacity: .25; filter: grayscale(1) sepia(1) hue-rotate(-30deg); }
-.fit-row.burnt { opacity: .6; box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
-.hb-slot.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; background: rgba(255,40,20,0.16); }
-.cap-boost { color: #5be37a; }
-.fit-sub .sheet-v { color: #5be37a; }
-.fit-row { display: grid; grid-template-columns: 1fr 74px 64px; align-items: center; }
-.fit-row.fit-head { background: none; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); padding-top: 0; padding-bottom: 0; }
-.fit-mod { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.fit-mod > span:not(.fit-hp) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fit-col { text-align: right; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
-.fit-hp { font-size: 10px; color: #ff6b5b; white-space: nowrap; }
+
 /* fleet panel: smaller pilot cards (owner: it was too big) */
 /* hotbar module states (owner): powered = an outline in the module's color (mining orange, combat red,
-   automation / self blue, passive grey); running = fill timer in that color; stopping after this cycle = grey; powered off = dark slate */
+   automation / self blue, passive gray); running = fill timer in that color; stopping after this cycle = gray; powered off = dark slate */
 .hb-slot { --mc: 255,160,70; }
-.hb-slot.c-mining { --mc: 255,160,70; }
-.hb-slot.c-combat { --mc: 255,80,70; }
-.hb-slot.c-auto { --mc: 80,170,255; }
+
 .hb-slot.passive { --mc: 150,160,175; }
 .hb-slot.filled { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.85); background: rgba(0,0,0,0.35); }
 .hb-slot.filled.on { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.55); background: rgba(0,0,0,0.35); }
 .hb-slot.on::before { background: conic-gradient(rgba(var(--mc),0.3) var(--p, 0%), transparent 0); }
-.hb-slot.filled.stopping { box-shadow: inset 0 0 0 1.5px rgba(160,170,185,0.85); }
-.hb-slot.stopping::before { background: conic-gradient(rgba(160,170,185,0.25) var(--p, 0%), transparent 0); }
+
 .hb-slot.filled.off { background: #1b2430; box-shadow: none; }
 .hb-slot.filled.passive { box-shadow: inset 0 0 0 1.5px rgba(var(--mc),0.6); }
-.hb-slot.filled.overload { box-shadow: inset 0 0 0 1.5px #ff3a1a; }
-.hb-slot.filled.burnt { box-shadow: inset 0 0 0 1px rgba(255,70,60,0.6); }
+
 .hb-num { color: var(--text-faint) !important; }
-.hb-badge { display: none; }
-.mod-tip { position: fixed; z-index: 2000000000; transform: translate(-50%, -100%); background: var(--panel-grad); box-shadow: var(--shadow); border-radius: 6px; padding: 6px 9px; font-size: 11px; pointer-events: none; min-width: 120px; }
-.mod-tip[hidden] { display: none; }
-.mod-tip-row { display: flex; justify-content: space-between; gap: 12px; color: var(--text-dim); }
-.mod-tip-row b { color: var(--text); font-weight: 600; }
-.set-row { margin: 8px 0 12px; }
-.set-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
-.set-val { color: var(--text); font-variant-numeric: tabular-nums; }
-.set-range { margin: 6px 0 0; }
-/* targets: tooltip only on hover; primary = leftmost, white bar under its circle; × drawn as two centered strokes */
-.tgt-tip { display: none; }
-.tgt.hover .tgt-tip { display: block; }
+
 .tgt.sel .tgt-ring { box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
-.tgt-primary { width: 22px; height: 2px; margin-top: 2px; border-radius: 1px; background: #fff; box-shadow: 0 0 4px rgba(255,255,255,0.6); }
+
 .tgt-x { padding: 0; font-size: 0; }
 .tgt-x::before, .tgt-x::after { content: ""; position: absolute; left: 50%; top: 50%; width: 8px; height: 1.5px; border-radius: 1px; background: currentColor; }
 .tgt-x::before { transform: translate(-50%, -50%) rotate(45deg); }
 .tgt-x::after { transform: translate(-50%, -50%) rotate(-45deg); }
-.hud-act { padding: 0; }
-.hud-act svg { display: block; }
-.win[data-id="fitting"] .fit-list { margin-top: 14px; }
+
 /* running modules: the outline's own color sweeps slowly clockwise (no white glint, owner) */
 @property --hb-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 .hb-slot.filled.on::after { content: ""; position: absolute; inset: 0; border-radius: 5px; padding: 1.5px; pointer-events: none;
   background: conic-gradient(from var(--hb-a), rgba(var(--mc),0.15) 0deg, rgba(var(--mc),0.15) 180deg, rgba(var(--mc),0.95) 330deg, rgba(var(--mc),0.15) 360deg);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
   animation: hbSpin 3s linear infinite; }
-.hb-slot.filled.on.stopping::after { display: none; }
+
 @keyframes hbSpin { to { --hb-a: 360deg; } }
 .cat-row.cat-group-start { margin-top: 10px; }
 .q-total { margin-left: auto; margin-right: 8px; font-size: 11px; color: var(--text-dim); }
@@ -564,10 +355,7 @@ input, textarea, .chat-log, .chat-log * { -webkit-user-select: text; user-select
 .hb-slot.standby { animation: hbStandby 0.9s ease-in-out infinite; }
 .hb-slot.standby::after { content: "Standby"; position: absolute; left: 0; right: 0; bottom: 1px; text-align: center; font-size: 7px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #ffd27a; text-shadow: 0 1px 2px #000; pointer-events: none; animation: none; background: none; padding: 0; -webkit-mask: none; mask: none; }
 @keyframes hbStandby { 0%, 100% { box-shadow: inset 0 0 0 1.5px rgba(255,210,120,0.95); } 50% { box-shadow: inset 0 0 0 1.5px rgba(255,210,120,0.15); } }
-/* HUD: docked (hotbar stays for fitting) and pilot-not-in-ship states */
-.hud-noship { display: none; padding: 10px 18px; background: rgba(14,19,30,0.86); border-radius: 7px; box-shadow: var(--shadow); color: var(--text-dim); font-size: 12px; letter-spacing: .04em; }
-#hud.no-ship > * { display: none; }
-#hud.no-ship > .hud-noship { display: block; }
+
 #hud.docked .hud-targets { display: none; }
 .hud-spd { cursor: default; }
 /* range sliders in the game's style: thin dark track, blue gradient fill up to the value, round thumb */
@@ -577,56 +365,18 @@ input[type="range"]::-moz-range-track { height: 5px; border-radius: 3px; backgro
 input[type="range"]::-moz-range-progress { height: 5px; border-radius: 3px; background: linear-gradient(90deg, #4fd2ff, #2a7bff); }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -4.5px; border-radius: 50%; background: #e4ecf6; box-shadow: 0 0 0 3px rgba(56,198,255,0.35), 0 2px 6px rgba(0,0,0,0.6); }
 input[type="range"]::-moz-range-thumb { width: 14px; height: 14px; border: none; border-radius: 50%; background: #e4ecf6; box-shadow: 0 0 0 3px rgba(56,198,255,0.35), 0 2px 6px rgba(0,0,0,0.6); }
-.hull-bonus { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(56,198,255,0.06); box-shadow: inset 0 0 0 1px rgba(56,198,255,0.18); }
-.hull-bonus-h { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; }
-.hull-bonus-row { font-size: 12.5px; color: #8fe3a5; }
-.req-head { margin: 12px 0 4px; }
-.req-none { padding: 4px 8px; }
-.cap-boost:not(.fit-col) { cursor: help; text-decoration: underline dotted rgba(91,227,122,0.6); text-underline-offset: 3px; }
+
 /* fitting window (owner): tabs; Fitting tab = ship image + current numbers, hardpoint slots below (8 a row, centered) */
 .fit-tabs { flex-wrap: wrap; }
 .fit-tabs .tab { font-size: 11px; padding: 5px 7px 7px; }
-.fit-top { display: flex; gap: 12px; align-items: stretch; }
-.fit-ship { flex: 0 0 132px; min-height: 104px; display: grid; place-items: center; border-radius: 8px; background: radial-gradient(circle at 50% 55%, rgba(79,160,255,0.16), rgba(0,0,0,0.3) 70%); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
-.fit-ship-img { max-width: 116px; max-height: 92px; object-fit: contain; image-rendering: pixelated; }
-.fit-stats { flex: 1; min-width: 0; }
-.fit-stats .sheet-row { padding-top: 5px; padding-bottom: 5px; }
+
 .fit-slots { display: grid; justify-content: center; gap: 6px; margin: 14px 0 4px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.22); }
 .fit-slots .hb-slot { width: 40px; height: 40px; }
-@media (max-width: 480px) { .fit-top { flex-direction: column; } .fit-ship { flex-basis: auto; } }
 
-/* the base window: build palette and settings on the left, the grid on the right */
-.win-body.base-body { display: flex; gap: 8px; padding: 6px; overflow: hidden; }
-.base-side { width: 200px; flex: none; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
-.base-canvas { flex: 1; min-width: 0; height: 100%; border-radius: 6px; touch-action: none; display: block; }
-.base-tools { display: flex; flex-direction: column; gap: 2px; }
-.base-tool { display: flex; justify-content: space-between; gap: 6px; padding: 5px 8px; border: none; border-radius: 5px; background: rgba(0,0,0,0.25); color: var(--text); font-size: 12px; cursor: pointer; text-align: left; }
-.base-tool:hover { background: rgba(255,255,255,0.08); }
-.base-tool.on { background: var(--sel); }
-.base-tool .credits { font-size: 11px; }
-.base-info { display: flex; flex-direction: column; gap: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); font-size: 12px; }
-.base-info-h { font-weight: 600; color: var(--text); }
-.base-sel, .base-num { width: 100%; background: rgba(0,0,0,0.35); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 4px 6px; font-size: 12px; }
-.base-need { display: flex; flex-wrap: wrap; gap: 3px; }
-.base-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-size: 11px; }
-.base-chip img, .base-item img { width: 16px; height: 16px; object-fit: contain; image-rendering: pixelated; }
-.base-status { color: #ffb347; font-size: 11px; min-height: 13px; }
-.base-cap { color: var(--text-dim); font-size: 11px; }
-.base-item { display: grid; grid-template-columns: 18px 1fr auto; gap: 5px; align-items: center; font-size: 12px; color: var(--text-dim); }
-.base-item b { color: var(--text); font-weight: 500; }
-@media (max-width: 600px) { .win-body.base-body { flex-direction: column; } .base-side { width: auto; max-height: 40%; } .base-canvas { min-height: 200px; } }
-
-/* the tutorial shard's step panel */
-.tut-panel { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 40; width: min(440px, calc(100vw - 32px)); padding: 10px 14px; background: rgba(12, 18, 28, 0.92); border: 1px solid rgba(255, 179, 71, 0.45); border-radius: 8px; color: #dfe6f0; pointer-events: none; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4); }
-.tut-count { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffb347; }
-.tut-title { font-size: 15px; font-weight: 600; margin: 2px 0 3px; }
-.tut-text { font-size: 13px; line-height: 1.4; color: #b9c3d2; }
-@media (max-width: 600px) { .tut-panel { left: 56px; transform: none; width: calc(100vw - 68px); } }
+.base-sel { width: 100%; background: rgba(0,0,0,0.35); color: var(--text); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 4px 6px; font-size: 12px; }
 
 /* portraits (portrait.js) in the Player Sheet and Pilot window */
 canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-.sheet-portrait { display: flex; justify-content: center; margin: 2px 0 10px; }
-.sheet-portrait canvas { border: 1px solid rgba(200, 220, 255, 0.22); }
 
 /* Fleet window (owner): portrait left; ship, shield / hull bars and the pilot's name right */
 .win[data-id="fleet"] .fleet-list { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -658,7 +408,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .fa-btn:hover { color: var(--text); background: rgba(255,255,255,0.08); }
 .fa-btn.on { color: #eaf7ff; border-color: rgba(42,182,255,0.8); box-shadow: inset 0 0 0 1px rgba(42,182,255,0.4); }
 
-/* Pilot Sheet (owner): every pilot side by side (room for 5), the tabs centred */
+/* Pilot Sheet (owner): every pilot side by side (room for 5), the tabs centered */
 .pilot-pick { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 12px; }
 .pp-card { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; padding: 5px 2px 4px; border: none; border-radius: 6px; background: rgba(0,0,0,0.3); color: var(--text-dim); font: inherit; cursor: pointer; }
 .pp-card:hover { background: rgba(255,255,255,0.08); }
@@ -693,7 +443,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .btn-ghost2:hover { color: var(--text); }
 .chat-log .who { cursor: pointer; }
 
-/* ---- HUD (owner): locked targets, shield / hull / speed, Inventory button and the hotbar, bottom centre ---- */
+/* ---- HUD (owner): locked targets, shield / hull / speed, Inventory button and the hotbar, bottom center ---- */
 #hud { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 40; pointer-events: none; }
 #hud[hidden] { display: none; }
 #hud > * { pointer-events: auto; }
@@ -763,9 +513,9 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .fit-active, .fit-passive { margin: 2px 0 4px; }
 .req-check { width: 16px; flex: 0 0 16px; color: #49d17d; font-weight: 700; }
 .req-row .sheet-k { flex: 1; }
-.si-hold { font-size: 10.5px; color: var(--text-dim); margin: 0 2px 3px; }
+
 .si-cap + .si-cap { margin-top: -2px; }
-/* (owner) Fitting: each slot row's type inside its box, small and grey; the ship centred between the rows, close under the tabs */
+/* (owner) Fitting: each slot row's type inside its box, small and gray; the ship centered between the rows, close under the tabs */
 .fit-body { margin-top: 2px; }
 .fit-tabs { margin-bottom: 0; }
 .fit-slots.fit-active, .fit-slots.fit-passive { position: relative; margin: 0; padding-top: 18px; }
@@ -831,3 +581,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .st-grid-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .st-foot { flex: 0 0 auto; display: flex; justify-content: flex-end; }
 .st-undock { padding: 6px 14px; }
+/* modules: powered off (disposition only), standby (waiting for a lock) */
+.hb-slot.off .hb-img { opacity: .3; filter: grayscale(1); }
+.hb-slot.standby { animation: hbStandby 0.9s ease-in-out infinite alternate; }
+@keyframes hbStandby { from { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.15); } to { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.85); } }

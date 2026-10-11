@@ -16,7 +16,7 @@ export class Obstacles {
   /** Is (x, y) inside object i grown by pad? */
   insideOne(i, x, y, pad) { const o = this.list[i]; return o.r != null ? (x - o.x) ** 2 + (y - o.y) ** 2 < (o.r + pad) ** 2 - 1e-9 : Math.abs(x - o.x) < o.hx + pad - 1e-9 && Math.abs(y - o.y) < o.hy + pad - 1e-9; }
   containing(x, y, pad) { const a = this.grid.get(Math.floor(x / CELL) + "," + Math.floor(y / CELL)) || []; return a.filter((i) => this.insideOne(i, x, y, pad)); }
-  /** Push a point out of every object grown by pad (a few passes settle neighbours). */
+  /** Push a point out of every object grown by pad (a few passes settle neighbors). */
   pushOut(p, pad) {
     for (let pass = 0; pass < 4; pass++) {
       const hit = this.containing(p.x, p.y, pad); if (!hit.length) return p;

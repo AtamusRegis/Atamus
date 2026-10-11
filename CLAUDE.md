@@ -95,7 +95,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
 
-The single PTR pilot is "Vera Kestrel" (pilot 1 after a reset). Ships are `<account>:ship:<pilot>`, so hers is `1:ship:1`; the world's centre is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
+The single PTR pilot is "Vera Kestrel" (pilot 1 after a reset). Ships are `<account>:ship:<pilot>`, so hers is `1:ship:1`; the world's center is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
 
 ## Code conventions
 

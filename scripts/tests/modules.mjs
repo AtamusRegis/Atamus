@@ -22,7 +22,17 @@ for (const [k, i] of [["mining_laser", 0], ["mining_laser", 1], ["mining_drones"
 w.cmdFit("a", s.id, "cargo_expander", "passive", 0);
 t.ok(s.fit.active.join() === "mining_laser,mining_laser,mining_drones,afterburner_1" && s.fit.passive[0] === "cargo_expander" && s.calc.power === 40, "untrained, two lasers, drones, an afterburner and a Cargo Expander use exactly the 40 power", s.calc);
 w.cmdFit("a", s.id, "mining_laser_upgrade", "passive", 1);
-t.ok(!s.fit.passive[1] && lastNote() === "Not enough power", "past the hull's power it's refused", [s.fit.passive, lastNote()]);
+t.ok(!s.fit.passive[1] && lastNote() === "Not enough disposition", "past the hull's disposition it's refused", [s.fit.passive, lastNote()]);
+// (owner) power: a module past the power is fitted powered off (disposition only); Power On needs the room
+w.cmdUnfit("a", s.id, "passive", 0); w.cmdFit("a", s.id, "mining_laser_upgrade", "passive", 0);
+t.ok(s.fit.passive[0] === "mining_laser_upgrade" && s.fit.off.passive[0] && lastNote() === "Not enough power: fitted offline" && s.calc.power === 36 && s.calc.disposition === 61, "past the power, a module is fitted powered off: disposition but no power", [s.fit.off, s.calc.power, s.calc.disposition]);
+t.ok(shipCalc(T, s.fit, s.lic).laser.yield === shipCalc(T, { active: s.fit.active, passive: [] }, s.lic).laser.yield, "a powered-off module does nothing");
+w.cmdPower("a", s.id, "passive", 0, true); t.ok(s.fit.off.passive[0] && lastNote() === "Not enough power", "Power On needs the power");
+w.cmdPower("a", s.id, "active", 3, false); w.cmdPower("a", s.id, "passive", 0, true);
+t.ok(s.fit.off.active[3] && !s.fit.off.passive[0] && s.calc.power === 31, "powering one off makes room for another", s.calc.power);
+notes.length = 0; w.cmdModule("a", s.id, 3, true); t.ok(!s.act[3] && lastNote() === "Powered off", "a powered-off module can't be switched on");
+w.cmdPower("a", s.id, "passive", 0, false); w.cmdPower("a", s.id, "active", 3, true); w.cmdUnfit("a", s.id, "passive", 0); w.cmdFit("a", s.id, "cargo_expander", "passive", 0);
+t.ok(!s.fit.off.active[3] && s.fit.passive[0] === "cargo_expander" && !s.fit.off.passive[0] && s.calc.power === 40, "back to the full-power fit", s.calc);
 t.ok(!s.holds.cargo.mining_laser && s.holds.cargo.mining_laser_upgrade === 1, "fitting takes the module out of the cargo hold");
 const all5 = { mining_frigate: 1, mining_lasers: 5, mining_drones: 5, mining_upgrades: 5, engineering_upgrades: 5, engines: 5 };
 const full = shipCalc(T, { active: ["mining_laser", "mining_laser", "mining_drones", "afterburner_1"], passive: ["mining_laser_upgrade", "mining_overclocker", "cargo_expander"] }, all5);
@@ -51,22 +61,30 @@ w.cmdModule("a", s.id, 3, false); t.ok(s.speed === T.speedKmps, "and off again")
 const belt = [...w.pois.values()].find((p) => p.kind === "belt"), k = belt.field.rocks.find((r) => r.size === 1000) || belt.field.rocks[0];
 const inb = Math.atan2(belt.y - k.y, belt.x - k.x);
 Object.assign(s, { x: k.x + Math.cos(inb) * (k.r + 1), y: k.y + Math.sin(inb) * (k.r + 1), vx: 0, vy: 0 }); w.tick(0.05);
-notes.length = 0; w.cmdModule("a", s.id, 0, true);
-t.ok(!s.act[0] && lastNote() === "No locked asteroid in range", "a laser needs a locked asteroid in its range", lastNote());
-w.cmdLock("a", s.id, "rock", k.id); s.targets[0].lockAt = 0; w.tick(0.05);
 w.cmdModule("a", s.id, 0, true); w.cmdModule("a", s.id, 2, true);
-t.ok(s.act[0] && s.act[0].tg === k.id && s.act[2] && s.act[2].tg === k.id, "with one, the laser and drones start on it");
+t.ok(s.act[0] && s.act[0].standby && s.act[2] && s.act[2].standby && w.snapshotFor(a).ships.find((x) => x.id === s.id).act[0].sb === 1, "with no locked asteroid in range, a laser (or drones) waits on standby (owner)", s.act);
+w.cmdLock("a", s.id, "rock", k.id); w.tick(0.05);
+t.ok(s.act[0].standby, "still waiting while the lock comes on");
+s.targets[0].lockAt = 0; w.tick(0.05);
+t.ok(s.act[0] && s.act[0].tg === k.id && s.act[2] && s.act[2].tg === k.id, "on the first lock in range they start on it");
+t.ok(Number.isFinite(s.act[0].ax) && Math.hypot(s.act[0].ax, s.act[0].ay) < k.r && [0, 1].includes(s.act[0].hp) && [2, 3].includes(w.ships.get(s.id).act[1] ? 2 : 2), "a laser picks a spot inside the rock and one of its arm's hardpoints for the cycle", s.act[0]);
 const m0 = k.m3; s.act[0].at -= 15000; w.tick(0.05);
 t.ok(Math.abs((s.holds.ore["ore:" + k.ore] || 0) - s.calc.laser.yield) < 1e-6 && Math.abs(k.m3 - (m0 - s.calc.laser.yield)) < 0.02, "each laser cycle moves its yield from the rock into the ore hold", [s.holds.ore, k.m3]);
 s.act[2].at -= 60000; w.tick(0.05);
 t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield - s.calc.drones.yield) < 1e-6, "a drone cycle adds the drones' yield", s.holds.ore);
 const snap = w.snapshotFor(a).ships.find((x) => x.id === s.id);
-t.ok(snap.fit && snap.holds && snap.calc && snap.act[0].tg === k.id && snap.beams.length === 2, "your ship's snapshot carries its fit, holds, numbers and running modules; everyone sees the beams", snap.beams);
+t.ok(snap.fit && snap.holds && snap.calc && snap.act[0].tg === k.id && snap.beams.length === 2 && snap.beams.every((b) => Number.isFinite(b.ax) && Number.isFinite(b.p) && b.c > 0), "your ship's snapshot carries its fit, holds, numbers and running modules; everyone sees the beams (spot, hardpoint, cycle)", snap.beams);
 s.holds.ore["ore:" + k.ore] = s.calc.holds.ore - 1; s.act[0].at -= 15000; w.tick(0.05);
 t.ok(!s.act[0] && Math.abs(Object.values(s.holds.ore).reduce((x, y) => x + y, 0) - s.calc.holds.ore) < 1e-6 && lastNote() === "Ore hold full", "a full ore hold stops the laser (only what fits is taken)", [s.act[0], lastNote()]);
 w.cmdModule("a", s.id, 0, true); t.ok(!s.act[0], "and it won't start with the hold full");
 s.holds.ore = {}; w.cmdModule("a", s.id, 0, true); w.cmdUnlock("a", s.id, "rock", k.id); w.tick(0.05);
 t.ok(!s.act[0] && !s.act[2], "unlocking the rock stops what's mining it");
+// (owner) Orbit: it circles the object at full speed, off its no-destination line
+{ const ow = new World(); ow.addPlayer("o", "O", () => {}, null, [{ id: 1, name: "O", licenses: {} }]); ow.tick(0.05); const so = ow.ships.get("o:ship:1"), bo = [...ow.pois.values()].find((p) => p.kind === "belt"), ko = bo.field.rocks[0];
+  Object.assign(so, { x: ko.x + 3, y: ko.y, vx: 0, vy: 0 }); ow.cmdChase("o", so.id, "rock", ko.id, "orbit");
+  let minD = Infinity, maxD = 0, turned = 0, lastA = Math.atan2(so.y - ko.y, so.x - ko.x);
+  for (let i = 0; i < 2400; i++) { ow.tick(0.05); if (i > 600) { const d = Math.hypot(so.x - ko.x, so.y - ko.y); minD = Math.min(minD, d); maxD = Math.max(maxD, d); const a2 = Math.atan2(so.y - ko.y, so.x - ko.x); let da = a2 - lastA; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; turned += da; lastA = a2; } }
+  t.ok(minD > ko.r + so.radius + 0.07 && maxD < ko.r + so.radius + 0.07 + 0.5 + 1.2 && Math.abs(turned) > 2 * Math.PI, "Orbit circles the object, never over it", { minD, maxD, turned, r: ko.r }); }
 w.cmdLock("a", s.id, "rock", k.id); s.targets[0].lockAt = 0; w.tick(0.05); w.cmdModule("a", s.id, 0, true);
 w._startWarp(s, [...w.pois.values()].find((p) => p.kind === "belt" && p !== belt), Date.now()); w.tick(0.05);
 t.ok(!s.act.some(Boolean), "a warp switches every module off"); s.wp = null;

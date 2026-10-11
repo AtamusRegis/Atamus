@@ -1,5 +1,5 @@
 // Asteroid belts (owner, 2026-10-10): belt POIs 100 km across whose rocks lie on a half-moon (crescent) around the
-// POI's centre. Five ores, one per rarity tier. Keys are the old names (they may be in player data later).
+// POI's center. Five ores, one per rarity tier. Keys are the old names (they may be in player data later).
 // `rock` = sprite family in assets/rocks/.
 export const ORES = [
   { key: "ironstone", name: "Cryonite",  rarity: "common",    tier: 0, color: "#8d8378", rock: "cratered"  },
@@ -17,7 +17,7 @@ export const BELT = {
   fullMs: 60 * 60 * 1000,       // (owner) untouched for the first hour...
   decayMinMs: 60 * 60 * 1000, decayMaxMs: 3 * 60 * 60 * 1000,   // ...then each rock wastes away to nothing over 1-3 hours of its own
 };
-// rock sizes (owner: large → medium → small as it loses ore): the sprite size in metres, by ore left
+// rock sizes (owner: large → medium → small as it loses ore): the sprite size in meters, by ore left
 export const ROCK_SIZES = [{ m: 1000, minM3: 20_000 }, { m: 500, minM3: 5_000 }, { m: 200, minM3: 0 }];
 export const sizeFor = (m3) => ROCK_SIZES.find((s) => m3 >= s.minM3).m;
 const START_M3 = { 1000: [25_000, 60_000], 500: [6_000, 15_000], 200: [1_500, 4_000] };
@@ -31,7 +31,7 @@ export function createBeltField(id, cx, cy, now = Date.now()) {
   while (types.length < 3 && lower.length) types.push(lower.splice(Math.floor(Math.random() * lower.length), 1)[0]);
   if (types.length < 2) types.push(ORES[Math.min(4, tier + 1)]);
   const shares = types.map((_, i) => (i === 0 ? 1 : 0.3 + Math.random() * 0.3));
-  const dir = Math.random() * Math.PI * 2;      // the way the crescent bulges: its middle is at this angle from the centre
+  const dir = Math.random() * Math.PI * 2;      // the way the crescent bulges: its middle is at this angle from the center
   const f = { dir: +dir.toFixed(4), tier, nextId: 0, ver: 1, rocks: [], total: 0 };
   let guard = 0;
   while (f.total < BELT.minM3 && guard++ < 5000) {

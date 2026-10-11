@@ -1,12 +1,12 @@
 // The authoritative simulation (back to basics, owner 2026-10-10): the Expanse's hexagon with nothing in it, and one
 // Prospector per pilot that flies, aligns and warps where it's told, and asteroid belt POIs. Everything else the game
 // had is kept for reference in reference/2026-10-10-pre-reset/.
-import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
+import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
 import { Obstacles } from "./obstacles.js";
-import { MODULES, STARTER_KIT, shipCalc } from "./modules.js";
+import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
 import { ORES, sizeFor } from "./belts.js";
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
@@ -29,6 +29,7 @@ export const cleanShipName = (v) => { if (typeof v !== "string") return null; co
 // just can't stop on an object. A destination is kept DEST_CLEAR_KM clear of touching an asteroid (its whole art: half
 // its size) or a Library prop (its art's box) — the zone the client outlines on hover.
 const DEST_CLEAR_KM = 0.07;
+const ORBIT_KM = 0.5;                                 // (owner) Orbit circles this far off an object's no-destination line
 // ---- ship holds (owner): { ore: { item: qty }, cargo: { item: qty } }; a module is 5 m³ an item, ore 1 m³ a unit ----
 const itemM3 = (k) => (MODULES[k] ? MODULES[k].m3 : 1);
 const isItem = (k) => !!MODULES[k] || (typeof k === "string" && k.startsWith("ore:") && ORES.some((o) => "ore:" + o.key === k));
@@ -41,10 +42,11 @@ function loadHolds(v, t) {
 }
 function loadHangar(v) { const h = {}; if (v && typeof v === "object") for (const [k, n] of Object.entries(v)) if (isItem(k) && Number.isFinite(n) && n > 0) h[k] = +n.toFixed(2); return h; }
 function loadFit(v, t) {
-  const f = { active: Array(t.activeSlots).fill(null), passive: Array(t.passiveSlots).fill(null) };
-  for (const kind of ["active", "passive"]) if (v && Array.isArray(v[kind])) v[kind].slice(0, f[kind].length).forEach((k, i) => { if (MODULES[k] && MODULES[k].slot === kind) f[kind][i] = k; });
+  const f = { active: Array(t.activeSlots).fill(null), passive: Array(t.passiveSlots).fill(null), off: { active: Array(t.activeSlots).fill(false), passive: Array(t.passiveSlots).fill(false) } };
+  for (const kind of ["active", "passive"]) if (v && Array.isArray(v[kind])) v[kind].slice(0, f[kind].length).forEach((k, i) => { if (MODULES[k] && MODULES[k].slot === kind) { f[kind][i] = k; f.off[kind][i] = !!(v.off && v.off[kind] && v.off[kind][i]); } });
   return f;
 }
+const cloneFit = (f) => ({ active: [...f.active], passive: [...f.passive], off: { active: [...f.off.active], passive: [...f.off.passive] } });
 const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
 
 export class World {
@@ -74,10 +76,11 @@ export class World {
     p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name, licenses: (x.licenses && typeof x.licenses === "object") ? x.licenses : {} }));
     const keep = new Set(p.pilots.map((x) => this._sid(id, x.id)));
     for (const [sid, s] of this.ships) if (s.owner === id && !keep.has(sid)) this.ships.delete(sid);
+    this._own = null;
     for (const pl of p.pilots) { const s = this._ensureShip(id, pl.id, saved || p.saved); const key = JSON.stringify(pl.licenses); if (s.licKey !== key) { s.lic = pl.licenses; s.licKey = key; this._recalc(s); } }
   }
   _sid(owner, pilotId) { return `${owner}:ship:${pilotId}`; }
-  // a pilot's Prospector: where they left it, or a fresh one near the centre
+  // a pilot's Prospector: where they left it, or a fresh one near the center
   _ensureShip(id, pilotId, saved) {
     const sid = this._sid(id, pilotId);
     if (this.ships.has(sid)) return this.ships.get(sid);
@@ -91,7 +94,7 @@ export class World {
     if (s.docked) { const st = this._station(); s.x = st.x; s.y = st.y; s.tx = s.x; s.ty = s.y; }
     if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
     this._recalc(s);
-    this.ships.set(sid, s);
+    this.ships.set(sid, s); this._own = null;
     return s;
   }
   // what the ship can do as fitted and as its pilot flies it (modules.js); the afterburner, when on, raises top speed
@@ -101,10 +104,34 @@ export class World {
     s.speed = ab ? s.calc.abSpeed : s.calc.speed; s.accel = s.calc.accel;
   }
   // Logging off (owner: no logged-off presence): after a short grace for reloads the ship leaves the world.
-  removePlayer(id) { const p = this.players.get(id); if (!p) return; p.offline = true; p.offlineSince = Date.now(); p.send = () => {}; }
+  // (owner) A safe log off (every ship docked) leaves after a short grace. Otherwise the ships carry on (mining, flying)
+  // for UNSAFE_LOGOFF_MS, then each warps to a safe spot and they leave space there (and come back there).
+  removePlayer(id) { const p = this.players.get(id); if (!p) return; p.offline = true; p.offlineSince = Date.now(); p.safeWarp = false; p.send = () => {}; }
+  /** Each account's ships (an index rebuilt only when ships come or go). */
+  shipsOf(owner) {
+    if (!this._own) { this._own = new Map(); for (const s of this.ships.values()) { let l = this._own.get(s.owner); if (!l) this._own.set(s.owner, l = []); l.push(s); } }
+    return this._own.get(owner) || [];
+  }
+  _tickLogoffs(now) {
+    for (const p of [...this.players.values()]) {
+      if (!p.offline) continue;
+      const ships = this.shipsOf(p.id), away = now - p.offlineSince;
+      if (ships.every((s) => s.docked)) { if (away > LOGOUT_GRACE_MS) this._purge(p.id); continue; }
+      if (away < UNSAFE_LOGOFF_MS) continue;
+      if (!p.safeWarp) { p.safeWarp = true; for (const s of ships) if (!s.docked && !s.wp) this._safeWarp(s, now); }
+      else if (ships.every((s) => s.docked || !s.wp)) this._purge(p.id);
+    }
+  }
+  _safeWarp(s, now) {
+    const a = Math.random() * Math.PI * 2, to = clampToExpanse(s.x + Math.cos(a) * SAFE_WARP_KM, s.y + Math.sin(a) * SAFE_WARP_KM, 50), dist = Math.hypot(to.x - s.x, to.y - s.y);
+    s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockReq = false; this._recalc(s);
+    s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: null };
+    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false;
+  }
   _purge(id) {
     if (this.onBeforePurge) { try { this.onBeforePurge(id); } catch (e) { console.error("onBeforePurge", e); } }
     for (const [sid, s] of this.ships) if (s.owner === id) this.ships.delete(sid);
+    this._own = null;
     this.players.delete(id);
   }
   /** Everything about a player worth keeping across logins and restarts. */
@@ -159,21 +186,30 @@ export class World {
     const m = MODULES[item]; if (!m || m.slot !== kind || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length) return;
     if (!((s.holds.cargo[item] || 0) >= 1)) return;
     if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
-    const old = s.fit[kind][slot], next = { active: [...s.fit.active], passive: [...s.fit.passive] }; next[kind][slot] = item;
-    const c = shipCalc(SHIP_TYPES[s.type], next, s.lic);
-    if (c.power > c.powerMax + 1e-9) return this._notice(pid, "Not enough power");
+    const old = s.fit[kind][slot], next = cloneFit(s.fit); next[kind][slot] = item; next.off[kind][slot] = false;
+    let c = shipCalc(SHIP_TYPES[s.type], next, s.lic);
     if (c.disposition > c.dispositionMax + 1e-9) return this._notice(pid, "Not enough disposition");
+    if (c.power > c.powerMax + 1e-9) { next.off[kind][slot] = true; this._notice(pid, "Not enough power: fitted offline"); }   // (owner) power it on when there's room
     takeItem(s.holds, "cargo", item, 1); if (old) addItem(s.holds, "cargo", old, 1);   // (a swap: same size, so it fits)
     s.fit = next; this._recalc(s);
   }
   cmdUnfit(pid, shipId, kind, slot) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || (kind !== "active" && kind !== "passive") || !Number.isInteger(slot) || slot < 0 || slot >= (s.fit[kind] || []).length) return;
     const item = s.fit[kind][slot]; if (!item) return;
-    const without = { ...s.fit, [kind]: s.fit[kind].map((k, i) => (i === slot ? null : k)) };   // (an expander out: the holds must still fit what's in them)
+    const without = cloneFit(s.fit); without[kind][slot] = null;   // (an expander out: the holds must still fit what's in them)
     if (holdUsed(s.holds, "cargo") + MODULES[item].m3 > this._holdCap(s, "cargo", without) + 1e-9) return this._notice(pid, "Cargo hold full");
     if (holdUsed(s.holds, "ore") > this._holdCap(s, "ore", without) + 1e-9) return this._notice(pid, "Ore hold full");
     if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
-    s.fit[kind][slot] = null; addItem(s.holds, "cargo", item, 1); this._recalc(s);
+    s.fit[kind][slot] = null; s.fit.off[kind][slot] = false; addItem(s.holds, "cargo", item, 1); this._recalc(s);
+  }
+  /** (owner) Power a fitted module off (it keeps its disposition but uses no power and does nothing) or back on (if
+   *  the power's there). */
+  cmdPower(pid, shipId, kind, slot, on) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || (kind !== "active" && kind !== "passive") || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length || !s.fit[kind][slot]) return;
+    if (!on) { if (kind === "active") this._modOff(s, slot); s.fit.off[kind][slot] = true; this._recalc(s); return; }
+    const next = cloneFit(s.fit); next.off[kind][slot] = false;
+    if (shipCalc(SHIP_TYPES[s.type], next, s.lic).power > s.calc.powerMax + 1e-9) return this._notice(pid, "Not enough power");
+    s.fit = next; this._recalc(s);
   }
   _holdCap(s, hold, fit = s.fit) { return shipCalc(SHIP_TYPES[s.type], fit, s.lic).holds[hold] || 0; }
   /** Switch an active module on or off. Lasers and drones need a locked asteroid in their range (the first such target). */
@@ -182,13 +218,19 @@ export class World {
     const m = MODULES[s.fit.active[slot]]; if (!m) return;
     if (!on) { this._modOff(s, slot); return; }
     if (s.wp || s.docked || (s.act[slot] && s.act[slot].on)) return;
+    if (isOff(s.fit, "active", slot)) return this._notice(pid, "Powered off");
     if (m.yield) {
-      const tg = this._miningTarget(s, m);
-      if (!tg) return this._notice(pid, "No locked asteroid in range");
       if (holdUsed(s.holds, "ore") >= (s.calc.holds.ore || 0) - 1e-6) return this._notice(pid, "Ore hold full");
-      s.act[slot] = { on: true, at: this.simAt, tg };
+      const tg = this._miningTarget(s, m);
+      s.act[slot] = tg ? this._cycle(s, slot, tg, this.simAt) : { on: true, standby: true };   // (owner) no target yet: on standby, it starts on the first lock in range
     } else s.act[slot] = { on: true, at: this.simAt };
     this._recalc(s);
+  }
+  // a mining cycle on rock `tg`: the laser picks a spot inside the rock and a hardpoint on its arm, kept for the cycle
+  _cycle(s, slot, tg, at) {
+    const k = this._rock(tg), t = SHIP_TYPES[s.type], arm = (t.arms || [[0]])[slot % (t.arms || [[0]]).length];
+    const a = Math.random() * Math.PI * 2, d = (k ? k.r : 0) * (0.15 + Math.random() * 0.35);
+    return { on: true, at, tg, ax: +(Math.cos(a) * d).toFixed(4), ay: +(Math.sin(a) * d).toFixed(4), hp: arm[Math.floor(Math.random() * arm.length)] };
   }
   _modOff(s, slot) { if (s.act[slot]) { s.act[slot] = null; this._recalc(s); } }
   _mcalc(s, m) { return m.key === "mining_drones" ? s.calc.drones : s.calc.laser; }
@@ -206,12 +248,13 @@ export class World {
       if (s.wp) { s.act = s.act.map(() => null); this._recalc(s); continue; }   // a warp switches everything off
       for (let i = 0; i < s.act.length; i++) {
         const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
+        if (a.standby) { const tg = this._miningTarget(s, m); if (tg) s.act[i] = this._cycle(s, i, tg, now); continue; }   // the first lock in range
         const c = this._mcalc(s, m), k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };
         if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
         if (now - a.at < c.cycleMs) continue;
         const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(c.yield, k.m3, Math.max(0, free));
         if (amt > 0) { addItem(s.holds, "ore", "ore:" + k.ore, amt); this._mineRock(a.tg, amt); }
-        a.at += c.cycleMs;
+        s.act[i] = this._cycle(s, i, a.tg, a.at + c.cycleMs);   // the next cycle: a new spot, maybe the other hardpoint
         if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); }
       }
     }
@@ -288,7 +331,7 @@ export class World {
     if (this._range(s, pos) > s.targetRange) return;
     s.targets.push({ kind, id, lockAt: this.simAt + s.lockMs, locked: false });
   }
-  /** Unlock Target (owner: a lock in progress can't be cancelled). */
+  /** Unlock Target (owner: a lock in progress can't be canceled). */
   cmdUnlock(pid, shipId, kind, id) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid) return;
     const i = s.targets.findIndex((g) => g.kind === kind && g.id === id && g.locked); if (i >= 0) s.targets.splice(i, 1);
@@ -296,7 +339,7 @@ export class World {
   /** Align To (fly at the object at full speed, no braking) or Move towards (fly to its edge and stop; follows a ship). */
   cmdChase(pid, shipId, kind, id, mode) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked) return;
-    if ((mode !== "align" && mode !== "approach") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
+    if ((mode !== "align" && mode !== "approach" && mode !== "orbit") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
     s.dockReq = false; s.chase = { kind, id, mode, v: Math.min(s.speed, Math.hypot(s.vx, s.vy)) }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = mode === "approach";   // (owner) Align To keeps the speed it had
   }
   /** Info on an object: an asteroid you have a ship beside (its belt), or a ship. */
@@ -372,7 +415,7 @@ export class World {
     this._tickShips(dtSec, now);
     this._tickTargets(now);
     this._tickModules(now);
-    for (const p of [...this.players.values()]) if (p.offline && now - p.offlineSince > LOGOUT_GRACE_MS) this._purge(p.id);
+    this._tickLogoffs(now);
   }
   _tickShips(dtSec, now) {
     this.simAt = now;
@@ -406,6 +449,12 @@ export class World {
             continue;
           }
         }
+        else if (s.chase.mode === "orbit") {               // (owner) Orbit: circle it at full speed, ORBIT_KM off its no-destination line
+          const R = pos.r + s.radius + DEST_CLEAR_KM + ORBIT_KM, dx = s.x - pos.x, dy = s.y - pos.y, d = Math.hypot(dx, dy) || 1;
+          if (!s.chase.dir) s.chase.dir = (dx * s.vy - dy * s.vx) >= 0 ? 1 : -1;   // the way it's already turning
+          const ang = Math.atan2(dy, dx) + s.chase.dir * Math.min(0.8, Math.max(0.15, s.speed * 2 / R)), r = d > R * 1.5 ? d * 0.8 : R;
+          s.tx = pos.x + Math.cos(ang) * r; s.ty = pos.y + Math.sin(ang) * r; s.moving = true; s.orbiting = true;
+        }
         else {                                             // Move towards: to just off its edge (its no-destination line), and stop
           const dx = s.x - pos.x, dy = s.y - pos.y, d = Math.hypot(dx, dy) || 1, keep = pos.r + s.radius + DEST_CLEAR_KM + 0.01;
           const goal = this._clearPoint({ x: pos.x + dx / d * keep, y: pos.y + dy / d * keep }, s);
@@ -414,9 +463,10 @@ export class World {
       }
       if (s.moving) {
         const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-        if (d <= SHIP_ARRIVE_EPS_KM) s.moving = false;
-        else {
-          const spd = Math.min(s.speed, Math.sqrt(2 * s.accel * d) * 0.95);
+        const orbit = s.chase && s.chase.mode === "orbit";
+        if (d <= SHIP_ARRIVE_EPS_KM && !orbit) s.moving = false;
+        else if (d > 1e-6) {
+          const spd = orbit ? s.speed : Math.min(s.speed, Math.sqrt(2 * s.accel * d) * 0.95);
           const dvx = (dx / d) * spd - s.vx, dvy = (dy / d) * spd - s.vy, dv = Math.hypot(dvx, dvy), step = s.accel * dtSec;
           if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
         }
@@ -496,10 +546,10 @@ export class World {
 
   // ---- snapshots: your own ships always, other ships inside your camera's view (or near your ship) ----
   snapshotFor(p) {
-    const own = [...this.ships.values()].find((s) => s.owner === p.id);   // (no view yet: around one of your ships)
+    const mineList = this.shipsOf(p.id), own = mineList[0];   // (no view yet: around one of your ships)
     const v = p.view || (own ? { x: own.x, y: own.y, w: 60 } : null);
     const half = v ? v.w * 0.75 : 0, ships = [], locked = new Set();
-    for (const s of this.ships.values()) if (s.owner === p.id) for (const g of s.targets) if (g.kind === "ship") locked.add(g.id);   // your targets are sent wherever they are
+    for (const s of mineList) for (const g of s.targets) if (g.kind === "ship") locked.add(g.id);   // your targets are sent wherever they are
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
       if (!mine && s.docked) continue;
@@ -515,9 +565,12 @@ export class World {
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
         // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
         e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = true; if (s.dockReq) e.dockReq = true;
-        e.act = s.act.map((a, i) => { if (!a) return null; const m = MODULES[s.fit.active[i]], c = m && m.yield ? this._mcalc(s, m) : null; return c ? { p: +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3), tg: a.tg } : { p: 1 }; });
+        e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
-      { const b = s.act ? s.act.map((a, i) => (a && a.tg ? { m: s.fit.active[i], tg: a.tg } : null)).filter(Boolean) : []; if (b.length) e.beams = b; }   // lasers and drones at work, for everyone to see
+      if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle
+        const b = []; s.act.forEach((a, i) => { if (a && a.tg) { const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3); b.push({ m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs }); } });
+        if (b.length) e.beams = b;
+      }
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };
       ships.push(e);
     }
