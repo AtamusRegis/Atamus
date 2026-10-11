@@ -42,13 +42,13 @@ packages/server/src/
   db.js           schema, one-time WIPES
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying, align / warp, collisions, chat
+    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying, align / warp, target locks, Align To / Move towards objects, collisions, chat
     belts.js      asteroid belts: ores, crescent fields, wasting away
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
     persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html/js    canvas renderer (backdrop, hexagon edge, ships), input, socket, update/countdown handling
-  ui.js           the left panel and the Player, Pilot, Chat and Fleet windows (window manager, tab groups)
+  ui.js           the left panel, the Player, Pilot, Chat, Fleet, Inventory and Info windows (window manager, tab groups), and the HUD (targets, status, hotbar)
   game.css        game UI styles
   play.html/js    website hub: character + pilot creation, "updating" wait page, Enter System
   portrait.js     draws portraits (assets/portraits layers) and the portrait creator

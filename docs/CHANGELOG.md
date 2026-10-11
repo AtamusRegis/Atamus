@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-11
 
+- **Targeting and the HUD (owner):** right-click (hold) an asteroid or ship for Lock Target / Unlock Target, Align To, Move towards and Info (Prospector: 5 km, 5 targets, 3 s locks; cargo 5,000 m³). A HUD at the bottom centre shows the locked targets in priority order (× unlocks; a lock in progress can't be cancelled; hover draws a faint line to the object), shield / hull / speed (hover: max speed), and the hotbar: an Inventory button and 12 module slots (keys 1-9, 0, -, =), empty slots hidden unless a module is dragged. The PTR's dev `move` now also clears the ship's orders.
 - **Player Sheet buttons (owner):** another player's sheet has DM and Report buttons at the bottom.
 - **Chat: Info, DM, Report (owner):** right-click (or hold) a name in chat for their Player Sheet, a direct-message tab, or a report (category and description, stored on the server for admin tools later).
 - **Clicks (owner):** a single click selects (your ship's pilot, or an asteroid: grey brackets, its ore and distance; orange is kept for targeted); a double click on space flies the ship there.

@@ -22,7 +22,7 @@ export async function devCommand(world, pid, m) {
   switch (m.cmd) {
     case "move": {                                       // put a ship of yours (m.ship, else the first) at x, y (km), stopped
       const sh = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid), x = +m.x, y = +m.y;
-      if (sh && Number.isFinite(x) && Number.isFinite(y)) { Object.assign(sh, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false }); tell("moved"); }
+      if (sh && Number.isFinite(x) && Number.isFinite(y)) { Object.assign(sh, { x, y, tx: x, ty: y, vx: 0, vy: 0, moving: false, chase: null, dest: null, warpReq: false, drift: false }); tell("moved"); }
       break;
     }
     case "offline": world.removePlayer(pid); tell("marked offline"); break;

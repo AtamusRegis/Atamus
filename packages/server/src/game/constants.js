@@ -28,9 +28,12 @@ export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the tar
 export const LOGOUT_GRACE_MS = 20 * 1000; // a closed connection keeps the ship in space this long (a reload), then it despawns
 
 // The Prospector (owner: the only ship for now). Stats as they were; radius drives spacing, mass who pushes whom;
-// hp / shield are shown in the fleet window (nothing damages ships yet).
+// hp / shield are shown in the fleet window and the HUD (nothing damages ships yet). Targeting: the Prospector's
+// numbers from before the reset (owner, balance pass): 5 km, 5 targets, 3 s to lock. cargoM3 (owner: the Prospector
+// starts with 5,000 m³).
 export const SHIP_TYPES = {
   chisel: {
     name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
+    targetRangeKm: 5, maxTargets: 5, lockMs: 3000, cargoM3: 5000,
   },
 };

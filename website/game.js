@@ -35,6 +35,16 @@
     align: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "align", ship: sh.id, poi: poiId }); },
     warp: (poiId, shipId) => { const sh = shipId ? window.Atamus.ship(shipId) : myShip(); if (sh) send({ t: "warp", ship: sh.id, poi: poiId }); },
     inPoi: (sh, poi) => !!(sh && poi && Math.hypot(sh.x - poi.x, sh.y - poi.y) <= poi.r),
+    // objects in space (owner): { kind: "rock" | "ship", id }. Orders go to the selected pilot's ship.
+    lock: (kind, id) => { const sh = myShip(); if (sh) send({ t: "lock", ship: sh.id, kind, id }); },
+    unlock: (kind, id) => { const sh = myShip(); if (sh) send({ t: "unlock", ship: sh.id, kind, id }); },
+    alignTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "align" }); },
+    moveTo: (kind, id) => { const sh = myShip(); if (sh) send({ t: "chase", ship: sh.id, kind, id, mode: "approach" }); },
+    info: (kind, id) => send({ t: "info", kind, id }),
+    objPos: (kind, id) => objPos(kind, id), objName: (kind, id) => objName(kind, id), objIcon: (kind, id) => objIcon(kind, id),
+    objItems: (kind, id) => objItems(kind, id),
+    hoverTarget: null,                               // set by the HUD: a thin grey line runs from your ship to it
+    rangeTo: (kind, id) => rangeTo(kind, id),
   };
   const myShip = () => { const own = (latest.ships || []).filter((x) => x.mine); return own.find((x) => x.pilot === selPilot) || own[0] || null; };   // the selected pilot's ship
 
@@ -85,7 +95,8 @@
         clockOffset = clockOffset == null ? off : Math.max(off, clockOffset + (off - clockOffset) * 0.02);   // server clock ≈ local + offset (the freshest arrival)
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; bus.dispatchEvent(new CustomEvent("snap"));
-      } else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
+      } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
+      else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));
     };
   }
@@ -196,6 +207,8 @@
   };
   function openMenu(px, py) {
     const menu = window.Atamus.ctxMenu; if (!menu) return;
+    const ob = objAt(px, py);
+    if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
     const p = poiAt(px, py);
     if (p && !p.hidden) { menu(px, py, poiItems(p)); return; }
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
@@ -248,6 +261,47 @@
     return best;
   }
   const rockById = (id) => { for (const f of belts.values()) { const k = f.rocks.find((x) => x.id === id); if (k) return k; } return null; };
+  // ---- objects in space (owner): asteroids and ships. Right-click / hold one: Lock Target (Unlock Target once locked),
+  // Align To, Move towards, Info ----
+  let drawn = [];                                   // the ships as last drawn (interpolated)
+  const ROCK_SOLID = 0.9;
+  function objPos(kind, id) {
+    if (kind === "rock") { const k = rockById(id); return k ? { x: k.x, y: k.y, r: k.size / 2000 * ROCK_SOLID, size: k.size / 1000 } : null; }
+    if (kind === "ship") { const s = drawn.find((x) => x.id === id) || (latest.ships || []).find((x) => x.id === id); return s && !s.warp ? { x: s.x, y: s.y, r: (hull(s.type).radiusKm || 0.09), size: hull(s.type).lengthKm, mine: s.mine, type: s.type } : null; }
+    return null;
+  }
+  const oreOf = (key) => ((cfg && cfg.ores) || []).find((o) => o.key === key);
+  function objName(kind, id) {
+    if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore); return o ? o.name : "Asteroid"; }
+    const s = (latest.ships || []).find((x) => x.id === id); return hull(s ? s.type : "chisel").name;
+  }
+  function objIcon(kind, id) {
+    if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + "_s.png"; }
+    const s = (latest.ships || []).find((x) => x.id === id); return "assets/icons/ships/" + hull(s ? s.type : "chisel").sprite + (s && s.mine ? "_blue" : "_red") + "_s.png";
+  }
+  // edge-to-edge distance from the selected pilot's ship (km), or null
+  function rangeTo(kind, id) {
+    const own = drawn.find((s) => s.mine && s.pilot === selPilot) || myShip(), pos = objPos(kind, id); if (!own || !pos) return null;
+    return Math.max(0, Math.hypot(own.x - pos.x, own.y - pos.y) - pos.r - (hull(own.type).radiusKm || 0.09));
+  }
+  function objItems(kind, id) {
+    const own = myShip(), out = [], A = window.Atamus;
+    if (own && !own.warp) {
+      const tg = (own.targets || []).find((g) => g.kind === kind && g.id === id), t = hull(own.type), r = rangeTo(kind, id);
+      if (tg) { if (tg.locked) out.push(["Unlock Target", () => A.unlock(kind, id)]); }
+      else if (r != null && r <= (t.targetRangeKm || 0) && (own.targets || []).length < (t.maxTargets || 0) && !(kind === "ship" && id === own.id)) out.push(["Lock Target", () => A.lock(kind, id)]);
+      if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)]);
+    }
+    out.push(["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
+    return out;
+  }
+  // the object under the pointer: a ship (not the selected pilot's own) or an asteroid
+  function objAt(px, py) {
+    const sc = scale(); let best = null, bd = Infinity;
+    for (const s of drawn) { if (s.warp || (s.mine && s.pilot === selPilot)) continue; const r = Math.max(12, hull(s.type).lengthKm * sc * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = { kind: "ship", id: s.id }; } }
+    if (best) return best;
+    const k = rockAt(px, py); return k ? { kind: "rock", id: k.id } : null;
+  }
   const tip = document.getElementById("tooltip"); let mapTip = false;
   canvas.addEventListener("pointermove", (e) => {    // a map marker's name on hover (owner: tooltips show names only)
     if (e.pointerType !== "mouse" || !tip) return;
@@ -313,6 +367,21 @@
     ctx.fillText(name + (dist != null ? " - " + (dist < 10 ? dist.toFixed(1) : Math.round(dist)) + " km" : ""), x, y - r - 6);
     ctx.restore();
   }
+  // locked targets (owner: orange = targeted): orange corner brackets, blinking while the lock comes on; hovering a
+  // target on the HUD draws a thin, faint grey line from your ship to it
+  function drawTargets(ships) {
+    const own = ships.find((s) => s.mine && s.pilot === selPilot); if (!own) return;
+    const sc = scale(), t = performance.now();
+    for (const g of own.targets || []) {
+      const pos = objPos(g.kind, g.id); if (!pos) continue;
+      const x = gx2s(pos.x), y = gy2s(pos.y), r = Math.max(10, pos.size * sc * 0.6) + 3, c = Math.min(8, r * 0.5);
+      ctx.save(); ctx.strokeStyle = "rgba(255,160,70," + (g.locked ? 0.95 : 0.35 + 0.5 * (0.5 + 0.5 * Math.sin(t / 80))) + ")"; ctx.lineWidth = 1.5;
+      for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.moveTo(x + sx * r, y + sy * (r - c)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - c), y + sy * r); ctx.stroke(); }
+      ctx.restore();
+    }
+    const h = window.Atamus.hoverTarget, hp = h && objPos(h.kind, h.id);
+    if (hp) { ctx.save(); ctx.strokeStyle = "rgba(200,206,216,0.35)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(gx2s(own.x), gy2s(own.y)); ctx.lineTo(gx2s(hp.x), gy2s(hp.y)); ctx.stroke(); ctx.restore(); }
+  }
   function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
     for (const sh of ships) {
       if (!sh.warp) continue;
@@ -376,7 +445,8 @@
       sendView(now);
     }
     drawBackground();
-    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); drawPicked(ships); }
+    drawn = ships;
+    if (cfg) { drawHex(); drawBelts(ships); drawWarps(ships); drawShips(ships); drawTargets(ships); drawPicked(ships); }
     requestAnimationFrame(frame);
   }
 

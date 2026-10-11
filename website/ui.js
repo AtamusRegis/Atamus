@@ -99,7 +99,7 @@
 
   // ---- tab groups: drop a window's title bar onto another window to stack them ----
   const groups = {}; let gseq = 0;
-  const persistableInGroup = (id) => ["player", "pilot", "chat", "fleet"].includes(id);
+  const persistableInGroup = (id) => ["player", "pilot", "chat", "fleet", "inv"].includes(id);
   const winLabel = (id) => (wins[id] && wins[id].label) || (META[id] && META[id].name) || id;
   function createGroupFrame(r) {
     const gid = "g" + (++gseq);
@@ -713,6 +713,131 @@
     toggleWindow("report", true);
   }
 
+  // ---- the HUD (owner), bottom centre, for the selected pilot's ship: locked targets (priority left to right), then
+  // shield, hull and speed, then the Inventory button and the hotbar (12 module slots, keys 1-9, 0, -, =; empty slots
+  // only show while a module is being dragged) ----
+  const HB_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+  const INV_ICON = '<svg viewBox="0 0 24 24"><path d="M4 8l8-4 8 4v9l-8 4-8-4z"/><path d="M4 8l8 4 8-4"/><path d="M12 12v9"/></svg>';
+  const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
+  const invBtn = el("button", { class: "hud-inv", "aria-label": "Inventory", html: INV_ICON, onclick: () => toggleWindow("inv") });
+  const hud = el("div", { id: "hud", hidden: "" }, hudTargets, hudStatus, el("div", { class: "hud-row" }, invBtn, hudBar));
+  document.body.append(hud);
+  const hudShip = () => { const A = window.Atamus; return pilotShip(saved.selPilot) || A.myShip; };
+  // a name-only tooltip above an element (owner: tooltips show names only)
+  function tipAbove(elm, text) { const r = elm.getBoundingClientRect(); tooltip.textContent = text; tooltip.hidden = false; tooltip.style.left = Math.max(4, r.left + r.width / 2 - tooltip.offsetWidth / 2) + "px"; tooltip.style.top = (r.top - 16) + "px"; }
+  function nameTip(elm, text) {                     // hover on a mouse; on touch, while the finger is down
+    const show = () => tipAbove(elm, typeof text === "function" ? text() : text), hide = () => { tooltip.hidden = true; };
+    elm.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") show(); });
+    elm.addEventListener("pointerleave", hide);
+    elm.addEventListener("pointerdown", (e) => { if (e.pointerType !== "mouse") show(); });
+    for (const ev of ["pointerup", "pointercancel"]) elm.addEventListener(ev, (e) => { if (e.pointerType !== "mouse") hide(); });
+  }
+  // (owner) the hotbar's empty slots show only while a module is being dragged
+  addEventListener("dragstart", (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes("atamus/module")) hud.classList.add("hb-dragging"); });
+  for (const ev of ["dragend", "drop"]) addEventListener(ev, () => hud.classList.remove("hb-dragging"));
+  addEventListener("keydown", (e) => {               // hotbar keys
+    const i = HB_KEYS.indexOf(e.key); if (i < 0 || hud.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = document.activeElement && document.activeElement.tagName; if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    const slot = hudBar.children[i]; if (slot && slot.classList.contains("filled")) { e.preventDefault(); slot.click(); }
+  });
+  const fmtSpeed = (kmps) => { const ms = kmps * 1000; return ms >= 10000 ? (kmps >= 100 ? Math.round(kmps).toLocaleString() : kmps.toFixed(1)) + " km/s" : Math.round(ms) + " m/s"; };
+  const fmtKm = (d) => d == null ? "" : d < 10 ? d.toFixed(1) + " km" : Math.round(d).toLocaleString() + " km";
+  const H = { sig: null, cards: {} };
+  function renderHud() {
+    const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : null;
+    if (!sh || !T) { hud.hidden = true; A.hoverTarget = null; return; }
+    hud.hidden = false;
+    const tgs = sh.targets || [];
+    const sig = sh.id + "|" + tgs.map((g) => g.kind + ":" + g.id + ":" + (g.locked ? 1 : 0)).join(",") + "|" + JSON.stringify(sh.mods || []);
+    if (sig !== H.sig) {                              // structure changed: rebuild (owner: never on every snapshot)
+      H.sig = sig; H.cards = {}; hudTargets.innerHTML = "";
+      if (A.hoverTarget && !tgs.some((g) => g.kind === A.hoverTarget.kind && g.id === A.hoverTarget.id)) { A.hoverTarget = null; tooltip.hidden = true; }
+      for (const g of tgs) {
+        const key = g.kind + ":" + g.id, ring = el("div", { class: "tgt-ring" }, el("img", { src: A.objIcon(g.kind, g.id), alt: "", draggable: "false" }));
+        const dist = el("div", { class: "tgt-dist" }), cell = el("div", { class: "tgt" + (g.locked ? " locked" : "") }, ring);
+        if (g.locked) cell.append(el("button", { class: "tgt-x", "aria-label": "Unlock Target", onclick: (e) => { e.stopPropagation(); A.unlock(g.kind, g.id); } }, "×"));   // (owner) a lock in progress can't be cancelled
+        cell.append(dist);
+        const menu = (x, y) => showCtxMenu(x, y, A.objItems(g.kind, g.id));
+        cell.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
+        let hold = 0;
+        const over = () => { A.hoverTarget = { kind: g.kind, id: g.id }; tipAbove(ring, A.objName(g.kind, g.id)); }, out = () => { if (A.hoverTarget && A.hoverTarget.id === g.id) A.hoverTarget = null; tooltip.hidden = true; };
+        cell.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") over(); });
+        cell.addEventListener("pointerleave", out);
+        cell.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; over(); clearTimeout(hold); hold = setTimeout(() => { out(); menu(e.clientX, e.clientY); }, 500); });   // hold = right-click
+        for (const ev of ["pointerup", "pointercancel"]) cell.addEventListener(ev, (e) => { if (e.pointerType === "mouse") return; clearTimeout(hold); out(); });
+        H.cards[key] = { g, cell, ring, dist };
+        hudTargets.append(cell);
+      }
+      if (!H.status) {
+        const bar = (k, cls) => { const fill = el("div", { class: "hud-fill " + cls }), txt = el("span", { class: "hud-txt" }); H[k] = { fill, txt }; return el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, k), el("div", { class: "hud-track" }, fill, txt)); };
+        H.speed = el("span", { class: "hud-speed" });
+        const spd = el("div", { class: "hud-bar hud-spd" }, el("span", { class: "hud-k" }, "Speed"), H.speed);
+        nameTip(spd, () => { const s2 = hudShip(), t2 = s2 && A.cfg.shipTypes[s2.type]; return "Max speed " + fmtSpeed((t2 && t2.speedKmps) || 0); });   // (owner) hover: max speed
+        hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), spd); H.status = true;
+      }
+      hudBar.innerHTML = "";
+      const mods = sh.mods || [];
+      for (let i = 0; i < HB_KEYS.length; i++) {
+        const m = mods[i];
+        hudBar.append(el("div", { class: "hb-slot" + (m ? " filled" : " hb-empty") }, el("span", { class: "hb-num" }, HB_KEYS[i])));
+      }
+      hudBar.classList.toggle("none", !mods.some(Boolean));
+    }
+    for (const g of tgs) {                            // live: lock progress and distance
+      const c = H.cards[g.kind + ":" + g.id]; if (!c) continue;
+      c.ring.style.setProperty("--p", Math.round((g.p || 0) * 100) + "%");
+      c.dist.textContent = fmtKm(A.rangeTo(g.kind, g.id));
+    }
+    const pct = (v, m) => (m ? Math.max(0, Math.min(1, v / m)) * 100 : 0) + "%";
+    H.Shield.fill.style.width = pct(sh.shield, T.shield); H.Shield.txt.textContent = Math.round(sh.shield) + " / " + T.shield;
+    H.Hull.fill.style.width = pct(sh.hp, T.hp); H.Hull.txt.textContent = Math.round(sh.hp) + " / " + T.hp;
+    H.speed.textContent = fmtSpeed(sh.v || 0);
+  }
+  window.Atamus.bus.addEventListener("snap", renderHud);
+  window.Atamus.bus.addEventListener("pilotselect", () => { H.sig = null; renderHud(); });
+
+  // ---- ship inventory (owner: the button left of the hotbar): the selected pilot's ship's cargo ----
+  function renderInv(body) {
+    const A = window.Atamus, sh = hudShip(), T = sh && A.cfg && A.cfg.shipTypes ? A.cfg.shipTypes[sh.type] || {} : {};
+    const pilot = state && state.pilots.find((p) => String(p.id) === String(saved.selPilot));
+    const sig = (sh ? sh.id : "-") + "|" + JSON.stringify((sh && sh.inv) || []);
+    wins.inv.slot.textContent = pilot ? pilot.name + "'s " + (T.name || "Ship") : "Inventory";
+    if (wins.inv.isig === sig) return; wins.inv.isig = sig;
+    body.innerHTML = "";
+    if (!sh) { body.append(el("div", { class: "muted" }, "No ship")); return; }
+    const items = sh.inv || [], used = items.reduce((t, it) => t + (it.m3 || 0), 0), cap = T.cargoM3 || 0;
+    body.append(el("div", { class: "si-cap" }, el("div", { class: "hud-track" }, el("div", { class: "hud-fill cargo", style: "width:" + (cap ? Math.min(100, used / cap * 100) : 0) + "%" }), el("span", { class: "hud-txt" }, Math.round(used).toLocaleString() + " / " + cap.toLocaleString() + " m³"))),
+      el("div", { class: "si-grid" }, items.map((it) => el("div", { class: "si-cell" }, it.name || "")), el("div", { class: "si-cell empty" })));
+  }
+  window.Atamus.bus.addEventListener("pilotselect", () => { if (wins.inv && isOpen(wins.inv)) renderInv(wins.inv.body); });
+
+  // ---- Info on an object in space (owner): an asteroid's ore and what's left of it, or a ship and who flies it ----
+  let oinfo = null;
+  function openObjInfo(kind, id) {
+    oinfo = { kind, id, data: null };
+    if (!wins.oinfo) createWindow("oinfo", { left: Math.round(innerWidth / 2 + 40), top: 120, width: 240, minW: 200, minH: 120, render: renderObjInfo, label: "Info" });
+    toggleWindow("oinfo", true); window.Atamus.info(kind, id);
+  }
+  window.Atamus.bus.addEventListener("objinfo", (e) => openObjInfo(e.detail.kind, e.detail.id));
+  window.Atamus.bus.addEventListener("info", (e) => { const m = e.detail; if (oinfo && m.kind === oinfo.kind && m.id === oinfo.id) { oinfo.data = m; if (isOpen(wins.oinfo)) renderObjInfo(wins.oinfo.body); } });
+  function renderObjInfo(body) {
+    const A = window.Atamus; body.innerHTML = ""; if (!oinfo) return;
+    const { kind, id, data: d } = oinfo, cfg = A.cfg || {};
+    wins.oinfo.slot.textContent = A.objName(kind, id);
+    const row = (k, v) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v)));
+    const head = el("div", { class: "oi-head" }, el("img", { class: "oi-icon", src: A.objIcon(kind, id), alt: "" }), el("span", { class: "ps-name" }, A.objName(kind, id)));
+    if (!d) { body.append(head, el("div", { class: "muted" }, "Loading…")); return; }
+    const rows = [];
+    if (kind === "rock") {
+      const o = (cfg.ores || []).find((q) => q.key === d.ore) || {};
+      rows.push(row("Rarity", o.rarity ? o.rarity.charAt(0).toUpperCase() + o.rarity.slice(1) : "-"), row("Ore", Math.round(d.m3).toLocaleString() + " m³"), row("Size", d.size.toLocaleString() + " m"), row("Belt", d.belt));
+    } else {
+      const t = (cfg.shipTypes || {})[d.type] || {};
+      rows.push(row("Class", t.cls || "-"), row("Pilot", d.pilot || "-"), row("Player", d.owner || "-"));
+    }
+    body.append(head, el("div", { class: "ps-rows" }, rows));
+  }
+
   // ---- right-click / hold menu (owner: placement centred above the press; below it near the top; to the right near
   // the left edge, to the left near the right edge). An item is [label, fn] or [label, [items…]]: a submenu opens beside
   // it on hover or tap, and submenus nest. [label, fn, { menu: [items…] }]: right-click (or hold) that row to open its
@@ -772,6 +897,7 @@
     createWindow("player", { left: 90, top: 70, width: 260, minW: 190, minH: 120, render: renderPlayer, dynMin: playerMin });
     createWindow("pilot", { left: 180, top: 90, width: 440, minW: 390, minH: 300, render: renderPilot });
     createWindow("chat", { left: 280, top: 150, width: 320, minW: 250, minH: 108, render: renderChat });
+    createWindow("inv", { left: Math.max(60, Math.round(innerWidth / 2 - 140)), top: Math.max(60, innerHeight - 380), width: 280, minW: 200, minH: 140, render: renderInv, label: "Inventory" });
     createWindow("fleet", { left: Math.max(60, Math.round(innerWidth / 2 - 150)), top: 8, width: 300, minW: 170, minH: 96, render: renderFleet, label: "Fleet" });
     if (!saved.win.fleet) saved.win.fleet = { open: true };   // (owner) the fleet window is how you switch pilots: open the first time
     dragMove(wins.fleet.win, wins.fleet.body, () => persistWin("fleet"));   // a bar with no title: dragged by its background

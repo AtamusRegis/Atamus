@@ -55,7 +55,7 @@ export class World {
     let x, y, h;
     if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = Math.cos(a) * d; y = Math.sin(a) * d; h = Math.random() * Math.PI * 2; }
-    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield };
+    const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targets: [], chase: null };
     this.ships.set(sid, s);
     return s;
   }
@@ -80,7 +80,7 @@ export class World {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;   // no new orders mid-warp
     const t = clampToExpanse(x, y, s.radius);
     for (const poi of this.pois.values()) if (Math.hypot(t.x - poi.x, t.y - poi.y) <= poi.r + 1) for (const k of poi.field.rocks) this._pushOut(t, k.x, k.y, k.r * ROCK_SOLID + s.radius + 0.02);   // a point inside a rock: its edge
-    s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false;
+    s.tx = t.x; s.ty = t.y; s.moving = true; s.dest = null; s.warpReq = false; s.drift = false; s.chase = null;
   }
   /** Align (owner): fly toward a POI at regular speed; it's now the ship's destination, which it can warp to as long as
    *  the POI still shows on the map. Warp: align, then warp as soon as it's aligned. */
@@ -89,9 +89,61 @@ export class World {
     const poi = typeof poiId === "string" ? this.pois.get(poiId) : null;
     if (!poi || poi.retired) return;                       // only a POI that still advertises itself
     if (warp && this._inPoi(s, poi)) return;               // no warping to where you already are
-    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.tx = poi.x; s.ty = poi.y; s.moving = true;
+    s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.tx = poi.x; s.ty = poi.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
+
+  // ---- objects in space (owner): asteroids and ships can be locked, aligned to, moved toward, and looked at ----
+  /** Where an object is now: { x, y, r } (r = its solid radius), or null if it's gone (or a ship is in warp). */
+  _objPos(kind, id) {
+    if (typeof id !== "string" || id.length > 80) return null;
+    if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp ? { x: o.x, y: o.y, r: o.radius } : null; }
+    if (kind === "rock") { const k = this._rock(id); return k ? { x: k.x, y: k.y, r: k.r * ROCK_SOLID } : null; }
+    return null;
+  }
+  _rock(id) { if (typeof id !== "string") return null; const poi = this.pois.get(id.split("#")[0]); return (poi && poi.field.rocks.find((k) => k.id === id)) || null; }
+  _range(s, pos) { return Math.max(0, Math.hypot(pos.x - s.x, pos.y - s.y) - pos.r - s.radius); }   // edge to edge
+  /** Lock Target: within targeting range, up to the hull's maximum; it locks after the hull's lock time. */
+  cmdLock(pid, shipId, kind, id) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    if (kind === "ship" && id === s.id) return;                                   // not itself
+    const t = SHIP_TYPES[s.type], pos = this._objPos(kind, id); if (!pos) return;
+    if (s.targets.some((g) => g.kind === kind && g.id === id) || s.targets.length >= t.maxTargets) return;
+    if (this._range(s, pos) > t.targetRangeKm) return;
+    s.targets.push({ kind, id, lockAt: this.simAt + t.lockMs, locked: false });
+  }
+  /** Unlock Target (owner: a lock in progress can't be cancelled). */
+  cmdUnlock(pid, shipId, kind, id) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid) return;
+    const i = s.targets.findIndex((g) => g.kind === kind && g.id === id && g.locked); if (i >= 0) s.targets.splice(i, 1);
+  }
+  /** Align To (fly at the object at full speed, no braking) or Move towards (fly to its edge and stop; follows a ship). */
+  cmdChase(pid, shipId, kind, id, mode) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp) return;
+    if ((mode !== "align" && mode !== "approach") || (kind === "ship" && id === s.id) || !this._objPos(kind, id)) return;
+    s.chase = { kind, id, mode }; s.dest = null; s.warpReq = false; s.drift = false; s.moving = true;
+  }
+  /** Info on an object: an asteroid you have a ship beside (its belt), or a ship. */
+  cmdInfo(pid, kind, id) {
+    const p = this.players.get(pid); if (!p) return;
+    if (kind === "rock") {
+      const k = this._rock(id), poi = k && this.pois.get(id.split("#")[0]); if (!k || !this._shipsIn(poi, pid)) return;
+      p.send(JSON.stringify({ t: "info", kind, id, ore: k.ore, size: k.size, m3: k.m3, belt: poi.name }));
+    } else if (kind === "ship") {
+      const o = typeof id === "string" && this.ships.get(id); if (!o) return;
+      const op = this.players.get(o.owner), pl = op && op.pilots.find((x) => x.id === o.pilot);
+      p.send(JSON.stringify({ t: "info", kind, id, type: o.type, pilot: pl ? pl.name : null, owner: op ? op.name : null }));
+    }
+  }
+  // locks complete, and break when the object is gone or out of range
+  _tickTargets(now) {
+    for (const s of this.ships.values()) {
+      if (!s.targets.length) continue;
+      const range = SHIP_TYPES[s.type].targetRangeKm;
+      s.targets = s.targets.filter((g) => { const pos = this._objPos(g.kind, g.id); return pos && this._range(s, pos) <= range; });
+      for (const g of s.targets) if (!g.locked && now >= g.lockAt) g.locked = true;
+    }
+  }
   // push a ship out of a circle (cx, cy, minD), taking away the velocity that carried it in
   _pushOut(s, cx, cy, minD) {
     let dx = s.x - cx, dy = s.y - cy, d = Math.hypot(dx, dy); if (d >= minD) return false;
@@ -113,7 +165,7 @@ export class World {
     const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
     const to = { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
-    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false;
+    s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
   /** Where the player's camera is: other ships in view get sent to them. */
   cmdView(pid, x, y, w) {
@@ -145,6 +197,7 @@ export class World {
     const now = Date.now(); this.simAt = now;
     if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); }
     this._tickShips(dtSec, now);
+    this._tickTargets(now);
     for (const p of [...this.players.values()]) if (p.offline && now - p.offlineSince > LOGOUT_GRACE_MS) this._purge(p.id);
   }
   _tickShips(dtSec, now) {
@@ -163,11 +216,17 @@ export class World {
         if (!poi || poi.retired) { s.dest = null; s.warpReq = false; s.moving = false; s.drift = true; }
         else if (s.warpReq && this._aligned(s, poi)) { this._startWarp(s, poi, now); continue; }
       }
+      if (s.chase) {                                       // Align To / Move towards an object: its position, every tick
+        const pos = this._objPos(s.chase.kind, s.chase.id);
+        if (!pos) { s.chase = null; s.moving = false; }
+        else if (s.chase.mode === "align") { s.tx = pos.x; s.ty = pos.y; s.moving = true; }
+        else { const dx = s.x - pos.x, dy = s.y - pos.y, d = Math.hypot(dx, dy) || 1, keep = pos.r + s.radius + 0.05; s.tx = pos.x + dx / d * keep; s.ty = pos.y + dy / d * keep; s.moving = true; }
+      }
       if (s.moving) {
-        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy);
-        if (d <= SHIP_ARRIVE_EPS_KM) s.moving = false;
-        else {
-          const spd = Math.min(s.speed, Math.sqrt(2 * s.accel * d) * 0.95);
+        const dx = s.tx - s.x, dy = s.ty - s.y, d = Math.hypot(dx, dy), full = s.chase && s.chase.mode === "align";
+        if (d <= SHIP_ARRIVE_EPS_KM && !full) s.moving = false;
+        else if (d > 1e-6) {
+          const spd = full ? s.speed : Math.min(s.speed, Math.sqrt(2 * s.accel * d) * 0.95);
           const dvx = (dx / d) * spd - s.vx, dvy = (dy / d) * spd - s.vy, dv = Math.hypot(dvx, dvy), step = s.accel * dtSec;
           if (dv <= step) { s.vx += dvx; s.vy += dvy; } else { s.vx += dvx / dv * step; s.vy += dvy / dv * step; }   // acceleration-limited
         }
@@ -272,15 +331,20 @@ export class World {
   snapshotFor(p) {
     const own = [...this.ships.values()].find((s) => s.owner === p.id);   // (no view yet: around one of your ships)
     const v = p.view || (own ? { x: own.x, y: own.y, w: 60 } : null);
-    const half = v ? v.w * 0.75 : 0, ships = [];
+    const half = v ? v.w * 0.75 : 0, ships = [], locked = new Set();
+    for (const s of this.ships.values()) if (s.owner === p.id) for (const g of s.targets) if (g.kind === "ship") locked.add(g.id);   // your targets are sent wherever they are
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
-      if (!mine && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
+      if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
       if (mine) {
         e.pilot = s.pilot; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
         if (s.dest) { e.dest = s.dest; if (s.warpReq) e.warpReq = true; }
         if (s.drift) e.drift = true;
+        // speed (km/s; in warp, along its eased line), locked targets in the order they were locked, Align To / Move towards
+        e.v = s.wp ? +(Math.hypot(s.wp.tx - s.wp.fx, s.wp.ty - s.wp.fy) * Math.PI / 2 * Math.sin(Math.PI * Math.min(1, (this.simAt - s.wp.at) / s.wp.dur)) / (s.wp.dur / 1000)).toFixed(4) : +Math.hypot(s.vx, s.vy).toFixed(4);
+        if (s.targets.length) { const lm = SHIP_TYPES[s.type].lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
+        if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
       }
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };
       ships.push(e);

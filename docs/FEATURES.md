@@ -4,7 +4,7 @@ This is a living spec of the game. Read it before every patch, and update it in 
 
 ## Back to basics (owner, 2026-10-10)
 
-The owner took the game back to scratch to focus on the Prospector's gameplay. **The game is the Player, Pilot, Chat and Fleet windows, the world boundary, a Prospector per pilot, and asteroid belts to align and warp to.** Gone from the live game: stations, stargates, planets, the sun, mining, modules, fitting, inventories, the market, whispers, the HUD, settings and music, bases, the tutorial shard and every license in the trainer. (The Fleet window and Local / Corp chat came back the same day, owner: "I didn't tell you to get rid of the Fleet window".)
+The owner took the game back to scratch to focus on the Prospector's gameplay. **The game is the Player, Pilot, Chat and Fleet windows, the world boundary, a Prospector per pilot, and asteroid belts to align and warp to.** Gone from the live game: stations, stargates, planets, the sun, mining, modules, fitting, the market, whispers, settings and music, bases, the tutorial shard and every license in the trainer. (The Fleet window and Local / Corp chat came back the same day, owner: "I didn't tell you to get rid of the Fleet window". Target locking, the HUD with its hotbar, and the ship inventory came back on 2026-10-11, owner.)
 
 - **Kept for reference:** everything that was live just before is in `reference/2026-10-10-pre-reset/` (client, server, tests, and the full FEATURES.md that described it) and at commit `0a745ec` (the last one before the reset). The art is still in `website/assets/`. Bring things back from there when the owner asks for them.
 - docs/DESIGN.md is still the long-term plan.
@@ -13,7 +13,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 
 - **The Expanse's hexagon, empty:** 1 AU across at the map scale the game always used (1 AU = 20,000 km), so **20,000 km across, flat to flat**, with flat top and bottom edges. The origin is its centre. Its edge is drawn as a thin line.
 - **The edge stops ships:** a move order past it is pulled just inside, and a ship that reaches it stops dead there.
-- **One Prospector per pilot:** each of your pilots has their own (id `<account>:ship:<pilot>`), which first appears within 5 km of the centre. A new pilot gets one (the server rereads your pilots when the client says so, and every minute); a pilot that's gone takes theirs along. It's the only ship (`SHIP_TYPES.chisel` in constants.js): 128 m long, top speed 335 m/s, acceleration 0.15 km/s², hull 200, shield 225 (shown in the Fleet window; nothing damages ships yet). No modules or holds.
+- **One Prospector per pilot:** each of your pilots has their own (id `<account>:ship:<pilot>`), which first appears within 5 km of the centre. A new pilot gets one (the server rereads your pilots when the client says so, and every minute); a pilot that's gone takes theirs along. It's the only ship (`SHIP_TYPES.chisel` in constants.js): 128 m long, top speed 335 m/s, acceleration 0.15 km/s², hull 200, shield 225 (shown in the Fleet window and the HUD; nothing damages ships yet), **targeting range 5 km, 5 targets, 3 s to lock** (its numbers from before the reset, owner's balance pass), **cargo 5,000 m³** (owner). No modules yet.
 - **Flying:** the ship accelerates toward its target as fast as it can while still able to brake in time, faces the way it's moving, and stops on the point. At top speed, crossing the hexagon takes about 16½ hours.
 - **Everything in space is solid (owner):** overlapping ships push apart (the lighter one more) and lose the velocity pushing them together, and a ship can't fly through an asteroid: it's pushed back out (to 90% of half the rock's sprite size plus its own radius; the art doesn't fill its square) and loses the velocity into it. A move order into a rock stops at its edge. Only a ship in warp passes through anything.
 - **Logging off:** a closed connection keeps your ships in space for 20 s (a reload), then they leave the world. Logging back in puts each where it was (pulled inside the edge if it somehow wasn't). Positions are saved every 10 s and on leaving.
@@ -38,6 +38,31 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
 - **Camera (owner):** following a ship through a warp zooms all the way out and holds the whole map still; when it drops out, the camera zooms back to where it was, onto the ship.
 - **Where you order it:** right-click (or hold) a belt's map marker → **Warp to name / Align to name**; or right-click (hold) space → **Belts ›**, a list of the belts: right-click (hold) one for its own menu, **Warp to / Align to** (owner: a list, not a third layer of submenus; a plain click on a name opens it too). That menu opens beside the name and the menus before it stay open until you pick something or move to another item in them. Under the Fleet window (below).
 
+## Objects in space (owner)
+
+Asteroids and ships (anyone's, including your other pilots' ships) are objects. **Right-click (or hold) one** for its menu, for the selected pilot's ship:
+
+- **Lock Target:** shown while it's within targeting range (edge to edge) and the ship has a target free; the lock completes after the hull's lock time. Not mid-warp, not the ship itself, never the same object twice. Once locked, the menu shows **Unlock Target** instead; a lock in progress shows neither (owner: a lock in progress can't be cancelled).
+  - **Locks break** when the object leaves targeting range, is gone (a rock wasted away) or warps away. A ship that starts a warp drops all its locks.
+  - Locked objects get **orange corner brackets** on the map (owner: orange = targeted), blinking while the lock comes on.
+  - A ship you've locked is sent to you wherever it is, even outside your camera's view.
+- **Align To:** fly straight at it at full speed without braking (it keeps tracking a moving ship). Ships stay solid, so this ends against it.
+- **Move towards:** fly to its edge and stop there; a ship keeps being followed.
+  - Both replace any move or align order (and a move or POI order replaces them). They end if the object is gone.
+- **Info:** a window titled with its name: an asteroid's ore icon, rarity, ore left (m³), size and belt (only for a belt you have a ship in); a ship's hull icon, class, pilot and player.
+
+## The HUD (owner)
+
+Bottom centre, for the selected pilot's ship:
+
+- **Locked targets** on top, in the order they were locked (priority, left to right): the object's icon in a ring (blinking and filling while it locks, solid orange when locked) and its edge-to-edge distance underneath.
+  - **×** unlocks a locked target; a target still locking has no × (owner).
+  - Right-click (hold) a target for its menu: **Unlock Target**, Align To, Move towards, Info.
+  - Hovering it (touch: while the finger is down) shows its name and draws a **thin, faint grey line** from your ship to it on the map (owner).
+- **Shield** and **Hull** bars with their numbers, and **Speed** (m/s, km/s from 10 km/s, which only a warp reaches). Hovering Speed shows **Max speed** (owner).
+- **The hotbar:** the **Inventory** button on the left, then **12 module slots**, keyed **1–9, 0, -, =** (not while typing). **Empty slots are hidden unless a module is being dragged** (owner); with no modules in the game yet, only the Inventory button shows.
+- **Inventory:** a window "Pilot's Prospector" for the selected pilot's ship: its cargo bar (used / 5,000 m³) and a grid of its items plus one empty cell. Nothing goes in it yet.
+
 ## The game screen
 
 - **Canvas:** the space backdrop, the hexagon's edge and the ships. Your ships are drawn in their blue sprite, others in red, at true scale; once a ship would be under 10 px long it's drawn as its hull icon instead. While one of your ships is flying, a faint dashed line runs to its destination.
@@ -47,7 +72,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
   - **double click / tap** empty space (two within 350 ms, 14 px): the selected pilot's ship flies there;
   - **drag**, or **WASD** (owner): pan the camera (it stops following);
   - selecting one of your ships never centres the camera (owner); the camera follows the selected pilot's ship from the start;
-  - **right-click / hold:** on a belt's map marker, Warp to / Align to it; anywhere else, the space menu: **Center on ship** (follow the selected pilot's ship) and **Belts ›** (the list of belts; right-click or hold one for its Warp to / Align to menu). Menus sit centred above the press (below it near the top; to the right of it near the left edge, to the left near the right edge); submenus open beside their row on hover or tap;
+  - **right-click / hold:** on an asteroid or a ship (not the selected pilot's own), its object menu (Objects in space); on a belt's map marker, Warp to / Align to it; anywhere else, the space menu: **Center on ship** (follow the selected pilot's ship) and **Belts ›** (the list of belts; right-click or hold one for its Warp to / Align to menu). Menus sit centred above the press (below it near the top; to the right of it near the left edge, to the left near the right edge); submenus open beside their row on hover or tap;
   - **wheel / pinch:** zoom, from **3.25 km across the screen** (owner: the Prospector about 1/25 of the screen's width) out to the whole hexagon. The wheel zooms toward the pointer, or about the followed ship.
   - The browser's own right-click menu never opens anywhere in the game (owner).
 - **Space backdrop (owner):** no nebula image in the game. It's built from these layers, redrawn every frame:

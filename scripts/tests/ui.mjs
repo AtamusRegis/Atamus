@@ -14,7 +14,7 @@ async function open(w, h, touch) {
   await page.waitForTimeout(600);
   return page;
 }
-const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new Promise((r) => setTimeout(r, ms)), A = window.Atamus, c = document.getElementById("view");
+const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new Promise((r) => setTimeout(r, ms)), A = window.Atamus, c = document.getElementById("view"), dev = (o) => A.send({ t: "dev", ...o });
   const wins = () => [...document.querySelectorAll(".win")].filter((w) => !w.hidden).map((w) => w.dataset.id);
   const ev = (type, x, y, id = 1, kind = "mouse") => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: kind, button: 0, clientX: x, clientY: y, bubbles: true }));
   ${body} })()`);
@@ -53,11 +53,11 @@ r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden)
   const opts = [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].map((x) => x.textContent.replace(" " + bname, ""));
   const kept = document.querySelectorAll(".ctx-root > .ctx-menu").length;
   [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].find((x) => x.textContent.startsWith("Align to")).click(); await s(800);
-  const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent);
+  const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent); const dest0 = A.myShip.dest || null, acts0 = !acts.hidden;
   const centerRow = () => { c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); return [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Center on ship"); };
   ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
   const centred = A.view.follow; A.send({ t: "dev", cmd: "move", x: 0, y: 0 }); await s(300);
-  return { top, names: names.length, opts, kept, dest: A.myShip.dest || null, acts: !acts.hidden, btns, centred };`);
+  return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centred };`);
 t.ok(r.top.join() === "Center on ship,Belts" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts", r);
 t.ok(r.opts.join() === "Warp to,Align to" && r.kept === 3, "right-click a belt in the list: its own menu beside it, Warp to / Align to, the menus before it kept open (owner)", r);
 t.ok(r.dest && r.acts && r.btns.join() === "Align,Warp", "aligning shows Align and Warp under the fleet", r);
@@ -148,6 +148,42 @@ r = await run(page, `const get0 = Api.get; Api.get = async (u) => u.startsWith("
   Api.get = get0; pi.querySelector(".win-close").click(); document.querySelector('.win[data-id="chat"] .win-close').click(); await s(100);
   return { btns, tab, own };`);
 t.ok(r.btns.join() === "DM,Report" && r.tab && r.own === 0, "a player's sheet: DM / Report at the bottom (DM opens their tab); none on your own", r);
+
+// the HUD (owner): locked targets above shield / hull / speed, the Inventory button and the hotbar
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600);
+  A.followShip(A.myShip.id); await s(300);
+  const menu = A.objItems("rock", k.id).map((x) => x[0]);
+  A.objItems("rock", k.id).find((x) => x[0] === "Lock Target")[1](); await s(700);
+  const locking = { cards: document.querySelectorAll("#hud .tgt").length, x: document.querySelectorAll("#hud .tgt-x").length };
+  await s(3000);
+  const locked = { x: document.querySelectorAll("#hud .tgt-x").length, dist: document.querySelector("#hud .tgt-dist").textContent };
+  const cell = document.querySelector("#hud .tgt"); cell.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })); await s(50);
+  const hover = A.hoverTarget && A.hoverTarget.id === k.id, tip = document.getElementById("tooltip").textContent;
+  cell.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+  cell.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 600 })); await s(100);
+  const tmenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  const spd = document.querySelector(".hud-spd"); spd.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })); await s(50);
+  const maxTip = document.getElementById("tooltip").textContent; spd.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+  const status = [...document.querySelectorAll("#hud .hud-k")].map((x) => x.textContent);
+  const hb = document.querySelector("#hud .hud-hotbar"), hbHidden = getComputedStyle(hb).display === "none";
+  document.getElementById("hud").classList.add("hb-dragging"); const slots = [...hb.querySelectorAll(".hb-slot")].filter((x) => getComputedStyle(x).display !== "none").map((x) => x.textContent);
+  document.getElementById("hud").classList.remove("hb-dragging");
+  document.querySelector("#hud .tgt-x").click(); await s(400);
+  const after = document.querySelectorAll("#hud .tgt").length;
+  document.querySelector("#hud .hud-inv").click(); await s(300);
+  const inv = document.querySelector('.win[data-id="inv"]'), invTitle = inv.querySelector(".win-title-slot").textContent, invCap = inv.querySelector(".hud-txt").textContent;
+  inv.querySelector(".win-close").click();
+  return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap };`);
+t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Info", r.menu);
+t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be cancelled), then gets its × and distance", r);
+t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
+t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Info", "a target's menu: Unlock Target, Align To, Move towards, Info", r.tmenu);
+t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
+t.ok(r.hbHidden && r.slots.join() === "1,2,3,4,5,6,7,8,9,0,-,=", "no modules: the hotbar's 12 empty slots (1-9, 0, -, =) show only while a module is dragged", r);
+t.ok(r.after === 0, "the × unlocks it", r.after);
+t.ok(/Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory button opens the ship's inventory", r);
 
 // reload keeps the windows that were open
 await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);

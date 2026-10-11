@@ -66,6 +66,10 @@ export function attachGameServer(httpServer) {
           case "chat": world.cmdChat(pid, m.text, m.channel, m.to); break;
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
+          case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;
+          case "unlock": world.cmdUnlock(pid, m.ship, m.kind, m.id); break;
+          case "chase": world.cmdChase(pid, m.ship, m.kind, m.id, m.mode); break;
+          case "info": world.cmdInfo(pid, m.kind, m.id); break;
           case "dev": if (PTR) devCommand(world, pid, m); break;
         }
       } catch (e) { console.error("command " + m.t, e); }
