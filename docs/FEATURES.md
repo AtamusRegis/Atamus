@@ -53,7 +53,7 @@ The owner took the game back to scratch to focus on the Prospector's gameplay. *
   1. **Your character:** the account's own portrait, which is who you'll be in chat (one person, not each of your pilots). Its name is your username.
   2. **Your first pilot:** a portrait plus a pilot name.
   - Then Enter System. The card widens for these steps; on narrow screens the portrait sits above the controls.
-- **Portraits (owner, the scifi portrait builder art):** 32×32 pixel art in `website/assets/portraits/`, stacked background → head → outfit → hair and drawn crisp at any size (`website/portrait.js`).
+- **Portraits (owner, the scifi portrait builder art):** 32×32 pixel art in `website/assets/portraits/`, stacked background → outfit → head → hair (owner) and drawn crisp at any size (`website/portrait.js`).
   - The creator: a big preview, **Male / Female**, a ‹ › stepper each for Skin (5), Hair, Hair color (10), Outfit (5 styles), Outfit color (10) and Background (25), and Randomize. A new creator starts on a random look.
   - **Male / female** picks which hairstyles are offered (the art has no other differences): male buzz, short, quiff, spiky, mohawk, shaggy, curly; female long, bob, bun, curly, shaggy, short, mohawk. Switching keeps the hair if the other list has it.
   - The server keeps the part lists (`portraits.js`, served at `/game/portraits`) and refuses any pick not on them; it stores only the seven fields. The account's is `users.portrait` (`POST /game/character`), a pilot's is in its data (sent with `/game/pilot/create`; a pilot made without one gets a random portrait).

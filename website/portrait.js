@@ -1,12 +1,13 @@
 // Character portraits (owner, 2026-10-10): 32×32 pixel art stacked from four layers in assets/portraits/
-// (background, head, shirt, hair), drawn crisp at any size. The part lists come from the server (/game/portraits),
+// (background, shirt, head, hair), drawn crisp at any size. The part lists come from the server (/game/portraits),
 // which checks every pick. Used by the play page (the character and pilot creators) and the game's windows.
 (() => {
   "use strict";
   let parts = null, partsP = null;
   const imgs = {};
   const img = (src) => { if (!imgs[src]) { imgs[src] = new Image(); imgs[src].src = src; } return imgs[src]; };
-  const layers = (p) => ["background/" + p.background, "head/skin_" + p.skin, "shirt/" + p.shirt + "_" + p.shirtColor, "hair/" + p.hair + "_" + p.hairColor].map((f) => img("assets/portraits/" + f + ".png"));
+  // (owner) drawn in this order: background, shirt, head, hair
+  const layers = (p) => ["background/" + p.background, "shirt/" + p.shirt + "_" + p.shirtColor, "head/skin_" + p.skin, "hair/" + p.hair + "_" + p.hairColor].map((f) => img("assets/portraits/" + f + ".png"));
   const NAMES = { darkbrown: "Dark brown", deepspace: "Deep space" };
   const nice = (k) => NAMES[k] || (k.charAt(0).toUpperCase() + k.slice(1)).replace(/_/g, " ");
 

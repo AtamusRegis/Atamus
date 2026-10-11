@@ -1,5 +1,5 @@
 // Character portraits (owner, 2026-10-10): 32×32 pixel art built from four layers in website/assets/portraits/:
-// background, head (skin), shirt (outfit style × colour), hair (style × colour). Accounts have one (the player
+// background, shirt (outfit style × colour), head (skin), hair — drawn in that order (owner) (style × colour). Accounts have one (the player
 // character everyone sees in chat) and so does every pilot. The server keeps the part lists and checks every pick.
 export const PORTRAIT_PARTS = {
   background: ["alien_jungle", "asteroid_field", "black_hole", "bridge", "cryo_bay", "cyber_city", "deepspace", "engine_room", "galaxy", "gas_giant", "green_nebula", "hangar", "holo_grid", "ice_planet", "mars_horizon", "medbay", "moon_surface", "nebula", "planet", "red_nebula", "ringed_planet", "starship_window", "station_corridor", "sun_corona", "warp_speed"],
