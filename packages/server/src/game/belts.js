@@ -25,21 +25,22 @@ const SIZE_W = [[1000, 30], [500, 40], [200, 30]];
 const RARITY_W = [50, 28, 14, 6, 2];
 const pickW = (ws) => { let r = Math.random() * ws.reduce((a, b) => a + b, 0); for (let i = 0; i < ws.length; i++) { r -= ws[i]; if (r <= 0) return i; } return 0; };
 
-/** A belt's field: a crescent of rocks around (cx, cy) — a primary ore by rarity plus a couple of lower ones. */
-export function createBeltField(id, cx, cy, now = Date.now()) {
+/** A belt's field: a crescent of rocks around (cx, cy) — a primary ore by rarity plus a couple of lower ones. (owner,
+ *  2026-10-11) `scatter`: in a planet's rings, rocks scattered all over the belt instead of a crescent. */
+export function createBeltField(id, cx, cy, now = Date.now(), scatter = false) {
   const tier = pickW(RARITY_W), lower = ORES.filter((o) => o.tier < tier), types = [ORES[tier]];
   while (types.length < 3 && lower.length) types.push(lower.splice(Math.floor(Math.random() * lower.length), 1)[0]);
   if (types.length < 2) types.push(ORES[Math.min(4, tier + 1)]);
   const shares = types.map((_, i) => (i === 0 ? 1 : 0.3 + Math.random() * 0.3));
   const dir = Math.random() * Math.PI * 2;      // the way the crescent bulges: its middle is at this angle from the center
-  const f = { dir: +dir.toFixed(4), tier, nextId: 0, ver: 1, rocks: [], total: 0 };
+  const f = { dir: +dir.toFixed(4), tier, nextId: 0, ver: 1, rocks: [], total: 0, ...(scatter ? { scatter: true } : {}) };
   let guard = 0;
   while (f.total < BELT.minM3 && guard++ < 5000) {
     const size = SIZE_W[pickW(SIZE_W.map((s) => s[1]))][0], r = size / 2000, [lo, hi] = START_M3[size];
     for (let t = 0; t < 60; t++) {
       // a half moon: angles within 90° of the middle; thickest in the middle, tapering toward the horns
-      const u = Math.random() * 2 - 1, a = dir + u * Math.PI / 2, thick = BELT.arcJitterKm * Math.cos(u * Math.PI / 2) ** 0.6;
-      const d = Math.min(BELT.radiusKm - r - 0.2, BELT.arcKm + (Math.random() * 2 - 1) * thick);
+      const u = Math.random() * 2 - 1, a = scatter ? Math.random() * Math.PI * 2 : dir + u * Math.PI / 2, thick = BELT.arcJitterKm * Math.cos(u * Math.PI / 2) ** 0.6;
+      const d = scatter ? (BELT.radiusKm - r - 2) * Math.sqrt(Math.random()) : Math.min(BELT.radiusKm - r - 0.2, BELT.arcKm + (Math.random() * 2 - 1) * thick);   // (scattered: evenly over the disc)
       const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
       if (f.rocks.some((o) => Math.hypot(x - o.x, y - o.y) < o.r + r + 0.15)) continue;
       const m3 = Math.round(lo + Math.random() * (hi - lo)), ore = types[pickW(shares)].key;

@@ -2092,7 +2092,7 @@
     if (kind === "celestial") {                         // (owner) a planet or moon
       const parent = d.parent ? A.celestial(d.parent) : null;
       if (d.kind === "sun") rows.push(row("Type", "Star"), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Planets", ((cfg.celestials && cfg.celestials.planets) || []).length));
-      else rows.push(row("Type", d.kind === "moon" ? "Moon" : "Planet"), row("World", d.world), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Orbits", parent ? parent.name : (cfg.celestials && cfg.celestials.sun ? cfg.celestials.sun.name : "-")), row("Orbit", Math.round(d.orbit).toLocaleString() + " km"));
+      else rows.push(row("Type", d.kind === "moon" ? "Moon" : "Planet"), row("World", d.world), row("Radius", Math.round(d.r).toLocaleString() + " km"), row("Orbits", parent ? parent.name : (cfg.celestials && cfg.celestials.sun ? cfg.celestials.sun.name : "-")), row("Orbit", d.au ? d.au + " AU" : Math.round(d.orbit).toLocaleString() + " km"));
       if (d.moons) rows.push(row("Moons", d.moons.length));
     } else if (kind === "rock") {
       const o = (cfg.ores || []).find((q) => q.key === d.ore) || {};

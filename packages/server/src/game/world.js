@@ -7,11 +7,12 @@ import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange, nearestHangar, hangarAt } from "./station.js";
 const shipLen = (s) => (SHIP_TYPES[s.type] || {}).lengthKm || 0.13;
+const RING_BELT_SHARE = 0.7;   // (owner) "a lot of the asteroid belts" are in the rings
 const SAFE_DOCK_MAX_MS = 10 * 60 * 1000;   // (a safe log off's warp home and docking: the longest it's given)
 const HANGAR_GAP_KM = 0.03, HANGAR_KMPS = 0.06, UNDOCK_KM = 5, UNDOCK_SPREAD = 0.5;   // (owner) a hangar: the gap in front, the speed in and out; undocking: how far out, how wide the angle
 import { Obstacles } from "./obstacles.js";
 import { HOME, homeId, homeProps, homeLanding } from "./home.js";
-import { SUN, PLANETS, celestialPois, anchorLanding, celestialClearance } from "./celestials.js";
+import { SUN, PLANETS, RINGED, celestialPois, anchorLanding, celestialClearance } from "./celestials.js";
 import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
 import { readFileSync } from "node:fs";
@@ -66,7 +67,7 @@ function loadFit(v, t) {
   return f;
 }
 const cloneFit = (f) => ({ active: [...f.active], passive: [...f.passive], off: { active: [...f.off.active], passive: [...f.off.passive] } });
-const VIEW_MAX_W = 4 * EXPANSE_APOTHEM_KM;            // the widest camera view a client may claim
+const VIEW_MAX_W = 10 * 20_000;                         // the widest camera view a client gets other ships for (10 AU: the system is 70 AU across)
 
 export class World {
   constructor() {
@@ -125,6 +126,8 @@ export class World {
    *  without one (`accounts`: [{ id, name }] from the database). */
   homesLoaded(accounts = []) {
     this.homesReady = true;
+    // (owner, 2026-10-11) the new solar system: stations made in the old, small one move somewhere new (storage and all)
+    for (const h of [...this.pois.values()]) if (h.kind === "home" && h.resite) { this.pois.delete(h.id); this.poiVer++; const at = this._homeSite(); delete h.resite; h.x = +at.x.toFixed(3); h.y = +at.y.toFixed(3); h.field = { rocks: [], props: homeProps(h), dir: 0, ver: (h.field.ver || 1) + 1 }; this.pois.set(h.id, h); this.poiVer++; }
     for (const p of this.players.values()) this._ensureHome(p);
     let made = 0; for (const a of accounts) if (!this._home(String(a.id))) { this._ensureHome({ id: String(a.id), name: a.name }); made++; }
     if (made) console.log("[homes] " + made + " player stations made");
@@ -158,7 +161,7 @@ export class World {
     if (this.ships.has(sid)) return this.ships.get(sid);
     const t = SHIP_TYPES.chisel, sv = saved && saved.ships && saved.ships[pilotId];
     let x, y, h;
-    if (sv && finite(sv.x) && finite(sv.y)) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }
+    if (sv && finite(sv.x) && finite(sv.y) && Math.hypot(sv.x, sv.y) > SUN.r + 50) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }   // (never inside the Sun: then beside the Station)
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = SPAWN_AT.x + Math.cos(a) * d; y = SPAWN_AT.y + Math.sin(a) * d; h = Math.random() * Math.PI * 2; }   // (owner: nothing at the sun) beside the Station
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
       name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
@@ -556,7 +559,7 @@ export class World {
   }
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
-    const a = poi.field.dir + (Math.random() - 0.5) * 0.3, d = WARP_LAND_KM + (Math.random() - 0.5) * 4;
+    const scat = poi.field && poi.field.scatter, a = scat ? Math.random() * Math.PI * 2 : poi.field.dir + (Math.random() - 0.5) * 0.3, d = scat ? BELT.radiusKm - 1 : WARP_LAND_KM + (Math.random() - 0.5) * 4;   // (a ring belt: just inside its edge, clear of its rocks)
     const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : poi.kind === "home" ? homeLanding(poi) : poi.ax != null ? anchorLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
@@ -708,7 +711,7 @@ export class World {
   }
   /** A belt from the database (a restart): back on the map with its rocks as they were. */
   loadPoi(d) {
-    if (d && d.kind === "home" && typeof d.owner === "string" && finite(d.x) && finite(d.y) && d.id === homeId(d.owner) && !this.pois.has(d.id)) { this.pois.set(d.id, this._makeHome(d)); this.poiVer++; return; }   // a player's station
+    if (d && d.kind === "home" && typeof d.owner === "string" && finite(d.x) && finite(d.y) && d.id === homeId(d.owner) && !this.pois.has(d.id)) { const h = this._makeHome(d); if (d.resite) h.resite = true; this.pois.set(d.id, h); this.poiVer++; return; }   // a player's station (resite: the new solar system moves it)
     if (!d || d.kind !== "belt" || !d.field || !Array.isArray(d.field.rocks) || this.pois.has(d.id)) return;
     this.pois.set(d.id, { ...d, retired: !d.field.rocks.length }); this.poiVer++;
   }
@@ -741,10 +744,25 @@ export class World {
     return this._pg.g.get(Math.floor(x / C) + "," + Math.floor(y / C)) || [];
   }
   _newBelt(now = Date.now()) {
-    // (owner) around a planet or one of its moons, clear of the edge, the sun, the bodies themselves and other POIs
+    // (owner, 2026-10-11) most belts spawn in a ringed planet's rings (Saturn's most), their rocks scattered; the rest
+    // around a planet or one of its moons, clear of the edge, the sun, the bodies themselves and other POIs
+    if (Math.random() < RING_BELT_SHARE) {
+      const w = RINGED.map((p) => (p.rings.bright ? 4 : 1.5)), tot = w.reduce((a, b) => a + b, 0);
+      for (let t = 0; t < 300; t++) {
+        let r = Math.random() * tot, p = RINGED[0]; for (let i = 0; i < RINGED.length; i++) { r -= w[i]; if (r <= 0) { p = RINGED[i]; break; } }
+        const mid = (p.rings.in + p.rings.out) / 2, half = Math.max(0, (p.rings.out - p.rings.in) / 2 - BELT.radiusKm * 0.6), a = Math.random() * Math.PI * 2, d = mid + (Math.random() * 2 - 1) * half;
+        const x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
+        if (p.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 20)) continue;
+        if (this._poisNearAll(x, y, 400).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 120 : 110))) continue;
+        const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
+        const poi = { id, kind: "belt", name: p.name + " Rings " + id.slice(-4).toUpperCase(), x: +x.toFixed(3), y: +y.toFixed(3), r: BELT.radiusKm, createdAt: now, field: createBeltField(id, x, y, now, true), retired: false };
+        this.pois.set(id, poi); this.poiVer++;
+        return poi;
+      }
+    }
     let x = 0, y = 0;
     for (let t = 0; t < 500; t++) {
-      const p = PLANETS[Math.floor(Math.random() * PLANETS.length)], body = Math.random() < 0.35 && p.moons.length ? p.moons[Math.floor(Math.random() * p.moons.length)] : p;
+      const p = PLANETS[Math.floor(Math.random() * PLANETS.length)], big = p.moons.filter((m) => m.major), body = Math.random() < 0.35 && big.length ? big[Math.floor(Math.random() * big.length)] : p;
       const a = Math.random() * Math.PI * 2, d = body === p ? p.zone + 150 + Math.random() * 900 : body.r + 150 + Math.random() * 250;
       x = body.x + Math.cos(a) * d; y = body.y + Math.sin(a) * d;
       if (!insideExpanse(x, y, BELT.radiusKm * 3) || Math.hypot(x, y) < SUN.clearKm) continue;

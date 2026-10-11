@@ -4,15 +4,16 @@
 import { World, insideExpanse, clampToExpanse } from "../../packages/server/src/game/world.js";
 import { EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, SHIP_TYPES } from "../../packages/server/src/game/constants.js";
 import { connect, suite, sleep, SHIP } from "./lib.mjs";
+import { STATION } from "../../packages/server/src/game/station.js";
 const t = suite("world");
 const run = (w, sec) => { for (let i = 0; i < sec * 20; i++) w.tick(0.05); };
 
 const T0 = SHIP_TYPES.chisel, w = new World(), A = EXPANSE_APOTHEM_KM, R = A / Math.cos(Math.PI / 6);
-t.ok(A === 10_000, "the hexagon is 20,000 km across, flat to flat (1 AU at the map's 20,000 km per AU)");
+t.ok(A === 700_000, "the hexagon is 70 AU across, flat to flat (owner, 2026-10-11: at 20,000 km per AU)");
 t.ok(insideExpanse(0, A - 1) && !insideExpanse(0, A + 1) && insideExpanse(R - 1, 0) && !insideExpanse(R + 1, 0), "flat top and bottom, corners left and right");
 const PA = [{ id: 1, name: "Pa", licenses: { mining_frigate: 5 } }];
 const a = w.addPlayer("a", "A", () => {}, null, PA), sa = w.ships.get("a:ship:1");
-t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x - 0, sa.y - (-1208)) <= SPAWN_SPREAD_KM && Math.hypot(sa.x, sa.y) > 1000 && w.ships.size === 1, "a pilot gets one Prospector, just south of the Station (owner: nothing spawns at the sun)");
+t.ok(sa && sa.type === "chisel" && sa.pilot === "1" && Math.hypot(sa.x - STATION.x, sa.y - (STATION.y - 8)) <= SPAWN_SPREAD_KM && Math.hypot(sa.x, sa.y) > 10000 && w.ships.size === 1, "a pilot gets one Prospector, just south of the Station (owner: nothing spawns at the sun)");
 w.addPlayer("a", "A", () => {}, null, PA); t.ok(w.ships.size === 1, "and only ever one");
 w.setPilots("a", [...PA, { id: 7, name: "Pb" }]); t.ok(w.ships.has("a:ship:7") && w.ships.size === 2, "a new pilot gets their own");
 w.setPilots("a", PA); t.ok(!w.ships.has("a:ship:7") && w.ships.size === 1, "a pilot that's gone takes theirs with them");
@@ -44,12 +45,12 @@ w.cmdView("b", 100, 100, 10); t.ok(w.snapshotFor(b).ships.length === 2, "ships i
 w.cmdView("b", 3000, 0, 10); const sn = w.snapshotFor(b);
 t.ok(sn.ships.length === 1 && sn.ships[0].mine, "ships outside it aren't, but your own always is");
 w.cmdView("b", "x", 0, 10); t.ok(w.players.get("b").view === null, "a junk view falls back to around your ship");
-w.cmdView("b", 0, 0, 1e12); t.ok(w.players.get("b").view.w === 4 * A, "and a client can't claim a view wider than the map");
+w.cmdView("b", 0, 0, 1e12); t.ok(w.players.get("b").view.w === 200_000, "and a client can't claim a view wider than 10 AU", w.players.get("b").view.w);
 w.cmdMove("a", sa.id, 150, 150);
 t.ok(!("tx" in (w.snapshotFor(b).ships.find((s) => s.id === "a:ship:1") || {})) && w.ships.get("a:ship:1").moving, "other players' destinations aren't sent");
 
 // saving and logging off
-w.cmdMove("a", sa.id, 120, 100); run(w, 2);
+Object.assign(sa, { x: 40000, y: 30000, vx: 0, vy: 0, tx: 40000, ty: 30000 }); w.cmdMove("a", sa.id, 40120, 30100); run(w, 2);
 const saved = JSON.parse(JSON.stringify(w.exportState("a")));
 w.removePlayer("a"); run(w, 0.1); t.ok(w.ships.has(sa.id), "a reload within the grace keeps the ship in space");
 w.players.get("a").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; w.tick(0.05);
@@ -64,7 +65,9 @@ t.ok(!w.players.has("a") && !w.ships.has(sa.id), "then leave the world");
 { const wd = new World(); wd.addPlayer("d", "D", () => {}, null, PA); const sd = wd.ships.get("d:ship:1"); wd._dock(sd); wd.removePlayer("d"); wd.players.get("d").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; wd.tick(0.05);
   t.ok(!wd.players.has("d"), "with every ship docked, logging off is safe: gone after the short grace"); }
 w.addPlayer("a", "A", () => {}, saved, PA); const back = w.ships.get("a:ship:1");
-t.ok(Math.abs(back.x - saved.ships["1"].x) < 1e-3 && Math.abs(back.y - saved.ships["1"].y) < 1e-3, "logging back in puts it where it was");
+{ const wz = new World(); wz.addPlayer("z", "Z", () => {}, { ships: { 1: { x: 100, y: 100, h: 0 } } }, PA); const sz = wz.ships.get("z:ship:1");
+  t.ok(Math.hypot(sz.x - STATION.x, sz.y - STATION.y) < 20, "a ship saved inside the Sun (the old, small system) comes back beside the Station", [sz.x, sz.y]); }
+t.ok(Math.abs(back.x - saved.ships["1"].x) < 1e-3 && Math.abs(back.y - saved.ships["1"].y) < 1e-3, "logging back in puts it where it was", [back.x, back.y, saved.ships["1"]]);
 const w2 = new World(); w2.addPlayer("z", "Z", () => {}, { ships: { 3: { x: 1e9, y: -1e9, h: 0 } } }, [{ id: 3, name: "Z" }]); const sz = w2.ships.get("z:ship:3");
 t.ok(insideExpanse(sz.x, sz.y), "a saved spot outside the edge comes back inside it");
 

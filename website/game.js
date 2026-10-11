@@ -281,7 +281,7 @@
     const belts = pois.filter((q) => q.kind === "belt" && !q.hidden).sort((a, b) => a.name.localeCompare(b.name));
     menu(px, py, [["Center on ship", () => { const own = myShip(); if (own) window.Atamus.followShip(own.id); }],
       ["Belts", belts.map((q) => [q.name, null, { menu: poiItems(q) }])],   // (owner) a list: right-click (hold) a belt for its menu
-      ["Celestials", [...(celestials().sun ? [[celestials().sun.name, null, { menu: celestialItems(celestials().sun) }]] : []), ["Planets", celestials().planets.map((q) => [q.name, null, { menu: [...celestialItems(q), ["Moons", q.moons.map((m) => [m.name, null, { menu: celestialItems(m) }])]] }])]]]]);   // (owner) Celestials › Planets › a planet (and its Moons)
+      ["Celestials", [...(celestials().sun ? [[celestials().sun.name, null, { menu: celestialItems(celestials().sun) }]] : []), ["Planets", celestials().planets.map((q) => [q.name, null, { menu: [...celestialItems(q), ...(q.moons.some((m) => m.major) ? [["Moons", q.moons.filter((m) => m.major).map((m) => [m.name, null, { menu: celestialItems(m) }])]] : [])] }])]]]]);   // (owner) Celestials › Planets › a planet (and its Moons)
   }
   canvas.addEventListener("contextmenu", (e) => { e.preventDefault(); if (e.ctrlKey && e.button === 0) return; openMenu(e.clientX, e.clientY); });   // (a Mac's Ctrl + click is Align To, not the menu)
   const shipAt = (px, py, ships) => {               // the nearest of your ships under the pointer
@@ -557,16 +557,37 @@
   const onScreenRing = (x, y, r) => { const d = Math.hypot(x - innerWidth / 2, y - innerHeight / 2); return Math.abs(d - r) < Math.hypot(innerWidth, innerHeight) / 2 + 2 && r < 3e6; };
   function ring(x, y, r, color) { if (!onScreenRing(x, y, r)) return; ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
   const bodyPx = (c, sc) => Math.max(c.kind === "moon" ? 1.5 : 3, c.r * sc);
+  // (owner, 2026-10-11) a planet's orbit is its real ellipse (the Sun at a focus): a, eccentricity, where the perihelion points
+  function orbitEllipse(p, color) {
+    const sc = scale(), a = p.orbit, e = p.e || 0, b = a * Math.sqrt(1 - e * e), w = p.w || 0, cx = -a * e * Math.cos(w), cy = -a * e * Math.sin(w);
+    const x = gx2s(cx), y = gy2s(cy); if (!onScreenRing(x, y, a * sc) && !onScreenRing(x, y, b * sc)) return;
+    ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y, a * sc, b * sc, -w, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+  }
+  // (owner) a ringed planet's rings: Saturn's bright and banded, the others faint
+  function drawRings(p, sc) {
+    const R = p.rings, x = gx2s(p.x), y = gy2s(p.y), ri = R.in * sc, ro = R.out * sc; if (ro < 2) return;
+    if (x + ro < 0 || y + ro < 0 || x - ro > innerWidth || y - ro > innerHeight) return;
+    ctx.save();
+    const g = ctx.createRadialGradient(x, y, ri, x, y, ro);
+    if (R.bright) { g.addColorStop(0, "rgba(160,140,110,0.18)"); g.addColorStop(0.25, "rgba(215,195,160,0.45)"); g.addColorStop(0.55, "rgba(230,212,175,0.55)"); g.addColorStop(0.62, "rgba(40,35,30,0.1)"); g.addColorStop(0.68, "rgba(220,200,165,0.45)"); g.addColorStop(1, "rgba(200,180,150,0.2)"); }
+    else { g.addColorStop(0, "rgba(170,175,190,0.05)"); g.addColorStop(0.5, "rgba(170,175,190,0.16)"); g.addColorStop(1, "rgba(170,175,190,0.05)"); }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, ro, 0, Math.PI * 2); ctx.arc(x, y, Math.max(0, ri), 0, Math.PI * 2, true); ctx.fill("evenodd");
+    ctx.restore();
+  }
   function drawCelestials() {
-    const sc = scale(), sx = gx2s(0), sy = gy2s(0);
-    for (const p of celestials().planets) {
-      ring(sx, sy, p.orbit * sc, "rgba(150,175,215,0.16)");                          // the planet's orbit around the sun
+    const sc = scale(), cc = celestials();
+    if (cc.sun) { const r = cc.sun.r * sc, x = gx2s(0), y = gy2s(0);   // (the Sun's disc, once it's big enough to see; its glow is SunFX)
+      if (r > 6 && x + r > 0 && y + r > 0 && x - r < innerWidth && y - r < innerHeight) { ctx.save(); const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, "rgba(255,252,235,1)"); g.addColorStop(0.8, "rgba(255,226,150,1)"); g.addColorStop(1, "rgba(255,180,80,0.9)"); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.restore(); } }
+    for (const p of cc.planets) {
+      orbitEllipse(p, "rgba(150,175,215,0.16)");                                     // the planet's orbit around the Sun
       const px = gx2s(p.x), py = gy2s(p.y);
-      for (const m of p.moons) ring(px, py, m.orbit * sc, "rgba(150,175,215,0.11)");   // its moons' orbits
+      for (const m of p.moons) if (m.major) ring(px, py, m.orbit * sc, "rgba(150,175,215,0.11)");   // its major moons' orbits
+      if (p.rings) drawRings(p, sc);
     }
-    for (const p of celestials().planets) for (const c of [p, ...p.moons]) {
+    for (const p of cc.planets) for (const c of [p, ...p.moons]) {
       const x = gx2s(c.x), y = gy2s(c.y), r = bodyPx(c, sc);
       if (x < -r * 1.3 || y < -r * 1.3 || x > innerWidth + r * 1.3 || y > innerHeight + r * 1.3) continue;
+      if (c.kind === "moon" && !c.major && c.r * sc < 1.5) { ctx.fillStyle = "rgba(190,195,205,0.55)"; ctx.fillRect(x - 0.5, y - 0.5, 1, 1); continue; }   // (a small moon far off: a speck)
       drawPlanet(x, y, r, c);
     }
   }

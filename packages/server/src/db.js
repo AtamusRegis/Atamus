@@ -371,7 +371,9 @@ export async function migrate() {
  */
 // tag -> what it clears. "full": pilots, systems and credits. "world": ships, hangars, cans and belts only (pilots,
 // licenses and credits stay). "pilots": pilots and their ships only (accounts, characters and credits stay).
-const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"]];
+// "solar": the new solar system (owner, 2026-10-11): belts go, player stations move (their storage stays), every ship
+// in space is docked at the Station (now at Earth); pilots, ships' holds, hangars and credits stay.
+const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"]];
 export async function runWipes() {
   await pool.query(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   for (const [tag, kind] of WIPES) {
@@ -380,6 +382,13 @@ export async function runWipes() {
       await c.query("BEGIN");
       const { rowCount } = await c.query(`INSERT INTO meta (key, value) VALUES ($1, 'done') ON CONFLICT (key) DO NOTHING`, ["wipe:" + tag]);
       if (!rowCount) { await c.query("ROLLBACK"); continue; }          // already ran
+      if (kind === "solar") {
+        const b = await c.query(`DELETE FROM instances WHERE data->>'kind' = 'belt'`);
+        const h = await c.query(`UPDATE instances SET data = data || '{"resite": true}'::jsonb WHERE data->>'kind' = 'home'`);
+        const { rows } = await c.query(`SELECT user_id, data FROM systems`); let docked = 0;
+        for (const r of rows) { const d = r.data || {}; let ch = false; for (const sh of Object.values(d.ships || {})) if (sh && !sh.docked) { sh.docked = "station"; ch = true; docked++; } if (ch) await c.query(`UPDATE systems SET data = $2 WHERE user_id = $1`, [r.user_id, d]); }
+        await c.query("COMMIT"); console.log(`[wipe] ${tag}: ${b.rowCount} belts removed, ${h.rowCount} stations to move, ${docked} ships docked at the Station`); continue;
+      }
       const p = kind === "full" || kind === "pilots" ? await c.query(`DELETE FROM pilots`) : { rowCount: 0 }, s = await c.query(`DELETE FROM systems`);
       await c.query(`DELETE FROM instances`);
       if (kind === "full") await c.query(`UPDATE users SET credits = 0`);

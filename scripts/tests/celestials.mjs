@@ -1,13 +1,21 @@
 // Celestials (docs/FEATURES.md › Celestials): the sun, planets and moons with anchors as their POIs; what spawns where.
 import { World, insideExpanse } from "../../packages/server/src/game/world.js";
-import { SUN, PLANETS, MOONS, celestialClearance, celestialsForClient } from "../../packages/server/src/game/celestials.js";
+import { SUN, PLANETS, MOONS, RINGED, EARTH, celestialClearance, celestialsForClient } from "../../packages/server/src/game/celestials.js";
+import { AU_KM, EXPANSE_APOTHEM_KM } from "../../packages/server/src/game/constants.js";
+import { STATION } from "../../packages/server/src/game/station.js";
 import { suite } from "./lib.mjs";
 const t = suite("celestials");
-t.ok(PLANETS.length === 5 && MOONS.length >= 5 && PLANETS.every((p) => p.moons.length >= 1), "five planets, each with moons", PLANETS.map((p) => p.moons.length));
-t.ok(PLANETS.every((p) => Math.abs(Math.hypot(p.x, p.y) - p.orbit) < 0.1 && insideExpanse(p.x, p.y, p.zone)) && MOONS.every((m) => { const p = PLANETS.find((q) => q.id === m.parent); return Math.abs(Math.hypot(m.x - p.x, m.y - p.y) - m.orbit) < 0.1; }), "each sits on its orbit line (around the sun, or its planet), inside the Expanse");
-t.ok([...PLANETS, ...MOONS].every((c) => { const d = Math.hypot(c.anchor.x - c.x, c.anchor.y - c.y); return d > c.r && d < c.r + 200; }), "each has an anchor on a ring just off it (owner: the warp-in point)");
+// (owner, 2026-10-11) modelled on our solar system: the eight planets on their real orbits, their real moon counts
+t.ok(PLANETS.map((p) => p.name).join() === "Mercury,Venus,Earth,Mars,Jupiter,Saturn,Uranus,Neptune" && PLANETS.map((p) => p.moons.length).join() === "0,0,1,2,95,146,28,16", "the eight planets with their moons", PLANETS.map((p) => p.moons.length));
+t.ok(PLANETS.every((p) => { const d = Math.hypot(p.x, p.y), a = p.au * AU_KM; return d >= a * (1 - p.e) - 1 && d <= a * (1 + p.e) + 1; }) && Math.abs(PLANETS[2].orbit - AU_KM) < 1 && PLANETS.every((p) => insideExpanse(p.x, p.y, p.zone)), "each on its real orbit (1 AU: Earth), inside a 70 AU system", PLANETS.map((p) => Math.round(Math.hypot(p.x, p.y))));
+t.ok(EXPANSE_APOTHEM_KM * 2 === 70 * AU_KM, "70 AU across");
+t.ok(RINGED.map((p) => p.name).join() === "Jupiter,Saturn,Uranus,Neptune" && RINGED.every((p) => p.rings.in > p.r && p.rings.out > p.rings.in) && RINGED.find((p) => p.name === "Saturn").rings.bright, "ringed planets have rings (Saturn's bright)");
+t.ok(MOONS.filter((m) => m.major).length >= 20 && MOONS.every((m) => !m.major || m.anchor) && MOONS.some((m) => m.name === "Titan" && m.major), "the major moons are POIs, with anchors");
+t.ok(PLANETS.every((p) => true) && MOONS.every((m) => { const p = PLANETS.find((q) => q.id === m.parent); return Math.abs(Math.hypot(m.x - p.x, m.y - p.y) - m.orbit) < 0.1; }), "each sits on its orbit line (around the sun, or its planet), inside the Expanse");
+t.ok([...PLANETS, ...MOONS.filter((m) => m.major)].every((c) => { const d = Math.hypot(c.anchor.x - c.x, c.anchor.y - c.y); return d > c.r && d < c.r + 200; }), "each has an anchor on a ring just off it (owner: the warp-in point)");
 const w = new World(), a = w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "A", licenses: {} }]); w.tick(0.05);
-const pp = w.poisFor(a), planetPoi = pp.find((p) => p.id === PLANETS[0].id), moonPoi = pp.find((p) => p.id === MOONS[0].id);
+const pp = w.poisFor(a), planetPoi = pp.find((p) => p.id === PLANETS[0].id), moonPoi = pp.find((p) => p.id === MOONS[0].id), minor = MOONS.find((m) => !m.major);
+t.ok(!pp.some((p) => p.id === minor.id), "small moons aren't on the map (owner)");
 t.ok(planetPoi && moonPoi && planetPoi.kind === "planet" && planetPoi.x === PLANETS[0].x && planetPoi.ax === PLANETS[0].anchor.x && moonPoi.kind === "moon", "planets and moons are POIs on everyone's map, at the body, with their anchor (owner)", planetPoi);
 const sunPoi = pp.find((p) => p.id === "sun"); t.ok(sunPoi && sunPoi.kind === "sun" && sunPoi.x === 0 && sunPoi.ax != null && Math.hypot(sunPoi.ax, sunPoi.ay) > SUN.rKm, "so is the sun, with its own orbiting point (owner)", sunPoi);
 w.cmdAlign("a", "a:ship:1", PLANETS[0].id); { const s0 = w.ships.get("a:ship:1"); t.ok(s0.tx === PLANETS[0].anchor.x && s0.ty === PLANETS[0].anchor.y, "aligning heads for the anchor, not the body (owner)", [s0.tx, s0.ty]); s0.dest = null; s0.moving = false; }
@@ -22,5 +30,6 @@ t.ok(bs.every((b) => PLANETS.every((p) => Math.hypot(b.x - p.x, b.y - p.y) > p.r
 for (let i = 0; i < 40; i++) w.addPlayer("h" + i, "H" + i, () => {}, null, []);
 const hs = [...w.pois.values()].filter((p) => p.kind === "home");
 t.ok(hs.length === 41 && hs.every((h) => celestialClearance(h.x, h.y) >= 0), "player stations keep clear of the sun, planets and moons (owner)", hs.filter((h) => celestialClearance(h.x, h.y) < 0).length);
-const cc = celestialsForClient(); t.ok(cc.sun.rKm > 0 && cc.planets.length === 5 && cc.planets[0].moons.length && cc.planets[0].orbit && !("zone" in cc.planets[0]), "the client gets the sun, planets, moons and their orbits");
+t.ok(Math.hypot(STATION.x - EARTH.x, STATION.y - EARTH.y) < 500, "the NPC Station orbits Earth (owner)");
+const cc = celestialsForClient(); t.ok(cc.sun.rKm > 0 && cc.planets.length === 8 && cc.planets[4].moons.length && cc.planets[0].orbit && !("zone" in cc.planets[0]), "the client gets the sun, planets, moons and their orbits");
 t.done();

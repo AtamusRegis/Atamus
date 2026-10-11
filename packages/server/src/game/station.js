@@ -1,7 +1,9 @@
 // The Station (owner, 2026-10-11, temporary): a POI with one station you dock at to reach your hangar (one per
 // account, unlimited storage; no market). Ships dock within DOCK_KM of its edge; a docked ship leaves space until it
 // undocks. The station is drawn like a Library prop (its art at true size) and a destination can't be on it.
-export const STATION = { id: "station", kind: "station", name: "Station", x: 0, y: -1200, r: 30 };
+import { EARTH } from "./celestials.js";
+// (owner, 2026-10-11) the NPC trading station orbits Earth (trading comes with the market); new pilots start beside it
+export const STATION = { id: "station", kind: "station", name: "Earth Station", x: +(EARTH.x + Math.cos(3.6) * 350).toFixed(2), y: +(EARTH.y + Math.sin(3.6) * 350).toFixed(2), r: 30 };
 export const DOCK_KM = 5;
 const W = 1475 * 1.875 / 1000, H = 879 * 1.875 / 1000;   // the station's art at the game's 1.875 m a pixel (2.77 × 1.65 km)
 // (owner) hangars: where ships fly in to dock and out to undock. Each, in the art's pixels (y down): the middle of its

@@ -7,20 +7,20 @@ export const SNAPSHOT_HZ = 15;
 export const SNAPSHOT_MS = 1000 / SNAPSHOT_HZ;
 
 // ---- the world: the Expanse's hexagon, nothing in it (owner) ----
-// The map scale the client always used: 1 AU is drawn as 20,000 km, so the 1 AU-across hexagon is 20,000 km across,
-// flat to flat (flat top and bottom). The origin is its center.
+// The map scale: 1 AU is 20,000 km. (owner, 2026-10-11) The home system, modelled on ours, is 70 AU across, flat to
+// flat (flat top and bottom): 1.4 million km. The origin (the Sun) is its center.
 export const AU_KM = 20_000;
-export const EXPANSE_APOTHEM_KM = 0.5 * AU_KM;     // center to the middle of an edge
+export const EXPANSE_APOTHEM_KM = 35 * AU_KM;      // center to the middle of an edge
 export const SPAWN_SPREAD_KM = 5;                  // new ships appear within this of the center
 
 // ---- asteroid belts (belts.js has the field rules) ----
-export const BELTS_MIN = 3, PLAYERS_PER_BELT = 12;   // belt POIs: one per this many players online, at least BELTS_MIN
+export const BELTS_MIN = 10, PLAYERS_PER_BELT = 8;   // (owner, 2026-10-11: a 70 AU system, most belts in planets' rings)   // belt POIs: one per this many players online, at least BELTS_MIN
 
 // ---- align and warp (owner) ----
 export const ALIGN_SPEED = 0.75;          // aligned at this share of top speed...
 export const ALIGN_DEG = 5;               // ...heading within this of the destination
 export const WARP_BASE_MS = 2000;         // a warp takes this plus the distance at WARP_KM_PER_S
-export const WARP_KM_PER_S = 20_000 / 28; // (owner, before the reset: crossing the system takes about 30 s)
+export const WARP_KM_PER_S = 1_400_000 / 118;   // (owner, 2026-10-11) crossing the whole 70 AU system takes about 2 minutes
 export const WARP_LAND_KM = 30;           // drop out this far from a belt's center, on the inside of its crescent
 
 // ---- RTS ship movement ----

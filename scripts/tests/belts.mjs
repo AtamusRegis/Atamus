@@ -3,15 +3,21 @@
 import { World } from "../../packages/server/src/game/world.js";
 import { BELT, ORES, decayField, fieldM3, sizeFor } from "../../packages/server/src/game/belts.js";
 import { BELTS_MIN, PLAYERS_PER_BELT, ALIGN_SPEED } from "../../packages/server/src/game/constants.js";
+import { RINGED } from "../../packages/server/src/game/celestials.js";
 import { connect, suite, sleep, SHIP } from "./lib.mjs";
 const t = suite("belts");
 const w = new World(), mk = (id) => w.addPlayer(id, id, () => {}, null, [{ id: 1, name: "P" + id, licenses: { mining_frigate: 5 } }]);
 const a = mk("a"), sa = w.ships.get("a:ship:1"); w.tick(0.05);
 const belts = () => [...w.pois.values()].filter((p) => p.kind === "belt" && !p.retired);
 t.ok(belts().length === BELTS_MIN, "a few players: " + BELTS_MIN + " belts", belts().length);
-for (let i = 0; i < 40; i++) mk("c" + i); w.nextPoiTick = 0; w.tick(0.05);
-t.ok(belts().length === Math.ceil(41 / PLAYERS_PER_BELT), "more belts with more players online", belts().length);
-const b = belts()[0], f = b.field;
+for (let i = 0; i < 120; i++) mk("c" + i); w.nextPoiTick = 0; w.tick(0.05);
+t.ok(belts().length === Math.ceil(121 / PLAYERS_PER_BELT), "more belts with more players online", belts().length);
+// (owner, 2026-10-11) most spawn in a ringed planet's rings, their rocks scattered over the whole belt
+{ const ring = belts().filter((x) => x.field.scatter), R = (x) => { const p = RINGED.find((q) => { const d = Math.hypot(x.x - q.x, x.y - q.y); return d >= q.rings.in - 1 && d <= q.rings.out + 1; }); return p; };
+  t.ok(ring.length >= belts().length * 0.3 && ring.every((x) => R(x) && x.name.startsWith(R(x).name + " Rings")), "most belts are in planets' rings, named for them (owner)", [ring.length, belts().length]);
+  const rf = ring[0].field, rd = rf.rocks.map((k) => Math.hypot(k.x - ring[0].x, k.y - ring[0].y));
+  t.ok(Math.min(...rd) < 20 && Math.max(...rd) < BELT.radiusKm, "a ring belt's rocks are scattered over it, not a crescent (owner)", [Math.min(...rd), Math.max(...rd)]); }
+const b = belts().find((x) => !x.field.scatter), f = b.field;
 t.ok(b.r * 2 === 100, "a belt is 100 km across");
 const ds = f.rocks.map((k) => Math.hypot(k.x - b.x, k.y - b.y));
 t.ok(Math.min(...ds) >= BELT.arcKm - BELT.arcJitterKm - 0.01 && Math.max(...ds) <= b.r, "its rocks lie 40-50 km out (the crescent's 45 km, give or take 5)", [Math.min(...ds), Math.max(...ds)]);
@@ -78,8 +84,8 @@ w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 // ---- part 2: on the PTR ----
 const c = await connect();
 t.ok((c.last.hello.pois || []).filter((p) => p.kind === "belt").length >= BELTS_MIN, "the map's belts arrive with hello");
-c.dev({ cmd: "move", x: 0, y: 0 }); await sleep(400);
 const target = c.last.hello.pois.find((p) => p.kind === "belt");
+c.dev({ cmd: "move", x: target.x + 3000, y: target.y }); await sleep(400);   // (a short warp: the system is 70 AU across)
 c.send({ t: "warp", ship: SHIP, poi: target.id });
 const t0 = Date.now(); let saw = false;
 while (Date.now() - t0 < 45000) { await sleep(200); const s = c.mine(); if (s && s.warp) saw = true; if (saw && s && !s.warp) break; }

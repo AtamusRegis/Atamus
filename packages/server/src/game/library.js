@@ -25,7 +25,8 @@ const ROCK_PX = { bubble: { 1000: [485, 531], 500: [267, 257], 200: [106, 106] }
   fractured: { 1000: [533, 440], 500: [218, 265], 200: [88, 106] }, layered: { 1000: [494, 531], 500: [267, 221], 200: [107, 72] } };
 ROWS.push(FAMILIES.flatMap(([n, f]) => [200, 500, 1000].map((size) => { const [w, h] = ROCK_PX[f][size]; return [n, "rocks/rock_" + f + "_" + size + ".webp", w, h, size / 1000]; })));
 
-export const LIBRARY = { id: "library", kind: "library", name: "Library", x: 0, y: 1200, r: 30 };
+import { EARTH } from "./celestials.js";
+export const LIBRARY = { id: "library", kind: "library", name: "Library", x: +(EARTH.x + Math.cos(0.4) * 650).toFixed(2), y: +(EARTH.y + Math.sin(0.4) * 650).toFixed(2), r: 30 };   // (owner, 2026-10-11) near Earth
 const GAP_KM = 0.6, ROW_GAP_KM = 1.5, SHELF_UP_KM = 10;
 /** The props, laid out in centered rows from the top down (km, relative to the world). */
 export function libraryProps() {
