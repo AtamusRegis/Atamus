@@ -241,9 +241,9 @@ export async function migrate() {
     ALTER TABLE appeal_messages ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS admin_id BIGINT;
-    -- (owner) Nyssary is the Head Admin (the only one; only they make admins)
+    -- (owner) Nyssary is a Head Admin (and the only one who makes Head Admins); staff: Head Admins and Moderators ('admin')
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
-    UPDATE users SET role = NULL WHERE role = 'head' AND lower(username) <> 'nyssary';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;   -- (owner) a staff member's own panel password (scrypt)
   `);
 }
 

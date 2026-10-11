@@ -101,11 +101,36 @@ await q("/license", { id: String(bob.id), pilotId: String(bp.id), key: "mining_f
 t.ok(d.licenses.mining_frigate === 1 && d.licenses.mining_lasers === 0, "reset puts it back to where everyone starts (never below)", d.licenses);
 await q("/reset", { id: String(bob.id), what: "credits" }); await q("/reset", { id: String(bob.id), what: "corp" });
 r = await q("/player/" + bob.id); t.ok(r.body.credits === 0 && r.body.corp === "Deep Core Industries", "credits and corporation reset", r.body);
-r = await q("/role", { id: String(bob.id), admin: true }); t.ok(r.body.ok && (await db.query(`SELECT role FROM users WHERE id = $1`, [bob.id])).rows[0].role === "admin", "the Head Admin makes admins");
-await q("/role", { id: String(bob.id), admin: false });
+r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.body.ok && (await db.query(`SELECT role FROM users WHERE id = $1`, [bob.id])).rows[0].role === "admin", "a Head Admin makes Moderators");
+await q("/role", { id: String(bob.id), role: null });
+// (owner) staff: Moderators (chat and behavior) and Head Admins; only Nyssary (the PTR tester stands in) makes Head Admins;
+// new staff make their own panel password (30+ characters, 3 capitals, 3 numbers, 3 symbols); staff can't discipline staff
+{ const qa = (path, body) => fetch(BASE + "/game/admin" + path, body ? { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestAnn" }, body: JSON.stringify(body) } : { headers: { "x-ptr-as": "AdmTestAnn" } }).then(async (r) => ({ status: r.status, body: await r.json() }));
+  await db.query(`UPDATE users SET admin_pw_hash = NULL, role = 'admin' WHERE id = $1`, [ann.id]); await qa("/lock", {});
+  r = await qa("/me"); t.ok(r.body.role === "admin" && r.body.needPassword && !r.body.owner, "a new Moderator must make a password first", r.body);
+  r = await qa("/unlock", { password: PW }); t.ok(r.status === 403 && /Make your admin password/.test(r.body.error), "the shared password doesn't open it for them", r.body);
+  for (const weak of ["Short1!", "abcdefghijklmnopqrstuvwxyz1234!!!", "ABCdefghijklmnopqrstuvwxyz12!!!x", "ABCdefghijklmnopqrstuvwxyz123!!x"]) { r = await qa("/password", { password: weak }); t.ok(r.status === 400 && /30 characters/.test(r.body.error), "refused: " + weak, r.body); }
+  const APW = "Moderate#Every$Thing%With_Care123XYZ";
+  r = await qa("/password", { password: APW }); t.ok(r.body.ok, "30+ characters with 3 capitals, 3 numbers, 3 symbols", r.body);
+  await qa("/lock", {}); r = await qa("/unlock", { password: "nope" }); t.ok(r.status === 403, "then only their own password opens it");
+  r = await qa("/unlock", { password: APW }); t.ok(r.body.ok, "their own password unlocks the panel");
+  await qa("/persona", { name: "Mod_Ann", pic: 4 });
+  r = await qa("/kick", { id: String(me.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't kick a Head Admin");
+  r = await qa("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or change credits (Head Admins only)");
+  r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403, "or make Moderators");
+  r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "and a Head Admin can't kick a Moderator (owner)");
+  r = await q("/role", { id: String(ann.id), role: "head" }); t.ok(r.body.ok && (await db.query(`SELECT role FROM users WHERE id = $1`, [ann.id])).rows[0].role === "head", "Nyssary makes Head Admins", r.body);
+  r = await qa("/role", { id: String(bob.id), role: "head" }); t.ok(r.status === 403 && /Nyssary/.test(r.body.error), "another Head Admin can't (owner)", r.body);
+  r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.body.ok, "but can make Moderators");
+  r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and can't kick staff");
+  r = await qa("/role", { id: String(me.id), role: null }); t.ok(r.status === 403, "no one changes Nyssary's role");
+  await qa("/role", { id: String(bob.id), role: null });
+  r = await q("/role", { id: String(ann.id), role: null }); const ah = (await db.query(`SELECT role, admin_pw_hash FROM users WHERE id = $1`, [ann.id])).rows[0];
+  t.ok(r.body.ok && !ah.role && !ah.admin_pw_hash && (await qa("/players")).status === 403, "removed: no role, panel locked, their password dropped", ah);
+  await db.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [ann.id]); }
 // a regular admin: kick / ban, nothing else, and not other admins
 await db.query(`UPDATE users SET role = 'admin' WHERE id = $1`, [me.id]);
-r = await q("/role", { id: String(bob.id), admin: true }); t.ok(r.status === 403, "an admin can't make admins (owner)", r);
+r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403, "a Moderator can't make Moderators (owner)", r);
 r = await q("/license", { id: String(bob.id), pilotId: String(bp.id), key: "mining_lasers", op: "+" }); t.ok(r.status === 403, "or change licenses");
 r = await q("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or reset credits");
 r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick / ban another admin");

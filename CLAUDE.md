@@ -39,7 +39,7 @@ packages/server/src/
   licenses.js     license catalog (empty for now), training helpers
   portraits.js    portrait part lists (served at /game/portraits) and validation
   ptr.js          PTR flag, PTR user, dev commands
-  admin.js        the admin panel's API (/game/admin/*): second password, players, kick / ban / unban, roles, license / credit / corp changes, admin log
+  admin.js        the admin panel's API (/game/admin/*): staff roles (Head Admin, Moderator) and passwords, players, moderation, license / credit / corp changes, admin log
   personas.js     admin profiles (admin name + picture), shown for every line and log entry an admin made
   language.js     language log heat: each flagged chat line heats a player's meter, cooling over time
   names.js        name checks (filter, banned names by leet key, admin names), approved filter words

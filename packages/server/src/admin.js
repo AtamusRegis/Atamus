@@ -1,17 +1,18 @@
-// The admin panel's server side (owner, 2026-10-11). Admins (users.role 'admin') and the Head Admin ('head': Nyssary,
-// set in db.js) open it with a second password, kept here only as its scrypt hash. Everything is checked here:
-//   anyone with a role: see the players and the admin log, kick, ban (permanent, or for hours / days) and unban, each
-//     with a reason, written to the admin log (a ban's reason is what the player sees at login);
-//   the Head Admin only: make or remove admins, add / remove / reset a pilot's license levels, reset credits and the
-//     corporation.
-// No one can act on themselves or the Head Admin; an admin can't act on another admin.
+// The admin panel's server side (owner, 2026-10-11). Staff: Moderators (users.role 'admin') and Head Admins ('head').
+// Nyssary (the owner, set in db.js) opens the panel with the shared second password, kept here only as its scrypt hash;
+// every other staff member makes a password of their own first (30+ characters: 3 capitals, 3 numbers, 3 symbols).
+//   Moderators: chat and behavior moderation (kick, ban, mute, freeze, names, separating players, appeals, reports,
+//     support), each with a reason in the admin log (a ban's reason is what the player sees at login);
+//   Head Admins: also make or remove Moderators, change credits, licenses and items, reset the corporation, approve words;
+//   only Nyssary makes or removes Head Admins.
+// No one acts on themselves, and staff can't discipline staff (owner).
 import crypto from "node:crypto";
 import express from "express";
 import { pool } from "./db.js";
 import { getSessionUser, readCookie, destroyAllSessions } from "./sessions.js";
-import { verifySecret } from "./hash.js";
+import { verifySecret, hashSecret } from "./hash.js";
 import { allow } from "./ratelimit.js";
-import { PTR } from "./ptr.js";
+import { PTR, ptrAs } from "./ptr.js";
 import { LICENSES, STARTING_LICENSES, getLicense } from "./licenses.js";
 import { CORP, offerName } from "./pilots.js";
 import { nameKey, filterForm, CATEGORY_KEYS } from "./namefilter.js";
@@ -46,14 +47,15 @@ const cleanReason = (r) => (typeof r === "string" ? r.replace(/\s+/g, " ").trim(
 // signed in with a role; `needUnlock`: and the second password given this session; `needPersona`: and an admin profile
 // made (owner: admins act under their admin name)
 async function who(req, res, needUnlock = true, needPersona = needUnlock) {
-  const u = await getSessionUser(readCookie(req));
+  let u = await getSessionUser(readCookie(req));
+  if (PTR && req.headers["x-ptr-as"]) u = await ptrAs(String(req.headers["x-ptr-as"]));   // (PTR only: tests act as another account)
   if (!u) { fail(res, 401, "Not logged in."); return null; }
   if (u.role !== "admin" && u.role !== "head") { fail(res, 403, "Not an admin."); return null; }
   const key = sessionKey(req, u.id), un = unlocked.get(key);
   if (needUnlock && !(un && un.uid === String(u.id) && un.until > Date.now())) { fail(res, 403, "Locked."); return null; }
   const pe = personaOf(u.id);
   if (needPersona && !pe) { fail(res, 403, "Make your admin profile first."); return null; }
-  return { id: String(u.id), name: pe ? pe.name : u.username, role: u.role, key, persona: pe };
+  return { id: String(u.id), name: pe ? pe.name : u.username, username: u.username, role: u.role, key, persona: pe };
 }
 const guard = (needUnlock, fn, needPersona = needUnlock) => async (req, res) => { try { const me = await who(req, res, needUnlock, needPersona); if (me) await fn(req, res, me); } catch (e) { console.error("admin", e); fail(res, 500, "Something went wrong."); } };
 async function target(id) {
@@ -62,7 +64,14 @@ async function target(id) {
   return rows[0] || null;
 }
 // may `me` act on `t` (kick, ban, change)? never yourself or the Head Admin; an admin not on another admin
-const mayAct = (me, t) => String(t.id) !== me.id && t.role !== "head" && !(t.role === "admin" && me.role !== "head");
+// (owner) staff (Moderators and Head Admins) can't kick, ban, mute, block or freeze each other
+const mayAct = (me, t) => String(t.id) !== me.id && !t.role;
+/** (owner) Nyssary: the one who makes Head Admins (and the PTR tester, standing in for them) */
+const isOwner = (name) => String(name || "").toLowerCase() === "nyssary" || (PTR && String(name || "").toLowerCase() === "ptr");
+// (owner) a staff member's own panel password: 30 characters or more, with 3 capitals, 3 numbers and 3 symbols
+const pwProblem = (pw) => typeof pw !== "string" || pw.length < 30 || pw.length > 200 || (pw.match(/[A-Z]/g) || []).length < 3 || (pw.match(/[0-9]/g) || []).length < 3 || (pw.match(/[^A-Za-z0-9]/g) || []).length < 3
+  ? "At least 30 characters, with 3 capitals, 3 numbers and 3 symbols." : null;
+async function pwHashOf(uid) { const { rows } = await pool.query(`SELECT admin_pw_hash, password FROM users WHERE id = $1`, [uid]); return rows[0] || {}; }
 /** (net.js) an admin's action from the game (Freeze in an admin DM) into the admin log */
 export async function logAction(adminId, adminName, targetId, targetName, action, reason = "", detail = null) {
   await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason, detail) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [adminId, adminName, targetId, targetName, action, reason, detail]);
@@ -79,7 +88,19 @@ const heatOf = (u) => Math.min(HEAT_MAX, Math.round(heatNow(u.lang_heat, u.lang_
 const lengthOf = (b) => { const n = Number(b.amount), unit = b.unit === "days" ? 86400_000 : b.unit === "hours" ? 3600_000 : 0; return b.perm ? { perm: true, until: null } : Number.isInteger(n) && n >= 1 && n <= 3650 && unit ? { perm: false, until: new Date(Date.now() + n * unit), n } : null; };
 
 // ---- the second password ----
-admin.get("/me", guard(false, async (req, res, me) => { const un = unlocked.get(me.key), un2 = !!(un && un.uid === me.id && un.until > Date.now()); res.json({ role: me.role, unlocked: un2, persona: un2 && me.persona ? { name: me.persona.name, pic: me.persona.pic } : null }); }));
+admin.get("/me", guard(false, async (req, res, me) => {
+  const un = unlocked.get(me.key), un2 = !!(un && un.uid === me.id && un.until > Date.now()), h = await pwHashOf(me.id);
+  res.json({ role: me.role, owner: isOwner(me.username), needPassword: !h.admin_pw_hash && !isOwner(me.username), unlocked: un2, persona: un2 && me.persona ? { name: me.persona.name, pic: me.persona.pic } : null });
+}));
+// (owner) new staff make their own panel password (not their login's); it unlocks the panel from then on
+admin.post("/password", guard(false, async (req, res, me) => {
+  const h = await pwHashOf(me.id), un = unlocked.get(me.key), un2 = !!(un && un.uid === me.id && un.until > Date.now());
+  if (h.admin_pw_hash && !un2) return fail(res, 403, "Locked.");                       // changing it needs the panel open
+  const pw = (req.body || {}).password, p = pwProblem(pw); if (p) return fail(res, 400, p);
+  if (h.password && h.password !== "!" && await verifySecret(pw, h.password).catch(() => false)) return fail(res, 400, "Use a different password from your login.");
+  await pool.query(`UPDATE users SET admin_pw_hash = $2 WHERE id = $1`, [me.id, await hashSecret(pw)]);
+  unlocked.set(me.key, { uid: me.id, until: Date.now() + UNLOCK_MS }); res.json({ ok: true });
+}, false));
 // (owner) the admin profile: made when an admin first opens the panel, changed from its menu; every earlier line and log
 // entry of theirs then shows the new one
 admin.post("/persona", guard(true, async (req, res, me) => {
@@ -92,7 +113,10 @@ admin.post("/persona", guard(true, async (req, res, me) => {
 admin.post("/unlock", guard(false, async (req, res, me) => {
   if (!PTR && !allow("admin-unlock", me.id, 5, 15 * 60_000)) return fail(res, 429, "Too many tries. Wait a few minutes.");   // (not in the PTR: its tests unlock often)
   const pw = req.body && req.body.password;
-  if (typeof pw !== "string" || pw.length > 200 || !(await verifySecret(pw, ADMIN_PASSWORD_HASH))) return fail(res, 403, "Wrong password.");
+  // (owner) a staff member's own password; Nyssary's is the shared one (until they make their own)
+  const h = await pwHashOf(me.id), hash = h.admin_pw_hash || (isOwner(me.username) ? ADMIN_PASSWORD_HASH : null);
+  if (!hash) return fail(res, 403, "Make your admin password first.");
+  if (typeof pw !== "string" || pw.length > 200 || !(await verifySecret(pw, hash))) return fail(res, 403, "Wrong password.");
   unlocked.set(me.key, { uid: me.id, until: Date.now() + UNLOCK_MS }); res.json({ ok: true });
 }));
 admin.post("/lock", guard(false, async (req, res, me) => { unlocked.delete(me.key); res.json({ ok: true }); }));
@@ -266,7 +290,7 @@ admin.post("/words/request", guard(true, async (req, res, me) => {
   await log(me, { id: null, username: word }, "word requested", "", { cat: b.cat }); res.json({ ok: true, word });
 }));
 admin.post("/words/decide", guard(true, async (req, res, me) => {
-  if (me.role !== "head") return fail(res, 403, "Only the Head Admin can do that.");
+  if (me.role !== "head") return fail(res, 403, "Only a Head Admin can do that.");
   const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request.");
   const { rows } = await pool.query(`SELECT * FROM filter_words WHERE id = $1`, [String(b.id)]); const w = rows[0];
   if (!w || w.status !== "pending") return fail(res, 404, "That request isn't pending.");
@@ -345,14 +369,19 @@ admin.post("/ticket/say", guard(true, async (req, res, me) => { const b = req.bo
 admin.post("/ticket/close", guard(true, async (req, res, me) => { const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request."); try { await tickets.closeTicket(me, String(b.id)); res.json({ ok: true }); } catch (e) { fail(res, 400, e.message); } }));
 
 // ---- the Head Admin only ----
-const head = (fn) => guard(true, async (req, res, me) => { if (me.role !== "head") return fail(res, 403, "Only the Head Admin can do that."); await fn(req, res, me); });
+const head = (fn) => guard(true, async (req, res, me) => { if (me.role !== "head") return fail(res, 403, "Only a Head Admin can do that."); await fn(req, res, me); });
+// (owner) roles: a Head Admin makes or removes Moderators; only Nyssary makes or removes Head Admins. A staff member who
+// loses their role has their panel locked at once and their own password dropped (a new one if they're made staff again).
 admin.post("/role", head(async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
-  if (String(t.id) === me.id || t.role === "head") return fail(res, 403, "You can't change that player's role.");
-  const make = !!b.admin; if (make === (t.role === "admin")) return res.json({ ok: true });
-  await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make ? "admin" : null]);
-  if (!make) for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);   // a removed admin's panel locks at once
-  await log(me, t, make ? "make admin" : "remove admin", cleanReason(b.reason)); res.json({ ok: true });
+  const want = b.role === "head" ? "head" : b.role === "mod" || b.admin === true ? "admin" : null;
+  if (String(t.id) === me.id || isOwner(t.username)) return fail(res, 403, "You can't change that player's role.");
+  if ((want === "head" || t.role === "head") && !isOwner(me.username)) return fail(res, 403, "Only Nyssary can do that.");
+  if ((t.role || null) === want) return res.json({ ok: true });
+  await pool.query(`UPDATE users SET role = $2${want ? "" : ", admin_pw_hash = NULL"} WHERE id = $1`, [t.id, want]);
+  if (!want) for (const [k, v] of unlocked) if (v.uid === String(t.id)) unlocked.delete(k);   // a removed staff member's panel locks at once
+  const NAME = { head: "Head Admin", admin: "Moderator" };
+  await log(me, t, want ? "make " + NAME[want] : "remove " + NAME[t.role], cleanReason(b.reason)); res.json({ ok: true });
 }));
 admin.post("/license", head(async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");

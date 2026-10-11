@@ -22,6 +22,7 @@ export async function saveAdminDm(pid, d) {
 }
 export async function deleteAdminDm(pid) { await pool.query(`DELETE FROM admin_dms WHERE player_id = $1`, [pid]); }
 export async function setFrozenRow(pid, on, adminId) { await pool.query(`UPDATE users SET frozen = $2, frozen_by = $3, frozen_at = CASE WHEN $2 THEN now() END, frozen_reason = NULL WHERE id = $1`, [pid, on, on ? adminId : null]); }
+export async function roleOf(id) { const { rows } = await pool.query(`SELECT role FROM users WHERE id = $1`, [id]); return rows[0] ? rows[0].role || null : null; }
 export async function userByName(name) { const { rows } = await pool.query(`SELECT id, username FROM users WHERE lower(username) = lower($1)`, [name]); return rows[0] ? { id: String(rows[0].id), name: rows[0].username } : null; }
 
 /** Every account (id, username): each gets a player station (owner). */

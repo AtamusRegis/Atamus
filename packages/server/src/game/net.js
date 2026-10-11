@@ -7,7 +7,7 @@ import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } fr
 import { celestialsForClient } from "./celestials.js";
 import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
 import { personaOf } from "../personas.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName, roleOf } from "./persist.js";
 import { scan } from "../namefilter.js";
 import { flagLine, HEAT_MAX } from "../language.js";
 import { onAppealLine, subscribers } from "../appeals.js";
@@ -76,6 +76,7 @@ export function attachGameServer(httpServer) {
     if (!isUnlocked(pid) || !personaOf(pid)) return;
     let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
     if (!!m.on === !!d.frozen) return;
+    if (m.on && await roleOf(to)) { sendTo(pid, { t: "admstate", with: d.name, frozen: false }); return; }   // (owner) staff can't freeze staff
     await setFreeze(to, !!m.on, { id: pid, name: pName(pid) });
   }
   async function admEnd(pid, m) {                      // (owner) closing the DM ends it, and thaws the player
