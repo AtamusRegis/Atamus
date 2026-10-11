@@ -4,11 +4,13 @@
 // password) or denies. While a request is open, the account's real owner sees it when they log in and can say "This is
 // not me", which closes it and tells the Head Admin.
 import crypto from "node:crypto";
+import { safeText } from "./textsafe.js";
 import { pool } from "./db.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { adminShown } from "./personas.js";
+import { unlockAccount } from "./security.js";
 
-const clean = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 1000) : "");
+const clean = (t) => safeText(t, 1000);
 const TOKEN_MS = 3 * 3600_000, tokens = new Map();         // token -> { id (request), until }
 let notify = () => {};                                     // (net.js / admin.js) the Head Admin is told
 export const onResetLine = (fn) => { notify = fn; };
@@ -61,7 +63,7 @@ export async function adminSay(admin, id, raw) {
 /** Approve (the temporary password becomes the account's password) or deny. Returns the request. */
 export async function closeReset(admin, id, approve) {
   const r = await row(id); if (!r || r.status !== "open") throw new Error("This request isn't open.");
-  if (approve) await pool.query(`UPDATE users SET password = $2 WHERE id = $1`, [r.user_id, r.temp_hash]);
+  if (approve) { await pool.query(`UPDATE users SET password = $2 WHERE id = $1`, [r.user_id, r.temp_hash]); await unlockAccount(r.user_id); }   // (an approved reset also unlocks a locked account)
   await pool.query(`UPDATE reset_requests SET status = $2, closed_by = $3, closed_at = now() WHERE id = $1`, [r.id, approve ? "approved" : "denied", admin.id]);
   await addLine(r, true, admin.id, admin.name, approve ? "Approved: your temporary password is now this account's password. Log in with it, then change it." : "Denied.");
   return r;

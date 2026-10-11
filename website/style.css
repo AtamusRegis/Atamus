@@ -416,3 +416,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .reset-note { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 8px; background: rgba(229,56,59,0.08); border: 1px solid rgba(229,56,59,0.35); }
 .reset-note p { margin: 0; color: var(--text-dim); font-size: 13px; }
 .reset-note .reset-title { color: #ff8a8a; font-weight: 600; letter-spacing: .04em; }
+
+/* (owner) the DB-IP credit its free database asks for */
+.site-foot { position: relative; z-index: 2; text-align: center; padding: 8px 16px 20px; font-size: 11px; }
+.site-foot a { color: var(--muted, #6f8aa6); text-decoration: none; }

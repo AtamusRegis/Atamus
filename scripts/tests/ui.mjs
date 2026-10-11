@@ -361,7 +361,7 @@ r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: 
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
   return { btn: true, masked, tabs, rows, info, lic, cards, meters, apTabs, prof, said, log };`);
 t.ok(r.btn && r.masked && r.tabs === "Players,Reports,Appeals,Chat,Names,Words,Support,Log,Resets,Review,Notifications,Players,Staff,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Staff / Disciplined), Reports, Appeals, Chat, Names, Words, Support, Log and Notifications (owner)", r);
-t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.apTabs === "Player,Pilots,Language" && r.cards >= 1 && r.lic >= 1 && r.log, "a player's admin info; their pilots as on the Pilot window, with their licenses (owner)", r);
+t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.apTabs === "Player,Pilots,Language,Security" && r.cards >= 1 && r.lic >= 1 && r.log, "a player's admin info; their pilots as on the Pilot window, with their licenses (owner)", r);
 t.ok(r.meters === 7, "the Language tab: the overall meter and one per kind of word (owner)", r.meters);
 t.ok((r.prof.pics === 6 || r.prof.pics === 0) && r.prof.after && r.prof.menu === "Admin Profile", "first the admin profile (6 pictures); the panel's menu changes it (owner)", r.prof);
 t.ok(r.said && r.said.admin && r.said.pic && /^Warden_/.test(r.said.who) && r.said.sw === "Admin", "the chat's Player / Admin switch: as Admin, a line under the admin name and picture (owner)", r.said);

@@ -5,6 +5,7 @@
 // timeout: the appeal closes and no new one can be made for days / months / years; after a timeout the player gets
 // one more appeal (owner).
 import crypto from "node:crypto";
+import { safeText } from "./textsafe.js";
 import { pool } from "./db.js";
 import { adminShown } from "./personas.js";
 
@@ -19,7 +20,7 @@ export function appealToken(uid) {
   const t = crypto.randomBytes(24).toString("base64url"); tokens.set(t, { uid: String(uid), until: now + TOKEN_MS }); return t;
 }
 export const tokenUser = (t) => { const v = typeof t === "string" ? tokens.get(t) : null; return v && v.until > Date.now() ? v.uid : null; };
-export const cleanText = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 1000) : "");
+export const cleanText = (t) => safeText(t, 1000);
 const isBanned = (u) => !!(u.ban_perm || (u.ban_until && new Date(u.ban_until) > new Date()));
 
 /** Where a player's appeals stand: their ban, how many appeals this ban has had (since its start, or since a "no new

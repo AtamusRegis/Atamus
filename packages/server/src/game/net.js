@@ -1,5 +1,6 @@
 // The game socket: one session per account, a few commands in, snapshots out at 15 Hz.
 import { WebSocketServer } from "ws";
+import { safeText } from "../textsafe.js";
 import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
 import { World } from "./world.js";
@@ -22,8 +23,11 @@ import { DOCK_KM } from "./station.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand, ptrAs } from "../ptr.js";
 import { getState } from "../pilots.js";
+import { deviceOf, strikes, timeOut, timedOut } from "../security.js";
 
 const world = new World();
+// the commands a client may send (anything else counts as malformed)
+const KNOWN = new Set(["move", "view", "pilots", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
@@ -57,7 +61,7 @@ export function attachGameServer(httpServer) {
     }
   }).catch((e) => console.error("admin rooms", e));
   const onlineByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return { id: p.id, name: p.name }; return null; };
-  const cleanText = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 500) : "");
+  const cleanText = (t) => safeText(t, 500);
   const roomOf = (pid, m) => { const r = typeof m.room === "string" ? rooms.get(m.room) : null; return r && isIn(r, pid) ? r : null; };
   // the room a staff member shares with a player (by name)
   // (the room they share: a one-to-one room first, else any room with both in it)
@@ -192,6 +196,7 @@ export function attachGameServer(httpServer) {
     chatLog: (pid) => chatLogFor(String(pid)),
     shipNames: (pid) => shipNamesOf(String(pid)),
     online: () => new Set(conns.keys()),
+    deviceBusy: (device, uid) => { for (const [id, set] of conns) if (id !== uid) for (const c of set) if (c.device === device && !c.replaced) return true; return false; },   // (owner) one account per device
     kick: (pid, code, msg) => { for (const c of conns.get(pid) || []) { try { c.send(JSON.stringify(msg)); c.close(code, msg.t); } catch {} } },
     refreshPilots: async (pid) => { if (!world.players.has(pid)) return; try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch (e) { console.error("admin refresh", e); } },
   });
@@ -204,10 +209,18 @@ export function attachGameServer(httpServer) {
     const origin = req.headers.origin;
     if (origin && !config.allowedOrigins.includes(origin)) { ws.close(4003, "origin"); return; }
     let user = await getSessionUser(readCookie(req));
-    if (PTR) { const as = new URL(req.url || "/", "http://ptr").searchParams.get("as"); if (as) user = await ptrAs(as); }   // (PTR only: a second test account)
+    const qs = new URL(req.url || "/", "http://x").searchParams;
+    let as = null; if (PTR) { as = qs.get("as"); if (as) user = await ptrAs(as); }   // (PTR only: a second test account)
     if (!user) { ws.close(4001, "auth"); return; }
-
+    // (owner) the browser's device id: one account at a time per device, and timeouts hold the device as well as the account
+    let device = deviceOf(qs.get("d"));
+    if (PTR && !device) device = "ptrdevice0000000" + (as ? "-" + String(as).replace(/[^A-Za-z0-9_]/g, "").slice(0, 20) : "");   // (the PTR's test scripts send none)
+    if (!device) { ws.close(4010, "device"); return; }
+    ws.device = device;
     const pid = String(user.id);
+    { const until = await timedOut(pid, device).catch(() => null); if (until) { ws.close(4008, String(new Date(until).getTime())); return; } }
+    for (const [id, set] of conns) if (id !== pid) for (const c of set) if (c.device === device && !c.replaced) { ws.close(4009, "device"); return; }
+    if (ws.readyState !== ws.OPEN) return;
     const send = (s) => { if (ws.readyState === ws.OPEN) ws.send(s); };
     if (!conns.has(pid)) conns.set(pid, new Set());
     const mine = conns.get(pid);
@@ -240,12 +253,23 @@ export function attachGameServer(httpServer) {
 
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
+    // (owner) malformed messages (not JSON, no command, a command the game doesn't have, flooding) from a client that isn't
+    // ours or a bot: too many and its device and account are timed out (5 minutes, then 30, then a day) and staff are told
+    const strike = strikes(); let drops = 0, timingOut = false;
+    const bad = (n, why) => {
+      if (timingOut || !strike(n)) return;
+      timingOut = true;
+      timeOut(pid, device, why).then((until) => {
+        try { ws.close(4007, String(until.getTime())); } catch {}
+        staffNotify(["head", "admin"], "security", "Timed out " + user.username + " until " + until.toUTCString() + ": too many malformed messages from their client (" + why + ").", { player: pid }).catch(() => {});
+      }).catch((e) => { console.error("timeout", e); try { ws.close(4007, "timeout"); } catch {} });
+    };
     ws.on("message", (buf) => {
-      if (ws.replaced) return;                              // nothing from a session that's been replaced
+      if (ws.replaced || timingOut) return;                 // nothing from a session that's been replaced
       const now = Date.now(); budget = Math.min(40, budget + (now - budgetAt) * 0.04); budgetAt = now;
-      if (budget < 1) return; budget--;
-      let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-      if (!m || typeof m !== "object" || typeof m.t !== "string") return;
+      if (budget < 1) { if (++drops % 20 === 0) bad(1, "flooding"); return; } budget--;
+      let m; try { m = JSON.parse(buf.toString()); } catch { bad(1, "not JSON"); return; }
+      if (!m || typeof m !== "object" || Array.isArray(m) || typeof m.t !== "string" || !KNOWN.has(m.t)) { bad(1, "unknown command"); return; }
       if (world.frozen.has(pid) && m.t !== "view" && m.t !== "adm") return;   // (owner) frozen: nothing but looking around and answering the admin
       try {
         switch (m.t) {

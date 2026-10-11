@@ -13,6 +13,7 @@ import { checkName } from "./names.js";
 import { appealToken, tokenUser, appealState, playerWrite } from "./appeals.js";
 import * as resets from "./resets.js";
 import { gameHook } from "./admin.js";
+import * as sec from "./security.js";
 
 export const auth = express.Router();
 
@@ -92,6 +93,7 @@ auth.post("/signup", async (req, res) => {
 
     await client.query("COMMIT");
 
+    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz), req).catch((e) => console.error("signup login", e)); }   // (the first login's place and device)
     const { token, expires } = await createSession(userId);
     setSessionCookie(res, token, expires);
     res.status(201).json({ username, email: email || null, hasRecovery: !!recoveryRows });
@@ -106,14 +108,17 @@ auth.post("/signup", async (req, res) => {
 
 auth.post("/login", async (req, res) => {
   const ip = clientIp(req);
-  if (!PTR && !allow("login", ip, 10, 15 * 60_000))   // (the PTR's test suite logs in test accounts many times)
+  // (owner) a broad cap per address only (many players can share a VPN's); failed logins back off per account and device
+  if (!PTR && !allow("login", ip, 120, 15 * 60_000))   // (the PTR's test suite logs in test accounts many times)
     return fail(res, 429, "Too many attempts. Please wait a few minutes.");
 
   const { username, password } = req.body || {};
-  if (!username || !password) return fail(res, 400, "Enter your username and password.");
+  if (typeof username !== "string" || typeof password !== "string" || !username || !password || username.length > 40 || password.length > 200) return fail(res, 400, "Enter your username and password.");
+  const device = sec.deviceOf((req.body || {}).device), tz = sec.tzOf((req.body || {}).tz);
+  { const wait = await sec.loginWait(username, device, ip); if (wait) return fail(res, 429, "Too many failed logins. Try again in " + wait + (wait === 1 ? " minute." : " minutes.")); }
 
   const { rows } = await pool.query(
-    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at,
+    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at, locked_reason,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = users.id) AS has_recovery
        FROM users WHERE lower(username) = lower($1)`,
     [username]
@@ -128,10 +133,19 @@ auth.post("/login", async (req, res) => {
     const r = await resets.requestByTemp(user.id, password);
     if (r) return res.status(403).json({ error: "Password reset request", reset: await resets.resetView(r.id), resetToken: resets.resetToken(r.id) });
   }
-  if (!user || !ok) return fail(res, 401, "Incorrect username or password.");
+  if (!user || !ok) {
+    sec.loginFailed(username, device, ip); if (user) sec.recordFailed(user.id, ip, device, tz, req).catch((e) => console.error("login record", e));
+    return fail(res, 401, "Incorrect username or password.");
+  }
+  sec.loginSucceeded(username, device, ip);
   // (owner) a banned player is told why (and until when) at login, and where their appeal stands
   if (isBanned(user))
     return res.status(403).json({ error: banText(user), ban: { perm: !!user.ban_perm, until: user.ban_until, reason: user.ban_reason || "" }, appeal: forPlayer(await appealState(user.id)), appealToken: appealToken(user.id) });
+
+  // (owner) a locked account (suspected sharing or compromise), and where this login comes from
+  if (user.locked_reason) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
+  if (device && gameHook("deviceBusy", device, String(user.id))) return fail(res, 409, "Another account is playing on this device.");   // (owner) one account per device
+  if ((await sec.checkLogin(user, ip, device, tz, req)).locked) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
@@ -251,6 +265,7 @@ auth.post("/recover/finish", async (req, res) => {
   await pool.query(`UPDATE users SET password = $1 WHERE id = $2`, [passHash, userId]);
   await pool.query(`DELETE FROM recovery_tokens WHERE user_id = $1`, [userId]);
   await destroyAllSessions(userId); // force re-login everywhere
+  await sec.unlockAccount(userId);   // (owner) the recovery answers unlock a locked account
 
   res.json({ ok: true });
 });

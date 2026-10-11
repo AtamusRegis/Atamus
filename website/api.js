@@ -5,6 +5,15 @@
 // atamus.io talks to the live server; anything else (the private PTR copy) talks to whoever served the page
 const API_BASE = /(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin;
 
+// (owner) this browser's device id, made once and kept: the server allows one account at a time per device and looks at
+// which devices an account logs in from (kept in memory for the page if storage is unavailable)
+let deviceMem = null;
+function deviceId() {
+  try { let d = localStorage.getItem("atamus.device"); if (!/^[A-Za-z0-9_-]{16,64}$/.test(d || "")) { d = crypto.randomUUID().replace(/-/g, ""); localStorage.setItem("atamus.device", d); } return d; }
+  catch { return deviceMem || (deviceMem = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("")); }
+}
+const timeZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch { return ""; } };
+
 const Api = {
   /**
    * POST JSON to the server. Resolves with the parsed JSON body.
@@ -17,7 +26,7 @@ const Api = {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
+        body: JSON.stringify(/^\/auth\/(login|signup)$/.test(path) ? { ...(body ?? {}), device: deviceId(), tz: timeZone() } : (body ?? {})),
       });
     } catch {
       throw new Error("Can't reach the Atamus server right now. Please try again in a moment.");

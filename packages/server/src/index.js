@@ -9,6 +9,7 @@ import { admin, loadPersonas } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
 import { loadNameData } from "./names.js";
 import { loadRelations } from "./relations.js";
+import { startGeo } from "./geo.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -17,6 +18,13 @@ const app = express();
 // Behind Caddy, so trust the proxy for correct client IPs and secure cookies.
 app.set("trust proxy", 1);
 
+// (owner) security headers: no sniffing, no framing, no referrer leaks, and (for pages the PTR serves) only this site's scripts
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff"); res.setHeader("X-Frame-Options", "DENY"); res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'");
+  next();
+});
 app.use(express.json({ limit: "32kb" }));
 
 app.use(cors({
@@ -47,7 +55,8 @@ async function main() {
   await migrate();
   await loadPersonas();
   await loadNameData();
-  await loadRelations();                                 // (owner) players' mutes and blocks                                  // (owner) banned names' keys, approved filter words                                  // (owner) admins' profiles
+  await loadRelations();                                 // (owner) players' mutes and blocks
+  startGeo();                                            // (owner) IP places and VPN lists for the login checks (security.js)
   await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();

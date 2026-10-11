@@ -1,4 +1,5 @@
 import express from "express";
+import { safeText } from "./textsafe.js";
 import { getSessionUser, readCookie } from "./sessions.js";
 import { CATALOG } from "./licenses.js";
 import { PORTRAIT_PARTS } from "./portraits.js";
@@ -89,7 +90,7 @@ game.post("/promotion", auth, async (req, res) => {
     const b = req.body || {}, { rows } = await pool.query(`SELECT username, promo_pending, promo_from FROM users WHERE id = $1`, [req.uid]), u = rows[0];
     if (!u || !u.promo_pending) throw new Error("No promotion to answer.");
     const NAME = { admin: "Admin", mod: "Moderator" }, role = NAME[u.promo_pending] || u.promo_pending;
-    const why = typeof b.reason === "string" ? b.reason.replace(/\s+/g, " ").trim().slice(0, 500) : "";   // (owner) an Admin's note, accepting or declining
+    const why = safeText(b.reason, 500);   // (owner) an Admin's note, accepting or declining
     if (b.accept === true) {
       await pool.query(`UPDATE users SET promo_pending = NULL, promo_from = NULL WHERE id = $1`, [req.uid]);
       await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason) VALUES ($1, $2, $1, $2, $3, $4)`, [req.uid, u.username, "accepted " + role, why]);

@@ -2,6 +2,7 @@
 // Prospector per pilot that flies, aligns and warps where it's told, and asteroid belt POIs. Everything else the game
 // had is kept for reference in reference/2026-10-10-pre-reset/.
 import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, DRONE, droneLegMs, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
+import { safeText } from "../textsafe.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
@@ -39,7 +40,7 @@ export function clampToExpanse(x, y, margin = 0) {
 }
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
 /** A ship's name (owner: ships can be renamed): printable, squashed whitespace, 1-24 characters; null if nothing's left. */
-export const cleanShipName = (v) => { if (typeof v !== "string") return null; const t = v.replace(/\s+/g, " ").replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, "").replace(/ +/g, " ").trim().slice(0, 24).trim(); return t || null; };
+export const cleanShipName = (v) => { if (typeof v !== "string") return null; const t = safeText(v, 24); return t || null; };   // (owner) the same cleaning as all player text
 // (owner, 2026-10-11) ships fly straight to their destination, over anything in the way, until given another; they
 // just can't stop on an object. A destination is kept DEST_CLEAR_KM clear of touching an asteroid (its whole art: half
 // its size) or a Library prop (its art's box) — the zone the client outlines on hover.
@@ -531,7 +532,7 @@ export class World {
    *  pilot. Local is everyone in the Expanse; everyone is in Deep Core Industries for now, so Corp reaches everyone too. */
   cmdChat(pid, text, channel, to, ship, persona = null) {
     const p = this.players.get(pid); if (!p || typeof text !== "string") return;
-    const clean = text.replace(/\s+/g, " ").trim().slice(0, 240); if (!clean) return;
+    const clean = safeText(text, 240); if (!clean) return;
     if (persona) {                                        // (owner) an admin speaking as admin: their admin name and picture; no ship says it
       const ch = channel === "corp" ? "corp" : "local";
       const msg = JSON.stringify({ t: "chat", ch, from: persona.name, admin: persona.key, pic: persona.pic, rank: persona.rank || "admin", ...(persona.portrait ? { portrait: persona.portrait } : {}), text: censor(clean), ts: Date.now() });

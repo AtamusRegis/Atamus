@@ -3,10 +3,11 @@
 // the appeal can't be used to bother the other player. An admin accepts (the mute / block is lifted on both lists) or
 // denies (it closes).
 import { pool } from "./db.js";
+import { safeText } from "./textsafe.js";
 import { adminShown } from "./personas.js";
 import { adminSet, setRelation } from "./relations.js";
 
-const clean = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 1000) : "");
+const clean = (t) => safeText(t, 1000);
 let notify = () => {};                                     // (net.js) tell both players and the admins of a change
 export const onRelAppeal = (fn) => { notify = fn; };
 

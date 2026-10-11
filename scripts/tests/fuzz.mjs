@@ -15,9 +15,10 @@ t.ok(await health(), "server survives malformed messages");
 const vals = [0, 1, -1, 2, 0.5, 1e9, -1e12, NaN, null, undefined, "1", "x", "__proto__", [], {}, true, Infinity];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const cmds = [() => ({ t: "move", ship: pick([SHIP, SHIP, "2:ship:0", ...vals]), x: pick(vals), y: pick(vals) }), () => ({ t: "view", x: pick(vals), y: pick(vals), w: pick(vals) })];
-for (let i = 0; i < 3000; i++) { c.send(cmds[Math.floor(Math.random() * cmds.length)]()); if (i % 30 === 0) await sleep(40); }
-await sleep(1500);
-t.ok(await health(), "server survives 3000 random commands");
+// (paced under the flood guard: flooding counts as malformed and times the client out, tested in security.mjs)
+for (let i = 0; i < 400; i++) { c.send(cmds[Math.floor(Math.random() * cmds.length)]()); await sleep(30); }
+await sleep(1000);
+t.ok(await health(), "server survives 400 random commands");
 const s = c.mine();
 t.ok(s && Number.isFinite(s.x) && Number.isFinite(s.y) && Number.isFinite(s.h), "the ship's numbers stay finite", s);
 t.ok(s && insideExpanse(s.x, s.y), "and it stays inside the hexagon", s);

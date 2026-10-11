@@ -1,4 +1,5 @@
 import { pool } from "./db.js";
+import { safeText } from "./textsafe.js";
 import { LICENSES, STARTING_LICENSES, getLicense, trainMs, requirementsMet } from "./licenses.js";
 import { cleanPortrait, randomPortrait } from "./portraits.js";
 import { checkName } from "./names.js";
@@ -67,7 +68,7 @@ let gameCredits = { take: () => null, give: () => {} };
 export const useGameCredits = (hooks) => { gameCredits = hooks; };
 export async function createPilot(userId, nameRaw, portraitRaw) {
   if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
-  const name = nameRaw.replace(/\s+/g, " ").trim().slice(0, 24);
+  const name = safeText(nameRaw, 24);
   if (!name) throw new Error("Pilot name required.");
   { const np = await checkName(name); if (np) throw new Error(np); }   // (owner) the name filter and banned names
   const portrait = portraitRaw == null ? randomPortrait() : cleanPortrait(portraitRaw);   // the website always sends one
@@ -230,7 +231,7 @@ export async function renameAccount(userId, raw) {
   return name;
 }
 export async function renamePilot(userId, pilotId, raw) {
-  const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 24) : "";
+  const name = safeText(raw, 24);
   if (typeof pilotId !== "string" && typeof pilotId !== "number") throw new Error("Pilot not found.");
   const p = await getOwnedPilot(userId, String(pilotId));
   if (!p.data.renameRequired) throw new Error("That pilot's name doesn't need changing.");
@@ -321,7 +322,7 @@ export async function fileReport(userId, b, chatOf = null) {
   const t = target.rows[0]; if (!t) throw new Error("No such player.");
   if (String(t.id) === String(userId)) throw new Error("You can't report yourself.");
   if (!REPORT_CATEGORIES.includes(b.category)) throw new Error("Pick what the report is about.");
-  const text = typeof b.text === "string" ? b.text.replace(/\s+/g, " ").trim().slice(0, 1000) : "";
+  const text = safeText(b.text, 1000);
   if (!text) throw new Error("Describe the issue.");
   const context = typeof b.context === "string" ? b.context.slice(0, 300) : null;
   const extra = chatOf ? chatOf(String(t.id)) : { chat: [], ships: [] };   // (owner) with the last hour of chat and their ship names then

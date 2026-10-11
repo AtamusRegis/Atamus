@@ -50,6 +50,9 @@ packages/server/src/
   tickets.js      support tickets
   staff.js        staff notifications (Admin chat lines or kept for later), the Admin chat, unread counts per admin tab
   db.js           schema, one-time WIPES
+  security.js     login records, failed-login backoff, impossible-travel locks and flags, malformed-message timeouts
+  geo.js          IP places (DB-IP Lite mmdb, downloaded into packages/server/data/) and VPN / datacenter ranges
+  textsafe.js     safeText: the one cleaner for all player-written text
   game/
     net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
     world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying (straight, over objects), align / warp, target locks, Align To / Move towards objects, collisions, chat
@@ -104,6 +107,8 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
+
+PTR test overrides: `x-ptr-as: Name` (HTTP) and `?as=Name` (socket) act as another account; `x-ptr-geo: lat,lon,city` and `x-ptr-vpn: 1` set a login's place and VPN status (security.js).
 
 The single PTR pilot is "Vera Kestrel" (pilot 1 after a reset). Ships are `<account>:ship:<pilot>`, so hers is `1:ship:1`; the world's center is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
 

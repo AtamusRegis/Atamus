@@ -35,10 +35,6 @@ for (const b of document.querySelectorAll("[data-to-request]")) b.addEventListen
   const u = stepUser.elements.username.value; stepUser.hidden = true; stepAnswers.hidden = true; stepRequest.hidden = false;
   if (u) stepRequest.elements.username.value = u; (u ? stepRequest.elements.temp : stepRequest.elements.username).focus();
 });
-document.getElementById("req-eye").addEventListener("click", (e) => {
-  e.preventDefault(); const t = stepRequest.elements.temp, show = t.type === "password";
-  t.type = stepRequest.elements.confirm.type = show ? "text" : "password"; e.target.textContent = show ? "Hide" : "Show";
-});
 stepRequest.addEventListener("submit", async (e) => {
   e.preventDefault(); showMessage(msg3, "");
   if (!stepRequest.reportValidity()) return;

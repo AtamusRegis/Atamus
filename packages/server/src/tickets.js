@@ -1,10 +1,11 @@
 // (owner, 2026-10-11) Support tickets: a player opens one (subject, category, message) and it becomes a conversation with
 // the admins until an admin closes it. (Later: admins assigned to tickets and subscribed by category.)
 import { pool } from "./db.js";
+import { safeText } from "./textsafe.js";
 import { adminShown } from "./personas.js";
 
 export const TICKET_CATEGORIES = ["Bug", "Account", "Player Behavior", "Gameplay", "Other"];
-const clean = (t, n = 1000) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, n) : "");
+const clean = (t, n = 1000) => safeText(t, n);
 let notify = () => {};                                     // (net.js) the player and the admins online are told of a new line
 export const onTicket = (fn) => { notify = fn; };
 

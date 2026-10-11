@@ -8,6 +8,7 @@
 //     the Head Admin to review (told at once; only the Head Admin lifts it); only Nyssary makes or removes staff.
 // No one acts on themselves, and staff can't discipline staff (owner).
 import crypto from "node:crypto";
+import { safeText } from "./textsafe.js";
 import express from "express";
 import { pool } from "./db.js";
 import { getSessionUser, readCookie, destroyAllSessions } from "./sessions.js";
@@ -26,6 +27,7 @@ import * as tickets from "./tickets.js";
 import { appealState, lines, subscribers, subscribe, adminWrite, closeAppeal, timeoutAppeal } from "./appeals.js";
 import { personaOf, adminShown, resolveLines, setPersona, loadPersonas, setRank } from "./personas.js";
 import { heatNow, kindHeat, HEAT_MAX, HEAT_HOT } from "./language.js";
+import { securityOf, unlockAccount } from "./security.js";
 export { loadPersonas };
 
 const ADMIN_PASSWORD_HASH = "scrypt$16384$8$1$4c30f6abf27a79c489f12869811f1ae9$cc0bd80ad3565c3c6b6404e4af96c61c06bba810a36133290e6c02b30970294b";
@@ -45,7 +47,7 @@ export const admin = express.Router();
 const sessionKey = (req, uid) => PTR ? "ptr:" + uid : crypto.createHash("sha256").update(readCookie(req) || "").digest("hex");
 const fail = (res, code, error) => res.status(code).json({ error });
 const isId = (v) => typeof v === "string" && /^[0-9]{1,15}$/.test(v) || (Number.isInteger(v) && v > 0);
-const cleanReason = (r) => (typeof r === "string" ? r.replace(/\s+/g, " ").trim().slice(0, REASON_MAX) : "");
+const cleanReason = (r) => safeText(r, REASON_MAX);
 
 // signed in with a role; `needUnlock`: and the second password given this session; `needPersona`: and an admin profile
 // made (owner: admins act under their admin name)
@@ -390,6 +392,15 @@ admin.post("/relation", guard(true, async (req, res, me) => {
   await log(me, t, (on ? "" : "lift ") + "admin " + b.kind, reason, { with: o.username, withId: String(o.id) });
   if (on) await modReview(me, t, b.kind === "mute" ? "set a mute between" : "set a block between", reason, { kind: b.kind, withId: String(o.id), with: o.username, text: "and " + o.username });
   res.json({ ok: true });
+}));
+// (owner) an account's logins (where from, which device), its lock (suspected sharing or compromise) and its timeouts;
+// Admins and the Head Admin only. Unlock: a reason each time
+admin.get("/player/:id/security", guard(true, async (req, res, me) => { if (noMod(me, res)) return; if (!isId(req.params.id)) return fail(res, 400, "Bad request."); res.json(await securityOf(req.params.id)); }));
+admin.post("/security/unlock", guard(true, async (req, res, me) => {
+  if (noMod(me, res)) return;
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  const reason = cleanReason(b.reason); if (!reason) return fail(res, 400, "Write a reason.");
+  await unlockAccount(t.id); await log(me, t, "unlock account", reason); res.json({ ok: true });
 }));
 admin.get("/player/:id/relations", guard(true, async (req, res) => { if (!isId(req.params.id)) return fail(res, 400, "Bad request."); res.json(await relationsOf(req.params.id)); }));
 // (owner) appeals of admin-set mutes / blocks: both players and the admins; a player writes once, more when an admin gives one

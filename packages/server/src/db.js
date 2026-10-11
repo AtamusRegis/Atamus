@@ -297,6 +297,21 @@ export async function migrate() {
       at TIMESTAMPTZ NOT NULL DEFAULT now(), until TIMESTAMPTZ NOT NULL, lifted_by BIGINT, lifted_at TIMESTAMPTZ
     );
     CREATE TABLE IF NOT EXISTS mod_susp_seen (susp_id BIGINT NOT NULL REFERENCES mod_suspensions(id) ON DELETE CASCADE, admin_id BIGINT NOT NULL, PRIMARY KEY (susp_id, admin_id));   -- (owner) a staff member's own panel password (scrypt)
+    -- (owner) security (security.js): each login (where from, which device), accounts locked on suspected sharing or
+    -- compromise, and timeouts for clients sending malformed messages
+    CREATE TABLE IF NOT EXISTS logins (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      ip TEXT, device TEXT, tz TEXT, city TEXT, country TEXT, lat DOUBLE PRECISION, lon DOUBLE PRECISION, vpn BOOLEAN NOT NULL DEFAULT false, result TEXT NOT NULL DEFAULT 'ok'
+    );
+    CREATE INDEX IF NOT EXISTS logins_user_idx ON logins (user_id, id DESC);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_reason TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS timeouts (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id) ON DELETE CASCADE, device TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      until TIMESTAMPTZ NOT NULL, reason TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS timeouts_user_idx ON timeouts (user_id, until DESC);
+    CREATE INDEX IF NOT EXISTS timeouts_device_idx ON timeouts (device, until DESC);
   `);
 }
 

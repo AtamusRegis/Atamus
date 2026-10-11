@@ -81,7 +81,7 @@
 
   // ---- connection ----
   Api.get("/auth/me").then((u) => { me.name = u.username; connect(); }).catch(() => { location.href = "login.html"; });
-  function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws"; }
+  function wsUrl() { const base = (typeof API_BASE !== "undefined" ? API_BASE : location.origin); return base.replace(/^http/, "ws") + "/ws?d=" + deviceId(); }
   function setStatus(t, k) { statusEl.textContent = t; statusEl.className = "status" + (k ? " " + k : ""); if (k === "ok") setTimeout(() => statusEl.classList.add("hidden"), 1200); else statusEl.classList.remove("hidden"); }
   function connect() {
     setStatus("Connecting…");
@@ -93,6 +93,11 @@
         reloading = true; const why = kickedWhy ? ": " + kickedWhy : ""; setStatus((e.code === 4006 ? "Banned" : "Kicked") + why, "err");
         setTimeout(() => { location.href = e.code === 4006 ? "login.html" : "play.html"; }, 5000); return;
       }
+      if (e.code === 4007 || e.code === 4008 || e.code === 4009) {   // (owner) timed out (malformed messages), or another account is playing on this device
+        reloading = true; setStatus(e.code === 4009 ? "Another account is playing on this device" : "Timed out" + (e.reason && /^\d+$/.test(e.reason) ? " until " + new Date(+e.reason).toLocaleString() : ""), "err");
+        setTimeout(() => { location.href = "play.html"; }, 5000); return;
+      }
+      if (e.code === 4011) { reloading = true; setStatus("Account locked", "err"); setTimeout(() => { location.href = "login.html"; }, 3000); return; }   // (owner) suspected sharing or compromise
       if (e.code === 4002) { reloading = true; setStatus("Playing on another tab or device", "err"); setTimeout(() => { location.href = "play.html"; }, 2500); return; }   // one session per account
       setStatus("Disconnected — retrying…", "err"); setTimeout(connect, 2000);
     };

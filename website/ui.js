@@ -812,11 +812,9 @@
       if (AD.me.suspendedUntil) { body.append(el("div", { class: "adm-lock" }, el("div", { class: "muted" }, "Suspended until " + fmtWhen(AD.me.suspendedUntil)))); return; }   // (owner) a suspended Moderator
       if (!AD.me.unlocked && AD.me.needPassword) {     // (owner) new staff: their own panel password first
         const pw = el("input", { class: "text-input adm-pw", type: "password", autocomplete: "new-password", spellcheck: "false" }), pw2 = el("input", { class: "text-input adm-pw", type: "password", autocomplete: "new-password", spellcheck: "false" }), err = el("div", { class: "form-err", hidden: "" });
-        // (owner) Show / Hide, only while making it (never on the unlock field)
-        const eye = el("button", { type: "button", class: "btn-ghost2 adm-mini adm-eye", onclick: () => { const show = pw.type === "password"; pw.type = pw2.type = show ? "text" : "password"; eye.textContent = show ? "Hide" : "Show"; } }, "Show");
         const go = async () => { if (pw.value !== pw2.value) { err.textContent = "Passwords don't match."; err.hidden = false; return; } try { await Api.post("/game/admin/password", { password: pw.value }); pw.value = pw2.value = ""; await adminLoad(); } catch (e) { err.textContent = e.message; err.hidden = false; } };
         for (const x of [pw, pw2]) x.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") go(); });
-        body.append(el("div", { class: "adm-lock" }, el("div", { class: "sheet-k adm-pw-head" }, el("span", {}, "New " + staffWord().toLowerCase() + " password"), eye), pw, el("div", { class: "sheet-k" }, "Confirm"), pw2, err, el("button", { class: "btn-primary2", onclick: go }, "Save")));
+        body.append(el("div", { class: "adm-lock" }, el("div", { class: "sheet-k adm-pw-head" }, el("span", {}, "New " + staffWord().toLowerCase() + " password")), pw, el("div", { class: "sheet-k" }, "Confirm"), pw2, err, el("button", { class: "btn-primary2", onclick: go }, "Save")));
         setTimeout(() => pw.focus(), 30); return;
       }
       if (!AD.me.unlocked) {                           // the second password (masked; paste works)
@@ -1207,7 +1205,7 @@
   function renderAdminPlayer(body) {
     body.innerHTML = ""; const p = aplayer; if (!p) return; wins.aplayer.slot.textContent = p.name;
     const head = isHigh(), row = (k, v, btn) => el("div", { class: "sheet-row" }, el("span", { class: "sheet-k" }, k), el("span", { class: "sheet-v" }, String(v), btn || null));
-    body.append(el("div", { class: "tab-row" }, [["info", "Player"], ["pilots", "Pilots"], ["lang", "Language"]].map(([k, n]) => el("button", { class: "tab" + (apTab === k ? " active" : ""), onclick: () => { apTab = k; renderAdminPlayer(body); } }, n))));
+    body.append(el("div", { class: "tab-row" }, [["info", "Player"], ["pilots", "Pilots"], ["lang", "Language"], ...(head ? [["sec", "Security"]] : [])].map(([k, n]) => el("button", { class: "tab" + (apTab === k ? " active" : ""), onclick: () => { apTab = k; renderAdminPlayer(body); } }, n))));
     const box = el("div", { class: "adm-list" });
     if (apTab === "info") {
       const reset = (what) => head ? el("button", { class: "btn-ghost2 adm-mini", onclick: () => adminDo("/reset", { id: p.id, what }) }, "Reset") : null;
@@ -1224,6 +1222,15 @@
         const text = el("div", { class: "adm-reason" });
         for (const part of f.text.split(/(\s+)/)) text.append(part.trim() && f.words.some((w) => part.includes(w)) ? el("mark", { class: "adm-mark" }, part) : part);
         box.append(el("div", { class: "adm-log" }, el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(f.at)), el("span", { class: "adm-when" }, f.channel === "corp" ? "Corp" : "Local"), el("span", { class: "adm-by" }, f.cats.map((c) => FLAG_NAME[c] || c).join(", "))), text));
+      }
+    } else if (apTab === "sec" && head) {             // (owner) logins, devices, the account's lock and timeouts
+      if (!p.sec) { Api.get("/game/admin/player/" + encodeURIComponent(p.id) + "/security").then((x) => { if (aplayer === p) { p.sec = x; renderAdminPlayer(wins.aplayer.body); } }).catch((e) => flash(e.message)); }
+      else {
+        box.append(row("Locked", p.sec.locked ? fmtWhen(p.sec.locked.at) + " · " + p.sec.locked.reason : "No", p.sec.locked ? el("button", { class: "btn-ghost2 adm-mini", onclick: () => adminReason("Unlock", (reason) => adminDo("/security/unlock", { id: p.id, reason }).then(() => { p.sec = null; renderAdminPlayer(wins.aplayer.body); })) }, "Unlock") : null),
+          row("Devices (30 days)", p.sec.devices30));
+        for (const t of p.sec.timeouts) box.append(row("Timed out", fmtWhen(t.at) + " – " + fmtWhen(t.until) + " · " + t.reason));
+        for (const l of p.sec.logins) box.append(el("div", { class: "adm-log" }, el("div", { class: "adm-log-head" }, el("span", { class: "adm-when" }, fmtWhen(l.at)), el("span", { class: "adm-when" }, l.device), el("span", { class: "adm-by" }, l.result === "ok" ? "Login" : l.result === "failed" ? "Failed" : l.result === "locked" ? "Locked" : "Unlocked")),
+          el("div", { class: "adm-reason" }, [l.place, l.tz, l.vpn ? "VPN" : ""].filter(Boolean).join(" · "))));
       }
     } else renderAdminPilots(box, p, head);
     body.append(box);
