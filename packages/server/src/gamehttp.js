@@ -82,6 +82,27 @@ game.post("/name-offer", auth, async (req, res) => {
     res.json({ name: r.name }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+// (owner) a promotion to Moderator or Admin: accepted, the role's powers start; declined (with why), they go back to the
+// role they had and the Head Admin alone is told
+game.post("/promotion", auth, async (req, res) => {
+  try {
+    const b = req.body || {}, { rows } = await pool.query(`SELECT username, promo_pending, promo_from FROM users WHERE id = $1`, [req.uid]), u = rows[0];
+    if (!u || !u.promo_pending) throw new Error("No promotion to answer.");
+    const NAME = { admin: "Admin", mod: "Moderator" }, role = NAME[u.promo_pending] || u.promo_pending;
+    const why = typeof b.reason === "string" ? b.reason.replace(/\s+/g, " ").trim().slice(0, 500) : "";   // (owner) an Admin's note, accepting or declining
+    if (b.accept === true) {
+      await pool.query(`UPDATE users SET promo_pending = NULL, promo_from = NULL WHERE id = $1`, [req.uid]);
+      await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason) VALUES ($1, $2, $1, $2, $3, $4)`, [req.uid, u.username, "accepted " + role, why]);
+      gameHook("staffNotify", ["head"], "promotion", u.username + " accepted " + role + (why ? ": " + why : "."), { player: req.uid });
+    } else {
+      if (!why) throw new Error("Write why.");
+      await pool.query(`UPDATE users SET role = promo_from, promo_pending = NULL, promo_from = NULL, admin_pw_hash = NULL WHERE id = $1`, [req.uid]);
+      await pool.query(`INSERT INTO admin_log (admin_id, admin_name, target_id, target_name, action, reason) VALUES ($1, $2, $1, $2, $3, $4)`, [req.uid, u.username, "declined " + role, why]);
+      gameHook("staffNotify", ["head"], "promotion", u.username + " declined " + role + ": " + why, { player: req.uid });
+    }
+    res.json({ ok: true });
+  } catch (e) { fail400(res, e); }
+});
 game.post("/pilot/rename", auth, async (req, res) => {
   try { const name = await pilots.renamePilot(req.uid, req.body?.pilotId, req.body?.name); await gameHook("refreshPilots", req.uid); res.json({ name }); }
   catch (e) { res.status(400).json({ error: e.message }); }

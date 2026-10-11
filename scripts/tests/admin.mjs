@@ -103,18 +103,46 @@ await q("/reset", { id: String(bob.id), what: "credits" }); await q("/reset", { 
 r = await q("/player/" + bob.id); t.ok(r.body.credits === 0 && r.body.corp === "Deep Core Industries", "credits and corporation reset", r.body);
 r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.body.ok && (await db.query(`SELECT role FROM users WHERE id = $1`, [bob.id])).rows[0].role === "mod", "the Head Admin makes Moderators");
 await q("/role", { id: String(bob.id), role: null });
+// (owner) a promotion waits to be accepted (its role has no powers until then); declining (with why) goes back to the role
+// they had, and only the Head Admin is told
+{ const gb = (path, body) => fetch(BASE + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestBob" }, ...(body ? { body: JSON.stringify(body) } : {}) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+  await q("/role", { id: String(bob.id), role: "mod" });
+  r = await gb("/game/state"); t.ok(r.body.profile.promoPending === "mod", "the promoted player's game opens the promotion page (owner)", r.body.profile);
+  r = await gb("/game/admin/unlock", { password: "x" }); t.ok(r.status === 403 && /Accept your promotion/.test(r.body.error), "no powers until it's accepted", r.body);
+  r = await gb("/game/promotion", { accept: false }); t.ok(r.status === 400 && /Write why/.test(r.body.error), "declining needs a reason");
+  r = await gb("/game/promotion", { accept: false, reason: "too busy right now" }); const u1 = (await db.query(`SELECT role, promo_pending FROM users WHERE id = $1`, [bob.id])).rows[0];
+  t.ok(r.body.ok && !u1.role && !u1.promo_pending, "declined: back to a player", u1);
+  t.ok((await q("/notes")).body.some((n) => n.kind === "promotion" && /declined Moderator: too busy right now/.test(n.text)), "the Head Admin is told why (owner)");
+  await q("/role", { id: String(bob.id), role: "mod" }); r = await gb("/game/promotion", { accept: true }); const u2 = (await db.query(`SELECT role, promo_pending FROM users WHERE id = $1`, [bob.id])).rows[0];
+  t.ok(r.body.ok && u2.role === "mod" && !u2.promo_pending, "accepted: the role's powers start", u2);
+  await q("/role", { id: String(ann.id), role: "admin" }); await db.query(`UPDATE users SET role = 'mod' WHERE id = $1`, [bob.id]);
+  await q("/role", { id: String(bob.id), role: "admin" }); r = await gb("/game/promotion", { accept: false, reason: "happy as a Moderator" });
+  t.ok((await db.query(`SELECT role FROM users WHERE id = $1`, [bob.id])).rows[0].role === "mod", "a Moderator who declines Admin stays a Moderator");
+  await q("/role", { id: String(bob.id), role: null }); await db.query(`UPDATE users SET role = 'mod', promo_pending = NULL WHERE id = $1`, [ann.id]); }
 // (owner) staff: Moderators (chat and behavior), Admins, and the Head Admin; only Nyssary (the PTR tester stands in) makes Admins;
 // new staff make their own panel password (30+ characters, 3 capitals, 3 numbers, 3 symbols); staff can't discipline staff
 { const qa = (path, body) => fetch(BASE + "/game/admin" + path, body ? { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestAnn" }, body: JSON.stringify(body) } : { headers: { "x-ptr-as": "AdmTestAnn" } }).then(async (r) => ({ status: r.status, body: await r.json() }));
   await db.query(`UPDATE users SET admin_pw_hash = NULL, role = 'mod' WHERE id = $1`, [ann.id]); await qa("/lock", {});
   r = await qa("/me"); t.ok(r.body.role === "mod" && r.body.needPassword && !r.body.owner, "a new Moderator must make a password first", r.body);
   r = await qa("/unlock", { password: PW }); t.ok(r.status === 403 && /Make your admin password/.test(r.body.error), "the shared password doesn't open it for them", r.body);
-  for (const weak of ["Short1!", "abcdefghijklmnopqrstuvwxyz1234!!!", "ABCdefghijklmnopqrstuvwxyz12!!!x", "ABCdefghijklmnopqrstuvwxyz123!!x"]) { r = await qa("/password", { password: weak }); t.ok(r.status === 400 && /30 characters/.test(r.body.error), "refused: " + weak, r.body); }
-  const APW = "Moderate#Every$Thing%With_Care123XYZ";
-  r = await qa("/password", { password: APW }); t.ok(r.body.ok, "30+ characters with 3 capitals, 3 numbers, 3 symbols", r.body);
+  for (const weak of ["Short1!", "lowercase1!", "Uppercase!!", "Uppercase11"]) { r = await qa("/password", { password: weak }); t.ok(r.status === 400 && /8 characters, with a capital, a number and a symbol/.test(r.body.error), "a Moderator's refused: " + weak, r.body); }
+  const APW = "Mod#Ann2026";
+  r = await qa("/password", { password: APW }); t.ok(r.body.ok, "a Moderator's: 8+ characters with a capital, a number and a symbol (owner)", r.body);
   await qa("/lock", {}); r = await qa("/unlock", { password: "nope" }); t.ok(r.status === 403, "then only their own password opens it");
   r = await qa("/unlock", { password: APW }); t.ok(r.body.ok, "their own password unlocks the panel");
-  await qa("/persona", { name: "Mod_Ann", pic: 4 });
+  r = await qa("/persona", { name: "Mod_Ann", pic: 4 }); t.ok(r.status === 400 && /own name/.test(r.body.error) && (await qa("/me")).body.persona.name === "AdmTestAnn", "Moderators have no pseudonym: they act under their own name (owner)", r.body);
+  // (owner) Moderators only mute, ban for a time and set mutes / blocks between players; each goes to the Admins to review
+  { await db.query(`UPDATE users SET role = NULL WHERE id = $1`, [bob.id]); await q("/notes/read", {});
+    r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "a Moderator can't kick");
+    r = await qa("/banname", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "or ban a name");
+    r = await qa("/ban", { id: String(bob.id), reason: "x", perm: true }); t.ok(r.status === 403 && /for a time/.test(r.body.error), "or ban for good (owner)", r.body);
+    r = await qa("/mute", { id: String(bob.id), reason: "spamming trade", amount: 2, unit: "hours" }); t.ok(r.body.ok, "but can mute", r.body);
+    r = await qa("/unmute", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and can't lift it themselves");
+    r = await q("/reviews"); const rv = r.body.find((x) => x.target === "AdmTestBob" && x.action === "muted" && x.status === "open");
+    t.ok(rv && rv.mod === "AdmTestAnn" && rv.reason === "spamming trade", "it goes to the Admins to review (owner)", r.body.slice(0, 2));
+    t.ok((await q("/notes")).body.some((n) => n.kind === "review" && /AdmTestAnn muted AdmTestBob/.test(n.text)), "and they're told");
+    r = await qa("/reviews"); t.ok(r.status === 403, "Moderators don't see the reviews");
+    r = await q("/review", { id: rv.id, outcome: "lifted" }); t.ok(r.body.ok && !(await q("/players")).body.find((x) => x.name === "AdmTestBob").mute, "an Admin lifts it on review"); }
   // (owner) an Admin suspends a Moderator for 24 hours (a reason); the Head Admin is told at once (or on connect)
   { const qb = (path, body) => fetch(BASE + "/game/admin" + path, body ? { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestBob" }, body: JSON.stringify(body) } : { headers: { "x-ptr-as": "AdmTestBob" } }).then(async (x) => ({ status: x.status, body: await x.json() }));
     await db.query(`UPDATE users SET role = 'mod', mod_suspended_until = NULL WHERE id = $1`, [bob.id]);
@@ -145,12 +173,13 @@ await q("/role", { id: String(bob.id), role: null });
   { const hs = await connect(), seen = []; hs.ws.on("message", (x) => seen.push(JSON.parse(x)));
     const pl = await connect("?as=AdmTestCal"), seenP = []; pl.ws.on("message", (x) => seenP.push(JSON.parse(x))); await sleep(300);
     const before = (await qa("/me")).body.notes;
-    hs.send({ t: "chat", channel: "staff", text: "heads up @Mod_Ann" }); pl.send({ t: "chat", channel: "staff", text: "let me in" }); await sleep(500);
-    const ln = seen.find((m) => m.t === "chat" && m.ch === "staff" && m.text === "heads up @Mod_Ann");
-    t.ok(ln && ln.from === AN && ln.rank === "admin" && ln.pic === 2, "staff talk in the Admin chat under their profiles (owner)", ln);
-    t.ok(!seenP.some((m) => m.ch === "staff") && !seen.some((m) => m.text === "let me in"), "players can't read or write in it");
+    hs.send({ t: "chat", channel: "modchat", text: "heads up @AdmTestAnn" }); hs.send({ t: "chat", channel: "staff", text: "admins only" }); pl.send({ t: "chat", channel: "staff", text: "let me in" }); pl.send({ t: "chat", channel: "modchat", text: "me too" }); await sleep(500);
+    const ln = seen.find((m) => m.t === "chat" && m.ch === "modchat" && m.text === "heads up @AdmTestAnn");
+    t.ok(ln && ln.from === AN && ln.rank === "admin" && ln.pic === 2 && seen.some((m) => m.ch === "staff" && m.text === "admins only"), "the Moderator chat and the Admin chat: Admins in both (owner)", ln);
+    t.ok(!seenP.some((m) => m.ch === "staff" || m.ch === "modchat") && !seen.some((m) => m.text === "let me in" || m.text === "me too"), "players can't read or write in them");
+    t.ok((await qa("/staffchat?ch=admin")).status === 403 && (await qa("/staffchat?ch=mod")).body.some((l) => l.text === "heads up @AdmTestAnn"), "Moderators read the Moderator chat (kept to catch up), not the Admin chat (owner)");
     let an = (await qa("/notes")).body; t.ok((await qa("/me")).body.notes === before + 1 && an.some((n) => n.kind === "mention" && /heads up/.test(n.text)), "an @mention of someone away goes to their Notifications (owner)", an.slice(0, 2));
-    r = await q("/staffchat"); t.ok(r.body.some((l) => l.text === "heads up @Mod_Ann" && l.from === AN), "the recent Admin chat lines are kept for those coming online");
+    r = await q("/staffchat?ch=admin"); t.ok(r.body.some((l) => l.text === "admins only" && l.from === AN), "the Admin chat is kept too");
     await q("/seen", { tab: "reports" }); const u0 = (await q("/unread")).body;
     await fetch(BASE + "/game/report", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ target: "AdmTestCal", category: "Spam", text: "testing unread" }) }); await sleep(400);
     const u1 = (await q("/unread")).body;
@@ -163,21 +192,37 @@ await q("/role", { id: String(bob.id), role: null });
   r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403, "or make Moderators");
   r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "and the Head Admin can't kick a Moderator (owner)");
   r = await q("/role", { id: String(ann.id), role: "admin" }); t.ok(r.body.ok && (await db.query(`SELECT role FROM users WHERE id = $1`, [ann.id])).rows[0].role === "admin", "Nyssary makes Admins", r.body);
+  await fetch(BASE + "/game/promotion", { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-ptr-as": "AdmTestAnn" }, body: JSON.stringify({ accept: true }) });
+  { r = await qa("/unlock", { password: APW }); t.ok(r.status === 403 && /Make your admin password/.test(r.body.error), "a new role means a new password (its own rules)", r.body);
+    r = await qa("/password", { password: "Mod#Ann2026" }); t.ok(r.status === 400 && /30 characters, with 3 capitals, 3 numbers and 3 symbols/.test(r.body.error), "an Admin's must be 30+ with 3 capitals, numbers and symbols (owner)", r.body);
+    r = await qa("/password", { password: "Moderate#Every$Thing%With_Care123XYZ" }); t.ok(r.body.ok, "an Admin's password", r.body);
+    r = await qa("/persona", { name: "Adm_Ann", pic: 4 }); t.ok(r.body.ok && (await qa("/me")).body.persona.name === "Adm_Ann", "as an Admin, an anonymous profile (owner)", r.body); }
+  // (owner) the Head Admin resets staff passwords; staff who can't get in ask for it, saying why (only the Head Admin is told)
+  { r = await qa("/pwreset", { id: String(bob.id) }); t.ok(r.status === 403, "only the Head Admin resets passwords");
+    r = await qa("/pwreset/request", { reason: "" }); t.ok(r.status === 400, "a reset request needs a reason");
+    r = await qa("/pwreset/request", { reason: "forgot it after the role change" }); t.ok(r.body.ok, "staff ask for a reset", r.body);
+    const ns = (await q("/notes")).body, mine = (await qa("/notes")).body;
+    t.ok(ns.some((n) => n.kind === "pwreset" && /AdmTestAnn/.test(n.text) && /forgot it/.test(n.text) && n.ref.player === String(ann.id)) && !mine.some((n) => n.kind === "pwreset"), "it goes to the Head Admin only (owner)", ns.slice(0, 2));
+    r = await q("/pwreset", { id: String(ann.id) }); const h = (await db.query(`SELECT admin_pw_hash FROM users WHERE id = $1`, [ann.id])).rows[0];
+    t.ok(r.body.ok && !h.admin_pw_hash && (await qa("/players")).status === 403 && (await qa("/me")).body.needPassword, "the Head Admin resets it: their panel locks and they make a new one (owner)", r.body);
+    r = await q("/pwreset", { id: String(me.id) }); t.ok(r.status === 403, "not their own (or a player's)");
+    await qa("/password", { password: "Moderate#Every$Thing%With_Care123XYZ" }); }
   r = await qa("/role", { id: String(bob.id), role: "admin" }); t.ok(r.status === 403 && /Nyssary/.test(r.body.error), "an Admin can't make Admins (owner)", r.body);
-  r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.body.ok, "but can make Moderators");
-  r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and can't kick staff");
+  r = await qa("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403 && /Nyssary/.test(r.body.error), "or Moderators: only Nyssary (owner)", r.body);
+  await q("/role", { id: String(bob.id), role: "mod" }); r = await qa("/kick", { id: String(bob.id), reason: "x" }); t.ok(r.status === 403, "and staff can't kick staff");
   r = await qa("/role", { id: String(me.id), role: null }); t.ok(r.status === 403, "no one changes Nyssary's role");
-  await qa("/role", { id: String(bob.id), role: null });
+  await q("/role", { id: String(bob.id), role: null });
   r = await q("/role", { id: String(ann.id), role: null }); const ah = (await db.query(`SELECT role, admin_pw_hash FROM users WHERE id = $1`, [ann.id])).rows[0];
   t.ok(r.body.ok && !ah.role && !ah.admin_pw_hash && (await qa("/players")).status === 403, "removed: no role, panel locked, their password dropped", ah);
   await db.query(`UPDATE users SET role = 'mod' WHERE id = $1`, [ann.id]); }
-// a regular admin: kick / ban, nothing else, and not other admins
+// a Moderator (the PTR tester for a moment): no roles, licenses or credits, nothing on staff, a timed ban only
 await db.query(`UPDATE users SET role = 'mod' WHERE id = $1`, [me.id]);
 r = await q("/role", { id: String(bob.id), role: "mod" }); t.ok(r.status === 403, "a Moderator can't make Moderators (owner)", r);
 r = await q("/license", { id: String(bob.id), pilotId: String(bp.id), key: "mining_lasers", op: "+" }); t.ok(r.status === 403, "or change licenses");
 r = await q("/reset", { id: String(bob.id), what: "credits" }); t.ok(r.status === 403, "or reset credits");
-r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick / ban another admin");
-r = await q("/kick", { id: String(bob.id), reason: "afk" }); t.ok(r.body.ok, "but can kick and ban players");
+r = await q("/kick", { id: String(ann.id), reason: "x" }); t.ok(r.status === 403, "or kick staff");
+r = await q("/ban", { id: String(bob.id), reason: "afk", amount: 1, unit: "hours" }); t.ok(r.body.ok, "but can ban a player for a time (the Admins review it)", r.body);
+await db.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [bob.id]);
 await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
 // (owner) Ban Name: the name goes on the list and its owner must rename (player or pilot)
 r = await q("/banname", { id: String(bob.id), reason: "offensive" }); t.ok(r.body.ok && (await db.query(`SELECT rename_required FROM users WHERE id = $1`, [bob.id])).rows[0].rename_required, "Ban Name on a player: they must rename", r.body);
@@ -268,6 +313,15 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
   t.ok(got.z.some((m) => m.t === "admopen" && m.admin === AN && m.pic === 2 && m.key) && got.a.some((m) => m.t === "admopen" && m.with === "AdmTestZed" && m.frozen === false), "an admin opens a DM: both windows open at once (owner)", got.z);
   adm.send({ t: "adm", to: "AdmTestZed", text: "hello there" }); await sleep(300);
   t.ok(got.z.some((m) => m.t === "admdm" && m.text === "hello there" && m.admin === AN), "an admin's line reaches the player");
+  // (owner) a staff DM is a room: staff add more people (players or staff); everyone in it sees every line
+  { const room = (got.a.find((m) => m.t === "admopen" && m.with === "AdmTestZed") || {}).room, cal = await connect("?as=AdmTestCal"), gotC = []; cal.ws.on("message", (b) => gotC.push(JSON.parse(b)));
+    adm.send({ t: "admadd", room, name: "AdmTestCal" }); zed.send({ t: "admadd", room, name: "AdmTestBob" }); await sleep(400);
+    const op = gotC.find((m) => m.t === "admopen" && m.room === room);
+    t.ok(op && op.members.length === 3 && op.members.some((x) => x.name === "AdmTestZed") && op.members.some((x) => x.staff && x.name === AN), "staff add someone to the room: they see it, with everyone in it (owner)", op);
+    t.ok(!op.members.some((x) => x.name === "AdmTestBob"), "players can't add anyone");
+    cal.send({ t: "adm", room, text: "I saw it happen" }); await sleep(300);
+    t.ok(got.z.some((m) => m.t === "admdm" && m.text === "I saw it happen") && got.a.some((m) => m.t === "admdm" && m.text === "I saw it happen" && m.room === room), "a line reaches everyone in the room");
+    await cal.close(); }
   zed.send({ t: "adm", text: "hi admin" }); zed.send({ t: "adm", to: "PTR", text: "sneaky" }); zed.send({ t: "admfreeze", to: "PTR", on: true }); await sleep(300);
   t.ok(got.a.some((m) => m.t === "admdm" && m.text === "hi admin" && m.from === "AdmTestZed") && !got.a.some((m) => m.text === "sneaky" && m.with !== "AdmTestZed") && !got.a.some((m) => m.t === "frozen"), "the player answers into it (a player can't start one or freeze anyone)");
   r = await q("/freeze", { id: String(zid), on: true }); t.ok(r.status === 400, "Freeze is done in an admin DM, not the panel");
@@ -297,7 +351,7 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
   r = await q("/log"); t.ok(r.body.some((x) => x.action === "freeze" && x.target === "AdmTestZed" && x.reason === ""), "the freeze is logged (owner)");
   await zed.close(); const zed2 = await connect("?as=AdmTestZed"); const got2 = []; zed2.ws.on("message", (b) => got2.push(JSON.parse(b))); await sleep(100);
   t.ok(zed2.last.frozen && zed2.last.frozen.on && zed2.last.admopen && zed2.last.admopen.log.length >= 3, "coming back, still frozen and the conversation still open", { f: zed2.last.frozen, o: zed2.last.admopen });
-  { const d = (await db.query(`SELECT frozen, admin_id FROM admin_dms WHERE player_id = $1`, [zid])).rows[0]; t.ok(d && d.frozen && String(d.admin_id) === String(me.id), "the DM and its freeze are saved (they survive a redeploy, owner)", d); }
+  { const d = (await db.query(`SELECT data FROM admin_rooms`)).rows.map((x) => x.data).find((x) => x.frozen && x.frozen[String(zid)]); t.ok(d && String(d.frozen[String(zid)]) === String(me.id), "the DM and its freeze are saved (they survive a redeploy, owner)", d); }
   adm.send({ t: "admend", to: "AdmTestZed" }); await sleep(400);
   t.ok(got2.some((m) => m.t === "admend") && got2.some((m) => m.t === "frozen" && !m.on), "closing the DM ends it and thaws the player (owner)");
   r = await q("/log"); t.ok(r.body.some((x) => x.action === "unfreeze" && x.target === "AdmTestZed"), "the thaw is logged");
@@ -316,7 +370,32 @@ await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = a
   { const k = (await q("/log")).body.find((x) => x.action === "kick" && x.target === "AdmTestZed"), kc = (await q("/log/" + k.id + "/chat")).body;
     t.ok(k.chat > 0 && kc.some((l) => l.text === "yes, me") && Array.isArray(k.ships), "a kick keeps the last hour of chat too (owner)", k); }
   await q("/persona", { name: AN, pic: 2 });
-  await adm.close(); await db.query(`UPDATE admin_log SET target_id = NULL WHERE target_id = $1`, [zid]); await db.query(`DELETE FROM users WHERE id = $1`, [zid]); }
+  await adm.close(); await db.query(`UPDATE admin_log SET target_id = NULL WHERE target_id = $1`, [zid]); await db.query(`DELETE FROM users WHERE id = $1`, [zid]); await db.query(`DELETE FROM users WHERE username = 'AdmTestCal'`); }
+// (owner) password reset appeals: a temporary password follows the request; the Head Admin alone decides; the real owner,
+// logged in, sees it and can say it isn't them
+{ const A = (path, body) => fetch(BASE + "/auth" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", origin: BASE }, ...(body ? { body: JSON.stringify(body) } : {}) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+  await db.query(`DELETE FROM reset_requests WHERE user_id IN ($1, $2)`, [bob.id, me.id]); await q("/notes/read", {});
+  r = await A("/reset-request", { username: "AdmTestBob", tempPassword: "short", text: "lost it" }); t.ok(r.status === 400, "the temporary password needs 8+ characters");
+  r = await A("/reset-request", { username: "AdmTestBob", tempPassword: "TempPass99", text: "I lost my password and my answers" }); t.ok(r.body.ok, "a reset request is sent", r.body);
+  r = await A("/reset-request", { username: "AdmTestBob", tempPassword: "TempPass98", text: "again" }); t.ok(r.status === 400 && /already open/.test(r.body.error), "one open request per account");
+  r = await A("/login", { username: "AdmTestBob", password: "TempPass99" }); const tok = r.body.resetToken;
+  t.ok(r.status === 403 && r.body.reset && r.body.reset.lines.length === 1 && tok, "logging in with the temporary password shows the request, not the game (owner)", r.body);
+  t.ok((await q("/notes")).body.some((n) => n.kind === "reset" && /AdmTestBob: I lost my password/.test(n.text)), "the Head Admin is told (owner)");
+  const rid = r.body.reset.id;
+  await db.query(`UPDATE users SET role = 'mod' WHERE id = $1`, [me.id]); r = await q("/resets"); t.ok(r.status === 403, "only the Head Admin sees them"); await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
+  await q("/reset/say", { id: rid, text: "What was your first pilot called?" });
+  r = await A("/reset/say", { token: tok, text: "Bob Pilot" }); t.ok(r.body.lines.length === 3 && r.body.lines[1].admin && r.body.lines[1].name === AN, "a conversation between them", r.body.lines);
+  r = await q("/reset/close", { id: rid, approve: true }); t.ok(r.body.ok, "the Head Admin approves");
+  r = await A("/login", { username: "AdmTestBob", password: "TempPass99" }); const r2 = await A("/login", { username: "AdmTestBob", password: "bobpassword1" });
+  t.ok(r.status === 200 && r2.status === 401, "approved: the temporary password is now the account's", { a: r.status, b: r2.status });
+  // the PTR tester stands in for an owner: a request on their account shows when they're logged in
+  await db.query(`UPDATE users SET password = $2 WHERE id = $1`, [me.id, await hashSecret("ptrpassword1")]);
+  r = await A("/reset-request", { username: "PTR", tempPassword: "Someone99", text: "it's mine, honest" });
+  r = await A("/me"); const open = r.body.resetRequests || []; t.ok(open.length === 1, "the logged-in owner sees the open request (owner)", r.body);
+  r = await A("/reset/notme", { id: open[0].id }); t.ok(r.body.ok && !((await A("/me")).body.resetRequests || []).length, "This is not me: the request closes (owner)");
+  r = await A("/login", { username: "PTR", password: "Someone99" }); t.ok(r.status === 401, "and its temporary password no longer opens anything");
+  t.ok((await q("/notes")).body.some((n) => n.kind === "reset" && /isn't them/.test(n.text)), "the Head Admin is told it wasn't them");
+  await db.query(`UPDATE users SET password = '!' WHERE id = $1`, [me.id]); }
 await db.query(`DELETE FROM pilots WHERE user_id IN ($1, $2)`, [bob.id, ann.id]); await db.query(`UPDATE admin_log SET target_id = NULL WHERE target_id IN ($1, $2)`, [bob.id, ann.id]); await db.query(`DELETE FROM users WHERE id IN ($1, $2)`, [bob.id, ann.id]);
 await db.end();
 t.done();

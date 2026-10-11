@@ -6,15 +6,16 @@ import { World } from "./world.js";
 import { TICK_MS, SNAPSHOT_MS, SHIP_TYPES, EXPANSE_APOTHEM_KM, AU_KM, DRONE } from "./constants.js";
 import { celestialsForClient } from "./celestials.js";
 import { setGameHooks, isUnlocked, muteOf, logAction } from "../admin.js";
-import { staffIds, storeNote, unreadNoteCount, saveStaffLine, mentioned, STAFF_ROLES, HIGH_ROLES } from "../staff.js";
+import { staffIds, storeNote, unreadNoteCount, saveStaffLine, mentioned, rolesOf, STAFF_ROLES, HIGH_ROLES, CHAT_ROLES } from "../staff.js";
 import { personaOf } from "../personas.js";
-import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, saveAdminDm, deleteAdminDm, setFrozenRow, userByName, roleOf } from "./persist.js";
+import { loadSystem, saveSystem, loadPois, savePoi, deletePoi, loadAccounts, loadAdminDms, deleteAdminDm, loadAdminRooms, saveAdminRoom, deleteAdminRoom, setFrozenRow, userByName, roleOf } from "./persist.js";
 import { scan } from "../namefilter.js";
 import { flagLine, HEAT_MAX } from "../language.js";
 import { onAppealLine, subscribers } from "../appeals.js";
 import { hears } from "../relations.js";
 import { onRelAppeal } from "../relappeals.js";
 import { onTicket } from "../tickets.js";
+import { onResetLine } from "../resets.js";
 import { ORES } from "./belts.js";
 import { MODULES } from "./modules.js";
 import { DOCK_KM } from "./station.js";
@@ -28,73 +29,102 @@ const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipT
 
 export function attachGameServer(httpServer) {
   const sendTo = (pid, o) => { const s = JSON.stringify(o); for (const c of conns.get(pid) || []) if (c.readyState === c.OPEN && !c.replaced) c.send(s); };
-  // (owner) admin DMs: an admin (with the panel open) messages an online player; the player's side is a window of its own
-  // that they can't close, until the admin ends it. One admin conversation per player (kept in memory).
-  // (owner) the admin is shown by their admin profile (personas.js), resolved when sent: a changed profile changes old lines
-  const admDm = new Map();                              // player pid -> { admin, name, log: [{ from, text, ts, a (an admin's line: their account) }], frozen, graceAt }
+  // (owner) staff DMs: rooms. A staff member opens one with a player (both windows open at once) and anyone staff in it can
+  // add more people, players or staff, for a discussion. Players can't close theirs or leave; staff leave by closing the
+  // window, and when the last staff member leaves the room ends. Staff show as their identity (an Admin's profile, a
+  // Moderator's own name), resolved when sent. Freeze is per player, held by the Admin who froze them: it lasts while that
+  // Admin is around with the room open (5 minutes' grace if they're away); leaving thaws it. Rooms are kept across restarts.
+  const rooms = new Map();                               // room id -> { id, members: [{ id, name, staff }], log: [{ uid, a (staff), from, text, ts }], frozen: { playerId: adminId }, grace: {}, wasOnline: {} }
   const pName = (adminPid) => (personaOf(adminPid) || {}).name || "Admin";
-  const pOut = (adminPid) => { const pe = personaOf(adminPid) || {}; return { name: pe.name || "Admin", pic: pe.pic || 1, key: pe.key || "", rank: pe.rank || "admin" }; };
-  const viewLog = (d) => d.log.map((l) => { if (!l.a) return { from: l.from, text: l.text, ts: l.ts }; const pe = pOut(String(l.a)); return { from: pe.name, text: l.text, ts: l.ts, key: pe.key, pic: pe.pic, rank: pe.rank }; });
-  const saveDm = (pid) => { const d = admDm.get(pid); (d ? saveAdminDm(pid, { ...d, adminName: pName(d.admin) }) : deleteAdminDm(pid)).catch((e) => console.error("admin dm", e)); };
-  loadAdminDms().then((rows) => { for (const r of rows) admDm.set(String(r.player_id), { admin: String(r.admin_id), name: r.player_name, log: (r.log || []).map((l) => (l.a || l.from !== r.admin_name ? l : { ...l, a: String(r.admin_id) })), frozen: !!r.frozen }); }).catch((e) => console.error("admin dms", e));
+  const pOut = (adminPid) => { const pe = personaOf(adminPid) || {}; return { name: pe.name || "Admin", pic: pe.pic || 1, key: pe.key || "", rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}) }; };   // (a Moderator: their own name and portrait)
+  const lineOut = (l) => { if (!l.a) return { from: l.from, text: l.text, ts: l.ts }; const pe = pOut(String(l.a)); return { from: pe.name, text: l.text, ts: l.ts, key: pe.key, pic: pe.pic, rank: pe.rank, ...(pe.portrait ? { portrait: pe.portrait } : {}) }; };
+  const memberOut = (r, m) => (m.staff ? { name: pName(m.id), staff: true, rank: pOut(m.id).rank } : { name: m.name, staff: false, frozen: !!r.frozen[m.id] });
+  const isStaffIn = (r, pid) => r.members.some((m) => m.id === pid && m.staff), isIn = (r, pid) => r.members.some((m) => m.id === pid);
+  const players = (r) => r.members.filter((m) => !m.staff), staffOf = (r) => r.members.filter((m) => m.staff);
+  // what each member is sent: the room, its members, its lines; plus (for the old one-to-one view) the player's or staff member's name
+  function openMsg(r, pid) {
+    const me = r.members.find((m) => m.id === pid), base = { t: "admopen", room: r.id, members: r.members.map((m) => memberOut(r, m)), log: r.log.map(lineOut) };
+    if (me && me.staff) { const p0 = players(r)[0]; return { ...base, with: p0 ? p0.name : (staffOf(r).find((m) => m.id !== pid) ? pName(staffOf(r).find((m) => m.id !== pid).id) : ""), frozen: !!(p0 && r.frozen[p0.id]) }; }
+    const s0 = staffOf(r)[0], pe = s0 ? pOut(s0.id) : {}; return { ...base, admin: pe.name, pic: pe.pic, key: pe.key, rank: pe.rank };
+  }
+  const tellRoom = (r) => { for (const m of r.members) sendTo(m.id, openMsg(r, m.id)); };
+  const saveRoom = (r) => (rooms.has(r.id) ? saveAdminRoom(r.id, r) : deleteAdminRoom(r.id)).catch((e) => console.error("admin room", e));
+  loadAdminRooms().then(async (list) => {
+    for (const r of list) rooms.set(r.id, { grace: {}, wasOnline: {}, frozen: {}, ...r });
+    for (const d of await loadAdminDms()) {             // (the one-to-one admin DMs saved before rooms: each becomes a room)
+      const id = "r" + d.player_id + "-" + Date.now().toString(36), r = { id, members: [{ id: String(d.admin_id), name: d.admin_name, staff: true }, { id: String(d.player_id), name: d.player_name, staff: false }], log: (d.log || []).map((l) => ({ ...l, ...(l.a ? { a: String(l.a) } : l.from === d.admin_name ? { a: String(d.admin_id) } : {}) })), frozen: d.frozen ? { [String(d.player_id)]: String(d.admin_id) } : {}, grace: {}, wasOnline: {} };
+      rooms.set(id, r); await saveAdminRoom(id, r); await deleteAdminDm(String(d.player_id));
+    }
+  }).catch((e) => console.error("admin rooms", e));
   const onlineByName = (name) => { if (typeof name !== "string" || name.length > 40) return null; for (const p of world.players.values()) if (!p.offline && p.name.toLowerCase() === name.toLowerCase()) return { id: p.id, name: p.name }; return null; };
   const cleanText = (t) => (typeof t === "string" ? t.replace(/\s+/g, " ").trim().slice(0, 500) : "");
-  const dmFor = (adminPid, name) => { for (const [pid, d] of admDm) if (d.admin === adminPid && d.name.toLowerCase() === String(name).toLowerCase()) return [pid, d]; return [null, null]; };
-  // (owner) an admin opens a DM with a player (by name, online or not): both windows open at once
-  async function admStart(pid, to) {
-    if (!isUnlocked(pid) || !personaOf(pid) || typeof to !== "string" || to.length > 40) return null;
-    const t = onlineByName(to) || await userByName(to); if (!t || t.id === pid) return null;
-    let d = admDm.get(t.id);
-    if (d && d.admin !== pid) { sendTo(d.admin, { t: "admend", with: d.name }); if (d.frozen) logAction(pid, pName(pid), t.id, t.name, "freeze taken over", "", { from: pName(d.admin) }).catch(() => {}); }   // another admin takes it over (and the freeze with it)
-    if (!d || d.admin !== pid) { d = { admin: pid, name: t.name, log: d ? d.log : [], frozen: !!(d && d.frozen) }; admDm.set(t.id, d); saveDm(t.id); if (d.frozen) setFrozenRow(t.id, true, pid).catch(() => {}); }
-    const pe = pOut(pid);
-    sendTo(t.id, { t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) }); sendTo(pid, { t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen });
-    return [t.id, d];
+  const roomOf = (pid, m) => { const r = typeof m.room === "string" ? rooms.get(m.room) : null; return r && isIn(r, pid) ? r : null; };
+  // the room a staff member shares with a player (by name)
+  // (the room they share: a one-to-one room first, else any room with both in it)
+  const pairRoom = (staffPid, name) => { let any = null; for (const r of rooms.values()) if (isStaffIn(r, staffPid) && players(r).some((m) => m.name.toLowerCase() === String(name).toLowerCase())) { if (r.members.length === 2) return r; any = any || r; } return any; };
+  const staffNow = (pid) => isUnlocked(pid) && personaOf(pid);
+  async function findUser(name) { if (typeof name !== "string" || !name || name.length > 40) return null; const t = onlineByName(name) || await userByName(name); if (!t) return null; return { ...t, role: await roleOf(t.id) }; }
+  async function admStart(pid, to) {                   // (owner) staff open a DM with someone: both windows open at once
+    if (!staffNow(pid)) return null;
+    const t = await findUser(to); if (!t || t.id === pid) return null;
+    let r = !t.role ? pairRoom(pid, t.name) : null;
+    if (!r) { r = { id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), members: [{ id: pid, name: pName(pid), staff: true }, { id: t.id, name: t.name, staff: !!t.role }], log: [], frozen: {}, grace: {}, wasOnline: {} }; rooms.set(r.id, r); saveRoom(r); }
+    tellRoom(r); return r;
+  }
+  async function admAdd(pid, m) {                      // (owner) anyone staff in a room adds a player or another staff member
+    const r = roomOf(pid, m); if (!r || !isStaffIn(r, pid) || !staffNow(pid)) return;
+    const t = await findUser(m.name); if (!t || isIn(r, t.id)) return;
+    r.members.push({ id: t.id, name: t.name, staff: !!t.role }); saveRoom(r); tellRoom(r);
+  }
+  function addLine(r, pid, text) {
+    const st = isStaffIn(r, pid), from = st ? pName(pid) : (r.members.find((m) => m.id === pid) || {}).name, line = { uid: pid, from, text, ts: Date.now(), ...(st ? { a: pid } : {}) };
+    r.log.push(line); if (r.log.length > 200) r.log.shift(); saveRoom(r);
+    const out = lineOut(line); for (const m of r.members) sendTo(m.id, { t: "admdm", room: r.id, ...out, ...(m.staff ? { with: (players(r)[0] || {}).name } : { admin: (staffOf(r)[0] ? pName(staffOf(r)[0].id) : "") }) });
+    chatLine({ ch: "admin", fromId: pid, ...(st ? { aid: pid } : {}), from, members: r.members.map((x) => x.id), to: r.members.filter((x) => x.id !== pid).map((x) => (x.staff ? pName(x.id) : x.name)).join(", "), text });
   }
   async function admSay(pid, name, m) {
     const text = cleanText(m.text); if (!text) return;
-    if (typeof m.to === "string" && isUnlocked(pid) && personaOf(pid)) {    // an admin to a player
-      let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
-      const pe = pOut(pid), line = { from: pe.name, text, ts: Date.now() }; d.log.push({ ...line, a: pid }); if (d.log.length > 100) d.log.shift(); saveDm(to);
-      sendTo(to, { t: "admdm", ...line, key: pe.key, pic: pe.pic, rank: pe.rank, admin: pe.name }); sendTo(pid, { t: "admdm", ...line, key: pe.key, pic: pe.pic, rank: pe.rank, with: d.name });
-      chatLine({ ch: "admin", fromId: pid, aid: pid, from: pe.name, toId: to, to: d.name, text });
-      return;
-    }
-    const d = admDm.get(pid); if (!d) return;            // the player answering
-    const pe = pOut(d.admin), line = { from: name, text, ts: Date.now() }; d.log.push(line); if (d.log.length > 100) d.log.shift(); saveDm(pid);
-    sendTo(pid, { t: "admdm", ...line, admin: pe.name }); sendTo(d.admin, { t: "admdm", ...line, with: d.name });
-    chatLine({ ch: "admin", fromId: pid, from: name, toId: d.admin, toAid: d.admin, to: pe.name, text });
+    let r = roomOf(pid, m);
+    if (!r && typeof m.to === "string" && staffNow(pid)) r = pairRoom(pid, m.to) || await admStart(pid, m.to);   // (one-to-one, by name)
+    if (!r && !staffNow(pid)) { for (const x of rooms.values()) if (isIn(x, pid) && !isStaffIn(x, pid)) r = x; }   // a player answering their latest room
+    if (!r || !isIn(r, pid)) return;
+    if (isStaffIn(r, pid) && !staffNow(pid)) return;
+    addLine(r, pid, text);
   }
-  // (owner) Freeze is a box in the admin's DM: no reason needed (it's logged); it lasts while that admin is around with the DM open
-  async function setFreeze(playerPid, on, by, note = "") {
-    const d = admDm.get(playerPid); if (d) { d.frozen = on; d.graceAt = null; saveDm(playerPid); sendTo(d.admin, { t: "admstate", with: d.name, frozen: on }); }
+  // (owner) Freeze is a box beside each player in the room (Admins only, not Moderators): no reason needed (it's logged)
+  async function setFreeze(playerPid, on, by, note = "", room = null) {
+    for (const r of rooms.values()) { if (on && r !== room) continue; if (!on && !r.frozen[playerPid]) continue; if (on) r.frozen[playerPid] = by.id; else delete r.frozen[playerPid]; delete r.grace[playerPid]; saveRoom(r); for (const m of staffOf(r)) sendTo(m.id, { t: "admstate", room: r.id, with: (r.members.find((x) => x.id === playerPid) || {}).name, frozen: on }); tellRoom(r); }
     await setFrozenRow(playerPid, on, by.id);
     world.setFrozen(playerPid, on); sendTo(playerPid, { t: "frozen", on });
-    const name = (d && d.name) || (world.players.get(playerPid) || {}).name || "?";
+    const name = (world.players.get(playerPid) || {}).name || ([...rooms.values()].flatMap((r) => r.members).find((x) => x.id === playerPid) || {}).name || "?";
     await logAction(by.id, by.name, playerPid, name, on ? "freeze" : "unfreeze", note).catch((e) => console.error("freeze log", e));
   }
+  const frozenAnywhere = (pid) => [...rooms.values()].some((r) => r.frozen[pid]);
   async function admFreeze(pid, m) {
-    if (!isUnlocked(pid) || !personaOf(pid)) return;
-    let [to, d] = dmFor(pid, m.to); if (!d) { const r = await admStart(pid, m.to); if (!r) return; [to, d] = r; }
-    if (!!m.on === !!d.frozen) return;
-    if (m.on && await roleOf(to)) { sendTo(pid, { t: "admstate", with: d.name, frozen: false }); return; }   // (owner) staff can't freeze staff
-    await setFreeze(to, !!m.on, { id: pid, name: pName(pid) });
+    if (!staffNow(pid)) return;
+    let r = roomOf(pid, m); if (!r && typeof m.to === "string") r = pairRoom(pid, m.to) || await admStart(pid, m.to);
+    if (!r || !isStaffIn(r, pid)) return;
+    const t = players(r).find((x) => x.name.toLowerCase() === String(m.to || "").toLowerCase()) || (players(r).length === 1 ? players(r)[0] : null); if (!t) return;
+    if ((personaOf(pid) || {}).mod || (m.on && await roleOf(t.id))) { tellRoom(r); sendTo(pid, { t: "admstate", room: r.id, with: t.name, frozen: !!r.frozen[t.id] }); return; }   // (owner) Moderators can't freeze; staff can't freeze staff
+    if (!!m.on === !!r.frozen[t.id]) return;
+    await setFreeze(t.id, !!m.on, { id: pid, name: pName(pid) }, "", r);
   }
-  async function admEnd(pid, m) {                      // (owner) closing the DM ends it, and thaws the player
-    const [to, d] = dmFor(pid, m.to); if (!d) return;
-    if (d.frozen) await setFreeze(to, false, { id: pid, name: pName(pid) }, "admin DM closed");
-    admDm.delete(to); saveDm(to); sendTo(to, { t: "admend" }); sendTo(pid, { t: "admend", with: d.name });
+  async function admEnd(pid, m) {                      // (owner) a staff member closing the room leaves it (thawing whom they froze); the last one ends it
+    let r = roomOf(pid, m); if (!r && typeof m.to === "string") r = pairRoom(pid, m.to); if (!r || !isStaffIn(r, pid)) return;
+    for (const [p, by] of Object.entries(r.frozen)) if (by === pid || staffOf(r).length === 1) await setFreeze(p, false, { id: pid, name: pName(pid) }, "admin DM closed");
+    r.members = r.members.filter((x) => x.id !== pid); sendTo(pid, { t: "admend", room: r.id, with: (players(r)[0] || {}).name });
+    if (!staffOf(r).length) { rooms.delete(r.id); for (const x of r.members) sendTo(x.id, { t: "admend", room: r.id }); saveRoom(r); return; }
+    saveRoom(r); tellRoom(r);
   }
-  // (owner) the freezing admin gone (logged off) for 5 minutes: the player thaws. A frozen player back before the admin starts
-  // the same 5 minutes.
+  // (owner) the freezing Admin gone (logged off) for 5 minutes: the player thaws. A frozen player back before them starts the
+  // same 5 minutes.
   const THAW_MS = 5 * 60_000;
   setInterval(() => {
     const now = Date.now();
-    for (const [pid, d] of admDm) {
-      if (!d.frozen) continue;
-      if (conns.has(d.admin)) { d.graceAt = null; continue; }
-      if (!d.graceAt && (conns.has(pid) || d.wasOnline)) d.graceAt = now;
-      if (d.graceAt && now - d.graceAt > THAW_MS) setFreeze(pid, false, { id: d.admin, name: pName(d.admin) }, "admin away 5 minutes").catch((e) => console.error("thaw", e));
+    for (const r of rooms.values()) for (const [p, by] of Object.entries(r.frozen)) {
+      if (conns.has(by)) { delete r.grace[p]; continue; }
+      if (!r.grace[p] && (conns.has(p) || r.wasOnline[p])) r.grace[p] = now;
+      if (r.grace[p] && now - r.grace[p] > THAW_MS) setFreeze(p, false, { id: by, name: pName(by) }, "admin away 5 minutes").catch((e) => console.error("thaw", e));
     }
   }, 10_000);
   // (owner) a player's ships as named right now (their pilot, the ship's name, its hull), saved with a kick, ban or report
@@ -105,7 +135,7 @@ export function attachGameServer(httpServer) {
   world.onLine = (l) => chatLine(l);
   function chatLogFor(pid) {                            // Local and Corp (everyone's), and the player's own DMs and admin DMs
     const since = Date.now() - CHAT_KEEP_MS;
-    return chatBuf.filter((l) => l.ts >= since && (l.ch === "local" || l.ch === "corp" || l.fromId === pid || l.toId === pid)).slice(-600)
+    return chatBuf.filter((l) => l.ts >= since && (l.ch === "local" || l.ch === "corp" || l.fromId === pid || l.toId === pid || (l.members && l.members.includes(pid)))).slice(-600)
       .map((l) => ({ ts: l.ts, ch: l.ch, from: l.from, ...(l.to ? { to: l.to } : {}), ...(l.aid ? { aid: l.aid } : {}), ...(l.toAid ? { toAid: l.toAid } : {}), text: l.text }));   // (an admin's lines keep who: shown as their profile when read)
   }
   // (owner) the admin panel: who's online, kicking (a message, then the socket closes), and a player's pilots changed
@@ -121,13 +151,16 @@ export function attachGameServer(httpServer) {
   async function staffNotify(roles, kind, text, ref = null, except = null) {
     try { for (const id of await staffIds(roles)) if (id !== except) await deliver(id, kind, text, ref); } catch (e) { console.error("staff notify", e); }
   }
-  // (owner) the Admin chat: staff talk under their admin profiles; "@name" pings that staff member (kept for them if away)
-  async function staffSay(pid, raw) {
-    const pe = isUnlocked(pid) && personaOf(pid), text = cleanText(raw); if (!pe || !text) return;
-    await saveStaffLine(pid, text);
-    const msg = { t: "chat", ch: "staff", from: pe.name, admin: pe.key, pic: pe.pic, rank: pe.rank || "admin", text, ts: Date.now() };
-    for (const id of conns.keys()) if (isUnlocked(id)) sendTo(id, msg);
-    for (const id of await mentioned(text)) if (id !== pid && !(conns.has(id) && isUnlocked(id))) { await storeNote(id, "mention", pe.name + ": " + text, { tab: "staffchat" }); if (conns.has(id)) sendTo(id, { t: "staffnotes", n: await unreadNoteCount(id) }); }
+  // (owner) the staff chats: the Admin chat (Admins) and the Moderator chat (Moderators; Admins read and write it too), each
+  // under the speaker's identity; "@name" pings someone who can read it (kept for them if away)
+  async function staffSay(pid, raw, channel) {
+    const pe = isUnlocked(pid) && personaOf(pid), text = cleanText(raw); if (!pe || !text || !CHAT_ROLES[channel]) return;
+    const online = [...conns.keys()].filter((id) => isUnlocked(id)), roles = await rolesOf(online.includes(pid) ? online : [...online, pid]);
+    if (!CHAT_ROLES[channel].includes(roles.get(pid))) return;
+    await saveStaffLine(pid, text, channel);
+    const msg = { t: "chat", ch: channel === "mod" ? "modchat" : "staff", from: pe.name, admin: pe.key, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}), text, ts: Date.now() };
+    for (const id of online) if (CHAT_ROLES[channel].includes(roles.get(id))) sendTo(id, msg);
+    for (const id of await mentioned(text, channel)) if (id !== pid && !(conns.has(id) && isUnlocked(id))) { await storeNote(id, "mention", pe.name + ": " + text, { tab: channel === "mod" ? "modchat" : "staffchat" }); if (conns.has(id)) sendTo(id, { t: "staffnotes", n: await unreadNoteCount(id) }); }
   }
   // (owner) every Local / Corp line goes through the filter; flagged ones are kept for the admins (never DMs); a player's
   // language running hot is a notification for the Admins and the Head Admin
@@ -145,12 +178,13 @@ export function attachGameServer(httpServer) {
   // ticket's new line: its player (an admin's answer) or the staff (the player's)
   onRelAppeal((id, players, fromPlayer) => { for (const p of players) sendTo(p, { t: "relappeal", id }); if (fromPlayer) staffNotify(STAFF_ROLES, "relappeal", "Mute / block appeal: a new line", { relappeal: id }); });
   onTicket((id, uid, fromAdmin, subject) => { if (fromAdmin) { if (uid) sendTo(uid, { t: "ticket", id, subject }); } else staffNotify(STAFF_ROLES, "ticket", "Support: " + subject, { ticket: id }); });
+  onResetLine((id, name, text) => staffNotify(["head"], "reset", "Password reset request · " + name + ": " + text, { reset: id }));   // (owner) the Head Admin only
   setGameHooks({
-    modSuspended: async (uid) => { for (const [pid2, d] of [...admDm]) if (d.admin === uid) await admEnd(uid, { to: d.name }).catch((e) => console.error("susp dm", e)); },
+    modSuspended: async (uid) => { for (const r of [...rooms.values()]) if (isStaffIn(r, uid)) await admEnd(uid, { room: r.id }).catch((e) => console.error("susp dm", e)); },
     staffNotify: (roles, kind, text, ref) => staffNotify(roles, kind, text, ref),
     // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
-    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin" }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
-      for (const [pid2, d] of admDm) if (d.admin === String(uid)) saveDm(pid2); },
+    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}) }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
+      for (const r of rooms.values()) if (isStaffIn(r, String(uid))) tellRoom(r); },
     renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); } catch {} } },
     renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
@@ -198,12 +232,11 @@ export function attachGameServer(httpServer) {
     });
     const fl = world.fieldsFor(player); player.fieldSig = fl.sig; player.poiSig = world.poiSig(player);
     send(JSON.stringify({ t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), you: { id: pid, name: user.username }, cfg: CLIENT_CONFIG, pois: world.poisFor(player), belts: fl.fields }));
-    { const d = admDm.get(pid), frozen = !!(user.frozen && d && d.frozen);   // (owner) still frozen (only while an admin DM holds it)
+    { const frozen = !!(user.frozen && frozenAnywhere(pid));   // (owner) still frozen (only while a staff DM holds it)
       if (user.frozen && !frozen) setFrozenRow(pid, false, null).catch(() => {});
-      world.setFrozen(pid, frozen); if (frozen) { send(JSON.stringify({ t: "frozen", on: true })); d.wasOnline = true; } }
+      world.setFrozen(pid, frozen); if (frozen) { send(JSON.stringify({ t: "frozen", on: true })); for (const r of rooms.values()) if (r.frozen[pid]) r.wasOnline[pid] = true; } }
     { const mu = muteOf(user); if (mu) mutes.set(pid, { perm: mu.perm, until: mu.until ? new Date(mu.until).getTime() : 0, reason: mu.reason }); else mutes.delete(pid); }
-    { const d = admDm.get(pid); if (d) { const pe = pOut(d.admin); send(JSON.stringify({ t: "admopen", admin: pe.name, pic: pe.pic, key: pe.key, log: viewLog(d) })); } }   // an admin conversation still open
-    for (const [to, d] of admDm) if (d.admin === pid) send(JSON.stringify({ t: "admopen", with: d.name, log: viewLog(d), frozen: !!d.frozen }));
+    for (const r of rooms.values()) if (isIn(r, pid)) send(JSON.stringify(openMsg(r, pid)));   // (owner) staff DM rooms still open
 
 
     let budget = 40, budgetAt = Date.now();                 // flood guard: ~40 commands a second, extras dropped
@@ -221,7 +254,7 @@ export function attachGameServer(httpServer) {
           case "pilots": refreshPilots(); break;
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
           case "chat": {
-            if (m.channel === "staff") { staffSay(pid, m.text).catch((e) => console.error("staff chat", e)); break; }   // (owner) the Admin chat
+            if (m.channel === "staff" || m.channel === "modchat") { staffSay(pid, m.text, m.channel === "modchat" ? "mod" : "admin").catch((e) => console.error("staff chat", e)); break; }   // (owner) the Admin and Moderator chats
             // (owner) an admin's Admin switch: they speak under their admin profile (no ship says it); a DM becomes an admin DM
             if (m.as === "admin") { const pe = isUnlocked(pid) && personaOf(pid); if (!pe) break;
               if (m.channel === "dm") admSay(pid, pe.name, { to: m.to, text: m.text }).catch((e) => console.error("adm", e));
@@ -235,6 +268,7 @@ export function attachGameServer(httpServer) {
           case "admstart": admStart(pid, m.to).catch((e) => console.error("admstart", e)); break;
           case "admfreeze": admFreeze(pid, m).catch((e) => console.error("admfreeze", e)); break;
           case "admend": admEnd(pid, m).catch((e) => console.error("admend", e)); break;
+          case "admadd": admAdd(pid, m).catch((e) => console.error("admadd", e)); break;   // (owner) add someone to a staff DM
           case "align": world.cmdAlign(pid, m.ship, m.poi); break;
           case "warp": world.cmdWarp(pid, m.ship, m.poi); break;
           case "lock": world.cmdLock(pid, m.ship, m.kind, m.id); break;

@@ -21,17 +21,20 @@ export async function notesOf(adminId) {
 }
 export async function readNotes(adminId) { await pool.query(`UPDATE staff_notes SET read = true WHERE admin_id = $1 AND NOT read`, [adminId]); }
 
-// ---- Admin chat (kept, so staff coming online see the recent lines; shown under each one's current profile) ----
-export async function saveStaffLine(adminId, text) { const { rows } = await pool.query(`INSERT INTO staff_chat (admin_id, text) VALUES ($1, $2) RETURNING at`, [adminId, text]); return rows[0].at; }
-export async function staffChatRecent() {
-  const { rows } = await pool.query(`SELECT admin_id, at, text FROM (SELECT * FROM staff_chat ORDER BY id DESC LIMIT 100) x ORDER BY id`);
-  return rows.map((r) => { const pe = personaOf(r.admin_id) || {}; return { from: adminShown(r.admin_id, "?"), admin: pe.key || "", pic: pe.pic || 1, rank: pe.rank || "admin", text: r.text, ts: new Date(r.at).getTime() }; });
+// ---- (owner) the staff chats, kept so whoever comes online can catch up (shown under each one's current identity):
+// 'admin', the Admin chat (Admins and the Head Admin), and 'mod', the Moderator chat (Moderators; Admins read and write it) ----
+export const CHAT_ROLES = { admin: HIGH_ROLES, mod: STAFF_ROLES };
+export async function saveStaffLine(adminId, text, channel = "admin") { const { rows } = await pool.query(`INSERT INTO staff_chat (admin_id, text, channel) VALUES ($1, $2, $3) RETURNING at`, [adminId, text, channel]); return rows[0].at; }
+export async function staffChatRecent(channel = "admin") {
+  const { rows } = await pool.query(`SELECT admin_id, at, text FROM (SELECT * FROM staff_chat WHERE channel = $1 ORDER BY id DESC LIMIT 200) x ORDER BY id`, [channel]);
+  return rows.map((r) => { const pe = personaOf(r.admin_id) || {}; return { from: adminShown(r.admin_id, "?"), admin: pe.key || "", pic: pe.pic || 1, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}), text: r.text, ts: new Date(r.at).getTime() }; });
 }
-/** The staff a line mentions ("@name", their admin name), by account id. */
-export async function mentioned(text) {
+/** The staff a line mentions ("@name": an Admin's admin name or a Moderator's username) who may read `channel`, by account id. */
+export async function mentioned(text, channel = "admin") {
   const names = [...new Set((String(text).match(/@([A-Za-z0-9_]{3,24})/g) || []).map((m) => m.slice(1).toLowerCase()))]; if (!names.length) return [];
-  const { rows } = await pool.query(`SELECT id FROM users WHERE role = ANY($1) AND lower(admin_name) = ANY($2)`, [STAFF_ROLES, names]); return rows.map((r) => String(r.id));
+  const { rows } = await pool.query(`SELECT id FROM users WHERE role = ANY($1) AND ((role <> 'mod' AND lower(admin_name) = ANY($2)) OR (role = 'mod' AND lower(username) = ANY($2)))`, [CHAT_ROLES[channel] || HIGH_ROLES, names]); return rows.map((r) => String(r.id));
 }
+export async function rolesOf(ids) { if (!ids.length) return new Map(); const { rows } = await pool.query(`SELECT id, role FROM users WHERE id = ANY($1)`, [ids]); return new Map(rows.map((r) => [String(r.id), r.role])); }
 
 // ---- unread counts: what's new on each tab since the staff member last opened it ----
 const TABS = {
@@ -42,6 +45,7 @@ const TABS = {
   words: `SELECT count(*)::int AS n FROM filter_words WHERE requested_at > $1 OR decided_at > $1`,
   support: `SELECT count(*)::int AS n FROM ticket_messages WHERE NOT from_admin AND at > $1`,
   disc: `SELECT count(*)::int AS n FROM admin_log WHERE at > $1 AND action IN ('ban', 'mute', 'freeze', 'unban', 'unmute', 'unfreeze')`,
+  review: `SELECT count(*)::int AS n FROM mod_reviews WHERE at > $1 AND status = 'open'`,
 };
 export const UNREAD_TABS = Object.keys(TABS);
 export async function unreadCounts(adminId) {

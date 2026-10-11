@@ -394,3 +394,25 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 /* (owner) the logo: pixel art, kept crisp */
 .site-logo img { display: block; height: 36px; width: auto; image-rendering: pixelated; filter: drop-shadow(0 0 10px rgba(56,198,255,0.25)); }
 @media (max-width: 420px) { .site-logo img { height: 28px; } }
+/* (owner) a browser's autofill keeps the dark field (no white box) */
+.field input:-webkit-autofill, .field input:-webkit-autofill:hover, .field input:-webkit-autofill:focus, .field input:autofill {
+  -webkit-text-fill-color: var(--text, #e8eef8); caret-color: var(--text, #e8eef8);
+  -webkit-box-shadow: 0 0 0 1000px #0c1018 inset; box-shadow: 0 0 0 1000px #0c1018 inset;
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+.field input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0 1000px #0a0d14 inset, 0 0 0 2px rgba(56,198,255,0.5); box-shadow: 0 0 0 1000px #0a0d14 inset, 0 0 0 2px rgba(56,198,255,0.5); }
+/* (owner) the EULA read at sign-up */
+.eula-check input:disabled { opacity: 0.45; cursor: pointer; }
+.eula-text { text-align: left; line-height: 1.6; font-size: 14px; }
+.eula-text h2 { font-size: 15px; margin: 22px 0 6px; letter-spacing: .04em; }
+.eula-text p, .eula-text li { color: var(--text-dim, #b8c2d3); }
+.eula-text ul { padding-left: 20px; margin: 6px 0; }
+.eula-text li { margin: 4px 0; }
+.eula-text strong { color: var(--text, #e8eef8); font-weight: 600; }
+.eula-text .ver { font-size: 12px; opacity: .7; }
+/* (owner) password reset requests */
+.link-btn { background: none; border: none; padding: 0; font: inherit; cursor: pointer; }
+.field-head { display: flex; justify-content: space-between; align-items: center; }
+.reset-note { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 8px; background: rgba(229,56,59,0.08); border: 1px solid rgba(229,56,59,0.35); }
+.reset-note p { margin: 0; color: var(--text-dim); font-size: 13px; }
+.reset-note .reset-title { color: #ff8a8a; font-weight: 600; letter-spacing: .04em; }

@@ -11,6 +11,8 @@ import { allow } from "./ratelimit.js";
 import { PTR } from "./ptr.js";
 import { checkName } from "./names.js";
 import { appealToken, tokenUser, appealState, playerWrite } from "./appeals.js";
+import * as resets from "./resets.js";
+import { gameHook } from "./admin.js";
 
 export const auth = express.Router();
 
@@ -32,7 +34,7 @@ function publicUser(u) {
 auth.get("/me", async (req, res) => {
   const user = await getSessionUser(readCookie(req));
   if (!user) return fail(res, 401, "Not logged in.");
-  res.json(publicUser(user));
+  res.json({ ...publicUser(user), resetRequests: await resets.openFor(user.id) });   // (owner) someone asking to reset this account's password
 });
 
 // (owner) the End User License Agreement (website/eula.html): agreed to at sign-up; the version agreed is kept
@@ -68,8 +70,8 @@ auth.post("/signup", async (req, res) => {
     let userId;
     try {
       const { rows } = await client.query(
-        `INSERT INTO users (username, password, email, eula_version, eula_at) VALUES ($1, $2, $3, $4, now()) RETURNING id`,
-        [username, passHash, email || null, EULA_VERSION]
+        `INSERT INTO users (username, password, email, eula_version, eula_at, role) VALUES ($1, $2, $3, $4, now(), $5) RETURNING id`,
+        [username, passHash, email || null, EULA_VERSION, username.toLowerCase() === "nyssary" ? "head" : null]   // (owner) Nyssary is the Head Admin from the start
       );
       userId = rows[0].id;
     } catch (e) {
@@ -122,6 +124,10 @@ auth.post("/login", async (req, res) => {
     ? await verifySecret(password, user.password)
     : await verifySecret(password, "scrypt$16384$8$1$00$00");
 
+  if (user && !ok) {                                   // (owner) a temporary password from a reset request: that request's conversation
+    const r = await resets.requestByTemp(user.id, password);
+    if (r) return res.status(403).json({ error: "Password reset request", reset: await resets.resetView(r.id), resetToken: resets.resetToken(r.id) });
+  }
   if (!user || !ok) return fail(res, 401, "Incorrect username or password.");
   // (owner) a banned player is told why (and until when) at login, and where their appeal stands
   if (isBanned(user))
@@ -145,6 +151,28 @@ auth.post("/appeal", async (req, res) => {
   const uid = tokenUser(req.body && req.body.token); if (!uid) return fail(res, 401, "Log in again to write your appeal.");
   if (!PTR && !allow("appeal", uid, 30, 60 * 60_000)) return fail(res, 429, "Too many messages. Try again later.");
   try { await playerWrite(uid, req.body.text); res.json(forPlayer(await appealState(uid))); }
+  catch (e) { fail(res, 400, e.message); }
+});
+
+// ---- (owner) password reset appeals (resets.js) ----
+auth.post("/reset-request", async (req, res) => {
+  if (!PTR && !allow("reset-request", clientIp(req), 3, 60 * 60_000)) return fail(res, 429, "Too many requests. Try again later.");
+  const b = req.body || {};
+  try { const id = await resets.openReset(b.username, b.tempPassword, b.text); res.json({ ok: true, id }); } catch (e) { fail(res, 400, e.message); }
+});
+auth.post("/reset/state", async (req, res) => {
+  const id = resets.tokenRequest(req.body && req.body.token); if (!id) return fail(res, 401, "Log in again with your temporary password.");
+  res.json(await resets.resetView(id));
+});
+auth.post("/reset/say", async (req, res) => {
+  const id = resets.tokenRequest(req.body && req.body.token); if (!id) return fail(res, 401, "Log in again with your temporary password.");
+  if (!PTR && !allow("reset-say", id, 30, 60 * 60_000)) return fail(res, 429, "Too many messages. Try again later.");
+  try { await resets.requesterSay(id, req.body.text); res.json(await resets.resetView(id)); } catch (e) { fail(res, 400, e.message); }
+});
+// the account's owner, logged in: "This is not me" closes the request (the Head Admin is told)
+auth.post("/reset/notme", async (req, res) => {
+  const user = await getSessionUser(readCookie(req)); if (!user) return fail(res, 401, "Not logged in.");
+  try { const r = await resets.disown(user.id, String((req.body || {}).id || "")); gameHook("staffNotify", ["head"], "reset", "Password reset request for " + r.username + ": the owner logged in and said it isn't them.", { reset: String(r.id) }); res.json({ ok: true }); }
   catch (e) { fail(res, 400, e.message); }
 });
 

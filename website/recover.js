@@ -29,6 +29,29 @@ stepUser.addEventListener("submit", async (e) => {
   }
 });
 
+// (owner) can't answer the questions: a reset request to the Head Admin, with a temporary password to follow it with
+const stepRequest = document.getElementById("step-request"), msg3 = document.getElementById("msg3");
+for (const b of document.querySelectorAll("[data-to-request]")) b.addEventListener("click", () => {
+  const u = stepUser.elements.username.value; stepUser.hidden = true; stepAnswers.hidden = true; stepRequest.hidden = false;
+  if (u) stepRequest.elements.username.value = u; (u ? stepRequest.elements.temp : stepRequest.elements.username).focus();
+});
+document.getElementById("req-eye").addEventListener("click", (e) => {
+  e.preventDefault(); const t = stepRequest.elements.temp, show = t.type === "password";
+  t.type = stepRequest.elements.confirm.type = show ? "text" : "password"; e.target.textContent = show ? "Hide" : "Show";
+});
+stepRequest.addEventListener("submit", async (e) => {
+  e.preventDefault(); showMessage(msg3, "");
+  if (!stepRequest.reportValidity()) return;
+  const v = formValues(stepRequest);
+  if (v.temp !== v.confirm) { showMessage(msg3, "Passwords don't match."); return; }
+  setBusy(stepRequest, true);
+  try {
+    await Api.post("/auth/reset-request", { username: v.username, tempPassword: v.temp, text: v.text });
+    showMessage(msg3, "Request sent. Log in with your username and temporary password to follow it.", "ok");
+    for (const x of stepRequest.querySelectorAll("input, textarea, button[type=submit]")) x.disabled = true;
+  } catch (err) { showMessage(msg3, err.message); setBusy(stepRequest, false); }
+});
+
 stepAnswers.addEventListener("submit", async (e) => {
   e.preventDefault();
   showMessage(msg2, "");

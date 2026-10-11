@@ -20,6 +20,10 @@ export async function saveAdminDm(pid, d) {
   await pool.query(`INSERT INTO admin_dms (player_id, admin_id, admin_name, player_name, log, frozen) VALUES ($1, $2, $3, $4, $5, $6)
     ON CONFLICT (player_id) DO UPDATE SET admin_id = $2, admin_name = $3, player_name = $4, log = $5, frozen = $6`, [pid, d.admin, d.adminName, d.name, JSON.stringify(d.log), !!d.frozen]);
 }
+// (owner) staff DM rooms, kept across restarts
+export async function loadAdminRooms() { const { rows } = await pool.query(`SELECT data FROM admin_rooms`); return rows.map((r) => r.data); }
+export async function saveAdminRoom(id, r) { const { grace, ...keep } = r; await pool.query(`INSERT INTO admin_rooms (id, data) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET data = $2`, [id, keep]); }
+export async function deleteAdminRoom(id) { await pool.query(`DELETE FROM admin_rooms WHERE id = $1`, [id]); }
 export async function deleteAdminDm(pid) { await pool.query(`DELETE FROM admin_dms WHERE player_id = $1`, [pid]); }
 export async function setFrozenRow(pid, on, adminId) { await pool.query(`UPDATE users SET frozen = $2, frozen_by = $3, frozen_at = CASE WHEN $2 THEN now() END, frozen_reason = NULL WHERE id = $1`, [pid, on, on ? adminId : null]); }
 export async function roleOf(id) { const { rows } = await pool.query(`SELECT role FROM users WHERE id = $1`, [id]); return rows[0] ? rows[0].role || null : null; }

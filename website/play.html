@@ -6,7 +6,7 @@
   <title>Atamus</title>
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=1791746306">
+  <link rel="stylesheet" href="style.css?v=1791749752">
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -32,6 +32,19 @@
       <h1 id="title" class="brand">Atamus</h1>
       <div class="form">
         <p class="welcome"><span id="hello">Welcome back</span>, <strong id="who">…</strong></p>
+        <!-- (owner) someone asked to reset this account's password: the owner can say it isn't them, then change it -->
+        <div id="reset-note" class="reset-note" hidden>
+          <p class="reset-title">Password reset requested</p>
+          <p id="reset-when"></p>
+          <button type="button" class="btn btn-ghost" id="not-me">This is not me</button>
+          <form id="pw-form" class="form" novalidate hidden>
+            <label class="field"><span>Current password</span><input name="current" type="password" autocomplete="current-password" required></label>
+            <label class="field"><span>New password</span><input name="password" type="password" autocomplete="new-password" required minlength="8"></label>
+            <label class="field"><span>Confirm new password</span><input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>
+            <p class="msg" id="pw-msg" role="alert" hidden></p>
+            <button type="submit" class="btn btn-primary">Change password</button>
+          </form>
+        </div>
         <div id="update-step" hidden>
           <p class="update-title">Atamus is updating</p>
           <p class="hint" id="update-msg">Back in a moment…</p>
@@ -66,6 +79,6 @@
 
   <script src="api.js?v=1791738602"></script>
   <script src="portrait.js?v=1791701182"></script>
-  <script src="play.js?v=1791701182" defer></script>
+  <script src="play.js?v=1791749752" defer></script>
 </body>
 </html>

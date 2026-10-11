@@ -20,6 +20,7 @@ let charBuilder = null, pilotBuilder = null;
 async function showSteps() {
   const me = await Api.get("/auth/me");
   who.textContent = me.username;
+  showResetNote(me.resetRequests || []);
   const state = await Api.get("/game/state").catch(() => null);
   const hasChar = !!(state && state.profile && state.profile.portrait), hasPilot = !!(state && state.pilots && state.pilots.length);
   charStep.hidden = hasChar; pilotStep.hidden = !hasChar || hasPilot; enterStep.hidden = !hasChar || !hasPilot;
@@ -77,4 +78,26 @@ logoutBtn.addEventListener("click", async () => {
   logoutBtn.disabled = true;
   try { await Api.post("/auth/logout"); } catch { /* clear client-side regardless */ }
   location.href = "index.html";
+});
+
+// ---- (owner) a password reset was requested for this account: the owner can say it isn't them (the request closes and the
+// Head Admin is told), then change their password ----
+const resetNote = document.getElementById("reset-note"), pwForm = document.getElementById("pw-form"), pwMsg = document.getElementById("pw-msg");
+let resetIds = [];
+function showResetNote(list) {
+  resetIds = list.map((r) => r.id); if (!list.length) { if (pwForm.hidden) resetNote.hidden = true; return; }
+  resetNote.hidden = false;
+  document.getElementById("reset-when").textContent = "Someone asked to reset this account's password on " + list.map((r) => new Date(r.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })).join(", ") + ".";
+}
+document.getElementById("not-me").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  try { for (const id of resetIds) await Api.post("/auth/reset/notme", { id }); } catch {}
+  document.getElementById("reset-when").textContent = "The request is closed. Change your password:"; e.target.hidden = true; pwForm.hidden = false; pwForm.elements.current.focus();
+});
+pwForm.addEventListener("submit", async (e) => {
+  e.preventDefault(); showMessage(pwMsg, ""); if (!pwForm.reportValidity()) return;
+  const v = formValues(pwForm); if (v.password !== v.confirm) { showMessage(pwMsg, "Passwords don't match."); return; }
+  setBusy(pwForm, true);
+  try { await Api.post("/auth/account/password", { current: v.current, password: v.password }); resetNote.hidden = true; }
+  catch (err) { showMessage(pwMsg, err.message); setBusy(pwForm, false); }
 });

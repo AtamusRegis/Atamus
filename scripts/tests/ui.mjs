@@ -22,7 +22,7 @@ const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new 
 let page = await open(1280, 800);
 let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 1500, y: -1500 }); await s(500);
   return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
-t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit,admin", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory and Fitting windows (and Admin, for admins: the PTR tester is the Head Admin)", r.btns);
+t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit,support,admin", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory, Fitting and Support windows (and Admin, for admins: the PTR tester is the Head Admin)", r.btns);
 r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
   return { wins: wins(), player: document.querySelector('.win[data-id="player"]').innerText, pilot: document.querySelector('.win[data-id="pilot"]').innerText };`);
 t.ok(r.wins.includes("player") && r.wins.includes("pilot"), "both open from the panel", r.wins);
@@ -89,7 +89,7 @@ r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); aw
   const corp = [...document.querySelectorAll('.win[data-id="chat"] .chat-line')].map((x) => x.textContent);
   document.querySelector('.win[data-id="chat"] .win-close').click();
   return { tabs, line: line && line.textContent, portrait: !!(line && line.querySelector("canvas.portrait")), corp };`);
-t.ok(["Local,Corp", "Local,Corp,Admin"].includes(r.tabs.join()), "chat has Local and Corp (and Admin for unlocked staff)", r.tabs);
+t.ok(["Local,Corp", "Local,Corp,Admin,Moderator"].includes(r.tabs.join()), "chat has Local and Corp (and the Admin and Moderator chats for unlocked staff)", r.tabs);
 t.ok(r.line === "PTR: hello expanse" && r.portrait, "a message shows the character's portrait and the username", r);
 t.ok(r.corp.length === 1 && r.corp[0] === "PTR: corp hello", "corp has its own log", r.corp);
 
@@ -125,9 +125,9 @@ r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); aw
   document.querySelector('.win[data-id="chat"] .win-close').click();
   return { menu, tabs, ph, parts, title: rep.querySelector(".win-title-slot").textContent, closed: rep.hidden, after };`);
 t.ok(r.menu.join() === "Info,DM,Report,Mute,Block,Admin", "a player's name: Info, DM, Report, Mute, Block (and Admin for an admin)", r.menu);
-t.ok(r.tabs.filter((x) => x !== "Admin").join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab named for them", r);
+t.ok(r.tabs.filter((x) => x !== "Admin" && x !== "Moderator").join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab named for them", r);
 t.ok(r.parts[0] && r.parts[1] && r.parts[2] === "Cancel,Send report" && r.title === "Report Zed" && r.closed, "Report: what it's about, what happened, Cancel / Send report", r);
-t.ok(r.after.filter((x) => x !== "Admin").join() === "Local,Corp", "a DM tab closes with its ×", r.after);
+t.ok(r.after.filter((x) => x !== "Admin" && x !== "Moderator").join() === "Local,Corp", "a DM tab closes with its ×", r.after);
 
 // another player's sheet (owner): DM / Report at the bottom; not on your own
 r = await run(page, `const get0 = Api.get; Api.get = async (u) => u.startsWith("/game/player/") ? { username: decodeURIComponent(u.split("/").pop()), createdAt: Date.now(), portrait: null, corp: "None", pilotCount: 1, totalSkillLevel: 0 } : get0(u);
@@ -336,7 +336,8 @@ await run(page, `for (const b of document.querySelectorAll(".win:not([hidden]) .
 r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   const btn = document.querySelector('.wbtn[data-id="admin"]'); if (!btn) return { btn: false };
   btn.click(); await s(800); const w = document.querySelector('.win[data-id="admin"]'), pw = w.querySelector('input[type="password"]');
-  const masked = !!pw; pw.value = "Cinder@Hollow6021=Magnet~Captain%Creek"; pw.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(1200);
+  const masked = !!pw; pw.value = "Cinder@Hollow6021=Magnet~Captain%Creek"; pw.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  for (let i = 0; i < 80 && !w.querySelector(".tab") && !w.querySelector(".apic"); i++) await s(100);   // (the panel loads)
   // (owner) the first time: the admin profile (a name and one of the pictures)
   let prof = { pics: w.querySelectorAll(".apic").length };
   if (prof.pics) { const n = w.querySelector(".apic-form .text-input"); n.value = "Warden_Q"; w.querySelectorAll(".apic")[2].click(); [...w.querySelectorAll("button")].find((b) => b.textContent === "Save").click(); await s(1200); }
@@ -359,7 +360,7 @@ r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: 
   [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
   for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
   return { btn: true, masked, tabs, rows, info, lic, cards, meters, apTabs, prof, said, log };`);
-t.ok(r.btn && r.masked && r.tabs === "Players,Reports,Appeals,Chat,Names,Words,Support,Log,Notifications,Players,Staff,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Staff / Disciplined), Reports, Appeals, Chat, Names, Words, Support, Log and Notifications (owner)", r);
+t.ok(r.btn && r.masked && r.tabs === "Players,Reports,Appeals,Chat,Names,Words,Support,Log,Resets,Review,Notifications,Players,Staff,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Staff / Disciplined), Reports, Appeals, Chat, Names, Words, Support, Log and Notifications (owner)", r);
 t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.apTabs === "Player,Pilots,Language" && r.cards >= 1 && r.lic >= 1 && r.log, "a player's admin info; their pilots as on the Pilot window, with their licenses (owner)", r);
 t.ok(r.meters === 7, "the Language tab: the overall meter and one per kind of word (owner)", r.meters);
 t.ok((r.prof.pics === 6 || r.prof.pics === 0) && r.prof.after && r.prof.menu === "Admin Profile", "first the admin profile (6 pictures); the panel's menu changes it (owner)", r.prof);

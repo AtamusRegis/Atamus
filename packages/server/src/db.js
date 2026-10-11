@@ -242,6 +242,24 @@ export async function migrate() {
     ALTER TABLE appeals ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS admin_id BIGINT;
     -- (owner) Nyssary is a Head Admin (and the only one who makes Head Admins); staff: Head Admins and Moderators ('admin')
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;   -- (owner) a staff member's own panel password (scrypt)
+    -- (owner) password reset appeals (resets.js): a temporary password to follow the request with; the Head Admin decides
+    CREATE TABLE IF NOT EXISTS reset_requests (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, username TEXT NOT NULL, temp_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open', created_at TIMESTAMPTZ NOT NULL DEFAULT now(), closed_by BIGINT, closed_at TIMESTAMPTZ
+    );
+    CREATE TABLE IF NOT EXISTS reset_messages (
+      id BIGSERIAL PRIMARY KEY, request_id BIGINT NOT NULL REFERENCES reset_requests(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      from_admin BOOLEAN NOT NULL DEFAULT false, admin_id BIGINT, name TEXT NOT NULL, text TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS admin_rooms (id TEXT PRIMARY KEY, data JSONB NOT NULL);   -- (owner) staff DM rooms (several people)
+    -- (owner) what a Moderator did (mute, timed ban, mute / block between players), for the Admins to review
+    CREATE TABLE IF NOT EXISTS mod_reviews (
+      id BIGSERIAL PRIMARY KEY, mod_id BIGINT, target_id BIGINT, target_name TEXT NOT NULL, action TEXT NOT NULL, reason TEXT NOT NULL,
+      detail JSONB, status TEXT NOT NULL DEFAULT 'open', at TIMESTAMPTZ NOT NULL DEFAULT now(), reviewed_by BIGINT, reviewed_at TIMESTAMPTZ
+    );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS promo_from TEXT;      -- (the role they had before it: declining goes back to it)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS promo_pending TEXT;   -- (owner) a promotion not yet accepted: its role has no powers until then
     -- (owner, 2026-10-11) three tiers: 'head' (Nyssary only), 'admin' (Admins), 'mod' (Moderators); once: the old 'admin'
     -- (regular admins, now Moderators) becomes 'mod' and any other Head Admin becomes an Admin
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now());
@@ -252,9 +270,17 @@ export async function migrate() {
         INSERT INTO meta (key, value) VALUES ('roles:3tier', 'done');
       END IF;
     END $$;
+    -- (owner, 2026-10-11) once: the old Nyssary account (its login stopped working) is set aside as Nyssary_old_<id> (no role,
+    -- admin profile, admin password or sessions; its history stays) so the owner can sign up again as Nyssary
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM meta WHERE key = 'reset:nyssary:1') THEN
+        DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE lower(username) = 'nyssary');
+        UPDATE users SET username = 'Nyssary_old_' || id, role = NULL, admin_name = NULL, admin_pic = NULL, admin_pw_hash = NULL WHERE lower(username) = 'nyssary';
+        INSERT INTO meta (key, value) VALUES ('reset:nyssary:1', 'done');
+      END IF;
+    END $$;
     UPDATE users SET role = 'admin' WHERE role = 'head' AND lower(username) NOT IN ('nyssary', 'ptr');   -- the Head Admin is Nyssary alone (the PTR tester stands in)
     UPDATE users SET role = 'head' WHERE lower(username) = 'nyssary' AND role IS DISTINCT FROM 'head';
-    ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_pw_hash TEXT;
     -- (owner) a Moderator's abilities suspended for 24 hours by another staff member, with a reason; Head Admins are told
     ALTER TABLE users ADD COLUMN IF NOT EXISTS mod_suspended_until TIMESTAMPTZ;
     -- (owner) staff notifications kept for when they're away, the Admin chat, and when each last opened each admin tab
@@ -264,6 +290,7 @@ export async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS staff_notes_admin_idx ON staff_notes (admin_id, id DESC);
     CREATE TABLE IF NOT EXISTS staff_chat (id BIGSERIAL PRIMARY KEY, admin_id BIGINT, at TIMESTAMPTZ NOT NULL DEFAULT now(), text TEXT NOT NULL);
+    ALTER TABLE staff_chat ADD COLUMN IF NOT EXISTS channel TEXT NOT NULL DEFAULT 'admin';   -- (owner) 'admin' (Admins) or 'mod' (Moderators, read by Admins)
     CREATE TABLE IF NOT EXISTS staff_seen (admin_id BIGINT NOT NULL, tab TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, PRIMARY KEY (admin_id, tab));
     CREATE TABLE IF NOT EXISTS mod_suspensions (
       id BIGSERIAL PRIMARY KEY, mod_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, by_id BIGINT, reason TEXT NOT NULL,
