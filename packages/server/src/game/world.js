@@ -1,13 +1,23 @@
 // The authoritative simulation (back to basics, owner 2026-10-10): the Expanse's hexagon with nothing in it, and one
 // Prospector per pilot that flies, aligns and warps where it's told, and asteroid belt POIs. Everything else the game
 // had is kept for reference in reference/2026-10-10-pre-reset/.
-import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
+import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE_WARP_KM, DRONE_KMPS, EXPANSE_APOTHEM_KM, SPAWN_SPREAD_KM, BELTS_MIN, PLAYERS_PER_BELT, WARP_BASE_MS, WARP_KM_PER_S, ALIGN_SPEED, ALIGN_DEG, WARP_LAND_KM } from "./constants.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
 import { STATION, DOCK_KM, stationProps, stationLanding, stationRange } from "./station.js";
 import { Obstacles } from "./obstacles.js";
 import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
-import { ORES, sizeFor } from "./belts.js";
+import { ORES, sizeFor, oreOf } from "./belts.js";
+import { readFileSync } from "node:fs";
+// (owner) a laser aims only at the rock itself: points well inside each rock sprite's opaque part, as fractions of its
+// width from its center (v down, as drawn; scripts/gen/rockmasks.py makes them), turned and scaled like the art
+const ROCK_MASKS = JSON.parse(readFileSync(new URL("./rockmasks.json", import.meta.url), "utf8"));
+function aimPoint(k) {
+  if (!k) return { ax: 0, ay: 0, size: 0 };
+  const pts = ROCK_MASKS[((oreOf(k.ore) || {}).rock || "cratered") + "_" + k.size], w = k.size / 1000;
+  const [u, v] = pts && pts.length ? pts[Math.floor(Math.random() * pts.length)] : [0, 0], c = Math.cos(k.rot || 0), sn = Math.sin(k.rot || 0);
+  return { ax: +((u * c - v * sn) * w).toFixed(4), ay: +(-(u * sn + v * c) * w).toFixed(4), size: k.size };   // screen y is down, world y up
+}
 
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -229,8 +239,7 @@ export class World {
   // a mining cycle on rock `tg`: the laser picks a spot inside the rock and a hardpoint on its arm, kept for the cycle
   _cycle(s, slot, tg, at) {
     const k = this._rock(tg), t = SHIP_TYPES[s.type], arm = (t.arms || [[0]])[slot % (t.arms || [[0]]).length];
-    const a = Math.random() * Math.PI * 2, d = (k ? k.r : 0) * (0.15 + Math.random() * 0.35);
-    return { on: true, at, tg, ax: +(Math.cos(a) * d).toFixed(4), ay: +(Math.sin(a) * d).toFixed(4), hp: arm[Math.floor(Math.random() * arm.length)] };
+    return { on: true, at, tg, ...aimPoint(k), hp: arm[Math.floor(Math.random() * arm.length)] };
   }
   _modOff(s, slot) { if (s.act[slot]) { s.act[slot] = null; this._recalc(s); } }
   _mcalc(s, m) { return m.key === "mining_drones" ? s.calc.drones : s.calc.laser; }
@@ -240,8 +249,9 @@ export class World {
     for (const g of s.targets) { if (g.kind !== "rock" || !g.locked) continue; const pos = this._objPos("rock", g.id); if (pos && this._range(s, pos) <= range) return g.id; }
     return null;
   }
-  // lasers and drones: each cycle's ore lands in the ore hold when it completes; they stop when the rock is gone, unlocked
-  // or out of reach, or the ore hold is full
+  // lasers and drones: a laser's ore lands in the ore hold when its cycle completes; (owner) drones fly theirs to the ship,
+  // drop it in the ore hold and fly back before the next cycle. They stop when the rock is gone, unlocked or out of reach,
+  // or the ore hold is full
   _tickModules(now) {
     for (const s of this.ships.values()) {
       if (!s.act || !s.act.some(Boolean)) continue;
@@ -250,9 +260,26 @@ export class World {
         const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
         if (a.standby) { const tg = this._miningTarget(s, m); if (tg) s.act[i] = this._cycle(s, i, tg, now); continue; }   // the first lock in range
         const c = this._mcalc(s, m), k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };
+        if (a.haul) {                                      // drones on their way to the ship (deposit) and back
+          const h = a.haul;
+          if (!h.dep && now >= h.at + h.leg) {
+            h.dep = true; const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(h.amt, Math.max(0, free));
+            if (amt > 0) addItem(s.holds, "ore", "ore:" + h.ore, amt);
+            if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); continue; }
+          }
+          if (now < h.at + 2 * h.leg) continue;
+          if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
+          s.act[i] = this._cycle(s, i, a.tg, now); continue;
+        }
         if (!k || !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm) { this._modOff(s, i); continue; }
+        if (a.size !== k.size) Object.assign(a, aimPoint(k));   // the rock shrank: aim at the smaller art
         if (now - a.at < c.cycleMs) continue;
         const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(c.yield, k.m3, Math.max(0, free));
+        if (m.key === "mining_drones" && amt > 0) {        // (owner) the drones carry it home: the rock loses it now, the hold gets it on arrival
+          this._mineRock(a.tg, amt);
+          a.haul = { amt, ore: k.ore, at: now, leg: Math.max(1000, Math.round(Math.hypot(k.x - s.x, k.y - s.y) / DRONE_KMPS * 1000)), rx: k.x, ry: k.y, rs: k.size };
+          continue;
+        }
         if (amt > 0) { addItem(s.holds, "ore", "ore:" + k.ore, amt); this._mineRock(a.tg, amt); }
         s.act[i] = this._cycle(s, i, a.tg, a.at + c.cycleMs);   // the next cycle: a new spot, maybe the other hardpoint
         if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); }
@@ -568,7 +595,13 @@ export class World {
         e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
       if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle
-        const b = []; s.act.forEach((a, i) => { if (a && a.tg) { const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3); b.push({ m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs }); } });
+        const b = []; s.act.forEach((a, i) => {
+          if (!a || !a.tg) return;
+          const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = a.haul ? 1 : +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3);
+          const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs };
+          if (a.haul) { const h = a.haul; Object.assign(e, { hl: +Math.min(1, (this.simAt - h.at) / (2 * h.leg)).toFixed(3), hd: 2 * h.leg, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore }); }   // drones hauling: how far through the round trip
+          b.push(e);
+        });
         if (b.length) e.beams = b;
       }
       if (s.wp) e.warp = { to: s.wp.poi, p: +Math.min(1, (this.simAt - s.wp.at) / s.wp.dur).toFixed(3), fx: +s.wp.fx.toFixed(2), fy: +s.wp.fy.toFixed(2), tx: +s.wp.tx.toFixed(2), ty: +s.wp.ty.toFixed(2) };

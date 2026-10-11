@@ -476,6 +476,10 @@
   // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
   // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
   // along its no-destination line, facing it.
+  // a square of the rock's ore riding a beam from (fx, fy) to (tx, ty), p of the way through the cycle
+  function drawChunk(fx, fy, tx, ty, p, color, qs) {
+    ctx.save(); ctx.translate(fx + (tx - fx) * p, fy + (ty - fy) * p); ctx.rotate(p * 6); ctx.fillStyle = color || "#b9a98c"; ctx.fillRect(-qs / 2, -qs / 2, qs, qs); ctx.strokeStyle = "rgba(255,225,180,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(-qs / 2, -qs / 2, qs, qs); ctx.restore();
+  }
   function drawBeams(ships) {
     const sc = scale(), now = performance.now(), t = now / 1000, ores = oreBy();
     for (const sh of ships) {
@@ -484,14 +488,29 @@
       const sx = gx2s(sh.x), sy = gy2s(sh.y);
       let n = 0;
       for (const b of sh.beams) {
+        const qs = Math.max(2.5, Math.min(6, L * 0.12));
+        if (b.m === "mining_drones" && b.hl != null) {   // (owner) hauling: out to the ship with the ore, then back to the rock
+          const art = sh.mine ? droneArt.blue : droneArt.red, w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
+          const hl = Math.min(1, b.hl + (now - snapAt) / (b.hd || 10000)), out = hl < 0.5, q = out ? hl * 2 : 2 - hl * 2, e = 0.5 - 0.5 * Math.cos(Math.PI * q);
+          const rx = gx2s(b.rx), ry = gy2s(b.ry), R = (b.rs / 2000 + (T.radiusKm || 0.09) + 0.07) * sc, o = ores.get(b.ore);
+          for (let d = 0; d < 2; d++) {
+            const tq = (now - hl * (b.hd || 10000) + (out ? 0 : (b.hd || 10000))) / 1000, a0 = tq * 0.25 + d * Math.PI + n * 0.7, x0 = rx + Math.cos(a0) * R, y0 = ry + Math.sin(a0) * R;   // leaves from / returns to its place in the orbit
+            const x = x0 + (sx + (d ? 4 : -4) * Math.cos(a0) - x0) * e, y = y0 + (sy + (d ? 4 : -4) * Math.sin(a0) - y0) * e;
+            const face = out ? Math.atan2(sy - y0, sx - x0) : Math.atan2(y0 - sy, x0 - sx);
+            if (art.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(face); ctx.imageSmoothingEnabled = w > 24; ctx.drawImage(art, -w / 2, -hgt / 2, w, hgt); ctx.restore(); }
+            if (out) { const cx = x + Math.cos(face) * w * 0.6, cy = y + Math.sin(face) * w * 0.6; drawChunk(cx, cy, cx, cy, 0, o && o.color, qs * 0.8); }   // the ore, carried at its nose
+          }
+          n++; continue;
+        }
         const k = rockById(b.tg); if (!k) continue;
-        const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.min(1, (b.p || 0) + (now - snapAt) / (b.c || 15000));
+        const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.min(1, (b.p || 0) + (now - snapAt) / (b.c || 15000)), o = ores.get(k.ore);
         if (b.m === "mining_drones") {
           const R = (k.size / 2000 + (T.radiusKm || 0.09) + 0.07) * sc, art = sh.mine ? droneArt.blue : droneArt.red;
           const w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
           for (let d = 0; d < 2; d++) {
             const a = t * 0.25 + d * Math.PI + n * 0.7, x = rx + Math.cos(a) * R, y = ry + Math.sin(a) * R;
-            ctx.save(); ctx.strokeStyle = "rgba(255,190,110," + (0.3 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx + (x - rx) * 0.3, ry + (y - ry) * 0.3); ctx.stroke(); ctx.restore();
+            ctx.save(); ctx.strokeStyle = "rgba(255,190,110," + (0.3 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx, ry); ctx.stroke(); ctx.restore();   // (owner) to the rock's center
+            drawChunk(rx, ry, x, y, p, o && o.color, qs * 0.8);   // (owner) the drone's yield rides its beam too
             if (art.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(a + Math.PI); ctx.imageSmoothingEnabled = w > 24; ctx.drawImage(art, -w / 2, -hgt / 2, w, hgt); ctx.restore(); }   // nose toward the rock
           }
         } else {
@@ -502,8 +521,7 @@
           ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ex, ey); ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 1.1; ctx.stroke();
           ctx.beginPath(); ctx.arc(ex, ey, 2.2, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,240,200,0.85)"; ctx.fill();
           ctx.restore();
-          const o = ores.get(k.ore), qx = ex + (ox - ex) * p, qy = ey + (oy - ey) * p, qs = Math.max(2.5, Math.min(6, L * 0.12));
-          ctx.save(); ctx.translate(qx, qy); ctx.rotate(p * 6); ctx.fillStyle = (o && o.color) || "#b9a98c"; ctx.fillRect(-qs / 2, -qs / 2, qs, qs); ctx.strokeStyle = "rgba(255,225,180,0.85)"; ctx.lineWidth = 1; ctx.strokeRect(-qs / 2, -qs / 2, qs, qs); ctx.restore();
+          drawChunk(ex, ey, ox, oy, p, o && o.color, qs);
         }
         n++;
       }

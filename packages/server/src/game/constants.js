@@ -28,6 +28,7 @@ export const SHIP_ARRIVE_EPS_KM = 0.04;  // "arrived" when this close to the tar
 export const LOGOUT_GRACE_MS = 20 * 1000; // a safe log off (every ship docked) leaves after this (a reload comes back in time)
 export const UNSAFE_LOGOFF_MS = 5 * 60 * 1000;   // (owner) otherwise the ships carry on this long, then warp to a safe spot and leave
 export const SAFE_WARP_KM = 1500;                // how far that safe spot is
+export const DRONE_KMPS = 1;                      // (owner) mining drones fly each cycle's ore to the ship and back at this speed
 
 // The Prospector (owner: the only ship for now). Stats as they were; radius drives spacing;
 // hp / shield are shown in the fleet window and the HUD (nothing damages ships yet). Targeting: the Prospector's

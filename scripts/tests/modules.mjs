@@ -70,8 +70,13 @@ t.ok(s.act[0] && s.act[0].tg === k.id && s.act[2] && s.act[2].tg === k.id, "on t
 t.ok(Number.isFinite(s.act[0].ax) && Math.hypot(s.act[0].ax, s.act[0].ay) < k.r && [0, 1].includes(s.act[0].hp) && [2, 3].includes(w.ships.get(s.id).act[1] ? 2 : 2), "a laser picks a spot inside the rock and one of its arm's hardpoints for the cycle", s.act[0]);
 const m0 = k.m3; s.act[0].at -= 15000; w.tick(0.05);
 t.ok(Math.abs((s.holds.ore["ore:" + k.ore] || 0) - s.calc.laser.yield) < 1e-6 && Math.abs(k.m3 - (m0 - s.calc.laser.yield)) < 0.02, "each laser cycle moves its yield from the rock into the ore hold", [s.holds.ore, k.m3]);
-s.act[2].at -= 60000; w.tick(0.05);
-t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield - s.calc.drones.yield) < 1e-6, "a drone cycle adds the drones' yield", s.holds.ore);
+const m1 = k.m3; s.act[2].at -= 60000; w.tick(0.05);
+const h = s.act[2] && s.act[2].haul, hsnap = w.snapshotFor(a).ships.find((x) => x.id === s.id).beams.find((b) => b.m === "mining_drones");
+t.ok(h && h.amt === s.calc.drones.yield && Math.abs(k.m3 - (m1 - h.amt)) < 0.02 && Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield) < 1e-6 && hsnap && hsnap.hl >= 0 && hsnap.hd === 2 * h.leg, "a drone cycle takes its yield from the rock, and the drones fly it to the ship (owner)", [h, hsnap]);
+h.at -= h.leg; w.tick(0.05);
+t.ok(Math.abs(s.holds.ore["ore:" + k.ore] - s.calc.laser.yield - s.calc.drones.yield) < 1e-6 && s.act[2].haul, "it lands in the ore hold when they reach the ship, then they fly back", s.holds.ore);
+h.at -= h.leg; w.tick(0.05);
+t.ok(s.act[2] && !s.act[2].haul && s.act[2].tg === k.id, "back at the rock, the next cycle starts", s.act[2]);
 const snap = w.snapshotFor(a).ships.find((x) => x.id === s.id);
 t.ok(snap.fit && snap.holds && snap.calc && snap.act[0].tg === k.id && snap.beams.length === 2 && snap.beams.every((b) => Number.isFinite(b.ax) && Number.isFinite(b.p) && b.c > 0), "your ship's snapshot carries its fit, holds, numbers and running modules; everyone sees the beams (spot, hardpoint, cycle)", snap.beams);
 s.holds.ore["ore:" + k.ore] = s.calc.holds.ore - 1; s.act[0].at -= 15000; w.tick(0.05);
