@@ -374,3 +374,18 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .appeal-when { color: var(--text-faint); font-size: 11px; }
 .appeal-state { margin: 0; font-size: 13px; color: var(--text-dim); }
 .appeal-state[hidden] { display: none; }
+/* (owner) the EULA checkbox at sign-up */
+.eula-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-dim, #b8c2d3); cursor: pointer; }
+.eula-check input { margin-top: 2px; accent-color: #4fb4ff; }
+.eula-check a { color: #8fd0ff; }
+/* (owner) the front page's update list: collapsed when long, the full log in a window over a darkened page */
+.front-updates.collapsed .front-body { max-height: 420px; overflow: hidden; padding-right: 0; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.updates-more { display: block; margin: 10px auto 0; padding: 6px 14px; font: inherit; font-size: 13px; letter-spacing: .04em; color: #8fd0ff; background: rgba(79,180,255,0.08); border: 1px solid rgba(79,180,255,0.3); border-radius: 999px; cursor: pointer; }
+.updates-more:hover { background: rgba(79,180,255,0.16); }
+.ulog-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(3,5,10,0.78); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.ulog-win { width: 100%; max-width: 640px !important; max-height: calc(100vh - 32px); display: flex; flex-direction: column; margin: 0; }
+.ulog-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.ulog-head h2 { margin: 0; }
+.ulog-close { flex: none; width: 34px; height: 34px; font-size: 22px; line-height: 1; color: var(--text-dim); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; cursor: pointer; }
+.ulog-close:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+.ulog-body { gap: 0; overflow-y: auto; min-height: 0; padding-right: 8px; scrollbar-width: thin; scrollbar-color: rgba(140,170,220,0.35) transparent; }

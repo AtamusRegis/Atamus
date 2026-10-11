@@ -35,11 +35,14 @@ auth.get("/me", async (req, res) => {
   res.json(publicUser(user));
 });
 
+// (owner) the End User License Agreement (website/eula.html): agreed to at sign-up; the version agreed is kept
+export const EULA_VERSION = "2026-10-11";
 auth.post("/signup", async (req, res) => {
   if (!allow("signup", clientIp(req), 10, 60 * 60_000))
     return fail(res, 429, "Too many sign-ups from this address. Try again later.");
 
-  const { username, password, email, recovery } = req.body || {};
+  const { username, password, email, recovery, eula } = req.body || {};
+  if (eula !== true) return fail(res, 400, "Agree to the End User License Agreement to create an account.");   // (owner)
 
   if (!USERNAME_RE.test(username || ""))
     return fail(res, 400, "Username must be 3–24 characters: letters, numbers and underscores.");
@@ -65,8 +68,8 @@ auth.post("/signup", async (req, res) => {
     let userId;
     try {
       const { rows } = await client.query(
-        `INSERT INTO users (username, password, email) VALUES ($1, $2, $3) RETURNING id`,
-        [username, passHash, email || null]
+        `INSERT INTO users (username, password, email, eula_version, eula_at) VALUES ($1, $2, $3, $4, now()) RETURNING id`,
+        [username, passHash, email || null, EULA_VERSION]
       );
       userId = rows[0].id;
     } catch (e) {

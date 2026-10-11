@@ -28,6 +28,7 @@ form.addEventListener("submit", async (e) => {
     password: v.password,
     email: v.email || null,
     recovery: complete.length === 3 ? complete : null,
+    eula: form.elements.eula.checked,   // (owner) the EULA, read and agreed
   };
 
   setBusy(form, true);

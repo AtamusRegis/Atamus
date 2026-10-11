@@ -6,7 +6,7 @@
   <title>Atamus</title>
   <meta name="description" content="Atamus is a multiplayer space mining game you play in your browser. Mine the Expanse, train your pilots, grow your fleet.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=1791701182">
+  <link rel="stylesheet" href="style.css?v=1791744036">
   <script>
     // already signed in: straight to the welcome-back page
     fetch((/(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin) + "/auth/me", { credentials: "include" })
@@ -83,5 +83,25 @@
       </div>
     </section>
   </main>
+  <script>
+    // (owner) a long update list shows its newest part, faded; Full Update Log opens every entry in a window over a darkened page
+    (() => {
+      const sec = document.querySelector(".front-updates"), body = sec && sec.querySelector(".front-body");
+      if (!body || body.querySelectorAll("li").length <= 8) return;
+      sec.classList.add("collapsed");
+      const more = document.createElement("button"); more.type = "button"; more.className = "updates-more"; more.textContent = "Full Update Log";
+      sec.append(more);
+      let ov = null;
+      const close = () => { if (ov) { ov.remove(); ov = null; document.body.style.overflow = ""; more.focus(); } };
+      more.addEventListener("click", () => {
+        ov = document.createElement("div"); ov.className = "ulog-overlay";
+        ov.innerHTML = '<div class="ulog-win card" role="dialog" aria-modal="true" aria-labelledby="ulog-title"><div class="ulog-head"><h2 id="ulog-title" class="brand">Update Log</h2><button type="button" class="ulog-close" aria-label="Close">×</button></div><div class="ulog-body front-body"></div></div>';
+        ov.querySelector(".ulog-body").innerHTML = body.innerHTML;
+        ov.addEventListener("click", (e) => { if (e.target === ov || e.target.closest(".ulog-close")) close(); });
+        document.body.append(ov); document.body.style.overflow = "hidden"; ov.querySelector(".ulog-close").focus();
+      });
+      addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    })();
+  </script>
 </body>
 </html>

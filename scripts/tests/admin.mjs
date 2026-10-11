@@ -115,10 +115,17 @@ await db.query(`UPDATE users SET role = 'head' WHERE id = $1`, [me.id]);
 r = await q("/banname", { id: String(bob.id), reason: "offensive" }); t.ok(r.body.ok && (await db.query(`SELECT rename_required FROM users WHERE id = $1`, [bob.id])).rows[0].rename_required, "Ban Name on a player: they must rename", r.body);
 r = await q("/banname", { id: String(bob.id), pilotId: String(bp.id), reason: "offensive pilot" }); t.ok(r.body.ok && (await db.query(`SELECT data FROM pilots WHERE id = $1`, [bp.id])).rows[0].data.renameRequired, "on a pilot: that pilot must be renamed");
 r = await q("/names"); t.ok(r.body.some((n) => n.name === "AdmTestBob" && n.kind === "player") && r.body.some((n) => n.name === "Bob Pilot" && n.kind === "pilot"), "both names are on the banned names list", r.body.slice(0, 2));
-r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "admtestbob", password: "whatever123" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "admtestbob", password: "whatever123", eula: true }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
 t.ok(r.status === 400 && /isn't allowed|taken|exists/i.test(r.body.error), "a banned name can't be signed up with", r.body);
-r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "H1tl3r_88", password: "whatever123" }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+r = await fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ username: "H1tl3r_88", password: "whatever123", eula: true }) }).then(async (x) => ({ status: x.status, body: await x.json() }));
 t.ok(r.status === 400 && /isn't allowed/.test(r.body.error), "the name filter refuses bad usernames at signup", r.body);
+// (owner) the EULA: agreed to at sign-up, the version kept
+{ const su = (body) => fetch(BASE + "/auth/signup", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (x) => ({ status: x.status, body: await x.json() }));
+  await db.query(`DELETE FROM users WHERE lower(username) = 'eulatestx'`);
+  r = await su({ username: "EulaTestX", password: "whatever123" }); t.ok(r.status === 400 && /License Agreement/.test(r.body.error), "no account without agreeing to the EULA", r.body);
+  r = await su({ username: "EulaTestX", password: "whatever123", eula: true }); const eu = (await db.query(`SELECT eula_version, eula_at FROM users WHERE username = 'EulaTestX'`)).rows[0];
+  t.ok(r.status === 201 && eu && eu.eula_version === "2026-10-11" && eu.eula_at, "agreed: the account is made and the version agreed is kept", { r, eu });
+  await db.query(`DELETE FROM users WHERE username = 'EulaTestX'`); }
 await q("/names/remove", { name: "Bob Pilot", reason: "fine after all" }); r = await q("/names"); t.ok(!r.body.some((n) => n.name === "Bob Pilot"), "a banned name can be allowed again");
 // forced renames, as the PTR tester (its own name and pilot flagged straight in the database)
 { const g = (path, body) => fetch(BASE + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", origin: BASE }, body: body ? JSON.stringify(body) : undefined }).then(async (x) => ({ status: x.status, body: await x.json() }));

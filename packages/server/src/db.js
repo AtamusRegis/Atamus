@@ -225,6 +225,8 @@ export async function migrate() {
       id BIGSERIAL PRIMARY KEY, ticket_id BIGINT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE, at TIMESTAMPTZ NOT NULL DEFAULT now(),
       from_admin BOOLEAN NOT NULL DEFAULT false, admin_id BIGINT, name TEXT NOT NULL, text TEXT NOT NULL
     );
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS eula_version TEXT;   -- (owner) the EULA version agreed to, and when
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS eula_at TIMESTAMPTZ;
     ALTER TABLE users ADD COLUMN IF NOT EXISTS name_offer TEXT;   -- (owner) a banned name allowed again: offered back (revert or keep)
     ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS owner_id BIGINT;
     ALTER TABLE banned_names ADD COLUMN IF NOT EXISTS pilot_id BIGINT;
