@@ -373,7 +373,10 @@ export async function migrate() {
 // licenses and credits stay). "pilots": pilots and their ships only (accounts, characters and credits stay).
 // "solar": the new solar system (owner, 2026-10-11): belts go, player stations move (their storage stays), every ship
 // in space is docked at the Station (now at Earth); pilots, ships' holds, hangars and credits stay.
-const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"]];
+const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"], ["2026-10-11 planetary systems", "systems"]];
+// "systems" (owner, 2026-10-11): free player stations go (what was stored in one moves to the owner's hangar at Earth
+// Station, and ships docked at one dock there instead); the single hangar becomes Earth Station's (a hangar per NPC
+// station now); belts outside every planetary system go.
 export async function runWipes() {
   await pool.query(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   for (const [tag, kind] of WIPES) {
@@ -382,6 +385,25 @@ export async function runWipes() {
       await c.query("BEGIN");
       const { rowCount } = await c.query(`INSERT INTO meta (key, value) VALUES ($1, 'done') ON CONFLICT (key) DO NOTHING`, ["wipe:" + tag]);
       if (!rowCount) { await c.query("ROLLBACK"); continue; }          // already ran
+      if (kind === "systems") {
+        const { systemAt } = await import("./game/celestials.js");
+        const { rows: homes } = await c.query(`SELECT id, data FROM instances WHERE data->>'kind' = 'home'`), items = new Map();
+        for (const h of homes) if (h.data && h.data.owner && h.data.items) items.set(String(h.data.owner), h.data.items);
+        const { rows: sys } = await c.query(`SELECT user_id, data FROM systems`); const have = new Set();
+        const merge = (into, from) => { for (const [k, n] of Object.entries(from || {})) if (Number.isFinite(n) && n > 0) into[k] = +((into[k] || 0) + n).toFixed(2); };
+        for (const r of sys) {
+          const d = r.data || {}, hangars = d.hangars || {}, earth = (hangars.station ||= {}); have.add(String(r.user_id));
+          if (d.hangar) { merge(earth, d.hangar); delete d.hangar; }
+          merge(earth, items.get(String(r.user_id)));
+          for (const sh of Object.values(d.ships || {})) if (sh && sh.docked === "home") sh.docked = "station";
+          d.hangars = hangars; await c.query(`UPDATE systems SET data = $2 WHERE user_id = $1`, [r.user_id, d]);
+        }
+        for (const [uid, it] of items) if (!have.has(uid)) { const hg = {}; merge(hg, it); await c.query(`INSERT INTO systems (user_id, data) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`, [uid, { ships: {}, hangars: { station: hg } }]); }
+        const hd = await c.query(`DELETE FROM instances WHERE data->>'kind' = 'home'`);
+        const { rows: belts } = await c.query(`SELECT id, data FROM instances WHERE data->>'kind' = 'belt'`); let gone = 0;
+        for (const b of belts) if (!systemAt(+b.data.x, +b.data.y)) { await c.query(`DELETE FROM instances WHERE id = $1`, [b.id]); gone++; }
+        await c.query("COMMIT"); console.log(`[wipe] ${tag}: ${hd.rowCount} player stations removed (storage to Earth Station), ${gone} belts outside the planetary systems removed`); continue;
+      }
       if (kind === "solar") {
         const b = await c.query(`DELETE FROM instances WHERE data->>'kind' = 'belt'`);
         const h = await c.query(`UPDATE instances SET data = data || '{"resite": true}'::jsonb WHERE data->>'kind' = 'home'`);

@@ -361,7 +361,7 @@ export function attachGameServer(httpServer) {
     const hv = p.heavy || (p.heavy = new Map());
     const same = (key, v) => { const j = JSON.stringify(v); if (hv.get(key) === j) return true; hv.set(key, j); return false; };
     for (const e of snap.ships) if (e.mine) for (const k of HEAVY) if (k in e && same(e.id + "|" + k, e[k])) delete e[k];
-    if (snap.hangar && same("hangar", snap.hangar)) delete snap.hangar;
+    if (snap.hangars && same("hangars", snap.hangars)) delete snap.hangars;   // (each station's hangar where you're docked)
     if (snap.home && same("home", snap.home)) delete snap.home;
     return snap;
   };

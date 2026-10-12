@@ -11,7 +11,7 @@ import { AU_KM } from "./constants.js";
 export const SUN = { id: "sun", kind: "sun", name: "Sun", x: 0, y: 0, rKm: 2500, r: 2500, clearKm: 4500 };   // nothing spawns within clearKm of the center
 export const WORLD_KINDS = ["Ocean", "Desert", "Ice", "Gas giant"];
 const ANCHOR = { rKm: 25, planetGapKm: 140, moonGapKm: 50, sunGapKm: 600 };   // an anchor POI is 50 km across, this far off the body's surface
-const MOON_SPREAD = 1.3, EARTH_R_KM = 6371, GAME_EARTH_R = 100, kmR = (realKm) => Math.max(0.5, +(realKm / EARTH_R_KM * GAME_EARTH_R).toFixed(2));
+const SYSTEM_MARGIN_KM = 1000, MOON_SPREAD = 1.3, EARTH_R_KM = 6371, GAME_EARTH_R = 100, kmR = (realKm) => Math.max(0.5, +(realKm / EARTH_R_KM * GAME_EARTH_R).toFixed(2));
 const ROMAN = (n) => { let s = ""; for (const [v, r] of [[100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]]) while (n >= v) { s += r; n -= v; } return s; };
 
 // [name, a (AU), e, perihelion longitude (deg), real radius (km), world, rings [inner, outer] in planet radii (bright?)]
@@ -54,7 +54,8 @@ function layout(seed = 1337) {
     for (const [count, from, to, rlo, rhi] of P.more || []) for (let j = 0; j < count; j++) add(P.name + " " + ROMAN(++k), from + rnd() * (to - from), rlo + rnd() * (rhi - rlo), false);
     const rings = P.rings ? { in: +(r * Math.sqrt(P.rings[0]) * MOON_SPREAD).toFixed(2), out: +(r * Math.sqrt(P.rings[1]) * MOON_SPREAD).toFixed(2), bright: P.rings[2] } : null;
     const zone = Math.max(r + 400, ...moons.filter((m) => m.major || m.orbit < r * 6).map((m) => m.orbit + m.r + 250));   // stations keep out of this (the planet and its inner system)
-    return { id, name: P.name, kind: "planet", x: +x.toFixed(2), y: +y.toFixed(2), r, orbit: +a.toFixed(0), au: P.a, e, w: +w.toFixed(4), seed: i + 1, world: P.world, moons, zone, ...(rings ? { rings } : {}) };
+    const sysR = +(Math.max(r, ...moons.map((m) => m.orbit + m.r)) + SYSTEM_MARGIN_KM).toFixed(0);   // (owner) its planetary system: out to the outermost moon, plus 1,000 km
+    return { id, key: P.name.toLowerCase(), name: P.name, kind: "planet", sysR, x: +x.toFixed(2), y: +y.toFixed(2), r, orbit: +a.toFixed(0), au: P.a, e, w: +w.toFixed(4), seed: i + 1, world: P.world, moons, zone, ...(rings ? { rings } : {}) };
   });
 }
 export const PLANETS = layout();
@@ -89,3 +90,13 @@ export function onBody(x, y, padKm) {
 }
 /** What the client draws: the Sun, and each planet (its orbit: a, e, perihelion; its rings) and moon (its orbit around the planet). */
 export const celestialsForClient = () => ({ sun: SUN, planets: PLANETS.map(({ zone, ...p }) => p) });
+
+// ---- (owner, 2026-10-11) planetary systems: each planet's POI is also a container out to its outermost moon plus
+// 1,000 km. Warping from one system to another (or to anything in deep space, a "rogue" POI) needs a Microwarp Drive;
+// inside a system ships warp freely. ----
+/** The planet whose system a point is in, or null (deep space). */
+export function systemAt(x, y) {
+  for (const p of PLANETS) if (Math.hypot(x - p.x, y - p.y) <= p.sysR) return p;
+  return null;
+}
+export const planetByKey = (k) => PLANETS.find((p) => p.key === k) || null;

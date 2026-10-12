@@ -28,6 +28,9 @@ export const MODULES = {
     laserYield: 0.05, desc: "Tunes the mining lasers for more ore each cycle." },
   mining_beam_extender: { name: "Mining Beam Extender", slot: "passive", power: 5, disposition: 10, m3: 5, license: "mining_upgrades", icon: "components/sensor_dish.png",
     laserRange: 0.10, desc: "Focusing optics that let the mining lasers reach farther." },
+  // (owner, 2026-10-11) needed to warp from one planetary system to another (or out to deep space); comes with the market
+  microwarp_drive: { name: "Microwarp Drive", slot: "passive", power: 8, disposition: 15, m3: 10, license: "engines", icon: "modules/microwarpdrive.png",
+    desc: "Lets the warp drive reach beyond the planetary system the ship is in." },
   mining_overclocker: { name: "Mining Overclocker", slot: "passive", power: 6, disposition: 10, m3: 5, license: "mining_upgrades", icon: "components/processor_chip.png",
     laserCycle: 0.08, desc: "Runs the mining lasers hot for shorter cycles." },
 };

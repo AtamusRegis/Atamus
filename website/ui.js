@@ -391,8 +391,9 @@
   function renderCreatePilot(body) {
     const input = el("input", { class: "text-input", maxlength: "24", placeholder: "First pilot name" });
     const err = el("div", { class: "form-err", hidden: "" });
-    const submit = async () => { const name = input.value.trim(); if (!name) return; try { await Api.post("/game/pilot/create", { name }); await refreshState(); } catch (e) { err.textContent = e.message; err.hidden = false; } };
-    body.append(el("div", { class: "create-pilot" }, el("div", { class: "muted" }, "Name your first pilot:"), input, err, el("button", { class: "btn-primary2", onclick: submit }, "Create")));
+    const start = el("select", { class: "base-sel" }, ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"].map((n) => el("option", { value: n.toLowerCase() }, n))); start.value = "earth";   // (owner) the planet they start at
+    const submit = async () => { const name = input.value.trim(); if (!name) return; try { await Api.post("/game/pilot/create", { name, start: start.value }); await refreshState(); } catch (e) { err.textContent = e.message; err.hidden = false; } };
+    body.append(el("div", { class: "create-pilot" }, el("div", { class: "muted" }, "Name your first pilot:"), input, start, err, el("button", { class: "btn-primary2", onclick: submit }, "Create")));
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
   }
 
@@ -1695,7 +1696,7 @@
   function modCost(k, lic) { const m = MODS()[k]; if (!m) return { power: 0, disposition: 0 }; const f = 1 - 0.05 * Math.min(5, lic[m.license] || 0); return { power: Math.round(m.power * f * 100) / 100, disposition: Math.round(m.disposition * f * 100) / 100 }; }
   // a container: a station's storage ("hangar": the Station's; "home": your own station's, owner), or a ship's hold { ship, hold }
   const isStore = (c) => c === "hangar" || c === "home";
-  const storeAt = (c) => (c === "home" ? "home" : "station");   // where that storage is (what a ship's docked says)
+  const storeAt = (c) => { if (c === "home") return "home"; const all = ((window.Atamus.snap && window.Atamus.snap.ships) || []).filter((x) => x.mine && x.docked), sh = hudShip(); return (sh && sh.docked) || (all[0] && all[0].docked) || "station"; };   // where that storage is: the station the selected ship is docked at (owner: a hangar per station)
   const contKey = (c) => (isStore(c) ? c : c.ship + "|" + c.hold);
   const contOf = (key) => { if (isStore(key)) return key; const i = key.lastIndexOf("|"); return { ship: key.slice(0, i), hold: key.slice(i + 1) }; };
   const srcCont = (from) => (isStore(from.type) ? from.type : { ship: from.ship, hold: from.hold });   // an item cell's container
@@ -2025,7 +2026,7 @@
     const openSet = saved.stOpen || (saved.stOpen = {});   // (owner) which ships in the Ship Bay are expanded to show their holds
     if (!isStore(sel)) openSet[selC.ship] = true;
     const sig = at + "|" + sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds, !!x.unboarded, openSet[x.id] !== false])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked) + "|" + !!(sh && sh.unboarded);
-    wins.station.slot.textContent = at === "home" ? (A.homeName() || "Station") : "Station";
+    wins.station.slot.textContent = at === "home" ? (A.homeName() || "Station") : ((A.poi && A.poi(at)) || {}).name || "Station";   // (that planet's station)
     if (wins.station.ssig === sig) return; wins.station.ssig = sig;
     const keepScroll = [...body.querySelectorAll(".st-side, .st-grid-wrap")].map((x) => x.scrollTop);
     body.innerHTML = ""; body.classList.add("st-win");

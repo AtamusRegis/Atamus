@@ -56,8 +56,7 @@ w.removePlayer("a"); run(w, 0.1); t.ok(w.ships.has(sa.id), "a reload within the 
 w.players.get("a").offlineSince = Date.now() - LOGOUT_GRACE_MS - 1; w.tick(0.05);
 t.ok(w.ships.has(sa.id), "undocked ships aren't a safe log off: they carry on (owner)");
 w.players.get("a").offlineSince = Date.now() - UNSAFE_LOGOFF_MS - 1; const x0 = sa.x, y0 = sa.y; w.tick(0.05);
-const home = w._home("a"), wantPoi = home ? home.id : "station";
-t.ok(sa.wp && sa.wp.poi === wantPoi && sa.dockReq === (home ? "home" : "station"), "after 5 minutes they warp to their station (else the Station) to dock (owner)", { wp: sa.wp, dockReq: sa.dockReq });
+t.ok(sa.wp && /^station/.test(sa.wp.poi) && sa.dockReq === sa.wp.poi, "after 5 minutes they warp to an NPC station (their system's; out in deep space the nearest) to dock (owner)", { wp: sa.wp, dockReq: sa.dockReq });
 sa.wp.at -= 1e6; for (let i = 0; i < 6000 && w.ships.has(sa.id) && !sa.docked; i++) w.tick(0.05);
 t.ok(sa.docked || !w.ships.has(sa.id), "and dock there", { docked: sa.docked });
 w.tick(0.05); w.tick(0.05);

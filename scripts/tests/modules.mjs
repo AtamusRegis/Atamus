@@ -130,19 +130,19 @@ t.ok(s.docked && !s.moving && !s.targets.length, "then docks (within 5 km of its
 t.ok(!w.snapshotFor(w.players.get("b")).ships.some((x) => x.id === s.id) && w.snapshotFor(a).ships.find((x) => x.id === s.id).docked, "a docked ship is out of space: others don't see it");
 w.cmdMove("a", s.id, 0, 0); w.cmdLock("a", s.id, "rock", k.id); t.ok(!s.moving && !s.targets.length, "no orders while docked");
 s.holds.ore = { "ore:ironstone": 100 }; w.cmdTransfer("a", { ship: s.id, hold: "ore" }, "hangar", "ore:ironstone");
-t.ok(a.hangar["ore:ironstone"] === 100 && !s.holds.ore["ore:ironstone"], "ore moves from a docked ship into the hangar");
+t.ok(a.hangars.station["ore:ironstone"] === 100 && !s.holds.ore["ore:ironstone"], "ore moves from a docked ship into the hangar");
 w.cmdTransfer("a", "hangar", { ship: s.id, hold: "cargo" }, "ore:ironstone", 1000);
 const free = s.calc.holds.cargo - 45 - (s.holds.cargo.mining_laser_upgrade ? 0 : 0);
-t.ok(s.holds.cargo["ore:ironstone"] > 0 && s.holds.cargo["ore:ironstone"] < 100 && a.hangar["ore:ironstone"] > 0, "into a ship's hold only what fits goes; the rest stays", [s.holds.cargo["ore:ironstone"], a.hangar["ore:ironstone"]]);
+t.ok(s.holds.cargo["ore:ironstone"] > 0 && s.holds.cargo["ore:ironstone"] < 100 && a.hangars.station["ore:ironstone"] > 0, "into a ship's hold only what fits goes; the rest stays", [s.holds.cargo["ore:ironstone"], a.hangars.station["ore:ironstone"]]);
 notes.length = 0; w.cmdTransfer("a", "hangar", { ship: s.id, hold: "ore" }, "mining_laser_upgrade"); w.cmdTransfer("a", { ship: s.id, hold: "cargo" }, { ship: s.id, hold: "ore" }, "mining_laser_upgrade");
 t.ok(lastNote() === "The ore hold takes only ore" && s.holds.cargo.mining_laser_upgrade === 1, "the ore hold takes only ore");
 w.cmdTransfer("b", "hangar", { ship: s.id, hold: "cargo" }, "ore:ironstone"); w.cmdTransfer("a", "hangar", { ship: sb.id, hold: "cargo" }, "ore:ironstone"); w.cmdTransfer("a", "hangar", "hangar", "ore:ironstone"); w.cmdTransfer("a", "hangar", { ship: s.id, hold: "cargo" }, "gold");
-t.ok(!w.players.get("b").hangar["ore:ironstone"] && !sb.holds.cargo["ore:ironstone"], "only your own hangar and ships, real items");
+t.ok(!(w.players.get("b").hangars.station || {})["ore:ironstone"] && !sb.holds.cargo["ore:ironstone"], "only your own hangar and ships, real items");
 w.cmdUndock("a", s.id); w.cmdTransfer("a", "hangar", { ship: s.id, hold: "ore" }, "ore:ironstone", 1);
 t.ok(!s.docked && !s.holds.ore["ore:ironstone"], "undocked: back in space, and no hangar from out there");
 for (let i = 0; i < 400 && s.dockSeq; i++) w.tick(0.05);   // (out of the hangar first)
 const ex = w.exportState("a");
-t.ok(ex.hangar["ore:ironstone"] > 0 && ex.ships["1"].fit.active[0] === "mining_laser" && ex.ships["1"].kit, "the hangar, holds and fit are saved");
+t.ok(ex.hangars.station["ore:ironstone"] > 0 && ex.ships["1"].fit.active[0] === "mining_laser" && ex.ships["1"].kit, "the hangar, holds and fit are saved");
 const w2 = new World(); w2.addPlayer("a", "A", () => {}, ex, [{ id: 1, name: "Ann", licenses: {} }]); const s2 = w2.ships.get("a:ship:1");
-t.ok(s2.fit.active[0] === "mining_laser" && JSON.stringify(s2.holds.cargo) === JSON.stringify(s.holds.cargo) && w2.players.get("a").hangar["ore:ironstone"] === ex.hangar["ore:ironstone"], "and come back as they were (no second starter kit)", [s2.holds.cargo, s.holds.cargo]);
+t.ok(s2.fit.active[0] === "mining_laser" && JSON.stringify(s2.holds.cargo) === JSON.stringify(s.holds.cargo) && w2.players.get("a").hangars.station["ore:ironstone"] === ex.hangars.station["ore:ironstone"], "and come back as they were (no second starter kit)", [s2.holds.cargo, s.holds.cargo]);
 t.done();

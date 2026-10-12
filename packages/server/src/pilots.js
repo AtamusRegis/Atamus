@@ -66,7 +66,10 @@ export const PILOT_PRICE = 1_000_000;
 // take() -> true (taken), false (not enough), null (not online: use the database).
 let gameCredits = { take: () => null, give: () => {} };
 export const useGameCredits = (hooks) => { gameCredits = hooks; };
-export async function createPilot(userId, nameRaw, portraitRaw) {
+// (owner, 2026-10-11) the planet a pilot starts at (its NPC station), picked when making them
+export const START_PLANETS = ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"];
+export async function createPilot(userId, nameRaw, portraitRaw, startRaw = "earth") {
+  const start = startRaw == null ? "earth" : START_PLANETS.includes(startRaw) ? startRaw : null; if (!start) throw new Error("Pick a planet to start at.");
   if (typeof nameRaw !== "string") throw new Error("Pilot name required.");
   const name = safeText(nameRaw, 24);
   if (!name) throw new Error("Pilot name required.");
@@ -87,7 +90,7 @@ export async function createPilot(userId, nameRaw, portraitRaw) {
       taken = mem === true;
       await c.query(`UPDATE users SET credits = credits - $1 WHERE id = $2`, [cost, userId]);
     }
-    const { rows } = await c.query(`INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`, [userId, name, { ...freshData(), portrait }]);
+    const { rows } = await c.query(`INSERT INTO pilots (user_id, name, data) VALUES ($1, $2, $3) RETURNING id`, [userId, name, { ...freshData(), portrait, start }]);
     await c.query("COMMIT");
     return rows[0].id;
   } catch (e) {
@@ -207,7 +210,7 @@ export async function getState(userId) {
       active = { key: it.key, level: it.level, trainMs: trainMs(it.key, it.level), remainingMs: Math.max(0, need - elapsed), paused: !!d.paused };
     }
     for (const l of LICENSES) maxByLicense[l.key] = Math.max(maxByLicense[l.key] || 0, d.licenses[l.key] || 0);
-    pilots.push({ id: row.id, name: row.name, portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused, renameRequired: !!d.renameRequired, ...(d.renameRequired ? { renameReason: d.renameReason || "" } : {}), ...(d.nameOffer ? { nameOffer: d.nameOffer } : {}) });
+    pilots.push({ id: row.id, name: row.name, start: d.start || "earth", portrait: d.portrait || null, licenses: d.licenses, banked: d.banked, queue: d.queue, active, paused: !!d.paused, renameRequired: !!d.renameRequired, ...(d.renameRequired ? { renameReason: d.renameReason || "" } : {}), ...(d.nameOffer ? { nameOffer: d.nameOffer } : {}) });
   }
   const totalSkillLevel = LICENSES.reduce((sum, l) => sum + (maxByLicense[l.key] || 0), 0);
 

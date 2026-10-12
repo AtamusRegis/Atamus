@@ -5,19 +5,21 @@ import { SHIP_TYPES, SHIP_ARRIVE_EPS_KM, LOGOUT_GRACE_MS, UNSAFE_LOGOFF_MS, SAFE
 import { safeText } from "../textsafe.js";
 import { BELT, createBeltField, decayField, fieldM3 } from "./belts.js";
 import { LIBRARY, libraryProps, libraryLanding } from "./library.js";
-import { STATION, DOCK_KM, stationProps, stationLanding, stationRange, nearestHangar, hangarAt } from "./station.js";
+import { STATION, STATIONS, stationById, stationOfPlanet, DOCK_KM, stationProps, stationLanding, stationRange, nearestHangar, hangarAt } from "./station.js";
 const shipLen = (s) => (SHIP_TYPES[s.type] || {}).lengthKm || 0.13;
-const RING_BELT_SHARE = 0.7;   // (owner) "a lot of the asteroid belts" are in the rings
+const RING_BELT_SHARE = 0.7, BELTS_PER_SYSTEM = 2;   // (owner) "a lot of the asteroid belts" are in the rings
 const SAFE_DOCK_MAX_MS = 10 * 60 * 1000;   // (a safe log off's warp home and docking: the longest it's given)
 const HANGAR_GAP_KM = 0.03, HANGAR_KMPS = 0.06, UNDOCK_KM = 5, UNDOCK_SPREAD = 0.5;   // (owner) a hangar: the gap in front, the speed in and out; undocking: how far out, how wide the angle
 import { Obstacles } from "./obstacles.js";
 import { HOME, homeId, homeProps, homeLanding } from "./home.js";
-import { SUN, PLANETS, RINGED, celestialPois, anchorLanding, celestialClearance } from "./celestials.js";
+import { SUN, PLANETS, RINGED, celestialPois, anchorLanding, celestialClearance, systemAt, planetByKey } from "./celestials.js";
 import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
 import { readFileSync } from "node:fs";
 import { nameProblem, censor } from "../namefilter.js";
-const SPAWN_AT = { x: STATION.x, y: STATION.y - 8 };   // a new ship appears just south of the Station (the sun is at the center)
+const spawnAt = (st) => ({ x: st.x, y: st.y - 8 });   // a new ship appears just south of its pilot's starting station
+const SOLAR_VIEW_KM = 60_000;                           // (owner) zoomed out past a planetary system: other ships aren't shown (only planets)
+const hasMWD = (s) => !!(s.npc || (s.fit && s.fit.passive.some((k, i) => k === "microwarp_drive" && !(s.fit.off && s.fit.off.passive && s.fit.off.passive[i]))));   // (owner) needed to warp between planetary systems
 const CHAT_GROUP_KM = 150;   // (owner) your pilots this close together share one chat bubble
 // (owner) a laser aims only at the rock itself: points well inside each rock sprite's opaque part, as fractions of its
 // width from its center (v down, as drawn; scripts/gen/rockmasks.py makes them), turned and scaled like the art
@@ -60,6 +62,12 @@ function loadHolds(v, t) {
   const h = {}; for (const hd of t.holds) { h[hd.key] = {}; const src = v && typeof v === "object" && v[hd.key]; if (src && typeof src === "object") for (const [k, n] of Object.entries(src)) if (isItem(k) && Number.isFinite(n) && n > 0) h[hd.key][k] = +n.toFixed(2); }
   return h;
 }
+// (owner, 2026-10-11) a hangar per NPC station: { stationId: items } (the old single hangar was Earth Station's)
+function loadHangars(saved) {
+  const out = {}, src = saved && saved.hangars && typeof saved.hangars === "object" ? saved.hangars : saved && saved.hangar ? { station: saved.hangar } : {};
+  for (const [id, items] of Object.entries(src)) if (stationById(id)) out[id] = loadHangar(items);
+  return out;
+}
 function loadHangar(v) { const h = {}; if (v && typeof v === "object") for (const [k, n] of Object.entries(v)) if (isItem(k) && Number.isFinite(n) && n > 0) h[k] = +n.toFixed(2); return h; }
 function loadFit(v, t) {
   const f = { active: Array(t.activeSlots).fill(null), passive: Array(t.passiveSlots).fill(null), off: { active: Array(t.activeSlots).fill(false), passive: Array(t.passiveSlots).fill(false) } };
@@ -79,7 +87,7 @@ export class World {
     this._ixs = new WeakMap();  // field -> { ver, ix }: each POI's objects indexed for pathing and collisions
     // (owner) the Library: every space object's art in rows, always on the map; its props are solid and nothing else
     this.pois.set(LIBRARY.id, { ...LIBRARY, createdAt: 0, field: { rocks: [], props: libraryProps(), dir: 0, ver: 1 }, retired: false });
-    this.pois.set(STATION.id, { ...STATION, createdAt: 0, field: { rocks: [], props: stationProps(), dir: 0, ver: 1 }, retired: false });   // (owner, temporary) the station
+    for (const st of STATIONS) this.pois.set(st.id, { ...st, createdAt: 0, field: { rocks: [], props: stationProps(st), dir: 0, ver: 1 }, retired: false });   // (owner) an NPC station at every planet
     for (const c of celestialPois()) this.pois.set(c.id, c);   // (owner) planets' and moons' anchors, always on the map
     this.frozen = new Set();    // (owner) accounts an admin has frozen: their ships hold still, take no orders and can't be targeted
     this.homesReady = true;     // (the server clears this until the saved player stations are loaded, so none is made twice)
@@ -88,7 +96,7 @@ export class World {
   addPlayer(id, name, send, saved = null, pilots = []) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this.setPilots(id, pilots, saved); return existing; }
-    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangar: loadHangar(saved && saved.hangar) };
+    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangars: loadHangars(saved) };
     this.players.set(id, p);
     this._ensureHome(p);
     this.setPilots(id, pilots, saved);
@@ -118,6 +126,7 @@ export class World {
     return h;
   }
   _ensureHome(p) {
+    return;                                                // (owner, 2026-10-11) no free stations: they'll be bought (and spawn in deep space)
     if (!this.homesReady || this._home(p.id)) return;
     const at = this._homeSite();
     this.pois.set(homeId(p.id), this._makeHome({ owner: p.id, name: p.name + "'s Station", x: +at.x.toFixed(3), y: +at.y.toFixed(3) })); this.poiVer++;
@@ -127,7 +136,7 @@ export class World {
   homesLoaded(accounts = []) {
     this.homesReady = true;
     // (owner, 2026-10-11) the new solar system: stations made in the old, small one move somewhere new (storage and all)
-    for (const h of [...this.pois.values()]) if (h.kind === "home" && h.resite) { this.pois.delete(h.id); this.poiVer++; const at = this._homeSite(); delete h.resite; h.x = +at.x.toFixed(3); h.y = +at.y.toFixed(3); h.field = { rocks: [], props: homeProps(h), dir: 0, ver: (h.field.ver || 1) + 1 }; this.pois.set(h.id, h); this.poiVer++; }
+    if (false) for (const h of [...this.pois.values()]) if (h.kind === "home" && h.resite) { this.pois.delete(h.id); this.poiVer++; const at = this._homeSite(); delete h.resite; h.x = +at.x.toFixed(3); h.y = +at.y.toFixed(3); h.field = { rocks: [], props: homeProps(h), dir: 0, ver: (h.field.ver || 1) + 1 }; this.pois.set(h.id, h); this.poiVer++; }
     for (const p of this.players.values()) this._ensureHome(p);
     let made = 0; for (const a of accounts) if (!this._home(String(a.id))) { this._ensureHome({ id: String(a.id), name: a.name }); made++; }
     if (made) console.log("[homes] " + made + " player stations made");
@@ -148,26 +157,26 @@ export class World {
   /** The account's pilots (from the database): each has one Prospector, and a pilot that's gone takes theirs with it. */
   setPilots(id, pilots, saved = null) {
     const p = this.players.get(id); if (!p) return;
-    p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name, licenses: (x.licenses && typeof x.licenses === "object") ? x.licenses : {} }));
+    p.pilots = (pilots || []).map((x) => ({ id: String(x.id), name: x.name, start: x.start || "earth", licenses: (x.licenses && typeof x.licenses === "object") ? x.licenses : {} }));
     const keep = new Set(p.pilots.map((x) => this._sid(id, x.id)));
     for (const [sid, s] of this.ships) if (s.owner === id && !keep.has(sid)) this.ships.delete(sid);
     this._own = null;
-    for (const pl of p.pilots) { const s = this._ensureShip(id, pl.id, saved || p.saved); const key = JSON.stringify(pl.licenses); if (s.licKey !== key) { s.lic = pl.licenses; s.licKey = key; this._recalc(s); } }
+    for (const pl of p.pilots) { const s = this._ensureShip(id, pl.id, saved || p.saved, pl.start); const key = JSON.stringify(pl.licenses); if (s.licKey !== key) { s.lic = pl.licenses; s.licKey = key; this._recalc(s); } }
   }
   _sid(owner, pilotId) { return `${owner}:ship:${pilotId}`; }
   // a pilot's Prospector: where they left it, or a fresh one near the center
-  _ensureShip(id, pilotId, saved) {
+  _ensureShip(id, pilotId, saved, start = "earth") {
     const sid = this._sid(id, pilotId);
     if (this.ships.has(sid)) return this.ships.get(sid);
     const t = SHIP_TYPES.chisel, sv = saved && saved.ships && saved.ships[pilotId];
     let x, y, h;
     if (sv && finite(sv.x) && finite(sv.y) && Math.hypot(sv.x, sv.y) > SUN.r + 50) { ({ x, y } = clampToExpanse(sv.x, sv.y, t.radiusKm)); h = finite(sv.h) ? sv.h : Math.PI / 2; }   // (never inside the Sun: then beside the Station)
-    else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; x = SPAWN_AT.x + Math.cos(a) * d; y = SPAWN_AT.y + Math.sin(a) * d; h = Math.random() * Math.PI * 2; }   // (owner: nothing at the sun) beside the Station
+    else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; const at = spawnAt(stationOfPlanet(start)); x = at.x + Math.cos(a) * d; y = at.y + Math.sin(a) * d; h = Math.random() * Math.PI * 2; }   // (owner: nothing at the sun) beside the Station
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
       name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
       holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: false };
     if (sv && sv.docked && sv.unboarded) s.unboarded = true;   // (owner) its pilot had left it, docked
-    if (sv && sv.docked) { s.docked = sv.docked === "home" ? "home" : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (true, before player stations: the Station)
+    if (sv && sv.docked) { s.docked = stationById(sv.docked) ? sv.docked : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (a station gone, or a player station removed: Earth Station)
     if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
     this._recalc(s);
     this.ships.set(sid, s); this._own = null;
@@ -202,10 +211,11 @@ export class World {
   // nomad space an ark ship makes a safe warp, and one in the system of its owner's station warps there and docks); with
   // no station, the Station; with neither, a safe spot SAFE_WARP_KM away
   _safeWarp(s, now) {
-    const home = this._home(s.owner), st = this.pois.get(STATION.id), goal = home || st;
+    // (owner, 2026-10-11) the NPC station of the planetary system it's in (out in deep space: the nearest one)
+    const sys = systemAt(s.x, s.y), stn = sys ? stationOfPlanet(sys.key) : STATIONS.reduce((b, o) => (!b || Math.hypot(o.x - s.x, o.y - s.y) < Math.hypot(b.x - s.x, b.y - s.y) ? o : b), null), goal = stn && this.pois.get(stn.id);
     if (goal) {
       s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockSeq = null; this._recalc(s);
-      const where = home ? "home" : "station", prop = this._dockProp(s.owner, where);
+      const where = stn.id, prop = this._dockProp(s.owner, where);
       if (prop && stationRange(s, prop) <= DOCK_KM) { this._startDock(s, where); return; }   // (already there: in it goes)
       this._startWarp(s, goal, now); s.dockReq = where; return;
     }
@@ -225,7 +235,7 @@ export class World {
     const ships = {};
     for (const s of this.ships.values()) if (s.owner === id) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}) };
     const p = this.players.get(id);
-    return { ships, hangar: p ? p.hangar : {}, savedAt: Date.now() };
+    return { ships, hangars: p ? p.hangars : {}, savedAt: Date.now() };
   }
 
   // ---- commands (every field hostile) ----
@@ -262,6 +272,7 @@ export class World {
     if (poi.kind === "home" && poi.owner !== pid) return;   // (owner) someone else's station isn't on your map
     const aim = this._poiAim(poi);
     if (warp && this._inPoi(s, aim)) return;               // no warping to where you already are
+    if (warp && systemAt(s.x, s.y) !== systemAt(aim.x, aim.y) && !hasMWD(s)) return this._notice(pid, "A Microwarp Drive is needed to warp out of this planetary system");   // (owner)
     s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.dockSeq = null; s.tx = aim.x; s.ty = aim.y; s.moving = true;
   }
   cmdWarp(pid, shipId, poiId) { const s = this.ships.get(shipId); if (!s || s.owner !== pid) return; this.cmdAlign(pid, shipId, typeof poiId === "string" ? poiId : s.dest, true); }
@@ -409,10 +420,10 @@ export class World {
   // ---- docking (owner): at the Station (temporary) or at your own station; within DOCK_KM of its edge (out of range:
   // fly there first, then dock); undock ----
   _station() { return this.pois.get(STATION.id).field.props[0]; }
-  _dockProp(owner, where) { if (where === "home") { const h = this._home(owner); return h ? h.field.props[0] : null; } return this._station(); }
+  _dockProp(owner, where) { if (where === "home") { const h = this._home(owner); return h ? h.field.props[0] : null; } const poi = stationById(where) && this.pois.get(where); return poi ? poi.field.props[0] : null; }
   cmdDock(pid, shipId, where = "station") {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || s.wp || s.docked || this._inHangar(s)) return;
-    where = where === "home" ? "home" : "station";
+    if (typeof where !== "string" || !stationById(where)) where = "station";   // (owner) any planet's NPC station
     const st = this._dockProp(pid, where); if (!st) return;
     if (stationRange(s, st) <= DOCK_KM) { this._startDock(s, where); return; }
     const dx = s.x - st.x, dy = s.y - st.y, d = Math.hypot(dx, dy) || 1, k = Math.max(st.w, st.h) / 2 + 1.5;   // fly to just off it, then dock
@@ -458,7 +469,7 @@ export class World {
   cmdUndock(pid, shipId) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
     if (s.unboarded) return this._notice(pid, "Board the ship first");   // (owner) a pilot not in their ship can't undock it
-    const where = s.docked, st = this._dockProp(pid, where) || this._station();
+    const where = s.docked, st = this._dockProp(pid, where) || this._station();   // (that station's hangar)
     const h = st.hangars && st.hangars.length ? hangarAt(st, Math.floor(Math.random() * st.hangars.length)) : null;   // (a station with two hangars: either one)
     if (!h) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.2, d = Math.max(st.w, st.h) / 2 + 2; Object.assign(s, { docked: false, x: st.x + Math.cos(a) * d, y: st.y + Math.sin(a) * d, vx: 0, vy: 0, h: a }); s.tx = s.x; s.ty = s.y; return; }
     const ix = h.x - h.nx * (shipLen(s) / 2 + HANGAR_GAP_KM), iy = h.y - h.ny * (shipLen(s) / 2 + HANGAR_GAP_KM);
@@ -475,14 +486,16 @@ export class World {
    *  storage takes anything. */
   cmdTransfer(pid, from, to, item, qty) {
     const p = this.players.get(pid); if (!p || typeof item !== "string" || !isItem(item)) return;
-    const box = (c) => {
-      if (c === "hangar") return { kind: "store", items: p.hangar, at: "station" };
-      if (c === "home") { const h = this._home(pid); return h ? { kind: "store", items: h.items, at: "home" } : null; }
+    const hold = (c) => {
       if (!c || typeof c !== "object" || typeof c.ship !== "string" || typeof c.hold !== "string") return null;
       const s = this.ships.get(c.ship); if (!s || s.owner !== pid || !s.holds[c.hold]) return null;
       return { kind: "hold", s, hold: c.hold, items: s.holds[c.hold], at: s.docked || null };
     };
-    const A = box(from), B = box(to); if (!A || !B || A.items === B.items) return;
+    // (owner) "hangar": the hangar of the station the ship on the other side is docked at (each station has its own)
+    const store = (other) => { if (!other || other.kind !== "hold" || !other.at || !stationById(other.at)) return null; return { kind: "store", items: (p.hangars[other.at] ||= {}), at: other.at }; };
+    let A = from === "hangar" ? null : hold(from), B = to === "hangar" ? null : hold(to);
+    if (from === "hangar") A = store(B); if (to === "hangar") B = store(A);
+    if (!A || !B || A.items === B.items) return;
     if (!(A.kind === "hold" && B.kind === "hold" && A.s === B.s) && !(A.at && A.at === B.at)) return;   // storage only with ships docked at that station
     const have = A.items[item] || 0; if (!(have > 0)) return;
     let n = qty == null ? have : (Number.isFinite(qty) && qty > 0 ? Math.min(qty, have) : 0); if (!(n > 0)) return;
@@ -560,7 +573,7 @@ export class World {
   _startWarp(s, poi, now) {
     // drop out on the inside of the crescent (WARP_LAND_KM toward its middle), give or take a couple of km
     const scat = poi.field && poi.field.scatter, a = scat ? Math.random() * Math.PI * 2 : poi.field.dir + (Math.random() - 0.5) * 0.3, d = scat ? BELT.radiusKm - 1 : WARP_LAND_KM + (Math.random() - 0.5) * 4;   // (a ring belt: just inside its edge, clear of its rocks)
-    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding() : poi.kind === "home" ? homeLanding(poi) : poi.ax != null ? anchorLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
+    const to = poi.kind === "library" ? libraryLanding(poi.field.props) : poi.kind === "station" ? stationLanding(poi) : poi.kind === "home" ? homeLanding(poi) : poi.ax != null ? anchorLanding(poi) : { x: poi.x + Math.cos(a) * d, y: poi.y + Math.sin(a) * d }, dist = Math.hypot(to.x - s.x, to.y - s.y);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: poi.id };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false; s.warpReq = false; s.chase = null; s.targets = [];   // a warp drops every lock
   }
@@ -633,7 +646,7 @@ export class World {
     for (const s of ships) {
       if (s.docked) continue;                              // (owner) a docked ship is out of space
       if (this.frozen.has(s.owner) && !s.wp) { s.vx = 0; s.vy = 0; s.moving = false; continue; }   // (owner) frozen: it holds still
-      if (s.dockReq && !s.wp) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) this._startDock(s, s.dockReq); }
+      if (s.dockReq && !s.wp) { const st = this._dockProp(s.owner, s.dockReq); if (!st) s.dockReq = false; else if (stationRange(s, st) <= DOCK_KM) this._startDock(s, s.dockReq); else if (!s.moving) this.cmdDock(s.owner, s.id, s.dockReq); }   // (out of a warp short of it: fly the rest)
       if (s.dockSeq && this._tickDockSeq(s, dtSec)) continue;   // (owner) into / out of a hangar
       if (s.wp) {                                          // in warp: eased along the line, then a dead stop at the far end
         const k = Math.min(1, (now - s.wp.at) / s.wp.dur), e = 0.5 - 0.5 * Math.cos(Math.PI * k);
@@ -704,6 +717,9 @@ export class World {
       if (!poi.retired && !poi.field.rocks.length) { poi.retired = true; this.poiVer++; }
       if (poi.retired && !this._shipsIn(poi)) { this.pois.delete(poi.id); this.poiVer++; if (this.onPoiClosed) { try { this.onPoiClosed(poi); } catch (e) { console.error("onPoiClosed", e); } } }
     }
+    // (owner, 2026-10-11) every planetary system keeps a couple of belts (players start at every planet); more with
+    // more players online, most of them in the ringed planets' rings
+    for (const pl of PLANETS) { let n = 0; for (const poi of this.pois.values()) if (poi.kind === "belt" && !poi.retired && Math.hypot(poi.x - pl.x, poi.y - pl.y) <= pl.sysR) n++; for (; n < BELTS_PER_SYSTEM; n++) this._newBelt(now, pl); }
     let online = 0; for (const p of this.players.values()) if (!p.offline) online++;
     const want = Math.max(BELTS_MIN, Math.ceil(online / PLAYERS_PER_BELT));
     let have = 0; for (const poi of this.pois.values()) if (poi.kind === "belt" && !poi.retired) have++;
@@ -711,6 +727,8 @@ export class World {
   }
   /** A belt from the database (a restart): back on the map with its rocks as they were. */
   loadPoi(d) {
+    if (d && d.kind === "home") return;                    // (owner, 2026-10-11) free player stations are gone (they'll be bought)
+    if (d && d.kind === "belt" && !systemAt(d.x, d.y)) return;   // (a belt left outside every planetary system)
     if (d && d.kind === "home" && typeof d.owner === "string" && finite(d.x) && finite(d.y) && d.id === homeId(d.owner) && !this.pois.has(d.id)) { const h = this._makeHome(d); if (d.resite) h.resite = true; this.pois.set(d.id, h); this.poiVer++; return; }   // a player's station (resite: the new solar system moves it)
     if (!d || d.kind !== "belt" || !d.field || !Array.isArray(d.field.rocks) || this.pois.has(d.id)) return;
     this.pois.set(d.id, { ...d, retired: !d.field.rocks.length }); this.poiVer++;
@@ -743,37 +761,34 @@ export class World {
     }
     return this._pg.g.get(Math.floor(x / C) + "," + Math.floor(y / C)) || [];
   }
-  _newBelt(now = Date.now()) {
-    // (owner, 2026-10-11) most belts spawn in a ringed planet's rings (Saturn's most), their rocks scattered; the rest
-    // around a planet or one of its moons, clear of the edge, the sun, the bodies themselves and other POIs
-    if (Math.random() < RING_BELT_SHARE) {
-      const w = RINGED.map((p) => (p.rings.bright ? 4 : 1.5)), tot = w.reduce((a, b) => a + b, 0);
-      for (let t = 0; t < 300; t++) {
-        let r = Math.random() * tot, p = RINGED[0]; for (let i = 0; i < RINGED.length; i++) { r -= w[i]; if (r <= 0) { p = RINGED[i]; break; } }
-        const mid = (p.rings.in + p.rings.out) / 2, half = Math.max(0, (p.rings.out - p.rings.in) / 2 - BELT.radiusKm * 0.6), a = Math.random() * Math.PI * 2, d = mid + (Math.random() * 2 - 1) * half;
-        const x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
-        if (p.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 20)) continue;
-        if (this._poisNearAll(x, y, 400).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 120 : 110))) continue;
-        const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
-        const poi = { id, kind: "belt", name: p.name + " Rings " + id.slice(-4).toUpperCase(), x: +x.toFixed(3), y: +y.toFixed(3), r: BELT.radiusKm, createdAt: now, field: createBeltField(id, x, y, now, true), retired: false };
-        this.pois.set(id, poi); this.poiVer++;
-        return poi;
-      }
+  _newBelt(now = Date.now(), planet = null) {
+    // (owner, 2026-10-11) inside a planetary system: in a ringed planet's rings (Saturn's most), the rocks scattered, or
+    // around the planet or one of its major moons (a crescent); clear of the bodies and other POIs
+    let p = planet;
+    if (!p) { if (Math.random() < RING_BELT_SHARE) { const w = RINGED.map((q) => (q.rings.bright ? 4 : 1.5)), tot = w.reduce((a, b) => a + b, 0); let r = Math.random() * tot; p = RINGED[0]; for (let i = 0; i < RINGED.length; i++) { r -= w[i]; if (r <= 0) { p = RINGED[i]; break; } } }
+      else p = PLANETS[Math.floor(Math.random() * PLANETS.length)]; }
+    const mk = (x, y, ring) => { const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
+      const poi = { id, kind: "belt", name: p.name + (ring ? " Rings " : " Belt ") + id.slice(-4).toUpperCase(), x: +x.toFixed(3), y: +y.toFixed(3), r: BELT.radiusKm, createdAt: now, field: createBeltField(id, x, y, now, ring), retired: false };
+      this.pois.set(id, poi); this.poiVer++; return poi; };
+    if (p.rings && Math.random() < RING_BELT_SHARE + 0.1) for (let t = 0; t < 300; t++) {
+      const mid = (p.rings.in + p.rings.out) / 2, half = Math.max(0, (p.rings.out - p.rings.in) / 2 - BELT.radiusKm * 0.6), a = Math.random() * Math.PI * 2, d = mid + (Math.random() * 2 - 1) * half;
+      const x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
+      if (p.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 20)) continue;
+      if (this._poisNearAll(x, y, 400).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 120 : 110))) continue;
+      return mk(x, y, true);
     }
-    let x = 0, y = 0;
+    let x = p.x + p.sysR / 2, y = p.y;
     for (let t = 0; t < 500; t++) {
-      const p = PLANETS[Math.floor(Math.random() * PLANETS.length)], big = p.moons.filter((m) => m.major), body = Math.random() < 0.35 && big.length ? big[Math.floor(Math.random() * big.length)] : p;
-      const a = Math.random() * Math.PI * 2, d = body === p ? p.zone + 150 + Math.random() * 900 : body.r + 150 + Math.random() * 250;
+      const big = p.moons.filter((m) => m.major), body = Math.random() < 0.35 && big.length ? big[Math.floor(Math.random() * big.length)] : p;
+      const a = Math.random() * Math.PI * 2, d = body === p ? p.r + 200 + Math.random() * Math.max(100, p.sysR - p.r - 350) : body.r + 150 + Math.random() * 250;
       x = body.x + Math.cos(a) * d; y = body.y + Math.sin(a) * d;
-      if (!insideExpanse(x, y, BELT.radiusKm * 3) || Math.hypot(x, y) < SUN.clearKm) continue;
-      if (PLANETS.some((q) => Math.hypot(q.x - x, q.y - y) < q.r + BELT.radiusKm + 100 || q.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 60))) continue;
-      if (this._poisNearAll(x, y, 600).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 150 : 600))) continue;
+      if (Math.hypot(x - p.x, y - p.y) > p.sysR - BELT.radiusKm - 20) continue;   // (inside its system)
+      if (p.rings && Math.hypot(x - p.x, y - p.y) > p.rings.in - BELT.radiusKm - 20 && Math.hypot(x - p.x, y - p.y) < p.rings.out + BELT.radiusKm + 20) continue;   // (not in the rings: those are scattered belts)
+      if (Math.hypot(x - p.x, y - p.y) < p.r + BELT.radiusKm + 100 || p.moons.some((m) => Math.hypot(m.x - x, m.y - y) < m.r + BELT.radiusKm + 60)) continue;
+      if (this._poisNearAll(x, y, 400).some((o) => Math.hypot(o.x - x, o.y - y) < (o.ax != null ? 120 : o.kind === "station" || o.kind === "library" ? 150 : 250))) continue;
       break;
     }
-    const id = "belt:" + now.toString(36) + (this.beltSeq++).toString(36);
-    const poi = { id, kind: "belt", name: "Asteroid Belt " + id.slice(-4).toUpperCase(), x: +x.toFixed(3), y: +y.toFixed(3), r: BELT.radiusKm, createdAt: now, field: createBeltField(id, x, y, now), retired: false };
-    this.pois.set(id, poi); this.poiVer++;
-    return poi;
+    return mk(x, y, false);
   }
   // what one player's map shows: every belt still advertising itself, plus a mined-out one their ships are still in
   poiSig(p) { let sig = String(this.poiVer); for (const poi of this._poisOf(p.id)) if (poi.retired) sig += "," + poi.id; return sig; }
@@ -806,6 +821,7 @@ export class World {
     for (const s of this.ships.values()) {
       const mine = s.owner === p.id;
       if (!mine && s.docked) continue;
+      if (!mine && v && v.w > SOLAR_VIEW_KM && !locked.has(s.id)) continue;   // (owner) the solar view shows planets, not ships
       if (!mine && p.staffRole && (p.staffRole === "mod" || !p.adminMode)) continue;   // (owner) staff see other players' ships only in admin mode (Admins; Moderators and former staff never)
       if (!mine && !locked.has(s.id) && (!v || Math.abs(s.x - v.x) > half || Math.abs(s.y - v.y) > half)) continue;
       const e = { id: s.id, type: s.type, x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), mine };
@@ -841,7 +857,7 @@ export class World {
       ships.push(e);
     }
     const out = { t: "snap", st: this.simAt, ships };
-    if (ships.some((x) => x.docked === "station")) out.hangar = p.hangar;   // (the hangar, while any of your ships is docked there)
+    { const at = new Set(ships.filter((x) => x.mine && x.docked).map((x) => x.docked)); if (at.size) { out.hangars = {}; for (const id of at) out.hangars[id] = p.hangars[id] || {}; } }   // (each station's hangar where one of your ships is docked)
     if (ships.some((x) => x.docked === "home")) { const h = this._home(p.id); if (h) out.home = h.items; }   // (your station's storage, while docked at it)
     return out;
   }

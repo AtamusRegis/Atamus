@@ -130,7 +130,7 @@ game.get("/state", auth, async (req, res) => {
 });
 
 game.post("/pilot/create", auth, async (req, res) => {
-  try { const id = await pilots.createPilot(req.uid, req.body?.name, req.body?.portrait); res.json({ id }); }
+  try { const id = await pilots.createPilot(req.uid, req.body?.name, req.body?.portrait, req.body?.start); res.json({ id }); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 

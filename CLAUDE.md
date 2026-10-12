@@ -62,7 +62,7 @@ packages/server/src/
     library.js    the Library POI: every space object's art in rows (props)
     obstacles.js  asteroids and props a destination can't be on (grid index, push a point out)
     modules.js    modules (active / passive), starter kit, shipCalc (fitted stats with licenses and hull bonuses)
-    station.js    the temporary Station POI: docking range, landing, its prop
+    station.js    the NPC stations (one per planet; Earth's id is "station"): hangar bays, docking range, landing, props
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
     persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client

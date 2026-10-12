@@ -14,7 +14,7 @@ export const EXPANSE_APOTHEM_KM = 35 * AU_KM;      // center to the middle of an
 export const SPAWN_SPREAD_KM = 5;                  // new ships appear within this of the center
 
 // ---- asteroid belts (belts.js has the field rules) ----
-export const BELTS_MIN = 10, PLAYERS_PER_BELT = 8;   // (owner, 2026-10-11: a 70 AU system, most belts in planets' rings)   // belt POIs: one per this many players online, at least BELTS_MIN
+export const BELTS_MIN = 16, PLAYERS_PER_BELT = 8;   // (owner, 2026-10-11: a 70 AU system, most belts in planets' rings)   // belt POIs: one per this many players online, at least BELTS_MIN
 
 // ---- align and warp (owner) ----
 export const ALIGN_SPEED = 0.75;          // aligned at this share of top speed...

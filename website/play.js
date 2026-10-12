@@ -74,7 +74,7 @@ pilotForm.addEventListener("submit", async (e) => {
   const name = pilotForm.elements.name.value.trim();
   if (!name) { showMessage(pilotMsg, "Give your pilot a name."); return; }
   const btn = pilotForm.querySelector('button[type="submit"]'); btn.disabled = true;
-  try { await Api.post("/game/pilot/create", { name, portrait: pilotBuilder && pilotBuilder.value }); location.href = "game.html?cb=" + Date.now(); }
+  try { await Api.post("/game/pilot/create", { name, portrait: pilotBuilder && pilotBuilder.value, start: pilotForm.elements.start.value }); location.href = "game.html?cb=" + Date.now(); }   // (owner) start: the planet whose station they start at
   catch (err) { showMessage(pilotMsg, err.message); btn.disabled = false; }
 });
 

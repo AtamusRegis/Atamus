@@ -3,15 +3,16 @@
 import { World } from "../../packages/server/src/game/world.js";
 import { BELT, ORES, decayField, fieldM3, sizeFor } from "../../packages/server/src/game/belts.js";
 import { BELTS_MIN, PLAYERS_PER_BELT, ALIGN_SPEED } from "../../packages/server/src/game/constants.js";
-import { RINGED } from "../../packages/server/src/game/celestials.js";
+import { RINGED, PLANETS } from "../../packages/server/src/game/celestials.js";
 import { connect, suite, sleep, SHIP } from "./lib.mjs";
 const t = suite("belts");
 const w = new World(), mk = (id) => w.addPlayer(id, id, () => {}, null, [{ id: 1, name: "P" + id, licenses: { mining_frigate: 5 } }]);
 const a = mk("a"), sa = w.ships.get("a:ship:1"); w.tick(0.05);
 const belts = () => [...w.pois.values()].filter((p) => p.kind === "belt" && !p.retired);
 t.ok(belts().length === BELTS_MIN, "a few players: " + BELTS_MIN + " belts", belts().length);
-for (let i = 0; i < 120; i++) mk("c" + i); w.nextPoiTick = 0; w.tick(0.05);
-t.ok(belts().length === Math.ceil(121 / PLAYERS_PER_BELT), "more belts with more players online", belts().length);
+for (let i = 0; i < 200; i++) mk("c" + i); w.nextPoiTick = 0; w.tick(0.05);
+t.ok(belts().length === Math.ceil(201 / PLAYERS_PER_BELT), "more belts with more players online", belts().length);
+t.ok(PLANETS.every((p) => belts().filter((b) => Math.hypot(b.x - p.x, b.y - p.y) <= p.sysR).length >= 2) && belts().every((b) => PLANETS.some((p) => Math.hypot(b.x - p.x, b.y - p.y) <= p.sysR)), "every planetary system has belts, and every belt is in one (owner)");
 // (owner, 2026-10-11) most spawn in a ringed planet's rings, their rocks scattered over the whole belt
 { const ring = belts().filter((x) => x.field.scatter), R = (x) => { const p = RINGED.find((q) => { const d = Math.hypot(x.x - q.x, x.y - q.y); return d >= q.rings.in - 1 && d <= q.rings.out + 1; }); return p; };
   t.ok(ring.length >= belts().length * 0.3 && ring.every((x) => R(x) && x.name.startsWith(R(x).name + " Rings")), "most belts are in planets' rings, named for them (owner)", [ring.length, belts().length]);
@@ -49,7 +50,13 @@ Object.assign(sa, { x: 0, y: 0, tx: 0, ty: 0 }); w.nextPoiTick = 0; w.tick(0.05)
 t.ok(!w.pois.has(other.id), "once they leave, it closes");
 
 // align, then warp
-const tgt = belts()[0]; Object.assign(sa, { x: 0, y: 0, vx: 0, vy: 0, moving: false });
+// (owner, 2026-10-11) warping from one planetary system to another needs a Microwarp Drive; within one it's free
+const earth = PLANETS.find((p) => p.key === "earth"), inSys = (b, p) => Math.hypot(b.x - p.x, b.y - p.y) <= p.sysR;
+{ const far = belts().find((b) => !inSys(b, earth)); Object.assign(sa, { x: earth.x + earth.sysR * 0.6, y: earth.y, vx: 0, vy: 0, moving: false });
+  w.cmdWarp("a", sa.id, far.id); t.ok(!sa.warpReq && !sa.dest, "no warping out of the planetary system without a Microwarp Drive (owner)");
+  sa.fit.passive[0] = "microwarp_drive"; w.cmdWarp("a", sa.id, far.id); t.ok(sa.warpReq && sa.dest === far.id, "with one fitted, any system (owner)");
+  sa.fit.passive[0] = null; sa.dest = null; sa.warpReq = false; sa.moving = false; }
+const tgt = belts().find((b) => inSys(b, earth)); Object.assign(sa, { x: earth.x + earth.sysR * 0.6, y: earth.y, vx: 0, vy: 0, moving: false });
 w.cmdAlign("c1", sa.id, tgt.id); t.ok(!sa.dest, "only the owner can order it");
 w.cmdAlign("a", sa.id, "nowhere"); t.ok(!sa.dest, "only to a real POI");
 w.cmdAlign("a", sa.id, tgt.id); t.ok(sa.dest === tgt.id && !sa.warpReq && sa.moving, "Align: the POI becomes the destination");
@@ -85,7 +92,7 @@ w.cmdWarp("a", sa.id, t2.id); t.ok(!sa.warpReq, "and it can't warp there");
 const c = await connect();
 t.ok((c.last.hello.pois || []).filter((p) => p.kind === "belt").length >= BELTS_MIN, "the map's belts arrive with hello");
 const target = c.last.hello.pois.find((p) => p.kind === "belt");
-c.dev({ cmd: "move", x: target.x + 3000, y: target.y }); await sleep(400);   // (a short warp: the system is 70 AU across)
+c.dev({ cmd: "move", x: target.x + 300, y: target.y }); await sleep(400);   // (a short warp, inside its planetary system)
 c.send({ t: "warp", ship: SHIP, poi: target.id });
 const t0 = Date.now(); let saw = false;
 while (Date.now() - t0 < 45000) { await sleep(200); const s = c.mine(); if (s && s.warp) saw = true; if (saw && s && !s.warp) break; }

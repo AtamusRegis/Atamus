@@ -25,11 +25,11 @@ t.ok(Math.hypot(s.wp.tx - PLANETS[0].anchor.x, s.wp.ty - PLANETS[0].anchor.y) < 
 for (let i = 0; i < 40; i++) w._newBelt();
 const bs = [...w.pois.values()].filter((p) => p.kind === "belt");
 t.ok(bs.every((b) => Math.hypot(b.x, b.y) > SUN.clearKm), "nothing spawns near the sun (owner)", bs.map((b) => Math.round(Math.hypot(b.x, b.y))).sort((x, y) => x - y).slice(0, 3));
-t.ok(bs.every((b) => PLANETS.some((p) => Math.hypot(b.x - p.x, b.y - p.y) < p.zone + 1100 || p.moons.some((m) => Math.hypot(b.x - m.x, b.y - m.y) < m.r + 450))), "belts spawn around planets and moons (owner)");
+t.ok(bs.every((b) => PLANETS.some((p) => Math.hypot(b.x - p.x, b.y - p.y) <= p.sysR)), "belts spawn inside planetary systems (owner)");
+t.ok(PLANETS.every((p) => p.sysR === Math.round(Math.max(p.r, ...p.moons.map((m) => m.orbit + m.r)) + 1000)), "a planetary system reaches its outermost moon plus 1,000 km (owner)", PLANETS.map((p) => p.sysR));
 t.ok(bs.every((b) => PLANETS.every((p) => Math.hypot(b.x - p.x, b.y - p.y) > p.r + 50 && p.moons.every((m) => Math.hypot(b.x - m.x, b.y - m.y) > m.r + 50))), "but not on top of them");
-for (let i = 0; i < 40; i++) w.addPlayer("h" + i, "H" + i, () => {}, null, []);
-const hs = [...w.pois.values()].filter((p) => p.kind === "home");
-t.ok(hs.length === 41 && hs.every((h) => celestialClearance(h.x, h.y) >= 0), "player stations keep clear of the sun, planets and moons (owner)", hs.filter((h) => celestialClearance(h.x, h.y) < 0).length);
+for (let i = 0; i < 5; i++) w.addPlayer("h" + i, "H" + i, () => {}, null, []);
+t.ok(![...w.pois.values()].some((p) => p.kind === "home"), "no free player stations (owner: they'll be bought)");
 t.ok(Math.hypot(STATION.x - EARTH.x, STATION.y - EARTH.y) < 500, "the NPC Station orbits Earth (owner)");
 const cc = celestialsForClient(); t.ok(cc.sun.rKm > 0 && cc.planets.length === 8 && cc.planets[4].moons.length && cc.planets[0].orbit && !("zone" in cc.planets[0]), "the client gets the sun, planets, moons and their orbits");
 t.done();

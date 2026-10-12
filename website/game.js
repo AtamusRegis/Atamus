@@ -68,7 +68,9 @@
     canDock: (sh) => {
       if (!sh || sh.docked || sh.warp) return false;
       const near = (st) => { if (!st) return false; const dx = Math.max(0, Math.abs(sh.x - st.x) - st.w / 2), dy = Math.max(0, Math.abs(sh.y - st.y) - st.h / 2); return Math.hypot(dx, dy) - (hull(sh.type).radiusKm || 0.09) <= ((cfg && cfg.dockKm) || 5); };
-      return near(homeProp()) ? "home" : near(stationProp()) ? "station" : false;
+      if (near(homeProp())) return "home";
+      for (const f of belts.values()) for (const o of f.props || []) if (o.station && !o.home && near(o)) return o.id.replace(/#0$/, "");   // (owner) any planet's NPC station: its id
+      return false;
     },
     homeName: () => { const h = pois.find((p) => p.kind === "home"); return h ? h.name : null; },
   };
@@ -137,7 +139,9 @@
         // server clock ≈ local + offset: eased toward the freshest arrivals (never jumped, so motion doesn't skip; a big change, like a sleeping tab, snaps)
         if (clockOffset == null || Math.abs(off - clockOffset) > 1000) clockOffset = off; else clockOffset += (off - clockOffset) * (off > clockOffset ? 0.08 : 0.01);
         for (const s of m.ships) if (s.mine) { const c = heavy.get(s.id) || {}; for (const k of HEAVY) { if (k in s) c[k] = s[k]; else if (k in c) s[k] = c[k]; } heavy.set(s.id, c); }   // the server leaves out what hasn't changed
-        if (m.hangar) heavy.set("hangar", m.hangar); else if (m.ships.some((s) => s.mine && s.docked === "station")) m.hangar = heavy.get("hangar") || {};
+        if (m.hangars) heavy.set("hangars", m.hangars); else if (m.ships.some((s) => s.mine && s.docked)) m.hangars = heavy.get("hangars") || {};
+        { const own = m.ships.filter((s) => s.mine && s.docked), at = (own.find((s) => s.pilot === selPilot) || own[0] || {}).docked;   // (owner) a hangar per station: the selected pilot's station's
+          if (at && m.hangars) m.hangar = m.hangars[at] || {}; }
         if (m.home) heavy.set("home", m.home); else if (m.ships.some((s) => s.mine && s.docked === "home")) m.home = heavy.get("home") || {};   // your station's storage
         snaps.push({ st: m.st, ships: new Map(m.ships.map((s) => [s.id, s])) }); while (snaps.length > 30) snaps.shift();
         latest = m; snapAt = performance.now(); bus.dispatchEvent(new CustomEvent("snap"));
@@ -252,7 +256,12 @@
   // drag or WASD = pan; wheel / pinch = zoom ----
   const ptrs = new Map(); let drag = null, hold = 0;
   const MARKER_PX = 12;
-  const poiAt = (px, py) => { let best = null, bd = MARKER_PX; for (const p of pois) { const d = Math.hypot(px - gx2s(p.x), py - gy2s(p.y)); if (d <= bd) { bd = d; best = p; } } return best; };
+  // (owner, 2026-10-11) zoomed out to the solar view, only the planets (and POIs out in deep space) are on the map: what's
+  // inside a planetary system shows once you zoom in on it
+  const sysOf = (p) => { if (p._sys !== undefined) return p._sys; if (!celestials().planets.length) return null; const pl = celestials().planets.find((q) => q.sysR && Math.hypot(p.x - q.x, p.y - q.y) <= q.sysR); return (p._sys = pl || null); };
+  const poiShown = (p, sc = scale()) => { if (p.kind === "planet" || p.kind === "sun") return true; const pl = sysOf(p); return !pl || pl.sysR * sc >= SYSTEM_SHOW_PX; };
+  const SYSTEM_SHOW_PX = 90;                         // a planetary system this big on screen (radius) shows what's in it
+  const poiAt = (px, py) => { let best = null, bd = MARKER_PX; for (const p of pois) { if (!poiShown(p)) continue; const d = Math.hypot(px - gx2s(p.x), py - gy2s(p.y)); if (d <= bd) { bd = d; best = p; } } return best; };
   const poiItems = (p) => {                         // a POI's options for the selected pilot's ship
     const own = myShip(), out = [];
     if (own && !window.Atamus.inPoi(own, p)) out.push(["Warp to " + p.name, () => window.Atamus.warp(p.id)]);
@@ -268,7 +277,7 @@
     if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
     const pr = propAt(px, py);
     if (pr && pr.station) {                          // (owner) the Station, or a player's station: only your own can be docked at
-      const own = myShip(), where = pr.home ? "home" : "station", yours = !pr.home || poiById.has("home:" + pr.home), items = [];
+      const own = myShip(), where = pr.home ? "home" : pr.id.replace(/#0$/, ""), yours = !pr.home || poiById.has("home:" + pr.home), items = [];
       if (yours) items.push(own && own.docked === where ? ["Open Hangar", () => bus.dispatchEvent(new CustomEvent("openstation"))] : ["Dock", () => { if (own) send({ t: "dock", ship: own.id, where }); }]);
       menu(px, py, [...items, ["Look At", () => lookAtObj("prop", pr.id)]]); return;
     }
@@ -469,6 +478,7 @@
     for (const p of pois) {
       const x = gx2s(p.x), y = gy2s(p.y), rPx = p.r * sc, f = belts.get(p.id);
       if (x < -rPx - 40 || y < -rPx - 40 || x > innerWidth + rPx + 40 || y > innerHeight + rPx + 40) continue;
+      if (!f && !poiShown(p, sc)) continue;
       if (f) {
         ctx.save(); ctx.beginPath(); ctx.arc(x, y, rPx, 0, Math.PI * 2); ctx.strokeStyle = "rgba(140,170,220,0.22)"; ctx.setLineDash([6, 6]); ctx.lineWidth = 1; ctx.stroke(); ctx.restore();
         for (const k of f.rocks) {
