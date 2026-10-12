@@ -1889,6 +1889,7 @@
       const A = window.Atamus, sh = hudShip(), out = [];
       if (MODS()[k] && from.type === "hold" && sh && sh.docked && from.ship === sh.id && from.hold === "cargo") out.push(["Fit", () => fitFirst(sh, k)]);   // (owner) docked only
       const dests = moveTargets(from, k); if (dests.length) out.push(["Move to", dests.map(([label, to]) => [label, () => A.send({ t: "transfer", from: srcCont(from), to, item: k })])]);
+      if ((ITEMDEFS()[k] || {}).manual) out.unshift(["Read", () => A.send({ t: "read", ship: sh && sh.id, from: srcCont(from), item: k })]);   // (owner) a license manual
       if (itemDef(k)) out.push(["Info", () => openModInfo(k)]);
       return out;
     });
@@ -2091,23 +2092,51 @@
   // ---- the Station (owner, temporary): your hangar (unlimited) and your docked ships' holds. The list on the left and
   // the storage on the right scroll on their own. Opens when the selected pilot's ship docks; closes when none is docked.
   const stSel = () => saved.stSel || "hangar";
+  // ---- (owner, "for now") the market: every NPC station sells everything, into your hangar there. Tabs by kind; sizes
+  // and tiers for modules and ammo; each row its price, an amount and Buy ----
+  const MK_TABS = [["active", "Active"], ["passive", "Passive"], ["weapons", "Weapons"], ["ammo", "Ammo"], ["drones", "Drones"], ["manuals", "Manuals"], ["ore", "Ore"]];
+  function marketView(at) {
+    const A = window.Atamus, P = A.cfg.prices || {}, tab = MK_TABS.some(([k]) => k === saved.mkTab) ? saved.mkTab : "active", size = saved.mkSize || "s", tier = saved.mkTier || 1;
+    const redo = () => { persistAll(); wins.station.ssig = null; renderStation(wins.station.body); };
+    const tabs = el("div", { class: "tab-row mk-tabs" }, MK_TABS.map(([k, n]) => el("button", { class: "tab" + (k === tab ? " active" : ""), onclick: () => { saved.mkTab = k; redo(); } }, n)));
+    const sized = tab === "active" || tab === "passive" || tab === "weapons" || tab === "ammo";
+    const filt = sized ? el("div", { class: "mk-filters" }, ["s", "m", "l"].map((z) => el("button", { class: "fa-btn" + (z === size ? " on" : ""), onclick: () => { saved.mkSize = z; redo(); } }, z.toUpperCase())), el("span", { class: "mk-gap" }),
+      [1, 2].map((n) => el("button", { class: "fa-btn" + (n === tier ? " on" : ""), onclick: () => { saved.mkTier = n; redo(); } }, n === 2 ? "II" : "I"))) : null;
+    const keys = Object.keys(P).filter((k) => {
+      const m = MODS()[k], d = ITEMDEFS()[k];
+      if (tab === "ore") return k.startsWith("ore:");
+      if (tab === "manuals") return !!(d && d.manual);
+      if (tab === "drones") return k === "drone" || k === "drone_fuel";
+      if (tab === "ammo") return !!(d && d.ammo && d.size === size && d.tier === tier);
+      if (!m || m.size !== size || m.tier !== tier) return false;
+      return tab === "weapons" ? m.kind === "weapon" : m.slot === tab && m.kind !== "weapon";
+    });
+    const rows = keys.map((k) => {
+      const qty = el("input", { class: "text-input mk-qty", type: "number", min: "1", value: "1", inputmode: "numeric" });
+      const nm = el("span", { class: "mk-name" }, itemName(k)); nm.addEventListener("click", () => { if (itemDef(k)) openModInfo(k); });
+      return el("div", { class: "mk-row" }, el("img", { class: "mk-icon", src: itemIcon(k), alt: "", draggable: "false" }), nm, el("span", { class: "credits mk-price" }, P[k].toLocaleString() + " cr"), qty,
+        el("button", { class: "btn-ghost2 mk-buy", onclick: () => { const n = Math.floor(+qty.value); if (n >= 1) A.send({ t: "buy", ship: (hudShip() || {}).id, item: k, qty: n }); } }, "Buy"));
+    });
+    const credits = (state && state.profile && state.profile.credits) || 0;
+    return [el("div", { class: "st-head" }, el("span", { class: "ps-name" }, "Market"), el("span", { class: "credits st-used" }, Math.round(credits).toLocaleString() + " cr")), tabs, ...(filt ? [filt] : []), el("div", { class: "mk-list" }, rows)];
+  }
   function renderStation(body) {
     // the station the selected pilot's ship is docked at (else the first of yours that's docked): the Station or your own (owner)
     const A = window.Atamus, sh = hudShip(), all = ((A.snap && A.snap.ships) || []).filter((x) => x.mine && x.docked);
     const at = (sh && sh.docked) || (all[0] && all[0].docked) || "station", store = at === "home" ? "home" : "hangar";
     const ships = all.filter((x) => x.docked === at), hangar = (A.snap && A.snap[store]) || {};
     let sel = stSel(); const selC = contOf(sel);
-    if (isStore(sel) ? sel !== store : !ships.some((x) => x.id === selC.ship)) sel = store;
-    const items = isStore(sel) ? hangar : (((ships.find((x) => x.id === selC.ship) || {}).holds || {})[selC.hold] || {});
+    if (sel !== "market" && (isStore(sel) ? sel !== store : !ships.some((x) => x.id === selC.ship))) sel = store;
+    const items = sel === "market" ? {} : isStore(sel) ? hangar : (((ships.find((x) => x.id === selC.ship) || {}).holds || {})[selC.hold] || {});
     const openSet = saved.stOpen || (saved.stOpen = {});   // (owner) which ships in the Ship Bay are expanded to show their holds
     if (!isStore(sel)) openSet[selC.ship] = true;
-    const sig = at + "|" + sel + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds, !!x.unboarded, openSet[x.id] !== false])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked) + "|" + !!(sh && sh.unboarded);
+    const sig = at + "|" + sel + "|" + (sel === "market" ? JSON.stringify([saved.mkTab, saved.mkSize, saved.mkTier, state && state.profile && state.profile.credits]) : "") + "|" + JSON.stringify(ships.map((x) => [x.id, x.name || "", x.holds, x.calc && x.calc.holds, !!x.unboarded, openSet[x.id] !== false])) + "|" + JSON.stringify(items) + "|" + JSON.stringify(hangar) + "|" + !!(sh && sh.docked) + "|" + !!(sh && sh.unboarded);
     wins.station.slot.textContent = at === "home" ? (A.homeName() || "Station") : ((A.poi && A.poi(at)) || {}).name || "Station";   // (that planet's station)
     if (wins.station.ssig === sig) return; wins.station.ssig = sig;
     const keepScroll = [...body.querySelectorAll(".st-side, .st-grid-wrap")].map((x) => x.scrollTop);
     body.innerHTML = ""; body.classList.add("st-win");
     const pick = (key) => { saved.stSel = key; persistAll(); wins.station.ssig = null; renderStation(body); };
-    const side = el("div", { class: "st-side" }, el("button", { class: "st-entry" + (sel === store ? " active" : ""), "data-cont": store, onclick: () => pick(store) }, "Hangar"));
+    const side = el("div", { class: "st-side" }, el("button", { class: "st-entry st-market" + (sel === "market" ? " active" : ""), onclick: () => pick("market") }, "Market"), el("button", { class: "st-entry" + (sel === store ? " active" : ""), "data-cont": store, onclick: () => pick(store) }, "Hangar"));
     if (ships.length) side.append(el("div", { class: "st-bay" }, "Ship Bay"));
     for (const x of ships) {                           // (owner) each ship a tab: click to show its holds; right-click (hold): its menu
       const T = A.cfg.shipTypes[x.type] || {}, open = openSet[x.id] !== false;   // (expanded until you collapse it)
@@ -2118,6 +2147,7 @@
       if (open) for (const h of T.holds || []) { const key = x.id + "|" + h.key; side.append(el("button", { class: "st-entry st-hold" + (sel === key ? " active" : ""), "data-cont": key, onclick: () => pick(key) }, h.name)); }
     }
     const main = el("div", { class: "st-main" });
+    if (sel === "market") { main.append(...marketView(at)); body.append(el("div", { class: "st-split" }, side, main)); return; }
     if (isStore(sel)) main.append(el("div", { class: "st-head" }, el("span", { class: "ps-name" }, "Hangar"), el("span", { class: "st-used" }, (Math.round(boxUsed(items) * 10) / 10).toLocaleString() + " m³")));
     else {
       const x = ships.find((y) => y.id === selC.ship), T = A.cfg.shipTypes[x.type] || {}, h = (T.holds || []).find((y) => y.key === selC.hold) || {}, cap = (x.calc && x.calc.holds[selC.hold]) || h.m3 || 0, used = boxUsed(items);
@@ -2146,6 +2176,7 @@
     if (wins.minfo && isOpen(wins.minfo) && minfoKey) { const k = JSON.stringify((sh && sh.calc) || {}); if (wins.minfo.msig !== k) { wins.minfo.msig = k; renderModInfo(wins.minfo.body); } }
   });
   window.Atamus.bus.addEventListener("openstation", () => toggleWindow("station", true));
+  window.Atamus.bus.addEventListener("credits", (e) => { if (state && state.profile) state.profile.credits = e.detail.n; if (wins.player && isOpen(wins.player)) renderPlayer(wins.player.body); if (wins.station && isOpen(wins.station)) { wins.station.ssig = null; renderStation(wins.station.body); } });
   window.Atamus.bus.addEventListener("notice", (e) => flash(e.detail));
 
   // ---- Info on an object in space (owner): an asteroid's ore and what's left of it, or a ship's hull ----

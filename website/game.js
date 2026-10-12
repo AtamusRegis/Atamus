@@ -151,6 +151,8 @@
       } else if (m.t === "admdm" || m.t === "admopen" || m.t === "admend" || m.t === "frozen" || m.t === "renamereq" || m.t === "appealmsg" || m.t === "admstate" || m.t === "adminprofile" || m.t === "chatflag" || m.t === "langalert" || m.t === "relappeal" || m.t === "relappealadm" || m.t === "ticket" || m.t === "staffsys" || m.t === "staffnotes") { bus.dispatchEvent(new CustomEvent(m.t, { detail: m }));   // (owner) admin DMs, Freeze
       } else if (m.t === "kicked" || m.t === "banned") { kickedWhy = m.reason || "";
       } else if (m.t === "info") bus.dispatchEvent(new CustomEvent("info", { detail: m }));
+      else if (m.t === "wreck") bus.dispatchEvent(new CustomEvent("wreck", { detail: m }));
+      else if (m.t === "credits") bus.dispatchEvent(new CustomEvent("credits", { detail: m }));
       else if (m.t === "notice") bus.dispatchEvent(new CustomEvent("notice", { detail: m.text }));
       else if (m.t === "chat") bus.dispatchEvent(new CustomEvent("chat", { detail: m }));
       else if (m.t === "sys") bus.dispatchEvent(new CustomEvent("sys", { detail: m }));

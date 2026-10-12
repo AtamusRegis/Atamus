@@ -53,6 +53,7 @@ export async function migrate() {
     CREATE INDEX IF NOT EXISTS pilots_user_idx ON pilots (user_id);
 
     ALTER TABLE users ADD COLUMN IF NOT EXISTS credits BIGINT NOT NULL DEFAULT 0;
+    ALTER TABLE users ALTER COLUMN credits SET DEFAULT 10000000;   -- (owner, 2026-10-11) players start with 10M
     ALTER TABLE users ADD COLUMN IF NOT EXISTS portrait JSONB;   -- the account's character (portraits.js), shown in chat
 
     CREATE TABLE IF NOT EXISTS systems (
@@ -373,7 +374,7 @@ export async function migrate() {
 // licenses and credits stay). "pilots": pilots and their ships only (accounts, characters and credits stay).
 // "solar": the new solar system (owner, 2026-10-11): belts go, player stations move (their storage stays), every ship
 // in space is docked at the Station (now at Earth); pilots, ships' holds, hangars and credits stay.
-const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"], ["2026-10-11 planetary systems", "systems"]];
+const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"], ["2026-10-11 planetary systems", "systems"], ["2026-10-11 10M to start", "credits10m"]];
 // "systems" (owner, 2026-10-11): free player stations go (what was stored in one moves to the owner's hangar at Earth
 // Station, and ships docked at one dock there instead); the single hangar becomes Earth Station's (a hangar per NPC
 // station now); belts outside every planetary system go.
@@ -403,6 +404,10 @@ export async function runWipes() {
         const { rows: belts } = await c.query(`SELECT id, data FROM instances WHERE data->>'kind' = 'belt'`); let gone = 0;
         for (const b of belts) if (!systemAt(+b.data.x, +b.data.y)) { await c.query(`DELETE FROM instances WHERE id = $1`, [b.id]); gone++; }
         await c.query("COMMIT"); console.log(`[wipe] ${tag}: ${hd.rowCount} player stations removed (storage to Earth Station), ${gone} belts outside the planetary systems removed`); continue;
+      }
+      if (kind === "credits10m") {                          // (owner) everyone has at least the 10M new players start with
+        const r = await c.query(`UPDATE users SET credits = 10000000 WHERE credits < 10000000`);
+        await c.query("COMMIT"); console.log(`[wipe] ${tag}: ${r.rowCount} accounts topped up to 10M`); continue;
       }
       if (kind === "solar") {
         const b = await c.query(`DELETE FROM instances WHERE data->>'kind' = 'belt'`);

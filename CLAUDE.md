@@ -64,6 +64,7 @@ packages/server/src/
     modules.js    modules (active / passive; S / M / L, I / II), weapons and ammo (weapons.json, from The Reach), drones and fuel items, starter kit, shipCalc
     combat.js     active modules at work, weapons and damage, wrecks and loot, drones (installed onto World)
     items.js      item helpers: volumes, holds, stacks
+    market.js     the NPC stations' market: prices for everything, license manuals
     station.js    the NPC stations (one per planet; Earth's id is "station"): hangar bays, docking range, landing, props
     eta.js        the Expanse Transit Authority: the ETA Office, its fleets, patrols, the response to aggression, scramblers and webs
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
@@ -113,7 +114,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
-- `give item n [ship]` (put items in your ship's hold: modules, ammo, drones)
+- `give item n [ship]` (put items in your ship's hold: modules, ammo, drones), `wreck` (a test wreck beside your ship)
 - `aggress [ship] [victim]` (your ship attacks: the ETA flags and hunts it), `pardon [ship]` (clear the flag), `killofficer [id]` (an ETA ship dies to yours: the escalation)
 
 PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check), `POST /game/admin/dev/lapse` (the staff inactivity check).

@@ -51,6 +51,10 @@ export async function devCommand(world, pid, m) {
       if (sh && typeof k === "string" && isItem(k) && sh.holds[holdFor(k)]) { addItem(sh.holds, holdFor(k), k, n); tell("given"); } else tell("no such item");
       break;
     }
+    case "wreck": {                                      // a wreck with a few things in it, beside your ship (m.ship, else the first in space)
+      const sh = [...world.ships.values()].find((s) => s.owner === pid && !s.docked && !s.admin); if (!sh) { tell("no ship in space"); break; }
+      world._addWreck(sh.x + 1, sh.y, "Test Wreck", { beam_s1: 1, "ore:ironstone": 20, ammo_beam_std_s1: 3 }, null); tell("wreck"); break;
+    }
     // (owner) aggression without weapons: your ship (m.ship, else the first in space) attacks m.victim (a ship id,
     // or no one); pardon clears a flag; killofficer has an ETA ship (m.id, else the nearest) destroyed by your ship
     case "aggress": case "pardon": case "killofficer": {

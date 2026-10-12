@@ -1,5 +1,8 @@
 // Pilots: first is free, each extra costs the pilot price, 3 per account. The trainer has the Mining Frigate license.
 import { suite, sleep, BASE } from "./lib.mjs";
+import pg from "../../packages/server/node_modules/pg/lib/index.js";
+const db = new pg.Pool({ connectionString: "postgres://postgres@127.0.0.1:5433/atamus" });
+await db.query(`UPDATE users SET credits = 0 WHERE lower(username) = 'ptr'`);   // (players start with 10M: none here, to check the price)
 const t = suite("pilots");
 const post = (path, body) => fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
 const state = async () => (await fetch(BASE + "/game/state")).json();
@@ -30,5 +33,6 @@ t.ok(!r.ok, "a new pilot's portrait is checked too (and still needs the credits)
 r = await post("/game/character", { portrait: { ...good, extra: "x" } }); const st1 = await state();
 const same = (a, b) => JSON.stringify(Object.entries(a || {}).sort()) === JSON.stringify(Object.entries(b).sort());
 t.ok(r.ok && same(st1.profile.portrait, good), "the account's character is saved, nothing extra kept", st1.profile.portrait);
+await db.query(`UPDATE users SET credits = 10000000 WHERE lower(username) = 'ptr'`); await db.end();
 await sleep(100);
 t.done();

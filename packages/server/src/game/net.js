@@ -21,6 +21,7 @@ import { onTicket } from "../tickets.js";
 import { onResetLine } from "../resets.js";
 import { ORES } from "./belts.js";
 import { MODULES, ITEMS } from "./modules.js";
+import { PRICES, priceOf, MAX_BUY } from "./market.js";
 import { DOCK_KM } from "./station.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand, ptrAs } from "../ptr.js";
@@ -36,9 +37,9 @@ const staffRoleOf = async (pid) => {
   const { rows } = await pool.query(`SELECT role, former_staff FROM users WHERE id = $1`, [String(pid)]); const u = rows[0];
   return u ? u.role || (u.former_staff ? "former" : null) : null;   // (owner) former staff don't see other ships either
 };
-const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "loot", "take", "ammo", "dev"]);
+const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "loot", "take", "ammo", "buy", "read", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
-const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, items: ITEMS, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
+const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, items: ITEMS, prices: PRICES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
 export function attachGameServer(httpServer) {
   const sendTo = (pid, o) => { const s = JSON.stringify(o); for (const c of conns.get(pid) || []) if (c.readyState === c.OPEN && !c.replaced) c.send(s); };
@@ -334,7 +335,9 @@ export function attachGameServer(httpServer) {
           case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
           case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on, m.drones && typeof m.drones === "object" ? { item: m.drones.item, n: m.drones.n } : null); break;
           case "loot": world.cmdLoot(pid, m.ship, m.wreck); break;
-          case "ammo": world.cmdAmmo(pid, m.ship, m.slot, m.item); break;   // (owner) load a weapon   // (owner) open a wreck
+          case "ammo": world.cmdAmmo(pid, m.ship, m.slot, m.item); break;   // (owner) load a weapon
+          case "buy": buy(pid, m).catch((e) => console.error("buy", e)); break;   // (owner) the NPC station market
+          case "read": if (world.cmdRead(pid, m.ship, m.from, m.item)) persist(pid); break;   // (owner) a license manual   // (owner) open a wreck
           case "take": world.cmdTake(pid, m.ship, m.wreck, m.item, m.qty); break;
           case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
           case "dock": world.cmdDock(pid, m.ship, m.where); break;
@@ -348,6 +351,18 @@ export function attachGameServer(httpServer) {
     ws.on("error", () => { try { ws.close(); } catch {} });
   });
 
+  // (owner) buying at an NPC station: the price comes off the account's credits (if it has them), the items go into its
+  // hangar at the station the ship is docked at
+  async function buy(pid, m) {
+    const item = typeof m.item === "string" ? m.item : null, price = priceOf(item), n = Number.isInteger(m.qty) ? m.qty : 0;
+    if (price == null || n < 1 || n > MAX_BUY) return;
+    const at = world.dockedAt(pid, m.ship); if (!at) return sendTo(pid, { t: "notice", text: "Dock at a station to buy" });
+    const cost = price * n;
+    const { rows } = await pool.query(`UPDATE users SET credits = credits - $1 WHERE id = $2 AND credits >= $1 RETURNING credits`, [cost, pid]);
+    if (!rows[0]) return sendTo(pid, { t: "notice", text: "Not enough credits" });
+    world.addToHangar(pid, at, item, n); persist(pid);
+    sendTo(pid, { t: "credits", n: Number(rows[0].credits) });
+  }
   const lastSaved = new Map();                            // pid -> JSON last written: skip the write when nothing changed
   const persist = async (pid) => {
     if (!world.players.has(pid)) return;

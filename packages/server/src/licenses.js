@@ -34,7 +34,8 @@ export const LICENSES = [
     // (owner) 5 levels, the first known from the start; stepped: level N takes N × 12 min (level 5: an hour)
     requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN)
   },
-  // (owner, 2026-10-11) module licenses, 5 levels each, stepped like Mining Frigate. Each level: −5% power and
+  // (owner, 2026-10-11) module licenses, 5 levels each, stepped like Mining Frigate; (owner) each needs its manual read
+  // first (bought at any NPC station: market.js), unless the pilot already has a level in it. Each level: −5% power and
   // disposition of the modules it names, +5% to an active module's effect and +10% to a passive's bonus; a II module
   // needs its license at V (modules.js).
   ...[
@@ -56,7 +57,7 @@ export const LICENSES = [
     ["beams", "Beams", "beams", "Fire beams better and lighter.", "Beam"],
     ["repeaters", "Repeaters", "projectiles", "Fire repeaters better and lighter.", "Repeater"],
     ["coilguns", "Coilguns", "hybrid", "Fire coilguns better and lighter.", "Coilgun"],
-  ].map(([key, name, category, desc, what]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus: "+5% " + what + " effect (passives: +10%), −5% their power and disposition; II modules need V", requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
+  ].map(([key, name, category, desc, what]) => ({ key, name, category, maxLevel: 5, free: false, desc, bonus: "+5% " + what + " effect (passives: +10%), −5% their power and disposition; II modules need V", requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
 ];
 for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms * TRAINING_TIME_MODIFIER));   // the times everything uses (server and trainer)
 

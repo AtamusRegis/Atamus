@@ -16,6 +16,7 @@ import { SUN, PLANETS, RINGED, celestialPois, anchorLanding, celestialClearance,
 import { MODULES, ITEMS, STARTER_KIT, STARTER_DRONES, KIT_VERSION, shipCalc, isOff, itemKey, fitProblem } from "./modules.js";
 import { itemM3, isItem, holdUsed, addItem, takeItem, loadItems, aimPoint } from "./items.js";
 import { installCombat } from "./combat.js";
+import "./market.js";   // (its license manuals are items)
 import { Eta, ETA_OFFICE, officeProps } from "./eta.js";
 import { ADMIN_TYPES } from "./constants.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
@@ -95,7 +96,7 @@ export class World {
   addPlayer(id, name, send, saved = null, pilots = []) {
     const existing = this.players.get(id);
     if (existing) { existing.send = send; existing.offline = false; existing.name = name; this.setPilots(id, pilots, saved); return existing; }
-    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangars: loadHangars(saved) };
+    const p = { id, name, send, offline: false, offlineSince: 0, view: null, pilots: [], saved, hangars: loadHangars(saved), unlocked: saved && saved.unlocked && typeof saved.unlocked === "object" ? { ...saved.unlocked } : {} };
     this.players.set(id, p);
     this._ensureHome(p);
     this.setPilots(id, pilots, saved);
@@ -245,7 +246,7 @@ export class World {
     const ships = {};
     for (const s of this.ships.values()) if (s.owner === id && !s.admin) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}), ...(s.crim ? { crim: s.crim } : {}), kitV: s.kitV, ...(s.ammo && s.ammo.some(Boolean) ? { ammo: s.ammo } : {}), hp: +s.hp.toFixed(1), shield: +s.shield.toFixed(1) };
     const p = this.players.get(id);
-    return { ships, hangars: p ? p.hangars : {}, savedAt: Date.now() };
+    return { ships, hangars: p ? p.hangars : {}, ...(p && Object.keys(p.unlocked || {}).length ? { unlocked: p.unlocked } : {}), savedAt: Date.now() };
   }
 
   // ---- commands (every field hostile) ----
@@ -508,6 +509,28 @@ export class World {
       if (out.length >= 60) break;
     }
     return out;
+  }
+
+  // ---- (owner) the market and license manuals ----
+  /** Bought items land in the hangar at that station. */
+  addToHangar(pid, at, item, n) { const p = this.players.get(pid); if (!p || !stationById(at)) return false; const h = (p.hangars[at] ||= {}); h[item] = +((h[item] || 0) + n).toFixed(2); return true; }
+  /** The NPC station one of your ships is docked at (the given one, else any), or null. */
+  dockedAt(pid, shipId = null) {
+    const s = typeof shipId === "string" && this.ships.get(shipId); if (s && s.owner === pid && s.docked && stationById(s.docked)) return s.docked;
+    const any = this.shipsOf(pid).find((x) => x.docked && stationById(x.docked)); return any ? any.docked : null;
+  }
+  /** (owner) Read a license manual (from a hold of your ship, or the hangar where it's docked): it's used up, and the
+   *  license can be trained (account-wide). */
+  cmdRead(pid, shipId, from, item) {
+    const p = this.players.get(pid), def = typeof item === "string" && ITEMS[item]; if (!p || !def || !def.manual) return false;
+    let box = null;
+    if (from === "hangar") { const at = this.dockedAt(pid, shipId); box = at && p.hangars[at]; }
+    else if (from && typeof from === "object" && typeof from.ship === "string" && typeof from.hold === "string") { const s = this.ships.get(from.ship); box = s && s.owner === pid && s.holds[from.hold]; }
+    if (!box || !((box[item] || 0) >= 1)) return false;
+    if (p.unlocked[def.manual]) return this._notice(pid, "Already read"), false;
+    const v = +((box[item] || 0) - 1).toFixed(2); if (v <= 0) delete box[item]; else box[item] = v;
+    p.unlocked[def.manual] = true; this._notice(pid, def.name + " read");
+    return true;
   }
 
   // ---- objects in space (owner): asteroids and ships can be locked, aligned to, moved toward, and looked at ----
