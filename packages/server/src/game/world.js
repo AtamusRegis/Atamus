@@ -13,7 +13,9 @@ const HANGAR_GAP_KM = 0.03, HANGAR_KMPS = 0.06, UNDOCK_KM = 5, UNDOCK_SPREAD = 0
 import { Obstacles } from "./obstacles.js";
 import { HOME, homeId, homeProps, homeLanding } from "./home.js";
 import { SUN, PLANETS, RINGED, celestialPois, anchorLanding, celestialClearance, systemAt, planetByKey } from "./celestials.js";
-import { MODULES, STARTER_KIT, shipCalc, isOff } from "./modules.js";
+import { MODULES, ITEMS, STARTER_KIT, STARTER_DRONES, KIT_VERSION, shipCalc, isOff, itemKey, fitProblem } from "./modules.js";
+import { itemM3, isItem, holdUsed, addItem, takeItem, loadItems, aimPoint } from "./items.js";
+import { installCombat } from "./combat.js";
 import { Eta, ETA_OFFICE, officeProps } from "./eta.js";
 import { ADMIN_TYPES } from "./constants.js";
 import { ORES, sizeFor, oreOf } from "./belts.js";
@@ -21,20 +23,10 @@ import { readFileSync } from "node:fs";
 import { nameProblem, censor } from "../namefilter.js";
 const spawnAt = (st) => ({ x: st.x, y: st.y - 8 });   // a new ship appears just south of its pilot's starting station
 const SOLAR_VIEW_KM = 60_000;                           // (owner) zoomed out past a planetary system: other ships aren't shown (only planets)
-const hasMWD = (s) => !!(s.npc || s.admin || (s.fit && s.fit.passive.some((k, i) => k === "microwarp_drive" && !(s.fit.off && s.fit.off.passive && s.fit.off.passive[i]))));   // (owner) needed to warp between planetary systems
-const WEB_SPEED = 0.4;                                  // (owner) an ETA web: top speed down to this share
-const ADMIN_LOCK_KM = 200;                              // (owner) an admin's ETA ship locks instantly out to here
+const hasMWD = (s) => !!(s.npc || s.admin || (s.calc && s.calc.mwd));   // (owner) a Microwarp Drive fitted (powered): needed to warp between planetary systems
+// (owner) an admin's ETA ship comes fitted
+const ADMIN_FIT = { active: ["warp_scrambler_l2", "stasis_webifier_l2", "microwarp_drive_l2", "coilgun_long_l2", "tractor_beam_l2", "remote_shield_booster_l2"], passive: ["target_range_upgrade_l2", "locking_upgrade_l2", "target_tracker_l2", "armor_upgrade_l2", "speed_upgrade_l2", "cargo_upgrade_l2"] };
 const CHAT_GROUP_KM = 150;   // (owner) your pilots this close together share one chat bubble
-// (owner) a laser aims only at the rock itself: points well inside each rock sprite's opaque part, as fractions of its
-// width from its center (v down, as drawn; scripts/gen/rockmasks.py makes them), turned and scaled like the art
-const ROCK_MASKS = JSON.parse(readFileSync(new URL("./rockmasks.json", import.meta.url), "utf8"));
-function aimPoint(k) {
-  if (!k) return { ax: 0, ay: 0, size: 0 };
-  const pts = ROCK_MASKS[((oreOf(k.ore) || {}).rock || "cratered") + "_" + k.size], w = k.size / 1000;
-  const [u, v] = pts && pts.length ? pts[Math.floor(Math.random() * pts.length)] : [0, 0], c = Math.cos(k.rot || 0), sn = Math.sin(k.rot || 0);
-  return { ax: +((u * c - v * sn) * w).toFixed(4), ay: +(-(u * sn + v * c) * w).toFixed(4), size: k.size };   // screen y is down, world y up
-}
-
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
 export const insideExpanse = (x, y, margin = 0) => NORMALS.every(([nx, ny]) => x * nx + y * ny <= EXPANSE_APOTHEM_KM - margin + 1e-9);
@@ -56,14 +48,11 @@ export const cleanShipName = (v) => { if (typeof v !== "string") return null; co
 // its size) or a Library prop (its art's box) — the zone the client outlines on hover.
 const DEST_CLEAR_KM = 0.07;
 const ORBIT_KM = 0.5;                                 // (owner) Orbit circles this far off an object's no-destination line
-// ---- ship holds (owner): { ore: { item: qty }, cargo: { item: qty } }; a module is 5 m³ an item, ore 1 m³ a unit ----
-const itemM3 = (k) => (MODULES[k] ? MODULES[k].m3 : 1);
-const isItem = (k) => !!MODULES[k] || (typeof k === "string" && k.startsWith("ore:") && ORES.some((o) => "ore:" + o.key === k));
-export const holdUsed = (h, hold) => Object.entries(h[hold] || {}).reduce((t, [k, n]) => t + itemM3(k) * n, 0);
-function addItem(h, hold, k, n) { h[hold] ||= {}; h[hold][k] = +((h[hold][k] || 0) + n).toFixed(2); }
-function takeItem(h, hold, k, n) { const v = +((h[hold][k] || 0) - n).toFixed(2); if (v <= 0) delete h[hold][k]; else h[hold][k] = v; }
-function loadHolds(v, t) {
-  const h = {}; for (const hd of t.holds) { h[hd.key] = {}; const src = v && typeof v === "object" && v[hd.key]; if (src && typeof src === "object") for (const [k, n] of Object.entries(src)) if (isItem(k) && Number.isFinite(n) && n > 0) h[hd.key][k] = +n.toFixed(2); }
+// ---- ship holds (owner): { ore, cargo, drones: { item: qty } } (items.js) ----
+export { holdUsed };
+export function loadHolds(v, t) {
+  const h = {}; for (const hd of t.holds) h[hd.key] = {};
+  if (v && typeof v === "object") for (const [hold, items] of Object.entries(v)) for (const [k, n] of Object.entries(loadItems(items))) { const to = h[hold] && !(hold === "ore" && !k.startsWith("ore:")) ? hold : h.cargo ? "cargo" : null; if (to) addItem(h, to, k, n); }
   return h;
 }
 // (owner, 2026-10-11) a hangar per NPC station: { stationId: items } (the old single hangar was Earth Station's)
@@ -72,10 +61,10 @@ function loadHangars(saved) {
   for (const [id, items] of Object.entries(src)) if (stationById(id)) out[id] = loadHangar(items);
   return out;
 }
-function loadHangar(v) { const h = {}; if (v && typeof v === "object") for (const [k, n] of Object.entries(v)) if (isItem(k) && Number.isFinite(n) && n > 0) h[k] = +n.toFixed(2); return h; }
-function loadFit(v, t) {
+const loadHangar = (v) => loadItems(v);
+export function loadFit(v, t) {
   const f = { active: Array(t.activeSlots).fill(null), passive: Array(t.passiveSlots).fill(null), off: { active: Array(t.activeSlots).fill(false), passive: Array(t.passiveSlots).fill(false) } };
-  for (const kind of ["active", "passive"]) if (v && Array.isArray(v[kind])) v[kind].slice(0, f[kind].length).forEach((k, i) => { if (MODULES[k] && (MODULES[k].slot === kind || t.anySlot)) { f[kind][i] = k; f.off[kind][i] = !!(v.off && v.off[kind] && v.off[kind][i]); } });
+  for (const kind of ["active", "passive"]) if (v && Array.isArray(v[kind])) v[kind].slice(0, f[kind].length).forEach((k0, i) => { const k = itemKey(k0); if (MODULES[k] && (MODULES[k].slot === kind || t.anySlot)) { f[kind][i] = k; f.off[kind][i] = !!(v.off && v.off[kind] && v.off[kind][i]); } });
   return f;
 }
 const cloneFit = (f) => ({ active: [...f.active], passive: [...f.passive], off: { active: [...f.off.active], passive: [...f.off.passive] } });
@@ -94,6 +83,8 @@ export class World {
     for (const st of STATIONS) this.pois.set(st.id, { ...st, createdAt: 0, field: { rocks: [], props: stationProps(st), dir: 0, ver: 1 }, retired: false });   // (owner) an NPC station at every planet
     for (const c of celestialPois()) this.pois.set(c.id, c);   // (owner) planets' and moons' anchors, always on the map
     this.pois.set(ETA_OFFICE.id, { ...ETA_OFFICE, createdAt: 0, field: { rocks: [], props: officeProps(), dir: 0, ver: 1 }, retired: false });   // (owner) the ETA Office, near Mars
+    this.wrecks = new Map();    // (owner) wrecks: id -> { id, x, y, name, items, owner, until } (combat.js)
+    this.shots = [];            // missiles in flight
     this.alerts = [];           // (owner) open help tickets and non-language reports: { uid, n } (net.js keeps it), red diamonds for Admins
     this.eta = new Eta(this);   // (owner) the Expanse Transit Authority
     if (opts.eta !== false) this.eta.populate();
@@ -122,7 +113,7 @@ export class World {
     this.frozen.add(pid);
     for (const s of this.shipsOf(pid)) {
       Object.assign(s, { vx: 0, vy: 0, moving: false, chase: null, dest: null, warpReq: false, dockReq: false, drift: false, targets: [], tx: s.x, ty: s.y });
-      s.act = s.act.map(() => null); this._recalc(s);
+      this._clearActs(s); this._recalc(s);
     }
     for (const o of this.ships.values()) if (o.targets.length) o.targets = o.targets.filter((g) => !(g.kind === "ship" && this.ships.get(g.id) && this.ships.get(g.id).owner === pid));
   }
@@ -182,20 +173,29 @@ export class World {
     else { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * SPAWN_SPREAD_KM; const at = spawnAt(stationOfPlanet(start)); x = at.x + Math.cos(a) * d; y = at.y + Math.sin(a) * d; h = Math.random() * Math.PI * 2; }   // (owner: nothing at the sun) beside the Station
     const s = { id: sid, owner: id, pilot: String(pilotId), type: "chisel", x, y, vx: 0, vy: 0, h, tx: x, ty: y, moving: false, speed: t.speedKmps, accel: t.accelKmps2, radius: t.radiusKm, mass: t.mass, hp: t.hp, shield: t.shield, targetRange: t.targetRangeKm, lockMs: t.lockMs, maxTargets: t.maxTargets, targets: [], chase: null,   // (owner) always the hull's full stats
       name: sv && typeof sv.name === "string" ? cleanShipName(sv.name) : null,
-      holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), lic: {}, docked: false };
+      holds: loadHolds(sv && sv.holds, t), fit: loadFit(sv && sv.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: !!(sv && sv.kit), kitV: sv && finite(sv.kitV) ? sv.kitV : sv && sv.kit ? 1 : 0, lic: {}, docked: false };
+    if (sv && finite(sv.hp) && sv.hp > 0) s.hp = Math.min(t.hp, sv.hp);   // (damage stays until repaired: docking)
+    if (sv && finite(sv.shield) && sv.shield >= 0) s.shield = Math.min(t.shield, sv.shield);
     if (sv && sv.crim && typeof sv.crim === "object") s.crim = { since: finite(sv.crim.since) ? sv.crim.since : Date.now(), vs: Array.isArray(sv.crim.vs) ? sv.crim.vs.filter((x) => typeof x === "string").slice(-20) : [] };   // (owner) still hunted by the ETA
+    if (sv && Array.isArray(sv.ammo)) s.ammo = sv.ammo.slice(0, t.activeSlots).map((k) => (typeof k === "string" && ITEMS[k] ? k : null));   // (each weapon's loaded ammo)
     if (sv && sv.docked && sv.unboarded) s.unboarded = true;   // (owner) its pilot had left it, docked
     if (sv && sv.docked) { s.docked = stationById(sv.docked) ? sv.docked : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (a station gone, or a player station removed: Earth Station)
-    if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); s.kit = true; }   // (owner) a starter kit in the cargo hold, once per ship
+    if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); addItem(s.holds, "drones", "drone", STARTER_DRONES); s.kit = true; s.kitV = KIT_VERSION; }   // (owner) a starter kit in the cargo hold (and drones in the drone bay), once per ship
+    if (s.kitV < 2) { addItem(s.holds, "drones", "drone", STARTER_DRONES); addItem(s.holds, "cargo", "drone_fuel", 10); s.kitV = KIT_VERSION; }   // (owner: drones are items now) every ship gets its drones and some fuel, once
+    s.kitV = Math.max(s.kitV, KIT_VERSION);
     this._recalc(s);
     this.ships.set(sid, s); this._own = null;
     return s;
   }
-  // what the ship can do as fitted and as its pilot flies it (modules.js); the afterburner, when on, raises top speed
+  // what the ship can do as fitted and as its pilot flies it (modules.js): an afterburner or microwarp drive that's on
+  // raises top speed, a web lowers it; a shield extender (its own, or another ship's remote one) that's on adds shield
   _recalc(s) {
-    const t = SHIP_TYPES[s.type]; s.calc = shipCalc(t, s.fit, s.lic);
-    const ab = s.act.some((a, i) => a && a.on && MODULES[s.fit.active[i]] && MODULES[s.fit.active[i]].speedBonus);
-    s.speed = (ab ? s.calc.abSpeed : s.calc.speed) * (s.web ? WEB_SPEED : 1); s.accel = s.calc.accel;   // (owner) an ETA web slows it
+    const t = SHIP_TYPES[s.type], c = s.calc = shipCalc(t, s.fit, s.lic);
+    let boost = 0, ext = 0;
+    (s.act || []).forEach((a, i) => { const mc = c.mods[i]; if (!a || !a.on || !mc) return; if (mc.kind === "prop") boost += mc.speedBonus; if (mc.kind === "shield_ext") ext += mc.shieldAdd; });
+    s.speed = c.speed * (1 + boost) * (s.webK || 1); s.accel = c.accel;   // (owner) webs slow it
+    s.targetRange = c.targetRange; s.lockMs = c.lockMs; s.maxTargets = c.maxTargets;
+    s.shieldMax = c.shieldMax + ext + (s.extBuff || 0); if (s.shield > s.shieldMax) s.shield = s.shieldMax;
   }
   // Logging off (owner: no logged-off presence): after a short grace for reloads the ship leaves the world.
   // (owner) A safe log off (every ship docked) leaves after a short grace. Otherwise the ships carry on (mining, flying)
@@ -224,13 +224,13 @@ export class World {
     // (owner, 2026-10-11) the NPC station of the planetary system it's in (out in deep space: the nearest one)
     const sys = systemAt(s.x, s.y), stn = sys ? stationOfPlanet(sys.key) : STATIONS.reduce((b, o) => (!b || Math.hypot(o.x - s.x, o.y - s.y) < Math.hypot(b.x - s.x, b.y - s.y) ? o : b), null), goal = stn && this.pois.get(stn.id);
     if (goal) {
-      s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockSeq = null; this._recalc(s);
+      this._clearActs(s); s.targets = []; s.chase = null; s.dest = null; s.dockSeq = null; this._recalc(s);
       const where = stn.id, prop = this._dockProp(s.owner, where);
       if (prop && stationRange(s, prop) <= DOCK_KM) { this._startDock(s, where); return; }   // (already there: in it goes)
       this._startWarp(s, goal, now); s.dockReq = where; return;
     }
     const a = Math.random() * Math.PI * 2, to = clampToExpanse(s.x + Math.cos(a) * SAFE_WARP_KM, s.y + Math.sin(a) * SAFE_WARP_KM, 50), dist = Math.hypot(to.x - s.x, to.y - s.y);
-    s.act = s.act.map(() => null); s.targets = []; s.chase = null; s.dest = null; s.dockReq = false; this._recalc(s);
+    this._clearActs(s); s.targets = []; s.chase = null; s.dest = null; s.dockReq = false; this._recalc(s);
     s.wp = { fx: s.x, fy: s.y, tx: to.x, ty: to.y, at: now, dur: Math.round(WARP_BASE_MS + dist / WARP_KM_PER_S * 1000), poi: null };
     s.h = Math.atan2(to.y - s.y, to.x - s.x); s.moving = false;
   }
@@ -243,7 +243,7 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id && !s.admin) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}), ...(s.crim ? { crim: s.crim } : {}) };
+    for (const s of this.ships.values()) if (s.owner === id && !s.admin) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}), ...(s.crim ? { crim: s.crim } : {}), kitV: s.kitV, ...(s.ammo && s.ammo.some(Boolean) ? { ammo: s.ammo } : {}), hp: +s.hp.toFixed(1), shield: +s.shield.toFixed(1) };
     const p = this.players.get(id);
     return { ships, hangars: p ? p.hangars : {}, savedAt: Date.now() };
   }
@@ -282,8 +282,8 @@ export class World {
     if (poi.kind === "home" && poi.owner !== pid) return;   // (owner) someone else's station isn't on your map
     const aim = this._poiAim(poi);
     if (warp && this._inPoi(s, aim)) return;               // no warping to where you already are
+    if (warp && s.scram) return this._notice(pid, "Warp scrambled");   // (owner) a warp scrambler holds it
     if (warp && systemAt(s.x, s.y) !== systemAt(aim.x, aim.y) && !hasMWD(s)) return this._notice(pid, "A Microwarp Drive is needed to warp out of this planetary system");   // (owner)
-    if (warp && s.scram) return this._notice(pid, "Warp scrambled");   // (owner) an ETA officer's warp scrambler
     if (warp && s.admin) { s.dockReq = false; s.dockSeq = null; s.dest = null; this._startWarp(s, poi, this.simAt); return; }   // (an admin's ETA ship warps at once)
     s.dest = poi.id; s.warpReq = !!warp; s.drift = false; s.chase = null; s.dockReq = false; s.dockSeq = null; s.tx = aim.x; s.ty = aim.y; s.moving = true;
   }
@@ -297,12 +297,14 @@ export class World {
     const T = SHIP_TYPES[s.type], m = MODULES[item]; if (!m || (m.slot !== kind && !T.anySlot) || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length) return;   // (owner) an admin's ETA ship: any module in any slot
     if (!((s.holds.cargo[item] || 0) >= 1)) return;
     if (!s.docked && !T.anySlot) return this._notice(pid, "Dock to refit");   // (owner) refitting is done docked
-    if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
+    { const why = fitProblem(T, item, s.lic); if (why) return this._notice(pid, why); }   // (owner) its size class or smaller; a II needs its license at V
+    if (s.fit[kind][slot] && holdUsed(s.holds, "cargo") - m.m3 + MODULES[s.fit[kind][slot]].m3 > (s.calc.holds.cargo || 0) + 1e-9) return this._notice(pid, "Cargo hold full");   // (a swap: the old one goes in the cargo hold)
+    if (kind === "active" && s.act[slot]) this._stopSlot(s, slot);
     const old = s.fit[kind][slot], next = cloneFit(s.fit); next[kind][slot] = item; next.off[kind][slot] = false;
     let c = shipCalc(SHIP_TYPES[s.type], next, s.lic);
     if (c.disposition > c.dispositionMax + 1e-9 && !T.anySlot) return this._notice(pid, "Not enough disposition");
     if (c.power > c.powerMax + 1e-9 && !T.anySlot) { next.off[kind][slot] = true; this._notice(pid, "Not enough power: fitted offline"); }   // (owner) power it on when there's room
-    takeItem(s.holds, "cargo", item, 1); if (old) addItem(s.holds, "cargo", old, 1);   // (a swap: same size, so it fits)
+    takeItem(s.holds, "cargo", item, 1); if (old) addItem(s.holds, "cargo", old, 1);
     s.fit = next; this._recalc(s);
   }
   cmdUnfit(pid, shipId, kind, slot) {
@@ -312,38 +314,19 @@ export class World {
     const without = cloneFit(s.fit); without[kind][slot] = null;   // (an expander out: the holds must still fit what's in them)
     if (holdUsed(s.holds, "cargo") + MODULES[item].m3 > this._holdCap(s, "cargo", without) + 1e-9) return this._notice(pid, "Cargo hold full");
     if (holdUsed(s.holds, "ore") > this._holdCap(s, "ore", without) + 1e-9) return this._notice(pid, "Ore hold full");
-    if (kind === "active" && s.act[slot] && s.act[slot].on) this._modOff(s, slot);
+    if (kind === "active" && s.act[slot]) this._stopSlot(s, slot);
     s.fit[kind][slot] = null; s.fit.off[kind][slot] = false; addItem(s.holds, "cargo", item, 1); this._recalc(s);
   }
   /** (owner) Power a fitted module off (it keeps its disposition but uses no power and does nothing) or back on (if
    *  the power's there). */
   cmdPower(pid, shipId, kind, slot, on) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || (kind !== "active" && kind !== "passive") || !Number.isInteger(slot) || slot < 0 || slot >= s.fit[kind].length || !s.fit[kind][slot]) return;
-    if (!on) { if (kind === "active") this._modOff(s, slot); s.fit.off[kind][slot] = true; this._recalc(s); return; }
+    if (!on) { if (kind === "active") this._stopSlot(s, slot); s.fit.off[kind][slot] = true; this._recalc(s); return; }
     const next = cloneFit(s.fit); next.off[kind][slot] = false;
     if (shipCalc(SHIP_TYPES[s.type], next, s.lic).power > s.calc.powerMax + 1e-9) return this._notice(pid, "Not enough power");
     s.fit = next; this._recalc(s);
   }
   _holdCap(s, hold, fit = s.fit) { return shipCalc(SHIP_TYPES[s.type], fit, s.lic).holds[hold] || 0; }
-  /** Switch an active module on or off. Lasers and drones need a locked asteroid in their range (the first such target). */
-  cmdModule(pid, shipId, slot, on) {
-    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Number.isInteger(slot) || slot < 0 || slot >= s.fit.active.length) return;
-    const m = MODULES[s.fit.active[slot]]; if (!m || m.slot !== "active") return;   // (a passive module in an admin's active slot: always on)
-    if (!on) { if (m.key === "mining_drones") this._dronesOff(s, slot); else this._modOff(s, slot); return; }
-    if (s.wp || s.docked || (s.act[slot] && s.act[slot].on)) return;
-    if (isOff(s.fit, "active", slot)) return this._notice(pid, "Powered off");
-    if (m.yield) {
-      if (holdUsed(s.holds, "ore") >= (s.calc.holds.ore || 0) - 1e-6) return this._notice(pid, "Ore hold full");
-      const tg = this._miningTarget(s, m);
-      s.act[slot] = tg ? this._cycle(s, slot, tg, this.simAt) : { on: true, standby: true };   // (owner) no target yet: on standby, it starts on the first lock in range
-    } else s.act[slot] = { on: true, at: this.simAt };
-    this._recalc(s);
-  }
-  // a mining cycle on rock `tg`: the laser picks a spot inside the rock and a hardpoint on its arm, kept for the cycle
-  _cycle(s, slot, tg, at) {
-    const k = this._rock(tg), t = SHIP_TYPES[s.type], arm = (t.arms || [[0]])[slot % (t.arms || [[0]]).length];
-    return { on: true, at, tg, ...aimPoint(k), hp: arm[Math.floor(Math.random() * arm.length)] };
-  }
   /** (owner) Reorder your locked targets (their priority): `order` is every current target as "kind:id", once each. */
   cmdTargetOrder(pid, shipId, order) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Array.isArray(order) || order.length !== s.targets.length) return;
@@ -351,84 +334,6 @@ export class World {
     for (const k of order) { if (typeof k !== "string" || !by.has(k)) return; next.push(by.get(k)); by.delete(k); }
     s.targets = next;
   }
-  /** (owner) Drones out: the key sends them to a different locked asteroid in drone range (the first such), or else
-   *  recalls them: they fly home (dropping off anything they carry) and switch off when they're in. */
-  _dronesOff(s, slot) {
-    const a = s.act[slot]; if (!a || a.standby || !a.tg) return this._modOff(s, slot);
-    if (a.haul && a.haul.recall) return;                   // already on their way in
-    const m = MODULES.mining_drones, range = this._mcalc(s, m).rangeKm;
-    const next = s.targets.find((g) => g.kind === "rock" && g.locked && g.id !== a.tg && (() => { const p = this._objPos("rock", g.id); return p && this._range(s, p) <= range; })());
-    const now = this.simAt;
-    if (next) {
-      if (a.haul) { a.haul.next = next.id; return; }       // after this load they go to the new one
-      const from = this._rock(a.tg), to = this._rock(next.id), fly = from && to ? Math.round(Math.hypot(to.x - from.x, to.y - from.y) / DRONE.nearKmps * 1000) : 0;
-      s.act[slot] = { ...this._cycle(s, slot, next.id, now + fly), ...(from && fly ? { fx: from.x, fy: from.y, fs: from.size } : {}) };   // they fly over, then start
-      return;
-    }
-    if (a.haul) { a.haul.recall = true; return; }
-    const k = this._rock(a.tg); if (!k) return this._modOff(s, slot);
-    const dk = Math.hypot(k.x - s.x, k.y - s.y);
-    a.haul = { amt: 0, ore: k.ore, at: now, leg: droneLegMs(dk), dp: 0, dk: +dk.toFixed(3), rx: k.x, ry: k.y, rs: k.size, recall: true };
-  }
-  _modOff(s, slot) { if (s.act[slot]) { s.act[slot] = null; this._recalc(s); } }
-  _controlKm(s) { return SHIP_TYPES[s.type].droneControlKm || 0; }
-  _mcalc(s, m) { return m.key === "mining_drones" ? s.calc.drones : s.calc.laser; }
-  // the first locked asteroid within this module's reach
-  _miningTarget(s, m) {
-    const range = this._mcalc(s, m).rangeKm;
-    for (const g of s.targets) { if (g.kind !== "rock" || !g.locked) continue; const pos = this._objPos("rock", g.id); if (pos && this._range(s, pos) <= range) return g.id; }
-    return null;
-  }
-  // lasers and drones: a laser's ore lands in the ore hold when its cycle completes; (owner) drones fly theirs to the ship,
-  // drop it in the ore hold and fly back before the next cycle. They stop when the rock is gone, unlocked or out of reach,
-  // or the ore hold is full
-  _tickModules(now) {
-    for (const s of this.ships.values()) {
-      if (!s.act || !s.act.some(Boolean) || this.frozen.has(s.owner)) continue;
-      if (s.wp) { s.act = s.act.map(() => null); this._recalc(s); continue; }   // a warp switches everything off
-      for (let i = 0; i < s.act.length; i++) {
-        const a = s.act[i], m = a && MODULES[s.fit.active[i]]; if (!a || !m || !m.yield) continue;
-        if (a.standby) { const tg = this._miningTarget(s, m); if (tg) s.act[i] = this._cycle(s, i, tg, now); continue; }   // the first lock in range
-        const c = this._mcalc(s, m), k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };
-        const drones = m.key === "mining_drones";
-        if (a.haul) {                                      // (owner) drones: out to the ship, twice round it streaming the ore in, and back
-          const h = a.haul, home = h.at + h.leg + h.dp;
-          if (!h.dep && now >= home) {
-            h.dep = true; const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(h.amt, Math.max(0, free));
-            if (amt > 0) addItem(s.holds, "ore", "ore:" + h.ore, amt);
-            if (h.recall) { this._modOff(s, i); continue; }   // recalled: in, and off
-            if (h.amt > 0 && free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); continue; }
-            const tg = h.next || a.tg, kk = this._rock(tg), dk = kk && Math.hypot(kk.x - s.x, kk.y - s.y);
-            if (!kk || this._range(s, { x: kk.x, y: kk.y, r: kk.r }) > this._controlKm(s)) { this._modOff(s, i); continue; }   // nothing to go back to: they stay in
-            h.back = { tg, leg: droneLegMs(dk), dk: +dk.toFixed(3), rx: kk.x, ry: kk.y, rs: kk.size };
-          }
-          if (!h.back || now < home + h.back.leg) continue;
-          s.act[i] = this._cycle(s, i, h.back.tg, now); continue;
-        }
-        // lasers need the lock and their range; (owner) drones, once on a rock, stay on it out to the hull's control range, locked or not
-        if (!k || (drones ? this._range(s, pos) > this._controlKm(s) : !s.targets.some((g) => g.kind === "rock" && g.id === a.tg && g.locked) || this._range(s, pos) > c.rangeKm)) { this._modOff(s, i); continue; }
-        if (a.size !== k.size) Object.assign(a, aimPoint(k));   // the rock shrank: aim at the smaller art
-        if (now - a.at < c.cycleMs) continue;
-        const free = (s.calc.holds.ore || 0) - holdUsed(s.holds, "ore"), amt = Math.min(c.yield, k.m3, Math.max(0, free));
-        if (drones && amt > 0) {                           // (owner) the drones carry it home: the rock loses it now, the hold gets it once streamed in
-          this._mineRock(a.tg, amt); const dk = Math.hypot(k.x - s.x, k.y - s.y);
-          a.haul = { amt, ore: k.ore, at: now, leg: droneLegMs(dk), dp: DRONE.depositMs, dk: +dk.toFixed(3), rx: k.x, ry: k.y, rs: k.size };
-          continue;
-        }
-        if (amt > 0) { addItem(s.holds, "ore", "ore:" + k.ore, amt); this._mineRock(a.tg, amt); }
-        s.act[i] = this._cycle(s, i, a.tg, a.at + c.cycleMs);   // the next cycle: a new spot, maybe the other hardpoint
-        if (free - amt <= 1e-6) { this._modOff(s, i); this._notice(s.owner, "Ore hold full"); }
-      }
-    }
-  }
-  // ore mined out of a rock: it shrinks a size at a time and is gone when empty
-  _mineRock(id, amt) {
-    const poi = this.pois.get(id.split("#")[0]), f = poi && poi.field, k = f && f.rocks.find((r) => r.id === id); if (!k) return;
-    k.mined = +((k.mined || 0) + amt).toFixed(2); k.m3 = Math.max(0, +(k.m3 - amt).toFixed(2));
-    if (k.m3 <= 0) { f.rocks.splice(f.rocks.indexOf(k), 1); f.ver++; return; }
-    const size = sizeFor(k.m3); if (size !== k.size) { k.size = size; k.r = size / 2000; f.ver++; }
-  }
-
   // ---- docking (owner): at the Station (temporary) or at your own station; within DOCK_KM of its edge (out of range:
   // fly there first, then dock); undock ----
   _station() { return this.pois.get(STATION.id).field.props[0]; }
@@ -478,7 +383,7 @@ export class World {
   _dock(s, where = "station") {
     const st = this._dockProp(s.owner, where); if (!st) return;
     Object.assign(s, { docked: where, dockReq: false, moving: false, vx: 0, vy: 0, chase: null, dest: null, warpReq: false, drift: false, targets: [], x: st.x, y: st.y, tx: st.x, ty: st.y });
-    s.act = s.act.map(() => null); this._recalc(s);
+    this._clearActs(s); s.hp = SHIP_TYPES[s.type].hp; this._recalc(s); s.shield = s.shieldMax;   // (owner) docking repairs the ship
   }
   cmdUndock(pid, shipId) {
     const s = this.ships.get(shipId); if (!s || s.owner !== pid || !s.docked) return;
@@ -515,6 +420,7 @@ export class World {
     let n = qty == null ? have : (Number.isFinite(qty) && qty > 0 ? Math.min(qty, have) : 0); if (!(n > 0)) return;
     if (B.kind === "hold") {
       if (B.hold === "ore" && !item.startsWith("ore:")) return this._notice(pid, "The ore hold takes only ore");
+      if (B.hold === "drones" && item !== "drone") return this._notice(pid, "The drone bay takes only drones");
       const free = (B.s.calc.holds[B.hold] || 0) - holdUsed(B.s.holds, B.hold), per = itemM3(item);
       n = Math.min(n, MODULES[item] ? Math.floor(free / per + 1e-9) : Math.floor(free / per * 100) / 100);
       if (!(n > 0)) return this._notice(pid, "Not enough room");
@@ -559,7 +465,7 @@ export class World {
     const x = at ? at.x : ETA_OFFICE.x + (Math.random() - 0.5) * 6, y = at ? at.y : ETA_OFFICE.y - 10;
     const id = "adm:" + Math.random().toString(36).slice(2, 10);   // (its id doesn't give away the account)
     const s = { id, owner: pid, pilot: "admin", admin: true, cloak: true, type, x, y, vx: 0, vy: 0, h: at ? at.h : Math.PI / 2, tx: x, ty: y, moving: false, radius: t.radiusKm, mass: t.mass, targets: [], chase: null,
-      name: (persona && persona.name) || "Admin", holds: loadHolds(at && at.holds, t), fit: loadFit(at && at.fit, t), act: Array.from({ length: t.activeSlots }, () => null), kit: true, lic: {}, docked: false };
+      name: (persona && persona.name) || "Admin", holds: loadHolds((at && at.holds) || { cargo: { ammo_coilgun_std_l2: 500, ammo_coilgun_heavy_l2: 500 } }, t), fit: loadFit((at && at.fit) || ADMIN_FIT, t), act: Array.from({ length: t.activeSlots }, () => null), kit: true, lic: {}, docked: false };
     this._hull(s, type); p.adminSid = id; this.ships.set(id, s); this._own = null;
     return s;
   }
@@ -610,6 +516,7 @@ export class World {
     if (typeof id !== "string" || id.length > 80) return null;
     if (kind === "ship") { const o = this.ships.get(id); return o && !o.wp && !o.docked && !o.cloak && !this.frozen.has(o.owner) ? { x: o.x, y: o.y, r: o.radius } : null; }   // (a cloaked admin ship can't be targeted)   // (a frozen player's ships can't be targeted)
     if (kind === "rock") { const k = this._rock(id); return k ? { x: k.x, y: k.y, r: k.r } : null; }   // to its edge (owner)
+    if (kind === "wreck") { const w = this.wrecks.get(id); return w ? { x: w.x, y: w.y, r: 0.03 } : null; }
     return null;
   }
   _rock(id) { if (typeof id !== "string") return null; const poi = this.pois.get(id.split("#")[0]); return (poi && poi.field.rocks.find((k) => k.id === id)) || null; }
@@ -729,12 +636,14 @@ export class World {
   }
 
   tick(dtSec) {
-    const now = Date.now(); this.simAt = now; this.tickN = (this.tickN || 0) + 1;
-    if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); }
+    const now = Date.now(); this.simAt = now; this.tickN = (this.tickN || 0) + 1; this._dt = dtSec;
+    if (now >= this.nextPoiTick) { this.nextPoiTick = now + 2000; this._maintainPois(now); this._tickWrecks(now); }
     this._tickShips(dtSec, now);
     this._tickTargets(now);
     this.eta.tick(now);
     this._tickModules(now);
+    this._tickEffects();
+    this._regen(dtSec);
     this._tickLogoffs(now);
   }
   _tickShips(dtSec, now) {
@@ -929,22 +838,26 @@ export class World {
       if (s.admin) { if (!mine) e.npc = 1; else { e.admin = 1; if (s.cloak) e.cloak = 1; } }   // (an admin's ETA ship looks like the ETA's to everyone else)
       if (s.anchorUntil > this.simAt) e.wi = s.anchorUntil - this.simAt;   // (owner) warping in as it uncloaks
       if (mine) {
-        e.pilot = s.pilot; if (s.name) e.name = s.name; if (s.scram) e.scram = 1; if (s.crim) e.crim = 1; e.hp = s.hp; e.shield = s.shield; e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
+        e.pilot = s.pilot; if (s.name) e.name = s.name; if (s.scram) e.scram = 1; if (s.crim) e.crim = 1; e.shieldMax = Math.round(s.shieldMax || 0); e.vmax = +(s.speed || 0).toFixed(4); e.hp = Math.round(s.hp); e.shield = Math.round(s.shield); e.moving = s.moving; if (s.moving) { e.tx = +s.tx.toFixed(4); e.ty = +s.ty.toFixed(4); }
         if (s.dest) { e.dest = s.dest; if (s.warpReq) e.warpReq = true; }
         if (s.drift) e.drift = true;
         // speed (km/s; in warp, along its eased line), locked targets in the order they were locked, Align To / Move towards
         e.v = s.wp ? +(Math.hypot(s.wp.tx - s.wp.fx, s.wp.ty - s.wp.fy) * Math.PI / 2 * Math.sin(Math.PI * Math.min(1, (this.simAt - s.wp.at) / s.wp.dur)) / (s.wp.dur / 1000)).toFixed(4) : +Math.hypot(s.vx, s.vy).toFixed(4);
-        if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => ({ kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / lm)).toFixed(3) })); }
+        if (s.targets.length) { const lm = s.lockMs; e.targets = s.targets.map((g) => { const o = { kind: g.kind, id: g.id, locked: g.locked, p: g.locked ? 1 : +Math.max(0, Math.min(1, 1 - (g.lockAt - this.simAt) / (lm || 1))).toFixed(3) };
+          if (g.kind === "ship" && g.locked) { const t = this.ships.get(g.id), T = t && SHIP_TYPES[t.type]; if (t && T) { o.sh = +Math.max(0, Math.min(1, t.shield / (t.shieldMax || T.shield || 1))).toFixed(3); o.hl = +Math.max(0, Math.min(1, t.hp / T.hp)).toFixed(3); } }   // (a locked ship's shield and hull)
+          return o; }); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
         // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
-        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq; if (s.unboarded) e.unboarded = true;
+        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.ammo && s.ammo.some(Boolean)) e.ammo = s.ammo; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq; if (s.unboarded) e.unboarded = true;
         e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
       if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle
         const b = []; s.act.forEach((a, i) => {
-          if (!a || !a.tg) return;
-          const c = this._mcalc(s, MODULES[s.fit.active[i]]); a.p = a.haul ? 1 : +Math.min(1, (this.simAt - a.at) / c.cycleMs).toFixed(3);
-          const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: c.cycleMs, t0: a.at };   // t0: when the cycle began (server time), so clients run it smoothly
+          if (!a || !a.tg || a.standby) return;
+          const c = this._mcalc(s, i), cy = c.cycleMs || 1000; a.p = a.haul ? 1 : +Math.max(0, Math.min(1, (this.simAt - a.at) / cy)).toFixed(3);
+          const e = { m: s.fit.active[i], tg: a.tg, ax: a.ax, ay: a.ay, hp: a.hp, p: a.p, c: cy, t0: a.at };   // t0: when the cycle began (server time), so clients run it smoothly
+          if (a.fl) e.fl = a.fl;                             // (a missile's flight time)
+          if (a.drones) { e.dm = a.drones.item; e.n = a.drones.n; if (a.ret) e.rt = { t0: a.ret.at, lg: a.ret.leg }; }   // (owner) drones: what they carry, how many
           if (a.haul) {                                      // drones hauling: when they left, each stretch's length, where from and back to
             const h = a.haul; Object.assign(e, { h0: h.at, lg: h.leg, dp: h.dp, dk: h.dk, rx: h.rx, ry: h.ry, rs: h.rs, ore: h.ore, amt: h.amt });
             if (h.recall) e.rc = 1;
@@ -953,6 +866,7 @@ export class World {
           if (a.fx != null) Object.assign(e, { fx: a.fx, fy: a.fy, fs: a.fs });   // drones flying over from another rock until t0   // drones hauling: how far through the round trip
           b.push(e);
         });
+        if (s.gunTg && s.gunAt) b.push({ m: "eta_gun", tg: s.gunTg, t0: s.gunAt, c: (SHIP_TYPES[s.type].gun || {}).cycleMs || 5000 });   // (an ETA officer firing)
         if (b.length) e.beams = b;
       }
       if (s.dockSeq && s.dockSeq.phase !== "approach") e.dk = { prop: s.dockSeq.prop, i: s.dockSeq.i };   // (owner) in a hangar's mouth: masked by its front
@@ -960,9 +874,11 @@ export class World {
       ships.push(e);
     }
     const out = { t: "snap", st: this.simAt, ships };
+    if (this.wrecks.size) { const w = []; for (const x of this.wrecks.values()) if (v && Math.abs(x.x - v.x) <= half && Math.abs(x.y - v.y) <= half && v.w <= SOLAR_VIEW_KM) w.push({ id: x.id, x: +x.x.toFixed(4), y: +x.y.toFixed(4), n: x.name }); if (w.length) out.wrecks = w; }   // (owner) wrecks in view
     if (p.adminMode && this.alerts.length) out.alerts = this._alertsOut();   // (owner) red diamonds, for Admins in admin mode
     { const at = new Set(ships.filter((x) => x.mine && x.docked).map((x) => x.docked)); if (at.size) { out.hangars = {}; for (const id of at) out.hangars[id] = p.hangars[id] || {}; } }   // (each station's hangar where one of your ships is docked)
     if (ships.some((x) => x.docked === "home")) { const h = this._home(p.id); if (h) out.home = h.items; }   // (your station's storage, while docked at it)
     return out;
   }
 }
+installCombat(World);

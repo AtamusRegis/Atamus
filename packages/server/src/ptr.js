@@ -37,7 +37,21 @@ export async function devCommand(world, pid, m) {
       break;
     }
     case "offline": world.removePlayer(pid); tell("marked offline"); break;
-    // (owner, until there are weapons) aggression: your ship (m.ship, else the first in space) attacks m.victim (a ship id,
+    case "give": {                                       // put items in a ship of yours (m.ship, else the first): m.item, m.n
+      const { isItem, holdFor, addItem } = await import("./game/items.js"); const { itemKey } = await import("./game/modules.js");
+      const sh = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid && !s.admin);
+      const k = itemKey(m.item), n = Number.isFinite(+m.n) && +m.n > 0 ? +m.n : 1;
+      if (sh && typeof k === "string" && isItem(k) && sh.holds[holdFor(k)]) { addItem(sh.holds, holdFor(k), k, n); tell("given"); } else tell("no such item");
+      break;
+    }
+    case "give": {                                       // put items in a ship of yours (m.ship, else the first): m.item, m.n
+      const { isItem, holdFor, addItem } = await import("./game/items.js"); const { itemKey } = await import("./game/modules.js");
+      const sh = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid && !s.admin);
+      const k = itemKey(m.item), n = Number.isFinite(+m.n) && +m.n > 0 ? +m.n : 1;
+      if (sh && typeof k === "string" && isItem(k) && sh.holds[holdFor(k)]) { addItem(sh.holds, holdFor(k), k, n); tell("given"); } else tell("no such item");
+      break;
+    }
+    // (owner) aggression without weapons: your ship (m.ship, else the first in space) attacks m.victim (a ship id,
     // or no one); pardon clears a flag; killofficer has an ETA ship (m.id, else the nearest) destroyed by your ship
     case "aggress": case "pardon": case "killofficer": {
       const own = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid && !s.docked && !s.admin);

@@ -25,7 +25,6 @@ export const PER_AGGRESSOR = { deputy: 2 };                         // (owner) p
 export const ESCALATION = { same: 2, deputy: 3 };                   // (owner) per dead officer
 const SCENE_KM = 150;            // officers this close to an aggressor are at the scene
 const ENGAGE_KM = 25;            // farther than this from its quarry, an officer warps to it
-const LEASH_KM = 250;            // a station guard gives up a chase this far from its station
 const LOST_MS = 120_000;         // an aggressor gone (logged off) this long: the officers stand down (the flag stays)
 const SPAWN_MS = 4000;           // the office launches a ship this often to keep its ready pool full
 const MAX_OFFICERS = 400;
@@ -148,7 +147,12 @@ export class Eta {
   }
   _case(sid, now) { let c = this.cases.get(sid); if (!c) this.cases.set(sid, (c = { sid, since: now, units: new Set(), lostAt: 0 })); return c; }
   _assign(o, c) {
-    if (o.role !== "respond") { o.was = { role: o.role, at: o.at || null }; o.role = "respond"; o.spot = null; o.ring = null; }
+    if (o.role !== "respond") {
+      if (o.role === "guard" && o.post) {                  // (owner) a station's Magistrate goes after it all the way; another warps in to guard the station
+        const r = this._launch(o.type, "guard", { post: o.post, orbitR: rnd(15, 25), circles: Math.random() < 0.5 }); if (r) this._warpTo(r, { x: o.post.x, y: o.post.y }, this.w.simAt, [12, 25]);
+      }
+      o.was = { role: o.role, at: o.at || null }; o.role = "respond"; o.spot = null; o.ring = null;
+    }
     if (!o.cases.includes(c.sid)) o.cases.push(c.sid); c.units.add(o.id);
   }
   // from the ready pool (launching more when it's short)
@@ -175,18 +179,15 @@ export class Eta {
     for (const id of c.units) { const o = this.w.ships.get(id); if (!o) continue; o.cases = o.cases.filter((x) => x !== sid); o.targets = o.targets.filter((g) => g.id !== sid); if (!o.cases.length) this._standDown(o); }
   }
   _standDown(o) {
-    const was = o.was || { role: "return" }; o.was = null; o.chase = null; o.targets = []; o.moving = false; o.cruise = false; o.spot = null;
+    const was = o.was || { role: "return" }; o.was = null; o.chase = null; o.targets = []; o.moving = false; o.cruise = false; o.spot = null; o.gunTg = null;
     if (was.role === "patrol") { o.role = "patrol"; o.at = null; }
-    else if (was.role === "guard") o.role = "guard";
+    else if (was.role === "guard" && this.officers().filter((x) => x.role === "guard" && x.post && o.post && x.post.id === o.post.id).length < STATION_GUARDS) o.role = "guard";   // (its station already has its guards: into the office)
     else o.role = "return";                                // (the ready pool has been refilled: back into the office)
   }
   _respond(o, now) {
     const T = ETA_TYPES[o.type];
     let q = null; for (const sid of o.cases) { const s = this.w.ships.get(sid); if (s && !s.docked) { q = s; break; } }
     if (!q) { if (o.chase) { o.chase = null; o.moving = false; } return; }
-    if (o.was && o.was.role === "guard" && o.post && dist(q, o.post) > LEASH_KM) {   // a station guard stays near its station
-      for (const sid of o.cases) { const c = this.cases.get(sid); if (c) c.units.delete(o.id); } o.cases = []; this._standDown(o); return;
-    }
     if (q.wp) { if (Math.hypot(o.x - q.wp.tx, o.y - q.wp.ty) > ENGAGE_KM) this._warpTo(o, { q: q.id }, now); else if (o.chase) { o.chase = null; o.moving = false; } return; }   // (owner) after it, through warps too (already where it's going: wait for it)
     if (dist(o, q) > ENGAGE_KM) { this._warpTo(o, { q: q.id }, now); return; }
     if (!o.chase || o.chase.id !== q.id) { o.chase = { kind: "ship", id: q.id, mode: "orbit", dist: T.orbitKm }; o.cruise = false; }
@@ -196,6 +197,12 @@ export class Eta {
       if (!pos || o.targets.some((g) => g.id === sid) || this.w._range(o, pos) > o.targetRange) continue;
       o.targets.push({ kind: "ship", id: sid, lockAt: now + o.lockMs, locked: false });
     }
+    // (owner) officers fire on what they're after: the first locked one in their guns' reach
+    const gun = T.gun; if (!gun) return;
+    if (now < (o.gunNext || 0)) return;
+    const g = o.targets.find((x) => x.locked && o.cases.includes(x.id) && (() => { const p = this.w._objPos("ship", x.id); return p && this.w._range(o, p) <= gun.rangeKm; })());
+    if (!g) { o.gunTg = null; return; }
+    this.w._fire(o, g.id, { dmg: gun.dmg, cycleMs: gun.cycleMs, shieldK: 1, hullK: 1 }, now); o.gunTg = g.id; o.gunAt = now; o.gunNext = now + gun.cycleMs;
   }
   _return(o, now) {
     const h = hangarAt(this._office(), 0); if (!h) { this._despawn(o); return; }
@@ -205,28 +212,6 @@ export class Eta {
     o.tx = fx; o.ty = fy; o.moving = true; o.cruise = false;
   }
   _despawn(o) { this.w.ships.delete(o.id); this.w._own = null; for (const c of this.cases.values()) c.units.delete(o.id); }
-
-  // ---- (owner) warp scramblers and webs: a ship an officer (or an admin's ETA ship, uncloaked) has locked within its
-  // scrambler's reach can't warp; within a web's reach it's slowed ----
-  _effects() {
-    const scram = new Set(), web = new Set();
-    for (const o of this.w.ships.values()) {
-      if (!o.targets.length || o.wp || o.cloak || (!o.npc && !o.admin)) continue;
-      const T = SHIP_TYPES[o.type]; if (!T || (!T.scramKm && !T.webKm)) continue;
-      for (const g of o.targets) {
-        if (!g.locked || g.kind !== "ship") continue;
-        const q = this.w.ships.get(g.id); if (!q || q.npc || q.wp) continue;
-        const r = Math.max(0, dist(o, q) - o.radius - q.radius);   // edge to edge
-        if (T.scramKm && r <= T.scramKm) scram.add(q.id);
-        if (T.webKm && r <= T.webKm) web.add(q.id);
-      }
-    }
-    for (const s of this.w.ships.values()) {
-      if (s.npc) continue;
-      s.scram = scram.has(s.id);
-      const wb = web.has(s.id); if (!!s.web !== wb) { s.web = wb; this.w._recalc(s); }
-    }
-  }
 
   tick(now) {
     // flagged ships back in space (a relog, a redeploy) with no case open: hunted again (owner)
@@ -251,6 +236,5 @@ export class Eta {
       else if (s.role === "return") this._return(s, now);
       else if (!s.moving || s.circles) this._standBy(s);   // ready or guard (a just-launched ship finishes leaving the bay first)
     }
-    this._effects();
   }
 }

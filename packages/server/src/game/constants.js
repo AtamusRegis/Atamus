@@ -41,14 +41,14 @@ export const droneLegMs = (dk) => Math.max(800, Math.round((Math.min(dk, DRONE.n
 export const SHIP_TYPES = {
   chisel: {
     name: "Prospector", cls: "Mining Frigate", sprite: "chisel", lengthKm: 0.128, speedKmps: 0.335, accelKmps2: 0.15, radiusKm: 0.09, mass: 1.2, hp: 200, shield: 225,
-    targetRangeKm: 5, maxTargets: 5, lockMs: 3000, droneControlKm: 20,   // (owner) drones keep at a target out to their control range once on it
+    targetRangeKm: 5, maxTargets: 5, lockMs: 3000,   // (drones' control range is their Drone Link's)
     // (owner) every storage type the ship has: the 5,000 m³ the Prospector starts with is its ore hold; the small cargo
     // hold is as it was before the reset
-    holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 50 }],
+    holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 50 }, { key: "drones", name: "Drone Bay", m3: 10 }],   // (owner) drones are items, kept in the drone bay
     // (owner, 2026-10-11: the Fitting window) armor is new (a placeholder until the owner sets it); module slots come in
     // two kinds (owner): active (on the hotbar) and passive, a number of each per hull; power and disposition are the
     // Prospector's capacitor and disposition from before the reset
-    armor: 150, activeSlots: 4, passiveSlots: 3, powerMax: 40, dispositionMax: 70,
+    armorDR: 0.1, activeSlots: 4, passiveSlots: 3, powerMax: 40, dispositionMax: 70,   // (owner) armor is damage reduction: the share of each hit the hull doesn't take
     // (owner) mining beams leave the hull from these 4 points (ship lengths from the sprite's center, sprite facing +x;
     // as before the reset); each laser fires from one of its arm's two points, picked each cycle
     hardpoints: [[0.338, -0.184], [0.47, -0.14], [0.338, 0.184], [0.47, 0.14]], arms: [[0, 1], [2, 3]],
@@ -63,23 +63,23 @@ export const SHIP_TYPES = {
 SHIP_TYPES.chisel.size = "frigate";   // (owner, ETA) its size class: what the ETA matches a response to
 
 // ---- (owner, 2026-10-11) the Expanse Transit Authority's hulls: the Deputy (frigate), the Constable (cruiser) and the
-// Magistrate (battleship). Their own art (blue law ships; the Deputy's faces up: artRot). Officers' locks are limited
+// Magistrate (battleship). Their own art (blue law ships, facing +x like every sprite). Officers' locks are limited
 // (lock range, lock time) so being hunted is a chase; Deputies warp scramble, Constables and Magistrates also web.
-// Hull, shield and armor are placeholders until combat. Every ETA ship has a Microwarp Drive.
-const etaHull = (o) => ({ cls: "ETA " + o.size[0].toUpperCase() + o.size.slice(1), mass: 1, armor: o.shield, activeSlots: 0, passiveSlots: 0, powerMax: 0, dispositionMax: 0, holds: [], hardpoints: [[0, 0]], arms: [[0]], license: null, bonuses: [], ...o });
+// Hull, shield, armor (damage reduction) and their guns: a first balance. Every ETA ship has a Microwarp Drive.
+const etaHull = (o) => ({ cls: "ETA " + o.size[0].toUpperCase() + o.size.slice(1), mass: 1, activeSlots: 0, passiveSlots: 0, powerMax: 0, dispositionMax: 0, holds: [], hardpoints: [[0, 0]], arms: [[0]], license: null, bonuses: [], ...o });
 export const ETA_TYPES = {
-  deputy: etaHull({ name: "Deputy", size: "frigate", art: "deputy", artRot: Math.PI / 2, icon: "npc_deputy", lengthKm: 0.18, radiusKm: 0.09, speedKmps: 0.6, accelKmps2: 0.3, hp: 600, shield: 800,
+  deputy: etaHull({ name: "Deputy", size: "frigate", art: "deputy", icon: "npc_deputy", lengthKm: 0.086, radiusKm: 0.09, speedKmps: 0.6, accelKmps2: 0.3, hp: 600, shield: 800, armorDR: 0.3, gun: { dmg: 30, cycleMs: 5000, rangeKm: 15 },
     targetRangeKm: 30, lockMs: 6000, maxTargets: 3, scramKm: 10, webKm: 0, alignMs: 3000, orbitKm: 2, desc: "The Expanse Transit Authority's patrol frigate." }),
-  constable: etaHull({ name: "Constable", size: "cruiser", art: "constable", icon: "npc_constable", lengthKm: 0.433, radiusKm: 0.2, speedKmps: 0.4, accelKmps2: 0.15, hp: 2500, shield: 3000,
+  constable: etaHull({ name: "Constable", size: "cruiser", art: "constable", icon: "npc_constable", lengthKm: 0.433, radiusKm: 0.2, speedKmps: 0.4, accelKmps2: 0.15, hp: 2500, shield: 3000, armorDR: 0.4, gun: { dmg: 80, cycleMs: 5000, rangeKm: 20 },
     targetRangeKm: 40, lockMs: 10_000, maxTargets: 5, scramKm: 10, webKm: 10, alignMs: 6000, orbitKm: 4, desc: "The Expanse Transit Authority's cruiser." }),
-  magistrate: etaHull({ name: "Magistrate", size: "battleship", art: "magistrate", icon: "npc_magistrate", lengthKm: 1.883, radiusKm: 0.5, speedKmps: 0.25, accelKmps2: 0.06, hp: 8000, shield: 8000,
+  magistrate: etaHull({ name: "Magistrate", size: "battleship", art: "magistrate", icon: "npc_magistrate", lengthKm: 1.883, radiusKm: 0.5, speedKmps: 0.25, accelKmps2: 0.06, hp: 8000, shield: 8000, armorDR: 0.5, gun: { dmg: 250, cycleMs: 5000, rangeKm: 30 },
     targetRangeKm: 60, lockMs: 15_000, maxTargets: 8, scramKm: 10, webKm: 10, alignMs: 10_000, orbitKm: 8, desc: "The Expanse Transit Authority's battleship." }),
 };
 // (owner) an admin's ETA ship (in admin mode): any of the three hulls, with the owner's numbers (armor damage reduction /
 // shield / hull / shield repair a second / speed); cloak, warp scramble, an instant lock out to 200 km, and slots that
 // take active and passive modules alike with no power or disposition limits
 const admHull = (base, o) => ({ ...base, admin: true, armorDR: 0.99, targetRangeKm: 200, lockMs: 0, maxTargets: 10, scramKm: 200, webKm: 0,
-  activeSlots: 6, passiveSlots: 6, anySlot: true, powerMax: 9999, dispositionMax: 9999, holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 1000 }], ...o });
+  activeSlots: 6, passiveSlots: 6, anySlot: true, powerMax: 9999, dispositionMax: 9999, holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 1000 }, { key: "drones", name: "Drone Bay", m3: 100 }], ...o });
 export const ADMIN_TYPES = {
   adm_deputy: admHull(ETA_TYPES.deputy, { shield: 1000, hp: 1000, shieldRep: 100, speedKmps: 0.75, accelKmps2: 0.75 }),
   adm_constable: admHull(ETA_TYPES.constable, { shield: 5000, hp: 5000, shieldRep: 500, speedKmps: 1.5, accelKmps2: 1 }),

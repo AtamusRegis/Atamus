@@ -638,7 +638,7 @@
     for (const p of pilots) {
       const c = w.cards[p.id]; if (!c) continue;
       const sh = pilotShip(p.id), t = sh ? cfgT[sh.type] || {} : {};
-      c.sf.style.width = (sh && t.shield ? Math.max(0, Math.min(1, sh.shield / t.shield)) * 100 : 0) + "%";
+      c.sf.style.width = (sh && t.shield ? Math.max(0, Math.min(1, sh.shield / (sh.shieldMax || t.shield))) * 100 : 0) + "%";
       c.hf.style.width = (sh && t.hp ? Math.max(0, Math.min(1, sh.hp / t.hp)) * 100 : 0) + "%";
       c.card.classList.toggle("sel", String(p.id) === String(saved.selPilot));
     }
@@ -1689,11 +1689,13 @@
   // ---- items and modules (owner): what's in the holds and the hangar, fitted into slots, dragged between them ----
   const MODS = () => (window.Atamus.cfg && window.Atamus.cfg.modules) || {};
   const oreOfItem = (k) => ((window.Atamus.cfg && window.Atamus.cfg.ores) || []).find((o) => "ore:" + o.key === k);
-  const itemName = (k) => { if (k.startsWith("ore:")) { const o = oreOfItem(k); return o ? o.name : "Ore"; } const m = MODS()[k]; return m ? m.name : k; };
-  const itemIcon = (k) => { if (k.startsWith("ore:")) { const o = oreOfItem(k), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + ".png"; } const m = MODS()[k]; return m ? "assets/icons/" + m.icon : ""; };
-  const itemM3 = (k) => (MODS()[k] ? MODS()[k].m3 : 1);
+  const ITEMDEFS = () => (window.Atamus.cfg && window.Atamus.cfg.items) || {};   // (owner) drones and their fuel
+  const itemDef = (k) => MODS()[k] || ITEMDEFS()[k] || null;
+  const itemName = (k) => { if (k.startsWith("ore:")) { const o = oreOfItem(k); return o ? o.name : "Ore"; } const m = itemDef(k); return m ? m.name : k; };
+  const itemIcon = (k) => { if (k.startsWith("ore:")) { const o = oreOfItem(k), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + ".png"; } const m = itemDef(k); return m ? "assets/icons/" + m.icon : ""; };
+  const itemM3 = (k) => (itemDef(k) ? itemDef(k).m3 : 1);
   const boxUsed = (items) => Object.entries(items || {}).reduce((t, [k, n]) => t + itemM3(k) * n, 0);
-  const fmtQty = (k, n) => (MODS()[k] ? String(n) : (n >= 1000 ? Math.round(n).toLocaleString() : String(Math.floor(n * 10) / 10)));
+  const fmtQty = (k, n) => (itemDef(k) ? String(n) : (n >= 1000 ? Math.round(n).toLocaleString() : String(Math.floor(n * 10) / 10)));
   const licOf = (sh) => ((state && state.pilots.find((p) => String(p.id) === String(sh && sh.pilot))) || {}).licenses || {};
   function modCost(k, lic) { const m = MODS()[k]; if (!m) return { power: 0, disposition: 0 }; const f = 1 - 0.05 * Math.min(5, lic[m.license] || 0); return { power: Math.round(m.power * f * 100) / 100, disposition: Math.round(m.disposition * f * 100) / 100 }; }
   // a container: a station's storage ("hangar": the Station's; "home": your own station's, owner), or a ship's hold { ship, hold }
@@ -1825,13 +1827,60 @@
       }
       // (owner) refitting is done docked: in space a slot can't be dragged or unfitted, only powered on / off
       const docked = () => { const x = hudShip(); return !!(x && x.id === sh.id ? x.docked : sh.docked); };   // (live: the slot outlives the snapshot it was built from)
-      dragSource(node, () => (docked() ? { item: k, from: { type: "slot", kind, slot: i } } : null), () => [...(docked() ? [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })]] : []),
+      const ammoItems = () => { const x = hudShip(), m = MODS()[k]; if (!m || m.kind !== "weapon" || kind !== "active" || !x) return [];   // (owner, The Reach) load a kind of ammo from the cargo hold
+        const list = Object.entries((x.holds && x.holds.cargo) || {}).filter(([a, n]) => { const d = ITEMDEFS()[a]; return d && d.ammo === m.sys && d.size === m.size && n >= 1; });
+        return list.length ? [["Ammo", list.map(([a, n]) => [((x.ammo || [])[i] === a ? "✓ " : "") + itemName(a) + " (" + Math.floor(n) + ")", () => window.Atamus.send({ t: "ammo", ship: x.id, slot: i, item: a })])]] : []; };
+      dragSource(node, () => (docked() ? { item: k, from: { type: "slot", kind, slot: i } } : null), () => [...(docked() ? [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })]] : []), ...ammoItems(),
         [off ? "Power On" : "Power Off", () => window.Atamus.send({ t: "power", ship: sh.id, kind, slot: i, on: off })], ["Info", () => openModInfo(k)]],   // (owner) powered off: disposition only
         kind === "active" && extraCls === "hb-live" ? () => toggleModule(i) : null);
     }
     return node;
   }
-  function toggleModule(i) { const A = window.Atamus, sh = hudShip(); if (!sh || !modsOf(sh, "active")[i]) return; A.send({ t: "module", ship: sh.id, slot: i, on: !(sh.act && sh.act[i]) }); }
+  function toggleModule(i) {
+    const A = window.Atamus, sh = hudShip(), k = sh && modsOf(sh, "active")[i]; if (!k) return;
+    if ((MODS()[k] || {}).kind === "drones" && !(sh.act && sh.act[i]) && !sh.docked && !sh.warp) { openLaunch(sh, i); return; }   // (owner) drones: pick what they carry first
+    A.send({ t: "module", ship: sh.id, slot: i, on: !(sh.act && sh.act[i]) });
+  }
+  // ---- (owner) launching drones: which module from the cargo hold the drones carry (mining laser or weapon), and how
+  // many; with no drones in the drone bay, no such modules or no fuel: "Unable to launch more drones" ----
+  let launch = null;
+  function openLaunch(sh, slot) {
+    launch = { ship: sh.id, slot, item: null, n: 0 };
+    if (!wins.launch) createWindow("launch", { left: Math.round(innerWidth / 2 - 150), top: Math.round(innerHeight / 2 - 140), width: 300, minW: 240, minH: 140, render: renderLaunch, label: "Launch Drones", groupable: false });
+    toggleWindow("launch", true); renderLaunch(wins.launch.body);
+  }
+  function renderLaunch(body) {
+    const A = window.Atamus, sh = launch && A.ship(launch.ship); body.innerHTML = ""; wins.launch.slot.textContent = "Launch Drones";
+    if (!sh) { toggleWindow("launch", false); return; }
+    const cargo = (sh.holds && sh.holds.cargo) || {}, bay = Math.floor(((sh.holds && sh.holds.drones) || {}).drone || 0), fuel = Math.floor(cargo.drone_fuel || 0);
+    const link = (sh.calc && sh.calc.mods && sh.calc.mods[launch.slot]) || {}, opts = Object.entries(cargo).filter(([k, n]) => { const m = MODS()[k]; return m && m.droneable && m.size === "s" && n >= 1; });
+    const max = (k) => Math.max(0, Math.min(link.drones || 0, bay, fuel, Math.floor(cargo[k] || 0)));
+    if (!opts.length || !bay || !fuel || !link.drones) { body.append(el("div", { class: "muted launch-none" }, "Unable to launch more drones")); return; }
+    if (!launch.item || !opts.some(([k]) => k === launch.item)) { launch.item = opts[0][0]; launch.n = max(launch.item); }
+    const list = el("div", { class: "launch-list" }, opts.map(([k, n]) => el("button", { class: "launch-opt" + (k === launch.item ? " sel" : ""), onclick: () => { launch.item = k; launch.n = max(k); renderLaunch(body); } },
+      el("img", { src: itemIcon(k), alt: "", draggable: "false" }), el("span", { class: "launch-name" }, itemName(k)), el("span", { class: "launch-qty" }, String(n)))));
+    const num = el("span", { class: "launch-n" }, String(launch.n));
+    const step = (d) => { launch.n = Math.max(1, Math.min(max(launch.item), launch.n + d)); num.textContent = String(launch.n); };
+    const go = el("button", { class: "btn-ghost2 launch-go", onclick: () => { A.send({ t: "module", ship: sh.id, slot: launch.slot, on: true, drones: { item: launch.item, n: launch.n } }); toggleWindow("launch", false); } }, "Launch");
+    body.append(list, el("div", { class: "launch-row" }, el("button", { class: "fa-btn", onclick: () => step(-1) }, "−"), num, el("button", { class: "fa-btn", onclick: () => step(1) }, "+"), go));
+  }
+  // ---- (owner) a wreck: what's in it; Take (right-click or hold an item) or Take All ----
+  let wreckOpen = null;
+  window.Atamus.bus.addEventListener("openwreck", (e) => { const sh = hudShip(); if (sh) window.Atamus.send({ t: "loot", ship: sh.id, wreck: e.detail }); });
+  window.Atamus.bus.addEventListener("wreck", (e) => {
+    const m = e.detail;
+    if (m.far || m.gone) { if (wreckOpen && wreckOpen.id === m.id && wins.wreck && isOpen(wins.wreck)) { if (m.gone) toggleWindow("wreck", false); else if (m.far && !wreckOpen.told) { wreckOpen.told = true; flash("Too far away"); } } else if (m.far) flash("Too far away"); return; }
+    wreckOpen = { id: m.id, name: m.name, items: m.items || {} };
+    if (!wins.wreck) createWindow("wreck", { left: Math.round(innerWidth / 2 - 160), top: 150, width: 320, minW: 240, minH: 150, render: renderWreck, label: "Wreck", groupable: false });
+    toggleWindow("wreck", true); renderWreck(wins.wreck.body);
+  });
+  function renderWreck(body) {
+    const A = window.Atamus; body.innerHTML = ""; if (!wreckOpen) return; wins.wreck.slot.textContent = wreckOpen.name || "Wreck";
+    const take = (k) => { const sh = hudShip(); if (sh) A.send({ t: "take", ship: sh.id, wreck: wreckOpen.id, item: k }); };
+    const cells = Object.entries(wreckOpen.items).map(([k, n]) => { const cell = el("div", { class: "si-cell filled", "data-item": k }, el("img", { class: "si-icon", src: itemIcon(k), alt: "", draggable: "false" }), el("span", { class: "si-qty" }, fmtQty(k, n)));
+      nameTip(cell, itemName(k)); holdMenu(cell, () => [["Take", () => take(k)], ...(itemDef(k) ? [["Info", () => openModInfo(k)]] : [])]); return cell; });
+    body.append(el("div", { class: "st-grid-wrap" }, el("div", { class: "si-grid" }, cells)), el("div", { class: "st-foot" }, el("button", { class: "btn-ghost2", onclick: () => { for (const k of Object.keys(wreckOpen.items)) take(k); } }, "Take All")));
+  }
   // an item cell (Inventory and Station windows): its icon and amount; drag it; right-click: Fit (a module in the cargo hold), Move to…, Info
   function itemCell(k, n, from) {
     const cell = el("div", { class: "si-cell filled", "data-item": k }, el("img", { class: "si-icon", src: itemIcon(k), alt: "", draggable: "false" }), el("span", { class: "si-qty" }, fmtQty(k, n)));
@@ -1840,7 +1889,7 @@
       const A = window.Atamus, sh = hudShip(), out = [];
       if (MODS()[k] && from.type === "hold" && sh && sh.docked && from.ship === sh.id && from.hold === "cargo") out.push(["Fit", () => fitFirst(sh, k)]);   // (owner) docked only
       const dests = moveTargets(from, k); if (dests.length) out.push(["Move to", dests.map(([label, to]) => [label, () => A.send({ t: "transfer", from: srcCont(from), to, item: k })])]);
-      if (MODS()[k]) out.push(["Info", () => openModInfo(k)]);
+      if (itemDef(k)) out.push(["Info", () => openModInfo(k)]);
       return out;
     });
     return cell;
@@ -1854,7 +1903,7 @@
     for (const x of ships) {
       if (!(x.id === (src && src.id) || (at && x.docked === at))) continue;
       const T = A.cfg.shipTypes[x.type] || {};
-      for (const h of T.holds || []) { const key = x.id + "|" + h.key; if (key === fromKey || (h.key === "ore" && !k.startsWith("ore:"))) continue; out.push([(x.id === (src && src.id) ? "" : shipName(x) + " ") + h.name, { ship: x.id, hold: h.key }]); }
+      for (const h of T.holds || []) { const key = x.id + "|" + h.key; if (key === fromKey || (h.key === "ore" && !k.startsWith("ore:")) || (h.key === "drones" && k !== "drone")) continue; out.push([(x.id === (src && src.id) ? "" : shipName(x) + " ") + h.name, { ship: x.id, hold: h.key }]); }
     }
     return out;
   }
@@ -1865,24 +1914,47 @@
     if (!wins.minfo) createWindow("minfo", { left: Math.round(innerWidth / 2 + 60), top: 140, width: 260, minW: 220, minH: 140, render: renderModInfo, label: "Info" });
     toggleWindow("minfo", true); renderModInfo(wins.minfo.body);
   }
+  // (owner) a module's (or item's) numbers: as fitted on the selected ship when it is, else as this pilot would run it
   function renderModInfo(body) {
-    const m = MODS()[minfoKey]; body.innerHTML = ""; if (!m) return;
-    const sh = hudShip(), lic = licOf(sh), c = modCost(minfoKey, lic), calc = (sh && sh.calc) || {}, pct = (v) => "+" + Math.round(v * 1000) / 10 + "%";
-    const L = (key) => Math.min(5, lic[key] || 0), mu = 1 + 0.1 * L("mining_upgrades"), eu = 1 + 0.1 * L("engineering_upgrades");
+    const m = itemDef(minfoKey); body.innerHTML = ""; if (!m) return;
     wins.minfo.slot.textContent = m.name;
-    const rows = [statRow("Slot", m.slot === "active" ? "Active" : "Passive"), statRow("Power", c.power), statRow("Disposition", c.disposition), statRow("Volume", m.m3 + " m³")];
-    const lab = (cl) => cl && [statRow("Yield", cl.yield + " m³ / cycle"), statRow("Cycle Time", Math.round(cl.cycleMs / 100) / 10 + " s"), statRow("Range", cl.rangeKm + " km")];
-    if (m.key === "mining_laser" && calc.laser) rows.push(...lab(calc.laser));
-    if (m.key === "mining_drones" && calc.drones) rows.push(...lab(calc.drones));
-    if (m.speedBonus) rows.push(statRow("Top Speed", pct(calc.speed ? calc.abSpeed / calc.speed - 1 : m.speedBonus)));
-    if (m.holdBonus) rows.push(statRow("Holds", pct(m.holdBonus * eu)));
-    if (m.accelBonus) rows.push(statRow("Acceleration", pct(m.accelBonus * eu)));
-    if (m.laserYield) rows.push(statRow("Mining Laser Yield", pct(m.laserYield * mu)));
-    if (m.laserRange) rows.push(statRow("Mining Laser Range", pct(m.laserRange * mu)));
-    if (m.laserCycle) rows.push(statRow("Mining Laser Cycle Time", "−" + Math.round(m.laserCycle * mu * 1000) / 10 + "%"));
+    const head = el("div", { class: "oi-head" }, el("img", { class: "oi-icon", src: itemIcon(minfoKey), alt: "" }), el("span", { class: "ps-name" }, m.name));
+    if (!MODS()[minfoKey]) {                           // an item: drones, fuel, (owner, The Reach) ammo: what it does to its weapon
+      const rows = [statRow("Volume", m.m3 + " m³")], x = (v) => "×" + Math.round(v * 100) / 100;
+      if (m.ammo) rows.unshift(statRow("Size", m.size.toUpperCase()), statRow("Damage", x(m.dmg)), statRow("Range", x(m.range)), statRow(m.ammo === "missile" ? "Missile Speed" : "Tracking", x(m.ammo === "missile" ? m.vel : m.app / m.range)), statRow("Cycle Time", x(m.cyc)));
+      body.append(head, el("p", { class: "fit-desc" }, m.desc || ""), el("div", { class: "ps-rows" }, rows)); return; }
+    const sh = hudShip(), lic = licOf(sh), c = modCost(minfoKey, lic), L = (key) => Math.min(5, lic[key] || 0), pct = (v) => "+" + Math.round(v * 1000) / 10 + "%", sec = (ms) => Math.round(ms / 100) / 10 + " s", km = (v) => (Math.round(v * 100) / 100) + " km";
+    const slot = sh && (sh.fit && sh.fit.active || []).indexOf(minfoKey), mc = (sh && sh.calc && sh.calc.mods && slot >= 0 && sh.calc.mods[slot]) || null, x = mc || m;
+    const lk = 1 + 0.05 * L(m.license), pk = 1 + 0.1 * L(m.license);
+    const rows = [statRow("Slot", m.slot === "active" ? "Active" : "Passive"), statRow("Size", (m.size || "s").toUpperCase()), statRow("Power", c.power), statRow("Disposition", c.disposition), statRow("Volume", m.m3 + " m³")];
+    const R = (k, v) => rows.push(statRow(k, v));
+    if (m.kind === "mining") { R("Yield", (mc ? x.yield : Math.round(m.yield * lk * 100) / 100) + " m³ / cycle"); R("Cycle Time", sec(x.cycleMs)); R("Range", km(mc ? x.rangeKm : m.rangeKm * lk)); if (m.waste) R("Waste", "+" + Math.round(m.waste * 100) + "%"); }
+    else if (m.kind === "drones") { R("Drones", m.drones); R("Control Range", km(mc ? x.rangeKm : m.rangeKm * lk)); }
+    else if (m.kind === "weapon") {                    // (owner, The Reach) as with standard ammo
+      const dmg = mc ? x.dmg : m.dmg * lk; R("Damage", Math.round(dmg * 10) / 10 + " / shot"); R("Damage per Second", Math.round(dmg / m.cycleMs * 10000) / 10); R("Cycle Time", sec(m.cycleMs));
+      if (m.sys === "missile") { R("Range", km(m.maxKm)); R("Missile Speed", Math.round(m.flightKmps * 1000) + " m/s"); R("Explosion Radius", m.er + " m"); R("Explosion Velocity", m.ev + " m/s"); }
+      else { R("Optimal Range", km(m.opt)); R("Falloff", km(m.fall)); R("Tracking", m.trk + " rad/s"); }
+      R("Against Shields", Math.round(m.shieldK * 100) + "%"); R("Against Hulls", Math.round(m.hullK * 100) + "%");
+      if (m.crit) R("Critical Hits", Math.round(m.crit * 100) + "%"); if (m.drPen) R("Ignores Armor", Math.round(m.drPen * 100) + "%"); if (m.focusMs) R("Focus Time", sec(m.focusMs)); if (m.spinMs) R("Spin-up", sec(m.spinMs));
+      if (sh && slot >= 0 && sh.ammo && sh.ammo[slot]) R("Ammo", itemName(sh.ammo[slot]));
+    }
+    else if (m.kind === "prop") R("Top Speed", pct(mc ? x.speedBonus : m.speedBonus * lk));
+    else if (m.kind === "shield_ext" || m.kind === "remote_ext") { R("Shield", "+" + Math.round(m.shieldAdd * lk)); if (m.rangeKm) R("Range", km(m.rangeKm * lk)); }
+    else if (m.kind === "shield_rep" || m.kind === "remote_rep") { R("Shield", "+" + Math.round(m.amount * lk) + " / cycle"); R("Cycle Time", sec(m.cycleMs)); if (m.rangeKm) R("Range", km(m.rangeKm * lk)); }
+    else if (m.kind === "hull_rep") { R("Hull", "+" + Math.round(m.amount * lk * 10) / 10 + " / cycle"); R("Cycle Time", sec(m.cycleMs)); R("Range", km(m.rangeKm * lk)); }
+    else if (m.kind === "scram") R("Range", km(m.rangeKm * lk));
+    else if (m.kind === "web") { R("Speed", "−" + Math.round(Math.min(0.9, m.web * lk) * 100) + "%"); R("Range", km(m.rangeKm * lk)); }
+    else if (m.kind === "tractor") { R("Range", km(m.rangeKm * lk)); R("Pull Speed", Math.round(m.pullKmps * lk * 1000) + " m/s"); }
+    const P = { holdBonus: "Cargo and Ore Holds", laserYield: "Mining Yield", laserRange: "Mining Range", targetRange: "Targeting Range", armorDR: "Armor", droneBonus: "Drones", accelBonus: "Acceleration", propBonus: "Afterburner and Microwarp Drive" };
+    for (const [k, n] of Object.entries(P)) if (m[k]) R(n, pct(m[k] * pk));
+    if (m.laserCycle) R("Mining Cycle Time", "−" + Math.round(m.laserCycle * pk * 1000) / 10 + "%");
+    if (m.lockBonus) R("Locking Time", "−" + Math.round(m.lockBonus * pk * 1000) / 10 + "%");
+    if (m.targets) R("Targets", "+" + m.targets);
+    if (m.droneBay) R("Drone Bay", "+" + Math.round(m.droneBay * pk * 10) / 10 + " m³");
     const licName = (catalog && (catalog.licenses.find((l) => l.key === m.license) || {}).name) || m.license;
-    rows.push(statRow("License", licName + (L(m.license) ? " " + ROMAN[L(m.license)] : "")));
-    body.append(el("div", { class: "oi-head" }, el("img", { class: "oi-icon", src: itemIcon(minfoKey), alt: "" }), el("span", { class: "ps-name" }, m.name)), el("p", { class: "fit-desc" }, m.desc), el("div", { class: "ps-rows" }, rows));
+    R("License", licName + (L(m.license) ? " " + ROMAN[L(m.license)] : ""));
+    if (m.tier === 2) R("Requires", licName + " V");
+    body.append(head, el("p", { class: "fit-desc" }, m.desc), el("div", { class: "ps-rows" }, rows));
   }
   const hudTargets = el("div", { class: "hud-targets" }), hudStatus = el("div", { class: "hud-status" }), hudBar = el("div", { class: "hud-hotbar" });
   const hud = el("div", { id: "hud", hidden: "" }, hudTargets, hudStatus, el("div", { class: "hud-row" }, hudBar));
@@ -1921,6 +1993,7 @@
         const dist = el("div", { class: "tgt-dist" }), cell = el("div", { class: "tgt" + (g.locked ? " locked" : "") }, ring);
         if (g.locked) cell.append(el("button", { class: "tgt-x", "aria-label": "Unlock Target", onclick: (e) => { e.stopPropagation(); A.unlock(g.kind, g.id); } }, "×"));   // (owner) a lock in progress can't be canceled
         cell.append(dist);
+        let hpb = null; if (g.kind === "ship" && g.locked) { hpb = { sh: el("i"), hl: el("i") }; cell.append(el("div", { class: "tgt-hp" }, el("div", { class: "tgt-bar tgt-sh" }, hpb.sh), el("div", { class: "tgt-bar tgt-hl" }, hpb.hl))); }   // (owner, combat) a locked ship's shield and hull
         const menu = (x, y) => showCtxMenu(x, y, A.objItems(g.kind, g.id));
         cell.addEventListener("contextmenu", (e) => { e.preventDefault(); menu(e.clientX, e.clientY); });
         let hold = 0;
@@ -1935,14 +2008,14 @@
           const keys = [...hudTargets.querySelectorAll(".tgt")].map((c) => c.dataset.tkey), [mv] = keys.splice(from, 1); keys.splice(to, 0, mv);
           A.send({ t: "torder", ship: sh.id, order: keys });
         });
-        H.cards[key] = { g, cell, ring, dist };
+        H.cards[key] = { g, cell, ring, dist, hpb };
         hudTargets.append(cell);
       }
       if (!H.status) {
         const bar = (k, cls) => { const fill = el("div", { class: "hud-fill " + cls }), txt = el("span", { class: "hud-txt" }); H[k] = { fill, txt }; return el("div", { class: "hud-bar" }, el("span", { class: "hud-k" }, k), el("div", { class: "hud-track" }, fill, txt)); };
         H.speed = el("span", { class: "hud-speed" });
         const spd = el("div", { class: "hud-bar hud-spd" }, el("span", { class: "hud-k" }, "Speed"), H.speed);
-        nameTip(spd, () => { const s2 = hudShip(), t2 = s2 && A.cfg.shipTypes[s2.type]; return "Max speed " + fmtSpeed((s2 && s2.calc && (s2.act || []).some((a, i) => a && (MODS()[modsOf(s2, "active")[i]] || {}).speedBonus) ? s2.calc.abSpeed : (t2 && t2.speedKmps)) || 0); });   // (owner) hover: max speed
+        nameTip(spd, () => { const s2 = hudShip(), t2 = s2 && A.cfg.shipTypes[s2.type]; return "Max speed " + fmtSpeed((s2 && s2.vmax) || (t2 && t2.speedKmps) || 0); });   // (owner) hover: max speed
         hudStatus.append(bar("Shield", "shield"), bar("Hull", "hull"), spd); H.status = true;
       }
       hudBar.innerHTML = "";
@@ -1958,9 +2031,10 @@
       const c = H.cards[g.kind + ":" + g.id]; if (!c) continue;
       c.ring.style.setProperty("--p", Math.round((g.p || 0) * 100) + "%");
       c.dist.textContent = fmtKm(A.rangeTo(g.kind, g.id));
+      if (c.hpb) { c.hpb.sh.style.width = Math.round((g.sh || 0) * 100) + "%"; c.hpb.hl.style.width = Math.round((g.hl || 0) * 100) + "%"; }
     }
     const pct = (v, m) => (m ? Math.max(0, Math.min(1, v / m)) * 100 : 0) + "%";
-    H.Shield.fill.style.width = pct(sh.shield, T.shield); H.Shield.txt.textContent = Math.round(sh.shield) + " / " + T.shield;
+    const smax = sh.shieldMax || T.shield; H.Shield.fill.style.width = pct(sh.shield, smax); H.Shield.txt.textContent = Math.round(sh.shield) + " / " + smax;
     H.Hull.fill.style.width = pct(sh.hp, T.hp); H.Hull.txt.textContent = Math.round(sh.hp) + " / " + T.hp;
     H.speed.textContent = fmtSpeed(sh.v || 0);
   }
@@ -2140,8 +2214,8 @@
   const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
   // a hull's general stats (owner); max power, disposition and slots are in the Stats tab's Fitting section
   function generalRows(T, calc) {                    // calc: the ship as fitted (holds with expanders), else the hull's own
-    return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", (T.armor || 0).toLocaleString()], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
-      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0], ["Drone Control Range", (T.droneControlKm || 0) + " km"],
+    return [["Shields", (T.shield || 0).toLocaleString()], ["Armor", Math.round((T.armorDR || 0) * 100) + "%"], ["Hull", (T.hp || 0).toLocaleString()], ["Speed", kmM(T.speedKmps || 0) + "/s"],
+      ["Targeting Range", (T.targetRangeKm || 0) + " km"], ["Targeting Time", ((T.lockMs || 0) / 1000) + " s"], ["Max Targets", T.maxTargets || 0],
       ...(T.holds || []).map((h) => [h.name, ((calc && calc.holds && calc.holds[h.key]) || h.m3).toLocaleString() + " m³"])].map(([k, v]) => statRow(k, v));
   }
   const subHead = (t) => el("div", { class: "skills-sub-head fit-head" }, t);

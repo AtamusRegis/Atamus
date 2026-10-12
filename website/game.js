@@ -89,7 +89,7 @@
   const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Prospector", sprite: "chisel", lengthKm: 0.128 };
   const imgs = {};
   const img = (src) => { if (!imgs[src]) { imgs[src] = new Image(); imgs[src].src = src; } return imgs[src]; };
-  // (owner) the ETA's hulls have their own art (one color, the Deputy's facing up: artRot)
+  // (owner) the ETA's hulls have their own art (one color)
   const shipArt = (type, mine) => { const h = hull(type); return img("assets/ships/" + (h.art || h.sprite + (mine ? "_blue" : "_red")) + ".webp"); };
   const iconName = (type, mine) => { const h = hull(type); return h.icon || h.sprite + (mine ? "_blue" : "_red"); };
   const shipIcon = (type, mine) => img("assets/icons/ships/" + iconName(type, mine) + "_s.png");
@@ -339,7 +339,7 @@
       return;
     }
     if (ob && dbl) { const sel = myShip(); if (!(sel && (sel.targets || []).some((g) => g.kind === ob.kind && g.id === ob.id))) A.lock(ob.kind, ob.id); return; }
-    if (ob && ob.kind === "rock") { picked = { kind: "rock", id: ob.id }; return; }   // an asteroid: its name and distance
+    if (ob && (ob.kind === "rock" || ob.kind === "wreck")) { picked = { kind: ob.kind, id: ob.id }; return; }   // an asteroid (or a wreck): its name and distance
     if (ob) return;
     const pr = propAt(e.clientX, e.clientY);
     if (pr) { picked = { kind: "prop", id: pr.id }; return; }                      // a Library prop: its name and distance
@@ -369,18 +369,34 @@
   // Align To, Move towards, Info ----
   let drawn = [];                                   // the ships as last drawn (interpolated)
   const ROCK_SOLID = 1;                             // (owner) an object's edge: a rock's whole art
+  const wreckById = (id) => (latest.wrecks || []).find((w) => w.id === id) || null;   // (owner, combat) wrecks in view
+  const wreckArt = img("assets/ships/jettison_can_off.png");
+  const WRECK_KM = 0.06;
+  function wreckAt(px, py) { let best = null, bd = Infinity; const sc = scale(); for (const w of latest.wrecks || []) { const d = Math.hypot(px - gx2s(w.x), py - gy2s(w.y)), r = Math.max(9, WRECK_KM * sc * 0.6); if (d <= r && d < bd) { bd = d; best = w; } } return best; }
+  function drawWrecks() {
+    const sc = scale();
+    for (const w of latest.wrecks || []) {
+      const x = gx2s(w.x), y = gy2s(w.y); if (x < -30 || y < -30 || x > innerWidth + 30 || y > innerHeight + 30) continue;
+      const s0 = Math.max(12, WRECK_KM * sc); if (!wreckArt.naturalWidth) continue;
+      const h0 = s0 * wreckArt.naturalHeight / wreckArt.naturalWidth;
+      ctx.save(); ctx.imageSmoothingEnabled = s0 > 48; ctx.globalAlpha = 0.85; ctx.drawImage(wreckArt, x - s0 / 2, y - h0 / 2, s0, h0); ctx.restore();
+    }
+  }
   function objPos(kind, id) {
+    if (kind === "wreck") { const w = wreckById(id); return w ? { x: w.x, y: w.y, r: 0.03, size: WRECK_KM } : null; }
     if (kind === "rock") { const k = rockById(id); return k ? { x: k.x, y: k.y, r: k.size / 2000 * ROCK_SOLID, size: k.size / 1000 } : null; }
     if (kind === "ship") { const s = drawn.find((x) => x.id === id) || (latest.ships || []).find((x) => x.id === id); return s && !s.warp ? { x: s.x, y: s.y, r: (hull(s.type).radiusKm || 0.09), size: hull(s.type).lengthKm, mine: s.mine, type: s.type } : null; }
     return null;
   }
   const oreOf = (key) => ((cfg && cfg.ores) || []).find((o) => o.key === key);
   function objName(kind, id) {
+    if (kind === "wreck") { const w = wreckById(id); return w ? w.n : "Wreck"; }
     if (kind === "celestial") { const c = celestialById(id); return c ? c.name : "Celestial"; }
     if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore); return o ? o.name : "Asteroid"; }
     const s = (latest.ships || []).find((x) => x.id === id); return hull(s ? s.type : "chisel").name;
   }
   function objIcon(kind, id) {
+    if (kind === "wreck") return "assets/ships/jettison_can_off.png";
     if (kind === "celestial") {                       // its own surface (the sun: a glowing disc)
       const c = celestialById(id); if (!c) return "";
       if (c.kind === "sun") { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const g = cv.getContext("2d"), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31); gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.35, "#bcd6ff"); gr.addColorStop(1, "rgba(70,130,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return cv.toDataURL(); }
@@ -420,9 +436,10 @@
     if (own && !own.warp) {
       const tg = (own.targets || []).find((g) => g.kind === kind && g.id === id), t = hull(own.type), r = rangeTo(kind, id);
       if (tg) { if (tg.locked) out.push(["Unlock Target", () => A.unlock(kind, id)]); }
-      else if (r != null && r <= (t.targetRangeKm || 0) && (own.targets || []).length < (t.maxTargets || 0) && !(kind === "ship" && id === own.id)) out.push(["Lock Target", () => A.lock(kind, id)]);
+      else if (r != null && r <= ((own.calc && own.calc.targetRange) || t.targetRangeKm || 0) && (own.targets || []).length < ((own.calc && own.calc.maxTargets) || t.maxTargets || 0) && !(kind === "ship" && id === own.id)) out.push(["Lock Target", () => A.lock(kind, id)]);
       if (!(kind === "ship" && id === own.id)) out.push(["Align To", () => A.alignTo(kind, id)], ["Move towards", () => A.moveTo(kind, id)], ["Orbit", () => A.orbit(kind, id)]);
     }
+    if (kind === "wreck") { const r = rangeTo(kind, id); if (own && r != null && r <= 2.5) out.unshift(["Open", () => bus.dispatchEvent(new CustomEvent("openwreck", { detail: id }))]); out.push(["Look At", () => lookAtObj(kind, id)]); return out; }   // (owner) a wreck: open it beside it
     out.push(["Look At", () => lookAtObj(kind, id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
     const sh = kind === "ship" && (latest.ships || []).find((x) => x.id === id);
     if (sh && !sh.mine && !sh.npc) out.push(["Pilot Info", () => bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: id.split(":")[2] }))]);   // (owner) another player's ship: its pilot
@@ -433,6 +450,7 @@
     const sc = scale(); let best = null, bd = Infinity;
     for (const s of drawn) { if (s.warp || s.docked || (s.mine && s.pilot === selPilot)) continue; const r = Math.max(12, hull(s.type).lengthKm * sc * 0.6), d = Math.hypot(px - gx2s(s.x), py - gy2s(s.y)); if (d <= r && d < bd) { bd = d; best = { kind: "ship", id: s.id }; } }
     if (best) return best;
+    const wk = wreckAt(px, py); if (wk) return { kind: "wreck", id: wk.id };
     const k = rockAt(px, py); return k ? { kind: "rock", id: k.id } : null;
   }
   // (owner) hovering an asteroid or Library prop (touch: while pressing it) shows a light dotted outline of where a
@@ -529,6 +547,9 @@
       const p = propById(picked.id); if (!p) { picked = null; return; }
       x = gx2s(p.x); y = gy2s(p.y); r = Math.max(9, Math.max(p.w, p.h) * scale() * 0.55); name = p.name;
       dist = own ? Math.max(0, Math.hypot(Math.max(0, Math.abs(own.x - p.x) - p.w / 2), Math.max(0, Math.abs(own.y - p.y) - p.h / 2)) - shipR(own)) : null;
+    } else if (picked.kind === "wreck") {             // (owner) a wreck: its name and distance
+      const w = wreckById(picked.id); if (!w) { picked = null; return; }
+      x = gx2s(w.x); y = gy2s(w.y); r = Math.max(9, WRECK_KM * scale() * 0.55); name = w.n; dist = rangeTo("wreck", w.id);
     } else {
       const k = picked.kind === "rock" && rockById(picked.id); if (!k) { picked = null; return; }
       x = gx2s(k.x); y = gy2s(k.y); r = Math.max(9, k.size / 1000 * scale() * 0.55);
@@ -561,7 +582,8 @@
     }
   }
   // (owner) modules at work: a mining laser's beam from the ship to its rock; a pair of mining drones circling the rock
-  const droneArt = { blue: img("assets/ships/drone_blue.webp"), red: img("assets/ships/drone_red.webp") };
+  // (owner) a drone looks like what it carries (the owner's drone icons)
+  const droneArt = (dm) => { const m = (cfg && cfg.modules && cfg.modules[dm]) || {}, f = m.sys || (m.kind === "mining" ? "mining" : ""); return img("assets/icons/modules/drone" + (f ? "_" + f : "") + ".png"); };
   // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
   // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
   // along its no-destination line, facing it.
@@ -678,14 +700,14 @@
     if (!own || own.docked || own.warp) return;
     const T = hull(own.type), sc = scale(), x = gx2s(own.x), y = gy2s(own.y), rr = T.radiusKm || 0.09, far = Math.hypot(innerWidth, innerHeight) * 3;
     const ring = (km, dash, color, w) => { const r = (km + rr) * sc; if (r < 10 || r > far) return; ctx.save(); ctx.setLineDash(dash); ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); };
-    if (T.targetRangeKm) ring(T.targetRangeKm, [10, 5, 2, 5], "rgba(170,178,190,0.32)", 1);
+    const c0 = own.calc || {}; if (c0.targetRange || T.targetRangeKm) ring(c0.targetRange || T.targetRangeKm, [10, 5, 2, 5], "rgba(170,178,190,0.32)", 1);
     let hv = window.Atamus.hoverModule; if (hv && !hv.el.isConnected) hv = window.Atamus.hoverModule = null;
     const mods = (cfg && cfg.modules) || {}, seen = new Set(), c = own.calc || {};
-    for (const k of (own.fit && own.fit.active) || []) {
-      const m = mods[k]; if (!m || !m.rangeKm || seen.has(k)) continue; seen.add(k);
-      const mc = k === "mining_drones" ? c.drones : c.laser, hot = hv && hv.key === k;
+    ((own.fit && own.fit.active) || []).forEach((k, i) => {
+      const m = mods[k]; if (!m || !m.rangeKm || seen.has(k)) return; seen.add(k);
+      const mc = (c.mods || [])[i], hot = hv && hv.key === k;
       ring((mc && mc.rangeKm) || m.rangeKm, [4, 7], hot ? "rgba(255,150,60,0.75)" : "rgba(170,178,190,0.12)", hot ? 1.5 : 1);
-    }
+    });
   }
   // (owner) what a pilot says in Local floats over their ship for anyone with a ship near it
   const BUBBLE_MS = 7000, BUBBLE_NEAR_KM = 150, bubbles = new Map();
@@ -724,9 +746,10 @@
   // a pair of drones: circling their rock with a beam to its center (ore squares riding it); flying to another rock;
   // or hauling: out to the ship carrying the ore, twice round it streaming the ore in, then back out (recalled: they stay in)
   function drawDrones(sh, b, n, { sx, sy, sc, now, t, rt, T, qs, ores }) {
-    const art = sh.mine ? droneArt.blue : droneArt.red, w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
+    const art = droneArt(b.dm), w = Math.max(5, 0.064 * sc), hgt = art.naturalWidth ? w * art.naturalHeight / art.naturalWidth : w / 2;
     const rad = T.radiusKm || 0.09, Rs = Math.max(10, (rad + 0.06) * sc), cl = (st) => (now + (st - rt)) / 1000;   // a server moment, in this page's seconds
-    const orbitAt = (wx, wy, size, d, sec) => { const R = (size / 2000 + rad + 0.07) * sc, a = sec * 0.25 + d * Math.PI + n * 0.7; return [gx2s(wx) + Math.cos(a) * R, gy2s(wy) + Math.sin(a) * R, a]; };
+    const N = Math.max(1, Math.min(8, b.n || 2));        // (owner) as many drones as went out
+    const orbitAt = (wx, wy, size, d, sec) => { const R = (size / 2000 + rad + 0.07) * sc, a = sec * 0.25 + d * 2 * Math.PI / N + n * 0.7; return [gx2s(wx) + Math.cos(a) * R, gy2s(wy) + Math.sin(a) * R, a]; };
     const lerp = (a, b, f) => a + (b - a) * f, D = (cfg && cfg.drone) || { nearKmps: 0.75 };
     const put = (x, y, face, carry, color) => {
       if (art.naturalWidth) { ctx.save(); ctx.translate(x, y); ctx.rotate(face); ctx.imageSmoothingEnabled = w > 24; ctx.drawImage(art, -w / 2, -hgt / 2, w, hgt); ctx.restore(); }
@@ -734,8 +757,8 @@
     };
     if (b.h0 != null) {                                  // hauling
       const tau = rt - b.h0, lg = b.lg || 1000, dp = b.dp || 0, o = ores.get(b.ore), color = o && o.color;
-      for (let d = 0; d < 2; d++) {
-        const side = Math.atan2(gy2s(b.ry) - sy, gx2s(b.rx) - sx) + (d ? 0.4 : -0.4), rx0 = sx + Math.cos(side) * Rs, ry0 = sy + Math.sin(side) * Rs;
+      for (let d = 0; d < N; d++) {
+        const side = Math.atan2(gy2s(b.ry) - sy, gx2s(b.rx) - sx) + (d - (N - 1) / 2) * 0.4, rx0 = sx + Math.cos(side) * Rs, ry0 = sy + Math.sin(side) * Rs;
         if (tau < lg) {                                  // out to the ship
           const [x0, y0] = orbitAt(b.rx, b.ry, b.rs, d, cl(b.h0)), f = legFrac(tau, b.dk || 0, true);
           put(lerp(x0, rx0, f), lerp(y0, ry0, f), Math.atan2(ry0 - y0, rx0 - x0), b.amt > 0, color);
@@ -751,18 +774,30 @@
       }
       return;
     }
-    const k = rockById(b.tg); if (!k) return;
+    const k = rockById(b.tg);
+    if (!k) {                                            // (owner) weapon drones: out to the ship they're after, circling it and firing
+      const tg = drawn.find((x) => x.id === b.tg); if (!tg) return;
+      const tx = gx2s(tg.x), ty = gy2s(tg.y), tsize = (hull(tg.type).lengthKm || 0.13) * 1000;
+      for (let d = 0; d < N; d++) {
+        const [x1, y1, a] = orbitAt(tg.x, tg.y, tsize, d, t);
+        let f = 1; if (b.rt) f = 1 - Math.max(0, Math.min(1, (rt - b.rt.t0) / (b.rt.lg || 1000))); else if (b.t0 != null && rt < b.t0) f = 1 - Math.max(0, Math.min(1, (b.t0 - rt) / 3000));
+        const x = lerp(sx, x1, f), y = lerp(sy, y1, f);
+        if (f >= 1 && b.t0 != null) drawShot(b.dm, x, y, tx, ty, rt - (b.t0 + Math.floor(Math.max(0, rt - b.t0) / (b.c || 4000)) * (b.c || 4000)), b);
+        put(x, y, f >= 1 ? a + Math.PI : Math.atan2(y1 - sy, x1 - sx), false);
+      }
+      return;
+    }
     const o = ores.get(k.ore);
     if (b.fx != null && b.t0 != null && rt < b.t0) {     // flying over from the rock they were on
       const dist = Math.hypot(k.x - b.fx, k.y - b.fy), fly = dist / D.nearKmps * 1000, f = Math.max(0, Math.min(1, 1 - (b.t0 - rt) / Math.max(1, fly)));
-      for (let d = 0; d < 2; d++) {
+      for (let d = 0; d < N; d++) {
         const [x0, y0] = orbitAt(b.fx, b.fy, b.fs || k.size, d, cl(b.t0 - fly)), [x1, y1] = orbitAt(k.x, k.y, k.size, d, cl(b.t0));
         put(lerp(x0, x1, f), lerp(y0, y1, f), Math.atan2(y1 - y0, x1 - x0), false);
       }
       return;
     }
     const rx = gx2s(k.x), ry = gy2s(k.y), p = Math.max(0, Math.min(1, b.t0 != null ? (rt - b.t0) / (b.c || 60000) : (b.p || 0)));
-    for (let d = 0; d < 2; d++) {
+    for (let d = 0; d < N; d++) {
       const [x, y, a] = orbitAt(k.x, k.y, k.size, d, t);
       ctx.save(); ctx.strokeStyle = "rgba(90,180,255," + (0.35 + 0.25 * Math.sin(t * 9 + d)) + ")"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx, ry); ctx.stroke(); ctx.restore();   // (owner) to the rock's center
       drawChunk(rx, ry, x, y, p, o && o.color, qs * 0.8);   // (owner) the drone's yield rides its beam too
@@ -778,7 +813,16 @@
       let n = 0;
       for (const b of sh.beams) {
         const qs = Math.max(2.5, Math.min(6, L * 0.12));
-        if (b.m === "mining_drones") { drawDrones(sh, b, n, { sx, sy, sc, now, t, rt, T, qs, ores }); n++; continue; }
+        const mm = (cfg.modules || {})[b.m] || {}, kind = b.m === "eta_gun" ? "eta_gun" : mm.kind;
+        if (kind === "drones") { drawDrones(sh, b, n, { sx, sy, sc, now, t, rt, T, qs, ores }); n++; continue; }
+        const hp0 = hps[b.hp] || hps[0], hx = sx + (hp0[0] * ch - hp0[1] * sn) * L, hy = sy + (hp0[0] * sn + hp0[1] * ch) * L;
+        if (kind !== "mining") {                         // (owner, combat) weapons and the rest: at a ship (a tractor beam: a wreck)
+          const tg = kind === "tractor" ? wreckById(b.tg) : drawn.find((x) => x.id === b.tg); if (!tg) continue;
+          const tx = gx2s(tg.x), ty = gy2s(tg.y), age = rt - (b.t0 || 0);
+          if (kind === "weapon" || kind === "eta_gun") drawShot(kind === "eta_gun" ? "eta_gun" : b.m, hx, hy, tx, ty, age, b);
+          else drawLink(kind, hx, hy, tx, ty, t);
+          n++; continue;
+        }
         const k = rockById(b.tg); if (!k) continue;
         const p = Math.max(0, Math.min(1, b.t0 != null ? (rt - b.t0) / (b.c || 15000) : (b.p || 0) + (now - snapAt) / (b.c || 15000))), o = ores.get(k.ore);
         const hp = hps[b.hp] || hps[0], ox = sx + (hp[0] * ch - hp[1] * sn) * L, oy = sy + (hp[0] * sn + hp[1] * ch) * L;
@@ -792,6 +836,35 @@
         n++;
       }
     }
+  }
+  // (owner, combat) a weapon's shot from (x, y) to (tx, ty), `age` ms after it fired: a beam laser's burn, a railgun's
+  // streak, a slug cannon's tracers, a missile flying in; the ETA's guns are blue beams
+  function drawShot(key, x, y, tx, ty, age, b) {
+    const fam = key === "eta_gun" ? "eta_gun" : ((cfg.modules || {})[key] || {}).sys; if (!(age >= 0)) return;   // (owner, The Reach) missile, beam, repeater, coilgun
+    const flash = (a, r, col) => { ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.fillStyle = col.replace("A", a); ctx.fill(); };
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
+    if (fam === "beam" || fam === "eta_gun") {
+      const a = fam === "beam" ? (age < (b.c || 1000) + 400 ? 0.75 + 0.15 * Math.sin(performance.now() / 60) : 0) : Math.max(0, 1 - age / 450); if (a > 0) { const c = fam === "eta_gun" ? "90,170,255" : "255,90,60";   // (a beam is continuous)
+        ctx.strokeStyle = "rgba(" + c + "," + 0.4 * a + ")"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+        ctx.strokeStyle = "rgba(255,235,220," + 0.9 * a + ")"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke(); flash(a * 0.8, 3, "rgba(" + c + ",A)"); }
+    } else if (fam === "coilgun") {
+      const a = Math.max(0, 1 - age / 250); if (a > 0) { ctx.strokeStyle = "rgba(170,230,255," + a + ")"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke(); flash(a, 4, "rgba(220,245,255,A)"); }
+    } else if (fam === "repeater") {
+      for (let j = 0; j < 3; j++) { const f = (age - j * 70) / 220; if (f < 0 || f > 1) continue; ctx.fillStyle = "rgba(255,210,110,0.95)"; ctx.fillRect(x + (tx - x) * f - 1.5, y + (ty - y) * f - 1.5, 3, 3); }
+      if (age > 220 && age < 400) flash(1 - (age - 220) / 180, 3, "rgba(255,200,120,A)");
+    } else if (fam === "missile") {
+      const fl = b.fl || 1500, f = age / fl;
+      if (f >= 0 && f <= 1) { const mx = x + (tx - x) * f, my = y + (ty - y) * f; ctx.fillStyle = "rgba(255,170,80,0.95)"; ctx.beginPath(); ctx.arc(mx, my, 2, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "rgba(255,140,60,0.4)"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx - (tx - x) * 0.04, my - (ty - y) * 0.04); ctx.stroke(); }
+      else if (f > 1 && age < fl + 250) flash(1 - (age - fl) / 250, 5, "rgba(255,160,70,A)");
+    }
+    ctx.restore();
+  }
+  // modules that hold on to a target while they run: remote shield / hull repair (green), tractor beams (cyan), warp
+  // scramblers (red) and webifiers (purple)
+  function drawLink(kind, x, y, tx, ty, t) {
+    const col = kind === "tractor" ? "120,220,255" : kind === "scram" ? "255,90,90" : kind === "web" ? "190,120,255" : "110,230,140";
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.setLineDash(kind === "tractor" ? [6, 4] : [3, 5]); ctx.lineDashOffset = -t * 20;
+    ctx.strokeStyle = "rgba(" + col + "," + (0.35 + 0.2 * Math.sin(t * 6)) + ")"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke(); ctx.restore();
   }
   function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
     for (const sh of ships) {
@@ -830,9 +903,7 @@
       if (sh.cloak) ctx.globalAlpha = 0.35;             // (your own admin ship, cloaked)
       if (sh.dk) maskHangar(sh.dk);                    // (owner) flying into / out of a hangar: hidden past its front
       ctx.translate(sx, sy); ctx.rotate(-sh.h);  // sprites face +x; world +y is up
-      if (T.artRot) ctx.rotate(T.artRot);              // (art drawn facing up)
       if (wPx < 10 && ic.naturalWidth) { ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -ic.naturalWidth / 2, -ic.naturalHeight / 2); }   // zoomed out: its hull icon
-      else if (art.naturalWidth && T.artRot) { const ww = wPx * art.naturalWidth / art.naturalHeight; ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(art, -ww / 2, -wPx / 2, ww, wPx); }
       else if (art.naturalWidth) { const hPx = wPx * art.naturalHeight / art.naturalWidth; ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(art, -wPx / 2, -hPx / 2, wPx, hPx); }
       else { ctx.fillStyle = sh.mine ? "#4fd2ff" : "#ff5a5a"; ctx.fillRect(-Math.max(2, wPx) / 2, -Math.max(1, wPx / 4), Math.max(2, wPx), Math.max(2, wPx / 2)); }
       ctx.restore();
@@ -918,7 +989,7 @@
     drawBackground();
     drawSun(now);
     drawn = ships;
-    if (cfg) { drawHex(); drawCelestials(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawEtaGoals(ships); drawAlerts(); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
+    if (cfg) { drawHex(); drawCelestials(); drawBelts(ships); drawRanges(own); drawWrecks(); drawWarps(ships); drawBeams(ships); drawShips(ships); drawEtaGoals(ships); drawAlerts(); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
     requestAnimationFrame(frame);
   }
 
