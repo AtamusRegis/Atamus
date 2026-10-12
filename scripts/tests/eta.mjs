@@ -41,8 +41,8 @@ const roles = (w) => w.eta.officers().reduce((a, o) => ((a[o.role + ":" + o.type
   t.ok(s.fit.active.every(Boolean) && s.fit.active.includes("warp_scrambler_l2") && s.fit.passive.every(Boolean), "it comes fitted (owner)", s.fit);
   Object.assign(s.holds.cargo, { mining_laser_s1: 1, cargo_upgrade_s1: 1 }); w.cmdFit("x", s.id, "mining_laser_s1", "passive", 0); w.cmdFit("x", s.id, "cargo_upgrade_s1", "active", 0);
   t.ok(s.fit.passive[0] === "mining_laser_s1" && s.fit.active[0] === "cargo_upgrade_s1" && s.calc.holds.cargo > 1000, "its slots take active and passive modules alike, in space (owner)", s.fit);
-  s.holds.cargo.railgun_l2 = 30; for (let i = 1; i < 6; i++) w.cmdFit("x", s.id, "railgun_l2", "passive", i);
-  t.ok(s.fit.passive.filter((k) => k === "railgun_l2").length === 5, "with no power or disposition limits (owner)");
+  s.holds.cargo.coilgun_l2 = 30; for (let i = 1; i < 6; i++) w.cmdFit("x", s.id, "coilgun_l2", "passive", i);
+  t.ok(s.fit.passive.filter((k) => k === "coilgun_l2").length === 5, "with no power or disposition limits (owner)");
   w.setAdminShip("x", false); t.ok(!w.ships.has(s.id) && !w.exportState("x").ships.admin, "out of admin mode it's gone (never saved)");
 }
 

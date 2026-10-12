@@ -61,7 +61,9 @@ packages/server/src/
     belts.js      asteroid belts: ores, crescent fields, wasting away
     library.js    the Library POI: every space object's art in rows (props)
     obstacles.js  asteroids and props a destination can't be on (grid index, push a point out)
-    modules.js    modules (active / passive), starter kit, shipCalc (fitted stats with licenses and hull bonuses)
+    modules.js    modules (active / passive; S / M / L, I / II), weapons and ammo (weapons.json, from The Reach), drones and fuel items, starter kit, shipCalc
+    combat.js     active modules at work, weapons and damage, wrecks and loot, drones (installed onto World)
+    items.js      item helpers: volumes, holds, stacks
     station.js    the NPC stations (one per planet; Earth's id is "station"): hangar bays, docking range, landing, props
     eta.js        the Expanse Transit Authority: the ETA Office, its fleets, patrols, the response to aggression, scramblers and webs
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
@@ -80,6 +82,7 @@ scripts/
   check.sh        syntax-check every JS file (run before every push)
   ptr-test.sh     regression/stress suite against the PTR (see scripts/tests/)
   deploy.sh       server-side redeploy (the forced command for the deploy key)
+  gen/module_icons.py   cuts the owner's module icon sheet; gen/weapons_from_reach.mjs: weapons.json from The Reach
   sim/wormholes.mjs  nomad-space wormhole/population simulator for DESIGN.md (node scripts/sim/wormholes.mjs [scenario])
 .github/workflows deploy-server.yml (packages/server/**), deploy-website.yml (website/**)
 ```
@@ -110,6 +113,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
+- `give item n [ship]` (put items in your ship's hold: modules, ammo, drones)
 - `aggress [ship] [victim]` (your ship attacks: the ETA flags and hunts it), `pardon [ship]` (clear the flag), `killofficer [id]` (an ETA ship dies to yours: the escalation)
 
 PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check), `POST /game/admin/dev/lapse` (the staff inactivity check).

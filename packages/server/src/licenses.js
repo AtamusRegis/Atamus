@@ -53,9 +53,9 @@ export const LICENSES = [
     ["shield_operation", "Shield Operation", "power", "Run shield modules better and lighter.", "Shield Recharger and Shield Extender"],
     ["remote_shields", "Remote Shields", "power", "Run remote shield modules better and lighter.", "Remote Shield Recharger and Remote Shield Extender"],
     ["missiles", "Missiles", "missiles", "Fire missile launchers better and lighter.", "Missile Launcher"],
-    ["beams", "Beams", "beams", "Fire beam lasers better and lighter.", "Beam Laser"],
-    ["hybrid_turrets", "Hybrid Turrets", "hybrid", "Fire railguns better and lighter.", "Railgun"],
-    ["projectiles", "Projectiles", "projectiles", "Fire slug cannons better and lighter.", "Slug Cannon"],
+    ["beams", "Beams", "beams", "Fire beams better and lighter.", "Beam"],
+    ["repeaters", "Repeaters", "projectiles", "Fire repeaters better and lighter.", "Repeater"],
+    ["coilguns", "Coilguns", "hybrid", "Fire coilguns better and lighter.", "Coilgun"],
   ].map(([key, name, category, desc, what]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus: "+5% " + what + " effect (passives: +10%), −5% their power and disposition; II modules need V", requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
 ];
 for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms * TRAINING_TIME_MODIFIER));   // the times everything uses (server and trainer)

@@ -13,6 +13,7 @@
 // (owner) active modules take a lot of power and a moderate share of disposition; passive ones little power but a lot
 // of disposition. The Prospector (40 power / 70 disposition): untrained, two lasers, a Drone Link and an afterburner
 // leave power for the passives but disposition for only two of them; the licenses (−5% a level) make room for the third.
+import { readFileSync } from "node:fs";
 export const SIZES = ["s", "m", "l"];
 export const SIZE_NAME = { s: "S", m: "M", l: "L" };
 export const SIZE_RANK = { s: 0, m: 1, l: 2 };
@@ -53,18 +54,6 @@ export const FAMILIES = {
   microwarp_drive: F({ name: "Microwarp Drive", slot: "active", kind: "prop", license: "engines", icon: null, power: 16, disposition: 9,
     stats: { speedBonus: 4, mwd: true }, scale: { speedBonus: "pct" },
     desc: "A huge burst of speed while it's on. Fitted, it also lets the warp drive reach beyond the planetary system the ship is in." }),
-  missile: F({ name: "Missile Launcher", slot: "active", kind: "weapon", license: "missiles", icon: null, power: 12, disposition: 7,
-    stats: { dmg: 30, cycleMs: 6000, rangeKm: 20, flightKmps: 4, shieldK: 1, hullK: 1 }, scale: { dmg: "amt", rangeKm: "range" }, drone: true,
-    desc: "Fires a missile at a locked ship each cycle. Long reach; the missile takes time to fly." }),
-  beam: F({ name: "Beam Laser", slot: "active", kind: "weapon", license: "beams", icon: null, power: 13, disposition: 6,
-    stats: { dmg: 20, cycleMs: 4000, rangeKm: 8, shieldK: 1.2, hullK: 0.8 }, scale: { dmg: "amt", rangeKm: "range" }, drone: true,
-    desc: "Burns a locked ship each cycle. Strong against shields, weaker against hulls." }),
-  slug: F({ name: "Slug Cannon", slot: "active", kind: "weapon", license: "projectiles", icon: null, power: 10, disposition: 6,
-    stats: { dmg: 12, cycleMs: 2000, rangeKm: 4, shieldK: 0.8, hullK: 1.2 }, scale: { dmg: "amt", rangeKm: "range" }, drone: true,
-    desc: "Hammers a locked ship with slugs at close range. Fast; strong against hulls, weaker against shields." }),
-  railgun: F({ name: "Railgun", slot: "active", kind: "weapon", license: "hybrid_turrets", icon: null, power: 14, disposition: 7,
-    stats: { dmg: 45, cycleMs: 8000, rangeKm: 15, shieldK: 1, hullK: 1 }, scale: { dmg: "amt", rangeKm: "range" }, drone: true,
-    desc: "Fires a heavy round at a locked ship each cycle. Slow, hard-hitting, long reach." }),
   warp_scrambler: F({ name: "Warp Scrambler", slot: "active", kind: "scram", license: "propulsion_jamming", icon: null, power: 8, disposition: 5,
     stats: { rangeKm: 9 }, scale: { rangeKm: "range" },
     desc: "Keeps a locked ship in range from warping while it runs." }),
@@ -126,6 +115,51 @@ for (const [fam, f] of Object.entries(FAMILIES)) for (const [si, size] of SIZES.
   MODULES[key] = { key, family: fam, size, tier, name: f.name + " " + SIZE_NAME[size] + " " + (tier === 2 ? "II" : "I"), slot: f.slot, kind: f.kind || null, license: f.license, icon: "modules/" + fam + (tier === 2 ? "_2" : "") + ".png",   // (owner's icons: scripts/gen/module_icons.py)
     power: round(f.power * COST_K[si] * kt), disposition: round(f.disposition * COST_K[si] * kt), m3: M3[si], desc: f.desc, ...(f.drone ? { droneable: true } : {}), ...st };
 }
+// ---- (owner) weapons, from The Reach (scripts/gen/weapons_from_reach.mjs → weapons.json): four systems (Missile
+// Launchers, Beams, Repeaters, Coilguns), each in four roles (Standard; Shield-breaker, Armor-breaker and Long-reach:
+// Scorch / Quake / Cruise, Scatter / Etch / Point, Buckshot / Impact / Longrifle, Static / Breach / Rail), three sizes
+// and two tiers; and their ammo in three kinds per size (Swift, standard, Heavy; tier I and II). The Reach's damage is
+// scaled down to Atamus's hulls (DPS_K); its ranges are kept (m → km).
+export const WEAPONS = JSON.parse(readFileSync(new URL("./weapons.json", import.meta.url), "utf8"));
+export const DPS_K = 0.25;                                       // a Small Missile Launcher: ~6 damage a second
+const SYS = {   // our weapon systems: base fitting (S I), cycle, license, ammo, and how each fires
+  missile: { license: "missiles", power: 11, disposition: 7, cycleMs: 6000, ammo: "Missile", crystal: false, desc: "Fires missiles at a locked ship. They never miss, but take time to fly and do less to targets smaller or faster than their blast." },
+  beam: { license: "beams", power: 12, disposition: 6, cycleMs: 1000, focusMs: 4000, ammo: "Beam Crystal", crystal: true, desc: "A continuous beam on a locked ship: it builds to full strength while it stays on one target. Crystals wear out slowly; damage stops almost dead past optimal range." },
+  repeater: { license: "repeaters", power: 13, disposition: 7, cycleMs: 1500, spinMs: 2000, crit: 0.1, ammo: "Cartridge", crystal: false, desc: "Fast-firing cartridge guns: a moment to spin up, then the best tracking of any turret, with critical hits for double damage and a long falloff." },
+  coilgun: { license: "coilguns", power: 12, disposition: 7, cycleMs: 6000, drPen: 0.15, ammo: "Slug", crystal: false, desc: "Charges, then fires one heavy slug that ignores 15% of the target's armor. Huge hits, slow rhythm." },
+};
+export const SIG = { frigate: 40, cruiser: 125, battleship: 400 };   // (The Reach) a hull's signature by size
+const FLIGHT_KMPS = { s: 4, m: 3.5, l: 3 };                      // missile speed by size
+const AMMO_M3 = { s: 0.01, m: 0.025, l: 0.05 }, CRYSTAL_M3 = { s: 0.1, m: 0.25, l: 0.5 };
+export const CRYSTAL_SHOTS = 60;                                  // (The Reach: crystals wear out slowly) cycles a beam crystal lasts
+const ROLE_KEY = { std: "", shield: "_shield", armor: "_armor", long: "_long" };
+for (const [sys, S] of Object.entries(SYS)) {
+  const W = WEAPONS.systems[sys];
+  for (const role of ["std", "shield", "armor", "long"]) {
+    const R = WEAPONS.roles[role], fam = sys + ROLE_KEY[role], base = W.base === "Beam" ? "Beam" : W.base, name = (W.role_n[role] ? W.role_n[role] + " " : "") + base;
+    FAMILIES[fam] = { name, slot: "active", kind: "weapon", license: S.license, power: S.power * R.pg, disposition: S.disposition * R.cpu, weapon: true, desc: S.desc + (role === "std" ? "" : " " + WEAPONS.roles[role].n + ".") };
+    for (const [si, size] of SIZES.entries()) for (const tier of [1, 2]) {
+      const row = W.rows[size][role], h = row.hit, k = tier === 2 ? T2 : 1, kt = tier === 2 ? T2_COST : 1, dps = row.dps * DPS_K * k;
+      const st = { sys, role, dps: round(dps), dmg: round(dps * S.cycleMs / 1000), cycleMs: S.cycleMs, rangeKm: round(row.range / 1000), shieldK: round(W.lean.sh * R.sh), hullK: round(W.lean.ar * R.ar) };
+      if (sys === "missile") Object.assign(st, { maxKm: round(h.rng / 1000), er: h.er, ev: h.ev, flightKmps: FLIGHT_KMPS[size] });
+      else Object.assign(st, { opt: round(h.opt / 1000), fall: round(h.fall / 1000), trk: h.trk, res: h.res, maxKm: round((h.opt + 2 * h.fall) / 1000) });
+      if (S.focusMs) st.focusMs = S.focusMs; if (S.spinMs) st.spinMs = S.spinMs; if (S.crit) st.crit = S.crit; if (S.drPen) st.drPen = S.drPen;
+      const key = fam + "_" + size + tier;
+      MODULES[key] = { key, family: fam, size, tier, name: name + " " + SIZE_NAME[size] + " " + (tier === 2 ? "II" : "I"), slot: "active", kind: "weapon", license: S.license, icon: "modules/" + fam + (tier === 2 ? "_2" : "") + ".png",
+        power: round(S.power * R.pg * COST_K[si] * kt), disposition: round(S.disposition * R.cpu * COST_K[si] * kt), m3: M3[si], desc: FAMILIES[fam].desc, droneable: size === "s", ...st };
+    }
+  }
+  // its ammo: Swift (closer, harder, quicker), standard, Heavy (farther, slower); a II's bonuses 30% stronger
+  for (const sub of ["swift", "std", "heavy"]) for (const [si, size] of SIZES.entries()) for (const tier of [1, 2]) {
+    const U = WEAPONS.subs[sub], b = (v) => round(tier === 2 ? 1 + (v - 1) * T2 : v), key = "ammo_" + sys + "_" + sub + "_" + size + tier;
+    ITEMS[key] = { key, ammo: sys, sub, size, tier, name: (sub === "std" ? "" : U.n + " ") + S.ammo + " " + SIZE_NAME[size] + " " + (tier === 2 ? "II" : "I"), m3: (S.crystal ? CRYSTAL_M3 : AMMO_M3)[size],
+      icon: "modules/ammo_" + sys + "_" + sub + (tier === 2 ? "_2" : "") + ".png", dmg: sub === "std" && tier === 2 ? 1.05 : b(U.dmg), range: b(U.range), app: b(U.app), cyc: b(U.cyc), vel: b(U.vel),
+      desc: S.ammo + " for " + SIZE_NAME[size] + " " + (sys === "missile" ? "missile launchers" : sys + "s") + (S.crystal ? " (each lasts " + CRYSTAL_SHOTS + " cycles)." : ".") };
+  }
+}
+/** The ammo a weapon can load (its system and size). */
+export const ammoFits = (wkey, akey) => { const m = MODULES[wkey], a = ITEMS[akey]; return !!(m && a && m.kind === "weapon" && a.ammo === m.sys && a.size === m.size); };
+
 // the keys from before sizes and tiers: each is now its S I
 export const ALIASES = { mining_laser: "mining_laser_s1", mining_drones: "drone_link_s1", afterburner_1: "afterburner_s1", cargo_expander: "cargo_upgrade_s1", inertia_stabilizer: "gyroscope_s1",
   mining_laser_upgrade: "yield_upgrade_s1", mining_beam_extender: "range_upgrade_s1", microwarp_drive: "microwarp_drive_s1", mining_overclocker: "cycle_upgrade_s1" };
@@ -194,7 +228,7 @@ export function modStats(key, lic, up = {}) {
   const L = 1 + 0.05 * lv(lic, m.license), hb = up.hb || {}, o = { key, kind: m.kind };
   if (m.kind === "mining") Object.assign(o, { yield: r2(m.yield * L * (1 + (hb.laser_yield || 0)) * (up.yieldK || 1)), cycleMs: Math.round(m.cycleMs * (up.cyc || 1)), rangeKm: r2(m.rangeKm * L * (1 + (hb.laser_range || 0)) * (up.rangeK || 1)), waste: m.waste || 0 });
   else if (m.kind === "drones") Object.assign(o, { drones: m.drones, rangeKm: r2(m.rangeKm * L) });
-  else if (m.kind === "weapon") Object.assign(o, { dmg: r2(m.dmg * L), cycleMs: m.cycleMs, rangeKm: r2(m.rangeKm * L), shieldK: m.shieldK, hullK: m.hullK, flightKmps: m.flightKmps || 0, size: m.size });
+  else if (m.kind === "weapon") { const pick = ["sys", "role", "cycleMs", "rangeKm", "maxKm", "opt", "fall", "trk", "res", "er", "ev", "flightKmps", "shieldK", "hullK", "focusMs", "spinMs", "crit", "drPen", "size"]; for (const k of pick) if (m[k] != null) o[k] = m[k]; o.dmg = r2(m.dmg * L); }
   else if (m.kind === "prop") Object.assign(o, { speedBonus: r2(m.speedBonus * L * (up.propK || 1)) });
   else if (m.kind === "shield_ext" || m.kind === "remote_ext") Object.assign(o, { shieldAdd: Math.round(m.shieldAdd * L), rangeKm: m.rangeKm ? r2(m.rangeKm * L) : 0 });
   else if (m.kind === "web") Object.assign(o, { web: Math.min(0.9, r2(m.web * L)), rangeKm: r2(m.rangeKm * L) });

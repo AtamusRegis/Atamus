@@ -12,13 +12,13 @@ const P = SHIP_TYPES.chisel;
 
 // ---- the catalog ----
 const fams = Object.keys(FAMILIES);
-t.ok(["mining_laser", "strip_miner", "drone_link", "tractor_beam", "shield_recharger", "shield_extender", "afterburner", "microwarp_drive", "missile", "beam", "slug", "railgun", "warp_scrambler", "stasis_webifier", "remote_shield_booster", "remote_shield_extender", "repair_drone"].every((f) => FAMILIES[f].slot === "active")
+t.ok(["mining_laser", "strip_miner", "drone_link", "tractor_beam", "shield_recharger", "shield_extender", "afterburner", "microwarp_drive", "warp_scrambler", "stasis_webifier", "remote_shield_booster", "remote_shield_extender", "repair_drone"].every((f) => FAMILIES[f].slot === "active")
   && ["cargo_upgrade", "yield_upgrade", "cycle_upgrade", "range_upgrade", "target_range_upgrade", "armor_upgrade", "drone_upgrade", "gyroscope", "locking_upgrade", "target_tracker", "speed_upgrade", "drone_bay_extender"].every((f) => FAMILIES[f].slot === "passive"), "every module the owner listed, active and passive");
 t.ok(fams.every((f) => SIZES.every((z) => [1, 2].every((n) => MODULES[f + "_" + z + n]))) && Object.keys(MODULES).length === fams.length * 6, "each in S, M and L, I and II (owner)");
-t.ok(MODULES.railgun_s1.power < MODULES.railgun_m1.power && MODULES.railgun_m1.power < MODULES.railgun_l1.power && MODULES.railgun_s1.dmg < MODULES.railgun_m1.dmg && MODULES.railgun_m1.rangeKm < MODULES.railgun_l1.rangeKm, "smaller ones use less power and disposition and do less (owner)");
+t.ok(MODULES.coilgun_s1.power < MODULES.coilgun_m1.power && MODULES.coilgun_m1.power < MODULES.coilgun_l1.power && MODULES.coilgun_s1.dmg < MODULES.coilgun_m1.dmg && MODULES.coilgun_m1.rangeKm < MODULES.coilgun_l1.rangeKm, "smaller ones use less power and disposition and do less (owner)");
 t.ok(Math.abs(MODULES.beam_s2.dmg / MODULES.beam_s1.dmg - T2) < 1e-6 && Math.abs(MODULES.cargo_upgrade_s2.holdBonus / MODULES.cargo_upgrade_s1.holdBonus - T2) < 1e-6 && T2 === 1.3, "a II's bonuses are 30% stronger (owner)");
 t.ok(fams.every((f) => LICENSES.some((l) => l.key === FAMILIES[f].license)), "every module family has its license (owner: respective skills)");
-t.ok(MODULES.slug_s1.name === "Slug Cannon S I" && MODULES.remote_shield_booster_m2.name === "Remote Shield Recharger M II" && MODULES.mining_laser_s1.icon === "modules/mining_laser.png" && MODULES.mining_laser_s2.icon === "modules/mining_laser_2.png", "names and icons from the owner's sheet");
+t.ok(MODULES.repeater_shield_s1.name === "Buckshot Repeater S I" && MODULES.missile_long_l2.name === "Cruise Missile Launcher L II" && MODULES.beam_armor_m1.name === "Etch Beam M I" && MODULES.coilgun_long_s1.name === "Rail Coilgun S I" && MODULES.remote_shield_booster_m2.name === "Remote Shield Recharger M II" && MODULES.mining_laser_s1.icon === "modules/mining_laser.png" && MODULES.mining_laser_s2.icon === "modules/mining_laser_2.png", "names and icons from the owner's sheet");
 t.ok(ITEMS.drone && ITEMS.drone_fuel && P.holds.some((h) => h.key === "drones"), "drones and fuel blocks are items; hulls have a drone bay (owner)");
 t.ok(!fitProblem(P, "beam_s1", {}) && fitProblem(P, "beam_m1", {}) === "Too large for this hull" && fitProblem(SHIP_TYPES.magistrate, "beam_s1", {}) === null && fitProblem(SHIP_TYPES.constable, "beam_l1", {}) === "Too large for this hull", "a hull fits its own size or smaller (owner)");
 t.ok(fitProblem(P, "beam_s2", { beams: 4 }) === "Needs its license at V" && !fitProblem(P, "beam_s2", { beams: 5 }), "a II needs its license at V (owner)");
@@ -27,6 +27,28 @@ t.ok(P.armorDR === 0.1 && !("armor" in P) && SHIP_TYPES.adm_magistrate.armorDR =
   t.ok(one.armorDR > 0.1 && c.armorDR > one.armorDR && c.armorDR - one.armorDR < one.armorDR - 0.1, "Armor Upgrades raise it, with diminishing returns (owner)", [one.armorDR, c.armorDR]); }
 { const c = shipCalc(P, { active: [], passive: ["target_tracker_s1", "locking_upgrade_s1", "target_range_upgrade_s1", "drone_bay_extender_s1"] }, {});
   t.ok(c.maxTargets === 6 && c.lockMs < P.lockMs && c.targetRange > P.targetRangeKm && c.holds.drones === 15, "Target Tracker, Locking and Targeting Range Upgrades, Drone Bay Extender", c); }
+
+// ---- (owner) weapons and ammo from The Reach ----
+{ const { WEAPONS, DPS_K, ITEMS: IT, ammoFits } = await import("../../packages/server/src/game/modules.js");
+  const sys = ["missile", "beam", "repeater", "coilgun"], roles = ["", "_shield", "_armor", "_long"];
+  t.ok(sys.every((x) => roles.every((r) => ["s", "m", "l"].every((z) => MODULES[x + r + "_" + z + "1"] && MODULES[x + r + "_" + z + "2"]))), "four systems × four roles × S/M/L × I/II (The Reach)");
+  t.ok(Math.abs(MODULES.repeater_s1.dps - WEAPONS.systems.repeater.rows.s.std.dps * DPS_K) < 1e-6 && MODULES.missile_m1.maxKm === WEAPONS.systems.missile.rows.m.std.hit.rng / 1000 && MODULES.beam_l1.opt === WEAPONS.systems.beam.rows.l.std.hit.opt / 1000, "their numbers are The Reach's (damage scaled to our hulls, ranges kept)");
+  t.ok(MODULES.missile_shield_s1.shieldK > MODULES.missile_s1.shieldK && MODULES.missile_armor_s1.hullK > MODULES.missile_s1.hullK && MODULES.missile_long_s1.maxKm > MODULES.missile_s1.maxKm && MODULES.missile_shield_s1.maxKm < MODULES.missile_s1.maxKm, "roles: shield-breakers, armor-breakers, long-reach");
+  t.ok(sys.every((x) => ["swift", "std", "heavy"].every((u) => ["s", "m", "l"].every((z) => IT["ammo_" + x + "_" + u + "_" + z + "1"] && IT["ammo_" + x + "_" + u + "_" + z + "2"]))) && IT.ammo_beam_std_s1.name === "Beam Crystal S I" && IT.ammo_repeater_swift_m2.name === "Swift Cartridge M II" && IT.ammo_coilgun_heavy_l1.name === "Heavy Slug L I", "ammo: Swift, standard and Heavy per system and size, I and II");
+  t.ok(ammoFits("missile_long_s1", "ammo_missile_heavy_s2") && !ammoFits("missile_s1", "ammo_missile_std_m1") && !ammoFits("beam_s1", "ammo_missile_std_s1"), "a weapon loads its system's ammo of its size"); }
+
+// how the shots land (The Reach): turret tracking and falloff, missile blasts, repeater spin-up, coilgun charge
+{ const q = new World({ eta: false }); q.eta.respond = () => {};
+  for (const [id, n] of [["x", 1], ["y", 2]]) q.addPlayer(id, id, () => {}, null, [{ id: n, name: id, start: "earth", licenses: {} }]); run(q, 0.05);
+  const x = q.ships.get("x:ship:1"), y = q.ships.get("y:ship:2"); x.docked = y.docked = false;
+  const hit = (c, setup) => { Object.assign(x, { x: 7000, y: 7000, vx: 0, vy: 0 }); Object.assign(y, { x: 7002, y: 7000, vx: 0, vy: 0, shield: 1e6, shieldMax: 1e6 }); setup && setup(); const s0 = y.shield; q._fire(x, y.id, c, T0); return s0 - y.shield; };
+  const L = q.calc ? null : null, big = { ...MODULES.repeater_l1, dmg: 100, shieldK: 1 }, small = { ...MODULES.repeater_s1, dmg: 100, shieldK: 1 };
+  const still = hit(big), crossing = hit(big, () => { y.vy = 0.3; });
+  t.ok(still >= 99 && crossing < still * 0.6, "a big turret misses a small target crossing fast (tracking)", [still, crossing]);
+  t.ok(hit(small, () => { y.vy = 0.3; }) > crossing, "a small turret tracks it better");
+  const far = hit({ ...MODULES.beam_s1, dmg: 100, shieldK: 1 }, () => { y.x = 7000 + MODULES.beam_s1.opt + MODULES.beam_s1.fall * 2; });
+  t.ok(far < 15, "beams stop almost dead past optimal (short falloff)", far);
+  q._fire(x, y.id, { ...MODULES.missile_l1, dmg: 100, shieldK: 1 }, T0); const sh = q.shots.at(-1); y.shield = 1e6; run(q, 3); t.ok(sh && 1e6 - y.shield < 100 * 40 / 350 + 1, "a large missile's blast does little to a frigate (signature against explosion radius)", 1e6 - y.shield); }
 
 // ---- combat ----
 const w = new World({ eta: false }), notes = { a: [], b: [] };
@@ -38,9 +60,14 @@ const place = (s, x, y) => Object.assign(s, { x, y, tx: x, ty: y, vx: 0, vy: 0, 
 place(a, 5000, 5000); place(b, 5003, 5000);
 const fit = (s, active, passive = []) => { s.fit.active = [...active, ...Array(4 - active.length).fill(null)]; s.fit.passive = [...passive, ...Array(3 - passive.length).fill(null)]; s.fit.off = { active: Array(4).fill(false), passive: Array(3).fill(false) }; w._recalc(s); };
 fit(a, ["beam_s1", "warp_scrambler_s1", "stasis_webifier_s1"]);
+w.cmdModule("a", a.id, 0, true); t.ok(!a.act[0] && notes.a.at(-1).text === "No ammo", "no ammo, no firing");
+a.holds.cargo.ammo_beam_std_s1 = 2;
 w.cmdModule("a", a.id, 0, true); t.ok(a.act[0] && a.act[0].standby, "a weapon with no locked ship waits on standby");
 const sh0 = b.shield; w.cmdLock("a", a.id, "ship", b.id); run(w, 3.1);
-t.ok(a.act[0].tg === b.id && sh0 - b.shield > 20 * 1.2 - 1 && sh0 - b.shield < 20 * 1.2 + 0.1, "on the lock it fires: a beam's 20 damage, ×1.2 against shields", [sh0, b.shield]);
+const bd = MODULES.beam_s1.dmg * MODULES.beam_s1.shieldK;
+t.ok(a.act[0].tg === b.id && sh0 - b.shield > bd * 0.4 - 0.5 && sh0 - b.shield < bd * 0.4 + 0.5, "on the lock it fires: a beam starts at 40% (it builds while it stays on)", [sh0, b.shield, bd]);
+run(w, 5); { const s5 = b.shield; run(w, 1); t.ok(Math.abs(s5 - b.shield + b.shieldMax / 120 - bd) < 0.3, "...to full strength (less the shield coming back)", [s5 - b.shield, bd]); }
+t.ok(a.holds.cargo.ammo_beam_std_s1 === 2 && a.wear[0] > 0, "a beam crystal wears slowly (The Reach)", a.wear);
 t.ok(a.crim && w.snapshotFor(w.players.get("a")).ships.find((x) => x.id === a.id).crim === 1, "firing on a ship flags the attacker (ETA)");
 w.cmdModule("a", a.id, 1, true); w.cmdModule("a", a.id, 2, true); run(w, 0.1);
 t.ok(b.scram && b.web && Math.abs(b.speed - P.speedKmps * 0.5) < 1e-9, "a Warp Scrambler holds it, a Stasis Webifier halves its speed", [b.scram, b.speed]);
@@ -49,7 +76,7 @@ const snapB = w.snapshotFor(w.players.get("a")).ships.find((x) => x.id === a.id)
 t.ok(snapB.targets[0].sh < 1 && snapB.targets[0].hl === 1 && snapB.beams.some((x) => x.m === "beam_s1" && x.tg === b.id), "the attacker sees its target's shield and hull, everyone the shots", snapB.targets);
 // shield, then hull less armor
 b.shield = 0; const hp0 = b.hp; w._damage(b, 20, 1.2, 0.8, a);
-t.ok(Math.abs(hp0 - b.hp - 20 * 0.8 * (1 - 0.1)) < 1e-6, "with the shield down, the hull takes it, less armor damage reduction (and a beam's ×0.8 against hulls)", [hp0, b.hp]);
+t.ok(Math.abs(hp0 - b.hp - 20 * 0.8 * (1 - 0.1)) < 1e-6 && (() => { const h1 = b.hp; w._damage(b, 20, 1, 1, a, 0.15); return Math.abs(h1 - b.hp - 20 * (1 - 0.1 * 0.85)) < 1e-6; })(), "with the shield down, the hull takes it, less armor damage reduction (and a beam's ×0.8 against hulls)", [hp0, b.hp]);
 // remote help, a ship's own shield recharger
 const c = w.ships.get("a:ship:1"); w.addPlayer("c", "C", () => {}, null, [{ id: 3, name: "Cy", start: "earth", licenses: {} }]); run(w, 0.05);
 const cs = w.ships.get("c:ship:3"); place(cs, 5001, 5002); fit(cs, ["remote_shield_booster_s1", "repair_drone_s1", "shield_recharger_s1"]);
@@ -64,8 +91,8 @@ t.ok(cs.shieldMax === sm + 150, "a Shield Extender raises shield capacity while 
 w.cmdModule("c", cs.id, 2, true); t.ok(Math.abs(cs.speed - P.speedKmps * 5) < 1e-9 && cs.calc.mwd, "a Microwarp Drive: +400% while on; fitted, it reaches other planetary systems (owner)", cs.speed);
 // destroyed
 const r0 = Math.random; let rolls = 0; Math.random = () => (rolls++ % 4 === 0 ? 0.1 : 0.9);   // (one in four: under 25%)
-b.holds.cargo = { railgun_s1: 4, drone_fuel: 4 }; b.holds.ore = { "ore:ironstone": 100 };
-fit(b, ["mining_laser_s1", "afterburner_s1", "beam_s1", "slug_s1"]); b.shield = 0; b.hp = 1; b.crim = { since: 0, vs: [] };
+b.holds.cargo = { coilgun_s1: 4, drone_fuel: 4 }; b.holds.ore = { "ore:ironstone": 100 };
+fit(b, ["mining_laser_s1", "afterburner_s1", "beam_s1", "repeater_s1"]); b.shield = 0; b.hp = 1; b.crim = { since: 0, vs: [] };
 w._damage(b, 50, 1, 1, a); Math.random = r0;
 const wr = [...w.wrecks.values()].find((x) => x.name === "Bea's Prospector Wreck");
 t.ok(wr && wr.items.mining_laser_s1 === 1 && !wr.items.afterburner_s1 && wr.items["ore:ironstone"] === 50, "destroyed: a wreck with a share of what it had (fitted modules 25% each, owner)", wr && wr.items);

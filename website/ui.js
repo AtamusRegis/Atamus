@@ -1827,7 +1827,10 @@
       }
       // (owner) refitting is done docked: in space a slot can't be dragged or unfitted, only powered on / off
       const docked = () => { const x = hudShip(); return !!(x && x.id === sh.id ? x.docked : sh.docked); };   // (live: the slot outlives the snapshot it was built from)
-      dragSource(node, () => (docked() ? { item: k, from: { type: "slot", kind, slot: i } } : null), () => [...(docked() ? [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })]] : []),
+      const ammoItems = () => { const x = hudShip(), m = MODS()[k]; if (!m || m.kind !== "weapon" || kind !== "active" || !x) return [];   // (owner, The Reach) load a kind of ammo from the cargo hold
+        const list = Object.entries((x.holds && x.holds.cargo) || {}).filter(([a, n]) => { const d = ITEMDEFS()[a]; return d && d.ammo === m.sys && d.size === m.size && n >= 1; });
+        return list.length ? [["Ammo", list.map(([a, n]) => [((x.ammo || [])[i] === a ? "✓ " : "") + itemName(a) + " (" + Math.floor(n) + ")", () => window.Atamus.send({ t: "ammo", ship: x.id, slot: i, item: a })])]] : []; };
+      dragSource(node, () => (docked() ? { item: k, from: { type: "slot", kind, slot: i } } : null), () => [...(docked() ? [["Unfit", () => window.Atamus.send({ t: "unfit", ship: sh.id, kind, slot: i })]] : []), ...ammoItems(),
         [off ? "Power On" : "Power Off", () => window.Atamus.send({ t: "power", ship: sh.id, kind, slot: i, on: off })], ["Info", () => openModInfo(k)]],   // (owner) powered off: disposition only
         kind === "active" && extraCls === "hb-live" ? () => toggleModule(i) : null);
     }
@@ -1916,7 +1919,10 @@
     const m = itemDef(minfoKey); body.innerHTML = ""; if (!m) return;
     wins.minfo.slot.textContent = m.name;
     const head = el("div", { class: "oi-head" }, el("img", { class: "oi-icon", src: itemIcon(minfoKey), alt: "" }), el("span", { class: "ps-name" }, m.name));
-    if (!MODS()[minfoKey]) { body.append(head, el("p", { class: "fit-desc" }, m.desc || ""), el("div", { class: "ps-rows" }, [statRow("Volume", m.m3 + " m³")])); return; }
+    if (!MODS()[minfoKey]) {                           // an item: drones, fuel, (owner, The Reach) ammo: what it does to its weapon
+      const rows = [statRow("Volume", m.m3 + " m³")], x = (v) => "×" + Math.round(v * 100) / 100;
+      if (m.ammo) rows.unshift(statRow("Size", m.size.toUpperCase()), statRow("Damage", x(m.dmg)), statRow("Range", x(m.range)), statRow(m.ammo === "missile" ? "Missile Speed" : "Tracking", x(m.ammo === "missile" ? m.vel : m.app / m.range)), statRow("Cycle Time", x(m.cyc)));
+      body.append(head, el("p", { class: "fit-desc" }, m.desc || ""), el("div", { class: "ps-rows" }, rows)); return; }
     const sh = hudShip(), lic = licOf(sh), c = modCost(minfoKey, lic), L = (key) => Math.min(5, lic[key] || 0), pct = (v) => "+" + Math.round(v * 1000) / 10 + "%", sec = (ms) => Math.round(ms / 100) / 10 + " s", km = (v) => (Math.round(v * 100) / 100) + " km";
     const slot = sh && (sh.fit && sh.fit.active || []).indexOf(minfoKey), mc = (sh && sh.calc && sh.calc.mods && slot >= 0 && sh.calc.mods[slot]) || null, x = mc || m;
     const lk = 1 + 0.05 * L(m.license), pk = 1 + 0.1 * L(m.license);
@@ -1924,7 +1930,14 @@
     const R = (k, v) => rows.push(statRow(k, v));
     if (m.kind === "mining") { R("Yield", (mc ? x.yield : Math.round(m.yield * lk * 100) / 100) + " m³ / cycle"); R("Cycle Time", sec(x.cycleMs)); R("Range", km(mc ? x.rangeKm : m.rangeKm * lk)); if (m.waste) R("Waste", "+" + Math.round(m.waste * 100) + "%"); }
     else if (m.kind === "drones") { R("Drones", m.drones); R("Control Range", km(mc ? x.rangeKm : m.rangeKm * lk)); }
-    else if (m.kind === "weapon") { R("Damage", Math.round((mc ? x.dmg : m.dmg * lk) * 10) / 10); R("Cycle Time", sec(m.cycleMs)); R("Range", km(mc ? x.rangeKm : m.rangeKm * lk)); if (m.shieldK !== 1) R("Against Shields", Math.round(m.shieldK * 100) + "%"); if (m.hullK !== 1) R("Against Hulls", Math.round(m.hullK * 100) + "%"); }
+    else if (m.kind === "weapon") {                    // (owner, The Reach) as with standard ammo
+      const dmg = mc ? x.dmg : m.dmg * lk; R("Damage", Math.round(dmg * 10) / 10 + " / shot"); R("Damage per Second", Math.round(dmg / m.cycleMs * 10000) / 10); R("Cycle Time", sec(m.cycleMs));
+      if (m.sys === "missile") { R("Range", km(m.maxKm)); R("Missile Speed", Math.round(m.flightKmps * 1000) + " m/s"); R("Explosion Radius", m.er + " m"); R("Explosion Velocity", m.ev + " m/s"); }
+      else { R("Optimal Range", km(m.opt)); R("Falloff", km(m.fall)); R("Tracking", m.trk + " rad/s"); }
+      R("Against Shields", Math.round(m.shieldK * 100) + "%"); R("Against Hulls", Math.round(m.hullK * 100) + "%");
+      if (m.crit) R("Critical Hits", Math.round(m.crit * 100) + "%"); if (m.drPen) R("Ignores Armor", Math.round(m.drPen * 100) + "%"); if (m.focusMs) R("Focus Time", sec(m.focusMs)); if (m.spinMs) R("Spin-up", sec(m.spinMs));
+      if (sh && slot >= 0 && sh.ammo && sh.ammo[slot]) R("Ammo", itemName(sh.ammo[slot]));
+    }
     else if (m.kind === "prop") R("Top Speed", pct(mc ? x.speedBonus : m.speedBonus * lk));
     else if (m.kind === "shield_ext" || m.kind === "remote_ext") { R("Shield", "+" + Math.round(m.shieldAdd * lk)); if (m.rangeKm) R("Range", km(m.rangeKm * lk)); }
     else if (m.kind === "shield_rep" || m.kind === "remote_rep") { R("Shield", "+" + Math.round(m.amount * lk) + " / cycle"); R("Cycle Time", sec(m.cycleMs)); if (m.rangeKm) R("Range", km(m.rangeKm * lk)); }

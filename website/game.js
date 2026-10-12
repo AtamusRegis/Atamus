@@ -583,7 +583,7 @@
   }
   // (owner) modules at work: a mining laser's beam from the ship to its rock; a pair of mining drones circling the rock
   // (owner) a drone looks like what it carries (the owner's drone icons)
-  const droneArt = (dm) => { const f = ((cfg && cfg.modules && cfg.modules[dm]) || {}).family; return img("assets/icons/modules/drone" + (f === "mining_laser" ? "_mining" : f ? "_" + f : "") + ".png"); };
+  const droneArt = (dm) => { const m = (cfg && cfg.modules && cfg.modules[dm]) || {}, f = m.sys || (m.kind === "mining" ? "mining" : ""); return img("assets/icons/modules/drone" + (f ? "_" + f : "") + ".png"); };
   // (owner) a laser's beam leaves the hull from one of its 4 hardpoints and holds a spot inside the rock for the cycle;
   // a small square (the cycle's ore) rides it from the rock to the ship as the cycle runs. Mining drones circle the rock
   // along its no-destination line, facing it.
@@ -840,16 +840,16 @@
   // (owner, combat) a weapon's shot from (x, y) to (tx, ty), `age` ms after it fired: a beam laser's burn, a railgun's
   // streak, a slug cannon's tracers, a missile flying in; the ETA's guns are blue beams
   function drawShot(key, x, y, tx, ty, age, b) {
-    const fam = key === "eta_gun" ? "eta_gun" : ((cfg.modules || {})[key] || {}).family; if (!(age >= 0)) return;
+    const fam = key === "eta_gun" ? "eta_gun" : ((cfg.modules || {})[key] || {}).sys; if (!(age >= 0)) return;   // (owner, The Reach) missile, beam, repeater, coilgun
     const flash = (a, r, col) => { ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.fillStyle = col.replace("A", a); ctx.fill(); };
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
     if (fam === "beam" || fam === "eta_gun") {
-      const a = Math.max(0, 1 - age / 450); if (a > 0) { const c = fam === "eta_gun" ? "90,170,255" : "255,90,60";
+      const a = fam === "beam" ? (age < (b.c || 1000) + 400 ? 0.75 + 0.15 * Math.sin(performance.now() / 60) : 0) : Math.max(0, 1 - age / 450); if (a > 0) { const c = fam === "eta_gun" ? "90,170,255" : "255,90,60";   // (a beam is continuous)
         ctx.strokeStyle = "rgba(" + c + "," + 0.4 * a + ")"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
         ctx.strokeStyle = "rgba(255,235,220," + 0.9 * a + ")"; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke(); flash(a * 0.8, 3, "rgba(" + c + ",A)"); }
-    } else if (fam === "railgun") {
+    } else if (fam === "coilgun") {
       const a = Math.max(0, 1 - age / 250); if (a > 0) { ctx.strokeStyle = "rgba(170,230,255," + a + ")"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke(); flash(a, 4, "rgba(220,245,255,A)"); }
-    } else if (fam === "slug") {
+    } else if (fam === "repeater") {
       for (let j = 0; j < 3; j++) { const f = (age - j * 70) / 220; if (f < 0 || f > 1) continue; ctx.fillStyle = "rgba(255,210,110,0.95)"; ctx.fillRect(x + (tx - x) * f - 1.5, y + (ty - y) * f - 1.5, 3, 3); }
       if (age > 220 && age < 400) flash(1 - (age - 220) / 180, 3, "rgba(255,200,120,A)");
     } else if (fam === "missile") {

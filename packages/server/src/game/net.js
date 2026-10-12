@@ -36,7 +36,7 @@ const staffRoleOf = async (pid) => {
   const { rows } = await pool.query(`SELECT role, former_staff FROM users WHERE id = $1`, [String(pid)]); const u = rows[0];
   return u ? u.role || (u.former_staff ? "former" : null) : null;   // (owner) former staff don't see other ships either
 };
-const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "loot", "take", "dev"]);
+const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "loot", "take", "ammo", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, items: ITEMS, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
@@ -333,7 +333,8 @@ export function attachGameServer(httpServer) {
           case "fit": world.cmdFit(pid, m.ship, m.item, m.kind, m.slot); break;
           case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
           case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on, m.drones && typeof m.drones === "object" ? { item: m.drones.item, n: m.drones.n } : null); break;
-          case "loot": world.cmdLoot(pid, m.ship, m.wreck); break;   // (owner) open a wreck
+          case "loot": world.cmdLoot(pid, m.ship, m.wreck); break;
+          case "ammo": world.cmdAmmo(pid, m.ship, m.slot, m.item); break;   // (owner) load a weapon   // (owner) open a wreck
           case "take": world.cmdTake(pid, m.ship, m.wreck, m.item, m.qty); break;
           case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
           case "dock": world.cmdDock(pid, m.ship, m.where); break;

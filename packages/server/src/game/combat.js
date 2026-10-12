@@ -13,7 +13,7 @@
 //   (drones to the bay, modules to the cargo hold). Out of fuel before they're home, or left behind (a warp, docking),
 //   they're lost to a wreck where they were.
 import { SHIP_TYPES, DRONE, droneLegMs } from "./constants.js";
-import { MODULES, ITEMS, itemKey, isOff, droneStats, hullBonuses, SIZE_RANK, HULL_RANK } from "./modules.js";
+import { MODULES, ITEMS, itemKey, isOff, droneStats, hullBonuses, SIG, CRYSTAL_SHOTS, ammoFits } from "./modules.js";
 import { holdUsed, addItem, takeItem, aimPoint, isCountable, holdFor } from "./items.js";
 import { sizeFor } from "./belts.js";
 import { stationOfPlanet } from "./station.js";
@@ -23,7 +23,8 @@ const LOOT_KM = 2.5;                 // how close a ship must be to open a wreck
 const WRECK_MS = 2 * 3600_000;       // wrecks last this long
 const DROP_FIT = 0.25, DROP_HOLD = 0.5;   // (owner) a fitted module drops 25% of the time; (held items: 50%)
 const TRACTOR_HOLD_KM = 1;           // a tractor beam stops pulling this close
-const SIZE_HIT = [1, 0.7, 0.45];     // a weapon this many sizes bigger than its target's hull does this share
+const BEAM_FOCUS_MIN = 0.4;          // (The Reach) a beam starts at this share and builds to full over its focus time
+const MISSILE_DRF = 0.5;             // how hard a missile's blast falls off on a target faster than it
 const ROOKIE_FIT = ["mining_laser_s1"];   // a new Prospector after a loss has these fitted
 const TARGETED = { weapon: "hostile", scram: "hostile", web: "hostile", remote_rep: "friend", remote_ext: "friend", hull_rep: "friend", tractor: "wreck", mining: "rock" };
 const finite = (v) => typeof v === "number" && Number.isFinite(v);
@@ -40,8 +41,9 @@ const methods = {
     const c = s.calc.mods[slot] || {};
     if (m.kind === "drones") return this._launchDrones(s, slot, req);
     if (m.kind === "mining" && holdUsed(s.holds, "ore") >= (s.calc.holds.ore || 0) - 1e-6) return this._notice(pid, "Ore hold full");
+    if (m.kind === "weapon" && !this._loadAmmo(s, slot)) return this._notice(pid, "No ammo");   // (owner, The Reach) weapons fire ammo from the cargo hold
     if (TARGETED[m.kind]) {
-      const tg = this._findTarget(s, TARGETED[m.kind], c.rangeKm);
+      const tg = this._findTarget(s, TARGETED[m.kind], m.kind === "weapon" ? this._wstats(s, slot).maxKm : c.rangeKm);
       s.act[slot] = tg ? this._begin(s, slot, tg, this.simAt) : { on: true, standby: true };   // (owner) no target yet: on standby, it starts on the first lock in reach
     } else s.act[slot] = { on: true, at: this.simAt };
     this._recalc(s);
@@ -51,7 +53,9 @@ const methods = {
     const t = SHIP_TYPES[s.type], arm = (t.arms || [[0]])[slot % (t.arms || [[0]]).length], hp = arm[Math.floor(Math.random() * arm.length)];
     const m = MODULES[s.fit.active[slot]];
     if (m && m.kind === "mining") return { on: true, at, tg, ...aimPoint(this._rock(tg)), hp };
-    return { on: true, at, tg, hp, next: at };
+    const prev = s.act[slot], o = { on: true, at, tg, hp, next: at };
+    if (m && m.kind === "weapon") { o.spinAt = prev && prev.spinAt ? prev.spinAt : at; if (m.sys === "coilgun") o.next = at + this._wstats(s, slot).cycleMs; }   // (a repeater keeps spinning; a coilgun charges first)
+    return o;
   },
   _cycle(s, slot, tg, at) { return this._begin(s, slot, tg, at); },
   /** The first locked object a module can work on, within `range` (edge to edge): a rock, a wreck, someone else's ship
@@ -89,9 +93,10 @@ const methods = {
         if (a.drones) { this._tickDrones(s, i, a, now); continue; }
         if (m.kind === "mining") { this._tickLaser(s, i, a, now); continue; }
         if (!TARGETED[m.kind]) { if (m.kind === "shield_rep") this._tickSelfRep(s, i, a, now); continue; }
-        const c = s.calc.mods[i] || {}, want = TARGETED[m.kind];
-        if (!this._keep(s, i, a, want, c.rangeKm, now)) continue;
-        if (m.kind === "weapon") { if (now >= a.next) { this._fire(s, a.tg, c, now, a); a.at = now; a.next = now + c.cycleMs; } }
+        const c = s.calc.mods[i] || {}, want = TARGETED[m.kind], w = m.kind === "weapon" ? this._wstats(s, i) : null;
+        if (m.kind === "weapon" && !w) { this._modOff(s, i); this._notice(s.owner, "Out of ammo"); continue; }
+        if (!this._keep(s, i, a, want, w ? w.maxKm : c.rangeKm, now)) continue;
+        if (m.kind === "weapon") { const b = s.act[i]; if (now >= b.next) { this._useAmmo(s, i); this._fire(s, b.tg, w, now, b); b.at = now; b.next = now + w.cycleMs; } }
         else if (m.kind === "remote_rep" || m.kind === "hull_rep") {
           if (now >= a.next) { const t = this.ships.get(a.tg); if (t) { if (m.kind === "remote_rep") t.shield = Math.min(t.shieldMax || 0, t.shield + c.amount); else t.hp = Math.min(SHIP_TYPES[t.type].hp, t.hp + c.amount); } a.at = now; a.next = now + c.cycleMs; }
         } else if (m.kind === "tractor") this._pull(s, a.tg, c, this._dt || 0.05);
@@ -137,29 +142,76 @@ const methods = {
   // ---- combat ----
   /** A weapon (or a drone's) fires at ship `tid`: missiles fly there first, the rest hit at once. Firing on someone
    *  flags the attacker (eta.js). */
+  // ---- (owner, The Reach) weapons: the ammo loaded (per slot), and what a shot does ----
+  /** The ammo a weapon slot fires: the kind loaded, else (none left) the first that fits in the cargo hold. */
+  _loadAmmo(s, slot) {
+    const wk = s.fit.active[slot]; s.ammo ||= [];
+    const has = (k) => k && ammoFits(wk, k) && (s.holds.cargo[k] || 0) >= 1;
+    if (has(s.ammo[slot])) return s.ammo[slot];
+    const cand = Object.keys(s.holds.cargo).filter(has).sort((x, y) => ["std", "swift", "heavy"].indexOf(ITEMS[x].sub) - ["std", "swift", "heavy"].indexOf(ITEMS[y].sub) || ITEMS[y].tier - ITEMS[x].tier);
+    s.ammo[slot] = cand[0] || s.ammo[slot] || null; return cand[0] || null;
+  },
+  /** (owner) Load a kind of ammo into a weapon slot (it must fit: the weapon's system and size). */
+  cmdAmmo(pid, shipId, slot, item) {
+    const s = this.ships.get(shipId); if (!s || s.owner !== pid || !Number.isInteger(slot) || slot < 0 || slot >= s.fit.active.length || typeof item !== "string") return;
+    if (!ammoFits(s.fit.active[slot], item)) return;
+    (s.ammo ||= [])[slot] = item; if (s.wear) s.wear[slot] = 0;
+  },
+  _useAmmo(s, slot) {
+    const k = this._loadAmmo(s, slot); if (!k) return;
+    const m = MODULES[s.fit.active[slot]];
+    if (m.sys === "beam") { s.wear ||= []; s.wear[slot] = (s.wear[slot] || 0) + 1; if (s.wear[slot] < CRYSTAL_SHOTS) return; s.wear[slot] = 0; }   // (a crystal wears out slowly)
+    takeItem(s.holds, "cargo", k, 1);
+  },
+  /** A weapon slot's numbers with its ammo: damage, cycle, reach, tracking (missiles: blast and flight). */
+  _wstats(s, slot) {
+    const c = s.calc.mods[slot], k = this._loadAmmo(s, slot), A = k && ITEMS[k]; if (!c || !A) return null;
+    const o = { ...c, ammo: k, dmg: c.dmg * A.dmg * A.cyc, cycleMs: Math.round(c.cycleMs * A.cyc), rangeKm: c.rangeKm * A.range, maxKm: c.maxKm * A.range };
+    if (c.sys === "missile") Object.assign(o, { er: c.er / A.app, ev: c.ev * A.app, flightKmps: c.flightKmps * A.vel });
+    else Object.assign(o, { opt: c.opt * A.range, fall: c.fall * A.range, trk: c.trk * A.app / A.range });
+    return o;
+  },
+  /** A weapon (or a drone's, or an officer's gun) fires at ship `tid`. Turrets hit by how well they track it (its
+   *  angular speed against their tracking, its signature against their resolution) and where it is against their
+   *  optimal and falloff; missiles fly there first, their blast doing less to small or fast targets; beams build up on
+   *  one target; repeaters spin up and can crit; coilgun slugs ignore some armor. Firing on someone flags the attacker. */
   _fire(s, tid, c, now, a = null) {
     const t = this.ships.get(tid); if (!t) return;
     if (!s.npc) this.aggress(s.id, t.id);
-    const tr = HULL_RANK[(SHIP_TYPES[t.type] || {}).size] ?? 0, wr = SIZE_RANK[c.size] ?? 0, k = wr > tr ? SIZE_HIT[Math.min(2, wr - tr)] : 1;   // (big guns on small hulls do less)
-    const hit = { tg: tid, dmg: c.dmg * k, shieldK: c.shieldK || 1, hullK: c.hullK || 1, by: s.id };
+    const T = SHIP_TYPES[t.type] || {}, sig = T.sig || SIG[T.size] || 40;
+    let dmg = c.dmg;
+    if (c.sys === "beam" && a) { if (a.focusTg !== tid) { a.focusTg = tid; a.focusAt = now; } dmg *= Math.min(1, BEAM_FOCUS_MIN + (1 - BEAM_FOCUS_MIN) * (now - a.focusAt) / (c.focusMs || 1)); }
+    if (c.spinMs && a && now - (a.spinAt || now) < c.spinMs) dmg *= 0.5;
+    if (c.crit && Math.random() < c.crit) dmg *= 2;
+    if (c.trk && !c.drone) {                             // a turret's chance to hit, as damage
+      const dx = t.x - s.x, dy = t.y - s.y, d = Math.max(0.01, Math.hypot(dx, dy)), rvx = (t.vx || 0) - (s.vx || 0), rvy = (t.vy || 0) - (s.vy || 0);
+      const w = Math.abs(rvx * dy - rvy * dx) / d / d, edge = Math.max(0, d - t.radius - s.radius);
+      dmg *= Math.pow(0.5, (w * c.res / (c.trk * sig)) ** 2 + (Math.max(0, edge - c.opt) / (c.fall || 1)) ** 2);
+    }
+    const hit = { tg: tid, dmg, shieldK: c.shieldK || 1, hullK: c.hullK || 1, drPen: c.drPen || 0, by: s.id, er: c.er, ev: c.ev, sig };
     if (c.flightKmps) { const d = Math.hypot(t.x - s.x, t.y - s.y); this.shots.push({ ...hit, at: now + Math.round(d / c.flightKmps * 1000) }); if (a) a.fl = Math.round(d / c.flightKmps * 1000); }
-    else this._damage(t, hit.dmg, hit.shieldK, hit.hullK, s);
+    else this._damage(t, hit.dmg, hit.shieldK, hit.hullK, s, hit.drPen);
   },
   _tickShots(now) {
     if (!this.shots.length) return;
     const due = this.shots.filter((x) => x.at <= now); if (!due.length) return;
     this.shots = this.shots.filter((x) => x.at > now);
-    for (const h of due) { const t = this.ships.get(h.tg); if (t && !t.docked && !t.wp) this._damage(t, h.dmg, h.shieldK, h.hullK, this.ships.get(h.by) || null); }
+    for (const h of due) {
+      const t = this.ships.get(h.tg); if (!t || t.docked || t.wp) continue;
+      let dmg = h.dmg;
+      if (h.er) { const vt = Math.hypot(t.vx || 0, t.vy || 0) * 1000, q = h.sig / h.er; dmg *= Math.min(1, q, vt > 0 ? Math.pow(q * h.ev / vt, MISSILE_DRF) : 1); }   // (a missile's blast on a small or fast target)
+      this._damage(t, dmg, h.shieldK, h.hullK, this.ships.get(h.by) || null, h.drPen);
+    }
   },
   /** Damage: the shield takes it first (times the weapon's shield factor), then the hull (its hull factor, less the
    *  hull's armor damage reduction). At 0 hull the ship is destroyed. */
-  _damage(t, dmg, shieldK = 1, hullK = 1, by = null) {
+  _damage(t, dmg, shieldK = 1, hullK = 1, by = null, drPen = 0) {
     if (!t || t.docked || !(dmg > 0)) return;
     const sd = dmg * shieldK;
     if (t.shield >= sd) { t.shield -= sd; return; }
     const left = dmg - t.shield / shieldK; t.shield = 0;
     const dr = t.calc && finite(t.calc.armorDR) ? t.calc.armorDR : (SHIP_TYPES[t.type].armorDR || 0);
-    t.hp -= left * hullK * (1 - dr);
+    t.hp -= left * hullK * (1 - dr * (1 - drPen));   // (a coilgun's slug ignores some of the armor)
     if (t.hp <= 0) this._destroy(t, by);
   },
   _regen(dt) {
@@ -292,7 +344,7 @@ const methods = {
     if (!mining) {
       const t = this.ships.get(a.tg), pos = t && this._objPos("ship", a.tg);
       if (!pos || this._range(s, pos) > c.rangeKm) { const nx = this._findTarget(s, "hostile", c.rangeKm); if (nx) this._droneGo(s, a, nx, now); else this._recall(s, a, now); return; }
-      if (now >= a.next) { this._fire(s, a.tg, c, now); a.at = now; a.next = now + c.cycleMs; }
+      if (now >= a.next) { this._fire(s, a.tg, { ...c, drone: true }, now, a); a.at = now; a.next = now + c.cycleMs; }   // (drones fire without ammo)
       return;
     }
     const k = this._rock(a.tg), pos = k && { x: k.x, y: k.y, r: k.r };

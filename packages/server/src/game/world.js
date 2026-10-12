@@ -25,7 +25,7 @@ const spawnAt = (st) => ({ x: st.x, y: st.y - 8 });   // a new ship appears just
 const SOLAR_VIEW_KM = 60_000;                           // (owner) zoomed out past a planetary system: other ships aren't shown (only planets)
 const hasMWD = (s) => !!(s.npc || s.admin || (s.calc && s.calc.mwd));   // (owner) a Microwarp Drive fitted (powered): needed to warp between planetary systems
 // (owner) an admin's ETA ship comes fitted
-const ADMIN_FIT = { active: ["warp_scrambler_l2", "stasis_webifier_l2", "microwarp_drive_l2", "railgun_l2", "tractor_beam_l2", "remote_shield_booster_l2"], passive: ["target_range_upgrade_l2", "locking_upgrade_l2", "target_tracker_l2", "armor_upgrade_l2", "speed_upgrade_l2", "cargo_upgrade_l2"] };
+const ADMIN_FIT = { active: ["warp_scrambler_l2", "stasis_webifier_l2", "microwarp_drive_l2", "coilgun_long_l2", "tractor_beam_l2", "remote_shield_booster_l2"], passive: ["target_range_upgrade_l2", "locking_upgrade_l2", "target_tracker_l2", "armor_upgrade_l2", "speed_upgrade_l2", "cargo_upgrade_l2"] };
 const CHAT_GROUP_KM = 150;   // (owner) your pilots this close together share one chat bubble
 // the hexagon's edges: outward normals (flat top and bottom) — a point is inside when n · p ≤ apothem for all six
 const NORMALS = [0, 1, 2, 3, 4, 5].map((k) => { const a = Math.PI / 2 + k * Math.PI / 3; return [Math.cos(a), Math.sin(a)]; });
@@ -177,6 +177,7 @@ export class World {
     if (sv && finite(sv.hp) && sv.hp > 0) s.hp = Math.min(t.hp, sv.hp);   // (damage stays until repaired: docking)
     if (sv && finite(sv.shield) && sv.shield >= 0) s.shield = Math.min(t.shield, sv.shield);
     if (sv && sv.crim && typeof sv.crim === "object") s.crim = { since: finite(sv.crim.since) ? sv.crim.since : Date.now(), vs: Array.isArray(sv.crim.vs) ? sv.crim.vs.filter((x) => typeof x === "string").slice(-20) : [] };   // (owner) still hunted by the ETA
+    if (sv && Array.isArray(sv.ammo)) s.ammo = sv.ammo.slice(0, t.activeSlots).map((k) => (typeof k === "string" && ITEMS[k] ? k : null));   // (each weapon's loaded ammo)
     if (sv && sv.docked && sv.unboarded) s.unboarded = true;   // (owner) its pilot had left it, docked
     if (sv && sv.docked) { s.docked = stationById(sv.docked) ? sv.docked : "station"; const st = this._dockProp(id, s.docked); if (st) { s.x = st.x; s.y = st.y; } s.tx = s.x; s.ty = s.y; }   // docked: where (a station gone, or a player station removed: Earth Station)
     if (!s.kit) { for (const [k, n] of STARTER_KIT) addItem(s.holds, "cargo", k, n); addItem(s.holds, "drones", "drone", STARTER_DRONES); s.kit = true; s.kitV = KIT_VERSION; }   // (owner) a starter kit in the cargo hold (and drones in the drone bay), once per ship
@@ -242,7 +243,7 @@ export class World {
   /** Everything about a player worth keeping across logins and restarts. */
   exportState(id) {
     const ships = {};
-    for (const s of this.ships.values()) if (s.owner === id && !s.admin) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}), ...(s.crim ? { crim: s.crim } : {}), kitV: s.kitV, hp: +s.hp.toFixed(1), shield: +s.shield.toFixed(1) };
+    for (const s of this.ships.values()) if (s.owner === id && !s.admin) ships[s.pilot] = { x: +s.x.toFixed(4), y: +s.y.toFixed(4), h: +s.h.toFixed(3), ...(s.name ? { name: s.name } : {}), holds: s.holds, fit: s.fit, kit: s.kit, ...(s.docked ? { docked: s.docked } : {}), ...(s.unboarded ? { unboarded: true } : {}), ...(s.crim ? { crim: s.crim } : {}), kitV: s.kitV, ...(s.ammo && s.ammo.some(Boolean) ? { ammo: s.ammo } : {}), hp: +s.hp.toFixed(1), shield: +s.shield.toFixed(1) };
     const p = this.players.get(id);
     return { ships, hangars: p ? p.hangars : {}, savedAt: Date.now() };
   }
@@ -464,7 +465,7 @@ export class World {
     const x = at ? at.x : ETA_OFFICE.x + (Math.random() - 0.5) * 6, y = at ? at.y : ETA_OFFICE.y - 10;
     const id = "adm:" + Math.random().toString(36).slice(2, 10);   // (its id doesn't give away the account)
     const s = { id, owner: pid, pilot: "admin", admin: true, cloak: true, type, x, y, vx: 0, vy: 0, h: at ? at.h : Math.PI / 2, tx: x, ty: y, moving: false, radius: t.radiusKm, mass: t.mass, targets: [], chase: null,
-      name: (persona && persona.name) || "Admin", holds: loadHolds(at && at.holds, t), fit: loadFit((at && at.fit) || ADMIN_FIT, t), act: Array.from({ length: t.activeSlots }, () => null), kit: true, lic: {}, docked: false };
+      name: (persona && persona.name) || "Admin", holds: loadHolds((at && at.holds) || { cargo: { ammo_coilgun_std_l2: 500, ammo_coilgun_heavy_l2: 500 } }, t), fit: loadFit((at && at.fit) || ADMIN_FIT, t), act: Array.from({ length: t.activeSlots }, () => null), kit: true, lic: {}, docked: false };
     this._hull(s, type); p.adminSid = id; this.ships.set(id, s); this._own = null;
     return s;
   }
@@ -847,7 +848,7 @@ export class World {
           return o; }); }
         if (s.chase) e.chase = { kind: s.chase.kind, id: s.chase.id, mode: s.chase.mode };
         // (owner) modules: what's fitted, what's running (and how far through its cycle), the holds, the ship as fitted
-        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq; if (s.unboarded) e.unboarded = true;
+        e.fit = s.fit; e.holds = s.holds; e.calc = s.calc; if (s.ammo && s.ammo.some(Boolean)) e.ammo = s.ammo; if (s.docked) e.docked = s.docked; if (s.dockReq) e.dockReq = s.dockReq; if (s.unboarded) e.unboarded = true;
         e.act = s.act.map((a) => (!a ? null : a.standby ? { sb: 1 } : a.tg ? { p: a.p, tg: a.tg } : { p: 1 }));
       }
       if (s.act) {                                         // lasers and drones at work, for everyone to see: where, from which hardpoint, how far through the cycle
