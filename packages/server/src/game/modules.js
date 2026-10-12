@@ -50,14 +50,16 @@ export function moduleCost(key, lic) {
   return { power: r2(m.power * k), disposition: r2(m.disposition * k) };
 }
 // sum of a passive bonus over fitted modules of a kind, with diminishing returns
+// the passive modules at work: those in passive slots (and, on an admin's ETA ship, owner: passives in active slots too)
+const passives = (fit) => [...fit.passive.filter((k, i) => !isOff(fit, "passive", i)), ...(fit.any ? fit.active.filter((k, i) => MODULES[k] && MODULES[k].slot === "passive" && !isOff(fit, "active", i)) : [])];
 function stacked(fit, field, strength) {
-  const vals = fit.passive.filter((k, i) => !isOff(fit, "passive", i)).map((k) => MODULES[k]).filter((m) => m && m[field]).map((m) => m[field] * strength).sort((a, b) => b - a);
+  const vals = passives(fit).map((k) => MODULES[k]).filter((m) => m && m[field]).map((m) => m[field] * strength).sort((a, b) => b - a);
   return vals.reduce((t, v, i) => t + v * stackPenalty(i), 0);
 }
 /** Everything a fitted ship can do, for this pilot: what's used of power / disposition, the hold capacities, top
  *  speed (and with the afterburner on), acceleration, and each mining module's yield / cycle / range. */
 export function shipCalc(T, fit, lic) {
-  fit = { active: (fit && fit.active) || [], passive: (fit && fit.passive) || [], off: (fit && fit.off) || null };
+  fit = { active: (fit && fit.active) || [], passive: (fit && fit.passive) || [], off: (fit && fit.off) || null, any: !!T.anySlot };
   let power = 0, disposition = 0;
   for (const kind of ["active", "passive"]) fit[kind].forEach((k, i) => { if (!k) return; const c = moduleCost(k, lic); disposition += c.disposition; if (!isOff(fit, kind, i)) power += c.power; });   // (owner) a module powered off uses disposition, not power
   const MF = lv(lic, T.license), ML = lv(lic, "mining_lasers"), MD = lv(lic, "mining_drones"), MU = lv(lic, "mining_upgrades"), EU = lv(lic, "engineering_upgrades"), EN = lv(lic, "engines");
@@ -66,7 +68,7 @@ export function shipCalc(T, fit, lic) {
   const holdK = 1 + stacked(fit, "holdBonus", eu), accelK = 1 + stacked(fit, "accelBonus", eu);
   const L = MODULES.mining_laser, D = MODULES.mining_drones;
   // the cycle upgrade cuts time: each one multiplies the cycle by (1 − its bonus), with the same diminishing returns
-  const cyc = fit.passive.filter((k, i) => !isOff(fit, "passive", i)).map((k) => MODULES[k]).filter((m) => m && m.laserCycle).map((m) => m.laserCycle * mu).sort((a, b) => b - a).reduce((t, v, i) => t * (1 - v * stackPenalty(i)), 1);
+  const cyc = passives(fit).map((k) => MODULES[k]).filter((m) => m && m.laserCycle).map((m) => m.laserCycle * mu).sort((a, b) => b - a).reduce((t, v, i) => t * (1 - v * stackPenalty(i)), 1);
   return {
     power: r2(power), disposition: r2(disposition), powerMax: T.powerMax, dispositionMax: T.dispositionMax,
     holds: Object.fromEntries((T.holds || []).map((h) => [h.key, Math.round(h.m3 * holdK)])),

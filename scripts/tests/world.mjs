@@ -8,7 +8,7 @@ import { STATION } from "../../packages/server/src/game/station.js";
 const t = suite("world");
 const run = (w, sec) => { for (let i = 0; i < sec * 20; i++) w.tick(0.05); };
 
-const T0 = SHIP_TYPES.chisel, w = new World(), A = EXPANSE_APOTHEM_KM, R = A / Math.cos(Math.PI / 6);
+const T0 = SHIP_TYPES.chisel, w = new World({ eta: false }), A = EXPANSE_APOTHEM_KM, R = A / Math.cos(Math.PI / 6);
 t.ok(A === 700_000, "the hexagon is 70 AU across, flat to flat (owner, 2026-10-11: at 20,000 km per AU)");
 t.ok(insideExpanse(0, A - 1) && !insideExpanse(0, A + 1) && insideExpanse(R - 1, 0) && !insideExpanse(R + 1, 0), "flat top and bottom, corners left and right");
 const PA = [{ id: 1, name: "Pa", licenses: { mining_frigate: 5 } }];

@@ -36,7 +36,7 @@ const staffRoleOf = async (pid) => {
   const { rows } = await pool.query(`SELECT role, former_staff FROM users WHERE id = $1`, [String(pid)]); const u = rows[0];
   return u ? u.role || (u.former_staff ? "former" : null) : null;   // (owner) former staff don't see other ships either
 };
-const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "dev"]);
+const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
 const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
@@ -203,9 +203,10 @@ export function attachGameServer(httpServer) {
     modSuspended: async (uid) => { for (const r of [...rooms.values()]) if (isStaffIn(r, uid)) await admEnd(uid, { room: r.id }).catch((e) => console.error("susp dm", e)); },
     staffNotify: (roles, kind, text, ref) => staffNotify(roles, kind, text, ref),
     // (owner) an admin's profile changed: everyone's chat shows their lines (old ones too) under the new one
-    persona: (uid, pe) => { const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}) }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
+    persona: (uid, pe) => { const ash = world._adminShip(String(uid)); if (ash) ash.name = pe.name;   // (the admin ship's name)
+ const msg = JSON.stringify({ t: "adminprofile", key: pe.key, name: pe.name, pic: pe.pic, rank: pe.rank || "admin", ...(pe.portrait ? { portrait: pe.portrait } : {}) }); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg);
       for (const r of rooms.values()) if (isStaffIn(r, String(uid))) tellRoom(r); },
-    renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); const pl = world.players.get(pid); pl.staffRole = await staffRoleOf(pid); if (!pl.staffRole || pl.staffRole === "mod") pl.adminMode = false; } catch {} } },
+    renameRequired: async (pid) => { sendTo(pid, { t: "renamereq" }); if (world.players.has(pid)) { try { const st = await getState(pid); world.setPilots(pid, st.pilots); const pl = world.players.get(pid); pl.staffRole = await staffRoleOf(pid); if (!pl.staffRole || pl.staffRole === "mod") { pl.adminMode = false; world.setAdminShip(pid, false); } } catch {} } },
     renamed: (pid, name) => { world.renamePlayer(pid, name); sendTo(pid, { t: "renamereq" }); },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     freeze: async (pid, on, by) => { await setFreeze(pid, on, by); },   // (the panel: unfreeze)
@@ -250,10 +251,10 @@ export function attachGameServer(httpServer) {
     if (ws.readyState !== ws.OPEN) { mine.delete(ws); if (!mine.size) conns.delete(pid); return; }
     const player = world.addPlayer(pid, user.username, sendAll, saved, st0 ? st0.pilots : []);
     player.portrait = st0 && st0.profile.portrait;          // the account's character: who you are in chat
-    player.staffRole = await staffRoleOf(pid); player.adminMode = false;   // (owner) staff see other ships only in admin mode
+    player.staffRole = await staffRoleOf(pid); player.adminMode = false; world.setAdminShip(pid, false);   // (owner) staff see other ships only in admin mode
     player.heavy = new Map();                              // a new session gets the whole fit / holds / hangar again
     // a pilot made or gone while you play (the client says so; and once a minute anyway)
-    const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; player.staffRole = await staffRoleOf(pid); if (!player.staffRole || player.staffRole === "mod" || !isUnlocked(pid)) player.adminMode = false; } catch (e) { console.error("pilots", e); } };
+    const refreshPilots = async () => { try { const st = await getState(user.id); world.setPilots(pid, st.pilots); player.portrait = st.profile.portrait; player.staffRole = await staffRoleOf(pid); if (!player.staffRole || player.staffRole === "mod" || !isUnlocked(pid)) { player.adminMode = false; world.setAdminShip(pid, false); } } catch (e) { console.error("pilots", e); } };
     const pilotTimer = setInterval(refreshPilots, 60000);
     // (owner) time played, for the trade watch (training far beyond it is a red flag)
     let playAt = Date.now(); const playTick = () => { if (ws.replaced) return; const now = Date.now(); addPlay(pid, (now - playAt) / 1000).catch(() => {}); playAt = now; };
@@ -297,7 +298,11 @@ export function attachGameServer(httpServer) {
           case "move": world.cmdMove(pid, m.ship, m.x, m.y); break;
           case "view": world.cmdView(pid, m.x, m.y, m.w); break;
           case "pilots": refreshPilots(); break;
-          case "mode": player.adminMode = m.admin === true && isUnlocked(pid) && (player.staffRole === "admin" || player.staffRole === "head"); break;   // (owner) admin mode: Admins see other players' ships
+          case "mode": player.adminMode = m.admin === true && isUnlocked(pid) && (player.staffRole === "admin" || player.staffRole === "head");   // (owner) admin mode: Admins see other players' ships
+            world.setAdminShip(pid, player.adminMode, personaOf(pid)); break;   // (owner) and fly an ETA ship under their admin name
+          case "cloak": if (player.adminMode) world.cmdCloak(pid, m.on === true); break;
+          case "ahull": if (player.adminMode) world.cmdAdminHull(pid, m.hull); break;
+          case "warppt": if (player.adminMode) world.cmdWarpPoint(pid, m.x, m.y); break;
           case "torder": world.cmdTargetOrder(pid, m.ship, m.order); break;
           case "chat": {
             if (m.channel === "staff" || m.channel === "modchat") { staffSay(pid, m.text, m.channel === "modchat" ? "mod" : "admin").catch((e) => console.error("staff chat", e)); break; }   // (owner) the Admin and Moderator chats
@@ -365,6 +370,17 @@ export function attachGameServer(httpServer) {
     if (snap.home && same("home", snap.home)) delete snap.home;
     return snap;
   };
+  // (owner) red diamonds for Admins: open help tickets (not Language) and open reports (not Language), at the player who
+  // asked (a report: its reporter, else the reported player), while they're online
+  const refreshAlerts = async () => {
+    try {
+      const { rows: t } = await pool.query(`SELECT id, user_id FROM tickets WHERE status = 'open' AND category <> 'Language' AND user_id IS NOT NULL ORDER BY id DESC LIMIT 300`);
+      const { rows: r } = await pool.query(`SELECT id, reporter, target FROM reports WHERE status = 'open' AND category <> 'Language' ORDER BY id DESC LIMIT 300`);
+      const on = (id) => id != null && world.players.has(String(id)) && !world.players.get(String(id)).offline;
+      world.alerts = [...t.filter((x) => on(x.user_id)).map((x) => ({ id: "t" + x.id, uid: String(x.user_id) })), ...r.map((x) => { const uid = on(x.reporter) ? x.reporter : on(x.target) ? x.target : null; return uid == null ? null : { id: "r" + x.id, uid: String(uid) }; }).filter(Boolean)];
+    } catch (e) { console.error("alerts", e); }
+  };
+  setInterval(refreshAlerts, 10_000); refreshAlerts();
   let last = Date.now();
   setInterval(() => { const now = Date.now(), dt = Math.min(0.25, (now - last) / 1000); last = now; world.tick(dt); }, TICK_MS);
   setInterval(() => {

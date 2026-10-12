@@ -60,3 +60,29 @@ export const SHIP_TYPES = {
     req: { licenses: [["mining_frigate", "Mining Frigate", 1]], ark: ["ark_mini", "Light Ark"] },   // [license key, name, level]; (owner) a ship needs an ark that can carry it: the smallest that can [type, name]
   },
 };
+SHIP_TYPES.chisel.size = "frigate";   // (owner, ETA) its size class: what the ETA matches a response to
+
+// ---- (owner, 2026-10-11) the Expanse Transit Authority's hulls: the Deputy (frigate), the Constable (cruiser) and the
+// Magistrate (battleship). Their own art (blue law ships; the Deputy's faces up: artRot). Officers' locks are limited
+// (lock range, lock time) so being hunted is a chase; Deputies warp scramble, Constables and Magistrates also web.
+// Hull, shield and armor are placeholders until combat. Every ETA ship has a Microwarp Drive.
+const etaHull = (o) => ({ cls: "ETA " + o.size[0].toUpperCase() + o.size.slice(1), mass: 1, armor: o.shield, activeSlots: 0, passiveSlots: 0, powerMax: 0, dispositionMax: 0, holds: [], hardpoints: [[0, 0]], arms: [[0]], license: null, bonuses: [], ...o });
+export const ETA_TYPES = {
+  deputy: etaHull({ name: "Deputy", size: "frigate", art: "deputy", artRot: Math.PI / 2, icon: "npc_deputy", lengthKm: 0.18, radiusKm: 0.09, speedKmps: 0.6, accelKmps2: 0.3, hp: 600, shield: 800,
+    targetRangeKm: 30, lockMs: 6000, maxTargets: 3, scramKm: 10, webKm: 0, alignMs: 3000, orbitKm: 2, desc: "The Expanse Transit Authority's patrol frigate." }),
+  constable: etaHull({ name: "Constable", size: "cruiser", art: "constable", icon: "npc_constable", lengthKm: 0.433, radiusKm: 0.2, speedKmps: 0.4, accelKmps2: 0.15, hp: 2500, shield: 3000,
+    targetRangeKm: 40, lockMs: 10_000, maxTargets: 5, scramKm: 10, webKm: 10, alignMs: 6000, orbitKm: 4, desc: "The Expanse Transit Authority's cruiser." }),
+  magistrate: etaHull({ name: "Magistrate", size: "battleship", art: "magistrate", icon: "npc_magistrate", lengthKm: 1.883, radiusKm: 0.5, speedKmps: 0.25, accelKmps2: 0.06, hp: 8000, shield: 8000,
+    targetRangeKm: 60, lockMs: 15_000, maxTargets: 8, scramKm: 10, webKm: 10, alignMs: 10_000, orbitKm: 8, desc: "The Expanse Transit Authority's battleship." }),
+};
+// (owner) an admin's ETA ship (in admin mode): any of the three hulls, with the owner's numbers (armor damage reduction /
+// shield / hull / shield repair a second / speed); cloak, warp scramble, an instant lock out to 200 km, and slots that
+// take active and passive modules alike with no power or disposition limits
+const admHull = (base, o) => ({ ...base, admin: true, armorDR: 0.99, targetRangeKm: 200, lockMs: 0, maxTargets: 10, scramKm: 200, webKm: 0,
+  activeSlots: 6, passiveSlots: 6, anySlot: true, powerMax: 9999, dispositionMax: 9999, holds: [{ key: "ore", name: "Ore Hold", m3: 5000 }, { key: "cargo", name: "Cargo Hold", m3: 1000 }], ...o });
+export const ADMIN_TYPES = {
+  adm_deputy: admHull(ETA_TYPES.deputy, { shield: 1000, hp: 1000, shieldRep: 100, speedKmps: 0.75, accelKmps2: 0.75 }),
+  adm_constable: admHull(ETA_TYPES.constable, { shield: 5000, hp: 5000, shieldRep: 500, speedKmps: 1.5, accelKmps2: 1 }),
+  adm_magistrate: admHull(ETA_TYPES.magistrate, { shield: 10_000, hp: 10_000, shieldRep: 1000, speedKmps: 3, accelKmps2: 1.5 }),
+};
+Object.assign(SHIP_TYPES, ETA_TYPES, ADMIN_TYPES);

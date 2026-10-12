@@ -37,6 +37,17 @@ export async function devCommand(world, pid, m) {
       break;
     }
     case "offline": world.removePlayer(pid); tell("marked offline"); break;
+    // (owner, until there are weapons) aggression: your ship (m.ship, else the first in space) attacks m.victim (a ship id,
+    // or no one); pardon clears a flag; killofficer has an ETA ship (m.id, else the nearest) destroyed by your ship
+    case "aggress": case "pardon": case "killofficer": {
+      const own = (m.ship && world.ships.get(m.ship) && world.ships.get(m.ship).owner === pid) ? world.ships.get(m.ship) : [...world.ships.values()].find((s) => s.owner === pid && !s.docked && !s.admin);
+      if (!own) { tell("no ship in space"); break; }
+      if (m.cmd === "aggress") tell(world.aggress(own.id, typeof m.victim === "string" ? m.victim : null) ? "flagged" : "not flagged");
+      else if (m.cmd === "pardon") tell(world.pardon(own.id) ? "pardoned" : "not flagged");
+      else { const o = (typeof m.id === "string" && world.ships.get(m.id)) || world.eta.officers().reduce((b, x) => (!b || Math.hypot(x.x - own.x, x.y - own.y) < Math.hypot(b.x - own.x, b.y - own.y) ? x : b), null);
+        if (o && o.npc) { world.eta.officerDown(o.id, own.id); tell("officer down"); } }
+      break;
+    }
     case "update": {                                     // rehearse a live update on this PTR client
       const ms = Math.max(1000, (+m.seconds || 5) * 1000);
       p.send(JSON.stringify({ t: "countdown", at: Date.now() + ms, in: ms, parts: ["web"] }));

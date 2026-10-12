@@ -30,7 +30,8 @@
   window.Atamus = {
     send: (o) => send(o), bus, get me() { return me; }, get cfg() { return cfg; }, get snap() { return latest; },
     get drawn() { return drawn; },                    // the ships as drawn this frame (positions interpolated)
-    hoverModule: null,                               // set by the UI: { key, el } of the active module the pointer is on (its range lights up)
+    hoverModule: null,
+    adminMode: false,                                // set by the UI (owner: the chat's Player / Admin switch)                               // set by the UI: { key, el } of the active module the pointer is on (its range lights up)
     ship: (id) => (latest.ships || []).find((x) => x.id === id) || null, get myShip() { return myShip(); }, get picked() { return picked; },
     get view() { return { cx: +cam.cx.toFixed(3), cy: +cam.cy.toFixed(3), w: +viewWTarget.toFixed(3), follow, lookAt }; },
     get selectedPilot() { return selPilot; },
@@ -88,8 +89,10 @@
   const hull = (type) => (cfg && cfg.shipTypes && cfg.shipTypes[type]) || { name: "Prospector", sprite: "chisel", lengthKm: 0.128 };
   const imgs = {};
   const img = (src) => { if (!imgs[src]) { imgs[src] = new Image(); imgs[src].src = src; } return imgs[src]; };
-  const shipArt = (type, mine) => img("assets/ships/" + hull(type).sprite + (mine ? "_blue" : "_red") + ".webp");
-  const shipIcon = (type, mine) => img("assets/icons/ships/" + hull(type).sprite + (mine ? "_blue" : "_red") + "_s.png");
+  // (owner) the ETA's hulls have their own art (one color, the Deputy's facing up: artRot)
+  const shipArt = (type, mine) => { const h = hull(type); return img("assets/ships/" + (h.art || h.sprite + (mine ? "_blue" : "_red")) + ".webp"); };
+  const iconName = (type, mine) => { const h = hull(type); return h.icon || h.sprite + (mine ? "_blue" : "_red"); };
+  const shipIcon = (type, mine) => img("assets/icons/ships/" + iconName(type, mine) + "_s.png");
 
   // ---- connection ----
   if (needLogin()) { location.replace("login.html"); return; }   // (owner) returning players log in first
@@ -273,6 +276,8 @@
     // one of your ships: its menu (the selected pilot's own: Info) plus Rename (owner)
     const mine = shipAt(px, py, drawn);
     if (mine) { menu(px, py, ownShipItems(mine.id)); return; }
+    const al = alertAt(px, py), adm = (latest.ships || []).find((x) => x.mine && x.admin);
+    if (al && adm && !adm.docked) { menu(px, py, [["Warp to " + al.n, () => send({ t: "warppt", x: al.x, y: al.y })]]); return; }   // (owner) a red diamond: the admin ship warps to it
     const ob = objAt(px, py);
     if (ob) { menu(px, py, objItems(ob.kind, ob.id)); return; }
     const pr = propAt(px, py);
@@ -382,7 +387,7 @@
       return planetTexture(c.seed || 1, c.world).c.toDataURL();
     }
     if (kind === "rock") { const k = rockById(id), o = k && oreOf(k.ore), f = o ? o.rock : "cratered"; return "assets/icons/ores/" + (f === "bubble" ? "rubble" : f) + "_s.png"; }
-    const s = (latest.ships || []).find((x) => x.id === id); return "assets/icons/ships/" + hull(s ? s.type : "chisel").sprite + (s && s.mine ? "_blue" : "_red") + "_s.png";
+    const s = (latest.ships || []).find((x) => x.id === id); return "assets/icons/ships/" + iconName(s ? s.type : "chisel", s && s.mine) + "_s.png";
   }
   // edge-to-edge distance from the selected pilot's ship (km), or null
   function rangeTo(kind, id) {
@@ -400,6 +405,12 @@
   function ownShipItems(id) {
     const sh = (latest.ships || []).find((x) => x.id === id); if (!sh) return [];
     const items = sh.pilot === selPilot ? [["Look At", () => lookAtObj("ship", id)], ["Show Fitting", () => bus.dispatchEvent(new CustomEvent("showfitting", { detail: sh.pilot }))], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id } }))]] : objItems("ship", id);
+    if (sh.admin) {                                    // (owner) an admin's ETA ship: cloak, and its hull
+      if (!sh.docked && !sh.warp) items.push(sh.cloak ? ["Uncloak", () => send({ t: "cloak", on: false })] : ["Cloak", () => send({ t: "cloak", on: true })]);
+      if (!sh.docked) items.push(["Hull", ["deputy", "constable", "magistrate"].filter((k) => "adm_" + k !== sh.type).map((k) => [hull("adm_" + k).name, () => send({ t: "ahull", hull: k })])]);
+      if (sh.docked && !sh.unboarded) items.unshift(["Undock", () => send({ t: "undock", ship: id })]);
+      return items;
+    }
     if (sh.docked) { items.unshift(...(sh.unboarded ? [] : [["Undock", () => send({ t: "undock", ship: id })]])); items.push(sh.unboarded ? ["Board Pilot", () => send({ t: "board", ship: id, on: true })] : ["Unboard Pilot", () => send({ t: "board", ship: id, on: false })]); }   // (owner) a pilot not aboard can't undock
     items.push(["Rename", () => bus.dispatchEvent(new CustomEvent("rename", { detail: id }))]);
     return items;
@@ -414,7 +425,7 @@
     }
     out.push(["Look At", () => lookAtObj(kind, id)], ["Info", () => bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind, id } }))]);
     const sh = kind === "ship" && (latest.ships || []).find((x) => x.id === id);
-    if (sh && !sh.mine) out.push(["Pilot Info", () => bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: id.split(":")[2] }))]);   // (owner) another player's ship: its pilot
+    if (sh && !sh.mine && !sh.npc) out.push(["Pilot Info", () => bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: id.split(":")[2] }))]);   // (owner) another player's ship: its pilot
     return out;
   }
   // the object under the pointer: a ship (not the selected pilot's own) or an asteroid
@@ -444,7 +455,7 @@
   const tip = document.getElementById("tooltip"); let mapTip = false;
   canvas.addEventListener("pointermove", (e) => {    // a map marker's name on hover (owner: tooltips show names only)
     if (e.pointerType !== "mouse" || !tip) return;
-    const p = poiAt(e.clientX, e.clientY);
+    const al = alertAt(e.clientX, e.clientY), p = al ? { name: al.n } : poiAt(e.clientX, e.clientY);
     if (p) { tip.textContent = p.name; tip.hidden = false; tip.style.left = (e.clientX + 14) + "px"; tip.style.top = e.clientY + "px"; mapTip = true; }
     else if (mapTip) { tip.hidden = true; mapTip = false; }
   });
@@ -471,7 +482,7 @@
     ctx.strokeStyle = "rgba(140,170,220,0.35)"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
   }
   // belts: the map marker always; the zone and the rocks only while one of your ships is inside (owner)
-  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png"), home: img("assets/icons/map/station_s.png"), planet: img("assets/icons/map/waypoint_s.png"), moon: img("assets/icons/map/waypoint_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
+  const mapIcons = { belt: img("assets/icons/map/asteroid_field_s.png"), library: img("assets/icons/map/waypoint_s.png"), station: img("assets/icons/map/station_s.png"), office: img("assets/icons/map/station_s.png"), home: img("assets/icons/map/station_s.png"), planet: img("assets/icons/map/waypoint_s.png"), moon: img("assets/icons/map/waypoint_s.png") }, oreBy = () => new Map(((cfg && cfg.ores) || []).map((o) => [o.key, o]));
   const rockArt = (family, size) => img("assets/rocks/rock_" + family + "_" + size + ".webp"), oreIcon = (family) => img("assets/icons/ores/" + (family === "bubble" ? "rubble" : family) + "_s.png");
   function drawBelts(ships) {
     const sc = scale(), ores = oreBy();
@@ -784,7 +795,7 @@
   }
   function drawWarps(ships) {                       // a ship in warp leaves a fading streak back toward where it entered
     for (const sh of ships) {
-      if (!sh.warp) continue;
+      if (!sh.warp || (sh.npc && window.Atamus.adminMode)) continue;   // (owner) admins see the ETA as dots, no trails
       const x = gx2s(sh.x), y = gy2s(sh.y), fx = gx2s(sh.warp.fx), fy = gy2s(sh.warp.fy), L = Math.hypot(x - fx, y - fy); if (L < 2) continue;
       const k = Math.min(1, 160 / L), sx = x + (fx - x) * k, sy = y + (fy - y) * k, g = ctx.createLinearGradient(x, y, sx, sy);
       g.addColorStop(0, sh.mine ? "rgba(120,200,255,0.9)" : "rgba(255,120,120,0.9)"); g.addColorStop(1, "rgba(120,200,255,0)");
@@ -811,17 +822,53 @@
         ctx.setLineDash([]); ctx.beginPath(); ctx.arc(tx, ty, 2.5, 0, Math.PI * 2); ctx.fillStyle = "rgba(200,205,215,0.5)"; ctx.fill(); ctx.restore();
       }
       if (sx < -80 || sy < -80 || sx > innerWidth + 80 || sy > innerHeight + 80) continue;
-      const wPx = hull(sh.type).lengthKm * sc, art = shipArt(sh.type, sh.mine), ic = shipIcon(sh.type, sh.mine);
+      const T = hull(sh.type), wPx = T.lengthKm * sc, art = shipArt(sh.type, sh.mine), ic = shipIcon(sh.type, sh.mine);
+      if (sh.npc && window.Atamus.adminMode && wPx < 10) { etaDot(sx, sy, 1); continue; }   // (owner) admins: the ETA as small blue dots
+      if (sh.wi) warpIn(sh, sx, sy, Math.max(wPx, 30));    // (owner) an admin's ship uncloaking: it warps in
       ctx.save();
+      if (sh.wi) ctx.globalAlpha = Math.max(0, Math.min(1, 1 - (sh.wi - 600) / 1400));
+      if (sh.cloak) ctx.globalAlpha = 0.35;             // (your own admin ship, cloaked)
       if (sh.dk) maskHangar(sh.dk);                    // (owner) flying into / out of a hangar: hidden past its front
       ctx.translate(sx, sy); ctx.rotate(-sh.h);  // sprites face +x; world +y is up
+      if (T.artRot) ctx.rotate(T.artRot);              // (art drawn facing up)
       if (wPx < 10 && ic.naturalWidth) { ctx.imageSmoothingEnabled = false; ctx.drawImage(ic, -ic.naturalWidth / 2, -ic.naturalHeight / 2); }   // zoomed out: its hull icon
+      else if (art.naturalWidth && T.artRot) { const ww = wPx * art.naturalWidth / art.naturalHeight; ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(art, -ww / 2, -wPx / 2, ww, wPx); }
       else if (art.naturalWidth) { const hPx = wPx * art.naturalHeight / art.naturalWidth; ctx.imageSmoothingEnabled = wPx > 48; ctx.drawImage(art, -wPx / 2, -hPx / 2, wPx, hPx); }
       else { ctx.fillStyle = sh.mine ? "#4fd2ff" : "#ff5a5a"; ctx.fillRect(-Math.max(2, wPx) / 2, -Math.max(1, wPx / 4), Math.max(2, wPx), Math.max(2, wPx / 2)); }
       ctx.restore();
     }
   }
 
+  // (owner) admins in admin mode: ETA ships zoomed out are small blue dots, and where a warping one is headed another
+  function etaDot(x, y, a) { ctx.save(); ctx.globalAlpha = a; ctx.fillStyle = "rgba(90,170,255,1)"; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  function drawEtaGoals(ships) {
+    if (!window.Atamus.adminMode) return;
+    for (const sh of ships) if (sh.npc && sh.warp) etaDot(gx2s(sh.warp.tx), gy2s(sh.warp.ty), 0.55);
+  }
+  // (owner) the warp-in as an admin's ship uncloaks: a blue warp window opening where it arrives (the warp effect from
+  // before the reset), the ship coming out of it
+  const hash = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  function warpIn(sh, x, y, L) {
+    const p = Math.max(0, Math.min(1, 1 - sh.wi / 2000)), alpha = p < 0.8 ? 1 : (1 - p) / 0.2, grow = Math.min(1, p / 0.15), W = L * 0.75 * (0.15 + 0.85 * grow), Tk = Math.max(3, W * 0.3), t = performance.now();
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-sh.h); ctx.translate(-L * 0.55 * (1 - p), 0); ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(70,160,255,0.95)"; ctx.shadowBlur = 16;
+    const g = ctx.createLinearGradient(-Tk, 0, Tk, 0); g.addColorStop(0, "rgba(60,140,255,0)"); g.addColorStop(0.5, "rgba(120,200,255,0.45)"); g.addColorStop(1, "rgba(60,140,255,0)");
+    ctx.fillStyle = g; ctx.fillRect(-Tk, -W, Tk * 2, W * 2);
+    ctx.strokeStyle = "rgba(160,220,255,0.95)"; ctx.lineWidth = 1.5; ctx.strokeRect(-Tk / 2, -W, Tk, W * 2);
+    ctx.shadowBlur = 0; ctx.fillStyle = "rgba(200,235,255,0.9)"; ctx.fillRect(-0.75, -W, 1.5, W * 2);
+    for (let i = 0; i < 16; i++) { const f = (t * 0.0011 + i / 16 + hash(i) * 0.3) % 1, px = (-1 + 2 * f) * W * 1.3, py = (hash(i + 7) - 0.5) * 1.8 * W; ctx.globalAlpha = alpha * (1 - Math.abs(2 * f - 1)) * 0.9; ctx.fillStyle = "rgba(150,215,255,1)"; ctx.fillRect(px - 1, py - 1, 2, 2); }
+    ctx.restore();
+  }
+  // (owner) red diamonds for Admins in admin mode: open help tickets and reports, at the player who asked (online only)
+  const ALERT_PX = 6;
+  function drawAlerts() {
+    for (const a of latest.alerts || []) {
+      const x = gx2s(a.x), y = gy2s(a.y); if (x < -10 || y < -10 || x > innerWidth + 10 || y > innerHeight + 10) continue;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillStyle = "rgba(235,60,60,0.95)"; ctx.strokeStyle = "rgba(255,190,190,0.9)"; ctx.lineWidth = 1;
+      ctx.fillRect(-ALERT_PX / 2 - 1, -ALERT_PX / 2 - 1, ALERT_PX + 2, ALERT_PX + 2); ctx.strokeRect(-ALERT_PX / 2 - 1, -ALERT_PX / 2 - 1, ALERT_PX + 2, ALERT_PX + 2); ctx.restore();
+    }
+  }
+  const alertAt = (px, py) => { let best = null, bd = 10; for (const a of latest.alerts || []) { const d = Math.hypot(px - gx2s(a.x), py - gy2s(a.y)); if (d <= bd) { bd = d; best = a; } } return best; };
   let lastFrame = performance.now();
   function frame(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
@@ -871,7 +918,7 @@
     drawBackground();
     drawSun(now);
     drawn = ships;
-    if (cfg) { drawHex(); drawCelestials(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
+    if (cfg) { drawHex(); drawCelestials(); drawBelts(ships); drawRanges(own); drawWarps(ships); drawBeams(ships); drawShips(ships); drawEtaGoals(ships); drawAlerts(); drawTargets(ships); drawKeepOut(ships); drawPicked(ships); drawBubbles(ships); }
     requestAnimationFrame(frame);
   }
 

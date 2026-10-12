@@ -561,8 +561,10 @@
 
   // ---- the selected pilot (owner): one is always selected; it's whose ship a click flies. Selecting doesn't move
   // the camera. Tab steps through the pilots left to right (wrapping). ----
+  // (owner) in admin mode an Admin has one more pilot: their admin name, flying their ETA ship
+  const allPilots = () => { const ps = (state && state.pilots) || [], sh = pilotShip("admin"); return sh ? [...ps, { id: "admin", name: sh.name || "Admin", admin: true }] : ps; };
   function ensurePilot() {
-    const ps = (state && state.pilots) || []; if (!ps.length) return;
+    const ps = allPilots(); if (!ps.length) return;
     if (!ps.some((p) => String(p.id) === String(saved.selPilot))) saved.selPilot = String(ps[0].id);
     selectedPilotId = ps.find((p) => String(p.id) === String(saved.selPilot)).id;
     if (window.Atamus.selectedPilot !== String(saved.selPilot)) window.Atamus.selectPilot(String(saved.selPilot));
@@ -577,7 +579,7 @@
     if (e.key !== "Tab" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
     const t = document.activeElement && document.activeElement.tagName; if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
     e.preventDefault();
-    const ps = (state && state.pilots) || []; if (ps.length < 2) return;
+    const ps = allPilots(); if (ps.length < 2) return;
     const i = ps.findIndex((p) => String(p.id) === String(saved.selPilot)), next = ps[(i + 1) % ps.length];
     selectPilot(next.id);
     const sh = pilotShip(next.id); if (sh) window.Atamus.focusShip(sh.id);   // (owner) Tab centers on them, zoomed to show a whole POI
@@ -588,7 +590,7 @@
   // double-tap) it to also center the camera on their ship and follow it. ----
   const pilotShip = (id) => ((window.Atamus.snap && window.Atamus.snap.ships) || []).find((x) => x.mine && String(x.pilot) === String(id)) || null;
   function renderFleet(body) {
-    const w = wins.fleet, pilots = (state && state.pilots) || [], cfgT = (window.Atamus.cfg && window.Atamus.cfg.shipTypes) || {};
+    const w = wins.fleet, pilots = allPilots(), cfgT = (window.Atamus.cfg && window.Atamus.cfg.shipTypes) || {};
     const sig = pilots.map((p) => p.id + ":" + p.name + ":" + JSON.stringify(p.portrait) + ":" + ((pilotShip(p.id) || {}).type || "-")).join(",");
     if (sig !== w.fsig) {
       w.fsig = sig; w.cards = {}; body.innerHTML = "";
@@ -597,15 +599,15 @@
         const sh = pilotShip(p.id), t = sh ? cfgT[sh.type] || {} : {};
         const sf = el("i"), hf = el("i");
         const card = el("button", { class: "fleet-card" },
-          p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 44, "fc-portrait") : el("span", { class: "fc-portrait" }),
+          p.admin ? el("img", { class: "fc-portrait", src: apicSrc(AD.me && AD.me.persona && AD.me.persona.pic), alt: "", draggable: "false" }) : p.portrait && window.Portrait ? Portrait.canvas(p.portrait, 44, "fc-portrait") : el("span", { class: "fc-portrait" }),
           el("div", { class: "fc-right" },
-            el("div", { class: "fc-ship" }, sh ? el("img", { src: "assets/icons/ships/" + (t.sprite || "chisel") + "_blue.png", alt: "", draggable: "false" }) : null),
+            el("div", { class: "fc-ship" }, sh ? el("img", { src: "assets/icons/ships/" + (t.icon || (t.sprite || "chisel") + "_blue") + ".png", alt: "", draggable: "false" }) : null),
             el("div", { class: "fc-bars" + (sh ? "" : " empty") }, el("div", { class: "fc-bar fc-sh" }, sf), el("div", { class: "fc-bar fc-hp" }, hf)),
             el("div", { class: "fc-name" }, p.name)));
         card.addEventListener("click", () => selectPilot(p.id));
         // (owner) right-click (hold) a card: its ship's menu, plus Pilot Info
         const cardMenu = (x, y) => { const cur = pilotShip(p.id); const items = cur ? window.Atamus.ownShipItems(cur.id) : []; if (cur && !items.some((it) => it[0] === "Show Fitting")) items.splice(Math.min(1, items.length), 0, ["Show Fitting", () => showFitting(p.id)]);
-          showCtxMenu(x, y, [...items, ["Pilot Info", () => openPilotInfo(String(p.id))]]); };
+          showCtxMenu(x, y, p.admin ? items : [...items, ["Pilot Info", () => openPilotInfo(String(p.id))]]); };
         card.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); cardMenu(e.clientX, e.clientY); });
         { let h = 0; card.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") return; clearTimeout(h); h = setTimeout(() => cardMenu(e.clientX, e.clientY), 500); });
           for (const ev of ["pointerup", "pointercancel", "pointerleave", "pointermove"]) card.addEventListener(ev, () => clearTimeout(h)); }
@@ -641,7 +643,7 @@
       c.card.classList.toggle("sel", String(p.id) === String(saved.selPilot));
     }
   }
-  window.Atamus.bus.addEventListener("snap", () => { const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });
+  window.Atamus.bus.addEventListener("snap", () => { if (saved.selPilot === "admin" && !pilotShip("admin")) ensurePilot(); const w = wins.fleet; if (w && isOpen(w)) renderFleet(w.body); });   // (the admin pilot gone with admin mode)
 
   // ---- chat (owner): Local and Corp, plus a tab per direct message. You speak as your account's character: its
   // portrait and your username. Right-click (or hold) a name for Info, DM and Report. ----
@@ -649,7 +651,7 @@
   const apicSrc = (n) => "assets/admin/" + (Number.isInteger(n) && n >= 1 && n <= 6 ? n : 1) + ".png";
   const canAdminChat = () => !!(AD.me && AD.me.unlocked && AD.me.persona);
   // (owner) the game hears of admin mode: staff see other players' ships only in it (Admins; Moderators never)
-  const sendMode = () => { if (chatAs === "admin" && !canAdminChat()) chatAs = "player"; window.Atamus.send({ t: "mode", admin: chatAs === "admin" }); };
+  const sendMode = () => { if (chatAs === "admin" && !canAdminChat()) chatAs = "player"; window.Atamus.adminMode = chatAs === "admin"; window.Atamus.send({ t: "mode", admin: chatAs === "admin" }); };
   window.Atamus.bus.addEventListener("hello", () => sendMode());
   const myName = () => (window.Atamus.me && window.Atamus.me.name) || "";
   const dmKey = (name) => "dm:" + name.toLowerCase();
@@ -1786,7 +1788,7 @@
   }
   // (owner) a hold only takes what it can hold: the ore hold, only ore; a module slot, only a module of its kind
   function accepts(target, pl) {
-    if (target.dataset.mslot != null) { const m = MODS()[pl.item], sh = hudShip(); return !!m && m.slot === target.dataset.kind && !!(sh && sh.docked); }   // (owner) refit docked
+    if (target.dataset.mslot != null) { const m = MODS()[pl.item], sh = hudShip(), any = !!(sh && ((window.Atamus.cfg.shipTypes || {})[sh.type] || {}).anySlot); return !!m && (m.slot === target.dataset.kind || any) && !!(sh && (sh.docked || any)); }   // (owner) refit docked (an admin's ETA ship: any module, any slot, anywhere)
     if (target.dataset.cont && target.dataset.cont.endsWith("|ore")) return pl.item.startsWith("ore:") && pl.from.type !== "slot";
     return true;
   }

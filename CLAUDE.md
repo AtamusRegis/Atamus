@@ -63,6 +63,7 @@ packages/server/src/
     obstacles.js  asteroids and props a destination can't be on (grid index, push a point out)
     modules.js    modules (active / passive), starter kit, shipCalc (fitted stats with licenses and hull bonuses)
     station.js    the NPC stations (one per planet; Earth's id is "station"): hangar bays, docking range, landing, props
+    eta.js        the Expanse Transit Authority: the ETA Office, its fleets, patrols, the response to aggression, scramblers and webs
     constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
     persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
 website/          GitHub Pages site (atamus.io) and the game client
@@ -109,6 +110,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no 
 - `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
 - `offline` (mark yourself offline, to test the logout grace)
 - `update seconds` (rehearse the countdown)
+- `aggress [ship] [victim]` (your ship attacks: the ETA flags and hunts it), `pardon [ship]` (clear the flag), `killofficer [id]` (an ETA ship dies to yours: the escalation)
 
 PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check), `POST /game/admin/dev/lapse` (the staff inactivity check).
 
