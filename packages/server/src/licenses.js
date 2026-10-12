@@ -34,15 +34,29 @@ export const LICENSES = [
     // (owner) 5 levels, the first known from the start; stepped: level N takes N × 12 min (level 5: an hour)
     requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN)
   },
-  // (owner, 2026-10-11) module licenses, 5 levels each, stepped like Mining Frigate; none is needed to fit a module.
-  // Each one's power / disposition cut applies to the modules it names, not to what they upgrade (modules.js).
+  // (owner, 2026-10-11) module licenses, 5 levels each, stepped like Mining Frigate. Each level: −5% power and
+  // disposition of the modules it names, +5% to an active module's effect and +10% to a passive's bonus; a II module
+  // needs its license at V (modules.js).
   ...[
-    ["mining_lasers", "Mining Lasers", "mining", "Run mining lasers better and lighter.", "+5% Mining Laser yield and range, −5% Mining Laser power and disposition"],
-    ["mining_drones", "Mining Drones", "mining", "Run mining drones better and lighter.", "+5% Mining Drones yield and range, −5% Mining Drones power and disposition"],
-    ["mining_upgrades", "Mining Upgrades", "mining", "Get more out of mining laser upgrades.", "+10% to Mining Laser Upgrade, Mining Beam Extender and Mining Overclocker bonuses, −5% their power and disposition"],
-    ["engineering_upgrades", "Engineering Upgrades", "engineering", "Get more out of the ship's engineering upgrades.", "+10% to Cargo Expander and Inertia Stabilizer bonuses, −5% their power and disposition"],
-    ["engines", "Engines", "engineering", "Push the afterburner harder.", "+10% to the Afterburner's speed bonus, −5% its power and disposition"],
-  ].map(([key, name, category, desc, bonus]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus, requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
+    ["mining_lasers", "Mining Lasers", "mining", "Run mining lasers better and lighter.", "Mining Laser"],
+    ["strip_mining", "Strip Mining", "mining", "Run strip miners better and lighter.", "Strip Miner"],
+    ["mining_upgrades", "Mining Upgrades", "mining", "Get more out of mining upgrades.", "Yield, Cycle and Range Upgrade"],
+    ["mining_drones", "Drones", "automation", "Control drones better and lighter.", "Drone Link"],
+    ["drone_upgrades", "Drone Upgrades", "automation", "Get more out of drone upgrades.", "Drone Upgrade and Drone Bay Extender"],
+    ["repair_drones", "Repair Drones", "automation", "Run repair drones better and lighter.", "Repair Drone"],
+    ["tractor_beams", "Tractor Beams", "automation", "Run tractor beams better and lighter.", "Tractor Beam"],
+    ["engineering_upgrades", "Engineering Upgrades", "engineering", "Get more out of the ship's engineering upgrades.", "Cargo Upgrade and Gyroscope"],
+    ["engines", "Engines", "engineering", "Push the engines harder.", "Afterburner, Microwarp Drive and Speed Upgrade"],
+    ["electronics", "Electronics", "engineering", "Get more out of targeting upgrades.", "Targeting Range Upgrade, Locking Upgrade and Target Tracker"],
+    ["hull_upgrades", "Hull Upgrades", "engineering", "Get more out of armor upgrades.", "Armor Upgrade"],
+    ["propulsion_jamming", "Propulsion Jamming", "engineering", "Run warp scramblers and webifiers better and lighter.", "Warp Scrambler and Stasis Webifier"],
+    ["shield_operation", "Shield Operation", "power", "Run shield modules better and lighter.", "Shield Recharger and Shield Extender"],
+    ["remote_shields", "Remote Shields", "power", "Run remote shield modules better and lighter.", "Remote Shield Recharger and Remote Shield Extender"],
+    ["missiles", "Missiles", "missiles", "Fire missile launchers better and lighter.", "Missile Launcher"],
+    ["beams", "Beams", "beams", "Fire beam lasers better and lighter.", "Beam Laser"],
+    ["hybrid_turrets", "Hybrid Turrets", "hybrid", "Fire railguns better and lighter.", "Railgun"],
+    ["projectiles", "Projectiles", "projectiles", "Fire slug cannons better and lighter.", "Slug Cannon"],
+  ].map(([key, name, category, desc, what]) => ({ key, name, category, maxLevel: 5, free: true, desc, bonus: "+5% " + what + " effect (passives: +10%), −5% their power and disposition; II modules need V", requirements: [], levelTimes: [1, 2, 3, 4, 5].map((n) => n * 12 * MIN) })),
 ];
 for (const l of LICENSES) l.levelTimes = l.levelTimes.map((ms) => Math.round(ms * TRAINING_TIME_MODIFIER));   // the times everything uses (server and trainer)
 

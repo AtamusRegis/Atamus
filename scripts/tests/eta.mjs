@@ -38,10 +38,11 @@ const roles = (w) => w.eta.officers().reduce((a, o) => ((a[o.role + ":" + o.type
   const w = new World({ eta: false }); w.addPlayer("x", "X", () => {}, null, [{ id: 9, name: "Xi", licenses: {} }]);
   const s = w.setAdminShip("x", true, { name: "Warden" });
   t.ok(s && s.type === "adm_magistrate" && s.cloak && s.name === "Warden" && s.pilot === "admin" && w.setAdminShip("x", true) === s, "an admin's ETA ship: a cloaked Magistrate under their admin name, one only");
-  Object.assign(s.holds.cargo, { mining_laser: 1, cargo_expander: 1 }); w.cmdFit("x", s.id, "mining_laser", "passive", 0); w.cmdFit("x", s.id, "cargo_expander", "active", 0);
-  t.ok(s.fit.passive[0] === "mining_laser" && s.fit.active[0] === "cargo_expander" && s.calc.holds.cargo > 1000, "its slots take active and passive modules alike, in space (owner)", s.fit);
-  s.holds.cargo.microwarp_drive = 30; for (let i = 1; i < 6; i++) w.cmdFit("x", s.id, "microwarp_drive", "passive", i);
-  t.ok(s.fit.passive.filter((k) => k === "microwarp_drive").length === 5, "with no power or disposition limits (owner)");
+  t.ok(s.fit.active.every(Boolean) && s.fit.active.includes("warp_scrambler_l2") && s.fit.passive.every(Boolean), "it comes fitted (owner)", s.fit);
+  Object.assign(s.holds.cargo, { mining_laser_s1: 1, cargo_upgrade_s1: 1 }); w.cmdFit("x", s.id, "mining_laser_s1", "passive", 0); w.cmdFit("x", s.id, "cargo_upgrade_s1", "active", 0);
+  t.ok(s.fit.passive[0] === "mining_laser_s1" && s.fit.active[0] === "cargo_upgrade_s1" && s.calc.holds.cargo > 1000, "its slots take active and passive modules alike, in space (owner)", s.fit);
+  s.holds.cargo.railgun_l2 = 30; for (let i = 1; i < 6; i++) w.cmdFit("x", s.id, "railgun_l2", "passive", i);
+  t.ok(s.fit.passive.filter((k) => k === "railgun_l2").length === 5, "with no power or disposition limits (owner)");
   w.setAdminShip("x", false); t.ok(!w.ships.has(s.id) && !w.exportState("x").ships.admin, "out of admin mode it's gone (never saved)");
 }
 
@@ -83,8 +84,8 @@ const roles = (w) => w.eta.officers().reduce((a, o) => ((a[o.role + ":" + o.type
   w2.removePlayer("a"); w2._purge("a"); run(w2, 125); t.ok(!w2.eta.cases.size, "its ship gone for 2 minutes: the officers stand down");
 }
 
-{ // webs, a station guard's leash
-  const w = new World(); w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "Ann", start: "earth", licenses: {} }]); run(w, 1);
+{ // webs, station guards
+  const w = new World(); w._damage = () => {}; w.addPlayer("a", "A", () => {}, null, [{ id: 1, name: "Ann", start: "earth", licenses: {} }]); run(w, 1);   // (no one dies here: combat.mjs)
   const a = w.ships.get("a:ship:1"), st = stationOfPlanet("earth"), sp = a.speed;
   a.x = st.x + 30; a.y = st.y; a.tx = a.x; a.ty = a.y; w.aggress(a.id, null);
   const g = w.eta.officers().filter((o) => o.role === "respond" && o.was && o.was.role === "guard");
@@ -93,13 +94,16 @@ const roles = (w) => w.eta.officers().reduce((a, o) => ((a[o.role + ":" + o.type
   run(w, 40);
   t.ok(a.web && a.speed < sp * 0.5, "a Constable's web slows it (owner: cruisers and Magistrates scramble and web)", { web: a.web, speed: a.speed, sp });
   w.pardon(a.id); run(w, 1); t.ok(!a.web && Math.abs(a.speed - sp) < 1e-9, "and lets go");
-  // a guard at the scene joins, then gives up far from its station
+  // a guard at the scene joins and chases it anywhere; another Magistrate warps in to guard the station (owner)
   for (const o of w.eta.officers()) if (o.role === "ready") w.ships.delete(o.id); w._own = null;
   SHIP_TYPES.chisel.size = "battleship"; w.aggress(a.id, null); SHIP_TYPES.chisel.size = "frigate";
   t.ok(w.eta.cases.get(a.id) && [...w.eta.cases.get(a.id).units].some((id) => w.ships.get(id).role === "respond" && w.ships.get(id).was && w.ships.get(id).was.role === "guard"), "a station's Magistrate at the scene matches a battleship (owner: officers at the scene count)");
   const gd = [...w.eta.cases.get(a.id).units].map((id) => w.ships.get(id)).find((o) => o.was && o.was.role === "guard");
-  Object.assign(a, { x: st.x + 400, y: st.y, tx: st.x + 400, ty: st.y }); run(w, 1);
-  t.ok(gd.role === "guard" && !gd.cases.length, "a guard gives up a chase far from its station");
+  const guards = () => w.eta.officers().filter((o) => o.role === "guard" && o.post.id === st.id);
+  t.ok(guards().length === 3 && guards().some((o) => o.align || o.wp || Math.hypot(o.x - st.x, o.y - st.y) > 100), "another Magistrate warps in to guard the station (owner)", guards().length);
+  Object.assign(a, { x: st.x + 400, y: st.y, tx: st.x + 400, ty: st.y }); run(w, 20);
+  t.ok(gd.role === "respond" && gd.cases.includes(a.id) && Math.hypot(gd.x - a.x, gd.y - a.y) < 40, "the station's Magistrate chases it far from its station (owner)", { role: gd.role, d: Math.hypot(gd.x - a.x, gd.y - a.y) });
+  w.pardon(a.id); run(w, 2); t.ok(gd.role === "return", "standing down with its station guarded again, it goes back into the office");
   w.pardon(a.id);
 }
 

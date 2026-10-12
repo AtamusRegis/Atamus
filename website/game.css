@@ -736,3 +736,19 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 .web-assoc { stroke: #b18cff; stroke-dasharray: 4 3; }
 .web-far { opacity: .55; }
 .susp-n { font-weight: 700; }
+
+/* (owner, combat) a locked ship's shield and hull under its target ring */
+.tgt-hp { display: flex; flex-direction: column; gap: 2px; width: 44px; margin: 2px auto 0; }
+.tgt-bar { height: 3px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+.tgt-bar i { display: block; height: 100%; width: 0; }
+.tgt-sh i { background: #4f9dff; } .tgt-hl i { background: #e2554f; }
+/* (owner) Launch Drones */
+.launch-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.launch-opt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; color: inherit; cursor: pointer; text-align: left; }
+.launch-opt.sel { border-color: rgba(110,180,255,0.7); background: rgba(80,140,255,0.12); }
+.launch-opt img { width: 28px; height: 28px; object-fit: contain; image-rendering: pixelated; }
+.launch-name { flex: 1; } .launch-qty { opacity: 0.7; }
+.launch-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.launch-n { min-width: 20px; text-align: center; }
+.launch-go { margin-left: auto; }
+.launch-none { padding: 12px 4px; text-align: center; }

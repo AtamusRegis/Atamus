@@ -54,7 +54,7 @@ t.ok(!w.pois.has(other.id), "once they leave, it closes");
 const earth = PLANETS.find((p) => p.key === "earth"), inSys = (b, p) => Math.hypot(b.x - p.x, b.y - p.y) <= p.sysR;
 { const far = belts().find((b) => !inSys(b, earth)); Object.assign(sa, { x: earth.x + earth.sysR * 0.6, y: earth.y, vx: 0, vy: 0, moving: false });
   w.cmdWarp("a", sa.id, far.id); t.ok(!sa.warpReq && !sa.dest, "no warping out of the planetary system without a Microwarp Drive (owner)");
-  sa.fit.passive[0] = "microwarp_drive"; w.cmdWarp("a", sa.id, far.id); t.ok(sa.warpReq && sa.dest === far.id, "with one fitted, any system (owner)");
+  sa.fit.active[3] = "microwarp_drive_s1"; w._recalc(sa); w.cmdWarp("a", sa.id, far.id); t.ok(sa.warpReq && sa.dest === far.id, "with one fitted, any system (owner)");
   sa.fit.passive[0] = null; sa.dest = null; sa.warpReq = false; sa.moving = false; }
 const tgt = belts().find((b) => inSys(b, earth)); Object.assign(sa, { x: earth.x + earth.sysR * 0.6, y: earth.y, vx: 0, vy: 0, moving: false });
 w.cmdAlign("c1", sa.id, tgt.id); t.ok(!sa.dest, "only the owner can order it");

@@ -4,7 +4,7 @@ const t = suite("pilots");
 const post = (path, body) => fetch(BASE + path, { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify(body) }).then(async (r) => ({ ok: r.ok, body: await r.json() }));
 const state = async () => (await fetch(BASE + "/game/state")).json();
 const catalog = await (await fetch(BASE + "/game/catalog")).json();
-t.ok(Array.isArray(catalog.licenses) && catalog.licenses.map((l) => l.key + ":" + l.maxLevel).join() === "mining_frigate:5,mining_lasers:5,mining_drones:5,mining_upgrades:5,engineering_upgrades:5,engines:5", "the trainer: Mining Frigate and the five module licenses, 5 levels each (owner, 2026-10-11)", catalog.licenses.map((l) => l.key));
+t.ok(Array.isArray(catalog.licenses) && catalog.licenses[0].key === "mining_frigate" && catalog.licenses.length === 19 && catalog.licenses.every((l) => l.maxLevel === 5) && ["mining_lasers", "mining_drones", "beams", "missiles", "hybrid_turrets", "projectiles", "propulsion_jamming", "electronics"].every((k) => catalog.licenses.some((l) => l.key === k)), "the trainer: Mining Frigate and a license per module family, 5 levels each (owner, 2026-10-11)", catalog.licenses.map((l) => l.key));
 const st0 = await state(), price = st0.profile.pilotPrice, max = st0.profile.maxPilots;
 t.ok(price === 1_000_000 && max === 3, "price 1M, max 3", { price, max });
 t.ok(st0.pilots.length === 1 && JSON.stringify(st0.pilots[0].licenses) === '{"mining_frigate":1}', "PTR starts with one pilot, Mining Frigate I known (run a PTR reset if not)", st0.pilots[0].licenses);

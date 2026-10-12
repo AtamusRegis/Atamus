@@ -1,7 +1,7 @@
 // The game socket: one session per account, a few commands in, snapshots out at 15 Hz.
 import { WebSocketServer } from "ws";
 import { pool } from "../db.js";
-import { recordContact, addPlay } from "../watch.js";
+import { recordContact, addPlay, recordFlow } from "../watch.js";
 import { safeText } from "../textsafe.js";
 import { config } from "../config.js";
 import { getSessionUser, readCookie } from "../sessions.js";
@@ -20,7 +20,7 @@ import { onRelAppeal } from "../relappeals.js";
 import { onTicket } from "../tickets.js";
 import { onResetLine } from "../resets.js";
 import { ORES } from "./belts.js";
-import { MODULES } from "./modules.js";
+import { MODULES, ITEMS } from "./modules.js";
 import { DOCK_KM } from "./station.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { PTR, devCommand, ptrAs } from "../ptr.js";
@@ -36,9 +36,9 @@ const staffRoleOf = async (pid) => {
   const { rows } = await pool.query(`SELECT role, former_staff FROM users WHERE id = $1`, [String(pid)]); const u = rows[0];
   return u ? u.role || (u.former_staff ? "former" : null) : null;   // (owner) former staff don't see other ships either
 };
-const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "dev"]);
+const KNOWN = new Set(["move", "view", "pilots", "mode", "torder", "chat", "adm", "admstart", "admfreeze", "admend", "admadd", "align", "warp", "lock", "unlock", "chase", "info", "rename", "fit", "unfit", "module", "power", "dock", "undock", "board", "transfer", "cloak", "ahull", "warppt", "loot", "take", "dev"]);
 const conns = new Map();   // pid -> sockets; one session per account: a new tab or device replaces the old one
-const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
+const CLIENT_CONFIG = { expanseApothemKm: EXPANSE_APOTHEM_KM, auKm: AU_KM, shipTypes: SHIP_TYPES, ores: ORES, modules: MODULES, items: ITEMS, dockKm: DOCK_KM, drone: DRONE, celestials: celestialsForClient() };
 
 export function attachGameServer(httpServer) {
   const sendTo = (pid, o) => { const s = JSON.stringify(o); for (const c of conns.get(pid) || []) if (c.readyState === c.OPEN && !c.replaced) c.send(s); };
@@ -146,6 +146,9 @@ export function attachGameServer(httpServer) {
   // (owner) the last hour of chat (Local, Corp, DMs and admin DMs), saved with a kick, a ban or a report on a player
   const CHAT_KEEP_MS = 3600_000, chatBuf = [];
   function chatLine(l) { chatBuf.push({ ts: Date.now(), ...l }); while (chatBuf.length && chatBuf[0].ts < Date.now() - CHAT_KEEP_MS) chatBuf.shift(); if (chatBuf.length > 20000) chatBuf.shift(); }
+  // (owner) kills and loot go in the trade ledger (watch.js: repeat kills, big loot are red flags)
+  world.onKill = ({ killer, victim }) => { if (killer && victim) recordFlow({ from: victim, to: killer, kind: "kill" }).catch((e) => console.error("kill flow", e)); };
+  world.onLoot = ({ from, to, item, n }) => recordFlow({ from, to, kind: "loot", items: { [item]: n } }).catch((e) => console.error("loot flow", e));
   world.onLine = (l) => { chatLine(l); if (l.ch === "dm" && l.toId) recordContact(l.fromId, l.toId).catch((e) => console.error("contact", e)); };   // (owner) who has talked, for the trade watch
   function chatLogFor(pid) {                            // Local and Corp (everyone's), and the player's own DMs and admin DMs
     const since = Date.now() - CHAT_KEEP_MS;
@@ -329,7 +332,9 @@ export function attachGameServer(httpServer) {
           case "rename": world.cmdRename(pid, m.ship, m.name); break;
           case "fit": world.cmdFit(pid, m.ship, m.item, m.kind, m.slot); break;
           case "unfit": world.cmdUnfit(pid, m.ship, m.kind, m.slot); break;
-          case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on); break;
+          case "module": world.cmdModule(pid, m.ship, m.slot, !!m.on, m.drones && typeof m.drones === "object" ? { item: m.drones.item, n: m.drones.n } : null); break;
+          case "loot": world.cmdLoot(pid, m.ship, m.wreck); break;   // (owner) open a wreck
+          case "take": world.cmdTake(pid, m.ship, m.wreck, m.item, m.qty); break;
           case "power": world.cmdPower(pid, m.ship, m.kind, m.slot, !!m.on); break;
           case "dock": world.cmdDock(pid, m.ship, m.where); break;
           case "undock": world.cmdUndock(pid, m.ship); break;
