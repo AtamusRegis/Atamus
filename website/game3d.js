@@ -45,9 +45,8 @@ try {
   const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}");
   if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash));
   if (sv.dirv === 3 && Number.isFinite(sv.over)) cam.over = Math.min(200, Math.max(0, sv.over));   // v3: the owner's new defaults replace older saved tuning once
-  if (sv.dirv === 3 && sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
 } catch {}
-const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir, dirv: 3 })); } catch {} };
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dirv: 3 })); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -101,6 +100,13 @@ const SLOTS = [
   { name: "Tertiary", range: INTERACT_R, speed: 60, spread: 45, interact: true },
 ];
 let slot = 0;
+try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   // tuned slot values, kept in this browser
+  if (Array.isArray(sv)) sv.forEach((v, i) => { if (!SLOTS[i] || !v) return;
+    if (Number.isFinite(v.range)) SLOTS[i].range = Math.min(3000, Math.max(10, v.range));
+    if (Number.isFinite(v.speed)) SLOTS[i].speed = Math.min(180, Math.max(0, v.speed));
+    if (Number.isFinite(v.spread)) SLOTS[i].spread = Math.min(90, Math.max(0, v.spread));
+    if (typeof v.interact === "boolean") SLOTS[i].interact = v.interact; }); } catch {}
+const saveSlots = () => { try { localStorage.setItem("atamus.slots", JSON.stringify(SLOTS)); } catch {} };
 // the spread lines: red at full spread, orange midway, green as they close on the aim line; a light fill between
 const spreadMat = new THREE.LineBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.95 });
 const mkLine = () => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)); const l = new THREE.Line(g, spreadMat); l.visible = false; l.frustumCulled = false; scene.add(l); return l; };
@@ -471,24 +477,37 @@ renderer.setAnimationLoop(() => {
 // per-direction leash trims; every slide applies live and is kept in this browser
 const $i = (id) => document.getElementById(id);
 const sl = { leash: $i("sl-leash"), leashV: $i("sl-leash-v"), over: $i("sl-over"), overV: $i("sl-over-v") };
-const DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 if (sl.leash) {
   const show = () => {
     sl.leash.value = cam.leash; sl.leashV.textContent = cam.leash + " m";
     sl.over.value = cam.over; sl.overV.textContent = cam.over + " m";
-    for (const d of DIRS) { $i("d-" + d).value = cam.dir[d]; $i("d-" + d + "-v").textContent = (cam.dir[d] > 0 ? "+" : "") + cam.dir[d]; }
   };
   show();
   sl.leash.addEventListener("input", () => { cam.leash = Math.min(3000, Math.max(100, +sl.leash.value || 700)); saveCam(); show(); });
   sl.over.addEventListener("input", () => { cam.over = Math.min(200, Math.max(0, +sl.over.value || 0)); saveCam(); show(); });
-  for (const d of DIRS) $i("d-" + d).addEventListener("input", () => { cam.dir[d] = Math.min(200, Math.max(-200, +$i("d-" + d).value || 0)); saveCam(); show(); });
 }
 
+// (owner, 2026-10-13) the slot sliders: they show and tune the selected slot's item, switching with the slot
+function showSlot() {
+  const it = SLOTS[slot]; if (!$i("sl-range")) return;
+  $i("sl-slot-name").textContent = (slot + 1) + " " + it.name;
+  $i("sl-range").value = it.range; $i("sl-range-v").textContent = it.range + " m";
+  $i("sl-speed").value = it.speed; $i("sl-speed-v").textContent = it.speed + "\u00b0/s";
+  $i("sl-spread").value = it.spread; $i("sl-spread-v").textContent = it.spread + "\u00b0";
+  $i("sl-interact").checked = it.interact;
+}
+if ($i("sl-range")) {
+  $i("sl-range").addEventListener("input", () => { SLOTS[slot].range = Math.min(3000, Math.max(10, +$i("sl-range").value || 10)); saveSlots(); showSlot(); });
+  $i("sl-speed").addEventListener("input", () => { SLOTS[slot].speed = Math.min(180, Math.max(0, +$i("sl-speed").value || 0)); saveSlots(); showSlot(); });
+  $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
+  $i("sl-interact").addEventListener("change", () => { SLOTS[slot].interact = $i("sl-interact").checked; saveSlots(); showSlot(); });
+}
 // (owner) the hotbar
 function selectSlot(i) {
   if (!(i >= 0 && i < SLOTS.length)) return;
   slot = i;
   document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.classList.toggle("on", k === slot));
+  showSlot();
 }
 document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListener("pointerdown", (e) => { e.preventDefault(); selectSlot(k); }));
 selectSlot(0);
