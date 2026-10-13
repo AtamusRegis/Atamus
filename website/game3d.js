@@ -78,6 +78,14 @@ const border = hexShapeBand(); border.position.y = 0.3; scene.add(border);
 // right-click aim marker (owner): a circle outline on the ground where the mouse points, and a line from the sphere to it
 const aimRing = new THREE.Mesh(new THREE.RingGeometry(26, 30, 48), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
 aimRing.rotation.x = -Math.PI / 2; aimRing.position.y = 0.4; aimRing.visible = false; scene.add(aimRing);
+// (owner) the range circle around the player: everywhere the reticle can be aimed (visible for now)
+let rangeRing = null, rangeRingR = 0;
+function rangeRingFor(R) {
+  if (rangeRing && rangeRingR === R) return;
+  if (rangeRing) { scene.remove(rangeRing); rangeRing.geometry.dispose(); }
+  rangeRing = new THREE.Mesh(new THREE.RingGeometry(R - 4, R, 160), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+  rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.35; rangeRingR = R; scene.add(rangeRing);
+}
 const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
 const aimLine = new THREE.Line(aimLineGeo, new THREE.LineBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.7 }));
 aimLine.visible = false; scene.add(aimLine);
@@ -296,19 +304,16 @@ renderer.setAnimationLoop(() => {
   // camera's focus slides toward a point between the player and the circle, zooming out to keep the player in shot
   let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
   myAim = null;
-  // (owner) the circle's distance from the ship is the pointer's ELLIPTICAL screen fraction times the
-  // Reticle slider: an ellipse inscribed in the screen (it fits any aspect ratio by construction), so
-  // the same fraction toward the bound means the same world distance - top, side or corner alike, max
-  // exactly at the bound on any screen. The ground raycast supplies only the direction.
+  // (owner) the reticle is the ground point under the pointer, CLAMPED to the range circle: push the
+  // pointer past the circle and the reticle rides its edge in that direction.
   function aimAt(px, py) {
     const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
-    const r = Math.hypot(sx, sy), e = Math.min(1, r);
     raycaster.setFromCamera({ x: sx, y: sy }, camera);
     if (!raycaster.ray.intersectPlane(groundPlane, aimHit)) return null;
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
-    const d = e * cam.leash;
-    return { x: me.x + ux * d, z: -me.y + uz * d, d };                   // the circle, in world coords
+    const d = Math.min(ul, cam.leash);
+    return { x: me.x + ux * d, z: -me.y + uz * d, d, sux: sx, suy: sy };
   }
   function drawAim(a) {
     aimRing.position.set(a.x, 0.4, a.z);
@@ -322,14 +327,16 @@ renderer.setAnimationLoop(() => {
     if (a) {
       hit = true; drawAim(a);
       if (!orbitLock) {                                                  // orbiting holds the frame: the aim stops steering it
-        fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the circle
-        // (owner, the Foxhole approach) fairness is anchored to the screen's SHORT dimension: the aim
-        // range is a world circle, and the zoom per aim distance is one uniform value sized so that
-        // distance fits the vertical ground extent (the short axis, foreshortened by the pitch) - the
-        // same zoom whichever way the pointer heads, so every direction sees max range identically and
-        // wide screens just get harmless extra margin at the sides, never extra reach.
-        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // vertical ground half-extent per unit of distance
-        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d / (1.5 * ey)));
+        fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the reticle
+        // (owner) zoom keeps the reticle plus 20 m of lead in view: pressing the pointer toward a
+        // screen edge before the reticle reaches the circle zooms out to show space to move into;
+        // at the limit, 20 m of world shows past it so the circle's edge never sits on the screen edge.
+        const lead = a.d / 2 + 20;                                       // from the focus to just past the reticle
+        const sl = Math.hypot(a.sux, a.suy) || 1;
+        const uxs = Math.abs(a.sux) / sl, uys = Math.abs(a.suy) / sl;    // the aim's screen direction
+        const ex = Math.tan(Math.PI / 6) * camera.aspect;                // ground half-extents in view,
+        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // per unit of distance
+        wantDist = Math.min(cam.zmax, Math.max(camDist, (uxs * lead) / (0.85 * ex), (uys * lead) / (0.85 * ey)));
       }
     }
   }
@@ -343,6 +350,7 @@ renderer.setAnimationLoop(() => {
   focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
   viewDist += (wantDist - viewDist) * k;
 
+  if (haveMe) { rangeRingFor(cam.leash); rangeRing.position.set(me.x, 0.35, -me.y); }
   const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
   camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
