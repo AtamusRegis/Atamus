@@ -15,7 +15,12 @@ export const BRAKE = 400;                    // m/s^2 (owner): letting go of WAS
 // at whichever is harder, BRAKE or the rate that stops the current speed in STOP_D (v^2 / 2 STOP_D); held constant,
 // it brings the ship to rest within STOP_D. Pressing WASD again ends the stop.
 export const STOP_D = 100;
-export const SPRINT = 1.3;                   // (owner, 2026-10-13) sprint is 30% faster (was double)
+export const SPRINT = 1.3;                   // (owner, 2026-10-13) sprint is 30% faster (was double), forward only
+// (owner, 2026-10-13) top speed by direction relative to the nose: forward 100%, sideways and backward 60%, blended
+// (diagonal ~88%). "Forward" for sprinting means within FWD_ARC of the nose.
+export const SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;
+export const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
+const wrapA = (a) => { a %= Math.PI * 2; return a > Math.PI ? a - Math.PI * 2 : a < -Math.PI ? a + Math.PI * 2 : a; };
 export const TURN_ACCEL = 0.3;
 // (owner, 2026-10-13) the capacitor, 0-100: sprinting drains it; moving without sprinting recharges it slowly,
 // sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
@@ -89,20 +94,17 @@ export class World3D {
       const moving = !!(p.dx || p.dy);
       if (p.cap === undefined) p.cap = CAP_MAX;
       if (p.cap <= 0) p.capOut = true; else if (p.capOut && p.cap >= CAP_RESUME) p.capOut = false;
-      const sprinting = !!p.boost && moving && !p.capOut;
+      const dh = moving ? wrapA(Math.atan2(p.dx, -p.dy) - (p.h || 0)) : 0;   // the push's angle off the nose (client's convention)
+      const sprinting = !!p.boost && moving && Math.abs(dh) <= FWD_ARC && !p.capOut;   // (owner) sprint only forward
       p.cap = sprinting ? Math.max(0, p.cap - CAP_DRAIN * dt) : Math.min(CAP_MAX, p.cap + (moving ? CAP_WALK : CAP_IDLE) * dt);
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
-      const spd = SPEED * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
+      const spd = SPEED * dirSpeed(dh) * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
       let a = ACCEL;
       if (p.dx || p.dy) p.brakeA = 0;
       else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }
-      if (p.dx || p.dy) {
-        const want = Math.atan2(p.dx, -p.dy);  // the input's heading (same convention as the client's)
-        let d = (want - (p.h || 0)) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
-        a *= accelShare(d);
-      }
+      if (moving) a *= accelShare(dh);
       let ex = tx - vx0, ey = ty - vy0; const el = Math.hypot(ex, ey), stepV = a * dt;
       if (el > stepV) { ex *= stepV / el; ey *= stepV / el; }
       p.vx = vx0 + ex; p.vy = vy0 + ey;

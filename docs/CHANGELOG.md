@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Directional speed; forward-only sprint (owner):** relative to the ship's nose, forward is full speed and sideways or backward 60% (blended between); sprint (30%) works only when pushing within 45° of the nose. Mostly felt while aiming, when the nose stays on the reticle.
 - **No wheel zoom (owner):** the max zoom now equals the min zoom (600 m), so the wheel and pinch don't zoom; the aim camera still pulls out while aiming.
 - **Base speed 200 m/s (owner):** ships cruise at 200 m/s (was 300); sprint is 260 m/s.
 - **Sprint 30% faster (owner):** sprinting now gives 390 m/s instead of double speed.

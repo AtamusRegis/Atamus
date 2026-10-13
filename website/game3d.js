@@ -19,6 +19,8 @@ let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
 let SPEED = 200;                               // m/s (owner, 2026-10-13; the server sends it in the hello)
 let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
+let SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;   // (owner) forward 100%, sideways / backward 60% (blended); sprint only within FWD_ARC of the nose
+const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
 let STOP_D = 100, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
 const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
@@ -287,7 +289,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -376,18 +378,17 @@ renderer.setAnimationLoop(() => {
   const d = inputDir(); sendDir(d, now);
   const movingIn = !!(d.x || d.y);
   if (cap <= 0) capOut = true; else if (capOut && cap >= CAPC.resume) capOut = false;
-  const sprintOn = !!d.b && movingIn && !capOut;
+  const mineP = players.get(myId);
+  let dh = 0;                                  // the push's angle off the nose, as the server works it out
+  if (movingIn) { dh = (Math.atan2(d.x, -d.y) - (mineP ? mineP.heading : 0)) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; }
+  const sprintOn = !!d.b && movingIn && Math.abs(dh) <= FWD_ARC && !capOut;   // (owner) sprint only forward
   if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * dt) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
+    const spd = SPEED * dirSpeed(dh) * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
     let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
     if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
-    if (d.x || d.y) {                          // a push off the nose gets only part of the acceleration
-      const mine = players.get(myId);
-      let dh = (Math.atan2(d.x, -d.y) - (mine ? mine.heading : 0)) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
-      a *= accelShare(dh);
-    }
+    if (movingIn) a *= accelShare(dh);         // a push off the nose gets only part of the acceleration
     let ex = tx - vel.x, ey = ty - vel.y; const el = Math.hypot(ex, ey), sv = a * dt;
     if (el > sv) { ex *= sv / el; ey *= sv / el; }
     vel.x += ex; vel.y += ey;
