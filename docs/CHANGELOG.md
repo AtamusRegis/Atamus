@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **Sprint, camera sliders, steady grid (owner):** holding Shift doubles the speed (server-applied). A panel of camera sliders: pitch, a two-handle min / max zoom, rotation speed, kept per browser. The grid moved into the ground's own shader (anti-aliased lines on the surface), fixing the flicker a separate line layer caused against the ground.
 - **A bigger world (owner): 126 km flat to flat and 300 m/s** (the sphere stays 100 m). The own-movement hard-snap threshold now scales with speed so the faster pace doesn't rubber-band.
 - **Right-click aiming, inverted orbit, max zoom (owner):** middle-mouse camera rotation is inverted; zoom is capped at 2,200 m. Holding right-click shows a circle on the ground at the pointer with a line from the sphere to it; the camera slides toward a point between the player and the circle (leashed to 700 m) and zooms out to keep the player in shot, easing back on release. The circle moves nothing yet.
 - **Fix: movement rubber-banding.** The client's own-sphere correction snapped back to the server's (half-a-round-trip-old) position every snapshot while moving; it now corrects toward the server's position projected forward by the measured latency (a ping every 2 s), snapping only past 25 m. Direction sends are capped at 20/s (orbiting the camera while moving flooded past the server's 40/s limit, which then dropped inputs).

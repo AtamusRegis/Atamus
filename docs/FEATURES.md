@@ -16,6 +16,8 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 - **Each player is one sphere, 100 m in diameter** (your own blue, everyone else's red), rolling as it travels. One sphere per account; it spawns within 300 m of the center the first time and comes back where it was after that (positions saved every 10 s and on leaving; a saved position outside the hexagon respawns at the center).
 - **Travel is on the ground plane only (XY): no movement up or down on Z.**
 - **Speed: 300 m/s** (owner, 2026-10-12; `SPEED` in `world3d.js`). Crossing the map takes about 7 minutes.
+- **Sprint (owner, 2026-10-12): holding Shift doubles the speed.** The sprint is just a flag to the server (`{t:"move", x, y, b}`); the server applies the doubling. *Open: its touch equivalent.*
+- The grid is drawn by the ground's own shader (anti-aliased 100 m lines on the surface itself), after a separate layer of rendered lines flickered against the ground.
 - **Server-authoritative:** the client only sends a direction (`{t:"move", x, y}`, clamped to length 1); the server simulates at 20 Hz and sends snapshots at 15 Hz to every client. The client predicts its own sphere locally (with the same border rule) and is softly corrected by snapshots; other spheres are drawn 120 ms in the past, interpolated between snapshots.
 - A player leaving (socket closed) despawns at once; their position is saved.
 
@@ -23,7 +25,7 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 - **WASD moves the sphere; wherever the camera is facing is "forward".**
 - **The middle mouse button, dragged, rotates the camera around the player** — **inverted** (owner, 2026-10-12): dragging right turns the view right. On touch, a one-finger drag does the same (mobile parity: drag = drag). *Open: how movement itself works on touch — nothing is decided yet.*
-- **The camera orbits the player at a 75° angle looking down toward it.** The mouse wheel (touch: pinch) changes its distance; **max zoom 2,200 m** (owner, 2026-10-12: "not super far out"; min 180 m, default 500 m — those two aren't owner numbers).
+- **The camera orbits the player looking down toward it; its pitch, zoom range and rotation speed are sliders** (owner, 2026-10-12): a panel in the top right with **Pitch** (15–89°, default 75°), **Zoom** (one two-handle slider for min and max, 100–8,000 m, defaults 180–2,200 m) and **Rotation** speed (10–300%, default 100%), kept per browser (`atamus.cam`). The mouse wheel (touch: pinch) zooms within the chosen range; the right-click leash zooms out at most to the chosen max.
 - **Right-click aiming (owner, 2026-10-12):** holding the right button shows a **circle outline on the ground where the mouse points** (scaled with zoom to stay readable) and a **line from the sphere to it**. While held, the **camera's focus slides toward a point between the player and the circle** (leashed to 700 m from the player) and **zooms out as needed to keep the player in the shot**, never past max zoom; releasing eases everything back. It's an indicator only — it doesn't move the sphere (yet). *Open: its touch equivalent (hold = right-click) once touch movement is decided.*
 - The browser's own right-click menu never opens in the game (kept from before).
 

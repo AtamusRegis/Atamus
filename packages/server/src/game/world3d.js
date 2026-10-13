@@ -53,21 +53,23 @@ export class World3D {
     await this._save(p).catch((e) => console.error("world3d leave", e));
   }
 
-  // The client only sends a direction; the server moves the sphere. Hostile input: finite numbers, length clamped to 1.
-  setDir(id, dx, dy) {
+  // The client only sends a direction (and whether Shift is held); the server moves the sphere.
+  // Hostile input: finite numbers, length clamped to 1, the boost only ever a flag.
+  setDir(id, dx, dy, boost) {
     const p = this.players.get(String(id));
     if (!p) return false;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
     const len = Math.hypot(dx, dy);
     if (len > 1) { dx /= len; dy /= len; }
-    p.dx = dx; p.dy = dy;
+    p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = double speed
     return true;
   }
 
   step(dt = TICK) {
     for (const p of this.players.values()) {
       if (!p.dx && !p.dy) continue;
-      const nx = p.x + p.dx * SPEED * dt, ny = p.y + p.dy * SPEED * dt;
+      const spd = SPEED * (p.boost ? 2 : 1);
+      const nx = p.x + p.dx * spd * dt, ny = p.y + p.dy * spd * dt;
       if (inside(nx, ny)) { p.x = nx; p.y = ny; }
       else {                                   // the border stops the sphere: walk as far along the step as still fits
         let lo = 0, hi = 1;

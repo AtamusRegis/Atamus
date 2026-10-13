@@ -33,18 +33,37 @@ scene.fog = new THREE.Fog(0x05070c, 3000, 14000);
 scene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 5000, 2000); scene.add(sun);
 
-const camera = new THREE.PerspectiveCamera(60, 1, 1, 30000);
+const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
-const CAM_PITCH = THREE.MathUtils.degToRad(75); // (owner) 75° looking down toward the player
-let camDist = 500;
-const MAX_DIST = 2200;                         // (owner) max zoom / leash distance: never super far out
+// camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
+const cam = { pitch: 75, zmin: 180, zmax: 2200, rot: 1 };
+try { Object.assign(cam, JSON.parse(localStorage.getItem("atamus.cam") || "{}")); } catch {}
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify(cam)); } catch {} };
+let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 const LEASH = 700;                             // how far the camera's focus may slide from the player while aiming
 
-// ground + the 2D grid
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 1, metalness: 0 }));
+// ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
+// so nothing z-fights or shimmers the way a second layer of rendered lines did
+const groundMat = new THREE.ShaderMaterial({
+  uniforms: {
+    base: { value: new THREE.Color(0x0a0e16) }, gline: { value: new THREE.Color(0x33455f) },
+    fogColor: { value: new THREE.Color(0x05070c) }, fogNear: { value: 3000 }, fogFar: { value: 14000 },
+  },
+  vertexShader: `varying vec3 vW; varying float vD;
+    void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vD = -mv.z; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `varying vec3 vW; varying float vD;
+    uniform vec3 base, gline, fogColor; uniform float fogNear, fogFar;
+    void main() {
+      vec2 c = vW.xz / 100.0;
+      vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
+      float l = 1.0 - min(min(g.x, g.y), 1.0);
+      vec3 col = mix(base, gline, l * 0.85);
+      col = mix(col, fogColor, smoothstep(fogNear, fogFar, vD));
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), groundMat);
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
-const grid = new THREE.GridHelper(126000, 1260, 0x33455f, 0x243450);   // 100 m cells over the whole map
-grid.position.y = 0.2; scene.add(grid);
 
 // the hexagon border: a flat glowing band on the ground (flat edges top and bottom, points east and west)
 function hexShapeBand() {
@@ -94,22 +113,23 @@ function placeSphere(p, x, y) {
 
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
 const keys = new Set();
-addEventListener("keydown", (e) => { if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
-addEventListener("keyup", (e) => keys.delete(e.code));
-addEventListener("blur", () => keys.clear());
+let sprint = false;                            // (owner) Shift = double speed
+addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
+addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
+addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
 let orbiting = false, aiming = false;
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
 addEventListener("mouseup", (e) => { if (e.button === 1) orbiting = false; if (e.button === 2) aiming = false; });
-addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005; });   // (owner) inverted
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(MAX_DIST, Math.max(180, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
+addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005 * cam.rot; });   // (owner) inverted
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
 let touch1 = null, pinch = 0;
 canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 1) touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }, { passive: true });
 canvas.addEventListener("touchmove", (e) => {
-  if (e.touches.length === 1 && touch1) { camYaw += (e.touches[0].clientX - touch1.x) * 0.006; touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
-  if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) camDist = Math.min(MAX_DIST, Math.max(180, camDist * pinch / d)); pinch = d; }
+  if (e.touches.length === 1 && touch1) { camYaw += (e.touches[0].clientX - touch1.x) * 0.006 * cam.rot; touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
+  if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * pinch / d)); pinch = d; }
   e.preventDefault();
 }, { passive: false });
 canvas.addEventListener("touchend", () => { touch1 = null; pinch = 0; }, { passive: true });
@@ -118,14 +138,14 @@ function inputDir() {                          // forward = where the camera fac
   let f = 0, r = 0;
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
-  if (!f && !r) return { x: 0, y: 0 };
+  if (!f && !r) return { x: 0, y: 0, b: sprint ? 1 : 0 };
   const n = Math.hypot(f, r); f /= n; r /= n;
   const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
-  return { x: f * sin + r * cos, y: f * cos - r * sin };   // game plane: +y north at yaw 0
+  return { x: f * sin + r * cos, y: f * cos - r * sin, b: sprint ? 1 : 0 };   // game plane: +y north at yaw 0
 }
 
 // ---- socket ----
-let ws = null, srvBuild = "", lastDir = { x: 0, y: 0 }, lastSent = 0, closedForGood = false;
+let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
 let rtt = 80, pingTimer = 0;                   // measured round trip, for latency-compensated correction
 const wsUrl = () => (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws" + (typeof deviceId === "function" ? "?d=" + deviceId() : "");
 function connect() {
@@ -152,10 +172,11 @@ function connect() {
         const x = cx / 100, y = cy / 100;
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
-          let tx = x + lastDir.x * SPEED * lead, ty = y + lastDir.y * SPEED * lead;
+          const lspd = SPEED * (lastDir.b ? 2 : 1);
+          let tx = x + lastDir.x * lspd * lead, ty = y + lastDir.y * lspd * lead;
           if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
-          if (err > SPEED * 0.4) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
+          if (err > lspd * 0.4) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");
@@ -178,13 +199,13 @@ function connect() {
 connect();
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
-  const changed = d.x !== lastDir.x || d.y !== lastDir.y;
+  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b;
   // at most 20 sends a second (orbiting the camera while moving changes the direction every mouse move;
   // the frame loop retries, so the latest direction always goes out), plus a heartbeat while moving
   const due = changed ? now - lastSent >= 50 : (d.x || d.y) && now - lastSent >= 500;
   if (!due) return;
   lastDir = d; lastSent = now;
-  ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y }));
+  ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y, b: d.b }));
 }
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
@@ -210,7 +231,8 @@ renderer.setAnimationLoop(() => {
 
   const d = inputDir(); sendDir(d, now);
   if (haveMe && (d.x || d.y)) {                // predict my own movement; the border stops me, as on the server
-    const nx = me.x + d.x * SPEED * dt, ny = me.y + d.y * SPEED * dt;
+    const spd = SPEED * (d.b ? 2 : 1);
+    const nx = me.x + d.x * spd * dt, ny = me.y + d.y * spd * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; }
   }
@@ -239,7 +261,7 @@ renderer.setAnimationLoop(() => {
       const ol = Math.hypot(ox, oy);
       if (ol > LEASH) { ox *= LEASH / ol; oy *= LEASH / ol; }            // leashed: never super far out
       fx = me.x + ox; fy = me.y + oy;
-      wantDist = Math.min(MAX_DIST, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
+      wantDist = Math.min(cam.zmax, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
     }
   }
   aimRing.visible = aimLine.visible = aiming && hit;
@@ -248,8 +270,9 @@ renderer.setAnimationLoop(() => {
   viewDist += (wantDist - viewDist) * k;
 
   const target = toWorld(focus.x, focus.y, SPHERE_R);
-  camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(CAM_PITCH) * viewDist);   // behind the player: W flies toward where the camera faces
-  camOff.y = Math.sin(CAM_PITCH) * viewDist;
+  const pr = THREE.MathUtils.degToRad(cam.pitch);
+  camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
+  camOff.y = Math.sin(pr) * viewDist;
   camera.position.copy(target).add(camOff);
   camera.lookAt(target);
 
@@ -260,6 +283,27 @@ renderer.setAnimationLoop(() => {
 
   renderer.render(scene, camera);
 });
+
+// (owner) camera sliders: pitch, min / max zoom (a two-handle slider), rotation speed
+const $ = (id) => document.getElementById(id);
+const sl = { pitch: $("sl-pitch"), zmin: $("sl-zmin"), zmax: $("sl-zmax"), rot: $("sl-rot"),
+             pitchV: $("sl-pitch-v"), zoomV: $("sl-zoom-v"), rotV: $("sl-rot-v") };
+function showCam() {
+  sl.pitch.value = cam.pitch; sl.zmin.value = cam.zmin; sl.zmax.value = cam.zmax; sl.rot.value = Math.round(cam.rot * 100);
+  sl.pitchV.textContent = cam.pitch + "\u00b0"; sl.zoomV.textContent = cam.zmin + "\u2013" + cam.zmax + " m"; sl.rotV.textContent = Math.round(cam.rot * 100) + "%";
+}
+if (sl.pitch) {
+  showCam();
+  sl.pitch.addEventListener("input", () => { cam.pitch = Math.min(89, Math.max(15, +sl.pitch.value || 75)); saveCam(); showCam(); });
+  sl.rot.addEventListener("input", () => { cam.rot = Math.min(3, Math.max(0.1, (+sl.rot.value || 100) / 100)); saveCam(); showCam(); });
+  const zoom = () => {
+    let a = +sl.zmin.value || 180, b = +sl.zmax.value || 2200;
+    if (a > b - 100) { if (document.activeElement === sl.zmin) a = b - 100; else b = a + 100; }
+    cam.zmin = Math.max(100, a); cam.zmax = Math.min(8000, b);
+    camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist)); saveCam(); showCam();
+  };
+  sl.zmin.addEventListener("input", zoom); sl.zmax.addEventListener("input", zoom);
+}
 
 // for the test harness and the console
 window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; } };

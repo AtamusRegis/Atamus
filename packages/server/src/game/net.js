@@ -51,7 +51,7 @@ export function attachGameServer(httpServer) {
       if (++cmds > 40) return;
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
-      if (m.t === "move") world.setDir(pid, m.x, m.y);
+      if (m.t === "move") world.setDir(pid, m.x, m.y, m.b);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
 
