@@ -118,10 +118,10 @@ addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if ([
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false, aimLock = null;   // (owner) orbiting freezes the aim pointer where MMB started
+let orbiting = false, aiming = false, aimLock = null;   // (owner) orbiting pointer-locks: the cursor freezes (hidden) where MMB started and the aim stays there
 const mouse = { x: 0, y: 0 };
-canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY }; e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; } if (e.button === 2) aiming = false; });
+canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY }; try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; try { document.exitPointerLock(); } catch {} } if (e.button === 2) aiming = false; });
 addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005 * cam.rot; });   // (owner) inverted
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
