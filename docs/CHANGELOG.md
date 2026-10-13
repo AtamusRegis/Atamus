@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Spread lines stop at the aim wedge (owner):** past optimal range the spread lines close only as far as the aim line's own wedge, never inside it.
 - **Optimal range (owner):** each item has an optimal range (a dotted gray circle while aiming) and a falloff. Inside it the aim line stays a line; past it the aim line opens into its own wedge, 0.5° either side at optimal and wider by the falloff per 100 m beyond. Optimal and Falloff sliders per slot.
 - **Idle aim turns the ship (owner):** with no WASD held, aiming any item turns the ship toward the aim point (others see it through the synced heading).
 - **Dots for endpoints (owner):** the aim line and the stop marker now end in small flat filled dots instead of ring outlines.

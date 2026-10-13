@@ -196,7 +196,7 @@ function updateSpread(dt, moving, sprinting) {
   const t = it.spread > 0 ? spreadCur / it.spread : 0;
   const hue = t > 0.5 ? 30 * (1 - (t - 0.5) * 2) : 30 + 90 * (1 - t * 2);   // red -> orange -> green
   spreadColor.setHSL(hue / 360, 0.95, 0.55); spreadMat.color.copy(spreadColor); fanMat.color.copy(spreadColor);
-  const ox = me.x, oz = -me.y, y = 0.6, L = it.range, sr = THREE.MathUtils.degToRad(spreadCur);
+  const ox = me.x, oz = -me.y, y = 0.6, L = it.range, sr = THREE.MathUtils.degToRad(Math.max(spreadCur, aimCone));   // (owner) the spread lines stop at the aim line's own wedge past optimal range
   const set = (line, b) => { const a = line.geometry.attributes.position; a.setXYZ(0, ox, y, oz); a.setXYZ(1, ox + Math.sin(b) * L, y, oz + Math.cos(b) * L); a.needsUpdate = true; };
   set(spreadL, bearing - sr); set(spreadR, bearing + sr);
   const fp = fanGeo.attributes.position; fp.setXYZ(0, ox, y - 0.1, oz);
@@ -625,9 +625,9 @@ renderer.setAnimationLoop(() => {
     const a2 = aimAt(px, py);
     if (a2) drawAim(a2);
   }
+  updateAimCone();
   updateSpread(dt, !!(d.x || d.y), sprintOn);
   updateStop();
-  updateAimCone();
   drawMinimap(nowP);
 
   if (countAt) {
