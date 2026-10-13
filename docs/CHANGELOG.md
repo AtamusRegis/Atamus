@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **The pinned circle rides with the ship (owner):** the middle-mouse pin is now the circle's offset from the ship rather than a world point, so flying with WASD keeps the circle and camera at their screen-locked spots; standing still it's still a fixed ground spot the orbit doesn't sweep.
 - **Fix: circling the aim around the ship made it backspin 360 once per lap.** The shortest-arc turn math was only valid near the target angle; as the heading accumulated a turn per lap it eventually commanded a full wrong-way spin. The wrap is now correct at any accumulation and the heading is kept normalized.
 - **The aim circle pins to the ground while orbiting (owner):** the ship always faces the active circle, so a middle-mouse orbit now freezes the circle at its world spot (it used to sweep with the pinned pointer, spinning the ship a full turn per camera revolution); the pointer resumes control when the middle button lifts.
 - **Idle ships hold their heading (owner):** with no right-click and no WASD the ship keeps the last direction it faced; the small post-stop network corrections no longer re-aim it (yours re-aims only from held input, others only at sustained speed).

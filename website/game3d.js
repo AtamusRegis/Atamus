@@ -162,7 +162,7 @@ let orbiting = false, aiming = false, aimLock = null, orbitLock = null, aimWorld
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw };
-    aimWorldLock = myAim ? { gx: myAim.x, gy: -myAim.z } : null;
+    aimWorldLock = myAim && haveMe ? { ox: myAim.x - me.x, oy: -myAim.z - me.y } : null;   // the circle's offset from the ship, so it travels with WASD
     lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
 addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; aimWorldLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false; aimWorldLock = null; } });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
@@ -300,11 +300,11 @@ renderer.setAnimationLoop(() => {
   myAim = null;
   if (aiming && haveMe) {
     let gx, gy;
-    if (orbiting && aimWorldLock) { gx = aimWorldLock.gx; gy = aimWorldLock.gy; hit = true; }   // (owner) orbiting: the circle holds its ground spot, the ship keeps facing it
+    if (orbiting && aimWorldLock) { gx = me.x + aimWorldLock.ox; gy = me.y + aimWorldLock.oy; hit = true; }   // (owner) MMB pins the circle at its offset from the ship: a fixed ground spot standing still, riding along under WASD, never swept by the orbit
     else {
       const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;
       raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-      if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; if (orbiting) aimWorldLock = { gx, gy }; }
+      if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; if (orbiting) aimWorldLock = { ox: gx - me.x, oy: gy - me.y }; }
     }
     if (hit) {
       aimRing.position.set(gx, 0.4, -gy);
