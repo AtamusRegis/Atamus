@@ -95,15 +95,16 @@ interactRing.rotation.x = -Math.PI / 2; interactRing.visible = false; scene.add(
 // second), an aim spread (degrees either side of the aim line) and whether it's an interaction object
 // (used on objects within the interaction circle; the ship faces the pointer while aiming it) or a ranged weapon
 const SLOTS = [
-  { name: "Primary", range: 600, speed: 20, spread: 30, interact: false },
-  { name: "Secondary", range: 700, speed: 8, spread: 20, interact: false },
-  { name: "Tertiary", range: INTERACT_R, speed: 60, spread: 45, interact: true },
+  { name: "Primary", range: 600, speed: 20, move: 10, spread: 30, interact: false },
+  { name: "Secondary", range: 700, speed: 8, move: 6, spread: 20, interact: false },
+  { name: "Tertiary", range: INTERACT_R, speed: 60, move: 20, spread: 45, interact: true },
 ];
 let slot = 0;
 try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   // tuned slot values, kept in this browser
   if (Array.isArray(sv)) sv.forEach((v, i) => { if (!SLOTS[i] || !v) return;
     if (Number.isFinite(v.range)) SLOTS[i].range = Math.min(3000, Math.max(10, v.range));
     if (Number.isFinite(v.speed)) SLOTS[i].speed = Math.min(180, Math.max(0, v.speed));
+    if (Number.isFinite(v.move)) SLOTS[i].move = Math.min(180, Math.max(0, v.move));
     if (Number.isFinite(v.spread)) SLOTS[i].spread = Math.min(90, Math.max(0, v.spread));
     if (typeof v.interact === "boolean") SLOTS[i].interact = v.interact; }); } catch {}
 const saveSlots = () => { try { localStorage.setItem("atamus.slots", JSON.stringify(SLOTS)); } catch {} };
@@ -122,7 +123,9 @@ const arcGeo = new THREE.BufferGeometry(); arcGeo.setAttribute("position", new T
 const spreadArc = new THREE.Line(arcGeo, spreadMat); spreadArc.visible = false; spreadArc.frustumCulled = false; scene.add(spreadArc);
 let spreadCur = 0, lastBearing = null, wasAiming = false, aimSlot = -1;
 const spreadColor = new THREE.Color();
-function updateSpread(dt) {
+const YELLOW = 1 / 3;                          // the share of full spread where the color passes yellow
+const SPRINT_SPREAD = 2;                       // sprinting opens the movement spread this much faster
+function updateSpread(dt, moving, sprinting) {
   const it = SLOTS[slot];
   const on = aiming && haveMe && !!myAim;
   spreadL.visible = spreadR.visible = spreadFan.visible = spreadArc.visible = on;
@@ -137,7 +140,13 @@ function updateSpread(dt) {
     spreadCur = Math.min(it.spread, spreadCur + (Math.abs(d) / Math.PI) * it.spread);
   }
   lastBearing = bearing;
-  spreadCur = Math.max(0, spreadCur - it.speed * dt);                 // and holding it steady closes it
+  // (owner, 2026-10-13) moving opens the spread at the item's movement spread speed instead of closing it:
+  // walking up to the yellow point at most (above it, it keeps closing down to there), sprinting faster
+  // and up to full spread. Standing still, it closes at the aim speed.
+  if (moving && sprinting) spreadCur = Math.min(it.spread, spreadCur + it.move * SPRINT_SPREAD * dt);
+  else if (moving) { const cap = it.spread * YELLOW;
+    spreadCur = spreadCur < cap ? Math.min(cap, spreadCur + it.move * dt) : Math.max(cap, spreadCur - it.speed * dt); }
+  else spreadCur = Math.max(0, spreadCur - it.speed * dt);
   const t = it.spread > 0 ? spreadCur / it.spread : 0;
   const hue = t > 0.5 ? 30 * (1 - (t - 0.5) * 2) : 30 + 90 * (1 - t * 2);   // red -> orange -> green
   spreadColor.setHSL(hue / 360, 0.95, 0.55); spreadMat.color.copy(spreadColor); fanMat.color.copy(spreadColor);
@@ -463,7 +472,7 @@ renderer.setAnimationLoop(() => {
     const a2 = aimAt(px, py);
     if (a2) drawAim(a2);
   }
-  updateSpread(dt);
+  updateSpread(dt, !!(d.x || d.y), !!d.b);
 
   if (countAt) {
     const left = Math.ceil((countAt - now) / 1000);
@@ -493,12 +502,14 @@ function showSlot() {
   $i("sl-slot-name").textContent = (slot + 1) + " " + it.name;
   $i("sl-range").value = it.range; $i("sl-range-v").textContent = it.range + " m";
   $i("sl-speed").value = it.speed; $i("sl-speed-v").textContent = it.speed + "\u00b0/s";
+  $i("sl-move").value = it.move; $i("sl-move-v").textContent = it.move + "\u00b0/s";
   $i("sl-spread").value = it.spread; $i("sl-spread-v").textContent = it.spread + "\u00b0";
   $i("sl-interact").checked = it.interact;
 }
 if ($i("sl-range")) {
   $i("sl-range").addEventListener("input", () => { SLOTS[slot].range = Math.min(3000, Math.max(10, +$i("sl-range").value || 10)); saveSlots(); showSlot(); });
   $i("sl-speed").addEventListener("input", () => { SLOTS[slot].speed = Math.min(180, Math.max(0, +$i("sl-speed").value || 0)); saveSlots(); showSlot(); });
+  $i("sl-move").addEventListener("input", () => { SLOTS[slot].move = Math.min(180, Math.max(0, +$i("sl-move").value || 0)); saveSlots(); showSlot(); });
   $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
   $i("sl-interact").addEventListener("change", () => { SLOTS[slot].interact = $i("sl-interact").checked; saveSlots(); showSlot(); });
 }
