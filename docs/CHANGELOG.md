@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Idle aim turns the ship (owner):** with no WASD held, aiming any item turns the ship toward the aim point (others see it through the synced heading).
 - **Dots for endpoints (owner):** the aim line and the stop marker now end in small flat filled dots instead of ring outlines.
 - **Capacitor, stop marker, aim dead zone (owner):** a 0–100 capacitor bar above the hotbar: sprinting drains it, walking recharges it slowly, sitting still faster (server-enforced; sprint stays off once empty until it's back to 15). While moving, a dashed line and circle show where the ship would stop if let go now (only you see it). Aiming near the ship no longer zooms or leashes (a dead zone, easing in beyond it), which ends the jitter there.
 - **Ship weight (owner):** momentum instead of instant speed. Thrust 200 m/s² toward the input, scaled down the more the push is off the nose (30% against it); letting go brakes at 400 m/s² whatever the heading. The nose turns toward the input. Same physics on the server and in the client's prediction (which now leads corrections by its own velocity).

@@ -465,7 +465,8 @@ renderer.setAnimationLoop(() => {
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
     if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift; an interaction item faces the pointer
-      const face = aiming && SLOTS[slot].interact ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
+      // (owner, 2026-10-13) with no WASD held, aiming turns the ship toward the aim point (any item)
+      const face = aiming && SLOTS[slot].interact ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : aiming ? myAim : null;
       placeShip(p, me.x, me.y, dt, face, false); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
