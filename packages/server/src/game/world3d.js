@@ -6,10 +6,10 @@ import { pool } from "../db.js";
 
 export const HEX_FLAT = 126_000;           // 126 km flat to flat (owner, 2026-10-12)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
-export const SPEED = 300;                    // m/s on the ground (owner, 2026-10-12)
+export const SPEED = 200;                    // m/s on the ground (owner, 2026-10-13; was 300)
 // (owner, 2026-10-13) weight: the ship accelerates toward its input; full ACCEL when the nose points where
 // it's being pushed, down to TURN_ACCEL of it when pushing against the nose (it has to come round first)
-export const ACCEL = 200;                    // m/s^2: 0 to 300 m/s in 1.5 s straight
+export const ACCEL = 200;                    // m/s^2: 0 to 200 m/s in 1 s straight
 export const BRAKE = 400;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
 // (owner, 2026-10-13) "no matter the speed, stop within 100 m": when WASD is let go the braking rate is fixed for that stop
 // at whichever is harder, BRAKE or the rate that stops the current speed in STOP_D (v^2 / 2 STOP_D); held constant,

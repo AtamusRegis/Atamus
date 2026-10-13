@@ -17,7 +17,7 @@ const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).co
 // ---- world constants (the server's hello can override them) ----
 let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
-let SPEED = 300;                               // m/s
+let SPEED = 200;                               // m/s (owner, 2026-10-13; the server sends it in the hello)
 let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
 let STOP_D = 100, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
 const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
