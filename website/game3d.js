@@ -5,6 +5,7 @@
 // (touch: a one-finger drag) rotates the camera around the player; it sits at a 75°
 // angle looking down toward the player. Everyone in the world sees everyone.
 import * as THREE from "./vendor/three.module.js";
+import { GLTFLoader } from "./vendor/GLTFLoader.js";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -83,32 +84,49 @@ const aimLine = new THREE.Line(aimLineGeo, new THREE.LineBasicMaterial({ color: 
 aimLine.visible = false; scene.add(aimLine);
 const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), aimHit = new THREE.Vector3();
 
-// ---- players ----
+// ---- players: the ship (owner, 2026-10-12: Combat_Cruiser.glb, Y up, +Z forward) ----
+// Scaled to 100 m long, resting on the grid, facing the way it travels. Until the
+// model arrives, a sphere stands in and is swapped the moment it loads.
 const sphereGeo = new THREE.SphereGeometry(SPHERE_R, 48, 32);
-const mineMat = new THREE.MeshStandardMaterial({ color: 0x4f8fe8, roughness: 0.35, metalness: 0.15 });
-const otherMat = new THREE.MeshStandardMaterial({ color: 0xd05050, roughness: 0.35, metalness: 0.15 });
-const players = new Map();                     // id -> { mesh, name, from:{x,y,ts}, to:{x,y,ts} }
+const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x4f8fe8, roughness: 0.35, metalness: 0.15 });
+const players = new Map();                     // id -> { holder, heading, name, from:{x,y,ts}, to:{x,y,ts} }
 let myId = null;
-const me = { x: 0, y: 0 };                     // my sphere, predicted locally and corrected by snapshots
+const me = { x: 0, y: 0 };                     // my ship, predicted locally and corrected by snapshots
 let haveMe = false;
+let shipTemplate = null, shipMid = SPHERE_R;   // shipMid: the hull's center height, for the camera and the aim line
+new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
+  const src = g.scene;
+  const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
+  src.scale.setScalar(100 / Math.max(size.x, size.y, size.z));
+  const b2 = new THREE.Box3().setFromObject(src);
+  src.position.y -= b2.min.y;                  // the hull rests on the grid
+  const wrap = new THREE.Group(); wrap.add(src);
+  shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
+  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual()); }
+}, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
+function makeVisual() {
+  if (shipTemplate) return shipTemplate.clone(true);
+  const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m;
+}
 
 function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
-  const mesh = new THREE.Mesh(sphereGeo, id === myId ? mineMat : otherMat);
-  mesh.position.copy(toWorld(x, y, SPHERE_R)); scene.add(mesh);
-  const p = { id, name, mesh, from: { x, y, ts: 0 }, to: { x, y, ts: 0 } };
+  const holder = new THREE.Group();
+  holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual()); scene.add(holder);
+  const p = { id, name, holder, heading: 0, from: { x, y, ts: 0 }, to: { x, y, ts: 0 } };
   players.set(id, p); return p;
 }
-function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.mesh); players.delete(id); }
-const rollAxis = new THREE.Vector3(), rollQ = new THREE.Quaternion();
-function placeSphere(p, x, y) {
-  const prev = p.mesh.position, nx = toWorld(x, y, SPHERE_R);
-  const dx = nx.x - prev.x, dz = nx.z - prev.z, d = Math.hypot(dx, dz);
-  if (d > 0.001) {                             // roll as it travels
-    rollAxis.set(dz, 0, -dx).normalize(); rollQ.setFromAxisAngle(rollAxis, d / SPHERE_R);
-    p.mesh.quaternion.premultiply(rollQ);
-  }
+function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
+function placeShip(p, x, y, dt) {
+  const prev = p.holder.position, nx = toWorld(x, y, 0);
+  const dx = nx.x - prev.x, dz = nx.z - prev.z;
   prev.copy(nx);
+  if (Math.hypot(dx, dz) > 0.02) {             // turn toward the way it travels (+Z forward)
+    const target = Math.atan2(dx, dz);
+    const diff = ((target - p.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    p.heading += diff * Math.min(1, dt * 6);
+    p.holder.rotation.y = p.heading;
+  }
 }
 
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
@@ -181,7 +199,7 @@ function connect() {
       focus.x = me.x; focus.y = me.y;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n);
-      addPlayer(myId, m.you.name, me.x, me.y).mesh.material = mineMat;
+      addPlayer(myId, m.you.name, me.x, me.y);
       if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts);
     } else if (m.t === "snap") {
       for (const [id, cx, cy] of m.p) {
@@ -236,14 +254,14 @@ function goUpdating(parts) {
 }
 
 // ---- frame loop ----
-const clock = new THREE.Clock();
+let lastT = performance.now();
 const focus = { x: 0, y: 0 };                  // where the camera looks (the player, or toward the aim circle)
 let viewDist = camDist;                        // the eased camera distance
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const camOff = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.1), now = Date.now();
+  const nowP = performance.now(), dt = Math.min((nowP - lastT) / 1000, 0.1), now = Date.now(); lastT = nowP;
 
   const d = inputDir(); sendDir(d, now);
   if (haveMe && (d.x || d.y)) {                // predict my own movement; the border stops me, as on the server
@@ -255,11 +273,11 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeSphere(p, me.x, me.y); continue; }
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt); continue; }
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
-    placeSphere(p, x, y);
+    placeShip(p, x, y, dt);
   }
 
   // right-click aiming (owner): a circle where the mouse points on the ground, a line from the sphere to it; the
@@ -273,7 +291,7 @@ renderer.setAnimationLoop(() => {
       const gx = aimHit.x, gy = -aimHit.z;
       aimRing.position.set(gx, 0.4, -gy);
       const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
-      aimLineGeo.setFromPoints([toWorld(me.x, me.y, SPHERE_R), new THREE.Vector3(gx, 0.4, -gy)]);
+      aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(gx, 0.4, -gy)]);
       if (!orbitLock) {                                                // orbiting holds the frame: the aim stops steering it
         let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                  // between the player and the circle
         const ol = Math.hypot(ox, oy);
@@ -293,7 +311,7 @@ renderer.setAnimationLoop(() => {
   focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
   viewDist += (wantDist - viewDist) * k;
 
-  const target = toWorld(focus.x, focus.y, SPHERE_R);
+  const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
   camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
   camOff.y = Math.sin(pr) * viewDist;

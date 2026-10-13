@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **The ship (owner):** players fly the owner's Combat Cruiser model (glTF, 100 m long, resting on the grid, turning to face its travel) instead of a sphere; GLTFLoader vendored. Also: the frame clock no longer uses the deprecated THREE.Clock.
 - **Camera defaults (owner):** pitch 60°, zoom 600–1,800 m, rotation 60%; a browser's saved sliders keep their own values.
 - **Camera frame locks while orbiting; X drops a cube (owner):** holding the middle mouse freezes the zoom and the focus offset at their current values and orbits that frame around the player — the aim circle no longer drags the camera or zoom mid-orbit. X drops a local 50 m cube at the player as a movement reference.
 - **Fix: the orbit hitched once per full turn.** Under pointer lock on Windows, the hidden cursor wraps the screen and movementX spikes by a screen width at each wrap; single-event deltas past 200 px are now dropped, and the lock is requested with unadjusted movement (plain fallback), which avoids the wrap path.
