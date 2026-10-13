@@ -38,16 +38,16 @@ const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
 const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 50,
-  dir: { n: 35, ne: -35, e: 35, se: 0, s: 35, sw: 0, w: 35, nw: -35 } };   // (owner) leash: max reticle distance; over: overflow; dir: the compass's per-direction leash trim (m)
+  dir: { n: 0, ne: 0, e: 0, se: 0, s: 0, sw: 0, w: 0, nw: 0 } };   // (owner) leash: max reticle distance; over: base overflow; dir: the compass's per-direction overflow delta (m)
 // only the shown tuning values are read back from this browser; the hidden settings always use the
 // owner's fixed values above
 try {
   const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}");
   if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash));
   if (Number.isFinite(sv.over)) cam.over = Math.min(200, Math.max(0, sv.over));
-  if (sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
+  if (sv.dirv === 2 && sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
 } catch {}
-const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir })); } catch {} };
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir, dirv: 2 })); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -351,30 +351,30 @@ renderer.setAnimationLoop(() => {
         // (vertical) extent pair, and the leash chosen per direction so the boundary ahead of the
         // reticle is exactly the overflow - measured on the ellipse inscribed in the screen, so a
         // diagonal gets the same guaranteed gap as a cardinal. Uniform zoom, uniform overflow.
-        const R = cam.leash, O = cam.over, S = 80, m = 0.85;             // overflow past the circle (the panel's number); margin behind the ship
+        const R = cam.leash, S = 80, m = 0.85;                           // margin behind the ship
         const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
+        // (owner, 2026-10-13, the diagram) the compass sets the OVERFLOW per direction: its slider
+        // plus the base Overflow is how far the camera bounds sit past the circle's edge when aiming
+        // that way, blended smoothly between neighboring directions; zoom and leash are solved
+        // together along the aim so the gap comes out exact, the ship kept behind the focus.
+        const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
+        const ring = [cam.dir.e, cam.dir.ne, cam.dir.n, cam.dir.nw, cam.dir.w, cam.dir.sw, cam.dir.s, cam.dir.se];
+        const t = ang / 45, i0 = Math.floor(t) % 8, i1 = (i0 + 1) % 8, ft = t - Math.floor(t);
+        const O = Math.max(0, cam.over + ring[i0] + (ring[i1] - ring[i0]) * (ft * ft * (3 - 2 * ft)));
         const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
-        const cot = (t) => Math.cos(t) / Math.max(1e-4, Math.sin(t));
+        const cot = (q) => Math.cos(q) / Math.max(1e-4, Math.sin(q));
         const eTop = Math.max(0.05, -Math.cos(ph) + Math.sin(ph) * cot(Math.max(0.05, ph - f2)));
         const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
         const ex = Math.tan(f2) * camera.aspect;
-        const Dfull = (R + O + S) / (m * (eTop + eBot));                 // the one full-press zoom, every direction
-        wantDist = Math.max(camDist, Math.min(6000, r * Dfull));
         const uxs = r > 1e-4 ? Math.abs(a.sux) / r : 0, uys = r > 1e-4 ? Math.abs(a.suy) / r : 1;
         const eF = a.suy >= 0 ? eTop : eBot, eB = a.suy >= 0 ? eBot : eTop;
         const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));     // ellipse boundary ahead, per unit of zoom
         const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));     // and behind (the vertical half flips)
-        let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the overflow
+        const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));          // the zoom this direction and its gap need
+        wantDist = Math.max(camDist, Math.min(6000, r * Ddir));
+        let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the gap
         lam = Math.min(lam, (m * wantDist / denB - S) / R);              // behind it: the ship + its margin
         lam = Math.min(1, Math.max(0, lam));
-        // (owner, 2026-10-13) the compass: a per-direction leash trim in meters, set on the panel's
-        // eight sliders and blended smoothly between neighboring directions, scaled by the press.
-        const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
-        const ring = [cam.dir.e, cam.dir.ne, cam.dir.n, cam.dir.nw, cam.dir.w, cam.dir.sw, cam.dir.s, cam.dir.se];
-        const t = ang / 45, i0 = Math.floor(t) % 8, i1 = (i0 + 1) % 8, ft = t - Math.floor(t);
-        const sm = ft * ft * (3 - 2 * ft);
-        const trim = ring[i0] + (ring[i1] - ring[i0]) * sm;
-        lam = Math.min(1, Math.max(0, lam + (trim / R) * r));
         fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;         // the focus: the extending leash
       }
     }
