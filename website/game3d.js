@@ -158,13 +158,12 @@ addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (e
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false, aimLock = null, orbitLock = null, aimWorldLock = null;   // orbitLock: MMB holds the camera frame; aimWorldLock: and pins the aim circle to its ground spot
+let orbiting = false, aiming = false, aimLock = null, orbitLock = null;   // orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw };
-    aimWorldLock = myAim && haveMe ? { ox: myAim.x - me.x, oy: -myAim.z - me.y } : null;   // the circle's offset from the ship, so it travels with WASD
     lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; aimWorldLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false; aimWorldLock = null; } });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -300,12 +299,9 @@ renderer.setAnimationLoop(() => {
   myAim = null;
   if (aiming && haveMe) {
     let gx, gy;
-    if (orbiting && aimWorldLock) { gx = me.x + aimWorldLock.ox; gy = me.y + aimWorldLock.oy; hit = true; }   // (owner) MMB pins the circle at its offset from the ship: a fixed ground spot standing still, riding along under WASD, never swept by the orbit
-    else {
-      const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;
-      raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-      if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; if (orbiting) aimWorldLock = { ox: gx - me.x, oy: gy - me.y }; }
-    }
+    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // (owner) MMB: the circle keeps the pinned SCREEN spot, through orbits and WASD alike
+    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; }
     if (hit) {
       aimRing.position.set(gx, 0.4, -gy);
       const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
