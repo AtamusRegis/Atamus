@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **The ship faces the reticle while aiming (owner):** holding the right button (with or without the middle button) turns the ship toward the reticle, even while flying with WASD; let go and it faces the WASD direction again.
 - **Leash circle and aim camera back (owner):** the blue 700 m camera leash circle shows again around the ship, the right-click reticle is clamped to it, and the camera slides toward the reticle as before (dead zone, overflow, middle-mouse frame freeze). The line still starts at the ship's center on the ground plane.
 - **Curved stop path reverted (owner: "its not right"); smaller dots (owner):** the stop marker is straight again. The aim line's end dot and the stop marker's dot are much smaller (2 m radius from 5, still scaling with zoom).
 - **Load circle; weapons and aiming scrapped for now (owner):** the server now sends each player only the ships within 5,000 m of them (the load circle, drawn as a ring for now, also on the minimap). The minimap shows ships as arrows pointing the way they face. All weapons, combat, health, the hotbar, inventory, the Weapon & Ammo Maker, spread / range displays and the aim leash camera are removed (last in `956cb73`); right-click is now just a dashed line from the ship's center on the ground to the pointer. The camera always looks at the ship.

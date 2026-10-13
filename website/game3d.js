@@ -176,7 +176,7 @@ function placeShip(p, x, y, dt, face, moving) {
   const spd = dt > 0 ? Math.hypot(dx, dz) / dt : 0;
   p.spd = (p.spd || 0) * 0.85 + spd * 0.15;
   let target = null;
-  if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // my own ship: toward the input
+  if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // my own ship: toward the input or the reticle
   else if ((moving === undefined ? p.spd > 30 : moving) && spd > 1) target = Math.atan2(dx, dz);   // only frames that really moved
   if (target !== null) {
     let diff = (target - p.heading) % (Math.PI * 2);                  // shortest arc, valid however far the
@@ -211,6 +211,7 @@ addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
+let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
   if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
@@ -396,7 +397,8 @@ renderer.setAnimationLoop(() => {
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
     if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift
-      const face = (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
+      // (owner, 2026-10-13) while aiming (right button, with or without the middle), it turns toward the reticle instead
+      const face = aiming && myAim ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
       placeShip(p, me.x, me.y, dt, face, false); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
@@ -477,7 +479,7 @@ renderer.setAnimationLoop(() => {
   camera.lookAt(target);
   // the line from the ship's center on the ground plane to the reticle, worked out against the camera as it renders
   // this frame so it never trails the pointer
-  let aimShown = false;
+  let aimShown = false; myAim = null;
   if (aiming && haveMe) {
     const a = aimAt(aimPx().x, aimPx().y);
     if (a) {
@@ -486,7 +488,7 @@ renderer.setAnimationLoop(() => {
       aimLine.computeLineDistances();
       const ds = Math.max(1, viewDist / 500); aimLineMat.dashSize = 12 * ds; aimLineMat.gapSize = 8 * ds;   // dashes keep their look zoomed out
       aimEnd.position.set(a.x, 0.5, a.z); aimEnd.scale.set(ds, ds, 1);
-      aimHit.set(a.x, 0, a.z);
+      aimHit.set(a.x, 0, a.z); myAim = { x: a.x, z: a.z };
     }
   }
   aimLine.visible = aimEnd.visible = aimShown;
