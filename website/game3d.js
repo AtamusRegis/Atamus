@@ -120,13 +120,17 @@ function addPlayer(id, name, x = 0, y = 0) {
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 const TURN = 12;                               // rad/s (owner): almost instant, but a real rotation
-function placeShip(p, x, y, dt, face) {
+// (owner) with no right-click and no WASD, the ship keeps its last heading: for my own ship only held
+// input re-aims it (correction nudges never do); for others, only a sustained real speed does.
+function placeShip(p, x, y, dt, face, moving) {
   const prev = p.holder.position, nx = toWorld(x, y, 0);
   const dx = nx.x - prev.x, dz = nx.z - prev.z;
   prev.copy(nx);
+  const spd = dt > 0 ? Math.hypot(dx, dz) / dt : 0;
+  p.spd = (p.spd || 0) * 0.85 + spd * 0.15;
   let target = null;
   if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // (owner) right-click: face the aim point
-  else if (Math.hypot(dx, dz) > 0.02) target = Math.atan2(dx, dz);    // otherwise face the way it travels
+  else if (moving === undefined ? p.spd > 30 : (moving && spd > 1)) target = Math.atan2(dx, dz);
   if (target !== null) {
     const diff = ((target - p.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     p.heading += Math.max(-TURN * dt, Math.min(TURN * dt, diff));
@@ -279,7 +283,7 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt, myAim); continue; }
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt, myAim, !!(d.x || d.y)); continue; }
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
