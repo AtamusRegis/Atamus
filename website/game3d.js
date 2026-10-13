@@ -208,7 +208,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
   const holder = new THREE.Group();
   holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual()); scene.add(holder);
-  const p = { id, name, holder, heading: 0, from: { x, y, ts: 0 }, to: { x, y, ts: 0 } };
+  const p = { id, name, holder, heading: 0, buf: [], to: { x, y } };   // buf: recent snapshot positions on the server's clock
   players.set(id, p); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
@@ -223,7 +223,7 @@ function placeShip(p, x, y, dt, face, moving) {
   p.spd = (p.spd || 0) * 0.85 + spd * 0.15;
   let target = null;
   if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // (owner) right-click: face the aim point
-  else if (moving === undefined ? p.spd > 30 : (moving && spd > 1)) target = Math.atan2(dx, dz);
+  else if ((moving === undefined ? p.spd > 30 : moving) && spd > 1) target = Math.atan2(dx, dz);   // only frames that really moved
   if (target !== null) {
     let diff = (target - p.heading) % (Math.PI * 2);                  // shortest arc, valid however far the
     if (diff > Math.PI) diff -= Math.PI * 2;                          // heading has accumulated (circling the
@@ -309,7 +309,7 @@ function inputDir() {                          // forward = where the camera fac
 
 // ---- socket ----
 let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
-let rtt = 80, pingTimer = 0;                   // measured round trip, for latency-compensated correction
+let rtt = 80, pingTimer = 0, srvOff = null;   // srvOff: local clock minus the server's, from snapshots                   // measured round trip, for latency-compensated correction
 const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);   // ?as: the PTR's second-account test hook (ignored live)
   return (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws?" + q.toString(); };
 function connect() {
@@ -335,6 +335,7 @@ function connect() {
       focus.x = me.x; focus.y = me.y;
       addPlayer(myId, myName, me.x, me.y).side = m.s;
     } else if (m.t === "snap") {
+      { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
       for (const [id, cx, cy] of m.p) {
         const x = cx / 100, y = cy / 100;
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
@@ -347,7 +348,8 @@ function connect() {
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");
-        p.from = p.to; p.to = { x, y, ts: performance.now() };   // our own clock: no server skew in the interpolation
+        p.buf.push({ x, y, t: m.ts }); if (p.buf.length > 30) p.buf.shift();   // a short history, timed by the server
+        p.to = { x, y };
       }
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
@@ -404,12 +406,20 @@ renderer.setAnimationLoop(() => {
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; }
   }
 
-  const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
+  // other ships are drawn 150 ms in the past on the server's clock, between the two snapshots around that moment
+  // (only the last two used to be kept, older than the render time, so they stepped and never glided)
+  const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
     if (p.id === myId) { placeShip(p, me.x, me.y, dt, aiming && SLOTS[slot].interact ? myAim : null, !!(d.x || d.y)); continue; }   // (owner, 2026-10-13) faces its travel; an interaction item faces the pointer while aiming
-    const span = p.to.ts - p.from.ts;
-    let x = p.to.x, y = p.to.y;
-    if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
+    const B = p.buf; let x = p.to.x, y = p.to.y;
+    if (B.length) {
+      let i = B.length - 1; while (i > 0 && B[i].t > rt) i--;
+      const a = B[i], b = B[i + 1];
+      if (b && b.t > a.t && rt >= a.t) { const t = (rt - a.t) / (b.t - a.t); x = a.x + (b.x - a.x) * t; y = a.y + (b.y - a.y) * t; }
+      else if (!b && i > 0 && rt > a.t) {      // past the newest: carry on along its last motion briefly, then hold
+        const z = B[i - 1], k = Math.min(rt - a.t, 120) / Math.max(1, a.t - z.t); x = a.x + (a.x - z.x) * k; y = a.y + (a.y - z.y) * k;
+      } else { x = a.x; y = a.y; }
+    }
     placeShip(p, x, y, dt);
   }
 
@@ -598,4 +608,4 @@ document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListene
 selectSlot(0);
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };

@@ -19,7 +19,7 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 - **Sprint (owner, 2026-10-12): holding Shift doubles the speed.** The sprint is just a flag to the server (`{t:"move", x, y, b}`); the server applies the doubling. *Open: its touch equivalent.*
 - **X drops a cube** (owner, 2026-10-12: a movement reference "for now"): a 50 m cube at the player's position, local to this browser (others don't see it; the newest 200 are kept; gone on reload).
 - The grid is drawn by the ground's own shader (anti-aliased 100 m lines on the surface itself), after a separate layer of rendered lines flickered against the ground.
-- **Server-authoritative:** the client only sends a direction (`{t:"move", x, y}`, clamped to length 1); the server simulates at 20 Hz and sends snapshots at 15 Hz to every client. The client predicts its own sphere locally (with the same border rule) and is softly corrected by snapshots; other spheres are drawn 120 ms in the past, interpolated between snapshots.
+- **Server-authoritative:** the client only sends a direction (`{t:"move", x, y}`, clamped to length 1); the server simulates at 20 Hz and sends snapshots at 15 Hz to every client. The client predicts its own sphere locally (with the same border rule) and is softly corrected by snapshots; other ships keep a short history of snapshot positions timed by the server's clock and are drawn 150 ms in the past, interpolated between the two snapshots around that moment (briefly carried on along their last motion if a snapshot is late); they turn only on frames where they really moved.
 - A player leaving (socket closed) despawns at once; their position is saved.
 
 ## Sides and the minimap (owner, 2026-10-13)
