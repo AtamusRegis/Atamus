@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Optimal range (owner):** each item has an optimal range (a dotted gray circle while aiming) and a falloff. Inside it the aim line stays a line; past it the aim line opens into its own wedge, 0.5° either side at optimal and wider by the falloff per 100 m beyond. Optimal and Falloff sliders per slot.
 - **Idle aim turns the ship (owner):** with no WASD held, aiming any item turns the ship toward the aim point (others see it through the synced heading).
 - **Dots for endpoints (owner):** the aim line and the stop marker now end in small flat filled dots instead of ring outlines.
 - **Capacitor, stop marker, aim dead zone (owner):** a 0–100 capacitor bar above the hotbar: sprinting drains it, walking recharges it slowly, sitting still faster (server-enforced; sprint stays off once empty until it's back to 15). While moving, a dashed line and circle show where the ship would stop if let go now (only you see it). Aiming near the ship no longer zooms or leashes (a dead zone, easing in beyond it), which ends the jitter there.

@@ -100,9 +100,9 @@ interactRing.rotation.x = -Math.PI / 2; interactRing.visible = false; scene.add(
 // second), an aim spread (degrees either side of the aim line) and whether it's an interaction object
 // (used on objects within the interaction circle; the ship faces the pointer while aiming it) or a ranged weapon
 const SLOTS = [
-  { name: "Primary", range: 600, speed: 20, move: 10, spread: 30, interact: false },
-  { name: "Secondary", range: 700, speed: 8, move: 6, spread: 20, interact: false },
-  { name: "Tertiary", range: INTERACT_R, speed: 60, move: 20, spread: 45, interact: true },
+  { name: "Primary", range: 600, optimal: 400, falloff: 2, speed: 20, move: 10, spread: 30, interact: false },
+  { name: "Secondary", range: 700, optimal: 600, falloff: 1, speed: 8, move: 6, spread: 20, interact: false },
+  { name: "Tertiary", range: INTERACT_R, optimal: INTERACT_R, falloff: 4, speed: 60, move: 20, spread: 45, interact: true },
 ];
 let slot = 0;
 try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   // tuned slot values, kept in this browser
@@ -110,6 +110,8 @@ try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   /
     if (Number.isFinite(v.range)) SLOTS[i].range = Math.min(3000, Math.max(10, v.range));
     if (Number.isFinite(v.speed)) SLOTS[i].speed = Math.min(180, Math.max(0, v.speed));
     if (Number.isFinite(v.move)) SLOTS[i].move = Math.min(180, Math.max(0, v.move));
+    if (Number.isFinite(v.optimal)) SLOTS[i].optimal = Math.min(3000, Math.max(10, v.optimal));
+    if (Number.isFinite(v.falloff)) SLOTS[i].falloff = Math.min(10, Math.max(0, v.falloff));
     if (Number.isFinite(v.spread)) SLOTS[i].spread = Math.min(90, Math.max(0, v.spread));
     if (typeof v.interact === "boolean") SLOTS[i].interact = v.interact; }); } catch {}
 const saveSlots = () => { try { localStorage.setItem("atamus.slots", JSON.stringify(SLOTS)); } catch {} };
@@ -127,6 +129,45 @@ const spreadFan = new THREE.Mesh(fanGeo, fanMat); spreadFan.visible = false; spr
 const arcGeo = new THREE.BufferGeometry(); arcGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((FAN + 1) * 3), 3));
 const spreadArc = new THREE.Line(arcGeo, spreadMat); spreadArc.visible = false; spreadArc.frustumCulled = false; scene.add(spreadArc);
 let spreadCur = 0, lastBearing = null, wasAiming = false, aimSlot = -1;
+// (owner, 2026-10-13) each item's optimal range: a dotted, transparent gray circle while aiming. Inside it the
+// aim line is a single line; past it the line opens into its own wedge, 0.5 degrees either side at the optimal
+// range and wider by the item's falloff (degrees per 100 m) beyond, the spread a shot would get past optimal
+let optRing = null, optR = 0;
+const optMat = new THREE.LineDashedMaterial({ color: 0xa0a8b4, transparent: true, opacity: 0.45, dashSize: 4, gapSize: 6 });
+function optRingFor(R) {
+  if (optRing && optR === R) return;
+  if (optRing) { scene.remove(optRing); optRing.geometry.dispose(); }
+  const pts = []; for (let i = 0; i <= 180; i++) { const t = (i / 180) * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(t) * R, 0, Math.cos(t) * R)); }
+  optRing = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), optMat); optRing.computeLineDistances();
+  optRing.frustumCulled = false; optRing.visible = false; optR = R; scene.add(optRing);
+}
+const coneMat = new THREE.LineDashedMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, dashSize: 12, gapSize: 8 });
+const mkCone = () => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)); const l = new THREE.Line(g, coneMat); l.visible = false; l.frustumCulled = false; scene.add(l); return l; };
+const coneL = mkCone(), coneR = mkCone();
+const coneFanGeo = new THREE.BufferGeometry();
+coneFanGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
+const coneFan = new THREE.Mesh(coneFanGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
+coneFan.visible = false; coneFan.frustumCulled = false; scene.add(coneFan);
+let aimCone = 0;                               // the aim line's own half-angle (degrees), 0 inside optimal range
+function updateAimCone() {
+  const it = SLOTS[slot], on = aiming && haveMe && !!myAim;
+  optRingFor(it.optimal);
+  optRing.visible = on && assists;
+  if (on) { optRing.position.set(me.x, 0.45, -me.y); const k = Math.max(1, viewDist / 500); optMat.dashSize = 4 * k; optMat.gapSize = 6 * k; }
+  const bx = on ? myAim.x - me.x : 0, bz = on ? myAim.z + me.y : 0, dist = Math.hypot(bx, bz);
+  aimCone = on && dist > it.optimal ? 0.5 + it.falloff * (dist - it.optimal) / 100 : 0;
+  const wedge = aimCone > 0;
+  coneL.visible = coneR.visible = coneFan.visible = wedge;
+  aimLine.visible = on && !wedge;              // inside optimal range: just the line
+  if (!wedge) return;
+  const b = Math.atan2(bx, bz), ha = THREE.MathUtils.degToRad(aimCone), ox = me.x, oz = -me.y, y = 0.55;
+  const k = Math.max(1, viewDist / 500); coneMat.dashSize = 12 * k; coneMat.gapSize = 8 * k;
+  const set = (line, a) => { const g = line.geometry.attributes.position; g.setXYZ(0, ox, y, oz); g.setXYZ(1, ox + Math.sin(a) * dist, y, oz + Math.cos(a) * dist); g.needsUpdate = true; line.computeLineDistances(); };
+  set(coneL, b - ha); set(coneR, b + ha);
+  const f = coneFanGeo.attributes.position;
+  f.setXYZ(0, ox, y, oz); f.setXYZ(1, ox + Math.sin(b - ha) * dist, y, oz + Math.cos(b - ha) * dist); f.setXYZ(2, ox + Math.sin(b + ha) * dist, y, oz + Math.cos(b + ha) * dist);
+  f.needsUpdate = true; coneFanGeo.computeBoundingSphere();
+}
 const spreadColor = new THREE.Color();
 const YELLOW = 1 / 3;                          // the share of full spread where the color passes yellow
 const SPRINT_SPREAD = 2;                       // sprinting opens the movement spread this much faster
@@ -586,6 +627,7 @@ renderer.setAnimationLoop(() => {
   }
   updateSpread(dt, !!(d.x || d.y), sprintOn);
   updateStop();
+  updateAimCone();
   drawMinimap(nowP);
 
   if (countAt) {
@@ -615,6 +657,8 @@ function showSlot() {
   const it = SLOTS[slot]; if (!$i("sl-range")) return;
   $i("sl-slot-name").textContent = (slot + 1) + " " + it.name;
   $i("sl-range").value = it.range; $i("sl-range-v").textContent = it.range + " m";
+  $i("sl-opt").value = it.optimal; $i("sl-opt-v").textContent = it.optimal + " m";
+  $i("sl-fall").value = it.falloff; $i("sl-fall-v").textContent = it.falloff + "\u00b0";
   $i("sl-speed").value = it.speed; $i("sl-speed-v").textContent = it.speed + "\u00b0/s";
   $i("sl-move").value = it.move; $i("sl-move-v").textContent = it.move + "\u00b0/s";
   $i("sl-spread").value = it.spread; $i("sl-spread-v").textContent = it.spread + "\u00b0";
@@ -622,6 +666,8 @@ function showSlot() {
 }
 if ($i("sl-range")) {
   $i("sl-range").addEventListener("input", () => { SLOTS[slot].range = Math.min(3000, Math.max(10, +$i("sl-range").value || 10)); saveSlots(); showSlot(); });
+  $i("sl-opt").addEventListener("input", () => { SLOTS[slot].optimal = Math.min(3000, Math.max(10, +$i("sl-opt").value || 10)); saveSlots(); showSlot(); });
+  $i("sl-fall").addEventListener("input", () => { SLOTS[slot].falloff = Math.min(10, Math.max(0, +$i("sl-fall").value || 0)); saveSlots(); showSlot(); });
   $i("sl-speed").addEventListener("input", () => { SLOTS[slot].speed = Math.min(180, Math.max(0, +$i("sl-speed").value || 0)); saveSlots(); showSlot(); });
   $i("sl-move").addEventListener("input", () => { SLOTS[slot].move = Math.min(180, Math.max(0, +$i("sl-move").value || 0)); saveSlots(); showSlot(); });
   $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
@@ -672,4 +718,4 @@ document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListene
 selectSlot(0);
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get cone() { return aimCone; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };
