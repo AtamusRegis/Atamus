@@ -1,13 +1,13 @@
 # Atamus: working notes for Claude
 
-Atamus is a browser-based, EVE-inspired multiplayer mining semi-RTS. Claude writes all the code and runs every deploy.
+Atamus is a browser-based multiplayer game. Claude writes all the code and runs every deploy.
 
 **Before you change anything:**
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. Read `docs/DESIGN.md`: the agreed redesign (the Expanse and nomad space built from POIs, arcs, the base surface, and a world built for 1,000 concurrent players) that the next phases build toward.
-4. **Back to basics (owner, 2026-10-10):** the live game is the Player, Pilot, Chat and Fleet windows, the Expanse's hexagon with asteroid belts, and a Prospector per pilot that flies, aligns and warps. Everything that existed before is kept for reference in `reference/2026-10-10-pre-reset/` (and commit `0a745ec`, the last one before the reset). Bring pieces back from there only when the owner asks; nothing in `reference/` is deployed.
+3. `docs/DESIGN.md` holds the agreed direction (short right now: the 3D rebuild has just begun).
+4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. The live game is one shared 3D world: a sphere per account on a gridded plane inside a 5-mile hexagon. **Old database data stays untouched for reference.**
 
 **In the same commit as any change to behavior:**
 
@@ -21,9 +21,9 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
 - **No helper or hint text**, anywhere. Tooltips show names only.
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag.
-- **US spelling.** Separately, the internal license key `exumers` is a misspelling that is saved in player data: leave it as it is.
-- **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown. (The PTR scripts stay in the repo for when the owner brings it back.)
-- **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first; start a new day's entry if there isn't one). Say what was added or changed, never how it works: no timers, thresholds, counts or rules ("Added wormholes to travel between solar systems", "Reworked wormholes"; not "closes after x minutes or y people").
+- **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
+- **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
+- **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first). Say what was added or changed, never how it works: no timers, thresholds, counts or rules.
 - **Read the real game files.** Don't guess at behavior. Read the code, or ask when it's a design decision.
 
 ## Layout
@@ -34,100 +34,50 @@ packages/server/src/
   build.js        SERVER_BUILD, website build polling, update countdown (announceUpdate)
   auth.js         signup / login / logout / password recovery (cookie sessions)
   sessions.js     getSessionUser (always returns the "PTR" user in PTR mode)
-  gamehttp.js     /game/*: catalog, state, pilot/create, training queue, deploy hooks
-  pilots.js       pilots + training queues (Postgres pilots table, JSONB data); MAX_PILOTS
-  licenses.js     license catalog (empty for now), training helpers
-  portraits.js    portrait part lists (served at /game/portraits) and validation
-  ptr.js          PTR flag, PTR user, dev commands
-  admin.js        the admin panel's API (/game/admin/*): staff roles (Head Admin, Moderator) and passwords, players, moderation, license / credit / corp changes, admin log
-  personas.js     admin profiles (admin name + picture), shown for every line and log entry an admin made
-  language.js     language log heat: each flagged chat line heats a player's meter, cooling over time
-  names.js        name checks (filter, banned names by leet key, admin names), approved filter words
-  namefilter.js   the word filter (categories, leet, censor for chat)
-  appeals.js      ban appeal conversations
-  relations.js    players' mutes and blocks (own and admin-set)
-  relappeals.js   appeals of admin-set mutes / blocks (both players, a message each)
-  tickets.js      support tickets
-  staff.js        staff notifications (Admin chat lines or kept for later), the Admin chat, unread counts per admin tab
-  db.js           schema, one-time WIPES
-  security.js     login records, failed-login backoff, impossible-travel locks and flags, malformed-message timeouts
-  geo.js          IP places (DB-IP Lite mmdb, downloaded into packages/server/data/) and VPN / datacenter ranges
-  textsafe.js     safeText: the one cleaner for all player-written text
-  suspicion.js    red flags add to a fading suspicion score: staff told every 10 points, logins on hold at 30
-  watch.js        the trade ledger (recordFlow: trades, cans, kills, loot), contacts, play time, the trade web, its red flags
+  db.js           schema; the old game's tables stay for reference (WIPES is empty now)
+  security.js, geo.js, suspicion.js, textsafe.js, names.js, namefilter.js   account security and the name/word filter
+  admin.js, personas.js, staff.js, appeals.js, relations.js, relappeals.js, tickets.js, language.js, watch.js,
+  pilots.js, licenses.js, portraits.js, gamehttp.js
+                  the 2D era's accounts/moderation APIs: still mounted and running, but the game hooks are
+                  disconnected and nothing in the 3D client uses them yet. Don't build on them without asking.
   game/
-    net.js        websocket server: one session per account, move/view/chat commands, snapshots 15 Hz
-    world.js      authoritative simulation (20 Hz): the hexagon, belt POIs, one Prospector per pilot, flying (straight, over objects), align / warp, target locks, Align To / Move towards objects, collisions, chat
-    belts.js      asteroid belts: ores, crescent fields, wasting away
-    library.js    the Library POI: every space object's art in rows (props)
-    obstacles.js  asteroids and props a destination can't be on (grid index, push a point out)
-    modules.js    modules (active / passive; S / M / L, I / II), weapons and ammo (weapons.json, from The Reach), drones and fuel items, starter kit, shipCalc
-    combat.js     active modules at work, weapons and damage, wrecks and loot, drones (installed onto World)
-    items.js      item helpers: volumes, holds, stacks
-    market.js     the NPC stations' market: prices for everything, license manuals
-    station.js    the NPC stations (one per planet; Earth's id is "station"): hangar bays, docking range, landing, props
-    eta.js        the Expanse Transit Authority: the ETA Office, its fleets, patrols, the response to aggression, scramblers and webs
-    constants.js  tunables + SHIP_TYPES (the Prospector), belts per player, align / warp numbers
-    persist.js    systems table (JSONB per player: their ships), instances table (belt POIs)
+    net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), {t:"move"} in,
+                  20 Hz sim + 15 Hz snapshots out, deploy countdown / website-reload broadcasts
+    world3d.js    the world: 5-mile flat-top hexagon (inset by the sphere), 100 m spheres, 60 m/s,
+                  direction clamping, border stop, positions in the world3d table
 website/          GitHub Pages site (atamus.io) and the game client
-  game.html/js    canvas renderer (backdrop, hexagon edge, ships), input, socket, update/countdown handling
-  ui.js           the left panel, the Player, Pilot Info, Chat, Fleet, Inventory, Fitting and Info windows (window manager, tab groups), and the HUD (targets, status, hotbar)
-  game.css        game UI styles
-  play.html/js    website hub: character + pilot creation, "updating" wait page, Enter System
-  portrait.js     draws portraits (assets/portraits layers) and the portrait creator
-  api.js          fetch helper; API_BASE = play.atamus.io on atamus.io, else same origin
-reference/        the game as it was before a reset, for reference only (never deployed)
+  game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
+  game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
+                  orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
+                  own-sphere prediction + snapshot interpolation, countdown and reconnect handling
+  vendor/         three.module.js + three.core.js (vendored; CSP allows only our own scripts)
+  index/login/signup/recover/eula/play.html (+ their .js), api.js, style.css, front-updates.js
+                  the website, as before; play.html goes straight to Enter System (no pilots)
+reference/        old snapshots, for reference only (never deployed); the full 2D game is the legacy-2d branch
 scripts/
-  ptr.sh          start|stop|reset|status for the PTR (local Postgres :5433, server :8090)
-  ptr-run.mjs     run a JS snippet in headless Chromium against the PTR (window.Atamus ready)
   check.sh        syntax-check every JS file (run before every push)
-  ptr-test.sh     regression/stress suite against the PTR (see scripts/tests/)
+  ptr.sh          start|stop|reset|status for a local copy (local Postgres :5433, server :8090 serving website/)
+  ptr-run.mjs     run a JS snippet in headless Chromium against the local copy (window.Atamus)
   deploy.sh       server-side redeploy (the forced command for the deploy key)
-  gen/module_icons.py   cuts the owner's module icon sheet; gen/weapons_from_reach.mjs: weapons.json from The Reach
-  sim/wormholes.mjs  nomad-space wormhole/population simulator for DESIGN.md (node scripts/sim/wormholes.mjs [scenario])
+  setup.sh        server provisioning
 .github/workflows deploy-server.yml (packages/server/**), deploy-website.yml (website/**)
 ```
 
-Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/tests` trigger no deploy.
+Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deploy.
 
 ## Patch workflow
 
-1. `scripts/ptr.sh start` (it restarts the server after code changes).
-2. Make the change.
-3. Run `scripts/check.sh`.
-4. Test it:
-   - **Targeted:** `node scripts/ptr-run.mjs steps.js [shot.png] [WxH]`. A steps file is the body of an async function with `s(ms)`, `A` (= window.Atamus) and `dev({cmd,...})` available.
-   - **Broad:** `scripts/ptr-test.sh` runs the regression and stress suite.
-   - **Phone layout:** check with a `390x844` screenshot.
-5. If you touched client files, bump the cache-busters:
-   - `?v=` on the scripts in `website/game.html`:
-     `CUR=$(grep -oP 'game.js\?v=\K[0-9]+' website/game.html); sed -i "s/?v=$CUR/?v=$(date +%s)/g" website/game.html`
-   - `play.js?v=` in `website/play.html`, if play.js changed.
-6. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
-7. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
+1. Make the change.
+2. Run `scripts/check.sh`.
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`.
+4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
+5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;
    - it then sleeps 30 s and switches the live build;
    - clients are sent to `play.html?updating=1`, which waits for the new build.
-
-**PTR dev commands** (socket `{t:"dev", cmd}`, PTR only):
-
-- `move x y [ship]` (put a ship of yours at x, y km, stopped and undocked)
-- `offline` (mark yourself offline, to test the logout grace)
-- `update seconds` (rehearse the countdown)
-- `give item n [ship]` (put items in your ship's hold: modules, ammo, drones), `wreck` (a test wreck beside your ship)
-- `aggress [ship] [victim]` (your ship attacks: the ETA flags and hunts it), `pardon [ship]` (clear the flag), `killofficer [id]` (an ETA ship dies to yours: the escalation)
-
-PTR-only HTTP: `POST /game/dev/flow {from, to, kind, credits, value}` (a ledger entry between two players by name) and `POST /game/dev/sweep` (the training check), `POST /game/admin/dev/lapse` (the staff inactivity check).
-
-PTR test overrides: `x-ptr-as: Name` (HTTP) and `?as=Name` (socket) act as another account; `x-ptr-geo: lat,lon,city` and `x-ptr-vpn: 1` set a login's place and VPN status (security.js).
-
-The single PTR pilot is "Vera Kestrel" (pilot 1 after a reset). Ships are `<account>:ship:<pilot>`, so hers is `1:ship:1`; the world's center is (0, 0). After a PTR reset, recreate the pilot: `curl -X POST localhost:8090/game/pilot/create -H 'content-type: application/json' -d '{"name":"Vera Kestrel"}'`.
+6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user).
 
 ## Code conventions
 
-- **Server-authoritative.** The client only sends commands. Validate every command field on the server as hostile:
-  - whole numbers only;
-  - the target must be owned by the sender;
-  - name the item, not just the slot.
-- **No re-render while interacting.** The UI updates in place, and windows rebuild only when their structure signature changes. Don't rebuild DOM on every snapshot: buttons die mid-click.
+- **Server-authoritative.** The client only sends commands (a movement direction). Validate every command field on the server as hostile: finite numbers, clamped ranges, the player can only act as themselves.
 - **Syntax check before every commit.** `node --check` (via `scripts/check.sh`) runs before every commit. A syntax error once reached live.

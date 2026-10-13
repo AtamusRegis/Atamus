@@ -374,7 +374,9 @@ export async function migrate() {
 // licenses and credits stay). "pilots": pilots and their ships only (accounts, characters and credits stay).
 // "solar": the new solar system (owner, 2026-10-11): belts go, player stations move (their storage stays), every ship
 // in space is docked at the Station (now at Earth); pilots, ships' holds, hangars and credits stay.
-const WIPES = [["2026-10-09 quick-training reset", "full"], ["2026-10-09 the Expanse", "world"], ["2026-10-10 back to basics", "full"], ["2026-10-10 pilot portraits", "pilots"], ["2026-10-11 the solar system", "solar"], ["2026-10-11 planetary systems", "systems"], ["2026-10-11 10M to start", "credits10m"]];
+// (owner, 2026-10-12: the 3D rebuild) the 2D game's wipes all ran on live and are history; the list is empty so a
+// fresh database (the PTR) doesn't try to run "systems", whose code imported the removed 2D world. Old data stays.
+const WIPES = [];
 // "systems" (owner, 2026-10-11): free player stations go (what was stored in one moves to the owner's hangar at Earth
 // Station, and ships docked at one dock there instead); the single hangar becomes Earth Station's (a hangar per NPC
 // station now); belts outside every planetary system go.

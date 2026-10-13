@@ -4,28 +4,24 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="boot.js?v=1791773386"></script>
   <meta name="atamus-build" content="__BUILD__">
   <title>Atamus — System</title>
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="game.css?v=1791773386">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #05070c; }
+    #view { display: block; width: 100%; height: 100%; touch-action: none; }
+    .overlay { position: fixed; left: 50%; transform: translateX(-50%); color: #cfe0f4; font: 14px/1.4 system-ui, sans-serif; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; padding: 6px 12px; user-select: none; }
+    #status { top: 12px; }
+    #countdown { top: 12px; color: #ffd27a; border-color: #6a5a2a; }
+    [hidden] { display: none !important; }
+  </style>
 </head>
-<body class="game-body">
+<body>
   <canvas id="view"></canvas>
-
-  <!-- left window panel (buttons injected by ui.js) -->
-  <nav id="window-panel" class="window-panel" aria-label="Windows"></nav>
-
-  <div id="status" class="status">Connecting…</div>
-
-  <!-- windows + tooltip container injected by ui.js -->
-  <div id="tooltip" class="tooltip" hidden></div>
-
-  <script src="api.js?v=1791773386"></script>
-  <script src="portrait.js?v=1791773386"></script>
-  <script src="sun.js?v=1791773386"></script>
-  <script src="game.js?v=1791773386"></script>
-  <script src="ui.js?v=1791773386"></script>
+  <div id="status" class="overlay">Connecting…</div>
+  <div id="countdown" class="overlay" hidden></div>
+  <script src="api.js?v=1791861058"></script>
+  <script type="module" src="game3d.js?v=1791861058"></script>
 </body>
 </html>

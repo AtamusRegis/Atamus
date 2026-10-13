@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **Atamus rebuilt in 3D (owner):** the 2D game is wiped from `main` (all of it preserved on the `legacy-2d` branch, tip `e56e61d`; the database keeps the old data untouched). The new game: one shared 3D world, no POIs, everyone sees everyone; a flat plane with a 2D grid; the same flat-top hexagon border at 5 miles flat to flat; one 100 m sphere per account (yours blue, others red) traveling on the ground plane only at 60 m/s; WASD relative to the camera; middle mouse (touch: one-finger drag) orbits the camera, fixed at 75° looking down; wheel / pinch zooms. Server-authoritative (direction in, 20 Hz sim, 15 Hz snapshots to all), positions persisted per account (`world3d`). The accounts backend, website and deploy countdown are kept; play.html drops character / pilot creation and goes straight to Enter System; the client is Three.js (vendored in `website/vendor/`). The old PTR test suite, wormhole sim and asset generators went with the 2D game.
 - **The front page always shows (owner):** signed-in visitors no longer get redirected from atamus.io to the login page; the front page shows for everyone (`front.js` removed). Not-logged-in tabs on play.html and in the game still go to Log in.
 
 ## 2026-10-11
