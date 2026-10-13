@@ -313,7 +313,7 @@ renderer.setAnimationLoop(() => {
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     const d = Math.min(ul, cam.leash);
-    return { x: me.x + ux * d, z: -me.y + uz * d, d, sux: sx, suy: sy };
+    return { x: me.x + ux * d, z: -me.y + uz * d, d, sux: sx, suy: sy, ux, uz };
   }
   function drawAim(a) {
     aimRing.position.set(a.x, 0.4, a.z);
@@ -327,16 +327,20 @@ renderer.setAnimationLoop(() => {
     if (a) {
       hit = true; drawAim(a);
       if (!orbitLock) {                                                  // orbiting holds the frame: the aim stops steering it
-        fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the reticle
-        // (owner) zoom keeps the reticle plus 20 m of lead in view: pressing the pointer toward a
-        // screen edge before the reticle reaches the circle zooms out to show space to move into;
-        // at the limit, 20 m of world shows past it so the circle's edge never sits on the screen edge.
-        const lead = a.d / 2 + 20;                                       // from the focus to just past the reticle
-        const sl = Math.hypot(a.sux, a.suy) || 1;
-        const uxs = Math.abs(a.sux) / sl, uys = Math.abs(a.suy) / sl;    // the aim's screen direction
+        // (owner) the camera is driven ONLY by the pointer's screen position and the circle's constant
+        // radius - never by the reticle's camera-dependent ground distance, which looped (zoom moved
+        // the ground under the pixel, which moved the zoom). Pressing toward a screen edge ramps the
+        // zoom so a full press shows the circle plus 20 m of lead on that axis; the focus slides out
+        // along the aim by the same screen fraction, up to halfway to the circle.
+        const R = cam.leash;
+        const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
+        fx = me.x + a.ux * r * R / 2; fy = me.y + -a.uz * r * R / 2;     // the focus: toward the aim, screen-driven
         const ex = Math.tan(Math.PI / 6) * camera.aspect;                // ground half-extents in view,
         const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // per unit of distance
-        wantDist = Math.min(cam.zmax, Math.max(camDist, (uxs * lead) / (0.85 * ex), (uys * lead) / (0.85 * ey)));
+        const need = (f) => f * R / 2 + 20;                              // from the focus to the circle + lead at full press
+        wantDist = Math.min(cam.zmax, Math.max(camDist,
+          need(Math.min(1, Math.abs(a.sux))) / (0.85 * ex),
+          need(Math.min(1, Math.abs(a.suy))) / (0.85 * ey)));
       }
     }
   }

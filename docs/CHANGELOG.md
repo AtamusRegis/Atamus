@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-13
+
+- **Fix: the zoom feedback loop, again and for good.** Tying the aim zoom to the reticle's ground distance looped (zoom moved the ground under the pixel, which moved the zoom). The camera now runs only on the pointer's screen position and the circle's constant radius — a full press toward an edge shows the circle plus 20 m of lead on that axis — while the reticle stays the ray's ground point clamped to the circle. Measured: zero drift with the pointer held still.
+
 ## 2026-10-12
 
 - **The range circle (owner):** the elliptical screen math is scrapped. A visible circle around the ship (radius = Reticle) is everywhere the reticle can be; the reticle is the ground point under the pointer, clamped to it. The zoom keeps the reticle plus 20 m of lead in view, so pressing toward a screen edge reveals space until the limit, and the circle's edge never sits on the screen edge. Reach is equal everywhere by the circle itself.
