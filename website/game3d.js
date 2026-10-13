@@ -38,8 +38,10 @@ const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
 const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700 };   // (owner, 2026-10-12) 60d / 600-1800 m / 60%; leash: max reticle distance (its slider is the only one shown)
-try { Object.assign(cam, JSON.parse(localStorage.getItem("atamus.cam") || "{}")); } catch {}
-const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify(cam)); } catch {} };
+// only the leash is read back from this browser: the hidden settings always use the owner's values
+// above, so stale slider values saved while the sliders were visible can't skew anyone's camera
+try { const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}"); if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash)); } catch {}
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash })); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -345,8 +347,8 @@ renderer.setAnimationLoop(() => {
         const ex = Math.tan(f2) * camera.aspect;
         const ev = a.suy >= 0 ? eTop : eBot;                             // which vertical half the aim presses into
         const need = (f) => f * R / 2 + O;                               // from the focus to the circle + overflow at full press
-        wantDist = Math.min(cam.zmax, Math.max(camDist,
-          need(Math.min(1, Math.abs(a.sux))) / (0.85 * ex),
+        wantDist = Math.min(6000, Math.max(camDist,                      // the aim's needed zoom is never capped by the
+          need(Math.min(1, Math.abs(a.sux))) / (0.85 * ex),               // wheel's max: reaching the circle always wins
           need(Math.min(1, Math.abs(a.suy))) / (0.85 * ev)));
       }
     }
