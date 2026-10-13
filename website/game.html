@@ -25,6 +25,11 @@
     .dual input[type=range]::-moz-range-track { background: transparent; }
     .dual input[type=range]::-webkit-slider-thumb { pointer-events: auto; -webkit-appearance: none; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%; background: #4f8fe8; }
     .dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 12px; height: 12px; border: 0; border-radius: 50%; background: #4f8fe8; }
+    #compass { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; margin-top: 2px; }
+    .c-cell { display: grid; gap: 1px; justify-items: center; font-size: 11px; color: #9fb3cf; }
+    .c-cell input[type=range] { width: 76px; margin: 0; accent-color: #4f8fe8; }
+    .c-cell .v { color: #cfe0f4; font-variant-numeric: tabular-nums; }
+    .c-mid { display: grid; place-items: center; color: #4f8fe8; font-size: 16px; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -34,8 +39,20 @@
   <div id="countdown" class="overlay" hidden></div>
   <div id="cam-panel" class="overlay">
     <div class="cam-row"><span>Reticle</span><input id="sl-leash" type="range" min="100" max="3000" step="25"><span class="v" id="sl-leash-v"></span></div>
+    <div class="cam-row"><span>Overflow</span><input id="sl-over" type="range" min="0" max="200" step="5"><span class="v" id="sl-over-v"></span></div>
+    <div id="compass">
+      <div class="c-cell"><span>NW</span><input id="d-nw" type="range" min="-200" max="200" step="5"><span class="v" id="d-nw-v"></span></div>
+      <div class="c-cell"><span>N</span><input id="d-n" type="range" min="-200" max="200" step="5"><span class="v" id="d-n-v"></span></div>
+      <div class="c-cell"><span>NE</span><input id="d-ne" type="range" min="-200" max="200" step="5"><span class="v" id="d-ne-v"></span></div>
+      <div class="c-cell"><span>W</span><input id="d-w" type="range" min="-200" max="200" step="5"><span class="v" id="d-w-v"></span></div>
+      <div class="c-mid">&#9678;</div>
+      <div class="c-cell"><span>E</span><input id="d-e" type="range" min="-200" max="200" step="5"><span class="v" id="d-e-v"></span></div>
+      <div class="c-cell"><span>SW</span><input id="d-sw" type="range" min="-200" max="200" step="5"><span class="v" id="d-sw-v"></span></div>
+      <div class="c-cell"><span>S</span><input id="d-s" type="range" min="-200" max="200" step="5"><span class="v" id="d-s-v"></span></div>
+      <div class="c-cell"><span>SE</span><input id="d-se" type="range" min="-200" max="200" step="5"><span class="v" id="d-se-v"></span></div>
+    </div>
   </div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791872984"></script>
+  <script type="module" src="game3d.js?v=1791873235"></script>
 </body>
 </html>

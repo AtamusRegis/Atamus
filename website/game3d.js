@@ -37,11 +37,17 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
-const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700 };   // (owner, 2026-10-12) 60d / 600-1800 m / 60%; leash: max reticle distance (its slider is the only one shown)
-// only the leash is read back from this browser: the hidden settings always use the owner's values
-// above, so stale slider values saved while the sliders were visible can't skew anyone's camera
-try { const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}"); if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash)); } catch {}
-const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash })); } catch {} };
+const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 50,
+  dir: { n: 35, ne: -35, e: 35, se: 0, s: 35, sw: 0, w: 35, nw: -35 } };   // (owner) leash: max reticle distance; over: overflow; dir: the compass's per-direction leash trim (m)
+// only the shown tuning values are read back from this browser; the hidden settings always use the
+// owner's fixed values above
+try {
+  const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}");
+  if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash));
+  if (Number.isFinite(sv.over)) cam.over = Math.min(200, Math.max(0, sv.over));
+  if (sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
+} catch {}
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir })); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -345,7 +351,7 @@ renderer.setAnimationLoop(() => {
         // (vertical) extent pair, and the leash chosen per direction so the boundary ahead of the
         // reticle is exactly the overflow - measured on the ellipse inscribed in the screen, so a
         // diagonal gets the same guaranteed gap as a cardinal. Uniform zoom, uniform overflow.
-        const R = cam.leash, O = 50, S = 80, m = 0.85;                   // overflow past the circle; margin behind the ship
+        const R = cam.leash, O = cam.over, S = 80, m = 0.85;             // overflow past the circle (the panel's number); margin behind the ship
         const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
         const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
         const cot = (t) => Math.cos(t) / Math.max(1e-4, Math.sin(t));
@@ -361,12 +367,14 @@ renderer.setAnimationLoop(() => {
         let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the overflow
         lam = Math.min(lam, (m * wantDist / denB - S) / R);              // behind it: the ship + its margin
         lam = Math.min(1, Math.max(0, lam));
-        // (owner, 2026-10-13) hand-tuned directional trim on top of the uniform base: front (N),
-        // back (S), E and W each extended a little; NE and NW pulled in a little; SE and SW as-is.
-        // Smoothly blended: zero at the cardinals' diagonals' complement, scaled by the press.
-        const k = a.suy >= 0 ? 0.10 : 0.05;                              // up-diagonals dip below the cardinals' lift
-        const bias = (0.05 - k * 4 * (uxs * uxs) * (uys * uys)) * r;
-        lam = Math.min(1, Math.max(0, lam + bias));
+        // (owner, 2026-10-13) the compass: a per-direction leash trim in meters, set on the panel's
+        // eight sliders and blended smoothly between neighboring directions, scaled by the press.
+        const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
+        const ring = [cam.dir.e, cam.dir.ne, cam.dir.n, cam.dir.nw, cam.dir.w, cam.dir.sw, cam.dir.s, cam.dir.se];
+        const t = ang / 45, i0 = Math.floor(t) % 8, i1 = (i0 + 1) % 8, ft = t - Math.floor(t);
+        const sm = ft * ft * (3 - 2 * ft);
+        const trim = ring[i0] + (ring[i1] - ring[i0]) * sm;
+        lam = Math.min(1, Math.max(0, lam + (trim / R) * r));
         fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;         // the focus: the extending leash
       }
     }
@@ -402,12 +410,21 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// (owner) one slider: the reticle's max distance from the player (the camera leash)
-const sl = { leash: document.getElementById("sl-leash"), leashV: document.getElementById("sl-leash-v") };
+// (owner) the tuning panel: Reticle (max distance), Overflow, and the compass of eight
+// per-direction leash trims; every slide applies live and is kept in this browser
+const $i = (id) => document.getElementById(id);
+const sl = { leash: $i("sl-leash"), leashV: $i("sl-leash-v"), over: $i("sl-over"), overV: $i("sl-over-v") };
+const DIRS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 if (sl.leash) {
-  const show = () => { sl.leash.value = cam.leash; sl.leashV.textContent = cam.leash + " m"; };
+  const show = () => {
+    sl.leash.value = cam.leash; sl.leashV.textContent = cam.leash + " m";
+    sl.over.value = cam.over; sl.overV.textContent = cam.over + " m";
+    for (const d of DIRS) { $i("d-" + d).value = cam.dir[d]; $i("d-" + d + "-v").textContent = (cam.dir[d] > 0 ? "+" : "") + cam.dir[d]; }
+  };
   show();
   sl.leash.addEventListener("input", () => { cam.leash = Math.min(3000, Math.max(100, +sl.leash.value || 700)); saveCam(); show(); });
+  sl.over.addEventListener("input", () => { cam.over = Math.min(200, Math.max(0, +sl.over.value || 0)); saveCam(); show(); });
+  for (const d of DIRS) $i("d-" + d).addEventListener("input", () => { cam.dir[d] = Math.min(200, Math.max(-200, +$i("d-" + d).value || 0)); saveCam(); show(); });
 }
 
 // for the test harness and the console
