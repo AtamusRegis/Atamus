@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Directional leash trim (owner):** on top of the uniform base, the leash is extended a little toward N, S, E and W, pulled in a little toward NE and NW, and left as-is toward SE and SW, blended smoothly.
 - **Uniform zoom and overflow in every direction (owner):** diagonals showed less overflow and front / back zoomed far more than the sides; the full-press zoom is now one direction-independent value (fixed by the worst vertical extent pair) and the leash per direction places the focus so exactly 50 m shows past the reticle, on the ellipse inscribed in the screen. Measured 647–651 m across N / S / E / NE / SW.
 - **The extending leash (owner):** zoom and the camera leash are now solved together per screen axis (circle + 50 m ahead of the focus, ship + margin behind it): aiming into a cramped direction slides the focus farther along the aim — the ship rides toward the roomy opposite edge — instead of zooming far out. Backward full-press drops from ~933 m to ~647 m of zoom, and forward aim now keeps the whole ship on screen too.
 - **Fix: stale saved sliders strangled the aim zoom.** Values saved while the camera sliders were visible (an old max zoom especially) capped the aim zoom below what backward aim needs; hidden settings now always use the owner's fixed values (only the Reticle slider persists per browser), and the aim's needed zoom is capped only by a 6,000 m engine limit, never the wheel's max.

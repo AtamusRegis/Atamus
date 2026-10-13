@@ -361,6 +361,12 @@ renderer.setAnimationLoop(() => {
         let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the overflow
         lam = Math.min(lam, (m * wantDist / denB - S) / R);              // behind it: the ship + its margin
         lam = Math.min(1, Math.max(0, lam));
+        // (owner, 2026-10-13) hand-tuned directional trim on top of the uniform base: front (N),
+        // back (S), E and W each extended a little; NE and NW pulled in a little; SE and SW as-is.
+        // Smoothly blended: zero at the cardinals' diagonals' complement, scaled by the press.
+        const k = a.suy >= 0 ? 0.10 : 0.05;                              // up-diagonals dip below the cardinals' lift
+        const bias = (0.05 - k * 4 * (uxs * uxs) * (uys * uys)) * r;
+        lam = Math.min(1, Math.max(0, lam + bias));
         fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;         // the focus: the extending leash
       }
     }
