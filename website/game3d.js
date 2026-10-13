@@ -308,8 +308,7 @@ renderer.setAnimationLoop(() => {
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     const d = e * cam.leash;
-    return { x: me.x + ux * d, z: -me.y + uz * d, d,
-             sux: r > 1e-4 ? Math.abs(sx) / r : 0, suy: r > 1e-4 ? Math.abs(sy) / r : 1 };   // the pointer's screen direction
+    return { x: me.x + ux * d, z: -me.y + uz * d, d };                   // the circle, in world coords
   }
   function drawAim(a) {
     aimRing.position.set(a.x, 0.4, a.z);
@@ -324,14 +323,13 @@ renderer.setAnimationLoop(() => {
       hit = true; drawAim(a);
       if (!orbitLock) {                                                  // orbiting holds the frame: the aim stops steering it
         fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the circle
-        // (owner) the zoom evens out what each screen direction can SEE: the view shows the least
-        // ground toward the short dimension (top: foreshortened by the pitch), more to the sides,
-        // most into the corners - so aiming top-center zooms out the most, sides a middle amount,
-        // corners the least, and max-range aim is equally visible whatever the direction or rotation.
-        const ex = Math.tan(Math.PI / 6) * camera.aspect;                              // half-extents of the ground
-        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // in view, per unit of distance
-        const g = Math.min(ex / Math.max(a.sux, 1e-4), ey / Math.max(a.suy, 1e-4));    // to the screen RECTANGLE's bound
-        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d / (1.5 * g)));
+        // (owner, the Foxhole approach) fairness is anchored to the screen's SHORT dimension: the aim
+        // range is a world circle, and the zoom per aim distance is one uniform value sized so that
+        // distance fits the vertical ground extent (the short axis, foreshortened by the pitch) - the
+        // same zoom whichever way the pointer heads, so every direction sees max range identically and
+        // wide screens just get harmless extra margin at the sides, never extra reach.
+        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // vertical ground half-extent per unit of distance
+        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d / (1.5 * ey)));
       }
     }
   }
