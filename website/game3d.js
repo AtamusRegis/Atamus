@@ -283,7 +283,7 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt, myAim, !!(d.x || d.y)); continue; }
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt, orbiting ? null : myAim, !!(d.x || d.y)); continue; }   // (owner) orbiting never spins the ship: the sweeping aim circle stops steering its nose until MMB lifts
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
