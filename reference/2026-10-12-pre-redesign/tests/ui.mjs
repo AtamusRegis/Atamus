@@ -1,0 +1,385 @@
+// Client checks in headless Chromium against the PTR: only the Player and Pilot windows exist, click / tap flies,
+// drag pans, clicking your ship follows it again, the pinch and wheel zoom, windows survive a reload and fit a phone.
+// No page errors allowed.
+import { chromium } from "/opt/npm-tools/node_modules/playwright/index.mjs";
+import { suite, BASE, SHIP as A_SHIP } from "./lib.mjs";
+const t = suite("ui");
+const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" }).catch(() => chromium.launch());
+const errors = [];
+async function open(w, h, touch) {
+  const page = await browser.newPage({ viewport: { width: w, height: h }, hasTouch: !!touch });
+  page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await page.goto(BASE + "/game.html");
+  await page.waitForFunction(() => window.Atamus && window.Atamus.cfg && window.Atamus.myShip, null, { timeout: 15000 });
+  await page.waitForTimeout(600);
+  return page;
+}
+const run = (page, body) => page.evaluate(`(async () => { const s = (ms) => new Promise((r) => setTimeout(r, ms)), A = window.Atamus, c = document.getElementById("view"), dev = (o) => A.send({ t: "dev", ...o });
+  const wins = () => [...document.querySelectorAll(".win")].filter((w) => !w.hidden).map((w) => w.dataset.id);
+  const ev = (type, x, y, id = 1, kind = "mouse") => c.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: kind, button: 0, clientX: x, clientY: y, bubbles: true }));
+  ${body} })()`);
+
+let page = await open(1280, 800);
+let r = await run(page, `A.send({ t: "dev", cmd: "move", x: 60000, y: -60000 }); await s(500);
+  return { btns: [...document.querySelectorAll(".wbtn")].map((b) => b.dataset.id), wins: wins() };`);
+t.ok(r.btns.join() === "player,pilot,chat,fleet,inv,fit,support,admin", "the left panel has the Player, Pilot Info, Chat, Fleet, Inventory, Fitting and Support windows (and Admin, for admins: the PTR tester is the Head Admin)", r.btns);
+r = await run(page, `for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
+  return { wins: wins(), player: document.querySelector('.win[data-id="player"]').innerText, pilot: document.querySelector('.win[data-id="pilot"]').innerText };`);
+t.ok(r.wins.includes("player") && r.wins.includes("pilot"), "both open from the panel", r.wins);
+t.ok(/Credits/.test(r.player) && /Vera Kestrel/.test(r.pilot), "the Player Sheet and the pilot's window", r);
+
+// click = fly; drag = pan (the camera stops following); click your ship = follow again
+r = await run(page, `for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click();
+  const W = innerWidth, H = innerHeight; ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(600);
+  const single = A.myShip.moving;
+  ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(80); ev("pointerdown", W / 2 + 200, H / 2); ev("pointerup", W / 2 + 200, H / 2); await s(600);
+  const moving = A.myShip.moving, tx = A.myShip.tx;
+  ev("pointerdown", 300, 300); ev("pointermove", 360, 340); ev("pointermove", 420, 380); ev("pointerup", 420, 380); await s(300);
+  const afterDrag = A.view.follow;
+  const own = A.myShip, sc = innerWidth / A.view.w, sx = W / 2 + (own.x - A.view.cx) * sc, sy = H / 2 - (own.y - A.view.cy) * sc;
+  ev("pointerdown", sx, sy); ev("pointerup", sx, sy); await s(200);
+  return { single, moving, tx, afterDrag, refollow: A.view.follow };`);
+t.ok(!r.single && r.moving && r.tx > 0, "a single click on space doesn't move the ship; a double click flies it there (owner)", r);
+t.ok(r.afterDrag === null, "dragging pans the camera off the ship", r);
+t.ok(r.refollow === null, "clicking your ship selects its pilot but doesn't center on it (owner)", r);
+// right-click / hold menus (owner): space → Center on ship, Belts › name › Warp to / Align to; Align shows the fleet's Align / Warp
+r = await run(page, `if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(200);
+  c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); await s(200);
+  const top = [...document.querySelectorAll(".ctx-root > .ctx-menu > .ctx-item")].map((x) => x.textContent);
+  const beltsRow = [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Belts"); beltsRow.click(); await s(100);
+  const names = [...document.querySelectorAll('.ctx-sub[data-depth="1"] .ctx-item')].map((x) => x.textContent);
+  const first = document.querySelector('.ctx-sub[data-depth="1"] .ctx-item'), bname = first.textContent;
+  first.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 720, clientY: 520 })); await s(100);
+  const opts = [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].map((x) => x.textContent.replace(" " + bname, ""));
+  const kept = document.querySelectorAll(".ctx-root > .ctx-menu").length;
+  [...document.querySelectorAll('.ctx-sub[data-depth="2"] .ctx-item')].find((x) => x.textContent.startsWith("Align to")).click(); await s(800);
+  const acts = document.querySelector(".fleet-acts2"), btns = [...acts.querySelectorAll(".fa-btn")].filter((b) => !b.hidden).map((b) => b.textContent); const dest0 = A.myShip.dest || null, acts0 = !acts.hidden;
+  const centerRow = () => { c.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 700, clientY: 500 })); return [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Center on ship"); };
+  ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); centerRow().click(); await s(200);
+  const centered = A.view.follow; A.send({ t: "dev", cmd: "move", x: 60000, y: -60000 }); await s(300);
+  return { top, names: names.length, opts, kept, dest: dest0, acts: acts0, btns, centered };`);
+t.ok(r.top.join() === "Center on ship,Belts,Celestials" && r.names >= 3, "space menu: Center on ship, Belts › a list of the belts, Celestials (owner)", r);
+t.ok(r.opts.join() === "Warp to,Align to" && r.kept === 3, "right-click a belt in the list: its own menu beside it, Warp to / Align to, the menus before it kept open (owner)", r);
+t.ok(r.dest && r.acts && r.btns.join() === "Align,Warp", "aligning shows Align and Warp under the fleet", r);
+t.ok(r.centered === A_SHIP, "Center on ship follows the selected pilot's ship", r);
+r = await run(page, `const card = document.querySelector(".fleet-card"); const parts = card && [card.querySelector("canvas.portrait"), card.querySelector(".fc-ship img"), card.querySelector(".fc-sh i"), card.querySelector(".fc-hp i"), card.querySelector(".fc-name")].map(Boolean);
+  ev("pointerdown", 300, 300); ev("pointermove", 380, 300); ev("pointerup", 380, 300); await s(100); const off = A.view.follow;
+  card.click(); await s(200); const afterClick = A.view.follow; card.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); await s(200); const afterDbl = A.view.follow;
+  const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true }); document.body.dispatchEvent(menu);
+  window.dispatchEvent(new KeyboardEvent("keydown", { key: "d" })); await s(400); window.dispatchEvent(new KeyboardEvent("keyup", { key: "d" }));
+  return { parts, sel: card.classList.contains("sel"), off, afterClick, afterDbl, blocked: menu.defaultPrevented, afterKeys: A.view.follow };`);
+t.ok(r.parts && r.parts.every(Boolean) && r.sel, "a fleet card: portrait, ship, shield and hull bars, name; the pilot is selected", r);
+t.ok(r.off === null && r.afterClick === null, "selecting a pilot doesn't move the camera (owner)", r);
+t.ok(r.afterDbl === A_SHIP, "double-clicking a card follows that pilot's ship", r);
+t.ok(r.blocked, "right-click never opens the browser's menu", r);
+t.ok(r.afterKeys === null, "WASD pans the camera off the ship", r);
+r = await run(page, `for (let i = 0; i < 80; i++) c.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, clientX: 640, clientY: 400, bubbles: true, cancelable: true })); await s(800); const out = A.view.w;
+  for (let i = 0; i < 80; i++) c.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 640, clientY: 400, bubbles: true, cancelable: true })); await s(800); return { out, in: A.view.w };`);
+t.ok(r.out > 20000 && Math.abs(r.in - 3.25) < 0.01, "the wheel zooms out to the whole hexagon and back in, no closer than 3.25 km across (owner)", r);
+
+// Local / Corp chat (owner): you speak as your character, portrait and username
+await fetch(BASE + "/game/character", { method: "POST", headers: { "content-type": "application/json", origin: BASE }, body: JSON.stringify({ portrait: { gender: "male", background: "nebula", skin: "tan", hair: "buzz", hairColor: "black", shirt: "armor", shirtColor: "red" } }) });
+await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(800);
+r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); await s(300);
+  const tabs = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((b) => b.textContent);
+  const inp = document.querySelector('.win[data-id="chat"] input'); inp.value = "hello expanse"; inp.form.requestSubmit(); await s(600);
+  const line = [...document.querySelectorAll('.win[data-id="chat"] .chat-line')].pop();
+  document.querySelector('.win[data-id="chat"] .tab[data-ch="corp"]').click(); await s(100);
+  const inp2 = document.querySelector('.win[data-id="chat"] input'); inp2.value = "corp hello"; inp2.form.requestSubmit(); await s(600);
+  const corp = [...document.querySelectorAll('.win[data-id="chat"] .chat-line')].map((x) => x.textContent);
+  document.querySelector('.win[data-id="chat"] .win-close').click();
+  return { tabs, line: line && line.textContent, portrait: !!(line && line.querySelector("canvas.portrait")), corp };`);
+t.ok(["Local,Corp", "Local,Corp,Admin,Moderator"].includes(r.tabs.join()), "chat has Local and Corp (and the Admin and Moderator chats for unlocked staff)", r.tabs);
+t.ok(r.line === "PTR: hello expanse" && r.portrait, "a message shows the character's portrait and the username", r);
+t.ok(r.corp.length === 1 && r.corp[0] === "PTR: corp hello", "corp has its own log", r.corp);
+
+// the Player Sheet resizes both ways by its knob, down to a minimum (a stretched-row measurement once made it run away)
+r = await run(page, `const w = document.querySelector('.win[data-id="player"]'); if (w.hidden) document.querySelector('.wbtn[data-id="player"]').click(); await s(500);
+  w.style.width = "260px"; w.style.height = "260px"; await s(50); const k = w.querySelector(".rz-se"), out = [];
+  const drag = async (dx, dy) => { const b = k.getBoundingClientRect(), x = b.left + 5, y = b.top + 5;
+    k.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 9, pointerType: "mouse", button: 0, clientX: x, clientY: y, bubbles: true }));
+    for (let i = 1; i <= 10; i++) window.dispatchEvent(new PointerEvent("pointermove", { pointerId: 9, clientX: x + dx * i / 10, clientY: y + dy * i / 10 }));
+    window.dispatchEvent(new PointerEvent("pointerup", { pointerId: 9, clientX: x + dx, clientY: y + dy })); await s(80); out.push(w.offsetWidth, w.offsetHeight); };
+  await drag(40, 20); await drag(-300, -300); const rows = w.querySelector(".ps-rows"); const scroll = rows.scrollHeight > rows.clientHeight;
+  w.querySelector(".win-close").click(); return { out, scroll };`);
+t.ok(r.out[0] === 300 && r.out[1] === 280 && r.out[2] < 260 && r.out[3] < 260 && r.out[2] > 150 && r.scroll, "the Player Sheet grows and shrinks with its knob, to a minimum where only its stats scroll", r);
+
+// a name in chat (owner): right-click / hold → Info, DM, Report; just Info on your own
+r = await run(page, `document.querySelector('.wbtn[data-id="chat"]').click(); await s(200); document.querySelector('.win[data-id="chat"] .tab[data-ch="local"]').click(); await s(50);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "yo" } })); await s(100);
+  const who = [...document.querySelectorAll('.win[data-id="chat"] .who')].find((x) => x.textContent.startsWith("Zed"));
+  who.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  const menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "DM").click(); await s(200);
+  const tabs = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((x) => x.textContent.replace("×", ""));
+  const ph = document.querySelector('.win[data-id="chat"] input').placeholder;
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "again" } })); await s(50);
+  document.querySelector('.win[data-id="chat"] .tab[data-ch="local"]').click(); await s(100);
+  const z = [...document.querySelectorAll('.win[data-id="chat"] .who')].find((x) => x.textContent.startsWith("Zed"));
+  z.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Report").click(); await s(400);
+  const rep = document.querySelector('.win[data-id="report"]'), parts = [!!rep.querySelector("select"), !!rep.querySelector("textarea"), [...rep.querySelectorAll(".win-body button")].map((b) => b.textContent).join()];
+  [...rep.querySelectorAll("button")].find((b) => b.textContent === "Cancel").click(); await s(100);
+  document.querySelector('.tab[data-ch="dm:zed"] .tab-x').click(); await s(100);
+  const after = [...document.querySelectorAll('.win[data-id="chat"] .tab')].map((x) => x.textContent);
+  document.querySelector('.win[data-id="chat"] .win-close').click();
+  return { menu, tabs, ph, parts, title: rep.querySelector(".win-title-slot").textContent, closed: rep.hidden, after };`);
+t.ok(r.menu.join() === "Info,DM,Report,Mute,Block,Admin", "a player's name: Info, DM, Report, Mute, Block (and Admin for an admin)", r.menu);
+t.ok(r.tabs.filter((x) => x !== "Admin" && x !== "Moderator").join() === "Local,Corp,Zed" && r.ph === "Zed", "DM opens a chat tab named for them", r);
+t.ok(r.parts[0] && r.parts[1] && r.parts[2] === "Cancel,Send report" && r.title === "Report Zed" && r.closed, "Report: what it's about, what happened, Cancel / Send report", r);
+t.ok(r.after.filter((x) => x !== "Admin" && x !== "Moderator").join() === "Local,Corp", "a DM tab closes with its ×", r.after);
+
+// another player's sheet (owner): DM / Report at the bottom; not on your own
+r = await run(page, `const get0 = Api.get; Api.get = async (u) => u.startsWith("/game/player/") ? { username: decodeURIComponent(u.split("/").pop()), createdAt: Date.now(), portrait: null, corp: "None", pilotCount: 1, totalSkillLevel: 0 } : get0(u);
+  document.querySelector('.wbtn[data-id="chat"]').click(); await s(200);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: "Zed", text: "hi" } })); await s(100);
+  const who = [...document.querySelectorAll('.win[data-id="chat"] .who')].reverse().find((x) => x.textContent.startsWith("Zed"));
+  who.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const pi = document.querySelector('.win[data-id="pinfo"]'), btns = [...pi.querySelectorAll(".ps-acts button")].map((b) => b.textContent);
+  [...pi.querySelectorAll(".ps-acts button")].find((b) => b.textContent === "DM").click(); await s(200);
+  const tab = !!document.querySelector('.tab[data-ch="dm:zed"]');
+  document.querySelector('.tab[data-ch="dm:zed"] .tab-x').click(); await s(100);
+  A.bus.dispatchEvent(new CustomEvent("chat", { detail: { t: "chat", ch: "local", from: A.me.name, text: "me" } })); await s(100);
+  const mine = [...document.querySelectorAll('.win[data-id="chat"] .who')].reverse().find((x) => x.textContent.startsWith(A.me.name));
+  mine.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 400, clientY: 300 })); await s(100);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const own = pi.querySelectorAll(".ps-acts button").length;
+  Api.get = get0; pi.querySelector(".win-close").click(); document.querySelector('.win[data-id="chat"] .win-close').click(); await s(100);
+  return { btns, tab, own };`);
+t.ok(r.btns.join() === "DM,Report" && r.tab && r.own === 0, "a player's sheet: DM / Report at the bottom (DM opens their tab); none on your own", r);
+
+// the HUD (owner): locked targets above shield / hull / speed, the Inventory button and the hotbar
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600);
+  A.followShip(A.myShip.id); await s(300);
+  const menu = A.objItems("rock", k.id).map((x) => x[0]);
+  A.objItems("rock", k.id).find((x) => x[0] === "Lock Target")[1](); await s(700);
+  const locking = { cards: document.querySelectorAll("#hud .tgt").length, x: document.querySelectorAll("#hud .tgt-x").length };
+  await s(3000);
+  const locked = { x: document.querySelectorAll("#hud .tgt-x").length, dist: document.querySelector("#hud .tgt-dist").textContent };
+  const cell = document.querySelector("#hud .tgt"); cell.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })); await s(50);
+  const hover = A.hoverTarget && A.hoverTarget.id === k.id, tip = document.getElementById("tooltip").textContent;
+  cell.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+  cell.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 600 })); await s(100);
+  const tmenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  const spd = document.querySelector(".hud-spd"); spd.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" })); await s(50);
+  const maxTip = document.getElementById("tooltip").textContent; spd.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+  const status = [...document.querySelectorAll("#hud .hud-k")].map((x) => x.textContent);
+  const hb = document.querySelector("#hud .hud-hotbar"), hbHidden = getComputedStyle(hb).display === "none";
+  document.getElementById("hud").classList.add("hb-dragging"); const slots = [...hb.querySelectorAll(".hb-slot")].filter((x) => getComputedStyle(x).display !== "none").map((x) => x.textContent);
+  document.getElementById("hud").classList.remove("hb-dragging");
+  document.querySelector("#hud .tgt-x").click(); await s(400);
+  const after = document.querySelectorAll("#hud .tgt").length;
+  const hudInv = !!document.querySelector("#hud .hud-inv"); document.querySelector('.wbtn[data-id="inv"]').click(); await s(300);
+  const inv = document.querySelector('.win[data-id="inv"]'), invTitle = inv.querySelector(".win-title-slot").textContent, invCap = inv.querySelector(".hud-txt").textContent;
+  const invTabs = [...inv.querySelectorAll(".tab")].map((x) => x.textContent).join(); inv.querySelector('.tab[data-hold="cargo"]').click(); await s(150);
+  const invCargo = inv.querySelector(".hud-txt").textContent; inv.querySelector('.tab[data-hold="ore"]').click(); await s(100);
+  const ik = inv.querySelector(".rz-se"), ikr = ik.getBoundingClientRect();
+  ik.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 6, button: 0, clientX: ikr.left + 5, clientY: ikr.top + 5, bubbles: true }));
+  dispatchEvent(new PointerEvent("pointermove", { pointerId: 6, clientX: ikr.left, clientY: ikr.top - 600 })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 6, clientX: ikr.left, clientY: ikr.top - 600 })); await s(150);
+  const invSlot = inv.querySelector(".si-scroll").clientHeight >= 48, invBars = inv.querySelectorAll(".si-cap").length;
+  document.querySelector(".fleet-card").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 560, clientY: 60 })); await s(100);
+  const cardMenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  inv.querySelector(".win-close").click();
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(300);
+  const fw = document.querySelector('.win[data-id="fit"]'), tabTo = async (k) => { fw.querySelector('.tab[data-tab="' + k + '"]').click(); await s(150); }, keys = () => [...fw.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
+  await tabTo("fitting");
+  const fit = { title: fw.querySelector(".win-title-slot").textContent, tabs: [...fw.querySelectorAll(".tab")].map((x) => x.textContent).join(), art: !!fw.querySelector(".fit-hull img"), slots: [...fw.querySelectorAll(".fit-active .fit-slot")].map((x) => x.textContent).join(), passive: fw.querySelectorAll(".fit-passive .fit-slot").length, order: [...fw.querySelector(".fit-left").children].map((x) => x.className.split(" ").pop()).join(), labels: [...fw.querySelectorAll(".fit-slots .fit-lab")].map((x) => x.textContent).join(), gen: keys(), bars: [...fw.querySelectorAll(".fit-left .fit-bar")].map((x) => x.textContent).join(), side: fw.querySelector(".fit-rows.fit-scroll").getBoundingClientRect().left > fw.querySelector(".fit-left").getBoundingClientRect().right - 1, shields: fw.querySelector(".fit-rows.fit-scroll .sheet-v").textContent, hb: [...document.querySelectorAll("#hud .hud-hotbar .hb-slot")].filter((x) => getComputedStyle(x).display !== "none").map((x) => x.textContent).join() };
+  await tabTo("hull"); fit.desc = !!fw.querySelector(".fit-desc").textContent; fit.bonusText = fw.querySelector(".fit-bonus").textContent; fit.bonuses = fw.querySelectorAll(".fit-bonus").length;
+  await tabTo("stats"); fit.stats = keys(); fit.statBars = fw.querySelectorAll(".fit-bar").length; fit.fitVals = [...fw.querySelectorAll(".fit-rows")[0].querySelectorAll(".sheet-v")].map((x) => x.textContent).join();
+  await tabTo("req"); fit.req = [...fw.querySelectorAll(".sheet-row")].map((x) => x.textContent).join();
+  await tabTo("fitting");
+  fw.querySelector(".win-close").click();
+  A.bus.dispatchEvent(new CustomEvent("objinfo", { detail: { kind: "ship", id: A.myShip.id } })); await s(500);
+  const ow = document.querySelector('.win[data-id="oinfo"]'), hull = { title: ow.querySelector(".win-title-slot").textContent, rows: [...ow.querySelectorAll(".sheet-k")].map((x) => x.textContent), shields: [...ow.querySelectorAll(".sheet-row")].find((x) => x.firstChild.textContent === "Shields").lastChild.textContent };
+  ow.querySelector(".win-close").click();
+  A.bus.dispatchEvent(new CustomEvent("pilotinfo", { detail: A.selectedPilot })); await s(600);
+  const pw = document.querySelector('.win[data-id="ppinfo"]'), pinfo = { title: pw.querySelector(".win-title-slot").textContent, name: pw.querySelector(".ps-name").textContent, rows: [...pw.querySelectorAll(".sheet-k")].map((x) => x.textContent) };
+  pw.querySelector(".win-close").click();
+  const pilotTitle = (document.querySelector('.wbtn[data-id="pilot"]').click(), await s(300), document.querySelector('.win[data-id="pilot"] .win-title-slot, .win-group .win-title-slot:not([hidden])').textContent); document.querySelector('.wbtn[data-id="pilot"]').click(); await s(200);
+  return { menu, locking, locked, hover, tip, tmenu, maxTip, status, hbHidden, slots, after, invTitle, invCap, hudInv, invTabs, invCargo, invSlot, invBars, cardMenu, fit, hull, pinfo, pilotTitle };`);
+t.ok(r.menu.join() === "Lock Target,Align To,Move towards,Orbit,Look At,Info", "an asteroid's menu: Lock Target, Align To, Move towards, Orbit, Look At, Info", r.menu);
+t.ok(r.locking.cards === 1 && r.locking.x === 0 && r.locked.x === 1 && /km$/.test(r.locked.dist), "a target shows above the status while it locks (no ×: can't be canceled), then gets its × and distance", r);
+t.ok(r.hover && /^[A-Z][a-z]+ite$/.test(r.tip), "hovering a target names it and draws the line to it", r);
+t.ok(r.tmenu.join() === "Unlock Target,Align To,Move towards,Orbit,Look At,Info", "a target's menu: Unlock Target, Align To, Move towards, Orbit, Look At, Info", r.tmenu);
+t.ok(r.status.join() === "Shield,Hull,Speed" && r.maxTip === "Max speed 335 m/s", "shield, hull and speed (hover: max speed)", r);
+t.ok(r.hbHidden && r.slots.join() === "1,2,3,4", "no modules: the hotbar's empty active slots (the Prospector's 4, keyed 1-4) show only while a module is dragged", r);
+t.ok(r.after === 0, "the × unlocks it", r.after);
+t.ok(!r.hudInv && /Prospector$/.test(r.invTitle) && r.invCap === "0 / 5,000 m³", "the Inventory window button (not on the hotbar) opens the ship's inventory", r);
+t.ok(r.invTabs === "Ore Hold,Cargo Hold,Drone Bay" && r.invCargo === "46 / 50 m³" && r.invBars === 1, "Inventory: a tab per hold, with that hold's fill bar under the tabs", r);
+t.ok(r.invSlot, "the Inventory window stays tall enough for at least one slot", r.invSlot);
+t.ok(r.cardMenu === "Look At,Show Fitting,Info,Rename,Pilot Info", "right-clicking a fleet card: its ship's menu (with Show Fitting) plus Pilot Info", r.cardMenu);
+const GEN = "Shields,Armor,Hull,Speed,Targeting Range,Targeting Time,Max Targets,Ore Hold,Cargo Hold,Drone Bay";
+t.ok(/Prospector$/.test(r.fit.title) && r.fit.tabs === "Fitting,Hull,Stats,Requirements", "the Fitting window's tabs: Fitting, Hull, Stats, Requirements", r.fit);
+t.ok(r.fit.art && r.fit.slots === "1,2,3,4" && r.fit.passive === 3 && r.fit.order === "fit-active,fit-hull,fit-passive,fit-bars" && r.fit.bars === "Power0 / 40,Disposition0 / 70" && r.fit.side && r.fit.labels === "Active,Passive" && r.fit.gen === GEN, "Fitting: 4 active slots above the ship (keyed as the hotbar), 3 passive below, each row labeled inside its box, the Power / Disposition bars under them, the general stats beside", r.fit);
+t.ok(r.fit.desc && r.fit.bonuses === 3, "Hull: its description and bonuses", r.fit);
+t.ok(r.fit.stats === "Active Slots,Passive Slots,Max Power,Max Disposition,Class,Length,Acceleration," + GEN && !r.fit.statBars && r.fit.fitVals === "4,3,40,70", "Stats: slots by type, max power and disposition (no bars), then the ship's stats", r.fit);
+t.ok(r.fit.shields === "225" && r.hull.shields === "225" && r.fit.bonusText === "+4% Mining Laser yield per level", "ships fly at their hull's full stats; hull bonuses are per level", r.fit);
+t.ok(r.fit.hb === "1,2,3,4", "while the Fitting window is open, the hotbar's empty slots and keys show", r.fit.hb);
+t.ok(r.fit.req === "✓Mining FrigateI,Carried byLight Ark", "Requirements: licenses and the ark that carries it", r.fit.req);
+t.ok(r.hull.title === "Prospector" && r.hull.rows.join() === "Class,Length," + GEN, "a ship's Info is its hull's", r.hull);
+t.ok(r.pinfo.title === "Pilot Info" && r.pinfo.name === "Vera Kestrel" && r.pinfo.rows.join() === "Player,Corp,Day Born,Total Endorsement Level", "Pilot Info: a pilot's portrait, name, player, corp, day born and endorsements", r.pinfo);
+t.ok(r.pilotTitle === "Pilot Info", "the pilot window is titled Pilot Info", r.pilotTitle);
+
+// (owner) double-click an object: Lock Target; Ctrl + click: Align To; Shift + click: Move towards (on space: fly there)
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600); A.focusShip(A.myShip.id); await s(1500);   // (zoomed out enough to see the rock)
+  const at = () => { const v = A.view, sc = innerWidth / v.w; return [innerWidth / 2 + (k.x - v.cx) * sc, innerHeight / 2 - (k.y - v.cy) * sc]; };
+  const click = (x, y, mods = {}) => { for (const t of ["pointerdown", "pointerup"]) c.dispatchEvent(new PointerEvent(t, { pointerId: 9, pointerType: "mouse", button: 0, clientX: x, clientY: y, bubbles: true, ...mods })); };
+  let [x, y] = at(); click(x, y); await s(80); click(x, y); await s(500);
+  const locked = (A.myShip.targets || []).some((g) => g.id === k.id);
+  await s(400); [x, y] = at(); click(x, y, { ctrlKey: true }); await s(400); const ctrl = A.myShip.chase && A.myShip.chase.mode;
+  await s(400); [x, y] = at(); click(x, y, { shiftKey: true }); await s(400); const shift = A.myShip.chase && A.myShip.chase.mode;
+  await s(400); click(60 + 20, innerHeight - 120, { shiftKey: true }); await s(400); const space = { moving: A.myShip.moving, chase: A.myShip.chase || null };
+  A.unlock("rock", k.id); dev({ cmd: "move", x: 60000, y: -60020 }); await s(300);
+  return { locked, ctrl, shift, space };`);
+t.ok(r.locked, "double-clicking an asteroid locks it", r);
+t.ok(r.ctrl === "align" && r.shift === "approach", "Ctrl + click: Align To; Shift + click: Move towards", r);
+t.ok(r.space.moving && !r.space.chase, "Shift + click on space flies there", r.space);
+
+// (owner) Look At: the camera follows the object and zooms about its center; the Fitting window's minimum; Rename
+r = await run(page, `const b = A.pois.find((p) => p.kind === "belt" && !p.hidden);
+  dev({ cmd: "move", x: b.x, y: b.y }); await s(1200);
+  const k = A.belts.get(b.id).rocks[0]; dev({ cmd: "move", x: k.x + 2, y: k.y }); await s(600);
+  A.objItems("rock", k.id).find((x) => x[0] === "Look At")[1](); await s(2200);   // (from far across the map: a little longer to settle)
+  const v1 = A.view, near1 = Math.hypot(v1.cx - k.x, v1.cy - k.y) < 0.05 && v1.lookAt && v1.lookAt.id === k.id && !v1.follow;
+  c.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, clientX: 100, clientY: 100, bubbles: true, cancelable: true })); await s(800);
+  const v2 = A.view, zoomed = v2.w > v1.w && Math.hypot(v2.cx - k.x, v2.cy - k.y) < 0.05;
+  ev("pointerdown", 400, 300); ev("pointermove", 480, 300); ev("pointerup", 480, 300); await s(100);
+  const dropped = !A.view.lookAt;
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(400);
+  const fw = document.querySelector('.win[data-id="fit"]'); fw.querySelector('.tab[data-tab="fitting"]').click(); await s(200);
+  const knob = fw.querySelector(".rz-se"), kr = knob.getBoundingClientRect();
+  knob.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 5, button: 0, clientX: kr.left + 5, clientY: kr.top + 5, bubbles: true }));
+  dispatchEvent(new PointerEvent("pointermove", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); dispatchEvent(new PointerEvent("pointerup", { pointerId: 5, clientX: kr.left - 500, clientY: kr.top - 700 })); await s(200);
+  const sc = fw.querySelector(".fit-rows.fit-scroll"), rowH = sc.querySelector(".sheet-row").offsetHeight, slotsW = fw.querySelector(".fit-active").offsetWidth;
+  const lb = fw.querySelector(".fit-bars").getBoundingClientRect().bottom, wb = fw.getBoundingClientRect().bottom;
+  const min = { barsIn: lb <= wb && wb - lb < 40, rows: sc.clientHeight / rowH, scrolls: sc.scrollHeight > sc.clientHeight, body: fw.querySelector(".win-body").scrollHeight <= fw.querySelector(".win-body").clientHeight + 1, sixSlots: slotsW >= 6 * 40 + 5 * 6, tabsTop: fw.querySelector(".fit-tabs").getBoundingClientRect().top - fw.getBoundingClientRect().top < 60 };
+  fw.querySelector('.tab[data-tab="req"]').click(); await s(200); const checks = [...fw.querySelectorAll(".req-check")].map((x) => x.textContent).join("|");
+  fw.querySelector(".win-title-slot").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 120 })); await s(100);
+  const tmenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); document.querySelector(".ctx-item").click(); await s(200);
+  const inp = document.querySelector('.win[data-id="rename"] input'), prefill = inp.value; inp.value = "  Rock   Hopper "; inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" })); await s(600);
+  const renamed = { title: fw.querySelector(".win-title-slot").textContent, snap: A.myShip.name };
+  A.send({ t: "rename", ship: A.myShip.id, name: "" }); await s(500); const back = fw.querySelector(".win-title-slot").textContent;
+  fw.querySelector('.tab[data-tab="fitting"]').click(); fw.querySelector(".win-close").click(); dev({ cmd: "move", x: 60000, y: -60020 }); await s(300);
+  return { near1, zoomed, dropped, min, checks, tmenu, prefill, renamed, back };`);
+t.ok(r.near1 && r.zoomed && r.dropped, "Look At: the camera follows the object and zooms about its center, until you pan", r);
+t.ok(r.min.scrolls && r.min.barsIn && r.min.body && r.min.sixSlots && r.min.tabsTop, "the Fitting window's minimum: 6 slots wide (plus the stats beside), down to the Power / Disposition bars; the stats scroll, the tabs stay on top", r.min);
+t.ok(r.checks === "✓|", "Requirements: a green check for what the pilot has (Mining Frigate I), none for what it doesn't (an ark)", r.checks);
+t.ok(r.tmenu === "Rename" && /Prospector$/.test(r.prefill) && r.renamed.title === "Rock Hopper" && r.renamed.snap === "Rock Hopper" && /Prospector$/.test(r.back), "Rename from the Fitting window's title; an empty name puts back the default", r);
+
+// (owner) modules: drag one from the cargo hold onto a slot to fit it; its hotbar key runs it; the Station: dock, the
+// hangar and the ship list, drag items between them
+r = await run(page, `for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  const P = (tgt, ty, x, y) => (tgt || window).dispatchEvent(new PointerEvent(ty, { pointerId: 11, button: 0, clientX: x, clientY: y, bubbles: true }));
+  const drag = async (src, dst) => { const a = src.getBoundingClientRect(), b = dst.getBoundingClientRect(); P(src, "pointerdown", a.left + 10, a.top + 10); P(null, "pointermove", a.left + 30, a.top + 30); P(null, "pointermove", b.left + 10, b.top + 10); await s(40); P(null, "pointerup", b.left + 10, b.top + 10); await s(600); };
+  document.querySelector('.wbtn[data-id="inv"]').click(); await s(300); const inv = document.querySelector('.win[data-id="inv"]'); inv.querySelector('.tab[data-hold="cargo"]').click(); await s(200);
+  document.querySelector('.wbtn[data-id="fit"]').click(); await s(400); const fw = document.querySelector('.win[data-id="fit"]'); fw.querySelector('.tab[data-tab="fitting"]').click(); await s(200);
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
+  const kit = [...inv.querySelectorAll(".si-cell.filled")].map((c) => c.dataset.item).join();
+  await drag(inv.querySelector('.si-cell[data-item="mining_laser_s1"]'), fw.querySelector('.fit-active [data-mslot="0"]')); const spaceFit = A.myShip.fit.active[0] || null;
+  { const st = A.pois.find((q) => q.id === "station"); dev({ cmd: "move", x: st.x - 1.3, y: st.y - 0.2 }); } await s(900); A.send({ t: "dock", ship: A.myShip.id, where: "station" }); for (let i = 0; i < 60 && !A.myShip.docked; i++) await s(200);   // (owner) refit docked (through the hangar)
+  for (const id of ["station"]) { const x = document.querySelector('.win[data-id="' + id + '"] .win-close'); if (x && !x.closest(".win").hidden) x.click(); } await s(200);
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; await s(50);
+  await drag(inv.querySelector('.si-cell[data-item="mining_laser_s1"]'), fw.querySelector('.fit-active [data-mslot="0"]'));
+  A.send({ t: "undock", ship: A.myShip.id }); await s(900); dev({ cmd: "move", x: 60000, y: -60020 }); await s(600);
+  for (const id of ["inv", "fit"]) { const w2 = document.querySelector('.win[data-id="' + id + '"]'); if (w2.hidden) document.querySelector('.wbtn[data-id="' + id + '"]').click(); await s(300); }
+  fw.style.left = "560px"; fw.style.top = "60px"; inv.style.left = "80px"; inv.style.top = "420px"; inv.querySelector('.tab[data-hold="cargo"]').click(); await s(200);
+  const fitted = A.myShip.fit.active[0], hb = !!document.querySelector('#hud .hb-slot.filled .hb-img'), bars = fw.querySelector(".fit-bar").textContent;
+  const flashText = () => document.getElementById("status").textContent;
+  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); const hb0 = document.querySelector("#hud .hb-slot.filled"), noTarget = { sb: !!(A.myShip.act[0] && A.myShip.act[0].sb), cls: hb0.classList.contains("standby") };
+  dispatchEvent(new KeyboardEvent("keydown", { key: "1" })); await s(500); noTarget.off = !A.myShip.act[0];
+  await drag(inv.querySelector('.si-cell[data-item="drone_link_s1"]'), inv.querySelector('.tab[data-hold="ore"]')); const oreRefused = !!A.myShip.holds.cargo.drone_link_s1 && !A.myShip.holds.ore.drone_link_s1;
+  fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100);
+  const slotMenu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Power Off").click(); await s(500);
+  const pslot = fw.querySelector('.fit-active [data-mslot="0"]'), power = { off: A.myShip.fit.off.active[0], cls: pslot.classList.contains("off"), bars: fw.querySelector(".fit-bar").textContent };
+  pslot.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Power On").click(); await s(500); power.on = !A.myShip.fit.off.active[0];
+  fw.querySelector('.fit-active [data-mslot="0"]').dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 600, clientY: 200 })); await s(100); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(300);
+  const mi = document.querySelector('.win[data-id="minfo"]'), minfo = [...mi.querySelectorAll(".sheet-k")].map((x) => x.textContent).join(); mi.querySelector(".win-close").click();
+  for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  { const st = A.pois.find((q) => q.id === "station"); dev({ cmd: "move", x: st.x - 1.3, y: st.y - 0.2 }); } await s(1300); A.followShip(A.myShip.id);
+  if (document.querySelector('.win[data-id="fleet"]').hidden) document.querySelector('.wbtn[data-id="fleet"]').click(); await s(300);
+  const dockBtn = document.querySelector(".fa-dock"), dockShown = !dockBtn.hidden && !dockBtn.parentNode.hidden; dockBtn.click(); for (let i = 0; i < 60 && !A.myShip.docked; i++) await s(200); await s(400);
+  const st = document.querySelector('.win[data-id="station"]'), stOpen = !st.hidden, side = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|");
+  const bay = {}, tab = () => st.querySelector(".st-ship-tab");
+  tab().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 200 })); await s(150);
+  bay.menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Unboard Pilot").click(); await s(500);
+  bay.unboarded = !!A.myShip.unboarded && /No pilot/.test(tab().textContent); bay.noUndock = st.querySelector(".st-undock").disabled;
+  A.send({ t: "undock", ship: A.myShip.id }); await s(400); bay.noUndock = bay.noUndock && !!A.myShip.docked;
+  tab().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 200 })); await s(150); [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Board Pilot").click(); await s(500); bay.boarded = !A.myShip.unboarded;
+  tab().click(); await s(200); bay.collapsed = [...st.querySelectorAll(".st-side > *")].map((x) => x.textContent).join("|"); tab().click(); await s(200);
+  [...st.querySelectorAll(".st-entry")].find((x) => x.textContent === "Cargo Hold").click(); await s(300);
+  await drag(st.querySelector('.st-main .si-cell[data-item="drone_link_s1"]'), st.querySelector('.st-entry[data-cont="hangar"]'));
+  const hangar = JSON.stringify(A.snap.hangar);
+  st.querySelector(".st-undock").click(); await s(600); const undocked = !A.myShip.docked; await s(300); const stClosed = st.hidden;
+  dev({ cmd: "move", x: 60000, y: -60020 }); await s(300);
+  return { bay, kit, spaceFit, fitted, hb, bars, noTarget, oreRefused, power, slotMenu, minfo, dockShown, stOpen, side, hangar, undocked, stClosed };`);
+t.ok(r.kit === "mining_laser_s1,drone_link_s1,afterburner_s1,cargo_upgrade_s1,gyroscope_s1,yield_upgrade_s1,range_upgrade_s1,cycle_upgrade_s1,drone_fuel", "the starter kit is in the cargo hold", r.kit);
+t.ok(r.fitted === "mining_laser_s1" && r.hb && r.bars === "Power8 / 40", "dragging a module onto a slot fits it; it shows on the hotbar and uses power", r);
+t.ok(r.noTarget.sb && r.noTarget.cls && r.noTarget.off, "its hotbar key runs it: with no locked asteroid a laser waits on standby (pulsing), and the key switches it off again (owner)", r.noTarget);
+t.ok(r.oreRefused, "a module dropped on the Ore Hold's tab stays in the cargo hold (the ore hold takes only ore)", r);
+t.ok(r.power.off && r.power.cls && /^Power0 \/ 40/.test(r.power.bars) && r.power.on, "Power Off from a fitted slot's menu: dimmed, no power used; Power On puts it back (owner)", r.power);
+t.ok(r.spaceFit === null && r.slotMenu === "Power Off,Info" && r.minfo === "Slot,Size,Power,Disposition,Volume,Yield,Cycle Time,Range,License", "in space a module can't be dragged into a slot, and a fitted one's menu is Power Off, Info (owner: refit docked; Info: its stats as fitted)", r);
+t.ok(r.dockShown && r.stOpen && r.side === "Market|Hangar|Ship Bay|▾Vera Kestrel's Prospector|Ore Hold|Cargo Hold|Drone Bay" && r.bay.menu === "Show Fitting,Info,Rename,Undock,Unboard Pilot" && r.bay.collapsed === "Market|Hangar|Ship Bay|▸Vera Kestrel's Prospector" && r.bay.unboarded && r.bay.noUndock && r.bay.boarded, "near the station the Dock button shows; docking opens the Station: the hangar, then the Ship Bay with each ship's holds; a ship's tab collapses, and right-click: its menu with Unboard / Board Pilot; no undocking without a pilot (owner)", r);
+t.ok(JSON.parse(r.hangar).drone_link_s1 === 1 && r.undocked && r.stClosed, "drag an item onto the hangar to store it; Undock closes the Station", r);
+
+// reload keeps the windows that were open
+await run(page, `document.querySelector('.wbtn[data-id="pilot"]').click(); await s(400);`);
+await page.reload(); await page.waitForFunction(() => window.Atamus && window.Atamus.myShip); await page.waitForTimeout(1200);
+r = await run(page, `return wins();`);
+t.ok(r.includes("pilot"), "a reload brings back the open windows", r);
+await run(page, `for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);`);
+// (owner) the admin panel: the Head Admin's button, the second password, players / admins, a player's info and licenses, the log
+r = await run(page, `await fetch("/game/admin/lock", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+  const btn = document.querySelector('.wbtn[data-id="admin"]'); if (!btn) return { btn: false };
+  btn.click(); await s(800); const w = document.querySelector('.win[data-id="admin"]'), pw = w.querySelector('input[type="password"]');
+  const masked = !!pw; pw.value = "Cinder@Hollow6021=Magnet~Captain%Creek"; pw.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+  for (let i = 0; i < 80 && !w.querySelector(".tab") && !w.querySelector(".apic"); i++) await s(100);   // (the panel loads)
+  // (owner) the first time: the admin profile (a name and one of the pictures)
+  let prof = { pics: w.querySelectorAll(".apic").length };
+  if (prof.pics) { const n = w.querySelector(".apic-form .text-input"); n.value = "Warden_Q"; w.querySelectorAll(".apic")[2].click(); [...w.querySelectorAll("button")].find((b) => b.textContent === "Save").click(); await s(1200); }
+  prof.after = !!w.querySelector(".tab");
+  w.querySelector(".win-title-slot").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 300, clientY: 100 })); await s(100);
+  prof.menu = [...document.querySelectorAll(".ctx-item")].map((x) => x.textContent).join(); document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); await s(100);
+  const tabs = [...w.querySelectorAll(".tab")].map((x) => x.childNodes[0].textContent).join();   // (the label, not its unread count)
+  [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Staff").click(); await s(300);
+  const r0 = w.querySelector(".adm-row"), rows = [...w.querySelectorAll(".adm-row")].map((x) => x.textContent), b = r0.getBoundingClientRect();
+  r0.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: b.left + 20, clientY: b.top + 5 })); await s(150);
+  [...document.querySelectorAll(".ctx-item")].find((x) => x.textContent === "Info").click(); await s(900);
+  const ap = document.querySelector('.win[data-id="aplayer"]'), info = [...ap.querySelectorAll(".sheet-k")].map((x) => x.textContent).join();
+  const apTabs = [...ap.querySelectorAll(".tab")].map((x) => x.textContent).join();
+  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Pilots").click(); await s(300); const lic = ap.querySelectorAll(".lic-row").length, cards = ap.querySelectorAll(".pp-card").length;
+  [...ap.querySelectorAll(".tab")].find((x) => x.textContent === "Language").click(); await s(600); const meters = ap.querySelectorAll(".heat").length;
+  // (owner) the chat's Player / Admin switch: as Admin, a line under the admin profile
+  document.querySelector('.wbtn[data-id="chat"]').click(); await s(300); const cw = document.querySelector('.win[data-id="chat"]'), sw = cw.querySelector(".chat-as");
+  let said = null; if (sw) { sw.click(); const inp = cw.querySelector(".chat-form .text-input"); inp.value = "admin hello"; cw.querySelector(".chat-form").requestSubmit(); await s(600);
+    const ln = [...cw.querySelectorAll(".chat-line")].pop(); said = { admin: ln.classList.contains("admin"), pic: !!ln.querySelector(".chat-apic"), who: ln.querySelector(".who").textContent, sw: sw.textContent }; sw.click(); }
+  [...w.querySelectorAll(".tab")].find((x) => x.textContent === "Log").click(); await s(800); const log = !!w.querySelector(".adm-list");
+  for (const x of document.querySelectorAll(".win:not([hidden]) .win-close")) x.click(); await s(200);
+  return { btn: true, masked, tabs, rows, info, lic, cards, meters, apTabs, prof, said, log };`);
+t.ok(r.btn && r.masked && r.tabs === "Players,Reports,Appeals,Chat,Names,Words,Support,Log,Resets,Review,Notifications,Players,Staff,Disciplined" && r.rows.some((x) => /PTR.*Head Admin/.test(x)), "the admin panel: a password field, then Players (Players / Staff / Disciplined), Reports, Appeals, Chat, Names, Words, Support, Log and Notifications (owner)", r);
+t.ok(r.info === "Role,Online,Joined,Ban,Muted,Frozen,Credits,Corporation" && r.apTabs === "Player,Pilots,Language,Trades,Security" && r.cards >= 1 && r.lic >= 1 && r.log, "a player's admin info; their pilots as on the Pilot window, with their licenses (owner)", r);
+t.ok(r.meters === 8, "the Language tab: the overall meter and one per kind of word (owner)", r.meters);
+t.ok((r.prof.pics === 6 || r.prof.pics === 0) && r.prof.after && r.prof.menu === "Admin Profile", "first the admin profile (6 pictures); the panel's menu changes it (owner)", r.prof);
+t.ok(r.said && r.said.admin && r.said.pic && /^Warden_/.test(r.said.who) && r.said.sw === "Admin", "the chat's Player / Admin switch: as Admin, a line under the admin name and picture (owner)", r.said);
+await page.close();
+
+// phone: windows fit the screen, a pinch zooms, a tap flies
+page = await open(844, 390, true);
+r = await run(page, `A.send({ t: "dev", cmd: "move", x: 60000, y: -60020 }); await s(400);   // open space: a tap mustn't land on an asteroid
+  for (const b of document.querySelectorAll(".wbtn")) b.click(); await s(500);
+  const over = [...document.querySelectorAll(".win:not([hidden])")].filter((w) => { const b = w.getBoundingClientRect(); return b.right > innerWidth + 1 || b.bottom > innerHeight + 1; }).map((w) => w.dataset.id);
+  for (const b of document.querySelectorAll(".win:not([hidden]) .win-close")) b.click(); await s(200);
+  const w0 = A.view.w; ev("pointerdown", 400, 200, 1, "touch"); ev("pointerdown", 500, 200, 2, "touch"); ev("pointermove", 440, 200, 1, "touch"); ev("pointermove", 460, 200, 2, "touch"); ev("pointerup", 440, 200, 1, "touch"); ev("pointerup", 460, 200, 2, "touch"); await s(500);
+  const w1 = A.view.w; ev("pointerdown", 700, 120, 3, "touch"); ev("pointerup", 700, 120, 3, "touch"); await s(60); ev("pointerdown", 700, 120, 4, "touch"); ev("pointerup", 700, 120, 4, "touch"); await s(500);
+  return { over, w0, w1, moving: A.myShip.moving };`);
+t.ok(!r.over.length, "windows fit a phone screen", r.over);
+t.ok(r.w1 > r.w0, "a pinch zooms", r);
+t.ok(r.moving, "a double tap flies the ship", r);
+await run(page, `A.send({ t: "dev", cmd: "move", x: 60000, y: -60000 }); await s(300);`);
+await page.close(); await browser.close();
+t.ok(!errors.length, "no page errors", errors.slice(0, 5));
+t.done();

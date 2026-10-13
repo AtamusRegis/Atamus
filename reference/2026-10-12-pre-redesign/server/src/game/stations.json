@@ -1,0 +1,53 @@
+{
+ "mPerPx": 1.875,
+ "sizes": {
+  "small": {
+   "retracted": {
+    "sprite": "stations/small_retracted.webp",
+    "w": 160,
+    "h": 228,
+    "dx": 5.0,
+    "dy": -0.03
+   },
+   "extended": {
+    "sprite": "stations/small_extended.webp",
+    "w": 182,
+    "h": 228,
+    "dx": -6.0,
+    "dy": -0.03
+   }
+  },
+  "medium": {
+   "retracted": {
+    "sprite": "stations/medium_retracted.webp",
+    "w": 482,
+    "h": 522,
+    "dx": 0.72,
+    "dy": 31.87
+   },
+   "extended": {
+    "sprite": "stations/medium_extended.webp",
+    "w": 482,
+    "h": 598,
+    "dx": 0.72,
+    "dy": 69.87
+   }
+  },
+  "large": {
+   "retracted": {
+    "sprite": "stations/large_retracted.webp",
+    "w": 1551,
+    "h": 1401,
+    "dx": 44.61,
+    "dy": -42.32
+   },
+   "extended": {
+    "sprite": "stations/large_extended.webp",
+    "w": 1760,
+    "h": 1401,
+    "dx": -59.89,
+    "dy": -42.32
+   }
+  }
+ }
+}

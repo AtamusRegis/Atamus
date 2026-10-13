@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus</title>
+  <meta name="description" content="Atamus is a multiplayer space mining game you play in your browser. Mine the Expanse, train your pilots, grow your fleet.">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=1791763226">
+  <script src="front.js?v=1791763226"></script>
+</head>
+<body class="front">
+  <div class="bg" aria-hidden="true">
+    <div class="bg-gradient"></div>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <header class="site-head">
+    <a class="site-logo" href="index.html"><img src="assets/logo.png" srcset="assets/logo.png 1x, assets/logo@2x.png 2x" width="182" height="36" alt="Atamus"></a>
+    <a class="btn btn-ghost btn-sm" href="login.html">Log in</a>
+  </header>
+
+  <main class="front-main">
+    <section class="card front-about" aria-labelledby="about-title">
+      <h2 id="about-title" class="brand">The Expanse</h2>
+      <div class="front-body">
+        <p class="front-lead">Atamus is a multiplayer space mining game you play right in your browser.</p>
+        <p>Start with a single mining frigate and a station in your own corner of the Expanse. Lock onto asteroids, cut ore, sell it on the market, and train your pilots in new licenses.</p>
+        <p>Buy bigger hulls, fit them with lasers and modules, and grow from one ship into a mining fleet. Push your ships past their limits when it counts.</p>
+        <a class="btn btn-primary btn-play" href="signup.html">Play now</a>
+      </div>
+    </section>
+
+    <section class="card front-help" aria-labelledby="help-title">
+      <h2 id="help-title" class="brand">Help build Atamus</h2>
+      <div class="front-body">
+        <p>Atamus is made by a single developer, so for now much of its art, effects and music are AI-generated placeholders.</p>
+        <p>If you'd like to help with the project, reach out to <strong>Nyssary</strong> on Discord or email <a href="mailto:AtamusRegis@proton.me">AtamusRegis@proton.me</a>, and we can talk about it.</p>
+      </div>
+    </section>
+
+    <section class="card front-updates" aria-labelledby="updates-title">
+      <h2 id="updates-title" class="brand">Updates</h2>
+      <div class="front-body">
+        <!-- one entry per day, newest first: that day's new features, saying what was added, never how it works (owner) -->
+        <article class="update">
+          <time datetime="2026-10-11">Oct 11, 2026</time>
+          <ul>
+            <li><b>Station markets.</b> NPC stations now sell modules, weapons, ammo, drones, ore and license manuals, and new players start with 10M credits.</li>
+            <li><b>Combat.</b> Ships now fight with missile launchers, beams, repeaters and coilguns and their ammo; destroyed ships leave wrecks to loot.</li>
+            <li><b>Modules.</b> Added many new modules in three sizes and two tiers, each with its own license.</li>
+            <li><b>Drones.</b> Drones are now items you launch with the module they carry, and they need fuel.</li>
+            <li><b>The Expanse Transit Authority.</b> The law has arrived: ETA ships guard the stations, patrol the solar system and hunt down anyone who causes trouble.</li>
+            <li><b>Planetary systems.</b> Every planet now has its own system with a station to start at, and warping between planets needs a Microwarp Drive.</li>
+            <li><b>Starting planet.</b> Choose the planet your new pilot starts at.</li>
+            <li><b>Our solar system.</b> The home system is now modelled on our own solar system, with its planets, moons and rings, and asteroid belts in the planets' rings.</li>
+            <li><b>Earth Station.</b> The station now orbits Earth, where new pilots start.</li>
+            <li><b>Station hangars.</b> Ships now fly into and out of station hangars when docking and undocking.</li>
+            <li><b>Warp camera.</b> The camera now follows your ship through warp.</li>
+            <li><b>Safe log-off.</b> Ships left in space after you log off now return to your station.</li>
+            <li><b>Remember Password.</b> Added a Remember Password option when logging in.</li>
+            <li><b>Game clock.</b> Added the game time to the window panel.</li>
+            <li><b>Undock button.</b> Undock your ship from the Fleet window.</li>
+            <li><b>Account security.</b> Added protection for your account against password guessing, account sharing and stolen logins.</li>
+            <li><b>Mute, block and support.</b> Mute or block other players, and open support tickets to reach the admins.</li>
+            <li><b>Chat filter.</b> Offensive words in chat are now hidden.</li>
+            <li><b>Celestials.</b> Added the sun, planets and moons to the Expanse, with asteroid belts gathering around them.</li>
+            <li><b>Player stations.</b> Every player now has their own station to dock at, store items in and refit their ships.</li>
+            <li><b>Drone control and reordering.</b> Recall and redirect mining drones, watch them deliver ore to your ship, and drag items, training and targets into the order you want.</li>
+            <li><b>Range rings and chat bubbles.</b> See your targeting and module ranges around your ship, and what nearby pilots say above their ships.</li>
+            <li><b>Drone hauling.</b> Mining drones now fly their ore back to your ship.</li>
+            <li><b>Orbit and module power.</b> Orbit objects in space, power modules off, and set mining modules on standby until a target is locked.</li>
+            <li><b>Logging off in space.</b> Ships left in space keep working for a while, then warp to safety.</li>
+            <li><b>Modules and mining.</b> Added mining lasers, mining drones, an afterburner and upgrades to fit to your ship, and mining asteroids for ore.</li>
+            <li><b>Station.</b> Added a station to dock at and store your ore and modules in its hangar.</li>
+            <li><b>Mining Frigate license.</b> Train the Mining Frigate license to strengthen your Prospector's hull bonuses.</li>
+            <li><b>Ship names and Look At.</b> Rename your ships, and keep the camera on any object in space.</li>
+            <li><b>Ship fitting and pilot info.</b> Added the Fitting window with your ship's hull, stats and requirements, hull info for ships, and Pilot Info for other players' pilots.</li>
+            <li><b>Flight.</b> Ships now fly straight over asteroids and each other on the way to their destination.</li>
+            <li><b>The Library.</b> Added the Library, a place to see every ship, structure and asteroid in the game.</li>
+            <li><b>Targeting.</b> Lock asteroids and ships, align to them, fly to them and look them up.</li>
+            <li><b>Ship HUD.</b> Added a hotbar with your ship's shields, hull and speed, your locked targets, and the ship inventory.</li>
+            <li><b>Direct messages and reporting.</b> Message other players directly, look up their player sheet, or report them from chat.</li>
+            <li><b>Asteroid belts and warp.</b> Added asteroid belts holding all five ores, and warp drives to reach them.</li>
+          </ul>
+        </article>
+        <article class="update">
+          <time datetime="2026-10-10">Oct 10, 2026</time>
+          <ul>
+            <li><b>Back to basics.</b> We've taken Atamus back to the start to get the core of flying and mining right. For now it's you, your pilots' Prospectors and the open Expanse. Everything else will return as it's rebuilt. Pilots, ships and credits were reset.</li>
+            <li><b>Characters and portraits.</b> Create your character and your pilots with the new portrait creator. Your character is who you are in Local and Corp chat.</li>
+            <li><b>Fleet.</b> Switch between your pilots from the Fleet bar or with Tab.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+  <footer class="site-foot"><a href="https://db-ip.com">IP Geolocation by DB-IP</a></footer>
+  <script src="front-updates.js?v=1791763226"></script>
+</body>
+</html>

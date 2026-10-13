@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Atamus — Recover account</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=1791763226">
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+    <svg class="bg-noise" xmlns="http://www.w3.org/2000/svg">
+      <filter id="noise">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch">
+          <animate attributeName="seed" dur="4s" repeatCount="indefinite" calcMode="discrete"
+                   values="0;7;14;21;28;35;42;49;56;3;10;17;24;31;38;45;52;59" />
+        </feTurbulence>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+      <rect width="100%" height="100%" filter="url(#noise)"/>
+    </svg>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <header class="site-head"><a class="site-logo" href="index.html"><img src="assets/logo.png" srcset="assets/logo.png 1x, assets/logo@2x.png 2x" width="182" height="36" alt="Atamus"></a></header>
+
+  <main>
+    <section class="card" aria-labelledby="title">
+      <h1 id="title" class="brand">Recover account</h1>
+      <p class="subtitle">Recover your account</p>
+
+      <!-- Step 1: who are you -->
+      <form id="step-user" class="form" novalidate>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required spellcheck="false">
+        </label>
+        <p class="msg" id="msg1" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Continue</button>
+        <button type="button" class="link-small link-btn" data-to-request>Request a reset</button>
+        <a class="link-small" href="login.html">Back to log in</a>
+      </form>
+
+      <!-- Step 2: answer questions and set a new password -->
+      <form id="step-answers" class="form" novalidate hidden>
+        <p class="hint">Answer all three questions, then choose a new password.</p>
+        <label class="field">
+          <span id="q1-label">Question 1</span>
+          <input name="a1" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span id="q2-label">Question 2</span>
+          <input name="a2" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span id="q3-label">Question 3</span>
+          <input name="a3" type="password" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>New password</span>
+          <input name="password" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="field">
+          <span>Confirm new password</span>
+          <input name="confirm" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <p class="msg" id="msg2" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Reset password</button>
+        <button type="button" class="link-small link-btn" data-to-request>Request a reset</button>
+        <a class="link-small" href="login.html">Back to log in</a>
+      </form>
+
+      <!-- (owner) can't answer: a password reset appeal to the Head Admin, followed by logging in with a temporary password -->
+      <form id="step-request" class="form" novalidate hidden>
+        <label class="field">
+          <span>Username</span>
+          <input name="username" type="text" autocomplete="username" required spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Temporary password</span>
+          <input name="temp" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="field">
+          <span>Confirm temporary password</span>
+          <input name="confirm" type="password" autocomplete="new-password" required minlength="8">
+        </label>
+        <label class="field">
+          <span>Why this is your account</span>
+          <textarea name="text" rows="4" maxlength="1000" required></textarea>
+        </label>
+        <p class="msg" id="msg3" role="alert" hidden></p>
+        <button type="submit" class="btn btn-primary">Send request</button>
+        <a class="link-small" href="login.html">Back to log in</a>
+      </form>
+    </section>
+  </main>
+
+  <script src="api.js?v=1791763226"></script>
+  <script src="recover.js?v=1791763226" defer></script>
+</body>
+</html>
