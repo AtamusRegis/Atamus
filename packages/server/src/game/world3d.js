@@ -32,16 +32,16 @@ export class World3D {
     )`);
   }
 
-  async join(id, name) {
+  async join(id, name, team) {
     id = String(id);
     let p = this.players.get(id);
-    if (p) { p.name = name; return p; }
+    if (p) { p.name = name; p.team = team; return p; }
     await this.ready;
     const { rows } = await pool.query(`SELECT x, y FROM world3d WHERE user_id = $1`, [id]);
     let x, y;
     if (rows[0] && inside(rows[0].x, rows[0].y)) ({ x, y } = rows[0]);
     else { const a = Math.random() * Math.PI * 2, d = Math.random() * 300; x = Math.cos(a) * d; y = Math.sin(a) * d; }
-    p = { id, name, x, y, dx: 0, dy: 0, dirty: true };
+    p = { id, name, team, x, y, dx: 0, dy: 0, dirty: true };   // team: "red" | "blue", picked every time they enter (owner)
     this.players.set(id, p);
     return p;
   }
@@ -94,5 +94,5 @@ export class World3D {
     for (const p of this.players.values()) out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100)]);
     return out;
   }
-  roster() { const out = []; for (const p of this.players.values()) out.push({ i: p.id, n: p.name }); return out; }
+  roster() { const out = []; for (const p of this.players.values()) out.push({ i: p.id, n: p.name, s: p.team }); return out; }
 }

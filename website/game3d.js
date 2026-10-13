@@ -183,7 +183,7 @@ const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE
 const sphereGeo = new THREE.SphereGeometry(SPHERE_R, 48, 32);
 const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x4f8fe8, roughness: 0.35, metalness: 0.15 });
 const players = new Map();                     // id -> { holder, heading, name, from:{x,y,ts}, to:{x,y,ts} }
-let myId = null;
+let myId = null, myName = "", mySide = null;
 const me = { x: 0, y: 0 };                     // my ship, predicted locally and corrected by snapshots
 let haveMe = false;
 let shipTemplate = null, shipMid = SPHERE_R;   // shipMid: the hull's center height, for the camera and the aim line
@@ -287,7 +287,8 @@ function inputDir() {                          // forward = where the camera fac
 // ---- socket ----
 let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
 let rtt = 80, pingTimer = 0;                   // measured round trip, for latency-compensated correction
-const wsUrl = () => (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws" + (typeof deviceId === "function" ? "?d=" + deviceId() : "");
+const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);   // ?as: the PTR's second-account test hook (ignored live)
+  return (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws?" + q.toString(); };
 function connect() {
   statusEl.hidden = false; statusEl.textContent = "Connecting…";
   ws = new WebSocket(wsUrl());
@@ -301,12 +302,15 @@ function connect() {
     if (m.t === "hello") {
       srvBuild = m.build || "";
       if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; }
-      myId = m.you.id; me.x = m.you.x; me.y = m.you.y; haveMe = true;
-      focus.x = me.x; focus.y = me.y;
+      myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
-      for (const r of m.roster || []) addPlayer(r.i, r.n);
-      addPlayer(myId, m.you.name, me.x, me.y);
+      for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
+      sidePick.hidden = false;                 // (owner) every time they enter, they choose a side first
       if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts);
+    } else if (m.t === "spawn") {
+      me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
+      focus.x = me.x; focus.y = me.y;
+      addPlayer(myId, myName, me.x, me.y).side = m.s;
     } else if (m.t === "snap") {
       for (const [id, cx, cy] of m.p) {
         const x = cx / 100, y = cy / 100;
@@ -322,7 +326,7 @@ function connect() {
         const p = players.get(id) || addPlayer(id, "");
         p.from = p.to; p.to = { x, y, ts: performance.now() };   // our own clock: no server skew in the interpolation
       }
-    } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n); }
+    } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
@@ -485,6 +489,7 @@ renderer.setAnimationLoop(() => {
     if (a2) drawAim(a2);
   }
   updateSpread(dt, !!(d.x || d.y), !!d.b);
+  drawMinimap(nowP);
 
   if (countAt) {
     const left = Math.ceil((countAt - now) / 1000);
@@ -528,6 +533,36 @@ if ($i("sl-range")) {
 if ($i("sl-assists")) {
   $i("sl-assists").checked = assists;
   $i("sl-assists").addEventListener("change", () => { assists = $i("sl-assists").checked; try { localStorage.setItem("atamus.assists", assists ? "1" : "0"); } catch {} });
+}
+// (owner, 2026-10-13) choosing a side: Red or Blue, every time the game is entered
+const sidePick = document.getElementById("side-pick");
+document.querySelectorAll("#side-pick button").forEach((btn) => btn.addEventListener("click", () => {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "side", s: btn.dataset.side }));
+}));
+// (owner, 2026-10-13) the minimap: the hexagon, friendlies (your side) blue, enemies red; north up, with a
+// tick on your dot for where the camera faces
+const mm = document.getElementById("minimap"), mmx = mm && mm.getContext("2d");
+let mmNext = 0;
+function drawMinimap(now) {
+  if (!mmx || now < mmNext) return; mmNext = now + 100;
+  const dpr = Math.min(devicePixelRatio || 1, 2), W = mm.clientWidth, H = mm.clientHeight;
+  if (mm.width !== Math.round(W * dpr)) { mm.width = Math.round(W * dpr); mm.height = Math.round(H * dpr); }
+  mmx.setTransform(dpr, 0, 0, dpr, 0, 0); mmx.clearRect(0, 0, W, H);
+  const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), k = (W / 2 - 3) / Rv, cx = W / 2, cy = H / 2;
+  const P = (x, y) => [cx + x * k, cy - y * k];
+  mmx.beginPath();
+  for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = P(Math.cos(t) * Rv, Math.sin(t) * Rv); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); }
+  mmx.closePath(); mmx.fillStyle = "rgba(10,14,22,0.85)"; mmx.fill(); mmx.strokeStyle = "#4f8fe8"; mmx.lineWidth = 1.5; mmx.stroke();
+  const dot = (x, y, col, r) => { const [X, Y] = P(x, y); mmx.beginPath(); mmx.arc(X, Y, r, 0, Math.PI * 2); mmx.fillStyle = col; mmx.fill(); };
+  for (const p of players.values()) {
+    if (p.id === myId || !p.side) continue;
+    dot(p.to.x, p.to.y, mySide && p.side === mySide ? "#4f8fe8" : "#e04848", 2.5);
+  }
+  if (haveMe) {
+    const [X, Y] = P(me.x, me.y);
+    mmx.strokeStyle = "#ffffff"; mmx.lineWidth = 1.5; mmx.beginPath(); mmx.moveTo(X, Y); mmx.lineTo(X + Math.sin(camYaw) * 9, Y - Math.cos(camYaw) * 9); mmx.stroke();
+    dot(me.x, me.y, "#4f8fe8", 3.5); mmx.strokeStyle = "#ffffff"; mmx.lineWidth = 1; mmx.beginPath(); mmx.arc(X, Y, 3.5, 0, Math.PI * 2); mmx.stroke();
+  }
 }
 // (owner) the hotbar
 function selectSlot(i) {

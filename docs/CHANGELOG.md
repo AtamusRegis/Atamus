@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Sides and a minimap (owner):** entering the game asks Red or Blue every time; players join the world once they've picked (server-checked, once per session). A hexagon minimap at the bottom left shows friendlies blue and enemies red, with your own dot outlined and a camera-facing tick. PTR: `?as=Name` is back for local multi-player tests.
 - **Aim line restyle, Assists toggle (owner):** the aim line is dashed white toward the pointer and ends in a white circle; the blue reticle ring is hidden. An Assists checkbox shows or hides the distance circle and the spread lines (the aim line always shows).
 - **Movement spread (owner):** each item has a movement spread speed (a Move slider per slot): moving opens the spread at that rate instead of closing it, walking only up to the yellow point (a third of full), sprinting twice as fast and up to full spread.
 - **Slot sliders replace the compass (owner):** the panel now shows the selected hotbar slot's Range, Speed, Spread and Interact, switching with the slot and kept per browser. The compass sliders are gone; their values stay fixed (Overflow slider kept, N S E W +200, diagonals 0).

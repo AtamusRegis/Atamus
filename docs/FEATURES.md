@@ -22,6 +22,13 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 - **Server-authoritative:** the client only sends a direction (`{t:"move", x, y}`, clamped to length 1); the server simulates at 20 Hz and sends snapshots at 15 Hz to every client. The client predicts its own sphere locally (with the same border rule) and is softly corrected by snapshots; other spheres are drawn 120 ms in the past, interpolated between snapshots.
 - A player leaving (socket closed) despawns at once; their position is saved.
 
+## Sides and the minimap (owner, 2026-10-13)
+
+- **Every time a player enters the game they choose a side: Red or Blue** ("Choose a side", two buttons over the world). They join the world only once they've picked; the server keeps the side for the session (`{t:"side", s}`, once per session, only "red" or "blue"). Reconnecting asks again.
+- **The minimap:** the map's hexagon at the bottom left, north up. **Friendly ships (your side) are blue dots, enemies red**; your own dot is blue with a white outline and a short white tick for where the camera faces. Redrawn ten times a second.
+- Ships themselves look the same for both sides for now.
+- PTR only: `game.html?as=Name` connects as another account (for testing several players locally).
+
 ## Controls (owner, 2026-10-12)
 
 - **WASD moves the sphere; wherever the camera is facing is "forward".**

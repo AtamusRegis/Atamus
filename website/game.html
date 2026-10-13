@@ -35,6 +35,13 @@
     #hotbar .slot { width: 64px; height: 64px; display: grid; place-items: center; align-content: center; gap: 2px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: pointer; touch-action: none; }
     #hotbar .slot b { font-size: 15px; color: #cfe0f4; }
     #hotbar .slot.on { border-color: #e8902a; box-shadow: 0 0 0 1px #e8902a inset; }
+    #minimap { position: fixed; left: 12px; bottom: 12px; width: 200px; height: 174px; pointer-events: none; }
+    #side-pick { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 7, 12, .6); z-index: 10; }
+    #side-pick .box { display: grid; gap: 14px; justify-items: center; padding: 20px 26px; background: rgba(10, 14, 22, .95); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 16px system-ui, sans-serif; }
+    #side-pick .row { display: flex; gap: 12px; }
+    #side-pick button { width: 110px; height: 44px; border-radius: 6px; border: 1px solid; font: 600 15px system-ui, sans-serif; cursor: pointer; color: #fff; }
+    #side-pick button[data-side="red"] { background: #7a2020; border-color: #e04848; }
+    #side-pick button[data-side="blue"] { background: #1f3f78; border-color: #4f8fe8; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -53,12 +60,14 @@
     <div class="cam-row"><span>Spread</span><input id="sl-spread" type="range" min="0" max="90" step="1"><span class="v" id="sl-spread-v"></span></div>
     <div class="cam-row"><span>Interact</span><input id="sl-interact" type="checkbox"><span class="v"></span></div>
   </div>
+  <canvas id="minimap"></canvas>
+  <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="hotbar">
     <div class="slot"><b>1</b><span>Primary</span></div>
     <div class="slot"><b>2</b><span>Secondary</span></div>
     <div class="slot"><b>3</b><span>Tertiary</span></div>
   </div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791877345"></script>
+  <script type="module" src="game3d.js?v=1791877541"></script>
 </body>
 </html>

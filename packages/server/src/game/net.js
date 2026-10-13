@@ -7,6 +7,7 @@ import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { World3D, HEX_FLAT, SPHERE_R, SPEED } from "./world3d.js";
+import { PTR, ptrAs } from "../ptr.js";
 
 export function attachGameServer(httpServer) {
   const world = new World3D();
@@ -26,6 +27,7 @@ export function attachGameServer(httpServer) {
   wss.on("connection", async (ws, req) => {
     let user = null;
     try { user = await getSessionUser(readCookie(req)); } catch (e) { console.error("ws auth", e); }
+    if (PTR) { const as = new URL(req.url, "http://x").searchParams.get("as"); if (as) user = await ptrAs(as).catch(() => null) || user; }   // (PTR only) ?as=Name tests as another account
     if (!user) { ws.close(4001, "Not logged in"); return; }
     if (user.frozen) { ws.close(4001, "Not available"); return; }
     const pid = String(user.id);
@@ -34,24 +36,34 @@ export function attachGameServer(httpServer) {
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
     socks.set(pid, ws);
 
-    const me = await world.join(pid, user.username);
+    // (owner, 2026-10-13) every time a player enters they choose a side first: they join the world only
+    // once they've sent {t:"side", s:"red"|"blue"}
+    let joined = false;
     let cmds = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(),
-      you: { id: pid, name: user.username, x: me.x, y: me.y },
+      you: { id: pid, name: user.username },
       cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED },
       roster: world.roster(),
     }));
-    broadcast({ t: "join", i: pid, n: user.username });
 
     ws.on("message", (data) => {
       if (socks.get(pid) !== ws) return;       // a replaced session: ignore everything it sends
       if (++cmds > 40) return;
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
-      if (m.t === "move") world.setDir(pid, m.x, m.y, m.b);
+      if (m.t === "side") {
+        if (joined || (m.s !== "red" && m.s !== "blue")) return;   // once per session, and only a real side
+        joined = true;
+        world.join(pid, user.username, m.s).then((me) => {
+          if (socks.get(pid) !== ws) return;
+          try { ws.send(JSON.stringify({ t: "spawn", x: me.x, y: me.y, s: me.team })); } catch {}
+          broadcast({ t: "join", i: pid, n: user.username, s: me.team });
+        }).catch((e) => { joined = false; console.error("join", e); });
+      }
+      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
 
@@ -59,6 +71,7 @@ export function attachGameServer(httpServer) {
       clearInterval(cmdReset);
       if (socks.get(pid) !== ws) return;       // replaced: the newer socket owns the player now
       socks.delete(pid);
+      if (!joined) return;
       world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));
     });
     ws.on("error", (e) => console.error("ws", e.message));
