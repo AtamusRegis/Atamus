@@ -37,11 +37,10 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
-const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6 };   // (owner, 2026-10-12) defaults: 60d / 600-1800 m / 60%
+const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700 };   // (owner, 2026-10-12) 60d / 600-1800 m / 60%; leash: max reticle distance (its slider is the only one shown)
 try { Object.assign(cam, JSON.parse(localStorage.getItem("atamus.cam") || "{}")); } catch {}
 const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify(cam)); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
-const LEASH = 700;                             // how far the camera's focus may slide from the player while aiming
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
 // so nothing z-fights or shimmers the way a second layer of rendered lines did
@@ -315,7 +314,7 @@ renderer.setAnimationLoop(() => {
         const r = Math.min(1, Math.hypot(sx, sy));
         const k = Math.min(1, Math.max(0, (r - 0.25) / 0.65));           // a deadzone at the center, full push at the edge
         let ux = gx - me.x, uy = gy - me.y; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
-        const off = k * k * LEASH;                                       // eases in toward the edge
+        const off = k * k * cam.leash;                                   // eases in toward the edge
         fx = me.x + ux * off; fy = me.y + uy * off;
         wantDist = Math.min(cam.zmax, Math.max(camDist, off * 3));       // player stays in the shot
       }
@@ -337,6 +336,15 @@ renderer.setAnimationLoop(() => {
   camOff.y = Math.sin(pr) * viewDist;
   camera.position.copy(target).add(camOff);
   camera.lookAt(target);
+  if (aiming && haveMe && hit) {               // re-project the circle against the camera as it will RENDER this
+    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // frame, so it never trails the pointer while the camera eases or orbits
+    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
+      aimRing.position.set(aimHit.x, 0.4, aimHit.z);
+      myAim = { x: aimHit.x, z: aimHit.z };
+      aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(aimHit.x, 0.4, aimHit.z)]);
+    }
+  }
 
   if (countAt) {
     const left = Math.ceil((countAt - now) / 1000);
@@ -346,25 +354,12 @@ renderer.setAnimationLoop(() => {
   renderer.render(scene, camera);
 });
 
-// (owner) camera sliders: pitch, min / max zoom (a two-handle slider), rotation speed
-const $ = (id) => document.getElementById(id);
-const sl = { pitch: $("sl-pitch"), zmin: $("sl-zmin"), zmax: $("sl-zmax"), rot: $("sl-rot"),
-             pitchV: $("sl-pitch-v"), zoomV: $("sl-zoom-v"), rotV: $("sl-rot-v") };
-function showCam() {
-  sl.pitch.value = cam.pitch; sl.zmin.value = cam.zmin; sl.zmax.value = cam.zmax; sl.rot.value = Math.round(cam.rot * 100);
-  sl.pitchV.textContent = cam.pitch + "\u00b0"; sl.zoomV.textContent = cam.zmin + "\u2013" + cam.zmax + " m"; sl.rotV.textContent = Math.round(cam.rot * 100) + "%";
-}
-if (sl.pitch) {
-  showCam();
-  sl.pitch.addEventListener("input", () => { cam.pitch = Math.min(89, Math.max(15, +sl.pitch.value || 75)); saveCam(); showCam(); });
-  sl.rot.addEventListener("input", () => { cam.rot = Math.min(3, Math.max(0.1, (+sl.rot.value || 100) / 100)); saveCam(); showCam(); });
-  const zoom = () => {
-    let a = +sl.zmin.value || 180, b = +sl.zmax.value || 2200;
-    if (a > b - 100) { if (document.activeElement === sl.zmin) a = b - 100; else b = a + 100; }
-    cam.zmin = Math.max(100, a); cam.zmax = Math.min(8000, b);
-    camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist)); saveCam(); showCam();
-  };
-  sl.zmin.addEventListener("input", zoom); sl.zmax.addEventListener("input", zoom);
+// (owner) one slider: the reticle's max distance from the player (the camera leash)
+const sl = { leash: document.getElementById("sl-leash"), leashV: document.getElementById("sl-leash-v") };
+if (sl.leash) {
+  const show = () => { sl.leash.value = cam.leash; sl.leashV.textContent = cam.leash + " m"; };
+  show();
+  sl.leash.addEventListener("input", () => { cam.leash = Math.min(3000, Math.max(100, +sl.leash.value || 700)); saveCam(); show(); });
 }
 
 // for the test harness and the console
