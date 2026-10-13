@@ -6,7 +6,7 @@
 // angle looking down toward the player. Everyone in the world sees everyone.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { A, mountEditor, mountInventory } from "./arsenal.js?v=1791883589";
+import { A, mountEditor, mountInventory } from "./arsenal.js?v=1791905438";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");

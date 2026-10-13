@@ -152,8 +152,11 @@ export function mountEditor(root) {
     }
     drawFields();
   }
+  // every edit looks the item up afresh: applying definitions rebuilds the lists, so an object captured when
+  // the fields were drawn goes stale after the first change (only that first edit used to take)
+  const cur = () => items().find((i) => i.id === sel);
   function drawFields() {
-    fields.innerHTML = ""; const x = items().find((i) => i.id === sel); if (!x) return;
+    fields.innerHTML = ""; const x = cur(); if (!x) return;
     for (const f of tab === "weapons" ? WEAPON_FIELDS : AMMO_FIELDS) {
       if (f.only && !f.only.includes(x.type)) continue;
       const row = document.createElement("label"); row.className = "ed-row";
@@ -166,13 +169,13 @@ export function mountEditor(root) {
       else if (f.t === "ammo") {
         input = document.createElement("div"); input.className = "ed-ammo";
         for (const a of A.ammo) { const l = document.createElement("label"); const c = document.createElement("input"); c.type = "checkbox"; c.checked = x.ammo.includes(a.id);
-          c.onchange = () => { x.ammo = c.checked ? [...new Set([...x.ammo, a.id])] : x.ammo.filter((id) => id !== a.id); A.setDefs({ weapons: A.weapons, ammo: A.ammo }); };
+          c.onchange = () => { const o = cur(); if (!o) return; o.ammo = c.checked ? [...new Set([...o.ammo, a.id])] : o.ammo.filter((id) => id !== a.id); A.setDefs({ weapons: A.weapons, ammo: A.ammo }); };
           l.append(c, document.createTextNode(" " + a.name)); input.appendChild(l); }
       }
       if (f.t !== "ammo") {
-        const commit = () => { x[f.k] = clampField(f, f.t === "bool" ? input.checked : input.value); A.setDefs({ weapons: A.weapons, ammo: A.ammo }); if (f.k === "name" || f.k === "slot" || f.k === "type") draw(); };
-        input.addEventListener(f.t === "text" || f.t === "num" ? "change" : "change", commit);
-        if (f.t === "num") input.addEventListener("input", () => { const v = +input.value; if (Number.isFinite(v) && v >= f.min && v <= f.max) { x[f.k] = v; A.setDefs({ weapons: A.weapons, ammo: A.ammo }); } });
+        const commit = () => { const o = cur(); if (!o) return; o[f.k] = clampField(f, f.t === "bool" ? input.checked : input.value); A.setDefs({ weapons: A.weapons, ammo: A.ammo }); if (f.k === "name" || f.k === "slot" || f.k === "type") draw(); };
+        input.addEventListener("change", commit);
+        if (f.t === "num") input.addEventListener("input", () => { const v = +input.value, o = cur(); if (o && Number.isFinite(v) && v >= f.min && v <= f.max) { o[f.k] = v; A.setDefs({ weapons: A.weapons, ammo: A.ammo }); } });
       }
       row.appendChild(input);
       if (f.unit) { const u = document.createElement("i"); u.textContent = typeof f.unit === "function" ? f.unit(x) : f.unit; row.appendChild(u); }
