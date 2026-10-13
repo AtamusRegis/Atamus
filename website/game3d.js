@@ -121,20 +121,13 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) 
 let orbiting = false, aiming = false, aimLock = null;   // (owner) orbiting pointer-locks: the cursor freezes (hidden) where MMB started and the aim stays there
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY }; lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; wantLock = false; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
-// the pointer lock can be refused (Chrome throttles quick re-locks); keep asking while MMB is held, on
-// gestures the browser accepts, so endless rotation comes back the moment it grants one
-let wantLock = false, lockBusy = false;
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
+// unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
-  wantLock = true;
-  if (document.pointerLockElement === canvas || lockBusy) return;
-  lockBusy = true;
-  let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch (e2) { console.warn("[cam] pointer lock refused:", e2 && e2.message); } }
-  if (r && r.catch) r.catch(() => { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch((e3) => console.warn("[cam] pointer lock refused:", e3 && e3.message)); } catch {} });
-  setTimeout(() => { lockBusy = false; if (wantLock && document.pointerLockElement !== canvas) lockPointer(); }, 400);
+  let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
+  if (r && r.catch) r.catch(() => { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch {} });
 }
-document.addEventListener("pointerlockerror", () => console.warn("[cam] pointer lock error"));
-addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005 * cam.rot; });   // (owner) inverted
+addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) { let dx = e.movementX; if (Math.abs(dx) > 200) dx = 0; camYaw += dx * 0.005 * cam.rot; } });   // (owner) inverted; spikes from the pointer-lock cursor wrap are dropped
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
 let touch1 = null, pinch = 0;
