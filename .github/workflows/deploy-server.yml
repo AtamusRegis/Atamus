@@ -18,10 +18,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Warn players (30 s countdown) before switching the live build
+      - name: Warn players (1 s countdown, owner: for now) before switching the live build
         run: |
           curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=server" -w "\nHTTP %{http_code}\n" || true
-          sleep 30
+          sleep 1
       - name: Trigger redeploy over SSH
         env:
           DEPLOY_KEY: ${{ secrets.ATAMUS_DEPLOY_KEY }}

@@ -38,7 +38,7 @@ Kept from before, unchanged (`auth.js`, `sessions.js`, `security.js` and the res
 
 ## Live updates (kept)
 
-- Every push to `main` warns every connected player ~30 s ahead: the game shows **"Update incoming — N s"** top center, then sends them to `play.html?updating=1`, which waits for the new build and offers Enter System again.
+- Every push to `main` warns every connected player ahead of the switch — **1 s for now (owner, 2026-10-12: "make countdown 1 second for now"**; it was 30 s and goes back up when the owner says): the game shows **"Update incoming — N s"** top center, then sends them to `play.html?updating=1`, which waits for the new build and offers Enter System again. The length lives in `gamehttp.js` (`announceUpdate(part, 1)`) and the `sleep` in both deploy workflows.
 - The deploy workflows are unchanged (`deploy-website.yml` on `website/**`, `deploy-server.yml` on `packages/server/**`).
 
 ## Rejected / removed (don't reintroduce)
