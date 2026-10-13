@@ -114,14 +114,25 @@ function placeSphere(p, x, y) {
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
 const keys = new Set();
 let sprint = false;                            // (owner) Shift = double speed
-addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
+// (owner) X drops a cube where the player is, as a movement reference on the grid; local to this browser
+const cubeGeo = new THREE.BoxGeometry(50, 50, 50);
+const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.6, metalness: 0.1 });
+const cubes = [];
+function dropCube() {
+  if (!haveMe) return;
+  const c = new THREE.Mesh(cubeGeo, cubeMat); c.position.copy(toWorld(me.x, me.y, 25)); scene.add(c); cubes.push(c);
+  if (cubes.length > 200) scene.remove(cubes.shift());
+}
+addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false, aimLock = null;   // (owner) orbiting pointer-locks: the cursor freezes (hidden) where MMB started and the aim stays there
+let orbiting = false, aiming = false, aimLock = null, orbitLock = null;   // orbitLock: MMB holds the camera frame   // (owner) orbiting pointer-locks: the cursor freezes (hidden) where MMB started and the aim stays there
 const mouse = { x: 0, y: 0 };
-canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY }; lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
+canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY };
+    orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw };
+    lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -263,12 +274,19 @@ renderer.setAnimationLoop(() => {
       aimRing.position.set(gx, 0.4, -gy);
       const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
       aimLineGeo.setFromPoints([toWorld(me.x, me.y, SPHERE_R), new THREE.Vector3(gx, 0.4, -gy)]);
-      let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                    // between the player and the circle
-      const ol = Math.hypot(ox, oy);
-      if (ol > LEASH) { ox *= LEASH / ol; oy *= LEASH / ol; }            // leashed: never super far out
-      fx = me.x + ox; fy = me.y + oy;
-      wantDist = Math.min(cam.zmax, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
+      if (!orbitLock) {                                                // orbiting holds the frame: the aim stops steering it
+        let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                  // between the player and the circle
+        const ol = Math.hypot(ox, oy);
+        if (ol > LEASH) { ox *= LEASH / ol; oy *= LEASH / ol; }          // leashed: never super far out
+        fx = me.x + ox; fy = me.y + oy;
+        wantDist = Math.min(cam.zmax, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
+      }
     }
+  }
+  if (orbitLock && haveMe) {                   // (owner) MMB: the camera and its target orbit the player at the settings they had
+    const th = camYaw + orbitLock.ang;
+    fx = me.x + Math.sin(th) * orbitLock.len; fy = me.y + Math.cos(th) * orbitLock.len;
+    wantDist = orbitLock.dist;
   }
   aimRing.visible = aimLine.visible = aiming && hit;
   const k = 1 - Math.exp(-dt * 6);                                       // the focus and zoom ease, in and back

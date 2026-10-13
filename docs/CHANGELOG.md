@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **Camera frame locks while orbiting; X drops a cube (owner):** holding the middle mouse freezes the zoom and the focus offset at their current values and orbits that frame around the player — the aim circle no longer drags the camera or zoom mid-orbit. X drops a local 50 m cube at the player as a movement reference.
 - **Fix: the orbit hitched once per full turn.** Under pointer lock on Windows, the hidden cursor wraps the screen and movementX spikes by a screen width at each wrap; single-event deltas past 200 px are now dropped, and the lock is requested with unadjusted movement (plain fallback), which avoids the wrap path.
 - **Fix: three pushes never deployed.** A colon in a renamed workflow step name broke both deploy workflows' YAML (0 s failures), so the 1 s countdown, the aim lock and the pointer lock sat undeployed; the step is renamed and everything pending ships with this push.
 - **Aim pointer locks while orbiting (owner):** holding the middle mouse pointer-locks the cursor — it freezes (hidden) where the press began and the right-click aim stays raycast from that spot; releasing restores the cursor there. (Falls back to freezing just the aim raycast where the browser refuses the lock.)
