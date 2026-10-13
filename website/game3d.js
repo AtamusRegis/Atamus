@@ -19,6 +19,8 @@ let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
 let SPEED = 300;                               // m/s
 let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
+let STOP_D = 100, brakeA = 0;                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
+const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 // (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
@@ -113,7 +115,7 @@ function updateStop() {
   const v = Math.hypot(vel.x, vel.y);
   const on = haveMe && v > 5;
   stopLine.visible = stopRing.visible = on; if (!on) return;
-  const dist = (v * v) / (2 * BRAKE), sx = me.x + (vel.x / v) * dist, sy = me.y + (vel.y / v) * dist;
+  const dist = (v * v) / (2 * stopRate(v)), sx = me.x + (vel.x / v) * dist, sy = me.y + (vel.y / v) * dist;
   stopLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.7, -me.y), new THREE.Vector3(sx, 0.7, -sy)]); stopLine.computeLineDistances();
   const k = Math.max(1, viewDist / 500); stopLineMat.dashSize = 10 * k; stopLineMat.gapSize = 8 * k;
   stopRing.position.set(sx, 0.7, -sy); stopRing.scale.set(k, k, 1);
@@ -260,10 +262,11 @@ function inputDir() {                          // forward = where the camera fac
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
   if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: analog, a small dead zone
-  if (!f && !r) return { x: 0, y: 0, b: sprint ? 1 : 0 };
+  const b = sprint && !aiming ? 1 : 0;          // (owner, 2026-10-13) no sprinting while aiming
+  if (!f && !r) return { x: 0, y: 0, b };
   const n = Math.max(1, Math.hypot(f, r)); f /= n; r /= n;
   const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
-  return { x: f * sin + r * cos, y: f * cos - r * sin, b: sprint ? 1 : 0 };   // game plane: +y north at yaw 0
+  return { x: f * sin + r * cos, y: f * cos - r * sin, b };   // game plane: +y north at yaw 0
 }
 
 // ---- socket ----
@@ -283,7 +286,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -377,7 +380,8 @@ renderer.setAnimationLoop(() => {
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
     const spd = SPEED * (sprintOn ? 2 : 1), tx = d.x * spd, ty = d.y * spd;
-    let a = d.x || d.y ? ACCEL : BRAKE;        // letting go brakes harder than thrust accelerates
+    let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
+    if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
     if (d.x || d.y) {                          // a push off the nose gets only part of the acceleration
       const mine = players.get(myId);
       let dh = (Math.atan2(d.x, -d.y) - (mine ? mine.heading : 0)) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
@@ -386,7 +390,7 @@ renderer.setAnimationLoop(() => {
     let ex = tx - vel.x, ey = ty - vel.y; const el = Math.hypot(ex, ey), sv = a * dt;
     if (el > sv) { ex *= sv / el; ey *= sv / el; }
     vel.x += ex; vel.y += ey;
-    if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; }
+    if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; brakeA = 0; }
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }

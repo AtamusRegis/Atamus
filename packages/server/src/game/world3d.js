@@ -11,6 +11,10 @@ export const SPEED = 300;                    // m/s on the ground (owner, 2026-1
 // it's being pushed, down to TURN_ACCEL of it when pushing against the nose (it has to come round first)
 export const ACCEL = 200;                    // m/s^2: 0 to 300 m/s in 1.5 s straight
 export const BRAKE = 400;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
+// (owner, 2026-10-13) "no matter the speed, stop within 100 m": when WASD is let go the braking rate is fixed for that stop
+// at whichever is harder, BRAKE or the rate that stops the current speed in STOP_D (v^2 / 2 STOP_D); held constant,
+// it brings the ship to rest within STOP_D. Pressing WASD again ends the stop.
+export const STOP_D = 100;
 export const TURN_ACCEL = 0.3;
 // (owner, 2026-10-13) the capacitor, 0-100: sprinting drains it; moving without sprinting recharges it slowly,
 // sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
@@ -90,7 +94,9 @@ export class World3D {
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
       const spd = SPEED * (sprinting ? 2 : 1), tx = p.dx * spd, ty = p.dy * spd;
-      let a = p.dx || p.dy ? ACCEL : BRAKE;
+      let a = ACCEL;
+      if (p.dx || p.dy) p.brakeA = 0;
+      else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }
       if (p.dx || p.dy) {
         const want = Math.atan2(p.dx, -p.dy);  // the input's heading (same convention as the client's)
         let d = (want - (p.h || 0)) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
@@ -99,7 +105,7 @@ export class World3D {
       let ex = tx - vx0, ey = ty - vy0; const el = Math.hypot(ex, ey), stepV = a * dt;
       if (el > stepV) { ex *= stepV / el; ey *= stepV / el; }
       p.vx = vx0 + ex; p.vy = vy0 + ey;
-      if (Math.hypot(p.vx, p.vy) < 0.01 && !p.dx && !p.dy) { p.vx = p.vy = 0; continue; }
+      if (Math.hypot(p.vx, p.vy) < 0.01 && !p.dx && !p.dy) { p.vx = p.vy = 0; p.brakeA = 0; continue; }
       const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
       if (inside(nx, ny)) { p.x = nx; p.y = ny; }
       else {                                   // the border stops the ship dead: as far along the step as still fits

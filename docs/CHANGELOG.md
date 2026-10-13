@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Stops within 100 m; no sprint while aiming (owner):** letting go of WASD now always brings the ship to rest within 100 m, however fast it was going (the braking rate is set at release: at least 400 m/s², harder when needed). Holding the right button turns sprint off.
 - **The ship faces the reticle while aiming (owner):** holding the right button (with or without the middle button) turns the ship toward the reticle, even while flying with WASD; let go and it faces the WASD direction again.
 - **Leash circle and aim camera back (owner):** the blue 700 m camera leash circle shows again around the ship, the right-click reticle is clamped to it, and the camera slides toward the reticle as before (dead zone, overflow, middle-mouse frame freeze). The line still starts at the ship's center on the ground plane.
 - **Curved stop path reverted (owner: "its not right"); smaller dots (owner):** the stop marker is straight again. The aim line's end dot and the stop marker's dot are much smaller (2 m radius from 5, still scaling with zoom).
