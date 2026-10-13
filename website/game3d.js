@@ -332,15 +332,22 @@ renderer.setAnimationLoop(() => {
         // the ground under the pixel, which moved the zoom). Pressing toward a screen edge ramps the
         // zoom so a full press shows the circle plus 20 m of lead on that axis; the focus slides out
         // along the aim by the same screen fraction, up to halfway to the circle.
-        const R = cam.leash;
+        const R = cam.leash, O = 50;                                     // overflow: world shown past the circle (owner: 50 m)
         const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
         fx = me.x + a.ux * r * R / 2; fy = me.y + -a.uz * r * R / 2;     // the focus: toward the aim, screen-driven
-        const ex = Math.tan(Math.PI / 6) * camera.aspect;                // ground half-extents in view,
-        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // per unit of distance
-        const need = (f) => f * R / 2 + 20;                              // from the focus to the circle + lead at full press
+        // the view's ground extents are ASYMMETRIC vertically: the top-of-screen ray grazes far ahead,
+        // the bottom ray plunges toward the camera's own ground point, so aiming toward the camera
+        // (screen-down) needs much more zoom to reach the circle than aiming away. Exact per unit of D:
+        const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
+        const cot = (t) => Math.cos(t) / Math.max(1e-4, Math.sin(t));
+        const eTop = Math.max(0.05, -Math.cos(ph) + Math.sin(ph) * cot(Math.max(0.05, ph - f2)));
+        const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
+        const ex = Math.tan(f2) * camera.aspect;
+        const ev = a.suy >= 0 ? eTop : eBot;                             // which vertical half the aim presses into
+        const need = (f) => f * R / 2 + O;                               // from the focus to the circle + overflow at full press
         wantDist = Math.min(cam.zmax, Math.max(camDist,
           need(Math.min(1, Math.abs(a.sux))) / (0.85 * ex),
-          need(Math.min(1, Math.abs(a.suy))) / (0.85 * ey)));
+          need(Math.min(1, Math.abs(a.suy))) / (0.85 * ev)));
       }
     }
   }

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Backward aim reaches the edge; 50 m overflow (owner):** the view's vertical ground extents are asymmetric (the bottom-of-screen ray plunges toward the camera's ground point while the top grazes far), and the symmetric estimate left screen-down aim unable to reach the circle; the extents are now exact per direction from the pitch, and the world shown past the circle is 50 m (was 20).
 - **Fix: the zoom feedback loop, again and for good.** Tying the aim zoom to the reticle's ground distance looped (zoom moved the ground under the pixel, which moved the zoom). The camera now runs only on the pointer's screen position and the circle's constant radius — a full press toward an edge shows the circle plus 20 m of lead on that axis — while the reticle stays the ray's ground point clamped to the circle. Measured: zero drift with the pointer held still.
 
 ## 2026-10-12
