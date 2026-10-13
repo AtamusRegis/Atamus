@@ -132,8 +132,11 @@ function placeShip(p, x, y, dt, face, moving) {
   if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // (owner) right-click: face the aim point
   else if (moving === undefined ? p.spd > 30 : (moving && spd > 1)) target = Math.atan2(dx, dz);
   if (target !== null) {
-    const diff = ((target - p.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    let diff = (target - p.heading) % (Math.PI * 2);                  // shortest arc, valid however far the
+    if (diff > Math.PI) diff -= Math.PI * 2;                          // heading has accumulated (circling the
+    else if (diff < -Math.PI) diff += Math.PI * 2;                    // aim around the ship adds a turn per lap)
     p.heading += Math.max(-TURN * dt, Math.min(TURN * dt, diff));
+    p.heading = ((p.heading + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;   // kept bounded
     p.holder.rotation.y = p.heading;
   }
 }
