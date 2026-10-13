@@ -15,6 +15,7 @@ export const BRAKE = 400;                    // m/s^2 (owner): letting go of WAS
 // at whichever is harder, BRAKE or the rate that stops the current speed in STOP_D (v^2 / 2 STOP_D); held constant,
 // it brings the ship to rest within STOP_D. Pressing WASD again ends the stop.
 export const STOP_D = 100;
+export const SPRINT = 1.3;                   // (owner, 2026-10-13) sprint is 30% faster (was double)
 export const TURN_ACCEL = 0.3;
 // (owner, 2026-10-13) the capacitor, 0-100: sprinting drains it; moving without sprinting recharges it slowly,
 // sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
@@ -78,7 +79,7 @@ export class World3D {
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
     const len = Math.hypot(dx, dy);
     if (len > 1) { dx /= len; dy /= len; }
-    p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = double speed
+    p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = sprint (30% faster)
     if (typeof h === "number" && Number.isFinite(h)) p.h = Math.atan2(Math.sin(h), Math.cos(h));   // (owner) the ship's heading, for everyone else's screens
     return true;
   }
@@ -93,7 +94,7 @@ export class World3D {
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
-      const spd = SPEED * (sprinting ? 2 : 1), tx = p.dx * spd, ty = p.dy * spd;
+      const spd = SPEED * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
       let a = ACCEL;
       if (p.dx || p.dy) p.brakeA = 0;
       else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }

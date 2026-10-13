@@ -19,7 +19,7 @@ let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
 let SPEED = 300;                               // m/s
 let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
-let STOP_D = 100, brakeA = 0;                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
+let STOP_D = 100, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
 const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
@@ -192,7 +192,7 @@ function placeShip(p, x, y, dt, face, moving) {
 
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
 const keys = new Set();
-let sprint = false;                            // (owner) Shift = double speed
+let sprint = false;                            // (owner) Shift = sprint (30% faster)
 // (owner) X drops a cube where the player is, as a movement reference on the grid; local to this browser
 const cubeGeo = new THREE.BoxGeometry(50, 50, 50);
 const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.6, metalness: 0.1 });
@@ -286,7 +286,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -379,7 +379,7 @@ renderer.setAnimationLoop(() => {
   if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * dt) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * (sprintOn ? 2 : 1), tx = d.x * spd, ty = d.y * spd;
+    const spd = SPEED * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
     let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
     if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
     if (d.x || d.y) {                          // a push off the nose gets only part of the acceleration
