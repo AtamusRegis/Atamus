@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Steady fire settles at yellow (owner):** firing continuously while still (no WASD, aim steady) holds the spread at the yellow point — it doesn't close below it while shooting, and shots don't push it above it; moving or swinging the aim lets shots open it further.
 - **Shooting (owner):** left click while aiming a non-interaction item fires a projectile somewhere inside the spread; each shot widens it 1° either side. Per-item Rate and Auto testing values. Projectiles (1,500 m/s, out to the aim range) go through the server, which validates and rate-limits them, and every player sees them. No damage yet.
 - **Spread lines stop at the aim wedge (owner):** past optimal range the spread lines close only as far as the aim line's own wedge, never inside it.
 - **Optimal range (owner):** each item has an optimal range (a dotted gray circle while aiming) and a falloff. Inside it the aim line stays a line; past it the aim line opens into its own wedge, 0.5° either side at optimal and wider by the falloff per 100 m beyond. Optimal and Falloff sliders per slot.

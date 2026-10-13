@@ -169,7 +169,7 @@ function updateShots(dt) {
     s.m.position.set(s.x + s.ux * s.d, shipMid, -(s.y + s.uy * s.d));
   }
 }
-let firing = false, firePending = false, lastShot = 0;
+let firing = false, firePending = false, lastShot = -1e9, aimSteady = true, steadyNow = true;
 function tryFire(now) {
   const it = SLOTS[slot];
   if (!firing || !aiming || !myAim || !haveMe || it.interact) return;
@@ -181,7 +181,10 @@ function tryFire(now) {
   const ux = Math.sin(a), uy = -Math.cos(a);                           // game plane: +y is -z
   spawnShot(me.x, me.y, ux, uy, it.range, "mine");
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "fire", x: ux, y: uy, r: it.range }));
-  spreadCur = Math.min(Math.max(it.spread, aimCone), Math.max(spreadCur, aimCone) + 1);   // each shot opens the spread 1 degree
+  // each shot opens the spread 1 degree; holding still and steady (no WASD, no aim swing) it opens only up to
+  // the yellow point (owner), moving or swinging the aim lets it open to the full spread
+  const top = steadyNow ? it.spread * YELLOW : it.spread;
+  spreadCur = Math.min(Math.max(top, aimCone), Math.max(spreadCur, Math.min(aimCone, top)) + 1);
 }
 function updateAimCone() {
   const it = SLOTS[slot], on = aiming && haveMe && !!myAim;
@@ -218,14 +221,20 @@ function updateSpread(dt, moving, sprinting) {
     let d = (bearing - lastBearing) % (Math.PI * 2);                  // fully, 90 by half, 45 by a quarter
     if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
     spreadCur = Math.min(it.spread, spreadCur + (Math.abs(d) / Math.PI) * it.spread);
+    aimSteady = dt > 0 && Math.abs(d) / dt < 0.05;                    // under ~3 degrees a second: not swinging
   }
   lastBearing = bearing;
+  steadyNow = aimSteady && !moving;
   // (owner, 2026-10-13) moving opens the spread at the item's movement spread speed instead of closing it:
   // walking up to the yellow point at most (above it, it keeps closing down to there), sprinting faster
   // and up to full spread. Standing still, it closes at the aim speed.
   if (moving && sprinting) spreadCur = Math.min(it.spread, spreadCur + it.move * SPRINT_SPREAD * dt);
   else if (moving) { const cap = it.spread * YELLOW;
     spreadCur = spreadCur < cap ? Math.min(cap, spreadCur + it.move * dt) : Math.max(cap, spreadCur - it.speed * dt); }
+  else if (performance.now() - lastShot < Math.max(300, 1500 / it.rate)) {   // (owner) firing steadily while still: settles
+    const cap = it.spread * YELLOW;                                    // at the yellow point, closing no further than it
+    if (spreadCur > cap) spreadCur = Math.max(cap, spreadCur - it.speed * dt);
+  }
   else spreadCur = Math.max(0, spreadCur - it.speed * dt);
   const t = it.spread > 0 ? spreadCur / it.spread : 0;
   const hue = t > 0.5 ? 30 * (1 - (t - 0.5) * 2) : 30 + 90 * (1 - t * 2);   // red -> orange -> green
