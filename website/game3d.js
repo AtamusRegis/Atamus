@@ -93,7 +93,7 @@ const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3()
 // ground point under the pointer, ending in a small white dot. Nothing else aims for now.
 const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, dashSize: 12, gapSize: 8 });
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = false;
-const aimEnd = new THREE.Mesh(new THREE.CircleGeometry(5, 32),   // (owner) a small flat filled dot
+const aimEnd = new THREE.Mesh(new THREE.CircleGeometry(2, 24),   // (owner) a small flat filled dot (owner, 2026-10-13: "way thinner", 2 m from 5)
   new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
 aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
 // (owner, 2026-10-13) the stop marker: a dashed line to a circle where the ship would come to rest if the
@@ -101,7 +101,7 @@ aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
 const stopLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
 const stopLineMat = new THREE.LineDashedMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8, dashSize: 10, gapSize: 8 });
 const stopLine = new THREE.Line(stopLineGeo, stopLineMat); stopLine.frustumCulled = false; stopLine.visible = false; scene.add(stopLine);
-const stopRing = new THREE.Mesh(new THREE.CircleGeometry(5, 32),   // (owner) a small flat filled dot
+const stopRing = new THREE.Mesh(new THREE.CircleGeometry(2, 24),   // (owner) a small flat filled dot (owner, 2026-10-13: "way thinner", 2 m from 5)
   new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
 stopRing.rotation.x = -Math.PI / 2; stopRing.visible = false; scene.add(stopRing);
 function updateStop() {
