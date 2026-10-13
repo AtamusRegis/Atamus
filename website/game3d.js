@@ -42,7 +42,9 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
-const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6 };
+const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 100,
+  dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
+// over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -87,6 +89,9 @@ function loadRingFor(R) {
   loadRing.geometry.setFromPoints(pts);
 }
 loadRingFor(LOAD_R); loadRing.frustumCulled = false; loadRing.visible = false; scene.add(loadRing);
+// (owner) the camera leash circle around the player: everywhere the reticle can be aimed (blue)
+const rangeRing = new THREE.Mesh(new THREE.RingGeometry(cam.leash - 4, cam.leash, 160), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
+rangeRing.rotation.x = -Math.PI / 2; rangeRing.visible = false; scene.add(rangeRing);
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
 // (owner, 2026-10-13) right-click: a dashed white line from the ship's center on the ground plane to the
@@ -204,11 +209,12 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false, aimPin = null;   // aimPin: while orbiting, the pointer is locked: the line keeps its screen spot
+let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
-canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY }; lockPointer(); e.preventDefault(); }
+canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
+    orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
   if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -407,34 +413,85 @@ renderer.setAnimationLoop(() => {
     if (h !== null) { p.heading = h; p.holder.rotation.y = h; }   // the owner's own heading, as they see it
   }
 
-  // the camera looks at the player (no aim leash for now); the zoom eases
-  const k = 1 - Math.exp(-dt * 6);
-  if (haveMe) { focus.x += (me.x - focus.x) * k; focus.y += (me.y - focus.y) * k; }
-  viewDist += (camDist - viewDist) * k;
-  if (haveMe) { loadRing.visible = true; loadRing.position.set(me.x, 0.35, -me.y); }
+  // right-click aiming (owner): the reticle is the ground point under the pointer, CLAMPED to the leash circle (push
+  // past it and the reticle rides its edge); the camera's focus slides toward it, zooming out to keep the ship in shot
+  let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist;
+  function aimAt(px, py) {
+    const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
+    raycaster.setFromCamera({ x: sx, y: sy }, camera);
+    if (!raycaster.ray.intersectPlane(groundPlane, aimHit)) return null;
+    let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    const d = Math.min(ul, cam.leash);
+    return { x: me.x + ux * d, z: -me.y + uz * d, sux: sx, suy: sy, ux, uz };
+  }
+  const aimPx = () => aimPin ? aimPin : mouse;
+  if (aiming && haveMe && !orbitLock) {
+    const a = aimAt(aimPx().x, aimPx().y);
+    if (a) {
+      // (owner, 2026-10-13) the camera is driven ONLY by the pointer's screen position and constants, never by the
+      // reticle's ground distance (that looped). One uniform full-press zoom; the leash (focus sliding along the aim)
+      // is solved per direction so the screen edge sits exactly the overflow past the circle, the ship kept 80 m
+      // inside the opposite edge. A dead zone around the screen's center (30%), full at 80% out.
+      const R = cam.leash, S = 80, m = 0.85;
+      const r = Math.min(1, Math.hypot(a.sux, a.suy));
+      const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
+      const ring = [cam.dir.e, cam.dir.ne, cam.dir.n, cam.dir.nw, cam.dir.w, cam.dir.sw, cam.dir.s, cam.dir.se];
+      const t = ang / 45, i0 = Math.floor(t) % 8, i1 = (i0 + 1) % 8, ft = t - Math.floor(t);
+      const O = Math.max(0, cam.over + ring[i0] + (ring[i1] - ring[i0]) * (ft * ft * (3 - 2 * ft)));
+      const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
+      const cot = (q) => Math.cos(q) / Math.max(1e-4, Math.sin(q));
+      const eTop = Math.max(0.05, -Math.cos(ph) + Math.sin(ph) * cot(Math.max(0.05, ph - f2)));
+      const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
+      const ex = Math.tan(f2) * camera.aspect;
+      const uxs = r > 1e-4 ? Math.abs(a.sux) / r : 0, uys = r > 1e-4 ? Math.abs(a.suy) / r : 1;
+      const eF = a.suy >= 0 ? eTop : eBot, eB = a.suy >= 0 ? eBot : eTop;
+      const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
+      const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
+      const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));
+      const DZ = 0.3, rr = Math.min(1, Math.max(0, (r - DZ) / (0.8 - DZ))), ease = rr * rr * (3 - 2 * rr);
+      wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
+      let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
+      lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
+      lam = Math.min(1, Math.max(0, lam)) * ease;
+      fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;
+    }
+  }
+  if (orbitLock && haveMe) {                   // (owner) MMB: the camera and its target orbit the player at the frame they had
+    const th = camYaw + orbitLock.ang;
+    fx = me.x + Math.sin(th) * orbitLock.len; fy = me.y + Math.cos(th) * orbitLock.len;
+    wantDist = orbitLock.dist;
+  }
+  const k = 1 - Math.exp(-dt * 6);                                       // the focus and zoom ease, in and back
+  focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
+  viewDist += (wantDist - viewDist) * k;
+  if (haveMe) {
+    loadRing.visible = true; loadRing.position.set(me.x, 0.35, -me.y);
+    rangeRing.visible = true; rangeRing.position.set(me.x, 0.36, -me.y);
+  }
   const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
   camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
   camOff.y = Math.sin(pr) * viewDist;
   camera.position.copy(target).add(camOff);
   camera.lookAt(target);
-  // (owner, 2026-10-13) right-click: the line from the ship's center on the ground plane to the pointer's ground point,
-  // worked out against the camera as it renders this frame so it never trails the pointer
+  // the line from the ship's center on the ground plane to the reticle, worked out against the camera as it renders
+  // this frame so it never trails the pointer
   let aimShown = false;
   if (aiming && haveMe) {
-    const px = aimPin ? aimPin.x : mouse.x, py = aimPin ? aimPin.y : mouse.y;
-    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
+    const a = aimAt(aimPx().x, aimPx().y);
+    if (a) {
       aimShown = true;
-      aimLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.4, -me.y), new THREE.Vector3(aimHit.x, 0.4, aimHit.z)]);
+      aimLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.4, -me.y), new THREE.Vector3(a.x, 0.4, a.z)]);
       aimLine.computeLineDistances();
       const ds = Math.max(1, viewDist / 500); aimLineMat.dashSize = 12 * ds; aimLineMat.gapSize = 8 * ds;   // dashes keep their look zoomed out
-      aimEnd.position.set(aimHit.x, 0.5, aimHit.z); aimEnd.scale.set(ds, ds, 1);
+      aimEnd.position.set(a.x, 0.5, a.z); aimEnd.scale.set(ds, ds, 1);
+      aimHit.set(a.x, 0, a.z);
     }
   }
   aimLine.visible = aimEnd.visible = aimShown;
   updateStop();
-  drawMinimap(nowP);  drawMinimap(nowP);
+  drawMinimap(nowP);
 
   if (countAt) {
     const left = Math.ceil((countAt - now) / 1000);
