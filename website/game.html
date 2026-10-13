@@ -30,6 +30,10 @@
     .c-cell input[type=range] { width: 76px; margin: 0; accent-color: #4f8fe8; }
     .c-cell .v { color: #cfe0f4; font-variant-numeric: tabular-nums; }
     .c-mid { display: grid; place-items: center; color: #4f8fe8; font-size: 16px; }
+    #hotbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 8px; user-select: none; }
+    #hotbar .slot { width: 64px; height: 64px; display: grid; place-items: center; align-content: center; gap: 2px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: pointer; touch-action: none; }
+    #hotbar .slot b { font-size: 15px; color: #cfe0f4; }
+    #hotbar .slot.on { border-color: #e8902a; box-shadow: 0 0 0 1px #e8902a inset; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -52,7 +56,12 @@
       <div class="c-cell"><span>SE</span><input id="d-se" type="range" min="-200" max="200" step="5"><span class="v" id="d-se-v"></span></div>
     </div>
   </div>
+  <div id="hotbar">
+    <div class="slot"><b>1</b><span>Primary</span></div>
+    <div class="slot"><b>2</b><span>Secondary</span></div>
+    <div class="slot"><b>3</b><span>Tertiary</span></div>
+  </div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791874906"></script>
+  <script type="module" src="game3d.js?v=1791876458"></script>
 </body>
 </html>

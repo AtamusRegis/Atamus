@@ -37,17 +37,17 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
-const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 50,
-  dir: { n: 0, ne: 0, e: 0, se: 0, s: 0, sw: 0, w: 0, nw: 0 } };   // (owner) leash: max reticle distance; over: base overflow; dir: the compass's per-direction overflow delta (m)
+const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 100,
+  dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner, 2026-10-13) overflow 100, N S E W 200, diagonals 0   // (owner) leash: max reticle distance; over: base overflow; dir: the compass's per-direction overflow delta (m)
 // only the shown tuning values are read back from this browser; the hidden settings always use the
 // owner's fixed values above
 try {
   const sv = JSON.parse(localStorage.getItem("atamus.cam") || "{}");
   if (Number.isFinite(sv.leash)) cam.leash = Math.min(3000, Math.max(100, sv.leash));
-  if (Number.isFinite(sv.over)) cam.over = Math.min(200, Math.max(0, sv.over));
-  if (sv.dirv === 2 && sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
+  if (sv.dirv === 3 && Number.isFinite(sv.over)) cam.over = Math.min(200, Math.max(0, sv.over));   // v3: the owner's new defaults replace older saved tuning once
+  if (sv.dirv === 3 && sv.dir) for (const k of Object.keys(cam.dir)) if (Number.isFinite(sv.dir[k])) cam.dir[k] = Math.min(200, Math.max(-200, sv.dir[k]));
 } catch {}
-const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir, dirv: 2 })); } catch {} };
+const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify({ leash: cam.leash, over: cam.over, dir: cam.dir, dirv: 3 })); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
@@ -88,6 +88,61 @@ const aimRing = new THREE.Mesh(new THREE.RingGeometry(26, 30, 48), new THREE.Mes
 aimRing.rotation.x = -Math.PI / 2; aimRing.position.y = 0.4; aimRing.visible = false; scene.add(aimRing);
 // (owner) the range circle around the player: everywhere the reticle can be aimed (visible for now)
 let rangeRing = null, rangeRingR = 0;
+// (owner, 2026-10-13) the interaction circle: 20 m out from the hull (the ship is 100 m long, so 70 m from its center)
+const INTERACT_R = 70;
+const interactRing = new THREE.Mesh(new THREE.RingGeometry(INTERACT_R - 2, INTERACT_R, 96), new THREE.MeshBasicMaterial({ color: 0x5fd0a0, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
+interactRing.rotation.x = -Math.PI / 2; interactRing.visible = false; scene.add(interactRing);
+// (owner) the hotbar's three slots: each item has an aim range (m), an aim speed (degrees of spread closed per
+// second), an aim spread (degrees either side of the aim line) and whether it's an interaction object
+// (used on objects within the interaction circle; the ship faces the pointer while aiming it) or a ranged weapon
+const SLOTS = [
+  { name: "Primary", range: 600, speed: 20, spread: 30, interact: false },
+  { name: "Secondary", range: 700, speed: 8, spread: 20, interact: false },
+  { name: "Tertiary", range: INTERACT_R, speed: 60, spread: 45, interact: true },
+];
+let slot = 0;
+// the spread lines: red at full spread, orange midway, green as they close on the aim line; a light fill between
+const spreadMat = new THREE.LineBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.95 });
+const mkLine = () => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)); const l = new THREE.Line(g, spreadMat); l.visible = false; l.frustumCulled = false; scene.add(l); return l; };
+const spreadL = mkLine(), spreadR = mkLine();
+const FAN = 32;
+const fanGeo = new THREE.BufferGeometry();
+fanGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((FAN + 2) * 3), 3));
+{ const idx = []; for (let i = 1; i <= FAN; i++) idx.push(0, i, i + 1); fanGeo.setIndex(idx); }
+const fanMat = new THREE.MeshBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
+const spreadFan = new THREE.Mesh(fanGeo, fanMat); spreadFan.visible = false; spreadFan.frustumCulled = false; scene.add(spreadFan);
+// (owner's diagram) the wedge is closed by an arc at the aim range; the aim line itself runs on to the reticle
+const arcGeo = new THREE.BufferGeometry(); arcGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array((FAN + 1) * 3), 3));
+const spreadArc = new THREE.Line(arcGeo, spreadMat); spreadArc.visible = false; spreadArc.frustumCulled = false; scene.add(spreadArc);
+let spreadCur = 0, lastBearing = null, wasAiming = false, aimSlot = -1;
+const spreadColor = new THREE.Color();
+function updateSpread(dt) {
+  const it = SLOTS[slot];
+  const on = aiming && haveMe && !!myAim;
+  spreadL.visible = spreadR.visible = spreadFan.visible = spreadArc.visible = on;
+  if (!on) { wasAiming = false; return; }
+  const bx = myAim.x - me.x, bz = myAim.z + me.y;                     // world, from the ship to the reticle
+  const bearing = Math.atan2(bx, bz);
+  if (!wasAiming || aimSlot !== slot) { spreadCur = it.spread; lastBearing = null; }   // a new aim (or item) starts wide
+  wasAiming = true; aimSlot = slot;
+  if (lastBearing !== null) {                                         // swinging the aim reopens it: 180 degrees
+    let d = (bearing - lastBearing) % (Math.PI * 2);                  // fully, 90 by half, 45 by a quarter
+    if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+    spreadCur = Math.min(it.spread, spreadCur + (Math.abs(d) / Math.PI) * it.spread);
+  }
+  lastBearing = bearing;
+  spreadCur = Math.max(0, spreadCur - it.speed * dt);                 // and holding it steady closes it
+  const t = it.spread > 0 ? spreadCur / it.spread : 0;
+  const hue = t > 0.5 ? 30 * (1 - (t - 0.5) * 2) : 30 + 90 * (1 - t * 2);   // red -> orange -> green
+  spreadColor.setHSL(hue / 360, 0.95, 0.55); spreadMat.color.copy(spreadColor); fanMat.color.copy(spreadColor);
+  const ox = me.x, oz = -me.y, y = 0.6, L = it.range, sr = THREE.MathUtils.degToRad(spreadCur);
+  const set = (line, b) => { const a = line.geometry.attributes.position; a.setXYZ(0, ox, y, oz); a.setXYZ(1, ox + Math.sin(b) * L, y, oz + Math.cos(b) * L); a.needsUpdate = true; };
+  set(spreadL, bearing - sr); set(spreadR, bearing + sr);
+  const fp = fanGeo.attributes.position; fp.setXYZ(0, ox, y - 0.1, oz);
+  const ap = arcGeo.attributes.position;
+  for (let i = 0; i <= FAN; i++) { const b = bearing - sr + (2 * sr * i) / FAN, X = ox + Math.sin(b) * L, Z = oz + Math.cos(b) * L; fp.setXYZ(i + 1, X, y - 0.1, Z); ap.setXYZ(i, X, y, Z); }
+  fp.needsUpdate = true; ap.needsUpdate = true;
+}
 function rangeRingFor(R) {
   if (rangeRing && rangeRingR === R) return;
   if (rangeRing) { scene.remove(rangeRing); rangeRing.geometry.dispose(); }
@@ -169,7 +224,7 @@ function dropCube() {
   const c = new THREE.Mesh(cubeGeo, cubeMat); c.position.copy(toWorld(me.x, me.y, 25)); scene.add(c); cubes.push(c);
   if (cubes.length > 200) scene.remove(cubes.shift());
 }
-addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
+addEventListener("keydown", (e) => { if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") selectSlot(+e.code.slice(5) - 1); if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
@@ -301,7 +356,7 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt, null, !!(d.x || d.y)); continue; }   // (owner, 2026-10-13) the ship faces the way it flies, never the reticle
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt, aiming && SLOTS[slot].interact ? myAim : null, !!(d.x || d.y)); continue; }   // (owner, 2026-10-13) faces its travel; an interaction item faces the pointer while aiming
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
@@ -390,7 +445,7 @@ renderer.setAnimationLoop(() => {
   focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
   viewDist += (wantDist - viewDist) * k;
 
-  if (haveMe) { rangeRingFor(cam.leash); rangeRing.position.set(me.x, 0.35, -me.y); }
+  if (haveMe) { rangeRingFor(cam.leash); rangeRing.position.set(me.x, 0.35, -me.y); interactRing.visible = true; interactRing.position.set(me.x, 0.4, -me.y); }
   const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
   camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
@@ -402,6 +457,7 @@ renderer.setAnimationLoop(() => {
     const a2 = aimAt(px, py);
     if (a2) drawAim(a2);
   }
+  updateSpread(dt);
 
   if (countAt) {
     const left = Math.ceil((countAt - now) / 1000);
@@ -428,5 +484,14 @@ if (sl.leash) {
   for (const d of DIRS) $i("d-" + d).addEventListener("input", () => { cam.dir[d] = Math.min(200, Math.max(-200, +$i("d-" + d).value || 0)); saveCam(); show(); });
 }
 
+// (owner) the hotbar
+function selectSlot(i) {
+  if (!(i >= 0 && i < SLOTS.length)) return;
+  slot = i;
+  document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.classList.toggle("on", k === slot));
+}
+document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListener("pointerdown", (e) => { e.preventDefault(); selectSlot(k); }));
+selectSlot(0);
+
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; } };
