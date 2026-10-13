@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **The ship faces its travel, not the reticle (owner):** aiming no longer turns the nose toward the circle; the ship faces the way WASD flies it and holds its last heading when idle.
 - **Fix: full overflow needed edge-hugging when maximized.** With a button held, a small window lets the cursor travel past its border (instant full press) while a maximized one stops it at the screen edge; the press now saturates at 80% of the way to the bound, so full overflow is reached comfortably inside the screen at any window size.
 - **The compass sets overflow, exactly (owner):** per the owner's diagram, each compass slider (plus the base Overflow) is now the gap between the circle's edge and the camera bounds when aiming in that direction — solved exactly per direction (zoom and leash together), not a leash trim. Old saved trims are discarded; compass defaults are 0. Verified: S +150 raises only S-aim zoom (762 m vs 647 elsewhere).
 - **(reworked the same night) The compass (owner):** the panel gains an Overflow slider and eight per-direction leash-trim sliders laid out as a compass, applied live with smooth blending between neighbors and kept per browser; the hard-coded trim becomes their defaults.
