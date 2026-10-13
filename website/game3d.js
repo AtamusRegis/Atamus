@@ -296,27 +296,34 @@ renderer.setAnimationLoop(() => {
   // camera's focus slides toward a point between the player and the circle, zooming out to keep the player in shot
   let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
   myAim = null;
+  // (owner) the circle's distance from the ship is the pointer's ELLIPTICAL screen fraction times the
+  // Reticle slider: an ellipse inscribed in the screen (it fits any aspect ratio by construction), so
+  // the same fraction toward the bound means the same world distance - top, side or corner alike, max
+  // exactly at the bound on any screen. The ground raycast supplies only the direction.
+  function aimAt(px, py) {
+    const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
+    const e = Math.min(1, Math.hypot(sx, sy));
+    raycaster.setFromCamera({ x: sx, y: sy }, camera);
+    if (!raycaster.ray.intersectPlane(groundPlane, aimHit)) return null;
+    let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    const d = e * cam.leash;
+    return { x: me.x + ux * d, z: -me.y + uz * d, d };                   // the circle, in world coords
+  }
+  function drawAim(a) {
+    aimRing.position.set(a.x, 0.4, a.z);
+    const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
+    myAim = { x: a.x, z: a.z };
+    aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(a.x, 0.4, a.z)]);
+  }
   if (aiming && haveMe) {
-    let gx, gy;
     const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // (owner) MMB: the circle keeps the pinned SCREEN spot, through orbits and WASD alike
-    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; }
-    if (hit) {
-      aimRing.position.set(gx, 0.4, -gy);
-      const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
-      myAim = { x: gx, z: -gy };
-      aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(gx, 0.4, -gy)]);
-      if (!orbitLock) {                                                // orbiting holds the frame: the aim stops steering it
-        // the leash is driven by the POINTER's distance from screen center, never by the circle's world
-        // distance: pointing far ahead used to move the camera, which pushed the same pixel's ground
-        // point farther, which moved the camera again - a runaway. Pixels can't feed back.
-        const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
-        const r = Math.min(1, Math.hypot(sx, sy));
-        const k = Math.min(1, Math.max(0, (r - 0.25) / 0.65));           // a deadzone at the center, full push at the edge
-        let ux = gx - me.x, uy = gy - me.y; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
-        const off = k * k * cam.leash;                                   // eases in toward the edge
-        fx = me.x + ux * off; fy = me.y + uy * off;
-        wantDist = Math.min(cam.zmax, Math.max(camDist, off * 3));       // player stays in the shot
+    const a = aimAt(px, py);
+    if (a) {
+      hit = true; drawAim(a);
+      if (!orbitLock) {                                                  // orbiting holds the frame: the aim stops steering it
+        fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the circle
+        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d * 1.6));     // player stays in the shot
       }
     }
   }
@@ -336,14 +343,10 @@ renderer.setAnimationLoop(() => {
   camOff.y = Math.sin(pr) * viewDist;
   camera.position.copy(target).add(camOff);
   camera.lookAt(target);
-  if (aiming && haveMe && hit) {               // re-project the circle against the camera as it will RENDER this
-    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // frame, so it never trails the pointer while the camera eases or orbits
-    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
-      aimRing.position.set(aimHit.x, 0.4, aimHit.z);
-      myAim = { x: aimHit.x, z: aimHit.z };
-      aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(aimHit.x, 0.4, aimHit.z)]);
-    }
+  if (aiming && haveMe && hit) {               // re-project against the camera as it will RENDER this frame,
+    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // so the circle never trails the pointer while the camera eases or orbits
+    const a2 = aimAt(px, py);
+    if (a2) drawAim(a2);
   }
 
   if (countAt) {
@@ -363,4 +366,4 @@ if (sl.leash) {
 }
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; } };
