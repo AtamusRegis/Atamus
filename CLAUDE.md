@@ -41,12 +41,14 @@ packages/server/src/
                   the 2D era's accounts/moderation APIs: still mounted and running, but the game hooks are
                   disconnected and nothing in the 3D client uses them yet. Don't build on them without asking.
   game/
-    net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), {t:"move"} in,
-                  20 Hz sim + 15 Hz snapshots out, deploy countdown / website-reload broadcasts
-    world3d.js    the world: 126 km flat-top hexagon (inset by the sphere), 100 m spheres, 300 m/s,
-                  direction clamping, border stop, positions in the world3d table
+    net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), side pick, move /
+                  fire / beam / chat in; 20 Hz sim + combat events, 15 Hz snapshots (players, beams, missiles)
+    world3d.js    the world: 126 km hexagon, momentum ships (accel / brake / turn-scaled thrust), capacitor,
+                  combat (bullets, homing missiles, beams, hits with falloff, 1,000 HP, respawn), positions saved
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
+  arsenal.js      weapon / ammo definitions, the Weapon & Ammo Maker panel (JSON import / export), the TAB
+                  inventory, hotbar loadout, magazines and reloads (kept per browser)
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
                   own-sphere prediction + snapshot interpolation, countdown and reconnect handling
@@ -69,7 +71,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 
 1. Make the change.
 2. Run `scripts/check.sh`.
-3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`.
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`, and the `arsenal.js?v=` in game3d.js's import.
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
 5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;

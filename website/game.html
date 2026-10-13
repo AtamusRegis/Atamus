@@ -52,6 +52,49 @@
     #cap-fill.out { background: #6a4a2a; }
     #cap-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 10px system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 0 2px #000; }
     html.touch #cap { bottom: 20px; left: auto; right: 20px; transform: none; }
+    #cam-panel { max-height: calc(100vh - 24px); overflow-y: auto; width: 290px; }
+    #arsenal-ed { display: grid; gap: 6px; font-size: 12px; }
+    #arsenal-ed button { background: #16202f; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 4px; padding: 3px 7px; font: 12px system-ui, sans-serif; cursor: pointer; }
+    #arsenal-ed button.on { border-color: #e8902a; color: #fff; }
+    .ed-tabs, .ed-btns, .ed-list { display: flex; flex-wrap: wrap; gap: 4px; }
+    .ed-fields { display: grid; gap: 3px; }
+    .ed-row { display: grid; grid-template-columns: 82px 1fr auto; gap: 6px; align-items: center; color: #9fb3cf; }
+    .ed-row i { font-style: normal; color: #7f93ad; font-size: 11px; }
+    .ed-row input[type=text], .ed-row input[type=number], .ed-row select { width: 100%; box-sizing: border-box; background: #0c121c; color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 3px; padding: 2px 4px; font: 12px system-ui, sans-serif; }
+    .ed-ammo { display: flex; flex-wrap: wrap; gap: 2px 8px; color: #cfe0f4; }
+    .ed-io textarea { width: 100%; box-sizing: border-box; height: 56px; background: #0c121c; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 3px; font: 11px ui-monospace, monospace; resize: vertical; }
+    .ed-msg { color: #e8902a; min-height: 14px; }
+    #hp { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); width: 208px; height: 12px; background: rgba(10, 14, 22, .85); border: 1px solid #52302a; border-radius: 4px; overflow: hidden; pointer-events: none; }
+    #hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #b8322a, #ff6a50); }
+    #hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 9px system-ui, sans-serif; color: #fff; text-shadow: 0 0 2px #000; }
+    #hotbar .slot, #inv .slot { position: relative; overflow: hidden; }
+    #hotbar .slot .sw, #inv .slot .sw { font-size: 10px; color: #cfe0f4; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #hotbar .slot .sa, #inv .slot .sa { font-size: 9px; color: #9fb3cf; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .slot .rl { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #e8902a; }
+    .slot.no { border-color: #e04848 !important; }
+    #inv { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 7, 12, .55); z-index: 8; }
+    #inv .inv-box { display: grid; gap: 8px; padding: 16px 18px; background: rgba(10, 14, 22, .96); border: 1px solid #2a3a52; border-radius: 8px; min-width: 420px; max-width: 90vw; }
+    .inv-label { font: 600 12px system-ui, sans-serif; color: #9fb3cf; }
+    .inv-row { display: flex; flex-wrap: wrap; gap: 8px; min-height: 64px; padding: 4px; border: 1px dashed #22314a; border-radius: 6px; }
+    #inv .slot { width: 64px; height: 64px; display: grid; place-items: center; align-content: center; gap: 1px; background: #0f1724; border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: grab; }
+    #inv .slot b { font-size: 13px; color: #cfe0f4; }
+    #inv .slot.on { border-color: #e8902a; }
+    .card { width: 96px; height: 56px; display: grid; place-items: center; align-content: center; gap: 2px; background: #121c2b; border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: grab; user-select: none; touch-action: none; }
+    .card b { color: #e8f0fb; font-size: 12px; }
+    .drag-ghost { position: fixed; z-index: 20; pointer-events: none; padding: 4px 8px; background: #1f3f78; border: 1px solid #4f8fe8; border-radius: 4px; color: #fff; font: 12px system-ui, sans-serif; }
+    #dmg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+    .dmg { position: absolute; left: 0; top: 0; font: 700 15px system-ui, sans-serif; color: #fff2a8; text-shadow: 0 0 3px #000, 0 0 1px #000; white-space: nowrap; }
+    .dmg.taken { color: #ff6a50; }
+    html.touch #hp { bottom: 40px; left: auto; right: 20px; transform: none; }
+    #chat { position: fixed; left: 12px; bottom: 196px; width: 320px; display: grid; gap: 4px; font: 12px system-ui, sans-serif; }
+    #chat-log { max-height: 160px; overflow-y: auto; display: grid; gap: 1px; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }
+    .chat-tag { color: #7f93ad; } .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; }
+    #chat-tabs { display: flex; gap: 4px; }
+    #chat-tabs button { background: rgba(10, 14, 22, .85); color: #9fb3cf; border: 1px solid #2a3a52; border-radius: 4px; padding: 2px 8px; font: 11px system-ui, sans-serif; cursor: pointer; }
+    #chat-tabs button.on { color: #fff; border-color: #e8902a; }
+    #chat-in { background: rgba(10, 14, 22, .85); color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 6px; font: 12px system-ui, sans-serif; outline: none; }
+    #chat-in:focus { border-color: #4f8fe8; }
+    html.touch #chat { left: 12px; top: 140px; bottom: auto; width: 240px; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -63,27 +106,19 @@
     <div class="cam-row"><span>Assists</span><input id="sl-assists" type="checkbox"><span class="v"></span></div>
     <div class="cam-row"><span>Reticle</span><input id="sl-leash" type="range" min="100" max="3000" step="25"><span class="v" id="sl-leash-v"></span></div>
     <div class="cam-row"><span>Overflow</span><input id="sl-over" type="range" min="0" max="200" step="5"><span class="v" id="sl-over-v"></span></div>
-    <div class="slot-title" id="sl-slot-name"></div>
-    <div class="cam-row"><span>Range</span><input id="sl-range" type="range" min="10" max="3000" step="10"><span class="v" id="sl-range-v"></span></div>
-    <div class="cam-row"><span>Optimal</span><input id="sl-opt" type="range" min="10" max="3000" step="10"><span class="v" id="sl-opt-v"></span></div>
-    <div class="cam-row"><span>Falloff</span><input id="sl-fall" type="range" min="0" max="10" step="0.5"><span class="v" id="sl-fall-v"></span></div>
-    <div class="cam-row"><span>Speed</span><input id="sl-speed" type="range" min="0" max="180" step="1"><span class="v" id="sl-speed-v"></span></div>
-    <div class="cam-row"><span>Move</span><input id="sl-move" type="range" min="0" max="180" step="1"><span class="v" id="sl-move-v"></span></div>
-    <div class="cam-row"><span>Spread</span><input id="sl-spread" type="range" min="0" max="90" step="1"><span class="v" id="sl-spread-v"></span></div>
-    <div class="cam-row"><span>Interact</span><input id="sl-interact" type="checkbox"><span class="v"></span></div>
-    <div class="cam-row"><span>Rate</span><input id="sl-rate" type="range" min="0.5" max="30" step="0.5"><span class="v" id="sl-rate-v"></span></div>
-    <div class="cam-row"><span>Auto</span><input id="sl-auto" type="checkbox"><span class="v"></span></div>
+    <div class="slot-title">Weapon &amp; Ammo Maker</div>
+    <div id="arsenal-ed"></div>
   </div>
   <canvas id="minimap"></canvas>
+  <div id="chat"><div id="chat-log"></div><div id="chat-tabs"><button data-ch="global" class="on">Global</button><button data-ch="side">Faction</button></div><input id="chat-in" maxlength="240" autocomplete="off"></div>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
-  <div id="hotbar">
-    <div class="slot"><b>1</b><span>Primary</span></div>
-    <div class="slot"><b>2</b><span>Secondary</span></div>
-    <div class="slot"><b>3</b><span>Tertiary</span></div>
-  </div>
+  <div id="hp"><div id="hp-fill"></div><span id="hp-num">1000</span></div>
+  <div id="hotbar"></div>
+  <div id="inv" hidden></div>
+  <div id="dmg"></div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791882484"></script>
+  <script type="module" src="game3d.js?v=1791883589"></script>
 </body>
 </html>

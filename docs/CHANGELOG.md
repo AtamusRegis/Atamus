@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Weapons, ammo, combat, inventory, chat (owner):** a Weapon & Ammo Maker replaces the slot sliders (weapons and ammo with JSON import / export); ammo types bullet, missile (lock-on homing: tracking grows with time aimed at the target) and beam (ship to aim point, no spread); damage with falloff past optimal; server-simulated hits, friendly fire on, 1,000 health and respawn near the center; floating damage numbers. TAB inventory: drag weapons onto matching hotbar slots and ammo onto weapons; R reloads over the weapon's reload time. Global and Faction chat (Enter to type).
 - **Steady fire settles at yellow (owner):** firing continuously while still (no WASD, aim steady) holds the spread at the yellow point — it doesn't close below it while shooting, and shots don't push it above it; moving or swinging the aim lets shots open it further.
 - **Shooting (owner):** left click while aiming a non-interaction item fires a projectile somewhere inside the spread; each shot widens it 1° either side. Per-item Rate and Auto testing values. Projectiles (1,500 m/s, out to the aim range) go through the server, which validates and rate-limits them, and every player sees them. No damage yet.
 - **Spread lines stop at the aim wedge (owner):** past optimal range the spread lines close only as far as the aim line's own wedge, never inside it.

@@ -6,6 +6,7 @@
 // angle looking down toward the player. Everyone in the world sees everyone.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
+import { A, mountEditor, mountInventory } from "./arsenal.js?v=1791883589";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -96,27 +97,15 @@ let rangeRing = null, rangeRingR = 0;
 const INTERACT_R = 70;
 const interactRing = new THREE.Mesh(new THREE.RingGeometry(INTERACT_R - 2, INTERACT_R, 96), new THREE.MeshBasicMaterial({ color: 0x5fd0a0, transparent: true, opacity: 0.45, side: THREE.DoubleSide }));
 interactRing.rotation.x = -Math.PI / 2; interactRing.visible = false; scene.add(interactRing);
-// (owner) the hotbar's three slots: each item has an aim range (m), an aim speed (degrees of spread closed per
-// second), an aim spread (degrees either side of the aim line) and whether it's an interaction object
-// (used on objects within the interaction circle; the ship faces the pointer while aiming it) or a ranged weapon
-const SLOTS = [
-  { name: "Primary", range: 600, optimal: 400, falloff: 2, speed: 20, move: 10, spread: 30, interact: false, rate: 8, auto: true },
-  { name: "Secondary", range: 700, optimal: 600, falloff: 1, speed: 8, move: 6, spread: 20, interact: false, rate: 1, auto: false },
-  { name: "Tertiary", range: INTERACT_R, optimal: INTERACT_R, falloff: 4, speed: 60, move: 20, spread: 45, interact: true, rate: 2, auto: false },
-];
+// (owner, 2026-10-13) the hotbar's weapons come from the arsenal (arsenal.js): each equipped weapon has an aim
+// range, optimal range, spread falloff, spread, aim speed, move spread, rate, auto, interaction, magazine and
+// reload; the loaded ammo decides what it fires (bullet, missile, beam). An empty slot aims but does nothing.
+A.load();
 let slot = 0;
-try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   // tuned slot values, kept in this browser
-  if (Array.isArray(sv)) sv.forEach((v, i) => { if (!SLOTS[i] || !v) return;
-    if (Number.isFinite(v.range)) SLOTS[i].range = Math.min(3000, Math.max(10, v.range));
-    if (Number.isFinite(v.speed)) SLOTS[i].speed = Math.min(180, Math.max(0, v.speed));
-    if (Number.isFinite(v.move)) SLOTS[i].move = Math.min(180, Math.max(0, v.move));
-    if (Number.isFinite(v.optimal)) SLOTS[i].optimal = Math.min(3000, Math.max(10, v.optimal));
-    if (Number.isFinite(v.falloff)) SLOTS[i].falloff = Math.min(10, Math.max(0, v.falloff));
-    if (Number.isFinite(v.rate)) SLOTS[i].rate = Math.min(30, Math.max(0.2, v.rate));
-    if (typeof v.auto === "boolean") SLOTS[i].auto = v.auto;
-    if (Number.isFinite(v.spread)) SLOTS[i].spread = Math.min(90, Math.max(0, v.spread));
-    if (typeof v.interact === "boolean") SLOTS[i].interact = v.interact; }); } catch {}
-const saveSlots = () => { try { localStorage.setItem("atamus.slots", JSON.stringify(SLOTS)); } catch {} };
+const NOWEAPON = { name: "", slot: 0, ammo: [], range: 0, optimal: 1e9, falloff: 0, spread: 0, speed: 0, move: 0, rate: 1, auto: false, interact: false, mag: 0, reload: 0 };
+const W = () => A.weapon(slot) || NOWEAPON;
+const AM = () => A.loaded(slot);
+const isBeam = () => { const a = AM(); return !!(a && a.type === "beam"); };
 // the spread lines: red at full spread, orange midway, green as they close on the aim line; a light fill between
 const spreadMat = new THREE.LineBasicMaterial({ color: 0xff3030, transparent: true, opacity: 0.95 });
 const mkLine = () => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)); const l = new THREE.Line(g, spreadMat); l.visible = false; l.frustumCulled = false; scene.add(l); return l; };
@@ -151,48 +140,136 @@ coneFanGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9
 const coneFan = new THREE.Mesh(coneFanGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
 coneFan.visible = false; coneFan.frustumCulled = false; scene.add(coneFan);
 let aimCone = 0;                               // the aim line's own half-angle (degrees), 0 inside optimal range
-// (owner, 2026-10-13) projectiles: left click while aiming a non-interaction item fires one somewhere inside the
-// spread; each shot widens the spread 1 degree either side. Rate (shots/s) and Auto are per-item testing values.
-let BULLET_SPEED = 1500;                       // m/s (the server's, from the hello)
-const shots = [];
+// (owner, 2026-10-13) combat. Left click while aiming fires the equipped weapon's loaded ammo:
+// - bullets fly straight from the ship for their lifetime, in a random direction inside the spread;
+// - missiles home on the locked target (the ship nearest the reticle; the longer it's held there, the harder the
+//   missile turns), simulated by the server and drawn from its snapshots;
+// - beams run from the ship to the aim point (no spread) while the button is held, using ammo per second.
+// Each bullet or missile shot widens the spread 1 degree either side. The server checks hits and applies damage
+// (full to the weapon's optimal range, minus the ammo's falloff percent per 100 m beyond); friendly fire is on.
+let BULLET_SPEED = 1500;
+const shots = [];                              // bullets in flight: { key, m, x, y, ux, uy, spd, life, age }
 const bulletGeo = new THREE.BoxGeometry(3, 3, 40);
 const bulletMats = { mine: new THREE.MeshBasicMaterial({ color: 0xbfefff }), friend: new THREE.MeshBasicMaterial({ color: 0x6fa8ff }), enemy: new THREE.MeshBasicMaterial({ color: 0xff6a50 }) };
-function spawnShot(x, y, ux, uy, r, kind) {
+function spawnShot(key, x, y, ux, uy, spd, life, kind) {
   const m = new THREE.Mesh(bulletGeo, bulletMats[kind]); m.rotation.y = Math.atan2(ux, -uy); m.frustumCulled = false;
   m.position.set(x, shipMid, -y); scene.add(m);
-  shots.push({ m, x, y, ux, uy, r, d: 0 });
+  shots.push({ key, m, x, y, ux, uy, spd, life, age: 0 });
 }
+function removeShot(key) { const i = shots.findIndex((q) => q.key === key); if (i >= 0) { scene.remove(shots[i].m); shots.splice(i, 1); } }
 function updateShots(dt) {
   for (let i = shots.length - 1; i >= 0; i--) {
-    const s = shots[i]; s.d += BULLET_SPEED * dt;
-    if (s.d >= s.r) { scene.remove(s.m); shots.splice(i, 1); continue; }
-    s.m.position.set(s.x + s.ux * s.d, shipMid, -(s.y + s.uy * s.d));
+    const q = shots[i]; q.age += dt;
+    if (q.age >= q.life) { scene.remove(q.m); shots.splice(i, 1); continue; }
+    const d = q.spd * q.age; q.m.position.set(q.x + q.ux * d, shipMid, -(q.y + q.uy * d));
   }
 }
-let firing = false, firePending = false, lastShot = -1e9, aimSteady = true, steadyNow = true;
-function tryFire(now) {
-  const it = SLOTS[slot];
-  if (!firing || !aiming || !myAim || !haveMe || it.interact) return;
-  if (now - lastShot < 1000 / it.rate || (!it.auto && !firePending)) return;
-  lastShot = now; firePending = false;
+// missiles, from the server's snapshots (extrapolated along their last motion between snapshots)
+const missileGeo = new THREE.ConeGeometry(7, 34, 10); missileGeo.rotateX(Math.PI / 2);
+const missileMat = new THREE.MeshBasicMaterial({ color: 0xffa040 });
+const missiles = new Map();                    // id -> { m, x, y, vx, vy, t }
+function missileSnap(list, ts) {
+  const seen = new Set();
+  for (const [id, x10, y10, h1000] of list || []) {
+    seen.add(id); const x = x10 / 10, y = y10 / 10, h = h1000 / 1000;
+    let q = missiles.get(id);
+    if (!q) { const m = new THREE.Mesh(missileGeo, missileMat); m.frustumCulled = false; scene.add(m); q = { m, x, y, vx: 0, vy: 0, t: ts }; missiles.set(id, q); }
+    else { const dtq = Math.max(1, ts - q.t) / 1000; q.vx = (x - q.x) / dtq; q.vy = (y - q.y) / dtq; }
+    q.x = x; q.y = y; q.t = ts; q.m.rotation.y = h;
+  }
+  for (const [id, q] of missiles) if (!seen.has(id)) { scene.remove(q.m); missiles.delete(id); }
+}
+function updateMissiles() {
+  const st = Date.now() - (srvOff || 0);
+  for (const q of missiles.values()) { const e = Math.min(0.2, Math.max(0, (st - q.t) / 1000)); q.m.position.set(q.x + q.vx * e, shipMid, -(q.y + q.vy * e)); }
+}
+// missile lock: the ship nearest the reticle (within a radius that grows with zoom); held there it locks
+let lockTgt = null, lockT = 0;
+const lockRing = new THREE.Mesh(new THREE.RingGeometry(70, 77, 48), new THREE.MeshBasicMaterial({ color: 0xffa040, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+lockRing.rotation.x = -Math.PI / 2; lockRing.visible = false; scene.add(lockRing);
+const lockAmount = () => { const am = AM(); return lockTgt && am ? Math.min(1, lockT / am.lock) : 0; };
+function updateLock(dt) {
+  const am = AM(), on = aiming && haveMe && !!myAim && !!A.weapon(slot) && !!am && am.type === "missile";
+  if (!on) { lockTgt = null; lockT = 0; lockRing.visible = false; return; }
+  let best = null, bd = Math.max(120, viewDist / 6);
+  for (const p of players.values()) {
+    if (p.id === myId) continue; const q = p.holder.position, d = Math.hypot(q.x - myAim.x, q.z - myAim.z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  if (!best) { lockTgt = null; lockT = 0; lockRing.visible = false; return; }
+  if (best.id !== lockTgt) { lockTgt = best.id; lockT = 0; }
+  lockT += dt;
+  const lk = lockAmount(), q = best.holder.position, k = 1 + (1 - lk) * 0.6;
+  lockRing.visible = true; lockRing.position.set(q.x, 0.8, q.z); lockRing.scale.set(k, k, 1);
+  lockRing.material.opacity = 0.25 + 0.6 * lk; lockRing.material.color.setHex(lk >= 1 ? 0xff3020 : 0xffa040);
+}
+// beams: a bright bar from the ship toward the aim (others' from the server's snapshots)
+const beamGeo = new THREE.BoxGeometry(1, 1, 1);
+const mkBeam = (color) => { const m = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 })); m.visible = false; m.frustumCulled = false; scene.add(m); return m; };
+function placeBeam(m, x, y, ux, uy, len) {
+  m.visible = len > 1; if (!m.visible) return;
+  m.position.set(x + ux * len / 2, shipMid, -(y + uy * len / 2)); m.rotation.y = Math.atan2(ux, -uy); m.scale.set(6, 3, len);
+}
+const myBeam = mkBeam(0xffe08a);
+let beamOn = false, beamSent = 0;
+const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
+function beamOff() { if (beamOn) send({ t: "beam", on: 0 }); beamOn = false; myBeam.visible = false; }
+let firing = false, firePending = false, lastShot = -1e9, aimSteady = true, steadyNow = true, cid = 0;
+function tryFire(now, dt) {
+  const w = A.weapon(slot), am = AM();
+  const want = firing && aiming && !!myAim && haveMe && !!w && !w.interact && !invOpen;
+  if (am && am.type === "beam") {
+    if (want && !A.reloading(slot, now) && A.consume(slot, w.rate * dt)) {
+      const bx = myAim.x - me.x, by = -myAim.z - me.y, l = Math.hypot(bx, by) || 1, ux = bx / l, uy = by / l, len = Math.min(w.range, l);
+      placeBeam(myBeam, me.x, me.y, ux, uy, len); beamOn = true; lastShot = now;
+      if (now - beamSent > 100) { beamSent = now; send({ t: "beam", on: 1, x: ux, y: uy, len, dps: am.damage, opt: w.optimal, fall: am.falloff }); }
+    } else beamOff();
+    return;
+  }
+  beamOff();
+  if (!want || !am || A.reloading(slot, now)) return;
+  if (now - lastShot < 1000 / w.rate || (!w.auto && !firePending)) return;
+  firePending = false;
+  if (!A.consume(slot, 1)) return;             // an empty magazine: R reloads
+  lastShot = now;
   const b = Math.atan2(myAim.x - me.x, myAim.z + me.y);                 // the aim's bearing (three: x, z)
   const h = THREE.MathUtils.degToRad(Math.max(spreadCur, aimCone));
-  const a = b + (Math.random() * 2 - 1) * h;                           // somewhere inside the spread
-  const ux = Math.sin(a), uy = -Math.cos(a);                           // game plane: +y is -z
-  spawnShot(me.x, me.y, ux, uy, it.range, "mine");
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "fire", x: ux, y: uy, r: it.range }));
+  const ang = b + (Math.random() * 2 - 1) * h;                         // somewhere inside the spread
+  const ux = Math.sin(ang), uy = -Math.cos(ang);                       // game plane: +y is -z
+  const c = ++cid;
+  if (am.type === "bullet") spawnShot(myId + ":" + c, me.x, me.y, ux, uy, am.speed, am.lifetime, "mine");
+  send({ t: "fire", k: am.type === "missile" ? "m" : "b", c, x: ux, y: uy, spd: am.speed, life: am.lifetime, dmg: am.damage, opt: w.optimal, fall: am.falloff, turn: am.turn, lock: lockAmount(), tgt: lockTgt });
   // each shot opens the spread 1 degree; holding still and steady (no WASD, no aim swing) it opens only up to
   // the yellow point (owner), moving or swinging the aim lets it open to the full spread
-  const top = steadyNow ? it.spread * YELLOW : it.spread;
+  const top = steadyNow ? w.spread * YELLOW : w.spread;
   spreadCur = Math.min(Math.max(top, aimCone), Math.max(spreadCur, Math.min(aimCone, top)) + 1);
 }
+// health and damage numbers
+let HP_MAX = 1000, myHp = 1000;
+const hpFill = document.getElementById("hp-fill"), hpNum = document.getElementById("hp-num");
+function drawHp() { if (!hpFill) return; hpFill.style.width = Math.max(0, myHp / HP_MAX) * 100 + "%"; hpNum.textContent = Math.max(0, Math.round(myHp)); }
+const dmgLayer = document.getElementById("dmg"), dmgs = [], projV = new THREE.Vector3();
+function dmgNumber(x, y, amount, mine) {
+  if (!dmgLayer || amount <= 0) return;
+  const el = document.createElement("div"); el.className = "dmg" + (mine ? "" : " taken"); el.textContent = Math.round(amount); dmgLayer.appendChild(el);
+  dmgs.push({ el, x, y, t0: performance.now() });
+}
+function updateDmg(now) {
+  for (let i = dmgs.length - 1; i >= 0; i--) {
+    const q = dmgs[i], age = (now - q.t0) / 1000;
+    if (age > 1.2) { q.el.remove(); dmgs.splice(i, 1); continue; }
+    projV.set(q.x, shipMid * 2, -q.y).project(camera);
+    q.el.style.transform = "translate(" + ((projV.x + 1) / 2 * innerWidth) + "px," + ((1 - projV.y) / 2 * innerHeight - age * 50) + "px) translate(-50%,-50%)";
+    q.el.style.opacity = age < 0.8 ? 1 : (1.2 - age) / 0.4;
+  }
+}
 function updateAimCone() {
-  const it = SLOTS[slot], on = aiming && haveMe && !!myAim;
-  optRingFor(it.optimal);
-  optRing.visible = on && assists;
+  const it = W(), on = aiming && haveMe && !!myAim, armed = on && !!A.weapon(slot);
+  optRingFor(Math.min(it.optimal, 6000));
+  optRing.visible = armed && assists;
   if (on) { optRing.position.set(me.x, 0.45, -me.y); const k = Math.max(1, viewDist / 500); optMat.dashSize = 4 * k; optMat.gapSize = 6 * k; }
   const bx = on ? myAim.x - me.x : 0, bz = on ? myAim.z + me.y : 0, dist = Math.hypot(bx, bz);
-  aimCone = on && dist > it.optimal ? 0.5 + it.falloff * (dist - it.optimal) / 100 : 0;
+  aimCone = armed && !isBeam() && dist > it.optimal ? 0.5 + it.falloff * (dist - it.optimal) / 100 : 0;   // beams: just the line
   const wedge = aimCone > 0;
   coneL.visible = coneR.visible = coneFan.visible = wedge;
   aimLine.visible = on && !wedge;              // inside optimal range: just the line
@@ -209,8 +286,8 @@ const spreadColor = new THREE.Color();
 const YELLOW = 1 / 3;                          // the share of full spread where the color passes yellow
 const SPRINT_SPREAD = 2;                       // sprinting opens the movement spread this much faster
 function updateSpread(dt, moving, sprinting) {
-  const it = SLOTS[slot];
-  const on = aiming && haveMe && !!myAim;
+  const it = W();
+  const on = aiming && haveMe && !!myAim && !!A.weapon(slot) && !isBeam();   // beams have no spread (owner)
   spreadL.visible = spreadR.visible = spreadFan.visible = spreadArc.visible = on && assists;
   if (!on) { wasAiming = false; return; }
   const bx = myAim.x - me.x, bz = myAim.z + me.y;                     // world, from the ship to the reticle
@@ -327,7 +404,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y } };   // buf: recent snapshot positions on the server's clock
   players.set(id, p); return p;
 }
-function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
+function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); if (p.beamMesh) scene.remove(p.beamMesh); players.delete(id); }
 const TURN = 4;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12)
 // (owner) with no right-click and no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
@@ -363,7 +440,15 @@ function dropCube() {
   const c = new THREE.Mesh(cubeGeo, cubeMat); c.position.copy(toWorld(me.x, me.y, 25)); scene.add(c); cubes.push(c);
   if (cubes.length > 200) scene.remove(cubes.shift());
 }
-addEventListener("keydown", (e) => { if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") selectSlot(+e.code.slice(5) - 1); if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
+const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
+addEventListener("keydown", (e) => {
+  if (typing()) return;
+  if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
+  if (e.code === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
+  if (e.code === "Escape" && invOpen) { toggleInv(false); return; }
+  if (e.code === "KeyR" && !e.repeat) A.reload(slot);
+});
+addEventListener("keydown", (e) => { if (typing()) return; if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") selectSlot(+e.code.slice(5) - 1); if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
@@ -442,7 +527,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.bulletSpeed) BULLET_SPEED = m.cfg.bulletSpeed; }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.bulletSpeed) BULLET_SPEED = m.cfg.bulletSpeed; if (m.cfg.hpMax) { HP_MAX = m.cfg.hpMax; myHp = HP_MAX; drawHp(); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -454,8 +539,10 @@ function connect() {
       addPlayer(myId, myName, me.x, me.y).side = m.s;
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
-      for (const [id, cx, cy, ch] of m.p) {
+      missileSnap(m.m, m.ts);
+      for (const [id, cx, cy, ch, bx, by, bl] of m.p) {
         const x = cx / 100, y = cy / 100;
+        if (id !== myId) { const pb = players.get(id); if (pb) pb.beam = bl ? { ux: bx / 1000, uy: by / 1000, len: bl } : null; }
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
           const lspd = Math.max(SPEED, Math.hypot(vel.x, vel.y));
@@ -471,8 +558,16 @@ function connect() {
       }
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
-    else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
-    else if (m.t === "shot") { if (m.i !== myId) { const q = players.get(m.i); spawnShot(m.x, m.y, m.ux, m.uy, m.r, mySide && m.s === mySide ? "friend" : "enemy"); } }
+    else if (m.t === "cap") { cap = m.c; capOut = !!m.o; if (Number.isFinite(m.hp)) { myHp = m.hp; drawHp(); } }
+    else if (m.t === "shot") { if (m.i !== myId) spawnShot(m.i + ":" + m.c, m.x, m.y, m.ux, m.uy, m.spd, m.life, mySide && m.s === mySide ? "friend" : "enemy"); }
+    else if (m.t === "hit") {                  // the server's damage: drop the bullet, number it for the shooter and the victim
+      if (m.k) removeShot(m.k);
+      if (m.by === myId || m.i === myId) dmgNumber(m.x, m.y, m.d, m.by === myId && m.i !== myId);
+      if (m.i === myId && Number.isFinite(m.hp)) { myHp = m.hp; drawHp(); }
+    }
+    else if (m.t === "down") { const pd = players.get(m.i); if (pd) pd.buf = []; }   // a destroyed ship jumps to its respawn
+    else if (m.t === "respawn") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; focus.x = me.x; focus.y = me.y; myHp = m.hp; drawHp(); beamOff(); }
+    else if (m.t === "chat") addChat(m);
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
     else if (m.t === "update") goUpdating(["web"]);
@@ -553,7 +648,7 @@ renderer.setAnimationLoop(() => {
   for (const p of players.values()) {
     if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift; an interaction item faces the pointer
       // (owner, 2026-10-13) with no WASD held, aiming turns the ship toward the aim point (any item)
-      const face = aiming && SLOTS[slot].interact ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : aiming ? myAim : null;
+      const face = aiming && W().interact ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : aiming ? myAim : null;
       placeShip(p, me.x, me.y, dt, face, false); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
@@ -673,8 +768,18 @@ renderer.setAnimationLoop(() => {
   }
   updateAimCone();
   updateSpread(dt, !!(d.x || d.y), sprintOn);
-  tryFire(nowP);
+  A.tick(nowP);
+  updateLock(dt);
+  tryFire(nowP, dt);
   updateShots(dt);
+  updateMissiles();
+  for (const pb of players.values()) {           // others' beams, from their drawn positions
+    if (pb.id === myId) continue;
+    if (!pb.beamMesh) pb.beamMesh = mkBeam(0xffb070);
+    if (pb.beam) placeBeam(pb.beamMesh, pb.holder.position.x, -pb.holder.position.z, pb.beam.ux, pb.beam.uy, pb.beam.len); else pb.beamMesh.visible = false;
+  }
+  updateDmg(nowP);
+  if (invUI) invUI.frame(nowP);
   updateStop();
   drawMinimap(nowP);
 
@@ -700,31 +805,11 @@ if (sl.leash) {
   sl.over.addEventListener("input", () => { cam.over = Math.min(200, Math.max(0, +sl.over.value || 0)); saveCam(); show(); });
 }
 
-// (owner, 2026-10-13) the slot sliders: they show and tune the selected slot's item, switching with the slot
-function showSlot() {
-  const it = SLOTS[slot]; if (!$i("sl-range")) return;
-  $i("sl-slot-name").textContent = (slot + 1) + " " + it.name;
-  $i("sl-range").value = it.range; $i("sl-range-v").textContent = it.range + " m";
-  $i("sl-opt").value = it.optimal; $i("sl-opt-v").textContent = it.optimal + " m";
-  $i("sl-fall").value = it.falloff; $i("sl-fall-v").textContent = it.falloff + "\u00b0";
-  $i("sl-rate").value = it.rate; $i("sl-rate-v").textContent = it.rate + "/s";
-  $i("sl-auto").checked = it.auto;
-  $i("sl-speed").value = it.speed; $i("sl-speed-v").textContent = it.speed + "\u00b0/s";
-  $i("sl-move").value = it.move; $i("sl-move-v").textContent = it.move + "\u00b0/s";
-  $i("sl-spread").value = it.spread; $i("sl-spread-v").textContent = it.spread + "\u00b0";
-  $i("sl-interact").checked = it.interact;
-}
-if ($i("sl-range")) {
-  $i("sl-range").addEventListener("input", () => { SLOTS[slot].range = Math.min(3000, Math.max(10, +$i("sl-range").value || 10)); saveSlots(); showSlot(); });
-  $i("sl-opt").addEventListener("input", () => { SLOTS[slot].optimal = Math.min(3000, Math.max(10, +$i("sl-opt").value || 10)); saveSlots(); showSlot(); });
-  $i("sl-fall").addEventListener("input", () => { SLOTS[slot].falloff = Math.min(10, Math.max(0, +$i("sl-fall").value || 0)); saveSlots(); showSlot(); });
-  $i("sl-rate").addEventListener("input", () => { SLOTS[slot].rate = Math.min(30, Math.max(0.2, +$i("sl-rate").value || 1)); saveSlots(); showSlot(); });
-  $i("sl-auto").addEventListener("change", () => { SLOTS[slot].auto = $i("sl-auto").checked; saveSlots(); showSlot(); });
-  $i("sl-speed").addEventListener("input", () => { SLOTS[slot].speed = Math.min(180, Math.max(0, +$i("sl-speed").value || 0)); saveSlots(); showSlot(); });
-  $i("sl-move").addEventListener("input", () => { SLOTS[slot].move = Math.min(180, Math.max(0, +$i("sl-move").value || 0)); saveSlots(); showSlot(); });
-  $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
-  $i("sl-interact").addEventListener("change", () => { SLOTS[slot].interact = $i("sl-interact").checked; saveSlots(); showSlot(); });
-}
+// (owner, 2026-10-13) the Weapon & Ammo Maker (the panel) and the TAB inventory with the hotbar
+const edRoot = $i("arsenal-ed"); if (edRoot) mountEditor(edRoot);
+const invEl = $i("inv"); let invOpen = false;
+const invUI = invEl ? mountInventory(invEl, $i("hotbar"), () => slot, (i) => selectSlot(i)) : null;
+function toggleInv(open) { invOpen = open === undefined ? !invOpen : open; if (invEl) invEl.hidden = !invOpen; if (invOpen) { firing = false; beamOff(); } }
 if ($i("sl-assists")) {
   $i("sl-assists").checked = assists;
   $i("sl-assists").addEventListener("change", () => { assists = $i("sl-assists").checked; try { localStorage.setItem("atamus.assists", assists ? "1" : "0"); } catch {} });
@@ -759,15 +844,29 @@ function drawMinimap(now) {
     dot(me.x, me.y, "#4f8fe8", 3.5); mmx.strokeStyle = "#ffffff"; mmx.lineWidth = 1; mmx.beginPath(); mmx.arc(X, Y, 3.5, 0, Math.PI * 2); mmx.stroke();
   }
 }
-// (owner) the hotbar
-function selectSlot(i) {
-  if (!(i >= 0 && i < SLOTS.length)) return;
-  slot = i;
-  document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.classList.toggle("on", k === slot));
-  showSlot();
+// (owner, 2026-10-13) chat: Global (everyone) and Faction (your side). Enter opens the box and sends; Escape
+// or sending an empty line closes it. Lines are inserted as plain text.
+const chatLog = $i("chat-log"), chatIn = $i("chat-in");
+let chatCh = "global";
+document.querySelectorAll("#chat-tabs button").forEach((b) => b.addEventListener("click", () => { chatCh = b.dataset.ch; document.querySelectorAll("#chat-tabs button").forEach((x) => x.classList.toggle("on", x === b)); if (chatIn) chatIn.focus(); }));
+function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); }
+if (chatIn) chatIn.addEventListener("keydown", (e) => {
+  if (e.code === "Enter") { e.preventDefault(); const text = chatIn.value; if (text.trim()) send({ t: "chat", ch: chatCh, text }); chatIn.value = ""; chatIn.blur(); }
+  else if (e.code === "Escape") { chatIn.value = ""; chatIn.blur(); }
+  e.stopPropagation();
+});
+function addChat(m) {
+  if (!chatLog) return;
+  const line = document.createElement("div"); line.className = "chat-line";
+  const tag = document.createElement("span"); tag.className = "chat-tag"; tag.textContent = m.ch === "side" ? "[Faction] " : "[Global] ";
+  const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
+  const txt = document.createElement("span"); txt.textContent = m.text;
+  line.append(tag, who, txt); chatLog.appendChild(line);
+  while (chatLog.children.length > 60) chatLog.firstChild.remove();
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
-document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListener("pointerdown", (e) => { e.preventDefault(); selectSlot(k); }));
-selectSlot(0);
+// (owner) the hotbar: keys 1-3, or a click / tap on a slot
+function selectSlot(i) { if (!(i >= 0 && i < 3)) return; slot = i; }
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get cone() { return aimCone; }, get shots() { return shots.length; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get cone() { return aimCone; }, get shots() { return shots.length; }, get hp() { return myHp; }, get lock() { return lockAmount(); }, get missiles() { return missiles.size; }, A, scr(x, z) { projV.set(x, shipMid, z).project(camera); return { x: (projV.x + 1) / 2 * innerWidth, y: (1 - projV.y) / 2 * innerHeight }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };
