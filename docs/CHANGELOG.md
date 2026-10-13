@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Ship weight (owner):** momentum instead of instant speed. Thrust 200 m/s² toward the input, scaled down the more the push is off the nose (30% against it); letting go brakes at 400 m/s² whatever the heading. The nose turns toward the input. Same physics on the server and in the client's prediction (which now leads corrections by its own velocity).
 - **Slower turning (owner):** ships turn at 4 rad/s, 3× slower than before (a U-turn takes about 0.8 s).
 - **Settled-state resends and synced headings (owner):** the ship's heading is now sent with movement and carried in every snapshot, so other screens show each ship turned exactly as its owner sees it (including interaction-aim facing), interpolated the short way round. After movement or rotation stops, the final state is sent twice more.
 - **Fix: other ships rubberbanded and didn't turn.** Only the last two snapshots were kept, both newer than the render time, so remote ships stepped instead of gliding, and the still frames between steps read as "face north". Remote ships now keep a short snapshot history on the server's clock and are drawn 150 ms in the past between the two around that moment; turning only follows frames that really moved. Measured: smooth ~300 m/s glide, nose on the travel direction.

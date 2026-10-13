@@ -7,6 +7,13 @@ import { pool } from "../db.js";
 export const HEX_FLAT = 126_000;           // 126 km flat to flat (owner, 2026-10-12)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
 export const SPEED = 300;                    // m/s on the ground (owner, 2026-10-12)
+// (owner, 2026-10-13) weight: the ship accelerates toward its input; full ACCEL when the nose points where
+// it's being pushed, down to TURN_ACCEL of it when pushing against the nose (it has to come round first)
+export const ACCEL = 200;                    // m/s^2: 0 to 300 m/s in 1.5 s straight
+export const BRAKE = 400;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
+export const TURN_ACCEL = 0.3;
+// the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
+export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
 const TICK = 1 / 20;                         // the simulation runs at 20 Hz, as before
@@ -68,14 +75,26 @@ export class World3D {
 
   step(dt = TICK) {
     for (const p of this.players.values()) {
-      if (!p.dx && !p.dy) continue;
-      const spd = SPEED * (p.boost ? 2 : 1);
-      const nx = p.x + p.dx * spd * dt, ny = p.y + p.dy * spd * dt;
+      const vx0 = p.vx || 0, vy0 = p.vy || 0;
+      if (!p.dx && !p.dy && !vx0 && !vy0) continue;
+      // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
+      const spd = SPEED * (p.boost ? 2 : 1), tx = p.dx * spd, ty = p.dy * spd;
+      let a = p.dx || p.dy ? ACCEL : BRAKE;
+      if (p.dx || p.dy) {
+        const want = Math.atan2(p.dx, -p.dy);  // the input's heading (same convention as the client's)
+        let d = (want - (p.h || 0)) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+        a *= accelShare(d);
+      }
+      let ex = tx - vx0, ey = ty - vy0; const el = Math.hypot(ex, ey), stepV = a * dt;
+      if (el > stepV) { ex *= stepV / el; ey *= stepV / el; }
+      p.vx = vx0 + ex; p.vy = vy0 + ey;
+      if (Math.hypot(p.vx, p.vy) < 0.01 && !p.dx && !p.dy) { p.vx = p.vy = 0; continue; }
+      const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
       if (inside(nx, ny)) { p.x = nx; p.y = ny; }
-      else {                                   // the border stops the sphere: walk as far along the step as still fits
+      else {                                   // the border stops the ship dead: as far along the step as still fits
         let lo = 0, hi = 1;
         for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; inside(p.x + (nx - p.x) * m, p.y + (ny - p.y) * m) ? (lo = m) : (hi = m); }
-        p.x += (nx - p.x) * lo; p.y += (ny - p.y) * lo;
+        p.x += (nx - p.x) * lo; p.y += (ny - p.y) * lo; p.vx = p.vy = 0;
       }
       p.dirty = true;
     }

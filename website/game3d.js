@@ -18,6 +18,9 @@ const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).co
 let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
 let SPEED = 300;                               // m/s
+let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
+const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
+const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 
@@ -324,7 +327,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -340,8 +343,8 @@ function connect() {
         const x = cx / 100, y = cy / 100;
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
-          const lspd = SPEED * (lastDir.b ? 2 : 1);
-          let tx = x + lastDir.x * lspd * lead, ty = y + lastDir.y * lspd * lead;
+          const lspd = Math.max(SPEED, Math.hypot(vel.x, vel.y));
+          let tx = x + vel.x * lead, ty = y + vel.y * lead;
           if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
           if (err > lspd * 0.4) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
@@ -405,18 +408,31 @@ renderer.setAnimationLoop(() => {
   const nowP = performance.now(), dt = Math.min((nowP - lastT) / 1000, 0.1), now = Date.now(); lastT = nowP;
 
   const d = inputDir(); sendDir(d, now);
-  if (haveMe && (d.x || d.y)) {                // predict my own movement; the border stops me, as on the server
-    const spd = SPEED * (d.b ? 2 : 1);
-    const nx = me.x + d.x * spd * dt, ny = me.y + d.y * spd * dt;
+  if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
+    const spd = SPEED * (d.b ? 2 : 1), tx = d.x * spd, ty = d.y * spd;
+    let a = d.x || d.y ? ACCEL : BRAKE;        // letting go brakes harder than thrust accelerates
+    if (d.x || d.y) {                          // a push off the nose gets only part of the acceleration
+      const mine = players.get(myId);
+      let dh = (Math.atan2(d.x, -d.y) - (mine ? mine.heading : 0)) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
+      a *= accelShare(dh);
+    }
+    let ex = tx - vel.x, ey = ty - vel.y; const el = Math.hypot(ex, ey), sv = a * dt;
+    if (el > sv) { ex *= sv / el; ey *= sv / el; }
+    vel.x += ex; vel.y += ey;
+    if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; }
+    const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
-    else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; }
+    else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }
   }
 
   // other ships are drawn 150 ms in the past on the server's clock, between the two snapshots around that moment
   // (only the last two used to be kept, older than the render time, so they stepped and never glided)
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt, aiming && SLOTS[slot].interact ? myAim : null, !!(d.x || d.y)); continue; }   // (owner, 2026-10-13) faces its travel; an interaction item faces the pointer while aiming
+    if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift; an interaction item faces the pointer
+      const face = aiming && SLOTS[slot].interact ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
+      placeShip(p, me.x, me.y, dt, face, false); continue;
+    }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
       let i = B.length - 1; while (i > 0 && B[i].t > rt) i--;
