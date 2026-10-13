@@ -44,7 +44,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
-const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6, leash: 700, over: 100,
+const cam = { pitch: 60, zmin: 600, zmax: 600, rot: 0.6,   // (owner, 2026-10-13) max zoom = min zoom: the wheel no longer zooms leash: 700, over: 100,
   dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
