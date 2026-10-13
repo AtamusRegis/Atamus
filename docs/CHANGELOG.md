@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Capacitor, stop marker, aim dead zone (owner):** a 0–100 capacitor bar above the hotbar: sprinting drains it, walking recharges it slowly, sitting still faster (server-enforced; sprint stays off once empty until it's back to 15). While moving, a dashed line and circle show where the ship would stop if let go now (only you see it). Aiming near the ship no longer zooms or leashes (a dead zone, easing in beyond it), which ends the jitter there.
 - **Ship weight (owner):** momentum instead of instant speed. Thrust 200 m/s² toward the input, scaled down the more the push is off the nose (30% against it); letting go brakes at 400 m/s² whatever the heading. The nose turns toward the input. Same physics on the server and in the client's prediction (which now leads corrections by its own velocity).
 - **Slower turning (owner):** ships turn at 4 rad/s, 3× slower than before (a U-turn takes about 0.8 s).
 - **Settled-state resends and synced headings (owner):** the ship's heading is now sent with movement and carried in every snapshot, so other screens show each ship turned exactly as its owner sees it (including interaction-aim facing), interpolated the short way round. After movement or rotation stops, the final state is sent twice more.

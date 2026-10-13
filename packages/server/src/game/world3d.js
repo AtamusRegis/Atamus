@@ -12,6 +12,9 @@ export const SPEED = 300;                    // m/s on the ground (owner, 2026-1
 export const ACCEL = 200;                    // m/s^2: 0 to 300 m/s in 1.5 s straight
 export const BRAKE = 400;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
 export const TURN_ACCEL = 0.3;
+// (owner, 2026-10-13) the capacitor, 0-100: sprinting drains it; moving without sprinting recharges it slowly,
+// sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
+export const CAP_MAX = 100, CAP_DRAIN = 20, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESUME = 15;
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
@@ -75,10 +78,15 @@ export class World3D {
 
   step(dt = TICK) {
     for (const p of this.players.values()) {
+      const moving = !!(p.dx || p.dy);
+      if (p.cap === undefined) p.cap = CAP_MAX;
+      if (p.cap <= 0) p.capOut = true; else if (p.capOut && p.cap >= CAP_RESUME) p.capOut = false;
+      const sprinting = !!p.boost && moving && !p.capOut;
+      p.cap = sprinting ? Math.max(0, p.cap - CAP_DRAIN * dt) : Math.min(CAP_MAX, p.cap + (moving ? CAP_WALK : CAP_IDLE) * dt);
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
-      if (!p.dx && !p.dy && !vx0 && !vy0) continue;
+      if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
-      const spd = SPEED * (p.boost ? 2 : 1), tx = p.dx * spd, ty = p.dy * spd;
+      const spd = SPEED * (sprinting ? 2 : 1), tx = p.dx * spd, ty = p.dy * spd;
       let a = p.dx || p.dy ? ACCEL : BRAKE;
       if (p.dx || p.dy) {
         const want = Math.atan2(p.dx, -p.dy);  // the input's heading (same convention as the client's)

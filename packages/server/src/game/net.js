@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, TURN_ACCEL } from "./world3d.js";
+import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 
 export function attachGameServer(httpServer) {
@@ -45,7 +45,7 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username },
-      cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL },
+      cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       roster: world.roster(),
     }));
 
@@ -79,6 +79,9 @@ export function attachGameServer(httpServer) {
 
   setInterval(() => world.step(), 50);                                           // 20 Hz simulation
   setInterval(() => broadcast({ t: "snap", ts: Date.now(), p: world.snapshot() }), 66);   // 15 Hz snapshots
+  setInterval(() => {                                                           // each player's own capacitor, 4 Hz, to them only
+    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (p && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "cap", c: Math.round((p.cap ?? CAP_MAX) * 10) / 10, o: p.capOut ? 1 : 0 })); }
+  }, 250);
 
   console.log("3D world attached at /ws (hex " + Math.round(HEX_FLAT) + " m flat to flat)");
 }

@@ -47,6 +47,11 @@
     html.touch #joy { display: block; }
     html.touch #minimap { top: 12px; bottom: auto; width: 130px; height: 113px; }
     html.touch #hotbar, html.touch #cam-panel { display: none; }
+    #cap { position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
+    #cap-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2f9bd6, #7fd8ff); transition: width .08s linear; }
+    #cap-fill.out { background: #6a4a2a; }
+    #cap-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 10px system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 0 2px #000; }
+    html.touch #cap { bottom: 20px; left: auto; right: 20px; transform: none; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -68,12 +73,13 @@
   <canvas id="minimap"></canvas>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
+  <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="hotbar">
     <div class="slot"><b>1</b><span>Primary</span></div>
     <div class="slot"><b>2</b><span>Secondary</span></div>
     <div class="slot"><b>3</b><span>Tertiary</span></div>
   </div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791879012"></script>
+  <script type="module" src="game3d.js?v=1791879982"></script>
 </body>
 </html>

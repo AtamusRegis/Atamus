@@ -21,6 +21,8 @@ let SPEED = 300;                               // m/s
 let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
+// (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
+let CAPC = { max: 100, drain: 20, walk: 4, idle: 12, resume: 15 }, cap = 100, capOut = false;
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 
@@ -174,6 +176,31 @@ const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, transparent: 
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = false;
 const aimEnd = new THREE.Mesh(new THREE.RingGeometry(7, 10, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
 aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
+// (owner, 2026-10-13) the stop marker: a dashed line to a circle where the ship would come to rest if the
+// player let go now (its velocity at the braking rate); only this player sees it
+const stopLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const stopLineMat = new THREE.LineDashedMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8, dashSize: 10, gapSize: 8 });
+const stopLine = new THREE.Line(stopLineGeo, stopLineMat); stopLine.frustumCulled = false; stopLine.visible = false; scene.add(stopLine);
+const stopRing = new THREE.Mesh(new THREE.RingGeometry(9, 12, 40), new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+stopRing.rotation.x = -Math.PI / 2; stopRing.visible = false; scene.add(stopRing);
+function updateStop() {
+  const v = Math.hypot(vel.x, vel.y);
+  const on = haveMe && v > 5;
+  stopLine.visible = stopRing.visible = on; if (!on) return;
+  const dist = (v * v) / (2 * BRAKE), sx = me.x + (vel.x / v) * dist, sy = me.y + (vel.y / v) * dist;
+  stopLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.7, -me.y), new THREE.Vector3(sx, 0.7, -sy)]); stopLine.computeLineDistances();
+  const k = Math.max(1, viewDist / 500); stopLineMat.dashSize = 10 * k; stopLineMat.gapSize = 8 * k;
+  stopRing.position.set(sx, 0.7, -sy); stopRing.scale.set(k, k, 1);
+}
+// the capacitor bar above the hotbar
+const capFill = document.getElementById("cap-fill"), capNum = document.getElementById("cap-num");
+let capShown = -1;
+function drawCap() {
+  if (!capFill) return; const v = Math.round(cap);
+  if (v === capShown) return; capShown = v;
+  capFill.style.width = (cap / CAPC.max) * 100 + "%"; capNum.textContent = v;
+  capFill.classList.toggle("out", capOut);
+}
 // (owner) the Assists toggle: the distance circle and the slot's spread lines on or off (the aim line always shows)
 let assists = true;
 try { assists = localStorage.getItem("atamus.assists") !== "0"; } catch {}
@@ -327,7 +354,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -356,6 +383,7 @@ function connect() {
       }
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
+    else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
     else if (m.t === "update") goUpdating(["web"]);
@@ -408,8 +436,13 @@ renderer.setAnimationLoop(() => {
   const nowP = performance.now(), dt = Math.min((nowP - lastT) / 1000, 0.1), now = Date.now(); lastT = nowP;
 
   const d = inputDir(); sendDir(d, now);
+  const movingIn = !!(d.x || d.y);
+  if (cap <= 0) capOut = true; else if (capOut && cap >= CAPC.resume) capOut = false;
+  const sprintOn = !!d.b && movingIn && !capOut;
+  if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * dt) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
+  drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * (d.b ? 2 : 1), tx = d.x * spd, ty = d.y * spd;
+    const spd = SPEED * (sprintOn ? 2 : 1), tx = d.x * spd, ty = d.y * spd;
     let a = d.x || d.y ? ACCEL : BRAKE;        // letting go brakes harder than thrust accelerates
     if (d.x || d.y) {                          // a push off the nose gets only part of the acceleration
       const mine = players.get(myId);
@@ -513,11 +546,14 @@ renderer.setAnimationLoop(() => {
         const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));     // ellipse boundary ahead, per unit of zoom
         const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));     // and behind (the vertical half flips)
         const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));          // the zoom this direction and its gap need
-        const rr = Math.min(1, r / 0.8);                                 // full press saturates at 80% of the way to the
-        wantDist = Math.max(camDist, Math.min(6000, rr * Ddir));         // bound: no edge-hugging needed, any window size
+        // (owner, 2026-10-13) a dead zone around the screen's center: aiming near the ship neither zooms nor
+        // leashes (there, a tiny pointer move flips the aim's direction, the camera chased it and the ship
+        // and pointer pulled at each other like magnets); beyond it the press eases in, full at 80% out
+        const DZ = 0.3, rr = Math.min(1, Math.max(0, (r - DZ) / (0.8 - DZ))), ease = rr * rr * (3 - 2 * rr);
+        wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
         let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the gap
         lam = Math.min(lam, (m * wantDist / denB - S) / R);              // behind it: the ship + its margin
-        lam = Math.min(1, Math.max(0, lam));
+        lam = Math.min(1, Math.max(0, lam)) * ease;                      // and no leash at all inside the dead zone
         fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;         // the focus: the extending leash
       }
     }
@@ -545,7 +581,8 @@ renderer.setAnimationLoop(() => {
     const a2 = aimAt(px, py);
     if (a2) drawAim(a2);
   }
-  updateSpread(dt, !!(d.x || d.y), !!d.b);
+  updateSpread(dt, !!(d.x || d.y), sprintOn);
+  updateStop();
   drawMinimap(nowP);
 
   if (countAt) {
