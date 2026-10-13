@@ -115,11 +115,16 @@ function inputDir() {                          // forward = where the camera fac
 
 // ---- socket ----
 let ws = null, srvBuild = "", lastDir = { x: 0, y: 0 }, lastSent = 0, closedForGood = false;
+let rtt = 80, pingTimer = 0;                   // measured round trip, for latency-compensated correction
 const wsUrl = () => (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws" + (typeof deviceId === "function" ? "?d=" + deviceId() : "");
 function connect() {
   statusEl.hidden = false; statusEl.textContent = "Connecting…";
   ws = new WebSocket(wsUrl());
-  ws.onopen = () => { statusEl.hidden = true; };
+  ws.onopen = () => {
+    statusEl.hidden = true;
+    clearInterval(pingTimer);
+    pingTimer = setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "ping", ts: performance.now() })); }, 2000);
+  };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
@@ -133,9 +138,12 @@ function connect() {
     } else if (m.t === "snap") {
       for (const [id, cx, cy] of m.p) {
         const x = cx / 100, y = cy / 100;
-        if (id === myId) {                     // soft-correct my prediction toward the server
-          const err = Math.hypot(x - me.x, y - me.y);
-          if (err > 5) { me.x = x; me.y = y; } else { me.x += (x - me.x) * 0.2; me.y += (y - me.y) * 0.2; }
+        if (id === myId) {                     // soft-correct my prediction toward where the server will be once
+          const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
+          let tx = x + lastDir.x * SPEED * lead, ty = y + lastDir.y * SPEED * lead;
+          if (!inside(tx, ty)) { tx = x; ty = y; }
+          const err = Math.hypot(tx - me.x, ty - me.y);
+          if (err > 25) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");
@@ -143,6 +151,7 @@ function connect() {
       }
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n); }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
+    else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
     else if (m.t === "update") goUpdating(["web"]);
   };
@@ -158,7 +167,10 @@ connect();
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const changed = d.x !== lastDir.x || d.y !== lastDir.y;
-  if (!changed && (now - lastSent < 500 || (!d.x && !d.y))) return;
+  // at most 20 sends a second (orbiting the camera while moving changes the direction every mouse move;
+  // the frame loop retries, so the latest direction always goes out), plus a heartbeat while moving
+  const due = changed ? now - lastSent >= 50 : (d.x || d.y) && now - lastSent >= 500;
+  if (!due) return;
   lastDir = d; lastSent = now;
   ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y }));
 }
