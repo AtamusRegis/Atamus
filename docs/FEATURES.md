@@ -22,8 +22,9 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 ## Controls (owner, 2026-10-12)
 
 - **WASD moves the sphere; wherever the camera is facing is "forward".**
-- **The middle mouse button, dragged, rotates the camera around the player.** On touch, a one-finger drag does the same (mobile parity: drag = drag). *Open: how movement itself works on touch — nothing is decided yet.*
-- **The camera orbits the player at a 75° angle looking down toward it.** The mouse wheel (touch: pinch) changes its distance (180–4,000 m; default 500 m). Not an owner decision: the distance numbers.
+- **The middle mouse button, dragged, rotates the camera around the player** — **inverted** (owner, 2026-10-12): dragging right turns the view right. On touch, a one-finger drag does the same (mobile parity: drag = drag). *Open: how movement itself works on touch — nothing is decided yet.*
+- **The camera orbits the player at a 75° angle looking down toward it.** The mouse wheel (touch: pinch) changes its distance; **max zoom 2,200 m** (owner, 2026-10-12: "not super far out"; min 180 m, default 500 m — those two aren't owner numbers).
+- **Right-click aiming (owner, 2026-10-12):** holding the right button shows a **circle outline on the ground where the mouse points** (scaled with zoom to stay readable) and a **line from the sphere to it**. While held, the **camera's focus slides toward a point between the player and the circle** (leashed to 700 m from the player) and **zooms out as needed to keep the player in the shot**, never past max zoom; releasing eases everything back. It's an indicator only — it doesn't move the sphere (yet). *Open: its touch equivalent (hold = right-click) once touch movement is decided.*
 - The browser's own right-click menu never opens in the game (kept from before).
 
 ## Accounts and sessions

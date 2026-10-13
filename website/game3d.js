@@ -37,6 +37,8 @@ const camera = new THREE.PerspectiveCamera(60, 1, 1, 30000);
 let camYaw = 0;                                // around the player
 const CAM_PITCH = THREE.MathUtils.degToRad(75); // (owner) 75° looking down toward the player
 let camDist = 500;
+const MAX_DIST = 2200;                         // (owner) max zoom / leash distance: never super far out
+const LEASH = 700;                             // how far the camera's focus may slide from the player while aiming
 
 // ground + the 2D grid
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 1, metalness: 0 }));
@@ -53,6 +55,14 @@ function hexShapeBand() {
   return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9 }));
 }
 const border = hexShapeBand(); border.position.y = 0.3; scene.add(border);
+
+// right-click aim marker (owner): a circle outline on the ground where the mouse points, and a line from the sphere to it
+const aimRing = new THREE.Mesh(new THREE.RingGeometry(26, 30, 48), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+aimRing.rotation.x = -Math.PI / 2; aimRing.position.y = 0.4; aimRing.visible = false; scene.add(aimRing);
+const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+const aimLine = new THREE.Line(aimLineGeo, new THREE.LineBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.7 }));
+aimLine.visible = false; scene.add(aimLine);
+const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), aimHit = new THREE.Vector3();
 
 // ---- players ----
 const sphereGeo = new THREE.SphereGeometry(SPHERE_R, 48, 32);
@@ -88,17 +98,18 @@ addEventListener("keydown", (e) => { if (["KeyW", "KeyA", "KeyS", "KeyD"].includ
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false;
-canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) orbiting = false; });
-addEventListener("mousemove", (e) => { if (orbiting) camYaw -= e.movementX * 0.005; });
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(4000, Math.max(180, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
+let orbiting = false, aiming = false;
+const mouse = { x: 0, y: 0 };
+canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
+addEventListener("mouseup", (e) => { if (e.button === 1) orbiting = false; if (e.button === 2) aiming = false; });
+addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005; });   // (owner) inverted
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(MAX_DIST, Math.max(180, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
 let touch1 = null, pinch = 0;
 canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 1) touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }, { passive: true });
 canvas.addEventListener("touchmove", (e) => {
-  if (e.touches.length === 1 && touch1) { camYaw -= (e.touches[0].clientX - touch1.x) * 0.006; touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
-  if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) camDist = Math.min(4000, Math.max(180, camDist * pinch / d)); pinch = d; }
+  if (e.touches.length === 1 && touch1) { camYaw += (e.touches[0].clientX - touch1.x) * 0.006; touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
+  if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) camDist = Math.min(MAX_DIST, Math.max(180, camDist * pinch / d)); pinch = d; }
   e.preventDefault();
 }, { passive: false });
 canvas.addEventListener("touchend", () => { touch1 = null; pinch = 0; }, { passive: true });
@@ -131,6 +142,7 @@ function connect() {
       srvBuild = m.build || "";
       if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; }
       myId = m.you.id; me.x = m.you.x; me.y = m.you.y; haveMe = true;
+      focus.x = me.x; focus.y = me.y;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n);
       addPlayer(myId, m.you.name, me.x, me.y).mesh.material = mineMat;
@@ -188,6 +200,8 @@ function goUpdating(parts) {
 
 // ---- frame loop ----
 const clock = new THREE.Clock();
+const focus = { x: 0, y: 0 };                  // where the camera looks (the player, or toward the aim circle)
+let viewDist = camDist;                        // the eased camera distance
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const camOff = new THREE.Vector3();
@@ -210,9 +224,32 @@ renderer.setAnimationLoop(() => {
     placeSphere(p, x, y);
   }
 
-  const target = haveMe ? toWorld(me.x, me.y, SPHERE_R) : toWorld(0, 0, SPHERE_R);
-  camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(CAM_PITCH) * camDist);   // behind the player: W flies toward where the camera faces
-  camOff.y = Math.sin(CAM_PITCH) * camDist;
+  // right-click aiming (owner): a circle where the mouse points on the ground, a line from the sphere to it; the
+  // camera's focus slides toward a point between the player and the circle, zooming out to keep the player in shot
+  let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
+  if (aiming && haveMe) {
+    raycaster.setFromCamera({ x: (mouse.x / innerWidth) * 2 - 1, y: -(mouse.y / innerHeight) * 2 + 1 }, camera);
+    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
+      hit = true;
+      const gx = aimHit.x, gy = -aimHit.z;
+      aimRing.position.set(gx, 0.4, -gy);
+      const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
+      aimLineGeo.setFromPoints([toWorld(me.x, me.y, SPHERE_R), new THREE.Vector3(gx, 0.4, -gy)]);
+      let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                    // between the player and the circle
+      const ol = Math.hypot(ox, oy);
+      if (ol > LEASH) { ox *= LEASH / ol; oy *= LEASH / ol; }            // leashed: never super far out
+      fx = me.x + ox; fy = me.y + oy;
+      wantDist = Math.min(MAX_DIST, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
+    }
+  }
+  aimRing.visible = aimLine.visible = aiming && hit;
+  const k = 1 - Math.exp(-dt * 6);                                       // the focus and zoom ease, in and back
+  focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
+  viewDist += (wantDist - viewDist) * k;
+
+  const target = toWorld(focus.x, focus.y, SPHERE_R);
+  camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(CAM_PITCH) * viewDist);   // behind the player: W flies toward where the camera faces
+  camOff.y = Math.sin(CAM_PITCH) * viewDist;
   camera.position.copy(target).add(camOff);
   camera.lookAt(target);
 
