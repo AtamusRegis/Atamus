@@ -171,7 +171,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   players.set(id, p); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
-const TURN = 4;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12)
+const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
 function placeShip(p, x, y, dt, face, moving) {
