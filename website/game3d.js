@@ -118,10 +118,10 @@ addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if ([
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false;
+let orbiting = false, aiming = false, aimLock = null;   // (owner) orbiting freezes the aim pointer where MMB started
 const mouse = { x: 0, y: 0 };
-canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) orbiting = false; if (e.button === 2) aiming = false; });
+canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY }; e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; } if (e.button === 2) aiming = false; });
 addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) camYaw += e.movementX * 0.005 * cam.rot; });   // (owner) inverted
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
@@ -250,7 +250,8 @@ renderer.setAnimationLoop(() => {
   // camera's focus slides toward a point between the player and the circle, zooming out to keep the player in shot
   let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
   if (aiming && haveMe) {
-    raycaster.setFromCamera({ x: (mouse.x / innerWidth) * 2 - 1, y: -(mouse.y / innerHeight) * 2 + 1 }, camera);
+    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // orbiting: the aim pointer stays where MMB started
+    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
     if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
       hit = true;
       const gx = aimHit.x, gy = -aimHit.z;
