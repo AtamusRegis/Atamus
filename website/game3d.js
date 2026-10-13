@@ -100,9 +100,9 @@ interactRing.rotation.x = -Math.PI / 2; interactRing.visible = false; scene.add(
 // second), an aim spread (degrees either side of the aim line) and whether it's an interaction object
 // (used on objects within the interaction circle; the ship faces the pointer while aiming it) or a ranged weapon
 const SLOTS = [
-  { name: "Primary", range: 600, optimal: 400, falloff: 2, speed: 20, move: 10, spread: 30, interact: false },
-  { name: "Secondary", range: 700, optimal: 600, falloff: 1, speed: 8, move: 6, spread: 20, interact: false },
-  { name: "Tertiary", range: INTERACT_R, optimal: INTERACT_R, falloff: 4, speed: 60, move: 20, spread: 45, interact: true },
+  { name: "Primary", range: 600, optimal: 400, falloff: 2, speed: 20, move: 10, spread: 30, interact: false, rate: 8, auto: true },
+  { name: "Secondary", range: 700, optimal: 600, falloff: 1, speed: 8, move: 6, spread: 20, interact: false, rate: 1, auto: false },
+  { name: "Tertiary", range: INTERACT_R, optimal: INTERACT_R, falloff: 4, speed: 60, move: 20, spread: 45, interact: true, rate: 2, auto: false },
 ];
 let slot = 0;
 try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   // tuned slot values, kept in this browser
@@ -112,6 +112,8 @@ try { const sv = JSON.parse(localStorage.getItem("atamus.slots") || "null");   /
     if (Number.isFinite(v.move)) SLOTS[i].move = Math.min(180, Math.max(0, v.move));
     if (Number.isFinite(v.optimal)) SLOTS[i].optimal = Math.min(3000, Math.max(10, v.optimal));
     if (Number.isFinite(v.falloff)) SLOTS[i].falloff = Math.min(10, Math.max(0, v.falloff));
+    if (Number.isFinite(v.rate)) SLOTS[i].rate = Math.min(30, Math.max(0.2, v.rate));
+    if (typeof v.auto === "boolean") SLOTS[i].auto = v.auto;
     if (Number.isFinite(v.spread)) SLOTS[i].spread = Math.min(90, Math.max(0, v.spread));
     if (typeof v.interact === "boolean") SLOTS[i].interact = v.interact; }); } catch {}
 const saveSlots = () => { try { localStorage.setItem("atamus.slots", JSON.stringify(SLOTS)); } catch {} };
@@ -149,6 +151,38 @@ coneFanGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9
 const coneFan = new THREE.Mesh(coneFanGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, side: THREE.DoubleSide, depthWrite: false }));
 coneFan.visible = false; coneFan.frustumCulled = false; scene.add(coneFan);
 let aimCone = 0;                               // the aim line's own half-angle (degrees), 0 inside optimal range
+// (owner, 2026-10-13) projectiles: left click while aiming a non-interaction item fires one somewhere inside the
+// spread; each shot widens the spread 1 degree either side. Rate (shots/s) and Auto are per-item testing values.
+let BULLET_SPEED = 1500;                       // m/s (the server's, from the hello)
+const shots = [];
+const bulletGeo = new THREE.BoxGeometry(3, 3, 40);
+const bulletMats = { mine: new THREE.MeshBasicMaterial({ color: 0xbfefff }), friend: new THREE.MeshBasicMaterial({ color: 0x6fa8ff }), enemy: new THREE.MeshBasicMaterial({ color: 0xff6a50 }) };
+function spawnShot(x, y, ux, uy, r, kind) {
+  const m = new THREE.Mesh(bulletGeo, bulletMats[kind]); m.rotation.y = Math.atan2(ux, -uy); m.frustumCulled = false;
+  m.position.set(x, shipMid, -y); scene.add(m);
+  shots.push({ m, x, y, ux, uy, r, d: 0 });
+}
+function updateShots(dt) {
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i]; s.d += BULLET_SPEED * dt;
+    if (s.d >= s.r) { scene.remove(s.m); shots.splice(i, 1); continue; }
+    s.m.position.set(s.x + s.ux * s.d, shipMid, -(s.y + s.uy * s.d));
+  }
+}
+let firing = false, firePending = false, lastShot = 0;
+function tryFire(now) {
+  const it = SLOTS[slot];
+  if (!firing || !aiming || !myAim || !haveMe || it.interact) return;
+  if (now - lastShot < 1000 / it.rate || (!it.auto && !firePending)) return;
+  lastShot = now; firePending = false;
+  const b = Math.atan2(myAim.x - me.x, myAim.z + me.y);                 // the aim's bearing (three: x, z)
+  const h = THREE.MathUtils.degToRad(Math.max(spreadCur, aimCone));
+  const a = b + (Math.random() * 2 - 1) * h;                           // somewhere inside the spread
+  const ux = Math.sin(a), uy = -Math.cos(a);                           // game plane: +y is -z
+  spawnShot(me.x, me.y, ux, uy, it.range, "mine");
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "fire", x: ux, y: uy, r: it.range }));
+  spreadCur = Math.min(Math.max(it.spread, aimCone), Math.max(spreadCur, aimCone) + 1);   // each shot opens the spread 1 degree
+}
 function updateAimCone() {
   const it = SLOTS[slot], on = aiming && haveMe && !!myAim;
   optRingFor(it.optimal);
@@ -326,6 +360,8 @@ addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
 let orbiting = false, aiming = false, aimLock = null, orbitLock = null;   // orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
+canvas.addEventListener("mousedown", (e) => { if (e.button === 0 && aiming) { firing = true; firePending = true; e.preventDefault(); } });
+addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw };
     lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
@@ -397,7 +433,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.bulletSpeed) BULLET_SPEED = m.cfg.bulletSpeed; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -427,6 +463,7 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
+    else if (m.t === "shot") { if (m.i !== myId) { const q = players.get(m.i); spawnShot(m.x, m.y, m.ux, m.uy, m.r, mySide && m.s === mySide ? "friend" : "enemy"); } }
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
     else if (m.t === "update") goUpdating(["web"]);
@@ -627,6 +664,8 @@ renderer.setAnimationLoop(() => {
   }
   updateAimCone();
   updateSpread(dt, !!(d.x || d.y), sprintOn);
+  tryFire(nowP);
+  updateShots(dt);
   updateStop();
   drawMinimap(nowP);
 
@@ -659,6 +698,8 @@ function showSlot() {
   $i("sl-range").value = it.range; $i("sl-range-v").textContent = it.range + " m";
   $i("sl-opt").value = it.optimal; $i("sl-opt-v").textContent = it.optimal + " m";
   $i("sl-fall").value = it.falloff; $i("sl-fall-v").textContent = it.falloff + "\u00b0";
+  $i("sl-rate").value = it.rate; $i("sl-rate-v").textContent = it.rate + "/s";
+  $i("sl-auto").checked = it.auto;
   $i("sl-speed").value = it.speed; $i("sl-speed-v").textContent = it.speed + "\u00b0/s";
   $i("sl-move").value = it.move; $i("sl-move-v").textContent = it.move + "\u00b0/s";
   $i("sl-spread").value = it.spread; $i("sl-spread-v").textContent = it.spread + "\u00b0";
@@ -668,6 +709,8 @@ if ($i("sl-range")) {
   $i("sl-range").addEventListener("input", () => { SLOTS[slot].range = Math.min(3000, Math.max(10, +$i("sl-range").value || 10)); saveSlots(); showSlot(); });
   $i("sl-opt").addEventListener("input", () => { SLOTS[slot].optimal = Math.min(3000, Math.max(10, +$i("sl-opt").value || 10)); saveSlots(); showSlot(); });
   $i("sl-fall").addEventListener("input", () => { SLOTS[slot].falloff = Math.min(10, Math.max(0, +$i("sl-fall").value || 0)); saveSlots(); showSlot(); });
+  $i("sl-rate").addEventListener("input", () => { SLOTS[slot].rate = Math.min(30, Math.max(0.2, +$i("sl-rate").value || 1)); saveSlots(); showSlot(); });
+  $i("sl-auto").addEventListener("change", () => { SLOTS[slot].auto = $i("sl-auto").checked; saveSlots(); showSlot(); });
   $i("sl-speed").addEventListener("input", () => { SLOTS[slot].speed = Math.min(180, Math.max(0, +$i("sl-speed").value || 0)); saveSlots(); showSlot(); });
   $i("sl-move").addEventListener("input", () => { SLOTS[slot].move = Math.min(180, Math.max(0, +$i("sl-move").value || 0)); saveSlots(); showSlot(); });
   $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
@@ -718,4 +761,4 @@ document.querySelectorAll("#hotbar .slot").forEach((el, k) => el.addEventListene
 selectSlot(0);
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get cone() { return aimCone; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; }, get spread() { return spreadCur; }, get slot() { return slot; }, get cone() { return aimCone; }, get shots() { return shots.length; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading })); } };

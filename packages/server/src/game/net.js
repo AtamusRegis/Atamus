@@ -39,13 +39,14 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-13) every time a player enters they choose a side first: they join the world only
     // once they've sent {t:"side", s:"red"|"blue"}
     let joined = false;
+    let shotBudget = 30, shotAt = Date.now();   // (owner, 2026-10-13) shots: at most ~30 a second whatever the client claims
     let cmds = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username },
-      cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL, bulletSpeed: 1500, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       roster: world.roster(),
     }));
 
@@ -64,6 +65,15 @@ export function attachGameServer(httpServer) {
         }).catch((e) => { joined = false; console.error("join", e); });
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h);
+      else if (m.t === "fire") {               // a projectile: from where the server has the ship, in the sent direction
+        const me = world.players.get(pid); if (!me) return;
+        const now = Date.now(); shotBudget = Math.min(30, shotBudget + (now - shotAt) * 0.03); shotAt = now;
+        if (shotBudget < 1) return; shotBudget -= 1;
+        let ux = +m.x, uy = +m.y; const l = Math.hypot(ux, uy);
+        if (!Number.isFinite(l) || l < 1e-6) return; ux /= l; uy /= l;
+        const r = Math.min(3000, Math.max(10, Number.isFinite(+m.r) ? +m.r : 0));
+        broadcast({ t: "shot", i: pid, x: Math.round(me.x * 10) / 10, y: Math.round(me.y * 10) / 10, ux: Math.round(ux * 1e4) / 1e4, uy: Math.round(uy * 1e4) / 1e4, r, s: me.team });
+      }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
 
