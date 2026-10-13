@@ -330,7 +330,7 @@ The law of the solar system: NPC ships that guard, patrol and hunt down anyone c
 - **Passwords are never shown** (owner): no Show / Hide on any password field.
 - **Remember Password** (owner): a box under the password on Log in. Ticked, a successful login gets a **token for that account on that browser** (`remember_tokens`, kept hashed; the browser keeps it in localStorage `atamus.remember`, never the password); next time the page fills the username and a dotted password, and Log in sends the token (30 days from last use; it goes through every check a password does). **Unticking forgets it** (here and on the server). A new password, a recovery, an approved reset request or a lock ends every token for the account.
 - **Another account in another tab** (owner): logging in to a second account in the same browser makes the website's requests the second account's; the game (and play.html) checks every 20 s and on returning to the tab, and sends the first account's game back to Log in (the admin panel used to sit on Loading for it).
-- **Returning players always see Log in** (owner): the front page sends signed-in visitors to Log in (not the welcome page), and play.html and the game send a tab that hasn't logged in to Log in (live site only; the PTR is always signed in). Logging out clears it.
+- **The front page always shows** (owner, 2026-10-12): signed-in visitors see the front page like anyone else (the redirect to Log in was removed). play.html and the game still send a tab that hasn't logged in to Log in (live site only; the PTR is always signed in). Logging out clears it.
 
 ## Trade watch (owner, 2026-10-11, `watch.js`)
 
@@ -349,6 +349,7 @@ The law of the solar system: NPC ships that guard, patrol and hunt down anyone c
 
 ## Rejected / removed (don't reintroduce)
 
+- **The front page redirecting signed-in visitors to Log in** (owner, 2026-10-12: "show the front page again"; `front.js` removed).
 - **Orbit lines** for planets and moons (owner, 2026-10-11: "we don't need orbit paths").
 
 - **Show / Hide on password fields** (owner, 2026-10-11: "no hidden/visible password typing"): removed from the staff password form and the reset request's temporary password. **Blacking out or blurring the login or admin fields while streaming** isn't possible to detect from a page, so nothing does it.

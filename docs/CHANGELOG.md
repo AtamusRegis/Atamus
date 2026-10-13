@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-12
+
+- **The front page always shows (owner):** signed-in visitors no longer get redirected from atamus.io to the login page; the front page shows for everyone (`front.js` removed). Not-logged-in tabs on play.html and in the game still go to Log in.
+
 ## 2026-10-11
 
 - **The market, manuals, 10M (owner, for now):** every NPC station sells everything (modules, weapons, ammo, drones, fuel, license manuals, ore) into your hangar there; module licenses need their manual read first (Read from its menu; account-wide); players start with 10M (everyone below was raised to it once). Fixed: wrecks' Open never showed their contents. PTR: `wreck`.
