@@ -334,22 +334,33 @@ renderer.setAnimationLoop(() => {
         // the ground under the pixel, which moved the zoom). Pressing toward a screen edge ramps the
         // zoom so a full press shows the circle plus 20 m of lead on that axis; the focus slides out
         // along the aim by the same screen fraction, up to halfway to the circle.
-        const R = cam.leash, O = 50;                                     // overflow: world shown past the circle (owner: 50 m)
+        // (owner, 2026-10-13: "start extending the camera leash" instead of super zoom) the focus
+        // slides ASYMMETRICALLY along the aim: each pressed screen axis must show the circle plus
+        // overflow ahead of the focus AND the ship plus a margin behind it, and the zoom and the
+        // focus fraction are solved together from the view's exact ground extents - so aiming into
+        // a cramped direction (screen-down, where the bottom ray plunges toward the camera) pushes
+        // the ship toward the roomy opposite edge instead of zooming the world away.
+        const R = cam.leash, O = 50, S = 80, m = 0.85;                   // overflow past the circle; margin behind the ship
         const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
-        fx = me.x + a.ux * r * R / 2; fy = me.y + -a.uz * r * R / 2;     // the focus: toward the aim, screen-driven
-        // the view's ground extents are ASYMMETRIC vertically: the top-of-screen ray grazes far ahead,
-        // the bottom ray plunges toward the camera's own ground point, so aiming toward the camera
-        // (screen-down) needs much more zoom to reach the circle than aiming away. Exact per unit of D:
         const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
         const cot = (t) => Math.cos(t) / Math.max(1e-4, Math.sin(t));
         const eTop = Math.max(0.05, -Math.cos(ph) + Math.sin(ph) * cot(Math.max(0.05, ph - f2)));
         const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
         const ex = Math.tan(f2) * camera.aspect;
-        const ev = a.suy >= 0 ? eTop : eBot;                             // which vertical half the aim presses into
-        const need = (f) => f * R / 2 + O;                               // from the focus to the circle + overflow at full press
-        wantDist = Math.min(6000, Math.max(camDist,                      // the aim's needed zoom is never capped by the
-          need(Math.min(1, Math.abs(a.sux))) / (0.85 * ex),               // wheel's max: reaching the circle always wins
-          need(Math.min(1, Math.abs(a.suy))) / (0.85 * ev)));
+        const axes = [];
+        const fxp = Math.min(1, Math.abs(a.sux)), fyp = Math.min(1, Math.abs(a.suy));
+        if (fxp > 0.05) axes.push({ f: fxp, eF: ex, eB: ex });
+        if (fyp > 0.05) axes.push({ f: fyp, eF: a.suy >= 0 ? eTop : eBot, eB: a.suy >= 0 ? eBot : eTop });
+        let D = camDist, lo = 0, hi = 1;
+        for (const ax of axes) D = Math.max(D, (ax.f * (R + O) + S) / (m * (ax.eF + ax.eB)));
+        D = Math.min(6000, D);
+        for (const ax of axes) {
+          lo = Math.max(lo, (R + O - (m * ax.eF * D) / ax.f) / R);       // enough world ahead of the focus
+          hi = Math.min(hi, (m * ax.eB * D - S) / (R * ax.f));           // the ship stays behind it with margin
+        }
+        const lam = Math.min(1, Math.max(0, Math.min(hi, Math.max(lo, 0.5))));
+        fx = me.x + a.ux * lam * r * R; fy = me.y + -a.uz * lam * r * R; // the focus: the extending leash
+        wantDist = D;
       }
     }
   }
