@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Phone controls (owner):** touch devices get a movement joystick at the bottom left; dragging elsewhere turns the camera (only fingers on the world count, so the joystick finger never turns a drag into a pinch). The minimap moves to the top left; the hotbar and panel are hidden. Aiming stays PC-only (owner: phones are for testing a second account).
 - **Sides and a minimap (owner):** entering the game asks Red or Blue every time; players join the world once they've picked (server-checked, once per session). A hexagon minimap at the bottom left shows friendlies blue and enemies red, with your own dot outlined and a camera-facing tick. PTR: `?as=Name` is back for local multi-player tests.
 - **Aim line restyle, Assists toggle (owner):** the aim line is dashed white toward the pointer and ends in a white circle; the blue reticle ring is hidden. An Assists checkbox shows or hides the distance circle and the spread lines (the aim line always shows).
 - **Movement spread (owner):** each item has a movement spread speed (a Move slider per slot): moving opens the spread at that rate instead of closing it, walking only up to the yellow point (a third of full), sprinting twice as fast and up to full spread.

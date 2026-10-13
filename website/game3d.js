@@ -266,20 +266,43 @@ addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY;
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
 let touch1 = null, pinch = 0;
-canvas.addEventListener("touchstart", (e) => { if (e.touches.length === 1) touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; if (e.touches.length === 2) pinch = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }, { passive: true });
+canvas.addEventListener("touchstart", (e) => { const t = e.targetTouches; if (t.length === 1) touch1 = { x: t[0].clientX, y: t[0].clientY }; if (t.length === 2) pinch = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }, { passive: true });
 canvas.addEventListener("touchmove", (e) => {
-  if (e.touches.length === 1 && touch1) { camYaw += (e.touches[0].clientX - touch1.x) * 0.006 * cam.rot; touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }
-  if (e.touches.length === 2) { const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); if (pinch) camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * pinch / d)); pinch = d; }
+  const t = e.targetTouches;                   // only fingers on the world: the joystick's finger is its own
+  if (t.length === 1 && touch1) { camYaw += (t[0].clientX - touch1.x) * 0.006 * cam.rot; touch1 = { x: t[0].clientX, y: t[0].clientY }; }
+  if (t.length === 2) { const d = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); if (pinch) camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * pinch / d)); pinch = d; touch1 = null; }
   e.preventDefault();
 }, { passive: false });
-canvas.addEventListener("touchend", () => { touch1 = null; pinch = 0; }, { passive: true });
+canvas.addEventListener("touchend", (e) => { const t = e.targetTouches; touch1 = t.length === 1 ? { x: t[0].clientX, y: t[0].clientY } : null; pinch = 0; }, { passive: true });
+
+// (owner, 2026-10-13) touch devices get a joystick for WASD (drag elsewhere turns the camera). Aiming stays
+// PC-only: phones are just for testing a second account.
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+const joy = { x: 0, y: 0, id: null };
+if (TOUCH) {
+  document.documentElement.classList.add("touch");
+  const base = document.getElementById("joy"), knob = document.getElementById("joy-knob");
+  const R = 50;
+  const move = (e) => {
+    const r = base.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    let dx = e.clientX - cx, dy = e.clientY - cy; const l = Math.hypot(dx, dy);
+    if (l > R) { dx *= R / l; dy *= R / l; }
+    knob.style.transform = "translate(" + dx + "px," + dy + "px)";
+    joy.x = dx / R; joy.y = -dy / R;
+  };
+  base.addEventListener("pointerdown", (e) => { joy.id = e.pointerId; base.setPointerCapture(e.pointerId); move(e); e.preventDefault(); });
+  base.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
+  const end = (e) => { if (e.pointerId !== joy.id) return; joy.id = null; joy.x = joy.y = 0; knob.style.transform = ""; };
+  base.addEventListener("pointerup", end); base.addEventListener("pointercancel", end);
+}
 
 function inputDir() {                          // forward = where the camera faces, on the ground
   let f = 0, r = 0;
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
+  if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: analog, a small dead zone
   if (!f && !r) return { x: 0, y: 0, b: sprint ? 1 : 0 };
-  const n = Math.hypot(f, r); f /= n; r /= n;
+  const n = Math.max(1, Math.hypot(f, r)); f /= n; r /= n;
   const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
   return { x: f * sin + r * cos, y: f * cos - r * sin, b: sprint ? 1 : 0 };   // game plane: +y north at yaw 0
 }
