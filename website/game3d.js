@@ -155,12 +155,13 @@ addEventListener("keydown", (e) => { if (e.key === "Shift") sprint = true; if (e
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game
-let orbiting = false, aiming = false, aimLock = null, orbitLock = null;   // orbitLock: MMB holds the camera frame   // (owner) orbiting pointer-locks: the cursor freezes (hidden) where MMB started and the aim stays there
+let orbiting = false, aiming = false, aimLock = null, orbitLock = null, aimWorldLock = null;   // orbitLock: MMB holds the camera frame; aimWorldLock: and pins the aim circle to its ground spot
 const mouse = { x: 0, y: 0 };
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimLock = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw };
+    aimWorldLock = myAim ? { gx: myAim.x, gy: -myAim.z } : null;
     lockPointer(); e.preventDefault(); } if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimLock = null; orbitLock = null; aimWorldLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false; aimWorldLock = null; } });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -283,7 +284,7 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt, orbiting ? null : myAim, !!(d.x || d.y)); continue; }   // (owner) orbiting never spins the ship: the sweeping aim circle stops steering its nose until MMB lifts
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt, myAim, !!(d.x || d.y)); continue; }   // (owner) the ship always faces the circle while it's active
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
@@ -295,11 +296,14 @@ renderer.setAnimationLoop(() => {
   let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
   myAim = null;
   if (aiming && haveMe) {
-    const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // orbiting: the aim pointer stays where MMB started
-    raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-    if (raycaster.ray.intersectPlane(groundPlane, aimHit)) {
-      hit = true;
-      const gx = aimHit.x, gy = -aimHit.z;
+    let gx, gy;
+    if (orbiting && aimWorldLock) { gx = aimWorldLock.gx; gy = aimWorldLock.gy; hit = true; }   // (owner) orbiting: the circle holds its ground spot, the ship keeps facing it
+    else {
+      const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;
+      raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
+      if (raycaster.ray.intersectPlane(groundPlane, aimHit)) { hit = true; gx = aimHit.x; gy = -aimHit.z; if (orbiting) aimWorldLock = { gx, gy }; }
+    }
+    if (hit) {
       aimRing.position.set(gx, 0.4, -gy);
       const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
       myAim = { x: gx, z: -gy };
