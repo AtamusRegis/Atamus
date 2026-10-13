@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Fix: reversing was sluggish (owner).** Pushing the other way while moving used only the weak off-nose thrust to cancel the old motion, so it was much slower than stopping first. Now the part of a direction change that slows the current motion brakes at the braking rate; reversing is as quick as stop-and-go.
 - **Faster turning (owner):** ships turn twice as fast, 8 rad/s (a U-turn takes about 0.4 s).
 - **Forward is where you aim (owner):** not aiming, every direction counts as forward (full speed, sprint works); while aiming, forward is toward the reticle, so strafing and backing off are 60% and can't sprint. The client now sends the reticle's direction with movement while aiming.
 - **Directional speed; forward-only sprint (owner):** relative to the ship's nose, forward is full speed and sideways or backward 60% (blended between); sprint (30%) works only when pushing within 45° of the nose. Mostly felt while aiming, when the nose stays on the reticle.

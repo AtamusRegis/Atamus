@@ -30,6 +30,25 @@ export const CAP_MAX = 100, CAP_DRAIN = 20, CAP_WALK = 4, CAP_IDLE = 12, CAP_RES
 // distance of their ship. It reaches well past the camera, so nothing pops in on screen.
 export const LOAD_R = 5000;
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
+// (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
+// toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
+// up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
+export function steer(vx, vy, tx, ty, a, brake, dt) {
+  let ex = tx - vx, ey = ty - vy;
+  const v = Math.hypot(vx, vy);
+  if (v > 1e-6) {
+    const ux = vx / v, uy = vy / v, par = ex * ux + ey * uy;
+    if (par < 0) {                             // slowing down along the current motion
+      const bx = ux * par, by = uy * par, px = ex - bx, py = ey - by;
+      const bl = -par, bs = Math.max(a, brake) * dt, pl = Math.hypot(px, py), ps = a * dt;
+      const kb = bl > bs ? bs / bl : 1, kp = pl > ps ? ps / pl : 1;
+      return [vx + bx * kb + px * kp, vy + by * kb + py * kp];
+    }
+  }
+  const el = Math.hypot(ex, ey), s = a * dt;
+  if (el > s) { ex *= s / el; ey *= s / el; }
+  return [vx + ex, vy + ey];
+}
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
@@ -109,9 +128,7 @@ export class World3D {
       if (p.dx || p.dy) p.brakeA = 0;
       else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }
       if (moving) a *= accelShare(dh);
-      let ex = tx - vx0, ey = ty - vy0; const el = Math.hypot(ex, ey), stepV = a * dt;
-      if (el > stepV) { ex *= stepV / el; ey *= stepV / el; }
-      p.vx = vx0 + ex; p.vy = vy0 + ey;
+      [p.vx, p.vy] = moving ? steer(vx0, vy0, tx, ty, a, BRAKE, dt) : steer(vx0, vy0, 0, 0, a, a, dt);
       if (Math.hypot(p.vx, p.vy) < 0.01 && !p.dx && !p.dy) { p.vx = p.vy = 0; p.brakeA = 0; continue; }
       const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
       if (inside(nx, ny)) { p.x = nx; p.y = ny; }

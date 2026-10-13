@@ -23,6 +23,25 @@ let SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;   // (owner) forward 100%, sideways
 const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
 let STOP_D = 100, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
 const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
+// (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
+// toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
+// up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
+function steer(vx, vy, tx, ty, a, brake, dt) {
+  let ex = tx - vx, ey = ty - vy;
+  const v = Math.hypot(vx, vy);
+  if (v > 1e-6) {
+    const ux = vx / v, uy = vy / v, par = ex * ux + ey * uy;
+    if (par < 0) {                             // slowing down along the current motion
+      const bx = ux * par, by = uy * par, px = ex - bx, py = ey - by;
+      const bl = -par, bs = Math.max(a, brake) * dt, pl = Math.hypot(px, py), ps = a * dt;
+      const kb = bl > bs ? bs / bl : 1, kp = pl > ps ? ps / pl : 1;
+      return [vx + bx * kb + px * kp, vy + by * kb + py * kp];
+    }
+  }
+  const el = Math.hypot(ex, ey), s = a * dt;
+  if (el > s) { ex *= s / el; ey *= s / el; }
+  return [vx + ex, vy + ey];
+}
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 // (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
@@ -394,9 +413,7 @@ renderer.setAnimationLoop(() => {
     let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
     if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
     if (movingIn) a *= accelShare(dh);         // a push off the nose gets only part of the acceleration
-    let ex = tx - vel.x, ey = ty - vel.y; const el = Math.hypot(ex, ey), sv = a * dt;
-    if (el > sv) { ex *= sv / el; ey *= sv / el; }
-    vel.x += ex; vel.y += ey;
+    [vel.x, vel.y] = movingIn ? steer(vel.x, vel.y, tx, ty, a, BRAKE, dt) : steer(vel.x, vel.y, 0, 0, a, a, dt);   // as on the server
     if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; brakeA = 0; }
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
