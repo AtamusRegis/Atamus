@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, HP_MAX } from "./world3d.js";
+import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 
 export function attachGameServer(httpServer) {
@@ -39,20 +39,19 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-13) every time a player enters they choose a side first: they join the world only
     // once they've sent {t:"side", s:"red"|"blue"}
     let joined = false;
-    let shotBudget = 30, shotAt = Date.now();   // (owner, 2026-10-13) shots: at most ~30 a second whatever the client claims
     let cmds = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username },
-      cfg: { hpMax: HP_MAX, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL, bulletSpeed: 1500, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      cfg: { loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       roster: world.roster(),
     }));
 
     ws.on("message", (data) => {
       if (socks.get(pid) !== ws) return;       // a replaced session: ignore everything it sends
-      if (++cmds > 80) return;                 // moves, beams, shots and chat together
+      if (++cmds > 80) return;                 // moves and chat together
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
       if (m.t === "side") {
@@ -65,14 +64,6 @@ export function attachGameServer(httpServer) {
         }).catch((e) => { joined = false; console.error("join", e); });
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h);
-      else if (m.t === "fire") {               // a projectile: from where the server has the ship, in the sent direction
-        const me = world.players.get(pid); if (!me) return;
-        const now = Date.now(); shotBudget = Math.min(30, shotBudget + (now - shotAt) * 0.03); shotAt = now;
-        if (shotBudget < 1) return; shotBudget -= 1;
-        const q = world.fire(pid, m); if (!q) return;
-        if (q.kind === "b") broadcast({ t: "shot", i: pid, c: q.c, x: Math.round(q.x * 10) / 10, y: Math.round(q.y * 10) / 10, ux: Math.round(q.ux * 1e4) / 1e4, uy: Math.round(q.uy * 1e4) / 1e4, spd: q.spd, life: q.life, s: me.team });
-      }
-      else if (m.t === "beam") world.beam(pid, m);
       else if (m.t === "chat") {               // (owner, 2026-10-13) simple chat: global to everyone, faction to your side
         const me = world.players.get(pid); if (!me || typeof m.text !== "string") return;
         const text = m.text.slice(0, 240); if (!text.trim()) return;
@@ -93,16 +84,17 @@ export function attachGameServer(httpServer) {
     ws.on("error", (e) => console.error("ws", e.message));
   });
 
-  setInterval(() => {                                                           // 20 Hz simulation, then its combat events
-    world.step();
-    for (const ev of world.events.splice(0)) {
-      if (ev.t === "respawn") { const ws = socks.get(ev.to); if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "respawn", x: ev.x, y: ev.y, hp: ev.hp })); }
-      else broadcast(ev);
+  setInterval(() => world.step(), 50);                                          // 20 Hz simulation
+  // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)
+  setInterval(() => {
+    const ts = Date.now();
+    for (const [pid, ws] of socks) {
+      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      ws.send(JSON.stringify({ t: "snap", ts, p: world.snapshotFor(p) }));
     }
-  }, 50);
-  setInterval(() => broadcast({ t: "snap", ts: Date.now(), p: world.snapshot(), m: world.missileSnap() }), 66);   // 15 Hz snapshots (players, beams, missiles)
+  }, 66);
   setInterval(() => {                                                           // each player's own capacitor, 4 Hz, to them only
-    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (p && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "cap", c: Math.round((p.cap ?? CAP_MAX) * 10) / 10, o: p.capOut ? 1 : 0, hp: Math.round(p.hp ?? HP_MAX) })); }
+    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (p && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "cap", c: Math.round((p.cap ?? CAP_MAX) * 10) / 10, o: p.capOut ? 1 : 0 })); }
   }, 250);
 
   console.log("3D world attached at /ws (hex " + Math.round(HEX_FLAT) + " m flat to flat)");

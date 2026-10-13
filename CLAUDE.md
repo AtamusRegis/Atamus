@@ -42,13 +42,12 @@ packages/server/src/
                   disconnected and nothing in the 3D client uses them yet. Don't build on them without asking.
   game/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), side pick, move /
-                  fire / beam / chat in; 20 Hz sim + combat events, 15 Hz snapshots (players, beams, missiles)
+                  chat in; 20 Hz sim, 15 Hz per-player snapshots (only ships inside that player's load circle)
     world3d.js    the world: 126 km hexagon, momentum ships (accel / brake / turn-scaled thrust), capacitor,
-                  combat (bullets, homing missiles, beams, hits with falloff, 1,000 HP, respawn), positions saved
+                  LOAD_R (5,000 m load circle, snapshotFor), positions saved. Weapons/combat were removed
+                  (owner, 2026-10-13); the last version is commit 956cb73
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
-  arsenal.js      weapon / ammo definitions, the Weapon & Ammo Maker panel (JSON import / export), the TAB
-                  inventory, hotbar loadout, magazines and reloads (kept per browser)
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
                   own-sphere prediction + snapshot interpolation, countdown and reconnect handling
@@ -71,7 +70,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 
 1. Make the change.
 2. Run `scripts/check.sh`.
-3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`, and the `arsenal.js?v=` in game3d.js's import.
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`,.
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
 5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;

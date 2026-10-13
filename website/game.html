@@ -14,27 +14,6 @@
     .overlay { position: fixed; left: 50%; transform: translateX(-50%); color: #cfe0f4; font: 14px/1.4 system-ui, sans-serif; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; padding: 6px 12px; user-select: none; }
     #status { top: 12px; }
     #countdown { top: 12px; color: #ffd27a; border-color: #6a5a2a; }
-    #cam-panel { position: fixed; top: 12px; right: 12px; left: auto; transform: none; display: grid; gap: 8px; min-width: 220px; }
-    .cam-row { display: grid; grid-template-columns: 58px 1fr 64px; gap: 8px; align-items: center; font-size: 12px; color: #9fb3cf; }
-    .cam-row .v { text-align: right; color: #cfe0f4; font-variant-numeric: tabular-nums; }
-    .cam-row input[type=range] { width: 100%; margin: 0; accent-color: #4f8fe8; }
-    .dual { position: relative; height: 18px; }
-    .dual::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: #2a3a52; border-radius: 1px; }
-    .dual input[type=range] { position: absolute; left: 0; top: 0; width: 100%; height: 18px; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; }
-    .dual input[type=range]::-webkit-slider-runnable-track { background: transparent; }
-    .dual input[type=range]::-moz-range-track { background: transparent; }
-    .dual input[type=range]::-webkit-slider-thumb { pointer-events: auto; -webkit-appearance: none; width: 12px; height: 12px; margin-top: 3px; border-radius: 50%; background: #4f8fe8; }
-    .dual input[type=range]::-moz-range-thumb { pointer-events: auto; width: 12px; height: 12px; border: 0; border-radius: 50%; background: #4f8fe8; }
-    .slot-title { font-size: 12px; color: #e8902a; margin-top: 4px; }
-    #compass { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; margin-top: 2px; }
-    .c-cell { display: grid; gap: 1px; justify-items: center; font-size: 11px; color: #9fb3cf; }
-    .c-cell input[type=range] { width: 76px; margin: 0; accent-color: #4f8fe8; }
-    .c-cell .v { color: #cfe0f4; font-variant-numeric: tabular-nums; }
-    .c-mid { display: grid; place-items: center; color: #4f8fe8; font-size: 16px; }
-    #hotbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 8px; user-select: none; }
-    #hotbar .slot { width: 64px; height: 64px; display: grid; place-items: center; align-content: center; gap: 2px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: pointer; touch-action: none; }
-    #hotbar .slot b { font-size: 15px; color: #cfe0f4; }
-    #hotbar .slot.on { border-color: #e8902a; box-shadow: 0 0 0 1px #e8902a inset; }
     #minimap { position: fixed; left: 12px; bottom: 12px; width: 200px; height: 174px; pointer-events: none; }
     #side-pick { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 7, 12, .6); z-index: 10; }
     #side-pick .box { display: grid; gap: 14px; justify-items: center; padding: 20px 26px; background: rgba(10, 14, 22, .95); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 16px system-ui, sans-serif; }
@@ -46,46 +25,11 @@
     #joy-knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(79, 143, 232, .55); pointer-events: none; }
     html.touch #joy { display: block; }
     html.touch #minimap { top: 12px; bottom: auto; width: 130px; height: 113px; }
-    html.touch #hotbar, html.touch #cam-panel { display: none; }
-    #cap { position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
+    #cap { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
     #cap-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2f9bd6, #7fd8ff); transition: width .08s linear; }
     #cap-fill.out { background: #6a4a2a; }
     #cap-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 10px system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 0 2px #000; }
     html.touch #cap { bottom: 20px; left: auto; right: 20px; transform: none; }
-    #cam-panel { max-height: calc(100vh - 24px); overflow-y: auto; width: 290px; }
-    #arsenal-ed { display: grid; gap: 6px; font-size: 12px; }
-    #arsenal-ed button { background: #16202f; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 4px; padding: 3px 7px; font: 12px system-ui, sans-serif; cursor: pointer; }
-    #arsenal-ed button.on { border-color: #e8902a; color: #fff; }
-    .ed-tabs, .ed-btns, .ed-list { display: flex; flex-wrap: wrap; gap: 4px; }
-    .ed-fields { display: grid; gap: 3px; }
-    .ed-row { display: grid; grid-template-columns: 82px 1fr auto; gap: 6px; align-items: center; color: #9fb3cf; }
-    .ed-row i { font-style: normal; color: #7f93ad; font-size: 11px; }
-    .ed-row input[type=text], .ed-row input[type=number], .ed-row select { width: 100%; box-sizing: border-box; background: #0c121c; color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 3px; padding: 2px 4px; font: 12px system-ui, sans-serif; }
-    .ed-ammo { display: flex; flex-wrap: wrap; gap: 2px 8px; color: #cfe0f4; }
-    .ed-io textarea { width: 100%; box-sizing: border-box; height: 56px; background: #0c121c; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 3px; font: 11px ui-monospace, monospace; resize: vertical; }
-    .ed-msg { color: #e8902a; min-height: 14px; }
-    #hp { position: fixed; left: 50%; bottom: 110px; transform: translateX(-50%); width: 208px; height: 12px; background: rgba(10, 14, 22, .85); border: 1px solid #52302a; border-radius: 4px; overflow: hidden; pointer-events: none; }
-    #hp-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #b8322a, #ff6a50); }
-    #hp-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 9px system-ui, sans-serif; color: #fff; text-shadow: 0 0 2px #000; }
-    #hotbar .slot, #inv .slot { position: relative; overflow: hidden; }
-    #hotbar .slot .sw, #inv .slot .sw { font-size: 10px; color: #cfe0f4; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #hotbar .slot .sa, #inv .slot .sa { font-size: 9px; color: #9fb3cf; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .slot .rl { position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: #e8902a; }
-    .slot.no { border-color: #e04848 !important; }
-    #inv { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(5, 7, 12, .55); z-index: 8; }
-    #inv .inv-box { display: grid; gap: 8px; padding: 16px 18px; background: rgba(10, 14, 22, .96); border: 1px solid #2a3a52; border-radius: 8px; min-width: 420px; max-width: 90vw; }
-    .inv-label { font: 600 12px system-ui, sans-serif; color: #9fb3cf; }
-    .inv-row { display: flex; flex-wrap: wrap; gap: 8px; min-height: 64px; padding: 4px; border: 1px dashed #22314a; border-radius: 6px; }
-    #inv .slot { width: 64px; height: 64px; display: grid; place-items: center; align-content: center; gap: 1px; background: #0f1724; border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: grab; }
-    #inv .slot b { font-size: 13px; color: #cfe0f4; }
-    #inv .slot.on { border-color: #e8902a; }
-    .card { width: 96px; height: 56px; display: grid; place-items: center; align-content: center; gap: 2px; background: #121c2b; border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 11px system-ui, sans-serif; cursor: grab; user-select: none; touch-action: none; }
-    .card b { color: #e8f0fb; font-size: 12px; }
-    .drag-ghost { position: fixed; z-index: 20; pointer-events: none; padding: 4px 8px; background: #1f3f78; border: 1px solid #4f8fe8; border-radius: 4px; color: #fff; font: 12px system-ui, sans-serif; }
-    #dmg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
-    .dmg { position: absolute; left: 0; top: 0; font: 700 15px system-ui, sans-serif; color: #fff2a8; text-shadow: 0 0 3px #000, 0 0 1px #000; white-space: nowrap; }
-    .dmg.taken { color: #ff6a50; }
-    html.touch #hp { bottom: 40px; left: auto; right: 20px; transform: none; }
     #chat { position: fixed; left: 12px; bottom: 196px; width: 320px; display: grid; gap: 4px; font: 12px system-ui, sans-serif; }
     #chat-log { max-height: 160px; overflow-y: auto; display: grid; gap: 1px; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }
     .chat-tag { color: #7f93ad; } .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; }
@@ -102,23 +46,12 @@
   <canvas id="view"></canvas>
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
-  <div id="cam-panel" class="overlay">
-    <div class="cam-row"><span>Assists</span><input id="sl-assists" type="checkbox"><span class="v"></span></div>
-    <div class="cam-row"><span>Reticle</span><input id="sl-leash" type="range" min="100" max="3000" step="25"><span class="v" id="sl-leash-v"></span></div>
-    <div class="cam-row"><span>Overflow</span><input id="sl-over" type="range" min="0" max="200" step="5"><span class="v" id="sl-over-v"></span></div>
-    <div class="slot-title">Weapon &amp; Ammo Maker</div>
-    <div id="arsenal-ed"></div>
-  </div>
   <canvas id="minimap"></canvas>
   <div id="chat"><div id="chat-log"></div><div id="chat-tabs"><button data-ch="global" class="on">Global</button><button data-ch="side">Faction</button></div><input id="chat-in" maxlength="240" autocomplete="off"></div>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
-  <div id="hp"><div id="hp-fill"></div><span id="hp-num">1000</span></div>
-  <div id="hotbar"></div>
-  <div id="inv" hidden></div>
-  <div id="dmg"></div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791905438"></script>
+  <script type="module" src="game3d.js?v=1791931398"></script>
 </body>
 </html>
