@@ -98,7 +98,9 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   const src = g.scene;
   const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
   src.scale.setScalar(100 / Math.max(size.x, size.y, size.z));
-  const b2 = new THREE.Box3().setFromObject(src);
+  src.rotation.y = Math.PI;                    // (owner) the model's nose is -Z: flip it to our +Z forward
+  const b2 = new THREE.Box3().setFromObject(src), c2 = b2.getCenter(new THREE.Vector3());
+  src.position.x -= c2.x; src.position.z -= c2.z;   // pivot at the hull's middle, so turns don't swing it
   src.position.y -= b2.min.y;                  // the hull rests on the grid
   const wrap = new THREE.Group(); wrap.add(src);
   shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
@@ -117,17 +119,21 @@ function addPlayer(id, name, x = 0, y = 0) {
   players.set(id, p); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
-function placeShip(p, x, y, dt) {
+const TURN = 12;                               // rad/s (owner): almost instant, but a real rotation
+function placeShip(p, x, y, dt, face) {
   const prev = p.holder.position, nx = toWorld(x, y, 0);
   const dx = nx.x - prev.x, dz = nx.z - prev.z;
   prev.copy(nx);
-  if (Math.hypot(dx, dz) > 0.02) {             // turn toward the way it travels (+Z forward)
-    const target = Math.atan2(dx, dz);
+  let target = null;
+  if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // (owner) right-click: face the aim point
+  else if (Math.hypot(dx, dz) > 0.02) target = Math.atan2(dx, dz);    // otherwise face the way it travels
+  if (target !== null) {
     const diff = ((target - p.heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-    p.heading += diff * Math.min(1, dt * 6);
+    p.heading += Math.max(-TURN * dt, Math.min(TURN * dt, diff));
     p.holder.rotation.y = p.heading;
   }
 }
+let myAim = null;                              // where my aim circle sits, in world coords, while right-clicking
 
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
 const keys = new Set();
@@ -273,7 +279,7 @@ renderer.setAnimationLoop(() => {
 
   const rt = performance.now() - 120;          // others: drawn 120 ms in the past, between snapshots
   for (const p of players.values()) {
-    if (p.id === myId) { placeShip(p, me.x, me.y, dt); continue; }
+    if (p.id === myId) { placeShip(p, me.x, me.y, dt, myAim); continue; }
     const span = p.to.ts - p.from.ts;
     let x = p.to.x, y = p.to.y;
     if (span > 0 && rt < p.to.ts) { const t = Math.max(0, (rt - p.from.ts) / span); x = p.from.x + (p.to.x - p.from.x) * t; y = p.from.y + (p.to.y - p.from.y) * t; }
@@ -283,6 +289,7 @@ renderer.setAnimationLoop(() => {
   // right-click aiming (owner): a circle where the mouse points on the ground, a line from the sphere to it; the
   // camera's focus slides toward a point between the player and the circle, zooming out to keep the player in shot
   let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, hit = false;
+  myAim = null;
   if (aiming && haveMe) {
     const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // orbiting: the aim pointer stays where MMB started
     raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
@@ -291,6 +298,7 @@ renderer.setAnimationLoop(() => {
       const gx = aimHit.x, gy = -aimHit.z;
       aimRing.position.set(gx, 0.4, -gy);
       const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
+      myAim = { x: gx, z: -gy };
       aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(gx, 0.4, -gy)]);
       if (!orbitLock) {                                                // orbiting holds the frame: the aim stops steering it
         let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                  // between the player and the circle
