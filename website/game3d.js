@@ -96,22 +96,53 @@ const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = 
 const aimEnd = new THREE.Mesh(new THREE.CircleGeometry(5, 32),   // (owner) a small flat filled dot
   new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
 aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
-// (owner, 2026-10-13) the stop marker: a dashed line to a circle where the ship would come to rest if the
-// player let go now (its velocity at the braking rate); only this player sees it
-const stopLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+// (owner, 2026-10-13) the stop marker: a dashed line to a dot where the ship would come to rest (only this
+// player sees it). Letting go, it's straight: the ship brakes along its velocity. (owner, 2026-10-13) While
+// WASD is held, the line CURVES: it follows the ship's own physics with the current input held for as long as
+// stopping would take (the velocity swinging toward the input as the nose comes round), then brakes to rest.
+const STOP_MAX = 240;                          // a fixed buffer (three can't grow a geometry in place); drawn up to the used points
+const stopLineGeo = new THREE.BufferGeometry();
+stopLineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(STOP_MAX * 3), 3));
 const stopLineMat = new THREE.LineDashedMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8, dashSize: 10, gapSize: 8 });
 const stopLine = new THREE.Line(stopLineGeo, stopLineMat); stopLine.frustumCulled = false; stopLine.visible = false; scene.add(stopLine);
 const stopRing = new THREE.Mesh(new THREE.CircleGeometry(5, 32),   // (owner) a small flat filled dot
   new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
 stopRing.rotation.x = -Math.PI / 2; stopRing.visible = false; scene.add(stopRing);
-function updateStop() {
+const stopPts = [];
+function updateStop(d, sprintOn) {
   const v = Math.hypot(vel.x, vel.y);
   const on = haveMe && v > 5;
   stopLine.visible = stopRing.visible = on; if (!on) return;
-  const dist = (v * v) / (2 * BRAKE), sx = me.x + (vel.x / v) * dist, sy = me.y + (vel.y / v) * dist;
-  stopLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.7, -me.y), new THREE.Vector3(sx, 0.7, -sy)]); stopLine.computeLineDistances();
+  const mine = players.get(myId);
+  let x = me.x, y = me.y, vx = vel.x, vy = vel.y, h = mine ? mine.heading : 0;
+  const steer = !!(d.x || d.y), spd = SPEED * (sprintOn ? 2 : 1), want = steer ? Math.atan2(d.x, -d.y) : 0;
+  const step = 1 / 30;
+  let hold = steer ? v / BRAKE : 0, n = 0;
+  stopPts.length = 0; stopPts.push(x, y);
+  while (n++ < 400) {
+    const thrust = hold > 0;
+    let a = BRAKE, tx = 0, ty = 0;
+    if (thrust) {
+      tx = d.x * spd; ty = d.y * spd;
+      let dh = (want - h) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2;
+      a = ACCEL * accelShare(dh);
+      h += Math.max(-TURN * step, Math.min(TURN * step, dh));   // the nose comes round as it would
+      hold -= step;
+    }
+    let ex = tx - vx, ey = ty - vy; const el = Math.hypot(ex, ey), sv = a * step;
+    if (el > sv) { ex *= sv / el; ey *= sv / el; }
+    vx += ex; vy += ey; x += vx * step; y += vy * step;
+    if (!inside(x, y)) break;
+    if (n % 2 === 0 && stopPts.length < (STOP_MAX - 1) * 2) stopPts.push(x, y);
+    if (!thrust && Math.hypot(vx, vy) < 0.5) break;
+  }
+  stopPts.push(x, y);
+  const pos = stopLineGeo.attributes.position, np = stopPts.length / 2;
+  for (let i = 0; i < np; i++) pos.setXYZ(i, stopPts[i * 2], 0.7, -stopPts[i * 2 + 1]);
+  for (let i = np; i < STOP_MAX; i++) pos.setXYZ(i, x, 0.7, -y);   // unused points sit on the end
+  pos.needsUpdate = true; stopLineGeo.setDrawRange(0, np); stopLine.computeLineDistances();
   const k = Math.max(1, viewDist / 500); stopLineMat.dashSize = 10 * k; stopLineMat.gapSize = 8 * k;
-  stopRing.position.set(sx, 0.7, -sy); stopRing.scale.set(k, k, 1);
+  stopRing.position.set(x, 0.7, -y); stopRing.scale.set(k, k, 1);
 }
 // the capacitor bar above the hotbar
 const capFill = document.getElementById("cap-fill"), capNum = document.getElementById("cap-num");
@@ -433,7 +464,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimEnd.visible = aimShown;
-  updateStop();
+  updateStop(d, sprintOn);
   drawMinimap(nowP);  drawMinimap(nowP);
 
   if (countAt) {
@@ -508,4 +539,4 @@ function addChat(m) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { get stop() { const a = stopLineGeo.attributes.position, n = stopLineGeo.drawRange.count; return { vis: stopLine.visible, n, pts: Array.from({ length: n }, (_, i) => [Math.round(a.getX(i)), Math.round(-a.getZ(i))]), ld: stopLineGeo.attributes.lineDistance && stopLineGeo.attributes.lineDistance.getX(n - 1) }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
