@@ -128,7 +128,7 @@ const SPRINT_SPREAD = 2;                       // sprinting opens the movement s
 function updateSpread(dt, moving, sprinting) {
   const it = SLOTS[slot];
   const on = aiming && haveMe && !!myAim;
-  spreadL.visible = spreadR.visible = spreadFan.visible = spreadArc.visible = on;
+  spreadL.visible = spreadR.visible = spreadFan.visible = spreadArc.visible = on && assists;
   if (!on) { wasAiming = false; return; }
   const bx = myAim.x - me.x, bz = myAim.z + me.y;                     // world, from the ship to the reticle
   const bearing = Math.atan2(bx, bz);
@@ -165,7 +165,15 @@ function rangeRingFor(R) {
   rangeRing.rotation.x = -Math.PI / 2; rangeRing.position.y = 0.35; rangeRingR = R; scene.add(rangeRing);
 }
 const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-const aimLine = new THREE.Line(aimLineGeo, new THREE.LineBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.7 }));
+// (owner, 2026-10-13) the aim line: dashed white toward the pointer, ending in a white circle (the old
+// blue reticle ring is hidden)
+const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, dashSize: 12, gapSize: 8 });
+const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = false;
+const aimEnd = new THREE.Mesh(new THREE.RingGeometry(7, 10, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
+// (owner) the Assists toggle: the distance circle and the slot's spread lines on or off (the aim line always shows)
+let assists = true;
+try { assists = localStorage.getItem("atamus.assists") !== "0"; } catch {}
 aimLine.visible = false; scene.add(aimLine);
 const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), aimHit = new THREE.Vector3();
 
@@ -398,6 +406,9 @@ renderer.setAnimationLoop(() => {
     const rs = Math.max(1, viewDist / 500); aimRing.scale.set(rs, rs, 1);   // stays readable zoomed out
     myAim = { x: a.x, z: a.z };
     aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(a.x, 0.4, a.z)]);
+    aimLine.computeLineDistances();
+    const ds = Math.max(1, viewDist / 500); aimLineMat.dashSize = 12 * ds; aimLineMat.gapSize = 8 * ds;   // dashes keep their look zoomed out
+    aimEnd.position.set(a.x, 0.5, a.z); aimEnd.scale.set(ds, ds, 1);
   }
   if (aiming && haveMe) {
     const px = aimLock ? aimLock.x : mouse.x, py = aimLock ? aimLock.y : mouse.y;   // (owner) MMB: the circle keeps the pinned SCREEN spot, through orbits and WASD alike
@@ -455,12 +466,13 @@ renderer.setAnimationLoop(() => {
     fx = me.x + Math.sin(th) * orbitLock.len; fy = me.y + Math.cos(th) * orbitLock.len;
     wantDist = orbitLock.dist;
   }
-  aimRing.visible = aimLine.visible = aiming && hit;
+  aimRing.visible = false;
+  aimLine.visible = aimEnd.visible = aiming && hit;
   const k = 1 - Math.exp(-dt * 6);                                       // the focus and zoom ease, in and back
   focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
   viewDist += (wantDist - viewDist) * k;
 
-  if (haveMe) { rangeRingFor(cam.leash); rangeRing.position.set(me.x, 0.35, -me.y); interactRing.visible = true; interactRing.position.set(me.x, 0.4, -me.y); }
+  if (haveMe) { rangeRingFor(cam.leash); rangeRing.position.set(me.x, 0.35, -me.y); rangeRing.visible = assists; interactRing.visible = true; interactRing.position.set(me.x, 0.4, -me.y); }
   const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
   camOff.set(-Math.sin(camYaw), 0, Math.cos(camYaw)).multiplyScalar(Math.cos(pr) * viewDist);   // behind the player: W flies toward where the camera faces
@@ -512,6 +524,10 @@ if ($i("sl-range")) {
   $i("sl-move").addEventListener("input", () => { SLOTS[slot].move = Math.min(180, Math.max(0, +$i("sl-move").value || 0)); saveSlots(); showSlot(); });
   $i("sl-spread").addEventListener("input", () => { SLOTS[slot].spread = Math.min(90, Math.max(0, +$i("sl-spread").value || 0)); saveSlots(); showSlot(); });
   $i("sl-interact").addEventListener("change", () => { SLOTS[slot].interact = $i("sl-interact").checked; saveSlots(); showSlot(); });
+}
+if ($i("sl-assists")) {
+  $i("sl-assists").checked = assists;
+  $i("sl-assists").addEventListener("change", () => { assists = $i("sl-assists").checked; try { localStorage.setItem("atamus.assists", assists ? "1" : "0"); } catch {} });
 }
 // (owner) the hotbar
 function selectSlot(i) {
