@@ -302,13 +302,14 @@ renderer.setAnimationLoop(() => {
   // exactly at the bound on any screen. The ground raycast supplies only the direction.
   function aimAt(px, py) {
     const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
-    const e = Math.min(1, Math.hypot(sx, sy));
+    const r = Math.hypot(sx, sy), e = Math.min(1, r);
     raycaster.setFromCamera({ x: sx, y: sy }, camera);
     if (!raycaster.ray.intersectPlane(groundPlane, aimHit)) return null;
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     const d = e * cam.leash;
-    return { x: me.x + ux * d, z: -me.y + uz * d, d };                   // the circle, in world coords
+    return { x: me.x + ux * d, z: -me.y + uz * d, d,
+             sux: r > 1e-4 ? Math.abs(sx) / r : 0, suy: r > 1e-4 ? Math.abs(sy) / r : 1 };   // the pointer's screen direction
   }
   function drawAim(a) {
     aimRing.position.set(a.x, 0.4, a.z);
@@ -323,7 +324,14 @@ renderer.setAnimationLoop(() => {
       hit = true; drawAim(a);
       if (!orbitLock) {                                                  // orbiting holds the frame: the aim stops steering it
         fx = (me.x + a.x) / 2; fy = (me.y + -a.z) / 2;                   // the focus: between the player and the circle
-        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d * 1.6));     // player stays in the shot
+        // (owner) the zoom evens out what each screen direction can SEE: the view shows the least
+        // ground toward the short dimension (top: foreshortened by the pitch), more to the sides,
+        // most into the corners - so aiming top-center zooms out the most, sides a middle amount,
+        // corners the least, and max-range aim is equally visible whatever the direction or rotation.
+        const ex = Math.tan(Math.PI / 6) * camera.aspect;                              // half-extents of the ground
+        const ey = Math.tan(Math.PI / 6) / Math.sin(THREE.MathUtils.degToRad(cam.pitch));   // in view, per unit of distance
+        const g = Math.min(ex / Math.max(a.sux, 1e-4), ey / Math.max(a.suy, 1e-4));    // to the screen RECTANGLE's bound
+        wantDist = Math.min(cam.zmax, Math.max(camDist, a.d / (1.5 * g)));
       }
     }
   }
@@ -366,4 +374,4 @@ if (sl.leash) {
 }
 
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; } };
+window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get ws() { return ws; }, get aim() { return myAim; }, get view() { return viewDist; } };
