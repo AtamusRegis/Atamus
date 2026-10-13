@@ -17,7 +17,8 @@ export const BRAKE = 400;                    // m/s^2 (owner): letting go of WAS
 export const STOP_D = 100;
 export const SPRINT = 1.3;                   // (owner, 2026-10-13) sprint is 30% faster (was double), forward only
 // (owner, 2026-10-13) top speed by direction relative to the nose: forward 100%, sideways and backward 60%, blended
-// (diagonal ~88%). "Forward" for sprinting means within FWD_ARC of the nose.
+// (diagonal ~88%). "Forward" for sprinting means within FWD_ARC. (owner, 2026-10-13) Not aiming, every push is forward
+// (WASD turns the ship that way); aiming, forward is toward the reticle.
 export const SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;
 export const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
 const wrapA = (a) => { a %= Math.PI * 2; return a > Math.PI ? a - Math.PI * 2 : a < -Math.PI ? a + Math.PI * 2 : a; };
@@ -78,7 +79,7 @@ export class World3D {
 
   // The client only sends a direction (and whether Shift is held); the server moves the sphere.
   // Hostile input: finite numbers, length clamped to 1, the boost only ever a flag.
-  setDir(id, dx, dy, boost, h) {
+  setDir(id, dx, dy, boost, h, aim) {
     const p = this.players.get(String(id));
     if (!p) return false;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
@@ -86,6 +87,7 @@ export class World3D {
     if (len > 1) { dx /= len; dy /= len; }
     p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = sprint (30% faster)
     if (typeof h === "number" && Number.isFinite(h)) p.h = Math.atan2(Math.sin(h), Math.cos(h));   // (owner) the ship's heading, for everyone else's screens
+    p.aim = typeof aim === "number" && Number.isFinite(aim) ? Math.atan2(Math.sin(aim), Math.cos(aim)) : null;   // (owner) aiming: the reticle's direction; absent = not aiming
     return true;
   }
 
@@ -94,13 +96,15 @@ export class World3D {
       const moving = !!(p.dx || p.dy);
       if (p.cap === undefined) p.cap = CAP_MAX;
       if (p.cap <= 0) p.capOut = true; else if (p.capOut && p.cap >= CAP_RESUME) p.capOut = false;
-      const dh = moving ? wrapA(Math.atan2(p.dx, -p.dy) - (p.h || 0)) : 0;   // the push's angle off the nose (client's convention)
-      const sprinting = !!p.boost && moving && Math.abs(dh) <= FWD_ARC && !p.capOut;   // (owner) sprint only forward
+      const want = moving ? Math.atan2(p.dx, -p.dy) : 0;                     // the push's direction (client's convention)
+      const dh = moving ? wrapA(want - (p.h || 0)) : 0;                      // off the nose: how much acceleration it gets
+      const df = moving && p.aim != null ? wrapA(want - p.aim) : 0;         // off "forward": the top speed and sprint
+      const sprinting = !!p.boost && moving && Math.abs(df) <= FWD_ARC && !p.capOut;   // (owner) sprint only forward
       p.cap = sprinting ? Math.max(0, p.cap - CAP_DRAIN * dt) : Math.min(CAP_MAX, p.cap + (moving ? CAP_WALK : CAP_IDLE) * dt);
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
-      const spd = SPEED * dirSpeed(dh) * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
+      const spd = SPEED * dirSpeed(df) * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
       let a = ACCEL;
       if (p.dx || p.dy) p.brakeA = 0;
       else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }

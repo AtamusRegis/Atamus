@@ -337,11 +337,14 @@ function connect() {
   };
 }
 connect();
-let lastH = 0, trailing = 0;                   // trailing: settled-state resends still owed after the last change
+let lastH = 0, lastAim = null, trailing = 0;
+// the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
+const aimAngle = () => aiming && myAim && haveMe ? Math.atan2(myAim.x - me.x, myAim.z + me.y) : null;                   // trailing: settled-state resends still owed after the last change
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
-  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH;
+  const ag = aimAngle(), aq = ag === null ? null : Math.round(ag * 100) / 100;   // (owner) aiming: forward is the reticle
+  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH || aq !== lastAim;
   // at most 20 sends a second (the frame loop retries, so the latest state always goes out), a heartbeat while
   // moving, and (owner) after movement or rotation stops, the settled state twice more so the server and
   // everyone else land on the real final position and heading
@@ -350,8 +353,8 @@ function sendDir(d, now) {
   else if (trailing > 0) { if (now - lastSent >= 100) { due = true; trailing--; } }
   else if ((d.x || d.y) && now - lastSent >= 500) due = true;
   if (!due) return;
-  lastDir = d; lastH = h; lastSent = now;
-  ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y, b: d.b, h }));
+  lastDir = d; lastH = h; lastAim = aq; lastSent = now;
+  ws.send(JSON.stringify(aq === null ? { t: "move", x: d.x, y: d.y, b: d.b, h } : { t: "move", x: d.x, y: d.y, b: d.b, h, a: aq }));
 }
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
@@ -379,13 +382,15 @@ renderer.setAnimationLoop(() => {
   const movingIn = !!(d.x || d.y);
   if (cap <= 0) capOut = true; else if (capOut && cap >= CAPC.resume) capOut = false;
   const mineP = players.get(myId);
-  let dh = 0;                                  // the push's angle off the nose, as the server works it out
-  if (movingIn) { dh = (Math.atan2(d.x, -d.y) - (mineP ? mineP.heading : 0)) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; }
-  const sprintOn = !!d.b && movingIn && Math.abs(dh) <= FWD_ARC && !capOut;   // (owner) sprint only forward
+  const wrap = (q) => { q %= Math.PI * 2; return q > Math.PI ? q - Math.PI * 2 : q < -Math.PI ? q + Math.PI * 2 : q; };
+  const want = Math.atan2(d.x, -d.y), ag = aimAngle();
+  const dh = movingIn ? wrap(want - (mineP ? mineP.heading : 0)) : 0;    // off the nose: the acceleration share (as the server)
+  const df = movingIn && ag !== null ? wrap(want - ag) : 0;             // (owner) off "forward": not aiming, everything is forward
+  const sprintOn = !!d.b && movingIn && Math.abs(df) <= FWD_ARC && !capOut;   // (owner) sprint only forward
   if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * dt) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * dirSpeed(dh) * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
+    const spd = SPEED * dirSpeed(df) * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
     let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
     if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
     if (movingIn) a *= accelShare(dh);         // a push off the nose gets only part of the acceleration

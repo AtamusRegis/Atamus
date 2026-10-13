@@ -63,7 +63,7 @@ export function attachGameServer(httpServer) {
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });
         }).catch((e) => { joined = false; console.error("join", e); });
       }
-      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h);
+      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
       else if (m.t === "chat") {               // (owner, 2026-10-13) simple chat: global to everyone, faction to your side
         const me = world.players.get(pid); if (!me || typeof m.text !== "string") return;
         const text = m.text.slice(0, 240); if (!text.trim()) return;
