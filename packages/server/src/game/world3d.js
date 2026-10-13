@@ -55,13 +55,14 @@ export class World3D {
 
   // The client only sends a direction (and whether Shift is held); the server moves the sphere.
   // Hostile input: finite numbers, length clamped to 1, the boost only ever a flag.
-  setDir(id, dx, dy, boost) {
+  setDir(id, dx, dy, boost, h) {
     const p = this.players.get(String(id));
     if (!p) return false;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
     const len = Math.hypot(dx, dy);
     if (len > 1) { dx /= len; dy /= len; }
     p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = double speed
+    if (typeof h === "number" && Number.isFinite(h)) p.h = Math.atan2(Math.sin(h), Math.cos(h));   // (owner) the ship's heading, for everyone else's screens
     return true;
   }
 
@@ -89,9 +90,9 @@ export class World3D {
   }
   async saveDirty() { for (const p of this.players.values()) if (p.dirty) await this._save(p); }
 
-  snapshot() {                                 // compact: [id, x (cm), y (cm)] per player, everyone to everyone
+  snapshot() {                                 // compact: [id, x (cm), y (cm), heading (mrad)] per player, everyone to everyone
     const out = [];
-    for (const p of this.players.values()) out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100)]);
+    for (const p of this.players.values()) out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000)]);
     return out;
   }
   roster() { const out = []; for (const p of this.players.values()) out.push({ i: p.id, n: p.name, s: p.team }); return out; }

@@ -63,7 +63,7 @@ export function attachGameServer(httpServer) {
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });
         }).catch((e) => { joined = false; console.error("join", e); });
       }
-      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b);
+      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
 

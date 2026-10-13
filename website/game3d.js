@@ -336,7 +336,7 @@ function connect() {
       addPlayer(myId, myName, me.x, me.y).side = m.s;
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
-      for (const [id, cx, cy] of m.p) {
+      for (const [id, cx, cy, ch] of m.p) {
         const x = cx / 100, y = cy / 100;
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
@@ -348,7 +348,7 @@ function connect() {
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");
-        p.buf.push({ x, y, t: m.ts }); if (p.buf.length > 30) p.buf.shift();   // a short history, timed by the server
+        p.buf.push({ x, y, h: (ch || 0) / 1000, t: m.ts }); if (p.buf.length > 30) p.buf.shift();   // a short history, timed by the server
         p.to = { x, y };
       }
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
@@ -366,15 +366,21 @@ function connect() {
   };
 }
 connect();
+let lastH = 0, trailing = 0;                   // trailing: settled-state resends still owed after the last change
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
-  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b;
-  // at most 20 sends a second (orbiting the camera while moving changes the direction every mouse move;
-  // the frame loop retries, so the latest direction always goes out), plus a heartbeat while moving
-  const due = changed ? now - lastSent >= 50 : (d.x || d.y) && now - lastSent >= 500;
+  const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
+  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH;
+  // at most 20 sends a second (the frame loop retries, so the latest state always goes out), a heartbeat while
+  // moving, and (owner) after movement or rotation stops, the settled state twice more so the server and
+  // everyone else land on the real final position and heading
+  let due = false;
+  if (changed) { if (now - lastSent >= 50) { due = true; trailing = 2; } }
+  else if (trailing > 0) { if (now - lastSent >= 100) { due = true; trailing--; } }
+  else if ((d.x || d.y) && now - lastSent >= 500) due = true;
   if (!due) return;
-  lastDir = d; lastSent = now;
-  ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y, b: d.b }));
+  lastDir = d; lastH = h; lastSent = now;
+  ws.send(JSON.stringify({ t: "move", x: d.x, y: d.y, b: d.b, h }));
 }
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
@@ -411,16 +417,18 @@ renderer.setAnimationLoop(() => {
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
     if (p.id === myId) { placeShip(p, me.x, me.y, dt, aiming && SLOTS[slot].interact ? myAim : null, !!(d.x || d.y)); continue; }   // (owner, 2026-10-13) faces its travel; an interaction item faces the pointer while aiming
-    const B = p.buf; let x = p.to.x, y = p.to.y;
+    const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
       let i = B.length - 1; while (i > 0 && B[i].t > rt) i--;
       const a = B[i], b = B[i + 1];
-      if (b && b.t > a.t && rt >= a.t) { const t = (rt - a.t) / (b.t - a.t); x = a.x + (b.x - a.x) * t; y = a.y + (b.y - a.y) * t; }
+      if (b && b.t > a.t && rt >= a.t) { const t = (rt - a.t) / (b.t - a.t); x = a.x + (b.x - a.x) * t; y = a.y + (b.y - a.y) * t;
+        let dh = (b.h - a.h) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; h = a.h + dh * t; }
       else if (!b && i > 0 && rt > a.t) {      // past the newest: carry on along its last motion briefly, then hold
-        const z = B[i - 1], k = Math.min(rt - a.t, 120) / Math.max(1, a.t - z.t); x = a.x + (a.x - z.x) * k; y = a.y + (a.y - z.y) * k;
-      } else { x = a.x; y = a.y; }
+        const z = B[i - 1], k = Math.min(rt - a.t, 120) / Math.max(1, a.t - z.t); x = a.x + (a.x - z.x) * k; y = a.y + (a.y - z.y) * k; h = a.h;
+      } else { x = a.x; y = a.y; h = a.h; }
     }
     placeShip(p, x, y, dt);
+    if (h !== null) { p.heading = h; p.holder.rotation.y = h; }   // the owner's own heading, as they see it
   }
 
   // right-click aiming (owner): a circle where the mouse points on the ground, a line from the sphere to it; the
