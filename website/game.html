@@ -25,6 +25,9 @@
     #joy-knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(79, 143, 232, .55); pointer-events: none; }
     html.touch #joy { display: block; }
     html.touch #minimap { top: 12px; bottom: auto; width: 130px; height: 113px; }
+    #helpers-box { position: fixed; top: 12px; right: 12px; display: flex; gap: 6px; align-items: center; padding: 5px 10px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 6px; color: #9fb3cf; font: 12px system-ui, sans-serif; user-select: none; cursor: pointer; }
+    #helpers-box input { margin: 0; accent-color: #4f8fe8; }
+    html.touch #helpers-box { display: none; }
     #cap { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
     #cap-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2f9bd6, #7fd8ff); transition: width .08s linear; }
     #cap-fill.out { background: #6a4a2a; }
@@ -46,12 +49,13 @@
   <canvas id="view"></canvas>
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
+  <label id="helpers-box"><input id="helpers" type="checkbox">Weapon helpers</label>
   <canvas id="minimap"></canvas>
   <div id="chat"><div id="chat-log"></div><div id="chat-tabs"><button data-ch="global" class="on">Global</button><button data-ch="side">Faction</button></div><input id="chat-in" maxlength="240" autocomplete="off"></div>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791934318"></script>
+  <script type="module" src="game3d.js?v=1791934569"></script>
 </body>
 </html>

@@ -117,14 +117,18 @@ loadRingFor(LOAD_R); loadRing.frustumCulled = false; loadRing.visible = false; s
 const rangeRing = new THREE.Mesh(new THREE.RingGeometry(cam.leash - 4, cam.leash, 160), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
 rangeRing.rotation.x = -Math.PI / 2; rangeRing.visible = false; scene.add(rangeRing);
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
-const aimLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-// (owner, 2026-10-13) right-click: a dashed white line from the ship's center on the ground plane to the
-// ground point under the pointer, ending in a small white dot. Nothing else aims for now.
-const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, dashSize: 12, gapSize: 8 });
+// (owner, 2026-10-13) right-click: a dashed white line from the ship's center on the ground plane to the reticle,
+// fading out over its last stretch (owner: no dot at the end). Three points: full from the ship to AIM_FADE of the
+// way, then fading to nothing at the reticle (per-vertex alpha).
+const AIM_FADE = 0.6;
+const aimLineGeo = new THREE.BufferGeometry();
+aimLineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
+aimLineGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array([1, 1, 1, 0.85, 1, 1, 1, 0.85, 1, 1, 1, 0]), 4));
+const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, vertexColors: true, transparent: true, dashSize: 12, gapSize: 8, depthWrite: false });
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = false;
-const aimEnd = new THREE.Mesh(new THREE.CircleGeometry(2, 24),   // (owner) a small flat filled dot (owner, 2026-10-13: "way thinner", 2 m from 5)
-  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-aimEnd.rotation.x = -Math.PI / 2; aimEnd.visible = false; scene.add(aimEnd);
+// (owner, 2026-10-13) the weapon UI helpers toggle (top right): the leash circle for now; off by default, kept per browser
+let helpers = false;
+try { helpers = localStorage.getItem("atamus.helpers") === "1"; } catch {}
 // (owner, 2026-10-13) the stop marker: a dashed line to a circle where the ship would come to rest if the
 // player let go now (its velocity at the braking rate); only this player sees it
 const stopLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
@@ -497,7 +501,7 @@ renderer.setAnimationLoop(() => {
   viewDist += (wantDist - viewDist) * k;
   if (haveMe) {
     loadRing.visible = true; loadRing.position.set(me.x, 0.35, -me.y);
-    rangeRing.visible = true; rangeRing.position.set(me.x, 0.36, -me.y);
+    rangeRing.visible = helpers; rangeRing.position.set(me.x, 0.36, -me.y);
   }
   const target = toWorld(focus.x, focus.y, shipMid);
   const pr = THREE.MathUtils.degToRad(cam.pitch);
@@ -512,14 +516,14 @@ renderer.setAnimationLoop(() => {
     const a = aimAt(aimPx().x, aimPx().y);
     if (a) {
       aimShown = true;
-      aimLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.4, -me.y), new THREE.Vector3(a.x, 0.4, a.z)]);
-      aimLine.computeLineDistances();
+      const lp = aimLineGeo.attributes.position, sx = me.x, sz = -me.y;
+      lp.setXYZ(0, sx, 0.4, sz); lp.setXYZ(1, sx + (a.x - sx) * AIM_FADE, 0.4, sz + (a.z - sz) * AIM_FADE); lp.setXYZ(2, a.x, 0.4, a.z);
+      lp.needsUpdate = true; aimLine.computeLineDistances();
       const ds = Math.max(1, viewDist / 500); aimLineMat.dashSize = 12 * ds; aimLineMat.gapSize = 8 * ds;   // dashes keep their look zoomed out
-      aimEnd.position.set(a.x, 0.5, a.z); aimEnd.scale.set(ds, ds, 1);
       aimHit.set(a.x, 0, a.z); myAim = { x: a.x, z: a.z };
     }
   }
-  aimLine.visible = aimEnd.visible = aimShown;
+  aimLine.visible = aimShown;
   updateStop();
   drawMinimap(nowP);
 
@@ -575,6 +579,10 @@ function drawMinimap(now) {
 // (owner, 2026-10-13) chat: Global (everyone) and Faction (your side). Enter opens the box and sends; Escape
 // or sending an empty line closes it. Lines are inserted as plain text.
 const $i = (id) => document.getElementById(id);
+if ($i("helpers")) {
+  $i("helpers").checked = helpers;
+  $i("helpers").addEventListener("change", () => { helpers = $i("helpers").checked; try { localStorage.setItem("atamus.helpers", helpers ? "1" : "0"); } catch {} $i("helpers").blur(); });
+}
 const chatLog = $i("chat-log"), chatIn = $i("chat-in");
 let chatCh = "global";
 document.querySelectorAll("#chat-tabs button").forEach((b) => b.addEventListener("click", () => { chatCh = b.dataset.ch; document.querySelectorAll("#chat-tabs button").forEach((x) => x.classList.toggle("on", x === b)); if (chatIn) chatIn.focus(); }));
