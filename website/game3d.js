@@ -340,6 +340,11 @@ renderer.setAnimationLoop(() => {
         // focus fraction are solved together from the view's exact ground extents - so aiming into
         // a cramped direction (screen-down, where the bottom ray plunges toward the camera) pushes
         // the ship toward the roomy opposite edge instead of zooming the world away.
+        // (owner, 2026-10-13: diagonals showed less overflow, and front / back zoomed far more than
+        // the sides) the solution is DIRECTION-INDEPENDENT: one full-press zoom, fixed by the worst
+        // (vertical) extent pair, and the leash chosen per direction so the boundary ahead of the
+        // reticle is exactly the overflow - measured on the ellipse inscribed in the screen, so a
+        // diagonal gets the same guaranteed gap as a cardinal. Uniform zoom, uniform overflow.
         const R = cam.leash, O = 50, S = 80, m = 0.85;                   // overflow past the circle; margin behind the ship
         const r = Math.min(1, Math.hypot(a.sux, a.suy));                 // how far the pointer presses outward
         const f2 = Math.PI / 6, ph = THREE.MathUtils.degToRad(cam.pitch);
@@ -347,20 +352,16 @@ renderer.setAnimationLoop(() => {
         const eTop = Math.max(0.05, -Math.cos(ph) + Math.sin(ph) * cot(Math.max(0.05, ph - f2)));
         const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
         const ex = Math.tan(f2) * camera.aspect;
-        const axes = [];
-        const fxp = Math.min(1, Math.abs(a.sux)), fyp = Math.min(1, Math.abs(a.suy));
-        if (fxp > 0.05) axes.push({ f: fxp, eF: ex, eB: ex });
-        if (fyp > 0.05) axes.push({ f: fyp, eF: a.suy >= 0 ? eTop : eBot, eB: a.suy >= 0 ? eBot : eTop });
-        let D = camDist, lo = 0, hi = 1;
-        for (const ax of axes) D = Math.max(D, (ax.f * (R + O) + S) / (m * (ax.eF + ax.eB)));
-        D = Math.min(6000, D);
-        for (const ax of axes) {
-          lo = Math.max(lo, (R + O - (m * ax.eF * D) / ax.f) / R);       // enough world ahead of the focus
-          hi = Math.min(hi, (m * ax.eB * D - S) / (R * ax.f));           // the ship stays behind it with margin
-        }
-        const lam = Math.min(1, Math.max(0, Math.min(hi, Math.max(lo, 0.5))));
-        fx = me.x + a.ux * lam * r * R; fy = me.y + -a.uz * lam * r * R; // the focus: the extending leash
-        wantDist = D;
+        const Dfull = (R + O + S) / (m * (eTop + eBot));                 // the one full-press zoom, every direction
+        wantDist = Math.max(camDist, Math.min(6000, r * Dfull));
+        const uxs = r > 1e-4 ? Math.abs(a.sux) / r : 0, uys = r > 1e-4 ? Math.abs(a.suy) / r : 1;
+        const eF = a.suy >= 0 ? eTop : eBot, eB = a.suy >= 0 ? eBot : eTop;
+        const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));     // ellipse boundary ahead, per unit of zoom
+        const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));     // and behind (the vertical half flips)
+        let lam = 1 - (m * wantDist / denF - O) / R;                     // ahead of the focus: the circle + exactly the overflow
+        lam = Math.min(lam, (m * wantDist / denB - S) / R);              // behind it: the ship + its margin
+        lam = Math.min(1, Math.max(0, lam));
+        fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;         // the focus: the extending leash
       }
     }
   }
