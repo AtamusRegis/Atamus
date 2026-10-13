@@ -1,13 +1,12 @@
 // The 3D world (owner, 2026-10-12: the game rebuilt in 3D, one shared world, no POIs).
 // Flat ground plane. One sphere per account, 100 m in diameter, moving on the XY plane
-// only (no Z). The border is the same flat-top hexagon as before, now 5 miles flat to
-// flat. Everyone sees everyone. Positions persist per account.
+// only (no Z). The border is the same flat-top hexagon, 126 km flat to flat. Everyone
+// sees everyone. Positions persist per account.
 import { pool } from "../db.js";
 
-export const MILE = 1609.344;
-export const HEX_FLAT = 5 * MILE;            // 8,046.72 m flat to flat (owner: "5 miles long")
+export const HEX_FLAT = 126_000;           // 126 km flat to flat (owner, 2026-10-12)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
-export const SPEED = 60;                     // m/s on the ground (tunable; nothing decided yet)
+export const SPEED = 300;                    // m/s on the ground (owner, 2026-10-12)
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
 const TICK = 1 / 20;                         // the simulation runs at 20 Hz, as before

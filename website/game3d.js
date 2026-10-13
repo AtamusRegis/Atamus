@@ -14,9 +14,9 @@ const countEl = document.getElementById("countdown");
 const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content || "";
 
 // ---- world constants (the server's hello can override them) ----
-let HEX_FLAT = 5 * 1609.344;                   // 5 miles flat to flat
+let HEX_FLAT = 126_000;                        // 126 km flat to flat
 let SPHERE_R = 50;                             // 100 m diameter
-let SPEED = 60;                                // m/s
+let SPEED = 300;                               // m/s
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 
@@ -41,9 +41,9 @@ const MAX_DIST = 2200;                         // (owner) max zoom / leash dista
 const LEASH = 700;                             // how far the camera's focus may slide from the player while aiming
 
 // ground + the 2D grid
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 1, metalness: 0 }));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), new THREE.MeshStandardMaterial({ color: 0x0a0e16, roughness: 1, metalness: 0 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
-const grid = new THREE.GridHelper(16000, 160, 0x33455f, 0x243450);   // 100 m cells
+const grid = new THREE.GridHelper(126000, 1260, 0x33455f, 0x243450);   // 100 m cells over the whole map
 grid.position.y = 0.2; scene.add(grid);
 
 // the hexagon border: a flat glowing band on the ground (flat edges top and bottom, points east and west)
@@ -155,7 +155,7 @@ function connect() {
           let tx = x + lastDir.x * SPEED * lead, ty = y + lastDir.y * SPEED * lead;
           if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
-          if (err > 25) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
+          if (err > SPEED * 0.4) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");

@@ -12,10 +12,10 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 - **One shared 3D world on one server: no POIs, no systems, no instances. Everyone sees everyone.**
 - A flat ground plane with a **2D grid** (100 m cells) drawn on it.
-- **The border is the same flat-top hexagon** (flat edges top and bottom, points east and west), now **5 miles flat to flat** (8,046.72 m), drawn as a glowing band on the ground. It stops players: movement walks as far along the step as still fits, and the sphere's edge rests on the line.
+- **The border is the same flat-top hexagon** (flat edges top and bottom, points east and west), **126 km flat to flat** (owner, 2026-10-12; was 5 miles), drawn as a glowing band on the ground. It stops players: movement walks as far along the step as still fits, and the sphere's edge rests on the line.
 - **Each player is one sphere, 100 m in diameter** (your own blue, everyone else's red), rolling as it travels. One sphere per account; it spawns within 300 m of the center the first time and comes back where it was after that (positions saved every 10 s and on leaving; a saved position outside the hexagon respawns at the center).
 - **Travel is on the ground plane only (XY): no movement up or down on Z.**
-- Speed: 60 m/s (`SPEED` in `world3d.js`; a first-pass number, not an owner decision).
+- **Speed: 300 m/s** (owner, 2026-10-12; `SPEED` in `world3d.js`). Crossing the map takes about 7 minutes.
 - **Server-authoritative:** the client only sends a direction (`{t:"move", x, y}`, clamped to length 1); the server simulates at 20 Hz and sends snapshots at 15 Hz to every client. The client predicts its own sphere locally (with the same border rule) and is softly corrected by snapshots; other spheres are drawn 120 ms in the past, interpolated between snapshots.
 - A player leaving (socket closed) despawns at once; their position is saved.
 

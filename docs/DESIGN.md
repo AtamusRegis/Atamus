@@ -4,7 +4,7 @@
 
 ## The 3D direction (owner, 2026-10-12, so far)
 
-- The game is 3D: one flat world with a 2D grid, the same flat-top hexagon border (5 miles flat to flat for now).
+- The game is 3D: one flat world with a 2D grid, the same flat-top hexagon border (126 km flat to flat).
 - **One shared world on one server: no POIs, no instancing. Everyone sees everyone.**
 - Players travel on the ground plane only (no Z), WASD relative to an orbiting camera (middle mouse, 75° down).
 - The player is a 100 m sphere for now; real ships, gameplay and everything else are still to be decided.
