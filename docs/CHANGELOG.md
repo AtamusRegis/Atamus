@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **Fix: aiming far ahead ran the camera away.** The leash fed on the circle's world distance, which the leash's own camera motion kept extending; it now runs on the pointer's distance from screen center (deadzone at the middle), so the circle stays where you point and the camera settles.
 - **The pinned circle is screen-locked in every case (owner):** while the middle mouse is held, the aim stays raycast from the pinned cursor spot through orbits and WASD alike (the ground-offset pin from earlier tonight is removed; the once-per-lap spin it dodged was really the turn-math wrap bug, fixed separately).
 - **(superseded the same night) The pinned circle rides with the ship (owner):** the middle-mouse pin is now the circle's offset from the ship rather than a world point, so flying with WASD keeps the circle and camera at their screen-locked spots; standing still it's still a fixed ground spot the orbit doesn't sweep.
 - **Fix: circling the aim around the ship made it backspin 360 once per lap.** The shortest-arc turn math was only valid near the target angle; as the heading accumulated a turn per lap it eventually commanded a full wrong-way spin. The wrap is now correct at any accumulation and the heading is kept normalized.

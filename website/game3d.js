@@ -308,11 +308,16 @@ renderer.setAnimationLoop(() => {
       myAim = { x: gx, z: -gy };
       aimLineGeo.setFromPoints([toWorld(me.x, me.y, shipMid), new THREE.Vector3(gx, 0.4, -gy)]);
       if (!orbitLock) {                                                // orbiting holds the frame: the aim stops steering it
-        let ox = (gx - me.x) / 2, oy = (gy - me.y) / 2;                  // between the player and the circle
-        const ol = Math.hypot(ox, oy);
-        if (ol > LEASH) { ox *= LEASH / ol; oy *= LEASH / ol; }          // leashed: never super far out
-        fx = me.x + ox; fy = me.y + oy;
-        wantDist = Math.min(cam.zmax, Math.max(camDist, Math.min(ol, LEASH) * 3));   // player stays in the shot
+        // the leash is driven by the POINTER's distance from screen center, never by the circle's world
+        // distance: pointing far ahead used to move the camera, which pushed the same pixel's ground
+        // point farther, which moved the camera again - a runaway. Pixels can't feed back.
+        const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
+        const r = Math.min(1, Math.hypot(sx, sy));
+        const k = Math.min(1, Math.max(0, (r - 0.25) / 0.65));           // a deadzone at the center, full push at the edge
+        let ux = gx - me.x, uy = gy - me.y; const ul = Math.hypot(ux, uy) || 1; ux /= ul; uy /= ul;
+        const off = k * k * LEASH;                                       // eases in toward the edge
+        fx = me.x + ux * off; fy = me.y + uy * off;
+        wantDist = Math.min(cam.zmax, Math.max(camDist, off * 3));       // player stays in the shot
       }
     }
   }
