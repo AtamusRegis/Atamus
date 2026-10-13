@@ -33,7 +33,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
-      - name: Warn players (1 s countdown, owner: for now) before switching the live build
+      - name: Warn players (1 s countdown for now) before switching the live build
         run: |
           curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=web" -w "\nHTTP %{http_code}\n" || true
           sleep 1

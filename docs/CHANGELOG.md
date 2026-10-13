@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-12
 
+- **Fix: three pushes never deployed.** A colon in a renamed workflow step name broke both deploy workflows' YAML (0 s failures), so the 1 s countdown, the aim lock and the pointer lock sat undeployed; the step is renamed and everything pending ships with this push.
 - **Aim pointer locks while orbiting (owner):** holding the middle mouse pointer-locks the cursor — it freezes (hidden) where the press began and the right-click aim stays raycast from that spot; releasing restores the cursor there. (Falls back to freezing just the aim raycast where the browser refuses the lock.)
 - **Deploy countdown 1 s for now (owner):** pushes switch the live build after a 1 s warning instead of 30 (gamehttp + both workflows).
 - **Sprint, camera sliders, steady grid (owner):** holding Shift doubles the speed (server-applied). A panel of camera sliders: pitch, a two-handle min / max zoom, rotation speed, kept per browser. The grid moved into the ground's own shader (anti-aliased lines on the surface), fixing the flicker a separate line layer caused against the ground.
