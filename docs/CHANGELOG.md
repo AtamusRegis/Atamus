@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **No wheel zoom (owner):** the max zoom now equals the min zoom (600 m), so the wheel and pinch don't zoom; the aim camera still pulls out while aiming.
 - **Base speed 200 m/s (owner):** ships cruise at 200 m/s (was 300); sprint is 260 m/s.
 - **Sprint 30% faster (owner):** sprinting now gives 390 m/s instead of double speed.
 - **Stops within 100 m; no sprint while aiming (owner):** letting go of WASD now always brings the ship to rest within 100 m, however fast it was going (the braking rate is set at release: at least 400 m/s², harder when needed). Holding the right button turns sprint off.
