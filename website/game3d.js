@@ -36,7 +36,7 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings (owner: sliders): pitch, min / max zoom, rotation speed; kept in this browser
-const cam = { pitch: 75, zmin: 180, zmax: 2200, rot: 1 };
+const cam = { pitch: 60, zmin: 600, zmax: 1800, rot: 0.6 };   // (owner, 2026-10-12) defaults: 60d / 600-1800 m / 60%
 try { Object.assign(cam, JSON.parse(localStorage.getItem("atamus.cam") || "{}")); } catch {}
 const saveCam = () => { try { localStorage.setItem("atamus.cam", JSON.stringify(cam)); } catch {} };
 let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
