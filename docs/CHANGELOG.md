@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Ship bumps and health (owner):** ships shove each other on impact and both take damage by how hard they closed on each other (same direction barely, a stationary target more, head-on most). Ships have health; a health bar shows over damaged ships, and a ship at 0 comes back at full health near the center.
 - **Drift (owner):** a ship's motion now swings toward a new direction more slowly than the nose turns (3.5 rad/s, was 8), so ships drift slightly through turns; the nose's turning eases a little more. **Fix: hidden ships no longer stop the aim line** (it could reveal them before they showed).
 - **Smoother ship movement (owner):** turning spins up and eases in instead of starting and stopping dead, ships lean into turns, corrections from the server blend in smoothly, and other ships glide along curves between updates. Speeds and handling are unchanged.
 - **Smoother visibility (owner):** ships fade smoothly from hidden at 25% visible to solid at 75% (no steps), appear fast and disappear slowly, the pivot line now counts 20% (was half), and visibility updates 30 times a second.

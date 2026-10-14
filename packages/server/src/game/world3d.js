@@ -31,6 +31,9 @@ export const CAP_MAX = 100, CAP_DRAIN = 1, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESU
 // ship. (owner, 2026-10-14) It's where the client's distance haze turns solid (the 700 m leash circle + 200 m + 400 m),
 // so things load in while still hidden and nothing beyond it is sent at all. Keep it equal to the client's FAR_OUT.
 export const LOAD_R = 1300;
+// (owner, 2026-10-14) ship bumps: the bounce (0 = dead stop, 1 = full rebound), the closing speed that does no damage
+// (m/s), and damage per m/s above it; health
+export const BUMP_E = 0.5, BUMP_SAFE = 60, BUMP_DMG = 0.1, HP_MAX = 100;
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -286,9 +289,23 @@ export class World3D {
     for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {   // two ships: each moves half the overlap apart
       const a = ps[i], b = ps[j], R = rads.get(a) + rads.get(b); if (Math.abs(a.x - b.x) > R || Math.abs(a.y - b.y) > R) continue;
       const n = satPush(polys.get(a), polys.get(b)); if (!n) continue;
-      keep(a, () => nudge(a, n, n.d / 2)); keep(b, () => nudge(b, { nx: -n.nx, ny: -n.ny }, n.d / 2));
+      keep(a, () => { a.x += n.nx * n.d / 2; a.y += n.ny * n.d / 2; }); keep(b, () => { b.x -= n.nx * n.d / 2; b.y -= n.ny * n.d / 2; });
+      // (owner, 2026-10-14) ships push each other: an impact trades momentum (equal masses, a little bounce) and both
+      // take damage by how hard they closed on each other (nothing for a gentle touch)
+      const vn = ((a.vx || 0) - (b.vx || 0)) * n.nx + ((a.vy || 0) - (b.vy || 0)) * n.ny;   // closing speed along the contact (negative = closing)
+      if (vn < 0) {
+        const j = -(1 + BUMP_E) * vn / 2;
+        a.vx = (a.vx || 0) + j * n.nx; a.vy = (a.vy || 0) + j * n.ny; b.vx = (b.vx || 0) - j * n.nx; b.vy = (b.vy || 0) - j * n.ny;
+        if (!a.dx && !a.dy) a.brakeA = 0; if (!b.dx && !b.dy) b.brakeA = 0;   // a drifting ship brakes again from its new speed
+        const dmg = Math.max(0, -vn - BUMP_SAFE) * BUMP_DMG; if (dmg > 0) { this.hurt(a, dmg); this.hurt(b, dmg); }
+      }
       polys.set(a, this.shipPoly(a)); polys.set(b, this.shipPoly(b));
     }
+  }
+  // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
+  hurt(p, d) {
+    p.hp = (p.hp ?? HP_MAX) - d;
+    if (p.hp <= 0) { p.hp = HP_MAX; this.respawn(p.id); }
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
   addBlock(pid) {
@@ -358,7 +375,7 @@ export class World3D {
     for (const p of this.players.values()) {
       const dx = p.x - viewer.x, dy = p.y - viewer.y;
       if (p !== viewer && dx * dx + dy * dy > R2) continue;
-      out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000)]);
+      out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX)]);   // + health (owner, 2026-10-14)
     }
     return out;
   }

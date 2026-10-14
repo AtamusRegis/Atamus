@@ -427,6 +427,24 @@ function updateShipVis(dt, now) {
   }
   visGizmo(edit);
 }
+// ---- (owner, 2026-10-14) health bars over damaged ships (mine too); a ship I can't see shows none ----
+const hpBars = new Map();                      // player id -> element
+function drawHpBars() {
+  const r = canvas.getBoundingClientRect(), seen = new Set();
+  for (const p of players.values()) {
+    if (p.hp === undefined || p.hp >= HP_MAX || !p.near && p.id !== myId) continue;
+    const v = p.holder.children[0], t = p.id === myId ? null : visTargets.get(v), a = p.id === myId ? 1 : t ? t.a : 0;
+    if (a <= 0.01) continue;
+    const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
+    const s3 = new THREE.Vector3(x, shipMid * 2 + 25, -y).project(camera); if (s3.z > 1) continue;
+    let el = hpBars.get(p.id); if (!el) { el = document.createElement("div"); el.className = "hp-bar"; el.innerHTML = "<i></i>"; document.body.appendChild(el); hpBars.set(p.id, el); }
+    const f = Math.max(0, Math.min(1, p.hp / HP_MAX));
+    el.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)"; el.style.opacity = a;
+    el.firstChild.style.width = f * 100 + "%"; el.firstChild.style.background = f > 0.5 ? "#5fd16b" : f > 0.25 ? "#e3b341" : "#e5534b";
+    seen.add(p.id);
+  }
+  for (const [id, el] of hpBars) if (!seen.has(id)) { el.remove(); hpBars.delete(id); }
+}
 // (owner) with the Object Editor open, the lines behind each number are drawn (clear green, blocked red) with the
 // percentage over each ship, for testing
 const visGizGeo = new THREE.BufferGeometry(); let visGizCap = 0;
@@ -474,7 +492,9 @@ let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direc
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
-const TURN_A = 40, TURN_K = 9, BANK_MAX = 0.32;   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
+const TURN_A = 40, TURN_K = 9, BANK_MAX = 0.32;
+const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
+let HP_MAX = 100;                               // (the server sends it)   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
 function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced turn direction (+1 / -1), 0 = the short way
@@ -525,7 +545,13 @@ function collideMe() {                       // (owner, 2026-10-14) by the ship'
   const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
   for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // Build menu pieces (their movement ellipses)
-  for (const p of players.values()) { if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) <= 2 * R + 10) hitBy(shipMove(x, y, p.heading)); }
+  for (const p of players.values()) {          // (owner, 2026-10-14) other ships: pushed apart, trading momentum like the server does
+    if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
+    const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
+    q.x += n.nx * n.d / 2; q.y += n.ny * n.d / 2; P = shipMove(q.x, q.y, h);
+    const vn = (q.vx - (p.vx || 0)) * n.nx + (q.vy - (p.vy || 0)) * n.ny;
+    if (vn < 0) { const j = -(1 + BUMP_E) * vn / 2; q.vx += j * n.nx; q.vy += j * n.ny; if (!(keys.size)) brakeA = 0; }
+  }
   if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
 }
 // (owner, 2026-10-14) every ship's colliders and pivot, for the Object Editor's drawing in the world
@@ -672,7 +698,7 @@ function connect() {
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; }
+      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; if (m.cfg.hpMax) HP_MAX = m.cfg.hpMax; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
@@ -694,9 +720,10 @@ function connect() {
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
       const inSnap = new Set();
-      for (const [id, cx, cy, ch] of m.p) {
+      for (const [id, cx, cy, ch, hp] of m.p) {
         const x = cx / 100, y = cy / 100;
         inSnap.add(id);
+        { const pp = players.get(id); if (pp && Number.isFinite(hp)) pp.hp = hp; }   // (owner, 2026-10-14) health
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
           const lspd = Math.max(SPEED, Math.hypot(vel.x, vel.y));
@@ -709,6 +736,7 @@ function connect() {
         const p = players.get(id) || addPlayer(id, "");
         if (!p.near) { p.near = true; p.buf = []; p.holder.visible = true; p.holder.position.copy(toWorld(x, y, 0)); }   // entering the load circle: start fresh there
         p.buf.push({ x, y, h: (ch || 0) / 1000, t: m.ts }); if (p.buf.length > 30) p.buf.shift();   // a short history, timed by the server
+        if (p.buf.length > 1) { const q = p.buf[p.buf.length - 2], dt2 = Math.max(0.001, (m.ts - q.t) / 1000); p.vx = (x - q.x) / dt2; p.vy = (y - q.y) / dt2; }   // its velocity, for bumping into it
         p.to = { x, y };
       }
       for (const p of players.values()) if (p.id !== myId && p.near && !inSnap.has(p.id)) { p.near = false; p.buf = []; p.holder.visible = false; }   // left the load circle
@@ -949,6 +977,7 @@ renderer.setAnimationLoop(() => {
   }
 
   updateShipVis(Math.min(0.1, dt || 0.016), performance.now());
+  drawHpBars();
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderer.render(scene, camera);
