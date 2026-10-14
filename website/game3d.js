@@ -224,17 +224,69 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   src.position.y -= b2.min.y;                  // the hull rests on the grid
   const wrap = new THREE.Group(); wrap.add(src);
   shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
-  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual()); }
+  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId)); }
 }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
-function makeVisual() {
-  if (shipTemplate) return shipTemplate.clone(true);
-  const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m;
+function makeVisual(remote) {
+  const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
+  if (remote) v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(losMat) : losMat(o.material); });
+  return v;
+}
+
+// ---- (owner, 2026-10-13) line of sight: other ships are drawn only where my ship's center can see them ----
+// On the ground plane (height ignored, like the colliders): each block and Build piece casts a shadow away from my
+// ship's center. The shadows are drawn top-down into a texture around me every frame, and the other ships' materials
+// skip every pixel that lies in shadow, so a ship half behind a wall shows only its visible half.
+const VIS_S = 2700, VIS_N = 2048;              // the texture covers 2 x VIS_S m square around me (the whole 2.5 km map)
+const visRT = new THREE.WebGLRenderTarget(VIS_N, VIS_N, { depthBuffer: false });
+const visScene = new THREE.Scene(); visScene.background = new THREE.Color(0xffffff);
+const visCam = new THREE.OrthographicCamera(-VIS_S, VIS_S, VIS_S, -VIS_S, 1, 4000); visCam.up.set(0, 0, -1);   // north up, east right
+const visGeo = new THREE.BufferGeometry(); let visCap = 0;
+const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })); visMesh.frustumCulled = false; visScene.add(visMesh);
+const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S } };
+const losCache = new Map();
+function losMat(m) {                           // a copy of a ship material that leaves out the parts in shadow
+  if (losCache.has(m)) return losCache.get(m);
+  const c = m.clone();
+  c.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, visU);
+    sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = "uniform sampler2D visTex; uniform vec2 visC; uniform float visS; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
+      "void main() {\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0 && texture2D(visTex, vuv).r < 0.5) discard;");
+  };
+  c.customProgramCacheKey = () => "los";
+  losCache.set(m, c); return c;
+}
+function updateVis() {                         // the shadows from where my ship is now
+  const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
+  const edges = (v) => {                       // v: a convex outline [x0, y0, x1, y1, ...]; each edge's shadow quad
+    for (let i = 0; i < v.length; i += 2) {
+      const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
+      const da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
+      const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
+      pos.push(ax, 0, -ay, bx, 0, -by, fbx, 0, -fby, ax, 0, -ay, fbx, 0, -fby, fax, 0, -fay);
+    }
+  };
+  for (const b of blocks.values()) {
+    if (Math.abs(b.x - vx) > VIS_S + BLOCK_HALF || Math.abs(b.y - vy) > VIS_S + BLOCK_HALF) continue;
+    const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
+  }
+  for (const b of builds.values()) if (Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) edges(b.poly);
+  if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
+  const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
+  visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
+  renderer.setRenderTarget(visRT); renderer.render(visScene, visCam); renderer.setRenderTarget(null);
+}
+// whether a block or Build piece stands between two points (the minimap hides ships my ship can't see)
+function sightBlocked(x0, y0, x1, y1) {
+  for (const b of blocks.values()) { const h = BLOCK_HALF; if (segPoly(x0, y0, x1, y1, [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]) !== null) return true; }
+  for (const b of builds.values()) if (segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
+  return false;
 }
 
 function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
   const holder = new THREE.Group();
-  holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual()); scene.add(holder);
+  holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId)); scene.add(holder);
   holder.visible = id === myId;                // others show once a snapshot has them inside the load circle
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y }, near: false };   // buf: recent snapshot positions on the server's clock; near: inside my load circle
   players.set(id, p); return p;
@@ -679,6 +731,7 @@ renderer.setAnimationLoop(() => {
   }
 
   build.frame();
+  updateVis();
   renderer.render(scene, camera);
 });
 
@@ -739,6 +792,7 @@ function drawMinimap(now) {
   }
   for (const p of players.values()) {
     if (p.id === myId || !p.side || !p.near) continue;
+    if (haveMe && sightBlocked(me.x, me.y, p.holder.position.x, -p.holder.position.z)) continue;   // (owner) out of my line of sight
     arrow(p.holder.position.x, -p.holder.position.z, p.heading, mySide && p.side === mySide ? "#4f8fe8" : "#e04848", 3, false);
   }
   if (haveMe) {
