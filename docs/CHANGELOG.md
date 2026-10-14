@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Reticle independent of the ship (owner):** aiming no longer turns the ship toward the reticle or slows strafing; the ship always faces and moves the way WASD pushes it.
 - **Slower game (owner):** all movement cut to 25%: speed 50 m/s (sprint 65), thrust, braking and the stop distance, the swing of the motion, and the nose's turning (2 rad/s). Ramming damage was rescaled so hits hurt the same as before.
 - **Slower turning (owner):** the ship's nose now turns at half the speed (4 rad/s, was 8).
 - **Test ships act as players (owner):** placed test ships now collide, get shoved, take damage, show health bars and sparks, and follow visibility exactly like player ships (they don't move on their own). They can still be picked up and moved in the Build menu.

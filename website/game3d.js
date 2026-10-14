@@ -806,7 +806,7 @@ function connect() {
 connect();
 let lastH = 0, lastAim = null, trailing = 0;
 // the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
-const aimAngle = () => aiming && myAim && haveMe ? Math.atan2(myAim.x - me.x, myAim.z + me.y) : null;                   // trailing: settled-state resends still owed after the last change
+const aimAngle = () => null;                   // (owner, 2026-10-14) the reticle is independent of the ship: it never turns it or changes "forward" (was its direction while aiming)                   // trailing: settled-state resends still owed after the last change
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
@@ -880,12 +880,12 @@ renderer.setAnimationLoop(() => {
   for (const p of players.values()) {
     if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift
       // (owner, 2026-10-13) while aiming (right button, with or without the middle), it turns toward the reticle instead
-      const face = aiming && myAim ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
+      const face = (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;   // (owner, 2026-10-14) WASD only, even while aiming
       // (owner, 2026-10-13) reversals turn through the last "middle" direction: going A W D, then D A D A..., the nose
       // swings over the top (W) every time instead of whichever way is shortest. Each input direction change that
       // isn't a reversal records the direction it came from as the middle; a reversal then picks the turn direction
       // whose arc passes through it, fixed until the input changes again.
-      if (!aiming && (d.x || d.y)) {
+      if (d.x || d.y) {
         const T2 = Math.PI * 2, tgt = Math.atan2(d.x, -d.y), w = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
         if (turnTgt === null) turnTgt = tgt;
         else if (Math.abs(w(tgt - turnTgt)) > 1e-3) {
@@ -895,8 +895,8 @@ renderer.setAnimationLoop(() => {
           } else { turnMid = turnTgt; turnSign = 0; }
           turnTgt = tgt;
         }
-      } else if (aiming) turnSign = 0;
-      placeShip(p, me.x, me.y, dt, face, false, aiming ? 0 : turnSign); bank(p, dt); continue;
+      }
+      placeShip(p, me.x, me.y, dt, face, false, turnSign); bank(p, dt); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
