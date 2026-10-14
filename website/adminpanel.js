@@ -1,9 +1,10 @@
 // (owner, 2026-10-13) The admin panel: an Admin button (top right) for staff accounts opens it. Being logged in as a staff
-// account is enough (no second password). Three tabs: Players (online players, plus anyone banned or muted: kick, ban,
-// unban, mute, unmute, each with a reason), Reports (players' reports with the reported player's recent chat) and
-// Appeals (ban appeals: read, reply, accept or deny). AdminPanel.open(id) shows Players with that player picked out (the
-// Admin item on a name in chat). Text is always
-// inserted as text. Talks to /game/admin/* on the server (packages/server/src/admin.js).
+// account is enough (no second password). Three tabs: Players (online players, plus anyone banned or muted: Action opens
+// the disciplinary panel; Unban / Unmute lift at once), Reports (players' reports with the reported player's recent chat)
+// and Appeals (ban appeals: read, reply, accept or deny). The disciplinary panel is its own window (AdminPanel.act(id,
+// name), also the Admin item on a name in chat): Type (kick, mute, ban, kill, respawn, teleport to me, teleport to player),
+// a reason from a list for mutes and bans, a length slider (5 min, 30 min, 6 h, 1 day, 3 days, 7 days, indefinite), an
+// optional note to the player, Cancel / Accept. Text is always inserted as text. Talks to /game/admin/* (server admin.js).
 (function () {
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const when = (t) => new Date(t).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -41,10 +42,10 @@
       const row = $("div", "ap-row"), name = $("span", "ap-name" + (p.side ? " " + p.side : ""), p.name);
       const st = $("span", "ap-st", [p.online ? "" : "offline", p.ban ? "banned " + length(p.ban) : "", p.mute ? "muted " + length(p.mute) : ""].filter(Boolean).join(" · "));
       const acts = $("span", "ap-acts");
+      { const a = $("button", "", "Action"); a.addEventListener("click", () => act(p.id, p.name)); acts.appendChild(a); }
       if (!p.staff) {
-        if (p.online) acts.appendChild(action("Kick", p, "kick", false));
-        acts.appendChild(p.ban ? action("Unban", p, "unban", false) : action("Ban", p, "ban", true));
-        acts.appendChild(p.mute ? action("Unmute", p, "unmute", false) : action("Mute", p, "mute", true));
+        if (p.ban) acts.appendChild(lift("Unban", p, "unban"));
+        if (p.mute) acts.appendChild(lift("Unmute", p, "unmute"));
       }
       if (focus && p.id === focus) row.classList.add("ap-focus");
       row.append(name, st, acts); t.appendChild(row);
@@ -52,30 +53,53 @@
     body.replaceChildren(t);
     const f = t.querySelector(".ap-focus"); if (f) f.scrollIntoView({ block: "nearest" });
   }
-  function action(label, p, path, timed) {
+  function lift(label, p, path) {
     const b = $("button", "", label);
-    b.addEventListener("click", () => {
-      const row = b.closest(".ap-row"); const old = row.nextElementSibling; if (old && old.classList.contains("ap-form")) old.remove();
-      const f = $("form", "ap-form"), reason = $("input"); reason.placeholder = "Reason"; reason.maxLength = 500;
-      f.append($("b", "", label + " " + p.name), reason);
-      let amount, unit;
-      if (timed) {
-        amount = $("input"); amount.type = "number"; amount.min = "1"; amount.max = "3650"; amount.value = "1"; amount.className = "ap-n";
-        unit = $("select"); for (const [v, l] of [["hours", "hours"], ["days", "days"], ["perm", "permanent"]]) { const o = $("option", "", l); o.value = v; unit.appendChild(o); }
-        unit.addEventListener("change", () => { amount.disabled = unit.value === "perm"; });
-        f.append(amount, unit);
-      }
-      const ok = $("button", "", label); ok.type = "submit"; const no = $("button", "", "Cancel"); no.type = "button"; no.addEventListener("click", () => f.remove());
-      const e = $("p", "ap-err"); e.hidden = true; f.append(ok, no, e);
-      f.addEventListener("submit", async (ev) => {
-        ev.preventDefault(); ok.disabled = true;
-        const data = { id: p.id, reason: reason.value };
-        if (timed) { if (unit.value === "perm") data.perm = true; else { data.amount = +amount.value; data.unit = unit.value; } }
-        try { await Api.post("/game/admin/" + path, data); draw(); } catch (x) { err(e, x); ok.disabled = false; }
-      });
-      row.after(f); reason.focus();
-    });
+    b.addEventListener("click", async () => { b.disabled = true; try { await Api.post("/game/admin/" + path, { id: p.id }); } catch {} draw(); });
     return b;
+  }
+
+  // ---- the disciplinary panel ----
+  const TYPES = [["kick", "Kick"], ["mute", "Mute"], ["ban", "Ban"], ["kill", "Kill"], ["respawn", "Respawn"], ["tpme", "Teleport to me"], ["tpto", "Teleport to player"]];
+  const REASONS = { mute: ["Language", "Spam"], ban: ["Language", "Spam", "Disruptive Behavior"] };
+  const NOTCHES = [[5, "5 min"], [30, "30 min"], [360, "6 h"], [1440, "1 day"], [4320, "3 days"], [10080, "7 days"], [null, "Indefinite"]];
+  let disc = null;
+  function act(id, name) {
+    if (!disc) { disc = $("div"); disc.id = "disc-panel"; disc.hidden = true; document.body.appendChild(disc); }
+    let type = "kick", reason = null, notch = 0;
+    const box = $("div", "dp-box"), title = $("p", "dp-title", name);
+    const typeRow = $("div", "dp-seg"), reasonWrap = $("div", "dp-row"), reasonRow = $("div", "dp-seg"), lenWrap = $("div", "dp-row");
+    const slider = $("input"); slider.type = "range"; slider.min = "0"; slider.max = String(NOTCHES.length - 1); slider.step = "1"; slider.value = "0";
+    const ticks = $("div", "dp-ticks"); for (const [, l] of NOTCHES) ticks.appendChild($("span", "", l));
+    const noteBtn = $("button", "", "Add note"), note = $("input"); note.maxLength = 300; note.hidden = true;
+    const e = $("p", "ap-err"); e.hidden = true;
+    const cancel = $("button", "", "Cancel"), ok = $("button", "dp-ok", "Accept");
+    const seg = (row, items, cur, pick) => { row.replaceChildren(...items.map(([k, l]) => { const b = $("button", k === cur ? "on" : "", l); b.addEventListener("click", () => pick(k)); return b; })); };
+    function redraw() {
+      seg(typeRow, TYPES, type, (k) => { type = k; reason = REASONS[k] ? REASONS[k][0] : null; redraw(); });
+      const rs = REASONS[type];
+      reasonWrap.hidden = lenWrap.hidden = !rs;
+      if (rs) seg(reasonRow, rs.map((r) => [r, r]), reason, (k) => { reason = k; redraw(); });
+      [...ticks.children].forEach((t, i) => t.classList.toggle("on", i === notch));
+    }
+    slider.addEventListener("input", () => { notch = +slider.value; redraw(); });
+    noteBtn.addEventListener("click", () => { note.hidden = !note.hidden; if (!note.hidden) note.focus(); });
+    note.addEventListener("keydown", (ev) => ev.stopPropagation());
+    cancel.addEventListener("click", () => { disc.hidden = true; });
+    ok.addEventListener("click", async () => {
+      ok.disabled = true; e.hidden = true;
+      const data = { id, type, note: note.hidden ? "" : note.value };
+      if (REASONS[type]) { data.reason = reason; data.minutes = NOTCHES[notch][0]; }
+      try { await Api.post("/game/admin/act", data); disc.hidden = true; if (root && !root.hidden) draw(); } catch (x) { err(e, x); ok.disabled = false; }
+    });
+    reasonWrap.append($("span", "dp-label", "Reason"), reasonRow);
+    lenWrap.append($("span", "dp-label", "Length"), $("div", "dp-len"));
+    lenWrap.lastChild.append(slider, ticks);
+    const typeWrap = $("div", "dp-row"); typeWrap.append($("span", "dp-label", "Type"), typeRow);
+    const noteWrap = $("div", "dp-row"); noteWrap.append(noteBtn, note);
+    const btns = $("div", "dp-btns"); btns.append(cancel, ok);
+    box.append(title, typeWrap, reasonWrap, lenWrap, noteWrap, e, btns);
+    disc.replaceChildren(box); disc.hidden = false; redraw();
   }
 
   // ---- reports ----
@@ -90,7 +114,7 @@
       const lines = $("div", "ap-lines");
       for (const l of r.chat) { const p = $("p"); p.append($("span", "ap-dim", when(l.at) + " [" + ({ side: "Faction", global: "World", whisper: "Whisper" }[l.ch] || l.ch) + "] "), document.createTextNode(l.text)); lines.appendChild(p); }
       if (r.chat.length) more.append(lines);
-      if (r.target) { const a = $("button", "", "Admin"); a.addEventListener("click", (e) => { e.stopPropagation(); open(r.target); }); more.append(a); }
+      if (r.target) { const a = $("button", "", "Action"); a.addEventListener("click", (e) => { e.stopPropagation(); act(r.target, r.targetName); }); more.append(a); }
       if (r.status === "open") { const c = $("button", "", "Close"); c.addEventListener("click", async (e) => { e.stopPropagation(); try { await Api.post("/game/admin/report/close", { id: r.id }); draw(); } catch {} }); more.append(c); }
       row.addEventListener("click", () => { more.hidden = !more.hidden; });
       t.append(row, more);
@@ -121,7 +145,7 @@
       const say = $("form", "ap-form"), text = $("input"); text.placeholder = "Reply"; text.maxLength = 1000;
       const send = $("button", "", "Send"); send.type = "submit"; say.append(text, send);
       say.addEventListener("submit", async (ev) => { ev.preventDefault(); if (!text.value.trim()) return; try { await Api.post("/game/admin/appeal/say", { id: a.id, text: text.value }); draw(); } catch (x) { err(e, x); } });
-      const dec = $("form", "ap-form"), reason = $("input"); reason.placeholder = "Reason"; reason.maxLength = 500;
+      const dec = $("form", "ap-form"), reason = $("input"); reason.placeholder = "Note"; reason.maxLength = 500;
       const acc = $("button", "", "Accept"), den = $("button", "", "Deny"); acc.type = den.type = "button";
       const decide = async (accept) => { try { await Api.post("/game/admin/appeal", { id: a.id, accept, reason: reason.value }); draw(); } catch (x) { err(e, x); } };
       acc.addEventListener("click", () => decide(true)); den.addEventListener("click", () => decide(false));
@@ -133,5 +157,5 @@
   }
 
   function open(id) { if (!root) return; tab = "players"; openAppeal = null; focus = String(id); toggle(true); }
-  window.AdminPanel = { mount, open };
+  window.AdminPanel = { mount, open, act };
 })();

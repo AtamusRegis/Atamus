@@ -24,6 +24,13 @@ export function attachGameServer(httpServer) {
     online: () => { const m = new Map(); for (const [pid] of socks) { const p = world.players.get(pid); m.set(pid, { side: p ? p.team : null }); } return m; },
     kick: (pid, code, reason) => { const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
+    // (owner) admin actions in the world: kill / respawn (back near the center), teleports (stopped, 150 m off the other
+    // ship); the moved player is told where they are now. note: a line for the player's chat
+    respawn: (pid) => { const p = world.respawn(pid); if (p) tell(pid, { t: "teleport", x: p.x, y: p.y }); return !!p; },
+    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2;
+      const p = world.teleport(pid, q.x + Math.cos(a) * 150, q.y + Math.sin(a) * 150); if (p) tell(pid, { t: "teleport", x: p.x, y: p.y }); return !!p; },
+    inWorld: (pid) => world.players.has(pid),
+    note: (pid, text) => tell(pid, { t: "chat", ch: "sys", text }),
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
   });
   // (owner, 2026-10-13) the last chat lines (everything sent, any channel), kept to go with a report: the reported
@@ -32,6 +39,7 @@ export function attachGameServer(httpServer) {
   const remember = (line) => { recent.push(line); if (recent.length > 500) recent.shift(); };
   const reports = new Map();                   // account id -> recent report times: at most 5 in 10 minutes
   const reportOk = (pid) => { const now = Date.now(), l = (reports.get(pid) || []).filter((t) => now - t < 600_000); if (l.length >= 5) return false; l.push(now); reports.set(pid, l); return true; };
+  const tell = (pid, obj) => { const w = socks.get(pid); if (w && w.readyState === w.OPEN) w.send(JSON.stringify(obj)); };
   const muted = (pid) => { const m = mutes.get(pid); return !!m && (m.perm || (m.until && m.until > Date.now())); };
 
   const wss = new WebSocketServer({

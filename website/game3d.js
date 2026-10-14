@@ -387,6 +387,7 @@ function connect() {
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
     else if (m.t === "chat") addChat(m);
+    else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
     else if (m.t === "update") goUpdating(["web"]);
@@ -727,7 +728,8 @@ if (chatIn) {
   chatIn.addEventListener("beforeinput", (e) => { if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") { e.preventDefault(); sendChat(); } });
 }
 function addChat(m) {
-  let key = m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
+  if (m.ch === "sys") m = { sys: 1, text: m.text };   // (owner) a line from an admin action: in the tab you're on
+  let key = m.sys && !m.ch ? chatTab : m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
   if (m.ch === "whisper") {
     if (!m.with) {                             // /whisper to a name no one online has: say so in the tab you're on
       if (!m.sys) return; key = chatTab; m = { sys: 1, text: (m.withName || "They") + " is offline." };
@@ -749,7 +751,7 @@ if (chatLog) chatLog.addEventListener("contextmenu", (e) => {
   const id = who.dataset.id, name = who.dataset.name;
   const item = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", () => { hideMenu(); fn(); }); return b; };
   ctxMenu.replaceChildren(item("Whisper", () => { selectTab(whisperTab(id, name)); openChat(); }), item("Report", () => openReport(id, name)),
-    ...(amStaff && window.AdminPanel ? [item("Admin", () => window.AdminPanel.open(id))] : []));
+    ...(amStaff && window.AdminPanel ? [item("Admin", () => window.AdminPanel.act(id, name))] : []));   // (owner) the disciplinary panel
   ctxMenu.hidden = false;
   ctxMenu.style.left = Math.min(e.clientX, innerWidth - 120) + "px"; ctxMenu.style.top = Math.min(e.clientY, innerHeight - 100) + "px";
 });

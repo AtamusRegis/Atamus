@@ -116,6 +116,14 @@ export class World3D {
     return p;
   }
 
+  // (owner, 2026-10-13) admin actions: put a ship somewhere (stopped), or back at the spawn area near the center
+  teleport(id, x, y) {
+    const p = this.players.get(String(id)); if (!p || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (!inside(x, y)) { const k = 0.98 * (A / Math.max(Math.abs(y), Math.abs(SQ3 * x + y) / 2, Math.abs(SQ3 * x - y) / 2, 1)); x *= Math.min(1, k); y *= Math.min(1, k); }
+    p.x = x; p.y = y; p.vx = p.vy = 0; p.dx = p.dy = 0; p.brakeA = 0; p.dirty = true; return p;
+  }
+  respawn(id) { const a = Math.random() * Math.PI * 2, d = Math.random() * 300; return this.teleport(id, Math.cos(a) * d, Math.sin(a) * d); }
+
   async leave(id) {
     const p = this.players.get(String(id));
     if (!p) return;

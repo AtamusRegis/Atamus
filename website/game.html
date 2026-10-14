@@ -49,6 +49,18 @@
     .ap-appeal { display: grid; gap: 6px; } .ap-appeal > button { justify-self: start; } .ap-title { margin: 0; font-weight: 600; } .ap-appeal .ap-dim { margin: 0; white-space: normal; }
     .ap-lines { max-height: 260px; overflow-y: auto; display: grid; gap: 3px; padding: 6px; background: #0c121c; border-radius: 4px; } .ap-lines p { margin: 0; } .ap-lines p.admin b { color: #ffd27a; }
     .ap-focus { outline: 1px solid #e8902a; } .ap-report { display: grid; } .ap-report .ap-text { margin: 0; white-space: pre-wrap; } .ap-report button { justify-self: start; }
+    /* (owner, 2026-10-13) the disciplinary panel: its own window */
+    #disc-panel { position: fixed; inset: 0; z-index: 16; display: grid; place-items: center; background: rgba(5, 7, 12, .45); }
+    .dp-box { display: grid; gap: 10px; width: 470px; max-width: calc(100vw - 24px); padding: 14px 16px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 12px system-ui, sans-serif; }
+    .dp-box button, .dp-box input:not([type=range]) { background: #16202f; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 9px; font: 12px system-ui, sans-serif; }
+    .dp-box input:not([type=range]) { background: #0c121c; flex: 1; }
+    .dp-title { margin: 0; font: 600 14px system-ui, sans-serif; color: #fff; }
+    .dp-row { display: flex; gap: 8px; align-items: flex-start; } .dp-label { width: 52px; flex: none; padding-top: 5px; color: #7f93ad; }
+    .dp-seg { display: flex; flex-wrap: wrap; gap: 4px; } .dp-seg button.on { border-color: #e8902a; color: #fff; }
+    .dp-len { flex: 1; display: grid; gap: 3px; } .dp-len input { width: 100%; margin: 0; accent-color: #e8902a; }
+    .dp-ticks { display: flex; justify-content: space-between; color: #7f93ad; font-size: 10px; } .dp-ticks span.on { color: #ffd27a; }
+    .dp-btns { display: flex; justify-content: flex-end; gap: 6px; } .dp-ok { border-color: #e8902a !important; color: #fff !important; }
+    html.touch #disc-panel { display: none; }
     html.touch #admin-btn, html.touch #admin-panel { display: none; }
     #cap { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
     #cap-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2f9bd6, #7fd8ff); transition: width .08s linear; }
@@ -98,7 +110,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791946227"></script>
-  <script type="module" src="game3d.js?v=1791947648"></script>
+  <script src="adminpanel.js?v=1791948217"></script>
+  <script type="module" src="game3d.js?v=1791948217"></script>
 </body>
 </html>
