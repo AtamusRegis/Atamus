@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Website look in the game; chat colors and size (owner):** the game UI (chat, admin and disciplinary panels, side picker, report box, menus, capacitor) now uses the login page's flat, unbordered style with light gradients. Chat tags: World gray, Faction in the side's color, Whisper purple. A +/− at the far right of the chat tabs collapses the chat to 2 rows or expands it to 10. Scroll bars are rounded gray bars.
 - **[A] admin button (owner):** the admin panel now opens from an [A] button at the left of the chat input instead of a button at the top right.
 - **Foxhole-style chat (owner):** tabs on top (All | World | Faction | Whisper) pick what you read; the input bar's "[Type] Name:" label shows where you type, and TAB switches that channel without changing the tab. All whispers share one tab; Whisper sends to the last person whispered. The input is dark.
 - **Chat channel in the input (owner):** the World / Faction tabs are gone: the input shows "[World] Name:" (or Faction / Whisper) at its start, World and Faction lines share one tagged log, and TAB switches the channel while typing. Tabs (Chat | Whisper …) appear only when there are whispers. T no longer cycles tabs.

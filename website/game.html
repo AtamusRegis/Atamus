@@ -77,7 +77,10 @@
     html.touch #cap { bottom: 20px; left: auto; right: 20px; transform: none; }
     /* (owner, 2026-10-13) chat at the bottom right: the selected tab's lines, the input, the tabs */
     #chat { position: fixed; right: 12px; bottom: 12px; width: 340px; display: grid; gap: 4px; font: 12px system-ui, sans-serif; }
-    #chat-log { max-height: 180px; overflow-y: auto; display: grid; gap: 1px; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }
+    #chat-log { height: 160px; overflow-y: auto; display: flex; flex-direction: column; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }   /* (owner) 10 rows */
+    #chat-log .chat-line { line-height: 16px; } #chat-log > :first-child { margin-top: auto; }   /* lines sit at the bottom */
+    #chat.small #chat-log { height: 32px; }   /* (owner) collapsed: 2 rows */
+    #chat-size { flex: none; width: 26px; margin-left: auto; font-size: 15px !important; line-height: 1; padding: 2px 0 !important; }   /* (owner) anchored at the far right of the tab row */
     .chat-line.sys { color: #7f93ad; font-style: italic; }
     .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; } .chat-who[data-id] { cursor: pointer; }
     #chat-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -85,12 +88,12 @@
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
     #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
     .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
-    #chat:has(#admin-btn) #chat-tabs, #chat:has(#admin-btn) #chat-log { margin-left: 32px; }   /* (owner) the tabs (and lines) start over the input, not over [A] */
+    #chat:has(#admin-btn) #chat-log, #chat:has(#admin-btn) #chat-tabs { margin-left: 32px; }   /* (owner) the tabs and lines start over the input, not over [A] */
     #chat-row { display: flex; gap: 4px; align-items: stretch; } #chat-row #chat-form { flex: 1; min-width: 0; }
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
     #chat-pre { flex: none; white-space: nowrap; font: 12px system-ui, sans-serif; }
-    .chat-ch.world { color: #9fb3cf; } .chat-ch.side { color: #7fd8a0; } .chat-ch.whisper { color: #d79bff; }
+    .chat-ch.world { color: #93a0b4; } .chat-ch.side.red { color: #ff6a50; } .chat-ch.side.blue { color: #6fa8ff; } .chat-ch.whisper { color: #c58cff; }   /* (owner) world gray, faction its color, whisper purple */
     #chat-in { flex: 1; min-width: 0; background: transparent; color: #e8f0fb; border: 0; padding: 2px 0; font: 12px system-ui, sans-serif; outline: none; }   /* (owner) not white: dark, inside the dark bar */
     html.touch #chat { left: 12px; right: auto; top: 140px; bottom: auto; width: 240px; }
     #ctx-menu { position: fixed; z-index: 20; display: grid; min-width: 100px; padding: 3px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 6px; }
@@ -105,6 +108,49 @@
     html:not(.touch), html:not(.touch) * { cursor: none !important; }
     #cursor { position: fixed; left: 0; top: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); pointer-events: none; z-index: 1000; will-change: transform; }
     html.touch #cursor { display: none; }
+    /* ================= (owner, 2026-10-13) the game UI in the website's look (the login page): flat, unbordered shapes with
+       light gradients for depth. These rules come last and override the older ones above. ================= */
+    :root { --panel-grad: linear-gradient(165deg, rgba(24,33,50,0.97) 0%, rgba(10,15,24,0.97) 100%); --panel-soft: linear-gradient(165deg, rgba(24,33,50,0.78) 0%, rgba(10,15,24,0.78) 100%);
+      --accent-grad: linear-gradient(135deg, #4fd2ff 0%, #2a7bff 100%); --gold-grad: linear-gradient(135deg, #ffd766 0%, #ff9a2a 100%);
+      --text: #e4ecf6; --text-dim: #93a0b4; --text-faint: #58667c; --card: rgba(255,255,255,0.04); --card-hover: rgba(255,255,255,0.08); --sel: rgba(56,198,255,0.16);
+      --radius: 6px; --shadow: 0 20px 55px rgba(0,0,0,0.55); --font: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif; }
+    .overlay, #helpers-box, #side-pick .box, #admin-panel, .dp-box, #report-box .box, #ctx-menu { background: var(--panel-grad) !important; border: none !important; border-radius: var(--radius) !important; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); }
+    #countdown { color: #ffd27a; }
+    #helpers-box { color: var(--text-dim); box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+    /* buttons: soft flat chips; selected ones take the blue tint, primary ones the blue gradient */
+    #admin-panel button, .dp-box button, #report-box button, #chat-tabs button, #ctx-menu button { background: var(--card) !important; border: none !important; color: var(--text-dim) !important; border-radius: 5px !important; font-family: var(--font) !important; transition: background .12s, color .12s; }
+    #admin-panel button:hover, .dp-box button:hover, #report-box button:hover, #chat-tabs button:hover, #ctx-menu button:hover { background: var(--card-hover) !important; color: var(--text) !important; }
+    #admin-panel .ap-tabs button.on, .dp-box .dp-seg button.on, #chat-tabs button.on { background: var(--sel) !important; color: var(--text) !important; }
+    #chat-tabs button.new:not(.on) { color: #ffd27a !important; }
+    .dp-box .dp-ok, #report-box #report-send { background: var(--accent-grad) !important; color: #06131f !important; font-weight: 600; }
+    .dp-box .dp-ok:hover, #report-box #report-send:hover { filter: brightness(1.08); box-shadow: 0 0 18px rgba(56,198,255,0.3); }
+    #admin-panel .ap-rail button { background: var(--panel-grad) !important; box-shadow: 0 8px 22px rgba(0,0,0,0.5); }
+    #admin-panel .ap-rail button.on { background: var(--accent-grad) !important; } #admin-panel .ap-rail button.on svg { fill: #06131f !important; }
+    /* inputs: dark wells, a blue glow when focused */
+    #admin-panel input, .dp-box input:not([type=range]), #report-box textarea { background: rgba(0,0,0,0.3) !important; border: none !important; border-radius: 5px !important; color: var(--text) !important; font-family: var(--font) !important; outline: none; }
+    #admin-panel input:focus, .dp-box input:not([type=range]):focus, #report-box textarea:focus { box-shadow: 0 0 0 2px rgba(56,198,255,0.5); background: rgba(0,0,0,0.4) !important; }
+    /* rows and cards: flat light cards on the panel */
+    .ap-table td, .ap-row { background: var(--card) !important; } .ap-click:hover { background: var(--card-hover) !important; }
+    .ap-form { border: none !important; background: rgba(0,0,0,0.2); }
+    .ap-lines { background: rgba(0,0,0,0.3) !important; }
+    /* the side picker */
+    #side-pick button { border: none !important; border-radius: var(--radius) !important; font-family: var(--font); box-shadow: 0 8px 22px rgba(0,0,0,0.4); }
+    #side-pick button[data-side="red"] { background: linear-gradient(135deg, #e0574a 0%, #9b2420 100%) !important; }
+    #side-pick button[data-side="blue"] { background: var(--accent-grad) !important; color: #06131f !important; }
+    #side-pick button:hover { filter: brightness(1.08); }
+    /* the capacitor bar */
+    #cap { background: rgba(0,0,0,0.45) !important; border: none !important; border-radius: 4px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+    #cap-fill { background: var(--accent-grad) !important; } #cap-fill.out { background: linear-gradient(135deg, #8a6a3a, #5a3a1a) !important; }
+    /* the chat: one soft panel; tabs, lines, then the input bar (a dark well); the [A] button in gold */
+    #chat { padding: 6px; border-radius: var(--radius); background: var(--panel-soft); box-shadow: 0 10px 30px rgba(0,0,0,0.35); font-family: var(--font); }
+    #chat-form { background: rgba(0,0,0,0.35) !important; border: none !important; border-radius: 5px !important; }
+    #chat-form:focus-within { box-shadow: 0 0 0 2px rgba(56,198,255,0.45); }
+    #admin-btn { background: rgba(255,207,80,0.14) !important; border: none !important; border-radius: 5px !important; color: #ffd766 !important; }
+    #admin-btn:hover { background: var(--gold-grad) !important; color: #1a1205 !important; }
+    /* (owner) scroll bars: a rounded gray bar, no track */
+    * { scrollbar-width: thin; scrollbar-color: #5c6676 transparent; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #5c6676; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: #727d8f; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -122,7 +168,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791951342"></script>
-  <script type="module" src="game3d.js?v=1791951426"></script>
+  <script src="adminpanel.js?v=1791951755"></script>
+  <script type="module" src="game3d.js?v=1791951943"></script>
 </body>
 </html>

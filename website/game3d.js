@@ -670,15 +670,21 @@ const shows = (tab, m) => tab === "all" || m.sys && !m.ch || m.ch === tab;
 function drawPrefix() {
   if (!chatPre) return;
   const tag = chatCh === "side" ? "Faction" : chatCh === "whisper" ? "Whisper " + (lastWhisper ? lastWhisper.name : "") : "World";
-  chatPre.className = "chat-ch " + (chatCh === "side" ? "side" : chatCh === "whisper" ? "whisper" : "world");
+  chatPre.className = "chat-ch " + (chatCh === "side" ? "side " + (mySide === "red" ? "red" : "blue") : chatCh === "whisper" ? "whisper" : "world");
   chatPre.textContent = "[" + tag + "] " + (myName || "") + ":";
 }
+// (owner) the +/- at the far right of the tab row: collapses the lines to 2 rows, or back to 10 (kept in this browser)
+const chatBox = $i("chat");
+let chatSmall = false; try { chatSmall = localStorage.getItem("atamus.chatSmall") === "1"; } catch {}
+if (chatBox) chatBox.classList.toggle("small", chatSmall);
 function drawTabs() {
   if (!chatTabs) return;
+  const size = document.createElement("button"); size.id = "chat-size"; size.textContent = chatSmall ? "+" : "\u2212";
+  size.addEventListener("click", () => { chatSmall = !chatSmall; try { localStorage.setItem("atamus.chatSmall", chatSmall ? "1" : "0"); } catch {} if (chatBox) chatBox.classList.toggle("small", chatSmall); drawTabs(); if (chatLog) chatLog.scrollTop = chatLog.scrollHeight; });
   chatTabs.replaceChildren(...TABS.map(([k, label]) => {
     const b = document.createElement("button"); b.className = (k === chatTab ? "on" : "") + (unread.has(k) ? " new" : "");
     b.textContent = label; b.addEventListener("click", () => selectTab(k)); return b;
-  }));
+  }), size);
 }
 function drawLog() {
   if (!chatLog) return;
@@ -689,7 +695,7 @@ function lineEl(m) {
   const line = document.createElement("div"); line.className = "chat-line";
   if (m.sys) { line.classList.add("sys"); line.textContent = m.text; return line; }
   const tag = document.createElement("span");
-  tag.className = "chat-ch " + (m.ch === "side" ? "side" : m.ch === "whisper" ? "whisper" : "world");
+  tag.className = "chat-ch " + (m.ch === "side" ? "side " + (m.s === "red" ? "red" : "blue") : m.ch === "whisper" ? "whisper" : "world");
   tag.textContent = m.ch === "side" ? "[Faction] " : m.ch === "whisper" ? (m.i === myId ? "[To " + (m.withName || "?") + "] " : "[Whisper] ") : "[World] ";
   const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
   if (m.i && m.i !== myId) { who.dataset.id = m.i; who.dataset.name = m.n; }
@@ -739,7 +745,7 @@ function addChat(m) {
   }
   lines.push(m); if (lines.length > CHAT_MAX) lines.shift();
   if (shows(chatTab, m)) { if (chatLog) { chatLog.appendChild(lineEl(m)); while (chatLog.children.length > CHAT_MAX) chatLog.firstChild.remove(); chatLog.scrollTop = chatLog.scrollHeight; } }
-  if (m.ch && m.i !== myId) for (const [k] of TABS) if (k !== chatTab && k !== "all" && shows(k, m)) unread.add(k);
+  if (m.ch && m.i !== myId && chatTab !== "all") for (const [k] of TABS) if (k !== chatTab && k !== "all" && shows(k, m)) unread.add(k);   // (on All you see everything)
   drawTabs();
 }
 drawTabs();

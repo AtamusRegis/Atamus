@@ -50,7 +50,7 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 ## Chat (owner, 2026-10-13, Foxhole-style)
 
-- **At the bottom right:** **tabs on top — All | World | Faction | Whisper** (which lines show), the lines, then the input bar with its label **"[Type] Name:"** on the left (dark, not white). Lines are tagged [World], [Faction], [Whisper] (received) or [To <name>] (sent); the last 200 are kept. A tab that gets a line while another is shown is marked (amber).
+- **At the bottom right**, on one soft panel: **tabs on top — All | World | Faction | Whisper** (which lines show) with a **+ / − button at the far right of the tab row** (owner: collapses the lines to 2 rows, or back to 10; kept per browser), the lines (10 rows, sitting at the bottom), then the input bar with its label **"[Type] Name:"** on the left (a dark well, not white). Lines are tagged **[World] (gray)**, **[Faction] (the speaker's side color)**, **[Whisper] / [To <name>] (purple)** (owner); the last 200 are kept. A tab that gets a line while another is shown is marked (amber); on All nothing is marked.
 - **The tab is what you read; the channel is where you type** (owner). **While typing, TAB switches the channel** — World → Faction → Whisper (to the last person whispered, either way) → World — **without changing the tab**, so you can read World and type to Faction. Picking a tab also points the channel at it (All leaves it; Whisper only once there's someone to whisper).
 - **All whispers share the Whisper tab** (owner). Receiving or sending a whisper makes that person the one Whisper sends to; sending one switches your channel to Whisper.
 - **Enter** opens the input and sends (on a phone, the keyboard's Go / Send key too); Escape or an empty line closes it. Game keys are ignored while typing.
@@ -71,6 +71,11 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 
 - Every push to `main` warns every connected player ahead of the switch — **1 s for now (owner, 2026-10-12: "make countdown 1 second for now"**; it was 30 s and goes back up when the owner says): the game shows **"Update incoming — N s"** top center, then sends them to `play.html?updating=1`, which waits for the new build and offers Enter System again. The length lives in `gamehttp.js` (`announceUpdate(part, 1)`) and the `sleep` in both deploy workflows.
 - The deploy workflows are unchanged (`deploy-website.yml` on `website/**`, `deploy-server.yml` on `packages/server/**`).
+
+## The UI's look (owner, 2026-10-13)
+
+- **The game UI uses the website's look (the login page):** flat, unbordered shapes with light gradients for depth — panels in the dark blue panel gradient with a soft shadow, buttons as soft flat chips (selected ones tinted blue, primary ones like Accept, Send and Blue in the blue gradient), inputs as dark wells with a blue glow when focused, rows as light cards. The capacitor fill is the blue gradient. The [A] button is gold. The mute / ban tags stay outlined.
+- **Scroll bars:** a rounded gray bar with no track.
 
 ## Rejected / removed (don't reintroduce)
 
