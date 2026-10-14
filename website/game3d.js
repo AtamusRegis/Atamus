@@ -65,11 +65,12 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
-// (owner, 2026-10-13) zmax = zmin: the wheel no longer zooms
-const cam = { pitch: 60, zmin: 600, zmax: 600, rot: 0.6, leash: 700, over: 100,
+// (owner, 2026-10-13) the wheel zooms in from 600 m down to 200 m (never out past 600); starting to aim snaps the
+// zoom straight back to 600 m, and the wheel does nothing while aiming
+const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100,
   dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
-let camDist = Math.min(cam.zmax, Math.max(cam.zmin, 500));
+let camDist = cam.zmax;
 
 // ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
 // so nothing z-fights or shimmers the way a second layer of rendered lines did
@@ -250,7 +251,7 @@ const mouse = { x: 0, y: 0 };
 let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
-  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });
+  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; camDist = viewDist = cam.zmax; e.preventDefault(); } });   // (owner) aiming snaps the zoom back
 addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
@@ -263,7 +264,7 @@ const cursorEl = document.getElementById("cursor");
 addEventListener("pointermove", (e) => { if (!cursorEl || e.pointerType === "touch") return; cursorEl.hidden = false; cursorEl.style.transform = "translate(" + e.clientX + "px," + e.clientY + "px)"; }, { capture: true, passive: true });
 document.addEventListener("mouseleave", () => { if (cursorEl) cursorEl.hidden = true; });
 addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) { let dx = e.movementX; if (Math.abs(dx) > 200) dx = 0; camYaw += dx * 0.005 * cam.rot; } });   // (owner) inverted; spikes from the pointer-lock cursor wrap are dropped
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); if (aiming) return; camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance
 let touch1 = null, pinch = 0;
 canvas.addEventListener("touchstart", (e) => { const t = e.targetTouches; if (t.length === 1) touch1 = { x: t[0].clientX, y: t[0].clientY }; if (t.length === 2) pinch = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY); }, { passive: true });
