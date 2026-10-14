@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791962395";
+import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791964391";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -60,29 +60,10 @@ function steer(vx, vy, tx, ty, a, brake, dt) {
   if (el > s) { ex *= s / el; ey *= s / el; }
   return [vx + ex, vy + ey];
 }
-// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored): each ship is a circle of SHIP_R,
-// each block a square BLOCK_HALF from its center. A ship overlapping one is pushed out along the shortest way, and the
-// part of its velocity going into it is dropped (it slides along). Mirrored in the client's prediction.
+// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored). A ship's footprint is SHIP_R x 2
+// square (its Movement ellipse is a fraction of that, Object Editor); each block a square BLOCK_HALF from its center.
+// Overlaps are pushed apart along the shortest way (satPush) and the velocity going in is dropped. Mirrored in the client.
 let SHIP_R = 45, BLOCK_HALF = 25;   // (the server sends both in the hello)
-function pushOut(p, cx, cy, minD) {           // p: {x, y, vx, vy}; push p's center to at least minD from (cx, cy)
-  let nx = p.x - cx, ny = p.y - cy, d = Math.hypot(nx, ny);
-  if (d >= minD) return false;
-  if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
-  p.x = cx + nx * minD; p.y = cy + ny * minD;
-  const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-  return true;
-}
-function pushFromBlock(p, b) {                 // a ship's circle out of an axis-aligned square
-  const qx = Math.max(b.x - BLOCK_HALF, Math.min(b.x + BLOCK_HALF, p.x)), qy = Math.max(b.y - BLOCK_HALF, Math.min(b.y + BLOCK_HALF, p.y));
-  if (qx === p.x && qy === p.y) {              // the center is inside the square: out through the nearest side
-    const dl = p.x - (b.x - BLOCK_HALF), dr = b.x + BLOCK_HALF - p.x, dd = p.y - (b.y - BLOCK_HALF), du = b.y + BLOCK_HALF - p.y, m = Math.min(dl, dr, dd, du);
-    const nx = m === dl ? -1 : m === dr ? 1 : 0, ny = m === dd ? -1 : m === du ? 1 : 0;
-    if (nx) p.x = b.x + nx * (BLOCK_HALF + SHIP_R); else p.y = b.y + ny * (BLOCK_HALF + SHIP_R);
-    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-    return true;
-  }
-  return pushOut(p, qx, qy, SHIP_R);
-}
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 // (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
@@ -97,7 +78,7 @@ const toWorld = (x, y, h = 0) => new THREE.Vector3(x, h, -y);
 // ---- scene ----
 const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));   // (owner, 2026-10-14: speed) at most 1.5 pixels per screen pixel
 const scene = new THREE.Scene();
 // (owner, 2026-10-14) deep blue space under the field grid (was dark charcoal)
 const SPACE = 0x081538;
@@ -116,71 +97,10 @@ const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100,
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
 let camDist = cam.zmax;
 
-// ground with the 2D grid drawn in its own shader: anti-aliased 100 m lines on the surface itself,
-// so nothing z-fights or shimmers the way a second layer of rendered lines did
-const groundMat = new THREE.ShaderMaterial({
-  uniforms: {
-    gline: { value: new THREE.Color(0x46464c) },   // (owner) soft gray lines; (owner, 2026-10-14) only the lines are drawn, space shows between them
-    fogNear: { value: 3000 }, fogFar: { value: 14000 },
-  }, transparent: true, depthWrite: false,
-  vertexShader: `varying vec3 vW; varying float vD;
-    void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vD = -mv.z; gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: `varying vec3 vW; varying float vD;
-    uniform vec3 gline; uniform float fogNear, fogFar;
-    void main() {
-      vec2 c = vW.xz / 100.0;
-      vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
-      float l = 1.0 - min(min(g.x, g.y), 1.0);
-      float a = l * 0.85 * (1.0 - smoothstep(fogNear, fogFar, vD));
-      if (a < 0.003) discard;
-      gl_FragColor = vec4(gline, a);
-      #include <colorspace_fragment>
-    }`,
-});
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), groundMat);
-ground.rotation.x = -Math.PI / 2; ground.renderOrder = -1; scene.add(ground);
 
 // (owner, 2026-10-14) the space background (from the owner's reference): a deep blue field with soft cyan glows, very far
 // below the grid so it drifts slowest of all as you move. A big plane that follows the camera; its pattern is fixed in
 // the world (stretched noise, so the glows run in soft diagonal bands).
-const skyT = { value: 0 };
-const SKY_NOISE = `
-    vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
-    float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-      return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
-                 mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
-    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }
-    float fbm4(vec2 p) { float v = 0.0, a = 0.55; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 4; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.5; } return 0.5 + 0.5 * v; }
-    // (owner, 2026-10-14) marbling: the noise looked up through more noise, so the clouds swirl and streak like a nebula
-    float marble(vec2 p) { vec2 q = vec2(fbm4(p), fbm4(p + vec2(5.2, 1.3))); return fbm4(p + 3.2 * q); }`;
-const skyVert = "varying vec2 vG; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }";
-// (owner, 2026-10-14) the colored space in parallax layers: a deep blue base furthest down, then two see-through layers
-// of soft glows nearer the grid, each at its own depth so they slide past each other as you move
-const skyLayers = [];
-function skyLayer(depth, order, frag, transparent) {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-    uniforms: { uT: skyT }, depthWrite: false, transparent, blending: transparent ? THREE.AdditiveBlending : THREE.NormalBlending, vertexShader: skyVert,
-    fragmentShader: "uniform float uT; varying vec2 vG;" + SKY_NOISE + frag,
-  }));
-  m.position.y = depth; m.renderOrder = order; m.frustumCulled = false; scene.add(m); skyLayers.push(m);
-}
-skyLayer(-9000, -5, `void main() {                               // the base: deep blue with marbled lighter clouds and dark dust lanes
-    vec2 p = vG / 14000.0 + vec2(uT * 0.0012, 0.0);
-    float n = marble(p), dust = smoothstep(0.42, 0.62, fbm4(vG / 9000.0 + 13.0 + uT * 0.0008));
-    // (owner, 2026-10-14) mostly near-black space: the blue clouds only where the marbling is high, with dark gaps between
-    float dark = smoothstep(0.32, 0.58, fbm4(vG / 20000.0 + 51.0 - uT * 0.0006));   // big dark regions with no clouds
-    vec3 col = mix(vec3(0.012, 0.035, 0.11), vec3(0.03, 0.17, 0.48), smoothstep(0.4, 0.72, n));
-    col = mix(col, vec3(0.09, 0.38, 0.8), smoothstep(0.64, 0.87, n) * 0.6);
-    col *= 1.0 - 0.55 * dust * smoothstep(0.45, 0.75, n);           // the dust lanes darken the bright clouds
-    col *= 0.6 + 0.4 * dark;
-    gl_FragColor = vec4(col, 1.0); }`, false);
-skyLayer(-6000, -4, `void main() {                               // bright cyan glow spots in the clouds (screen colors, no conversion)
-    float g = marble(vG / 9000.0 + 31.0 - uT * 0.0015);
-    g = pow(smoothstep(0.55, 0.9, g), 2.0);
-    gl_FragColor = vec4(vec3(0.07, 0.4, 0.72) * g, 1.0); }`, true);
-skyLayer(-3500, -3, `void main() {                               // nearer, faint blue wisps
-    float g = smoothstep(0.55, 0.9, marble(vG / 5000.0 + 77.0 + uT * 0.002));
-    gl_FragColor = vec4(vec3(0.025, 0.11, 0.29) * g, 1.0); }`, true);
 // (owner, 2026-10-14) stars far below the grid: thin points that drift slower than the grid as you move (they're deeper),
 // each slowly dimming in and out on its own. They tile around the camera so the field never runs out.
 const STAR_T = 24000, STAR_N = 6000;
@@ -224,15 +144,9 @@ function hexShapeBand() {
 let border = hexShapeBand(); border.position.y = 1.5; border.renderOrder = 3; scene.add(border);   // (owner, 2026-10-14) drawn over the haze
 function rebuildBorder() { scene.remove(border); border.geometry.dispose(); border = hexShapeBand(); border.position.y = 1.5; border.renderOrder = 3; scene.add(border); }   // when the hello changes the size
 
-// (owner, 2026-10-13) the load circle: the server sends only the players (and later objects) within LOAD_R of
-// this ship. Drawn for now, a thin ring around the ship.
-let LOAD_R = 5000;
-const loadRing = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x6f8fb8, transparent: true, opacity: 0.6 }));
-function loadRingFor(R) {
-  const pts = []; for (let i = 0; i < 360; i++) { const t = (i / 360) * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(t) * R, 0, Math.cos(t) * R)); }
-  loadRing.geometry.setFromPoints(pts);
-}
-loadRingFor(LOAD_R); loadRing.frustumCulled = false; loadRing.visible = false; scene.add(loadRing);
+// (owner, 2026-10-13) the load circle: the server sends only the players and objects within LOAD_R of this ship
+// (2026-10-14: where the distance haze turns solid). Shown on the minimap; no ring on the ground (it'd sit under the haze).
+let LOAD_R = 1300;
 // (owner) the camera leash circle around the player: everywhere the reticle can be aimed (blue)
 const rangeRing = new THREE.Mesh(new THREE.RingGeometry(cam.leash - 4, cam.leash, 160), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
 rangeRing.rotation.x = -Math.PI / 2; rangeRing.visible = false; scene.add(rangeRing);
@@ -350,23 +264,63 @@ function losMat(m) {                           // a copy of a ship material that
   c.customProgramCacheKey = () => "los";
   losCache.set(m, c); return c;
 }
+const skyT = { value: 0 };
+// (owner, 2026-10-14) for speed the noise is worked out once, at start, into a 1024 x 1024 texture that tiles seamlessly
+// (r: marbled clouds, g / b: two plain cloud noises, a: marbling for the glows); the sky layers and the haze only look it
+// up. Before, every pixel ran several layers of noise every frame, which made the game crawl.
+const noiseTex = (() => {
+  const rt = new THREE.WebGLRenderTarget(1024, 1024, { depthBuffer: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+  const m = new THREE.ShaderMaterial({
+    vertexShader: "varying vec2 vU; void main() { vU = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+    fragmentShader: `varying vec2 vU;
+      vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
+      vec2 hw(vec2 i, float per) { return hash2(mod(i, per)); }   // the lattice wraps, so the texture tiles
+      float gn(vec2 p, float per) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+        return mix(mix(dot(hw(i, per), f), dot(hw(i + vec2(1.0, 0.0), per), f - vec2(1.0, 0.0)), u.x),
+                   mix(dot(hw(i + vec2(0.0, 1.0), per), f - vec2(0.0, 1.0)), dot(hw(i + vec2(1.0, 1.0), per), f - vec2(1.0, 1.0)), u.x), u.y); }
+      float fbm(vec2 p, float per) { float v = 0.0, a = 0.55; for (int k = 0; k < 5; k++) { v += a * gn(p, per); p = p * 2.0 + 17.0; per *= 2.0; a *= 0.5; } return 0.5 + 0.5 * v; }
+      float marble(vec2 p, float per) { vec2 q = vec2(fbm(p, per), fbm(p + vec2(5.0, 1.0), per)); return fbm(p + 3.2 * q, per); }
+      void main() { vec2 p = vU * 4.0;
+        gl_FragColor = vec4(marble(p, 4.0), fbm(p + 13.0, 4.0), fbm(p + 51.0, 4.0), marble(p + 31.0, 4.0)); }`,
+  });
+  const sc = new THREE.Scene(); sc.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m));
+  renderer.setRenderTarget(rt); renderer.render(sc, new THREE.OrthographicCamera()); renderer.setRenderTarget(null);
+  m.dispose(); return rt.texture;
+})();
+// (owner, 2026-10-14) the colored space in three parallax layers (a deep blue base at -9,000 m, cyan glows at -6,000 m,
+// faint blue wisps at -3,500 m). For speed it's one plane: each pixel finds where its line of sight crosses each layer's
+// depth and adds the three up, so they still slide past each other as you move. Pixels behind the solid haze are skipped.
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  uniforms: { uT: skyT, nt: { value: noiseTex }, visC: visU.visC, visFar: visU.visFar }, depthWrite: false,
+  vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
+  fragmentShader: `uniform float uT; uniform sampler2D nt; uniform vec2 visC; uniform float visFar; varying vec3 vW;
+    vec2 at(float y) { vec3 c = cameraPosition; float t = (c.y - y) / (c.y - vW.y); return vec2(c.x + (vW.x - c.x) * t, -(c.z + (vW.z - c.z) * t)); }
+    void main() {
+      if (length(at(0.0) - visC) > visFar + 60.0) discard;   // behind the solid haze anyway
+      vec2 g = at(-9000.0);
+      float n = texture2D(nt, g / 56000.0 + vec2(uT * 0.00003, 0.0)).r, dust = smoothstep(0.42, 0.62, texture2D(nt, g / 36000.0 + 0.37).g);
+      float dark = smoothstep(0.32, 0.58, texture2D(nt, g / 80000.0 + 0.71).b);
+      vec3 col = mix(vec3(0.012, 0.035, 0.11), vec3(0.03, 0.17, 0.48), smoothstep(0.4, 0.72, n));
+      col = mix(col, vec3(0.09, 0.38, 0.8), smoothstep(0.64, 0.87, n) * 0.6);
+      col *= 1.0 - 0.55 * dust * smoothstep(0.45, 0.75, n);
+      col *= 0.6 + 0.4 * dark;
+      col += vec3(0.07, 0.4, 0.72) * pow(smoothstep(0.55, 0.9, texture2D(nt, at(-6000.0) / 36000.0 + vec2(0.31, -uT * 0.00004)).a), 2.0);   // cyan glows
+      col += vec3(0.025, 0.11, 0.29) * smoothstep(0.55, 0.9, texture2D(nt, at(-3500.0) / 20000.0 + vec2(0.77 + uT * 0.0001, 0.5)).r);    // wisps
+      gl_FragColor = vec4(col, 1.0);   // (screen colors, no conversion)
+    }`,
+}));
+sky.position.y = -9000; sky.renderOrder = -5; sky.frustumCulled = false; scene.add(sky);
 // (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
 // ship, drawn only where the shadow texture says it's out of sight
 // (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
 const shadeT = { value: 0 }, shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N } }, transparent: true, depthWrite: false,
+  uniforms: { ...visU, nt: { value: noiseTex }, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N }, gline: { value: new THREE.Vector3(0x46 / 255, 0x46 / 255, 0x4c / 255) } }, transparent: true, depthWrite: false,   // (gline: screen color)
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  // gradient noise (no grid squares), each octave turned, two layers drifting different ways; colors from near-black
-  // navy through dark blue to a dusky purple (owner, 2026-10-14)
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; varying vec3 vW;
-    vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
-    float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-      return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
-                 mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
-    float fbm(vec2 p) { float v = 0.0, a = 0.55; mat2 r = mat2(0.8, -0.6, 0.6, 0.8);
-      for (int k = 0; k < 5; k++) { v += a * gn(p); p = r * p * 2.02 + 11.7; a *= 0.5; } return 0.5 + 0.5 * v; }
+  // the baked noise (no grid squares), two layers drifting different ways; colors from near-black navy through dark
+  // blue to a dusky purple (owner, 2026-10-14)
+  fragmentShader: `uniform sampler2D visTex; uniform sampler2D nt; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; uniform vec3 gline; varying vec3 vW;
     float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0; }
     void main() {
       vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
@@ -375,18 +329,26 @@ const shadeMat = new THREE.ShaderMaterial({
       float ed = max(abs(g.y), max(abs(1.7320508 * g.x + g.y), abs(1.7320508 * g.x - g.y)) * 0.5) - hexA;   // past the hexagon's edge
       lit = min(lit, 1.0 - smoothstep(0.0, 30.0, ed));
       float far = smoothstep(farIn, visFar, length(g - visC));   // (owner) clear at the leash circle, solid 400 m past it
-      if (lit > 0.99 && far <= 0.0) discard;
-      float a = fbm(g / 300.0 + vec2(uT * 0.018, uT * 0.011)), b = fbm(g / 120.0 - vec2(uT * 0.027, -uT * 0.016));
+      // (owner) the grid: soft gray 100 m lines (space shows between them), drawn here under the haze
+      vec2 gc = vW.xz / 100.0, gg = abs(fract(gc - 0.5) - 0.5) / fwidth(gc);
+      float ga = (1.0 - min(min(gg.x, gg.y), 1.0)) * 0.85;
+      if (lit > 0.99 && far <= 0.0) { if (ga < 0.003) discard; gl_FragColor = vec4(gline, ga); return; }
+      float a = texture2D(nt, g / 1200.0 + vec2(uT * 0.0045, uT * 0.0028)).b, b = texture2D(nt, g / 480.0 - vec2(uT * 0.0068, -uT * 0.004)).g;
       float d = clamp(mix(a, b, 0.4) * 1.5 - 0.25, 0.0, 1.0);    // stretched, so the light and dark patches read clearly
-      float hue = smoothstep(0.35, 0.7, fbm(g / 520.0 + vec2(-uT * 0.009, uT * 0.006) + 40.0));
+      float hue = smoothstep(0.35, 0.7, texture2D(nt, g / 2080.0 + vec2(-uT * 0.0022, uT * 0.0015) + 0.4).b);
       vec3 deep = vec3(0.008, 0.012, 0.035), blue = vec3(0.05, 0.09, 0.24), purple = vec3(0.17, 0.07, 0.24);
       vec3 col = mix(deep, mix(blue, purple, hue), smoothstep(0.15, 0.95, d));
-      gl_FragColor = vec4(col, mix((0.28 + 0.5 * d) * (1.0 - lit), 1.0, far));
+      float ha = mix((0.28 + 0.5 * d) * (1.0 - lit), 1.0, far), oa = ha + ga * (1.0 - ha);   // the haze over the grid
+      gl_FragColor = vec4((col * ha + gline * ga * (1.0 - ha)) / max(oa, 1e-4), oa);
     }`,
 });
-const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);
-shade.position.y = 1; shade.renderOrder = 2; shade.frustumCulled = false; scene.add(shade);
+const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);   // (also the grid)
+shade.position.y = 0; shade.renderOrder = -1; shade.frustumCulled = false; scene.add(shade);
+let visVer = 0, visKey = "";                    // visVer: bumped whenever a block or Build piece changes
 function updateVis() {                         // the shadows from where my ship is now
+  shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
+  // (owner, 2026-10-14: speed) the shadow texture is only redrawn when my ship has moved or an object changed
+  const key = Math.round(me.x * 4) + "," + Math.round(me.y * 4) + "," + visVer; if (key === visKey) return; visKey = key;
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   // (owner, 2026-10-14) shadows start behind the outline, wherever the line of sight can't reach: only the edges facing
   // away from me cast, so the object itself and the ground up to its far side stay clear
@@ -411,7 +373,6 @@ function updateVis() {                         // the shadows from where my ship
   for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
-  shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
   renderer.setRenderTarget(visRT); renderer.render(visScene, visCam);
   renderer.setRenderTarget(null);
@@ -525,9 +486,9 @@ const blocks = new Map();                      // id -> { x, y, mesh }
 function addBlock(id, x, y) {
   if (blocks.has(id)) return;
   const mesh = new THREE.Mesh(cubeGeo, farMat(cubeMat)); mesh.scale.setScalar(BLOCK_HALF / 25); mesh.position.copy(toWorld(x, y, BLOCK_HALF)); scene.add(mesh);
-  blocks.set(id, { x, y, mesh });
+  blocks.set(id, { x, y, mesh }); visVer++;
 }
-function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); } }
+function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); visVer++; } }
 function dropCube() { if (haveMe) send({ t: "block" }); }
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 addEventListener("keydown", (e) => {
@@ -540,7 +501,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
@@ -623,7 +584,7 @@ function connect() {
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
@@ -854,7 +815,6 @@ renderer.setAnimationLoop(() => {
   focus.x += (fx - focus.x) * k; focus.y += (fy - focus.y) * k;
   viewDist += (wantDist - viewDist) * k;
   if (haveMe) {
-    loadRing.visible = true; loadRing.position.set(me.x, 0.35, -me.y);
     rangeRing.visible = helpers; rangeRing.position.set(me.x, 0.36, -me.y);
   }
   const target = toWorld(focus.x, focus.y, shipMid);
@@ -891,7 +851,7 @@ renderer.setAnimationLoop(() => {
     if (left <= 0) { countAt = 0; goUpdating(); } else countEl.textContent = "Update incoming — " + left + " s";
   }
 
-  build.frame(); starT.value = skyT.value = performance.now() / 1000; for (const l of skyLayers) { l.position.x = camera.position.x; l.position.z = camera.position.z; }
+  build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderer.render(scene, camera);
 });

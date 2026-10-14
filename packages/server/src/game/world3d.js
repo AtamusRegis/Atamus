@@ -68,29 +68,10 @@ export function steer(vx, vy, tx, ty, a, brake, dt) {
   if (el > s) { ex *= s / el; ey *= s / el; }
   return [vx + ex, vy + ey];
 }
-// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored): each ship is a circle of SHIP_R,
-// each block a square BLOCK_HALF from its center. A ship overlapping one is pushed out along the shortest way, and the
-// part of its velocity going into it is dropped (it slides along). Mirrored in the client's prediction.
+// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored). A ship's footprint is SHIP_R x 2
+// square (its Movement ellipse is a fraction of that, Object Editor); each block a square BLOCK_HALF from its center.
+// Overlaps are pushed apart along the shortest way (satPush) and the velocity going in is dropped. Mirrored in the client.
 export const SHIP_R = 45, BLOCK_HALF = 25;
-export function pushOut(p, cx, cy, minD) {           // p: {x, y, vx, vy}; push p's center to at least minD from (cx, cy)
-  let nx = p.x - cx, ny = p.y - cy, d = Math.hypot(nx, ny);
-  if (d >= minD) return false;
-  if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
-  p.x = cx + nx * minD; p.y = cy + ny * minD;
-  const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-  return true;
-}
-export function pushFromBlock(p, b) {                 // a ship's circle out of an axis-aligned square
-  const qx = Math.max(b.x - BLOCK_HALF, Math.min(b.x + BLOCK_HALF, p.x)), qy = Math.max(b.y - BLOCK_HALF, Math.min(b.y + BLOCK_HALF, p.y));
-  if (qx === p.x && qy === p.y) {              // the center is inside the square: out through the nearest side
-    const dl = p.x - (b.x - BLOCK_HALF), dr = b.x + BLOCK_HALF - p.x, dd = p.y - (b.y - BLOCK_HALF), du = b.y + BLOCK_HALF - p.y, m = Math.min(dl, dr, dd, du);
-    const nx = m === dl ? -1 : m === dr ? 1 : 0, ny = m === dd ? -1 : m === du ? 1 : 0;
-    if (nx) p.x = b.x + nx * (BLOCK_HALF + SHIP_R); else p.y = b.y + ny * (BLOCK_HALF + SHIP_R);
-    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-    return true;
-  }
-  return pushOut(p, qx, qy, SHIP_R);
-}
 // (owner, 2026-10-13) the admin Build menu's pieces: a shape (square, cylinder or triangle) with a footprint w (east-west)
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
@@ -128,23 +109,6 @@ export function cleanPivot(pv) {               // a submitted pivot, checked as 
   return [Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000];
 }
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
-// a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
-export function pushFromPoly(p, v, R) {
-  let inside = false, best = Infinity, bx = 0, by = 0;
-  for (let i = 0; i < v.length; i += 2) {
-    const ax = v[i], ay = v[i + 1], cx = v[(i + 2) % v.length], cy = v[(i + 3) % v.length], ex = cx - ax, ey = cy - ay, L2 = ex * ex + ey * ey || 1e-9;
-    if ((ay > p.y) !== (cy > p.y) && p.x < ex * (p.y - ay) / (cy - ay) + ax) inside = !inside;
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / L2)), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
-    if (d < best) { best = d; bx = qx; by = qy; }
-  }
-  if (inside) {
-    let nx = bx - p.x, ny = by - p.y; const d = Math.hypot(nx, ny); if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
-    p.x = bx + nx * R; p.y = by + ny * R;
-    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-    return true;
-  }
-  return pushOut(p, bx, by, R);
-}
 // (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
 // outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
 export function satPush(A, B) {
@@ -166,17 +130,6 @@ export function nudge(p, n, d) {               // move p by d along n, dropping 
   const vn = (p.vx || 0) * n.nx + (p.vy || 0) * n.ny; if (vn < 0) { p.vx -= vn * n.nx; p.vy -= vn * n.ny; }
 }
 export const squarePoly = (x, y, h) => [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h];
-// where a segment first crosses an outline's edge (fraction 0-1), or null
-export function segPoly(x0, y0, x1, y1, v) {
-  const dx = x1 - x0, dy = y1 - y0; let best = null;
-  for (let i = 0; i < v.length; i += 2) {
-    const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % v.length] - ax, ey = v[(i + 3) % v.length] - ay, den = dx * ey - dy * ex;
-    if (Math.abs(den) < 1e-12) continue;
-    const t = ((ax - x0) * ey - (ay - y0) * ex) / den, u = ((ax - x0) * dy - (ay - y0) * dx) / den;
-    if (t > 1e-4 && t < 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
-  }
-  return best;
-}
 // a submitted outline, checked as hostile: 3-64 points, finite, inside +-1.5 of the footprint; null if unusable
 export function cleanColl(pts) {
   if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;

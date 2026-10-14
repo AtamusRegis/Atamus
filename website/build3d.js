@@ -48,23 +48,6 @@ export function cleanPivot(pv) {               // a submitted pivot, checked as 
   return [Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000];
 }
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
-// a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
-export function pushFromPoly(p, v, R, pushOut) {
-  let inside = false, best = Infinity, bx = 0, by = 0;
-  for (let i = 0; i < v.length; i += 2) {
-    const ax = v[i], ay = v[i + 1], cx = v[(i + 2) % v.length], cy = v[(i + 3) % v.length], ex = cx - ax, ey = cy - ay, L2 = ex * ex + ey * ey || 1e-9;
-    if ((ay > p.y) !== (cy > p.y) && p.x < ex * (p.y - ay) / (cy - ay) + ax) inside = !inside;
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / L2)), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
-    if (d < best) { best = d; bx = qx; by = qy; }
-  }
-  if (inside) {
-    let nx = bx - p.x, ny = by - p.y; const d = Math.hypot(nx, ny); if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
-    p.x = bx + nx * R; p.y = by + ny * R;
-    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
-    return true;
-  }
-  return pushOut(p, bx, by, R);
-}
 // (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
 // outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
 export function satPush(A, B) {
@@ -96,14 +79,6 @@ export function segPoly(x0, y0, x1, y1, v) {
     if (t > 1e-4 && t < 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
   }
   return best;
-}
-// a submitted outline, checked as hostile: 3-64 points, finite, inside +-1.5 of the footprint; null if unusable
-export function cleanColl(pts) {
-  if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;
-  const out = [];
-  for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
-  return out;
 }
 
 // ---- meshes: unit footprints, BUILD_H tall, standing on the grid; scaled to w x d and turned r ----
@@ -157,7 +132,7 @@ export function initBuild(ctx) {
       if (held && held.id === b.id) holo(b.mesh, true);
     }
     const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
-    hold(b);
+    hold(b); if (ctx.onChange) ctx.onChange();   // (the line-of-sight shadows need redrawing)
   }
   function setBuild([id, k, x, y, w, d, r]) {
     if (held && held.id === id) return;        // the piece I'm holding is ahead of the server's echo
@@ -166,7 +141,7 @@ export function initBuild(ctx) {
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
     if (held && held.id === id) { holo(b.mesh, false); held = null; }
-    scene.remove(b.mesh); builds.delete(id);
+    scene.remove(b.mesh); builds.delete(id); if (ctx.onChange) ctx.onChange();
   }
 
   // ---- state ----

@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Speed and cleanup (owner):** the space background and haze were making the game crawl: their noise is now worked out once into a texture, the nebula layers draw in one pass, the grid shares the haze's pass, hidden sky isn't drawn, the line-of-sight shadows are redrawn only when something changes, and the game draws at most 1.5 pixels per screen pixel. Removed unused code (old circle colliders, the hidden ground load ring).
+- **Front page (owner):** the description is now "WIP prototype of a persistent space warfare game."; the Help panel is gone; Updates lists only the current game.
 - **Nebula background (owner):** marbled blue nebula clouds with dust lanes, cyan glows and wisps in parallax layers, toned down with larger dark regions so it's less saturated.
 - **Nebula background (owner):** the space background is now a marbled blue nebula with dark dust lanes, cyan glows and faint wisps, in layers that parallax against each other.
 - **Space in layers (owner):** the space background's colors are now three layers at different depths (blue base, cyan glows, blue wisps) that parallax against each other.
