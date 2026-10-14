@@ -39,7 +39,11 @@ export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
 // first block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG. A ship
 // the shooter can't see by line of sight (blocks and Build pieces; clouds don't count here) isn't hit: it flies through.
 export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 1.0, RAIL_SPEED = 700;
-export const PIV_W = 0.2, VIS_LO = 0.25;   // mutual visibility, as the client works it out: below VIS_LO a ship isn't drawn   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
+export const PIV_W = 0.2, VIS_LO = 0.25;
+// (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
+// in all; until then it can't move, turn or fire (and, half there, takes no damage)
+export const SPAWN_MS = 3000;
+export const spawning = (p) => !!p.spawnUntil && Date.now() < p.spawnUntil;   // mutual visibility, as the client works it out: below VIS_LO a ship isn't drawn   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -250,7 +254,10 @@ export class World3D {
     if (!inside(x, y)) { const k = 0.98 * (A / Math.max(Math.abs(y), Math.abs(SQ3 * x + y) / 2, Math.abs(SQ3 * x - y) / 2, 1)); x *= Math.min(1, k); y *= Math.min(1, k); }
     p.x = x; p.y = y; p.vx = p.vy = 0; p.dx = p.dy = 0; p.brakeA = 0; p.dirty = true; return p;
   }
-  respawn(id) { const a = Math.random() * Math.PI * 2, d = Math.random() * 300; return this.teleport(id, Math.cos(a) * d, Math.sin(a) * d); }
+  respawn(id) {                              // (owner, 2026-10-14) and it materializes there (SPAWN_MS)
+    const a = Math.random() * Math.PI * 2, d = Math.random() * 300, p = this.teleport(id, Math.cos(a) * d, Math.sin(a) * d);
+    if (p) p.spawnUntil = Date.now() + SPAWN_MS; return p;
+  }
 
   async leave(id) {
     const p = this.players.get(String(id));
@@ -267,6 +274,7 @@ export class World3D {
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
     const len = Math.hypot(dx, dy);
     if (len > 1) { dx /= len; dy /= len; }
+    if (spawning(p)) { p.dx = p.dy = 0; return true; }   // (owner) materializing: no moving or turning yet
     p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = sprint (30% faster)
     if (typeof h === "number" && Number.isFinite(h)) p.h = Math.atan2(Math.sin(h), Math.cos(h));   // (owner) the ship's heading, for everyone else's screens
     p.aim = typeof aim === "number" && Number.isFinite(aim) ? Math.atan2(Math.sin(aim), Math.cos(aim)) : null;   // (owner) aiming: the reticle's direction; absent = not aiming
@@ -344,12 +352,13 @@ export class World3D {
   }
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
   hurt(p, d) {
+    if (spawning(p)) return;                   // (still materializing)
     p.hp = (p.hp ?? HP_MAX) - d;
     if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); }   // a test ship just heals where it is
   }
   // (owner, 2026-10-14) a railgun shot: (dx, dy) the direction, checked as hostile (finite, not zero); one a RAIL_CD
   fire(id, dx, dy) {
-    const p = this.players.get(String(id)); if (!p || p.bot) return null;
+    const p = this.players.get(String(id)); if (!p || p.bot || spawning(p)) return null;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
     const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
     const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null; p.lastFire = now;
@@ -483,7 +492,9 @@ export class World3D {
     for (const p of this.players.values()) {
       const dx = p.x - viewer.x, dy = p.y - viewer.y;
       if (p !== viewer && dx * dx + dy * dy > R2) continue;
-      out.push([p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX)]);   // + health (owner, 2026-10-14)
+      const row = [p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX)];   // + health (owner, 2026-10-14)
+      if (spawning(p)) row.push(Math.ceil((p.spawnUntil - Date.now()) / 10));   // (owner, 2026-10-14) still materializing: hundredths of a second left
+      out.push(row);
     }
     return out;
   }

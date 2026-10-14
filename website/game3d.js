@@ -200,15 +200,16 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   src.position.y -= b2.min.y;                  // the hull rests on the grid
   const wrap = new THREE.Group(); wrap.add(src);
   shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
-  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId)); }
+  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId, p.id === myId)); }
   try { build.refreshShips(); } catch {}
   applyShipPivot();   // the Build menu's test ships
 }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
-function makeVisual(remote) {
+function makeVisual(remote, own = false) {     // own: my ship (its own materials too, for materializing; always solid otherwise)
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
-  if (remote) {                                 // (owner, 2026-10-14) each other ship has its own material copies: its opacity is its visibility
-    const va = { value: 0 }, mats = [], mine = new Map(); v.userData.va = va; v.userData.mats = mats; v.visible = false;   // (fades in once its visibility is known)
-    const one = (m) => { if (!mine.has(m)) { const c = losMat(m, va); mine.set(m, c); mats.push(c); } return mine.get(m); };
+  if (remote || own) {                          // (owner, 2026-10-14) each other ship has its own material copies: its opacity is its visibility
+    const va = { value: remote ? 0 : 1 }, mats = [], mine = new Map(), sp = { p: { value: new THREE.Vector4() }, k: { value: 1 }, s: { value: 1 } };
+    v.userData.va = remote ? va : null; v.userData.sp = sp; v.userData.mats = mats; if (remote) v.visible = false;   // (fades in once its visibility is known)
+    const one = (m) => { if (!mine.has(m)) { const c = losMat(m, va, sp); mine.set(m, c); mats.push(c); } return mine.get(m); };
     v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
   }
   return v;
@@ -239,14 +240,25 @@ function farMat(m) {                           // a material that isn't drawn pa
   c.customProgramCacheKey = () => "far";
   farCache.set(m, c); return c;
 }
-function losMat(m, va) {                       // a copy of a ship material: not drawn past the sight limit, and see-through by va (its visibility)
+// (owner, 2026-10-14) a ship materializing after a respawn: a cyan hologram revealed from its nose to its tail (spK 0..1),
+// a bright line at the reveal's edge and drifting scan bands, then it solidifies into the real ship (spS 0..1)
+const SP_HALF = 60;                            // how far the reveal runs ahead of / behind the pivot along the ship
+function losMat(m, va, sp) {                   // a copy of a ship material: not drawn past the sight limit, and see-through by va (its visibility)
   const c = m.clone();
   c.onBeforeCompile = (sh) => {
     sh.uniforms.visC = visU.visC; sh.uniforms.visFar = visU.visFar; sh.uniforms.visA = va;
+    sh.uniforms.spP = sp.p; sh.uniforms.spK = sp.k; sh.uniforms.spS = sp.s; sh.uniforms.spT = skyT;
     sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
-    sh.fragmentShader = "uniform vec2 visC; uniform float visFar; uniform float visA; varying vec3 vVisW;\n" + sh.fragmentShader
-      .replace("void main() {", "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;")
-      .replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a *= visA;");
+    sh.fragmentShader = "uniform vec2 visC; uniform float visFar; uniform float visA; uniform vec4 spP; uniform float spK; uniform float spS; uniform float spT; varying vec3 vVisW;\n" + sh.fragmentShader
+      .replace("void main() {", "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  float spAl = dot(vVisW.xz - spP.xy, spP.zw), spCut = mix(" + SP_HALF + ".0, -" + SP_HALF + ".0, spK);\n  if (spK < 1.0 && spAl < spCut) discard;")
+      .replace("#include <dithering_fragment>", `#include <dithering_fragment>
+  if (spS < 1.0) {
+    float scan = 0.7 + 0.3 * sin(vVisW.y * 1.6 - spT * 7.0) * sin(spAl * 0.35 + spT * 3.0);
+    float edge = spK < 1.0 ? smoothstep(9.0, 0.0, spAl - spCut) : 0.0;
+    gl_FragColor.rgb = mix(vec3(0.3, 0.82, 1.0) * scan, gl_FragColor.rgb, spS) + vec3(0.7, 0.97, 1.0) * edge * (1.0 - spS);
+    gl_FragColor.a *= mix(0.5 + 0.5 * edge, 1.0, spS);
+  }
+  gl_FragColor.a *= visA;`);
   };
   c.customProgramCacheKey = () => "losA";
   return c;
@@ -485,7 +497,23 @@ function cloudFx(now) {
   }
   for (const id of [...shipLast.keys()]) if (!seen.has(id)) shipLast.delete(id);
 }
+// (owner, 2026-10-14) materializing ships: the first 60% of the time reveals the hologram nose to tail, the rest solidifies it
+const SPAWN_MS = 3000, spawnEnd = new Map();   // ship id -> when it's done (performance.now)
+const amSpawning = () => (spawnEnd.get(myId) || 0) > performance.now();
+function updateSpawns(now) {
+  for (const p of players.values()) {
+    const v = p.holder.children[0], sp = v && v.userData.sp; if (!sp) continue;
+    const end = spawnEnd.get(p.id) || 0, e = end > now ? Math.max(0, 1 - (end - now) / SPAWN_MS) : 1;
+    sp.k.value = Math.min(1, e / 0.6); sp.s.value = Math.max(0, (e - 0.6) / 0.4);
+    if (e >= 1 && end) spawnEnd.delete(p.id);
+    if (sp.s.value < 1 || sp.k.value < 1) {
+      const h = p.heading || 0; sp.p.value.set(p.holder.position.x, p.holder.position.z, Math.sin(h), Math.cos(h));   // the nose, in the scene (game (sin h, -cos h))
+    }
+    if (!v.userData.va) for (const m of v.userData.mats) m.transparent = sp.s.value < 1;   // (my ship: see-through only while materializing)
+  }
+}
 function updateShipVis(dt, now) {
+  updateSpawns(now);
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
@@ -504,7 +532,7 @@ function updateShipVis(dt, now) {
     const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
     const k = Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
-    if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
+    if (v.userData.va) { v.userData.va.value = t.a; const sp = v.userData.sp; for (const m of v.userData.mats) m.transparent = t.a < 0.999 || (sp && sp.s.value < 1); }
     v.visible = t.a > 0.01;
   }
   visGizmo(edit); cloudFx(now);
@@ -596,7 +624,7 @@ function applyShipPivot() {
 function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
   const holder = new THREE.Group();
-  holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId)); scene.add(holder);
+  holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId, id === myId)); scene.add(holder);
   if (/^b[0-9]+$/.test(id)) holder.userData.id = id.slice(1);   // (owner, 2026-10-14) a test ship's stand-in: clicking it in the Build menu picks up the piece
   holder.visible = id === myId;                // others show once a snapshot has them inside the load circle
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y }, near: false };   // buf: recent snapshot positions on the server's clock; near: inside my load circle
@@ -736,7 +764,7 @@ const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b
 const RAIL_CD = 1000;
 let railAt = 0;
 function fireRail(px, py) {
-  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing()) return;
+  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing() || amSpawning()) return;
   const now = performance.now(); if (now - railAt < RAIL_CD) return;
   raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
   const g = new THREE.Vector3(); if (!raycaster.ray.intersectPlane(groundPlane, g)) return;
@@ -828,6 +856,7 @@ function inputDir() {
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
   if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: up / down thrust, left / right turn
   const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
+  if (amSpawning()) return { x: 0, y: 0, b: 0, turn: 0 };   // (owner) materializing: no moving or turning yet
   if (!f) return { x: 0, y: 0, b, turn };
   f = Math.max(-1, Math.min(1, f));
   // (owner, 2026-10-14) reversing, left and right swap: backing up with A swings the ship's tail to the left, the way it
@@ -875,9 +904,11 @@ function connect() {
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
       const inSnap = new Set();
-      for (const [id, cx, cy, ch, hp] of m.p) {
+      for (const [id, cx, cy, ch, hp, sl] of m.p) {
         const x = cx / 100, y = cy / 100;
         inSnap.add(id);
+        { const end = Number.isFinite(sl) && sl > 0 ? performance.now() + sl * 10 : 0, was = spawnEnd.get(id) || 0;   // (owner, 2026-10-14) materializing: when it's done
+          if (!end) spawnEnd.delete(id); else if (!was || Math.abs(was - end) > 200) spawnEnd.set(id, end); }
         { const pp = players.get(id); if (pp && Number.isFinite(hp)) pp.hp = hp; }   // (owner, 2026-10-14) health
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once
           const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
