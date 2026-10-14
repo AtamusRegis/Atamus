@@ -282,14 +282,14 @@ export function initBuild(ctx) {
   // (owner, 2026-10-14) leashed puffs along a cloud's edge, like a wall of tethered balloons: each one is tied to its spot,
   // a ship flying into them knocks them aside (they bounce off its hull), and they float back to where they were. The main
   // cloud stays put. Simulated here on the client, for the clouds near me.
-  const EDGE_SP = 34, EDGE_R = 46, EDGE_K = 5, EDGE_C = 1.8, EDGE_MAX = 360;
+  const EDGE_SP = 7, EDGE_R = 46, EDGE_K = 5, EDGE_C = 1.8, EDGE_MAX = 1800;   // (owner: lots of small ones)
   function edgeAnchors(pts) {                  // local spots along the outline (a little inside and outside it), heights, sizes
     let area = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; area += x * v - u * y; }); const sg = area >= 0 ? 1 : -1;
     let per = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; per += Math.hypot(u - x, v - y); });
     const sp = Math.max(EDGE_SP, per / EDGE_MAX), A = [];
     pts.forEach(([x, y], i) => {
       const [u, v] = pts[(i + 1) % pts.length], L = Math.hypot(u - x, v - y), n = Math.max(1, Math.round(L / sp)), nx = -(v - y) / (L || 1) * sg, ny = (u - x) / (L || 1) * sg;   // (n: inward)
-      for (let k = 0; k < n; k++) { const t = (k + Math.random()) / n, o = -12 + Math.random() * 40; A.push(x + (u - x) * t + nx * o, y + (v - y) * t + ny * o, 6 + Math.random() * 34, 26 + Math.random() * 26, Math.random()); }
+      for (let k = 0; k < n; k++) { const t = (k + Math.random()) / n, o = -15 + Math.random() * 45; A.push(x + (u - x) * t + nx * o, y + (v - y) * t + ny * o, 4 + Math.random() * 38, 7 + Math.random() * 9, Math.random()); }
     });
     return A;                                  // [x, y, h, size, seed] each
   }
@@ -315,7 +315,7 @@ export function initBuild(ctx) {
           float n = texture2D(nt, vU * 0.6 + vS * 7.3 + uT * 0.002).r, f = texture2D(nt, vU * 1.6 + vS * 3.1 - uT * 0.004).g;
           float blob = smoothstep(0.12, 0.75, (1.0 - r * r) * (0.55 + (n - 0.5) * 2.6) + (f - 0.5) * 0.7);
           vec3 col = mix(mix(c1, c2, clamp(vS * 0.7 + vH * 0.4 + (n - 0.5), 0.0, 1.0)), c3, smoothstep(0.55, 0.9, f + vH * 0.2) * 0.55 * blob);
-          gl_FragColor = vec4(col * 1.08, blob * 0.4);   // (screen colors; a touch brighter than the main cloud)
+          gl_FragColor = vec4(col * 1.08, blob * 0.45);   // (screen colors; a touch brighter than the main cloud)
         }`,
     });
     const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1;
