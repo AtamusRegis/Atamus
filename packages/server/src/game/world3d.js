@@ -82,9 +82,13 @@ export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "s
 // shapes' own square, the ship model's 59.4 x 100 m box.
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
 export const COLL_DEFAULT = { square: box(0.5, 0.5), triangle: box(0.5, 0.5), cylinder: box(0.5, 0.5), ship: box(0.33, 0.5556) };
+// (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
+// other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
+const boxPts = (hx, hy) => [[-hx, -hy], [0, -hy], [hx, -hy], [hx, 0], [hx, hy], [0, hy], [-hx, hy], [-hx, 0]];
+export const VIS_DEFAULT = { square: boxPts(0.5, 0.5), triangle: boxPts(0.5, 0.5), cylinder: boxPts(0.5, 0.5), ship: boxPts(0.33, 0.5556) };
 // (owner, 2026-10-14) each kind's pivot: the point of the model it turns around, in the same fractions. A piece's
 // position (x, y) is where its pivot is; the model and its outline sit around it. Default: the middle.
-function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
+export function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
   const c = Math.cos(o.r), s = Math.sin(o.r), out = [];
   for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
@@ -130,9 +134,9 @@ export function nudge(p, n, d) {               // move p by d along n, dropping 
   const vn = (p.vx || 0) * n.nx + (p.vy || 0) * n.ny; if (vn < 0) { p.vx -= vn * n.nx; p.vy -= vn * n.ny; }
 }
 export const squarePoly = (x, y, h) => [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h];
-// a submitted outline, checked as hostile: 3-64 points, finite, inside +-1.5 of the footprint; null if unusable
-export function cleanColl(pts) {
-  if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;
+// a submitted outline, checked as hostile: 3-64 points (visibility points: 1-32), finite, inside +-1.5 of the footprint; null if unusable
+export function cleanColl(pts, min = 3, max = 64) {
+  if (!Array.isArray(pts) || pts.length < min || pts.length > max) return null;
   const out = [];
   for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
@@ -153,7 +157,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -174,8 +178,9 @@ export class World3D {
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_colliders (k TEXT PRIMARY KEY, pts JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
-    for (const o of (await pool.query(`SELECT k, pts, pivot, mover FROM world3d_colliders`)).rows) {
-      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv;
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
+    for (const o of (await pool.query(`SELECT k, pts, pivot, mover, vis FROM world3d_colliders`)).rows) {
+      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
     for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
@@ -311,13 +316,13 @@ export class World3D {
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, pts, pivot, mover) {   // (owner) the sight outline, the pivot and the movement ellipse together
-    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k]; if (!c) return null;
+  async setCollider(k, pts, pivot, mover, vis) {   // (owner) the aim bounds, the pivot, the movement ellipse and the visibility points together
+    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, updated_at) VALUES ($1, $2, $3, $4, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv)]);
-    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, vis, updated_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, vis = $5, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs)]);
+    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv; this.visOutlines[k] = vs;
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
-    return { pts: c, pv, mv };
+    return { pts: c, pv, mv, vis: vs };
   }
   buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
   async addBuild(o, by) {

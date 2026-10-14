@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Aim Bounds and Visibility (owner):** the editor's Sight tab is now Aim Bounds (the hitbox for aiming and shooting); a new Visibility tab places free points that decide how visible a ship is. Visibility now weighs the pivot-to-pivot line as half and the Visibility points' lines as the other half.
+- **Fix: the Object Editor's colliders, pivots and ellipses didn't reach players on joining** since the load circle change earlier today (a code comment had swallowed them), so screens used the defaults until an edit was made.
 - **Visibility tuning (owner):** every side of a ship's outline now adds a point at its middle; steps are 75%+ solid, 50-75% half, 35-50% a quarter, under 35% hidden.
 - **Visibility steps (owner):** a ship 75%+ visible is solid, 50-75% is half see-through, under 50% is hidden (on screen and on the minimap).
 - **Visibility lines to pivots (owner):** mutual visibility now uses lines from each ship's outline points to the other ship's pivot (both ways) instead of every point against every point.

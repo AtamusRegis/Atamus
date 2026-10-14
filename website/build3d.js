@@ -21,9 +21,13 @@ const MIN = 5, MAX = 1000;
 // shapes' own square, the ship model's 59.4 x 100 m box.
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
 export const COLL_DEFAULT = { square: box(0.5, 0.5), triangle: box(0.5, 0.5), cylinder: box(0.5, 0.5), ship: box(0.33, 0.5556) };
+// (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
+// other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
+const boxPts = (hx, hy) => [[-hx, -hy], [0, -hy], [hx, -hy], [hx, 0], [hx, hy], [0, hy], [-hx, hy], [-hx, 0]];
+export const VIS_DEFAULT = { square: boxPts(0.5, 0.5), triangle: boxPts(0.5, 0.5), cylinder: boxPts(0.5, 0.5), ship: boxPts(0.33, 0.5556) };
 // (owner, 2026-10-14) each kind's pivot: the point of the model it turns around, in the same fractions. A piece's
 // position (x, y) is where its pivot is; the model and its outline sit around it. Default: the middle.
-function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
+export function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
   const c = Math.cos(o.r), s = Math.sin(o.r), out = [];
   for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
@@ -93,7 +97,7 @@ let GEO = geos();
 const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
 export const builds = new Map();
-export const colliders = {}, pivots = {}, movers = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+export const colliders = {}, pivots = {}, movers = {}, visOutlines = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -292,13 +296,16 @@ export function initBuild(ctx) {
   // view; the header drags the window; Mirrored (on at first) keeps the left and right halves matching; Reset puts the
   // current one back to its start; Ctrl+Z / Ctrl+U undo and redo. While it's open, every piece's colliders (and every
   // ship's) are drawn in the world.
-  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePts = null, ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  // (owner, 2026-10-14) Aim Bounds ("sight": the outline aim lines stop at, and line-of-sight shadows) and Visibility ("vis":
+  // free points, each sending a line to the other ship's pivot in the mutual visibility test) share the dragging code
+  const EP = { sight: null, vis: null }, pk = () => (eMode === "vis" ? "vis" : "sight");
   let eZoom = 1, mirror = true, past = [], future = [], ePan = [0, 0];   // ePan: (owner) the view's middle, in footprint fractions (middle mouse pans)
   // (owner, 2026-10-14) two rulers: a horizontal and a vertical dashed red line, each dragged on its own; corners, the
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
-  for (const [k, label] of [["sight", "Sight"], ["move", "Movement"], ["pivot", "Pivot"]]) {
+  for (const [k, label] of [["sight", "Aim Bounds"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   ceSlots.after(modes);
@@ -308,7 +315,7 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") ePts = COLL_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = MOVE_DEFAULT[eKind].slice(); else ePv = [0, 0];
+    if (eMode === "sight") EP.sight = COLL_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = MOVE_DEFAULT[eKind].slice(); else ePv = [0, 0];
     eSave(); eDraw();
   });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); };
@@ -340,7 +347,7 @@ export function initBuild(ctx) {
     ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
   function eSetKind(k) {
     eKind = k; if (k !== "ship") eShape = k;
-    ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice();
+    EP.sight = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice();
     eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawModes(); eDraw();
   }
   ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
@@ -371,23 +378,23 @@ export function initBuild(ctx) {
     eRen.render(eScene, eCam);
   }
   // ---- undo / redo: the kind's three things before each change ----
-  const state = () => JSON.stringify({ pts: ePts, pv: ePv, mv: eMv });
-  const apply = (j) => { const o = JSON.parse(j); ePts = o.pts; ePv = o.pv; eMv = o.mv; eSave(); eDraw(); };
+  const state = () => JSON.stringify({ pts: EP.sight, vis: EP.vis, pv: ePv, mv: eMv });
+  const apply = (j) => { const o = JSON.parse(j); EP.sight = o.pts; EP.vis = o.vis; ePv = o.pv; eMv = o.mv; eSave(); eDraw(); };
   function snap() { past.push(state()); if (past.length > 100) past.shift(); future = []; }
   function undo() { if (!past.length) return; future.push(state()); apply(past.pop()); }
   function redo() { if (!future.length) return; past.push(state()); apply(future.pop()); }
   // ---- mirrored editing: each corner's partner is the corner at its mirror image (left <-> right) ----
-  const partner = (i) => { const [x, y] = ePts[i]; if (Math.abs(x) < 0.004) return -2; let best = -1, bd = 0.03;
-    ePts.forEach(([a, b], j) => { if (j === i) return; const d = Math.hypot(a + x, b - y); if (d < bd) { bd = d; best = j; } }); return best; };   // -2: on the middle line
+  const partner = (i) => { const [x, y] = EP[pk()][i]; if (Math.abs(x) < 0.004) return -2; let best = -1, bd = 0.03;
+    EP[pk()].forEach(([a, b], j) => { if (j === i) return; const d = Math.hypot(a + x, b - y); if (d < bd) { bd = d; best = j; } }); return best; };   // -2: on the middle line
   const SV = "http://www.w3.org/2000/svg";
   const sv = (tag, attrs) => { const n = document.createElementNS(SV, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); ceSvg.appendChild(n); return n; };
   const handle = (x, y, r, cls, onDown) => { const c = sv("circle", { cx: x, cy: y, r, class: cls }); c.addEventListener("pointerdown", onDown); return c; };
   function eDraw() {
     while (ceSvg.firstChild) ceSvg.removeChild(ceSvg.firstChild);
-    if (!ePts) return;
-    const px = ePts.map(toPx), [ex, ey] = toPx([eMv[0], eMv[1]]), erx = eMv[2] * S(), ery = eMv[3] * S(), [vx, vy] = toPx(ePv);
+    if (!EP[pk()]) return;
+    const px = EP[pk()].map(toPx), [ex, ey] = toPx([eMv[0], eMv[1]]), erx = eMv[2] * S(), ery = eMv[3] * S(), [vx, vy] = toPx(ePv);
     // all three always drawn; the one being edited is bright and has handles
-    sv("polygon", { points: px.map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
+    sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("ellipse", { cx: ex, cy: ey, rx: erx, ry: ery, class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
@@ -396,7 +403,14 @@ export function initBuild(ctx) {
       const hit = sv("line", { x1, y1, x2, y2, class: "ce-guide-hit" + (ax === "x" ? " v" : " h") });
       hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); eGrab(e, "g" + ax); });
     }
-    if (eMode === "sight") {
+    if (eMode !== "vis") for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
+    if (eMode === "vis") {                       // (owner) click empty space to add a point; drag one to move it; right-click removes it
+      px.forEach((p, i) => handle(p[0], p[1], 6, "ce-vpt", (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (e.button === 2) { removeCorner(i); return; }
+        if (e.button === 0) { snap(); eGrab(e, "pt", i); }
+      }));
+    } else if (eMode === "sight") {
       px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
         const q = px[(i + 1) % px.length];
         handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); snap(); eGrab(e, "pt", addCorner(i)); });
@@ -415,19 +429,29 @@ export function initBuild(ctx) {
     }
   }
   function addCorner(i) {                      // a corner in the middle of edge i (and, mirrored, on its mirror edge); returns its index
-    const n = ePts.length, a = ePts[i], b = ePts[(i + 1) % n], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const n = EP[pk()].length, a = EP[pk()][i], b = EP[pk()][(i + 1) % n], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     let mi = -1;
     if (mirror) { const pa = partner(i), pb = partner((i + 1) % n); if (pa >= 0 && pb >= 0 && (pb + 1) % n === pa && pb !== i) mi = pb; }   // the mirror edge runs pb -> pa
-    if (mi < 0) { ePts.splice(i + 1, 0, m); return i + 1; }
+    if (mi < 0) { EP[pk()].splice(i + 1, 0, m); return i + 1; }
     const mm = [-m[0], m[1]];
-    if (mi > i) { ePts.splice(mi + 1, 0, mm); ePts.splice(i + 1, 0, m); return i + 1; }
-    ePts.splice(i + 1, 0, m); ePts.splice(mi + 1, 0, mm); return i + 2;
+    if (mi > i) { EP[pk()].splice(mi + 1, 0, mm); EP[pk()].splice(i + 1, 0, m); return i + 1; }
+    EP[pk()].splice(i + 1, 0, m); EP[pk()].splice(mi + 1, 0, mm); return i + 2;
   }
   function removeCorner(i) {
     const j = mirror ? partner(i) : -1, gone = j >= 0 ? [i, j] : [i];
-    if (ePts.length - gone.length < 3) return;
-    snap(); ePts = ePts.filter((_, k) => !gone.includes(k)); eSave(); eDraw();
+    if (EP[pk()].length - gone.length < (pk() === "vis" ? 1 : 3)) return;   // an outline keeps 3 corners; visibility keeps 1 point
+    snap(); EP[pk()] = EP[pk()].filter((_, k) => !gone.includes(k)); eSave(); eDraw();
   }
+  // a click on empty space in the Visibility tab adds a point there (mirrored: a pair, or one on the middle line)
+  ceSvg.addEventListener("pointerdown", (e) => {
+    if (eMode !== "vis" || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
+    e.preventDefault(); const r = ceSvg.getBoundingClientRect(); let u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
+    if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x; if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
+    snap();
+    if (mirror && Math.abs(u[0]) * S() < SNAP) u = [0, u[1]];
+    EP.vis.push(u); if (mirror && u[0] !== 0 && EP.vis.length < 32) EP.vis.push([-u[0], u[1]]);
+    eGrab(e, "pt", EP.vis.indexOf(u));
+  });
   function eGrab(e, type, i) { eDrag = { type, i, id: e.pointerId, mate: type === "pt" && mirror ? partner(i) : -1 }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
   ceSvg.addEventListener("pointermove", (e) => {
     if (!eDrag || e.pointerId !== eDrag.id) return;
@@ -437,20 +461,20 @@ export function initBuild(ctx) {
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x;                 // snap to the rulers
     if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     if (eDrag.type === "pt") {
-      const near = Math.abs(u[0]) * S() < SNAP, n = ePts.length;
+      const near = Math.abs(u[0]) * S() < SNAP, n = EP[pk()].length;
       if (eDrag.mate === -2) {                   // mirrored, on the middle line: stays on it until dragged clear sideways,
-        if (near) ePts[eDrag.i] = [0, u[1]];     // then (owner) it splits into a mirrored pair
+        if (near) EP[pk()][eDrag.i] = [0, u[1]];     // then (owner) it splits into a mirrored pair
         else {
-          const i = eDrag.i, prev = ePts[(i - 1 + n) % n], next = ePts[(i + 1) % n], me = u, mm = [-u[0], u[1]];
+          const i = eDrag.i, prev = EP[pk()][(i - 1 + n) % n], next = EP[pk()][(i + 1) % n], me = u, mm = [-u[0], u[1]];
           // the copy goes on the side of the neighbor that's on its own side, so the outline doesn't cross itself
-          if ((prev[0] - next[0]) * u[0] >= 0) { ePts[i] = me; ePts.splice(i + 1, 0, mm); eDrag.mate = i + 1; }
-          else { ePts[i] = mm; ePts.splice(i + 1, 0, me); eDrag.i = i + 1; eDrag.mate = i; }
+          if ((prev[0] - next[0]) * u[0] >= 0) { EP[pk()][i] = me; EP[pk()].splice(i + 1, 0, mm); eDrag.mate = i + 1; }
+          else { EP[pk()][i] = mm; EP[pk()].splice(i + 1, 0, me); eDrag.i = i + 1; eDrag.mate = i; }
         }
       } else if (eDrag.mate >= 0 && near) {      // (owner) a mirrored pair dragged together merges back into one on the middle line
         const keep = Math.min(eDrag.i, eDrag.mate), gone = Math.max(eDrag.i, eDrag.mate);
-        if (n > 3) { ePts.splice(gone, 1); ePts[keep] = [0, u[1]]; eDrag.i = keep; eDrag.mate = -2; }
-        else { ePts[eDrag.i] = u; ePts[eDrag.mate] = [-u[0], u[1]]; }
-      } else { ePts[eDrag.i] = u; if (eDrag.mate >= 0) ePts[eDrag.mate] = [-u[0], u[1]]; }
+        if (n > (pk() === "vis" ? 1 : 3)) { EP[pk()].splice(gone, 1); EP[pk()][keep] = [0, u[1]]; eDrag.i = keep; eDrag.mate = -2; }
+        else { EP[pk()][eDrag.i] = u; EP[pk()][eDrag.mate] = [-u[0], u[1]]; }
+      } else { EP[pk()][eDrag.i] = u; if (eDrag.mate >= 0) EP[pk()][eDrag.mate] = [-u[0], u[1]]; }
     }
     else if (eDrag.type === "mc") { eMv[0] = mirror ? 0 : u[0]; eMv[1] = u[1]; }
     else if (eDrag.type === "mx") eMv[2] = Math.max(0.02, Math.abs(u[0] - eMv[0]));
@@ -461,26 +485,27 @@ export function initBuild(ctx) {
   const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; const g = eDrag.type[0] === "g"; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} if (!g) eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
   const r4 = (x) => Math.round(x * 10000) / 10000;
-  function eSave() { send({ t: "coll", k: eKind, pts: ePts.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), mv: eMv.map(r4) }); }
-  function setColl(k, pts, pv, mv) {
+  function eSave() { send({ t: "coll", k: eKind, pts: EP.sight.map(([x, y]) => [r4(x), r4(y)]), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), mv: eMv.map(r4) }); }
+  function setColl(k, pts, pv, mv, vis) {
     if (!KINDS.includes(k) || !Array.isArray(pts)) return;
-    colliders[k] = pts; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(mv)) movers[k] = mv;
+    colliders[k] = pts; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(mv)) movers[k] = mv;
     for (const b of builds.values()) if (b.k === k) place(b);
     if (k === "ship" && ctx.onPivot) ctx.onPivot();
-    if (eOpen && eKind === k && !eDrag) { ePts = pts.map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice(); eDraw(); }
+    if (eOpen && eKind === k && !eDrag) { EP.sight = pts.map((q) => q.slice()); EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice(); eDraw(); }
   }
   // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----
   const gizGeo = new THREE.BufferGeometry(); let gizCap = 0;
   const giz = new THREE.LineSegments(gizGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthTest: false }));
   giz.renderOrder = 10; giz.frustumCulled = false; giz.visible = false; scene.add(giz);
-  const C_SIGHT = [0.62, 0.85, 1], C_MOVE = [1, 0.75, 0.35], C_PIV = [0.82, 0.7, 1];
+  const C_SIGHT = [0.62, 0.85, 1], C_MOVE = [1, 0.75, 0.35], C_PIV = [0.82, 0.7, 1], C_VIS = [0.45, 1, 0.55];
   function gizFrame() {
     if (!eOpen) return;
     const P = [], C = [];
     const loop = (v, col) => { for (let i = 0; i < v.length; i += 2) { P.push(v[i], 2, -v[i + 1], v[(i + 2) % v.length], 2, -v[(i + 3) % v.length]); C.push(...col, ...col); } };
+    const dots = (v) => { const a = 4; for (let i = 0; i < v.length; i += 2) { const x = v[i], y = v[i + 1]; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_VIS); } };
     const cross = (x, y) => { const a = 8; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_PIV); };
-    for (const b of builds.values()) { loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }
-    for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { loop(s.sight, C_SIGHT); loop(s.move, C_MOVE); cross(s.x, s.y); }
+    for (const b of builds.values()) { loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); if (b.k === "ship") dots(toWorldPts(b, visOutlines[b.k] || VIS_DEFAULT[b.k], pivots[b.k] || [0, 0])); cross(b.x, b.y); }
+    for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { loop(s.sight, C_SIGHT); loop(s.move, C_MOVE); if (s.vis) dots(s.vis); cross(s.x, s.y); }
     if (P.length > gizCap) { gizCap = Math.max(P.length, gizCap * 2, 3000); gizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); gizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); }
     gizGeo.attributes.position.array.set(P); gizGeo.attributes.color.array.set(C); gizGeo.attributes.position.needsUpdate = gizGeo.attributes.color.needsUpdate = true;
     gizGeo.setDrawRange(0, P.length / 3);
@@ -497,16 +522,16 @@ export function initBuild(ctx) {
     if (m.t === "build") { setBuild(m.o); return true; }
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
-    if (m.t === "coll") { setColl(m.k, m.pts, m.pv, m.mv); return true; }
+    if (m.t === "coll") { setColl(m.k, m.pts, m.pv, m.mv, m.vis); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
-  function load(list, h, shipD, coll, piv, mov) {
+  function load(list, h, shipD, coll, piv, mov, vis) {
     if (shipD) SHIP_D = shipD;
     for (const k of Object.keys(colliders)) delete colliders[k]; if (coll && typeof coll === "object") for (const k of KINDS) if (Array.isArray(coll[k])) colliders[k] = coll[k];
-    for (const o of [pivots, movers]) for (const k of Object.keys(o)) delete o[k];
-    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (mov && Array.isArray(mov[k])) movers[k] = mov[k]; }
+    for (const o of [pivots, movers, visOutlines]) for (const k of Object.keys(o)) delete o[k];
+    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (mov && Array.isArray(mov[k])) movers[k] = mov[k]; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
     if (ctx.onPivot) ctx.onPivot();
     if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
     held = null;
