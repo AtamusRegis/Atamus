@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Editor visibility lines (owner):** only your own lines to other ships are drawn, not theirs to you (the percentage still counts both).
 - **Aim Bounds and Visibility (owner):** the editor's Sight tab is now Aim Bounds (the hitbox for aiming and shooting); a new Visibility tab places free points that decide how visible a ship is. Visibility now weighs the pivot-to-pivot line as half and the Visibility points' lines as the other half.
 - **Fix: the Object Editor's colliders, pivots and ellipses didn't reach players on joining** since the load circle change earlier today (a code comment had swallowed them), so screens used the defaults until an edit was made.
 - **Visibility tuning (owner):** every side of a ship's outline now adds a point at its middle; steps are 75%+ solid, 50-75% half, 35-50% a quarter, under 35% hidden.
