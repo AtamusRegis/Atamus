@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Shaded blind spots (owner):** the ground you can't see past walls and structures is covered by a dark, dusty, slowly shifting haze.
 - **Line of sight (owner):** other ships are only drawn where your ship can see them past blocks and Build pieces: a ship partly behind a wall shows only the visible part, and one fully hidden is off the minimap too.
 - **Admin Build menu (owner):** staff get [B] (or the B key): a slot row above the capacitor bar with basic shapes (square / cylinder / triangle, Q cycles). Place with a click, select by clicking; W / E / R show Position (center square + NSEW arrows), Scale (square-ended handles per side) and Rotate (a ring) controls over the piece; Delete, Ctrl+C / X / V (paste at the pointer). Pieces are saved, everyone sees them, ships collide with them and they block the aim line. The ship ignores WASD while the menu is open.
 - **Colliders (owner):** ships collide with blocks and with each other (on the ground plane). X's blocks are now kept by the server and everyone sees them. When aiming at something blocked by a block or ship, the aim line turns red past the obstruction.

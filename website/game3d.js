@@ -256,6 +256,29 @@ function losMat(m) {                           // a copy of a ship material that
   c.customProgramCacheKey = () => "los";
   losCache.set(m, c); return c;
 }
+// (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
+// ship, drawn only where the shadow texture says it's out of sight
+// (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
+const shadeT = { value: 0 };
+const shadeMat = new THREE.ShaderMaterial({
+  uniforms: { ...visU, uT: shadeT }, transparent: true, depthWrite: false,
+  vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; varying vec3 vW;
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+    float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += a * n(p); p = p * 2.03 + 17.0; a *= 0.5; } return v; }
+    void main() {
+      vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
+      float lit = texture2D(visTex, uv).r; if (lit > 0.99) discard;
+      float a = fbm(g / 260.0 + vec2(uT * 0.020, uT * 0.013)), b = fbm(g / 110.0 - vec2(uT * 0.031, -uT * 0.017));
+      float d = mix(a, b, 0.45);
+      vec3 col = mix(vec3(0.015, 0.02, 0.035), vec3(0.16, 0.14, 0.115), smoothstep(0.3, 0.85, d));
+      gl_FragColor = vec4(col, (0.3 + 0.38 * d) * (1.0 - lit));
+    }`,
+});
+const shade = new THREE.Mesh(new THREE.PlaneGeometry(2 * VIS_S, 2 * VIS_S).rotateX(-Math.PI / 2), shadeMat);
+shade.position.y = 0.3; shade.renderOrder = 1; shade.frustumCulled = false; scene.add(shade);
 function updateVis() {                         // the shadows from where my ship is now
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   const edges = (v) => {                       // v: a convex outline [x0, y0, x1, y1, ...]; each edge's shadow quad
@@ -273,6 +296,7 @@ function updateVis() {                         // the shadows from where my ship
   for (const b of builds.values()) if (Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
+  shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeT.value = performance.now() / 1000;
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
   renderer.setRenderTarget(visRT); renderer.render(visScene, visCam); renderer.setRenderTarget(null);
 }
