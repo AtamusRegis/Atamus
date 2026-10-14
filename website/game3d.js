@@ -26,6 +26,23 @@ const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
+let VEL_TURN = 8;                               // (owner) as on the server (world3d.js)
+// (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
+// its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
+// motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
+// starts straight along the input. A near-reversal (over 150 degrees) swings round the side the nose is turning to
+// (`nose`: the ship's heading, same convention), so the ship and its motion turn together.
+function carry(vx, vy, dx, dy, target, up, down, dt, nose) {
+  let v = Math.hypot(vx, vy);
+  const want = Math.atan2(dx, -dy), T2 = Math.PI * 2, wrap = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
+  let va = v > 1 ? Math.atan2(vx, -vy) : want;
+  const d = wrap(want - va);
+  let sign = Math.sign(d), left = Math.abs(d);
+  if (left > Math.PI * 5 / 6 && Number.isFinite(nose)) { const s = wrap(nose - va); if (Math.abs(s) > 1e-3 && Math.sign(s) !== sign) { sign = Math.sign(s); left = T2 - left; } }
+  va += sign * Math.min(left, VEL_TURN * dt);
+  v = v < target ? Math.min(target, v + up * dt) : Math.max(target, v - down * dt);
+  return [Math.sin(va) * v, -Math.cos(va) * v];
+}
 function steer(vx, vy, tx, ty, a, brake, dt) {
   let ex = tx - vx, ey = ty - vy;
   const v = Math.hypot(vx, vy);
@@ -330,7 +347,7 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
@@ -443,11 +460,11 @@ renderer.setAnimationLoop(() => {
   if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * Math.hypot(vel.x, vel.y) * dt / 100) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * dirSpeed(df) * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;
+    const spd = SPEED * dirSpeed(df) * (sprintOn ? SPRINT : 1);
     let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
     if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
     if (movingIn) a *= accelShare(dh);         // a push off the nose gets only part of the acceleration
-    [vel.x, vel.y] = movingIn ? steer(vel.x, vel.y, tx, ty, a, BRAKE, dt) : steer(vel.x, vel.y, 0, 0, a, a, dt);   // as on the server
+    [vel.x, vel.y] = movingIn ? carry(vel.x, vel.y, d.x, d.y, spd * Math.min(1, Math.hypot(d.x, d.y)), a, BRAKE, dt, mineP ? mineP.heading : 0) : steer(vel.x, vel.y, 0, 0, a, a, dt);   // as on the server
     if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; brakeA = 0; }
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }

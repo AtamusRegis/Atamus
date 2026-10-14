@@ -34,6 +34,23 @@ export const LOAD_R = 5000;
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
+export const VEL_TURN = 8;                   // rad/s: how fast held WASD swings the motion round (the ship turns as fast)
+// (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
+// its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
+// motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
+// starts straight along the input. A near-reversal (over 150 degrees) swings round the side the nose is turning to
+// (`nose`: the ship's heading, same convention), so the ship and its motion turn together.
+export function carry(vx, vy, dx, dy, target, up, down, dt, nose) {
+  let v = Math.hypot(vx, vy);
+  const want = Math.atan2(dx, -dy), T2 = Math.PI * 2, wrap = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
+  let va = v > 1 ? Math.atan2(vx, -vy) : want;
+  const d = wrap(want - va);
+  let sign = Math.sign(d), left = Math.abs(d);
+  if (left > Math.PI * 5 / 6 && Number.isFinite(nose)) { const s = wrap(nose - va); if (Math.abs(s) > 1e-3 && Math.sign(s) !== sign) { sign = Math.sign(s); left = T2 - left; } }
+  va += sign * Math.min(left, VEL_TURN * dt);
+  v = v < target ? Math.min(target, v + up * dt) : Math.max(target, v - down * dt);
+  return [Math.sin(va) * v, -Math.cos(va) * v];
+}
 export function steer(vx, vy, tx, ty, a, brake, dt) {
   let ex = tx - vx, ey = ty - vy;
   const v = Math.hypot(vx, vy);
@@ -133,12 +150,12 @@ export class World3D {
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
-      const spd = SPEED * dirSpeed(df) * (sprinting ? SPRINT : 1), tx = p.dx * spd, ty = p.dy * spd;
+      const spd = SPEED * dirSpeed(df) * (sprinting ? SPRINT : 1);
       let a = ACCEL;
       if (p.dx || p.dy) p.brakeA = 0;
       else { if (!p.brakeA) p.brakeA = Math.max(BRAKE, (vx0 * vx0 + vy0 * vy0) / (2 * STOP_D)); a = p.brakeA; }
       if (moving) a *= accelShare(dh);
-      [p.vx, p.vy] = moving ? steer(vx0, vy0, tx, ty, a, BRAKE, dt) : steer(vx0, vy0, 0, 0, a, a, dt);
+      [p.vx, p.vy] = moving ? carry(vx0, vy0, p.dx, p.dy, spd * Math.min(1, Math.hypot(p.dx, p.dy)), a, BRAKE, dt, p.h) : steer(vx0, vy0, 0, 0, a, a, dt);
       if (Math.hypot(p.vx, p.vy) < 0.01 && !p.dx && !p.dy) { p.vx = p.vy = 0; p.brakeA = 0; continue; }
       const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
       if (inside(nx, ny)) { p.x = nx; p.y = ny; }
