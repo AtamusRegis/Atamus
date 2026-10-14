@@ -312,15 +312,12 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math
 sky.position.y = -9000; sky.renderOrder = -5; sky.frustumCulled = false; scene.add(sky);
 // (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
 // ship, drawn only where the shadow texture says it's out of sight
-// (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
-const shadeT = { value: 0 }, shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
+const shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, nt: { value: noiseTex }, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N }, gline: { value: new THREE.Vector3(0x46 / 255, 0x46 / 255, 0x4c / 255) } }, transparent: true, depthWrite: false,   // (gline: screen color)
+  uniforms: { ...visU, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N }, gline: { value: new THREE.Vector3(0x46 / 255, 0x46 / 255, 0x4c / 255) } }, transparent: true, depthWrite: false,   // (gline: screen color)
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  // the baked noise (no grid squares), two layers drifting different ways; colors from near-black navy through dark
-  // blue to a dusky purple (owner, 2026-10-14)
-  fragmentShader: `uniform sampler2D visTex; uniform sampler2D nt; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; uniform vec3 gline; varying vec3 vW;
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; uniform vec3 gline; varying vec3 vW;
     float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0; }
     void main() {
       vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
@@ -333,12 +330,8 @@ const shadeMat = new THREE.ShaderMaterial({
       vec2 gc = vW.xz / 100.0, gg = abs(fract(gc - 0.5) - 0.5) / fwidth(gc);
       float ga = (1.0 - min(min(gg.x, gg.y), 1.0)) * 0.85;
       if (lit > 0.99 && far <= 0.0) { if (ga < 0.003) discard; gl_FragColor = vec4(gline, ga); return; }
-      float a = texture2D(nt, g / 1200.0 + vec2(uT * 0.0045, uT * 0.0028)).b, b = texture2D(nt, g / 480.0 - vec2(uT * 0.0068, -uT * 0.004)).g;
-      float d = clamp(mix(a, b, 0.4) * 1.5 - 0.25, 0.0, 1.0);    // stretched, so the light and dark patches read clearly
-      float hue = smoothstep(0.35, 0.7, texture2D(nt, g / 2080.0 + vec2(-uT * 0.0022, uT * 0.0015) + 0.4).b);
-      vec3 deep = vec3(0.008, 0.012, 0.035), blue = vec3(0.05, 0.09, 0.24), purple = vec3(0.17, 0.07, 0.24);
-      vec3 col = mix(deep, mix(blue, purple, hue), smoothstep(0.15, 0.95, d));
-      float ha = mix((0.28 + 0.5 * d) * (1.0 - lit), 1.0, far), oa = ha + ga * (1.0 - ha);   // the haze over the grid
+      vec3 col = vec3(0.0);                   // (owner, 2026-10-14) a flat, see-through black (was a drifting dusty texture)
+      float ha = mix(0.55 * (1.0 - lit), 1.0, far), oa = ha + ga * (1.0 - ha);   // the haze over the grid
       gl_FragColor = vec4((col * ha + gline * ga * (1.0 - ha)) / max(oa, 1e-4), oa);
     }`,
 });
@@ -346,7 +339,7 @@ const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math
 shade.position.y = 0; shade.renderOrder = -1; shade.frustumCulled = false; scene.add(shade);
 let visVer = 0, visKey = "";                    // visVer: bumped whenever a block or Build piece changes
 function updateVis() {                         // the shadows from where my ship is now
-  shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
+  shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
   // (owner, 2026-10-14: speed) the shadow texture is only redrawn when my ship has moved or an object changed
   const key = Math.round(me.x * 4) + "," + Math.round(me.y * 4) + "," + visVer; if (key === visKey) return; visKey = key;
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
