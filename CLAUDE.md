@@ -35,7 +35,7 @@ packages/server/src/
   auth.js         signup / login / logout / password recovery (cookie sessions)
   sessions.js     getSessionUser (always returns the "PTR" user in PTR mode)
   db.js           schema; the old game's tables stay for reference (WIPES is empty now)
-  security.js, geo.js, suspicion.js, textsafe.js, names.js, namefilter.js   account security and the name/word filter
+  security.js, suspicion.js, textsafe.js, names.js, namefilter.js   account security and the name/word filter
   admin.js, personas.js, staff.js, appeals.js, relations.js, relappeals.js, tickets.js, language.js, watch.js,
   pilots.js, licenses.js, portraits.js, gamehttp.js
                   the 2D era's accounts/moderation APIs: still mounted and running, but the game hooks are

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Removed IP geolocation and password reset requests (owner):** no more DB-IP location lookups or VPN lists (so no impossible-travel locks or location flags; the footer credit is gone). Password recovery is only the three security questions now: the reset-request form, its login conversation, the Welcome back page's "This is not me" note and the admin endpoints are gone.
 - **Sprint drains by distance (owner):** the capacitor now loses 1% per 100 m sprinted instead of 20 a second, so a full bar lasts about 10 km (around 38 s).
 - **New ground colors; centered Welcome back card (owner):** the ground and background are now dark charcoal with soft gray grid lines (the grid shader also outputs proper sRGB now, so colors match what's set). Everything on the Welcome back card is centered. Removed three stray test screenshots from the repo root.
 - **Remembered side; Reset faction (owner):** the side you pick is saved to your account and re-joined automatically next time. A Reset faction checkbox under Enter System on the Welcome back page lets you pick again.

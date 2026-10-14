@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import { checkNewAccount } from "./watch.js";
-import { isVpn } from "./geo.js";
 import express from "express";
 import { pool } from "./db.js";
 import { config } from "./config.js";
@@ -13,7 +12,6 @@ import { allow } from "./ratelimit.js";
 import { PTR } from "./ptr.js";
 import { checkName } from "./names.js";
 import { appealToken, tokenUser, appealState, playerWrite } from "./appeals.js";
-import * as resets from "./resets.js";
 import { gameHook } from "./admin.js";
 import * as sec from "./security.js";
 import { HOLD_TEXT } from "./suspicion.js";
@@ -38,7 +36,7 @@ function publicUser(u) {
 auth.get("/me", async (req, res) => {
   const user = await getSessionUser(readCookie(req));
   if (!user) return fail(res, 401, "Not logged in.");
-  res.json({ ...publicUser(user), resetRequests: await resets.openFor(user.id) });   // (owner) someone asking to reset this account's password
+  res.json(publicUser(user));
 });
 
 // (owner) the End User License Agreement (website/eula.html): agreed to at sign-up; the version agreed is kept
@@ -96,8 +94,8 @@ auth.post("/signup", async (req, res) => {
 
     await client.query("COMMIT");
 
-    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz), req).catch((e) => console.error("signup login", e));
-      await checkNewAccount(userId, sec.deviceOf(b.device), clientIp(req), isVpn(clientIp(req), req)).catch((e) => console.error("signup watch", e)); }   // (owner) several new accounts from one device or address   // (the first login's place and device)
+    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz)).catch((e) => console.error("signup login", e));
+      await checkNewAccount(userId, sec.deviceOf(b.device), clientIp(req), false).catch((e) => console.error("signup watch", e)); }   // (owner) several new accounts from one device or address   // (the first login's place and device)
     const { token, expires } = await createSession(userId);
     setSessionCookie(res, token, expires);
     res.status(201).json({ username, email: email || null, hasRecovery: !!recoveryRows });
@@ -136,12 +134,8 @@ auth.post("/login", async (req, res) => {
     : await verifySecret(password, "scrypt$16384$8$1$00$00");
   if (byToken && !ok) { sec.loginFailed(username, device, ip); return res.status(401).json({ error: "Enter your password.", forget: true }); }
 
-  if (user && !ok) {                                   // (owner) a temporary password from a reset request: that request's conversation
-    const r = await resets.requestByTemp(user.id, password);
-    if (r) return res.status(403).json({ error: "Password reset request", reset: await resets.resetView(r.id), resetToken: resets.resetToken(r.id) });
-  }
   if (!user || !ok) {
-    sec.loginFailed(username, device, ip); if (user) sec.recordFailed(user.id, ip, device, tz, req).catch((e) => console.error("login record", e));
+    sec.loginFailed(username, device, ip); if (user) sec.recordFailed(user.id, ip, device, tz).catch((e) => console.error("login record", e));
     return fail(res, 401, "Incorrect username or password.");
   }
   sec.loginSucceeded(username, device, ip);
@@ -153,7 +147,7 @@ auth.post("/login", async (req, res) => {
   if (user.locked_reason) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
   if (user.login_hold_until && new Date(user.login_hold_until) > new Date()) return res.status(403).json({ error: HOLD_TEXT(user.login_hold_until), hold: true });   // (owner) suspicion: logins on hold
   if (device && gameHook("deviceBusy", device, String(user.id))) return fail(res, 409, "Another account is playing on this device.");   // (owner) one account per device
-  if ((await sec.checkLogin(user, ip, device, tz, req)).locked) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
+  if ((await sec.checkLogin(user, ip, device, tz)).locked) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);
@@ -162,8 +156,8 @@ auth.post("/login", async (req, res) => {
   else if (byToken) await forget(remembered);
   res.json({ ...publicUser(user), ...(rem ? { remember: rem } : {}) });
 });
-// (owner) Remember Password tokens: one per account and browser, 30 days from last use; a new password, a recovery, an
-// approved reset or a lock revokes them all
+// (owner) Remember Password tokens: one per account and browser, 30 days from last use; a new password, a recovery or a
+// lock revokes them all
 const tokHash = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
 async function rememberOk(uid, device, t) {
   const { rows } = await pool.query(`UPDATE remember_tokens SET used_at = now() WHERE token_hash = $1 AND user_id = $2 AND device = $3 AND used_at > now() - interval '30 days' RETURNING 1`, [tokHash(t), uid, device]);
@@ -191,28 +185,6 @@ auth.post("/appeal", async (req, res) => {
   const uid = tokenUser(req.body && req.body.token); if (!uid) return fail(res, 401, "Log in again to write your appeal.");
   if (!PTR && !allow("appeal", uid, 30, 60 * 60_000)) return fail(res, 429, "Too many messages. Try again later.");
   try { await playerWrite(uid, req.body.text); res.json(forPlayer(await appealState(uid))); }
-  catch (e) { fail(res, 400, e.message); }
-});
-
-// ---- (owner) password reset appeals (resets.js) ----
-auth.post("/reset-request", async (req, res) => {
-  if (!PTR && !allow("reset-request", clientIp(req), 3, 60 * 60_000)) return fail(res, 429, "Too many requests. Try again later.");
-  const b = req.body || {};
-  try { const id = await resets.openReset(b.username, b.tempPassword, b.text); res.json({ ok: true, id }); } catch (e) { fail(res, 400, e.message); }
-});
-auth.post("/reset/state", async (req, res) => {
-  const id = resets.tokenRequest(req.body && req.body.token); if (!id) return fail(res, 401, "Log in again with your temporary password.");
-  res.json(await resets.resetView(id));
-});
-auth.post("/reset/say", async (req, res) => {
-  const id = resets.tokenRequest(req.body && req.body.token); if (!id) return fail(res, 401, "Log in again with your temporary password.");
-  if (!PTR && !allow("reset-say", id, 30, 60 * 60_000)) return fail(res, 429, "Too many messages. Try again later.");
-  try { await resets.requesterSay(id, req.body.text); res.json(await resets.resetView(id)); } catch (e) { fail(res, 400, e.message); }
-});
-// the account's owner, logged in: "This is not me" closes the request (the Head Admin is told)
-auth.post("/reset/notme", async (req, res) => {
-  const user = await getSessionUser(readCookie(req)); if (!user) return fail(res, 401, "Not logged in.");
-  try { const r = await resets.disown(user.id, String((req.body || {}).id || "")); gameHook("staffNotify", ["head"], "reset", "Password reset request for " + r.username + ": the owner logged in and said it isn't them.", { reset: String(r.id) }); res.json({ ok: true }); }
   catch (e) { fail(res, 400, e.message); }
 });
 

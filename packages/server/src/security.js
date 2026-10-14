@@ -1,28 +1,20 @@
 // (owner, 2026-10-11) Account security:
-//   - every login is recorded (when, the address's place from geo.js, whether it's a known VPN, the browser's device id
-//     and time zone);
+//   - every login is recorded (when, the address, the browser's device id and time zone);
 //   - failed logins back off more and more, per account and device (not per address: many players can share a VPN's);
-//   - a login from somewhere the account couldn't have travelled to since its last login (faster than 150 mph as the crow
-//     flies) on a different device, with neither address a known VPN, locks the account on suspicion of sharing or
-//     compromise; the owner unlocks it with their recovery questions or a password reset request, or staff unlock it.
-//     When the browser's time zone matches the last login's (a VPN the lists miss) it's only flagged;
-//   - flagged to the Admins (not locked): VPN jumps on a new device, more than 4 devices in 30 days, and a login from a
-//     new place at an hour the account doesn't usually play;
+//   - flagged to the Admins: more than 4 devices in 30 days;
+//   - staff can lock an account; the owner unlocks it with their recovery questions;
 //   - a game client sending malformed messages is timed out (its device and account), longer each time.
-// Once logged in nothing checks the address again: only logins are looked at.
+// (owner, 2026-10-13) IP geolocation and the VPN lists were removed, and with them the impossible-travel lock and the
+// VPN-jump / odd-hour flags. Once logged in nothing checks the address again: only logins are looked at.
 import { pool } from "./db.js";
-import { locate, isVpn, km } from "./geo.js";
 import { gameHook } from "./admin.js";
 import { destroyAllSessions } from "./sessions.js";
 import { flag } from "./suspicion.js";
 
-export const MAX_MPH = 150, MAX_KMH = MAX_MPH * 1.609344;
-const MIN_KM = 100;                                   // closer than this is the same area (geolocation isn't exact)
 const DEVICE_RE = /^[A-Za-z0-9_-]{16,64}$/, TZ_RE = /^[A-Za-z0-9_+\-\/]{1,48}$/;
 /** A browser's device id (made once and kept in its storage), or null. */
 export const deviceOf = (v) => (typeof v === "string" && DEVICE_RE.test(v) ? v : null);
 export const tzOf = (v) => (typeof v === "string" && TZ_RE.test(v) ? v : null);
-const notify = (text, ref) => { try { gameHook("staffNotify", ["head", "admin"], "security", text, ref); } catch (e) { console.error("security notify", e); } };
 
 // ---- failed logins: after 5 misses, 1 minute, then 2, 4, 8 ... up to an hour; per account name and device (or address
 // when a client sends no device). Many misses on one account from devices it has never logged in on also hold those back.
@@ -63,52 +55,23 @@ export async function unlockAccount(uid) {
   const { rowCount } = await pool.query(`UPDATE users SET locked_reason = NULL, locked_at = NULL WHERE id = $1 AND locked_reason IS NOT NULL`, [String(uid)]);
   if (rowCount) await pool.query(`INSERT INTO logins (user_id, result) VALUES ($1, 'unlocked')`, [String(uid)]);
 }
-export const LOCK_TEXT = "This account is locked: it was logged in to from somewhere it couldn't have travelled to in time, which can mean someone else has your password. Unlock it with your recovery questions (Forgot password), or ask for a password reset.";
+export const LOCK_TEXT = "This account is locked. Unlock it with your recovery questions (Forgot password).";
 
-// ---- a successful password check: record it and look at where it came from. Returns { locked } (the login is refused).
-const placeOf = (r) => (r.city ? r.city + (r.country ? ", " + r.country : "") : r.country || "?");
-export async function checkLogin(user, ip, device, tz, req) {
-  const at = Date.now(), loc = locate(ip, req) || {}, vpn = isVpn(ip, req);
-  const cur = { ip, device, tz, city: loc.city || null, country: loc.country || null, lat: loc.lat ?? null, lon: loc.lon ?? null, vpn };
-  const { rows: all } = await pool.query(`SELECT at, device, tz, city, country, lat, lon, vpn, result FROM logins WHERE user_id = $1 AND result IN ('ok', 'unlocked') ORDER BY id DESC LIMIT 100`, [user.id]);
-  const hist = all.filter((h) => h.result === "ok"), prev = all[0] && all[0].result === "ok" ? all[0] : null;
-  let verdict = "ok";
-  if (prev && (!device || prev.device !== device) && (cur.lat != null || cur.country)) {
-    const hours = Math.max(1 / 60, (at - new Date(prev.at).getTime()) / HOUR), d = km(cur, prev);
-    const tooFar = d != null ? d > MIN_KM && d / hours > MAX_KMH
-      : !!(cur.country && prev.country && cur.country !== prev.country && hours < 3);   // (country-level database: a different country within 3 hours)
-    if (tooFar) {
-      const what = user.username + " logged in from " + placeOf(cur) + (d != null ? " (" + Math.round(d) + " km" : " (") + " from " + placeOf(prev) + " " + Math.round(hours * 60) + " minutes earlier) on a different device";
-      if (vpn || prev.vpn) { verdict = "flag"; await flag(user.id, "vpnjump", what + ", through a VPN.", device || ""); }
-      else if (tz && prev.tz && tz === prev.tz) { verdict = "flag"; await flag(user.id, "tzjump", what + " (same time zone: possibly a VPN).", device || ""); }
-      else verdict = "locked";
-      if (verdict === "locked") {
-        await pool.query(`INSERT INTO logins (user_id, ip, device, tz, city, country, lat, lon, vpn, result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'locked')`, [user.id, ip, device, tz, cur.city, cur.country, cur.lat, cur.lon, vpn]);
-        await lockAccount(user.id, what);
-        notify("Locked: " + what + ".", { player: String(user.id), tab: "sec" });
-        await flag(user.id, "travel", what + ".", device || "", 5);
-        return { locked: true };
-      }
-    }
-  }
-  await pool.query(`INSERT INTO logins (user_id, ip, device, tz, city, country, lat, lon, vpn, result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ok')`, [user.id, ip, device, tz, cur.city, cur.country, cur.lat, cur.lon, vpn]);
+// ---- a successful password check: record it. Returns { locked } (always false now: nothing locks at login).
+const placeOf = (r) => (r.city ? r.city + (r.country ? ", " + r.country : "") : r.country || "");   // (old rows still carry a place)
+export async function checkLogin(user, ip, device, tz) {
+  const { rows: hist } = await pool.query(`SELECT device FROM logins WHERE user_id = $1 AND result = 'ok' ORDER BY id DESC LIMIT 100`, [user.id]);
+  await pool.query(`INSERT INTO logins (user_id, ip, device, tz, vpn, result) VALUES ($1,$2,$3,$4,false,'ok')`, [user.id, ip, device, tz]);
   // more than 4 devices in 30 days (told when a new one appears)
-  const newDevice = !device || !hist.some((h) => h.device === device);
-  if (newDevice && device) {
+  if (device && !hist.some((h) => h.device === device)) {
     const { rows } = await pool.query(`SELECT count(DISTINCT device)::int AS n FROM logins WHERE user_id = $1 AND result = 'ok' AND device IS NOT NULL AND at > now() - interval '30 days'`, [user.id]);
     if (rows[0].n > 4) await flag(user.id, "devices", rows[0].n + " devices in 30 days.", device);
-  }
-  // a new place at an unusual hour (when there's enough history to know their hours)
-  if (hist.length >= 20 && (cur.city || cur.country) && !hist.some((h) => (h.city || null) === cur.city && (h.country || null) === cur.country)) {
-    const hr = new Date(at).getUTCHours(), near = hist.filter((h) => { const x = Math.abs(new Date(h.at).getUTCHours() - hr); return Math.min(x, 24 - x) <= 1; }).length;
-    if (near / hist.length < 0.05) await flag(user.id, "oddhour", placeOf(cur) + " at " + String(hr).padStart(2, "0") + ":00 UTC.", placeOf(cur));
   }
   return { locked: false };
 }
 /** A failed password, for the history staff see. */
-export async function recordFailed(uid, ip, device, tz, req) {
-  const loc = locate(ip, req) || {};
-  await pool.query(`INSERT INTO logins (user_id, ip, device, tz, city, country, lat, lon, vpn, result) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'failed')`, [uid, ip, device, tz, loc.city || null, loc.country || null, loc.lat ?? null, loc.lon ?? null, isVpn(ip, req)]);
+export async function recordFailed(uid, ip, device, tz) {
+  await pool.query(`INSERT INTO logins (user_id, ip, device, tz, vpn, result) VALUES ($1,$2,$3,$4,false,'failed')`, [uid, ip, device, tz]);
 }
 /** (admin) an account's recent logins, devices and lock. */
 export async function securityOf(uid) {

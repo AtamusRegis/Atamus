@@ -10,7 +10,6 @@ import { admin, loadPersonas } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
 import { loadNameData } from "./names.js";
 import { loadRelations } from "./relations.js";
-import { startGeo } from "./geo.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -57,7 +56,7 @@ async function main() {
   await loadPersonas();
   await loadNameData();
   await loadRelations();                                 // (owner) players' mutes and blocks
-  startGeo(); startWatch();                                            // (owner) IP places and VPN lists for the login checks (security.js)
+  startWatch();
   await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();

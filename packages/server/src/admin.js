@@ -19,7 +19,6 @@ import { LICENSES, STARTING_LICENSES, getLicense } from "./licenses.js";
 import { CORP, offerName } from "./pilots.js";
 import { nameKey, filterForm, CATEGORY_KEYS, isFiltered } from "./namefilter.js";
 import { reloadWords } from "./names.js";
-import * as resets from "./resets.js";
 import { unreadNoteCount, notesOf, readNotes, staffChatRecent, unreadCounts, markSeen, MOD_REPORTS, markActive } from "./staff.js";
 import { setRelation, relationsOf } from "./relations.js";
 import * as relAp from "./relappeals.js";
@@ -601,18 +600,6 @@ admin.get("/staffchat", guard(true, async (req, res, me) => {   // (owner) the A
 admin.get("/unread", guard(true, async (req, res, me) => res.json(await unreadCounts(me.id, me.role))));
 admin.post("/seen", guard(true, async (req, res, me) => { await markSeen(me.id, String((req.body || {}).tab || "")); res.json({ ok: true }); }));
 
-// (owner) password reset appeals: the Head Admin alone reads, answers, approves (the temporary password becomes the
-// account's, its sessions end) or denies them
-const headOnly = (fn) => guard(true, async (req, res, me) => { if (me.role !== "head") return fail(res, 403, "Only the Head Admin can do that."); await fn(req, res, me); });
-admin.get("/resets", headOnly(async (req, res) => res.json(await resets.resetList())));
-admin.get("/reset/:id", headOnly(async (req, res) => { if (!isId(req.params.id)) return fail(res, 400, "Bad request."); const v = await resets.resetView(req.params.id); if (!v) return fail(res, 404, "No such request."); res.json(v); }));
-admin.post("/reset/say", headOnly(async (req, res, me) => { const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request."); try { await resets.adminSay(me, String(b.id), b.text); res.json({ ok: true }); } catch (e) { fail(res, 400, e.message); } }));
-admin.post("/reset/close", headOnly(async (req, res, me) => {
-  const b = req.body || {}; if (!isId(b.id)) return fail(res, 400, "Bad request.");
-  try { const r = await resets.closeReset(me, String(b.id), !!b.approve); if (b.approve) await destroyAllSessions(r.user_id);
-    const t = await target(String(r.user_id)); if (t) await log(me, t, b.approve ? "password reset approved" : "password reset denied", "", { request: String(r.id) });
-    res.json({ ok: true }); } catch (e) { fail(res, 400, e.message); }
-}));
 
 // (owner) the Admins' review of what Moderators did (mutes, timed bans, mutes / blocks between players): Approve keeps it;
 // Lift undoes it; Edit (the panel re-issues it differently) marks it edited
