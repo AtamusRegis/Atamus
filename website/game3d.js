@@ -393,10 +393,10 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   for (const [x, y] of A.concat(B)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const near = W.filter((w) => w.x1 >= x0 && w.x0 <= x1 && w.y1 >= y0 && w.y0 <= y1), lines = keepLines ? [] : null;
   let clear = 0;
-  const test = (ax, ay, bx, by, show) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (lines && show) lines.push([ax, ay, bx, by, ok]); return ok; };   // show: drawn in the editor (owner: only my lines, not theirs at me)
+  const test = (ax, ay, bx, by, show) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (lines && show) lines.push([ax, ay, bx, by, ok]); return ok; };   // show: drawn in the editor (owner: only their lines to my pivot, and the pivot line)
   const piv = test(pa[0], pa[1], pb[0], pb[1], true) ? 0.5 : 0;
-  for (const [ax, ay] of A) if (test(ax, ay, pb[0], pb[1], true)) clear++;
-  for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], false)) clear++;
+  for (const [ax, ay] of A) if (test(ax, ay, pb[0], pb[1], false)) clear++;
+  for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], true)) clear++;
   return { f: piv + 0.5 * clear / Math.max(1, A.length + B.length), lines };
 }
 function updateShipVis(dt, now) {
