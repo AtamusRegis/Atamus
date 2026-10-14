@@ -330,6 +330,7 @@ function connect() {
       srvBuild = m.build || "";
       if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
+      if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       // (owner, 2026-10-13) the side is remembered: re-join it, unless this is the first time or the player ticked
@@ -374,6 +375,13 @@ function connect() {
     if (closedForGood) return;
     if (ev.code === 4001) { location.href = "login.html"; return; }
     if (ev.code === 4002) { closedForGood = true; statusEl.hidden = false; statusEl.textContent = "Playing on another tab or device."; setTimeout(() => location.href = "play.html", 1500); return; }
+    // (owner, 2026-10-13) another account on this device, a kick, a ban: say so, then back to the Welcome back page (a ban
+    // goes to Log in, which shows it)
+    if (ev.code === 4003 || ev.code === 4005 || ev.code === 4006) {
+      closedForGood = true; statusEl.hidden = false;
+      statusEl.textContent = ev.code === 4003 ? "Another account is playing on this device." : (ev.code === 4005 ? "Kicked" : "Banned") + (ev.reason ? ": " + ev.reason : ".");
+      setTimeout(() => location.href = ev.code === 4006 ? "login.html" : "play.html", 3000); return;
+    }
     statusEl.hidden = false; statusEl.textContent = "Reconnecting…";
     setTimeout(connect, 2000);
   };

@@ -8,10 +8,23 @@ import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
 import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
+import { setGameHooks } from "../admin.js";
+import { deviceOf } from "../security.js";
 
 export function attachGameServer(httpServer) {
   const world = new World3D();
   const socks = new Map();                     // account id -> ws
+  const devs = new Map();                      // device id -> account id, for the connected sockets
+  const mutes = new Map();                     // account id -> { perm, until } (ms), the connected players' chat mutes
+  // (owner, 2026-10-13) the admin panel's hooks into the world: who's online, kicks (and bans), mutes; and one account
+  // per device (auth.js asks at login; a second account's socket on a device in use is refused below)
+  setGameHooks({
+    online: () => { const m = new Map(); for (const [pid] of socks) { const p = world.players.get(pid); m.set(pid, { side: p ? p.team : null }); } return m; },
+    kick: (pid, code, reason) => { const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
+    mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
+    deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
+  });
+  const muted = (pid) => { const m = mutes.get(pid); return !!m && (m.perm || (m.until && m.until > Date.now())); };
 
   const wss = new WebSocketServer({
     server: httpServer, path: "/ws", maxPayload: 16 * 1024,
@@ -31,6 +44,10 @@ export function attachGameServer(httpServer) {
     if (!user) { ws.close(4001, "Not logged in"); return; }
     if (user.frozen) { ws.close(4001, "Not available"); return; }
     const pid = String(user.id);
+    const device = deviceOf(new URL(req.url, "http://x").searchParams.get("d"));
+    if (device && devs.has(device) && devs.get(device) !== pid && socks.has(devs.get(device))) { ws.close(4003, "Another account is playing on this device."); return; }   // (owner) one account per device
+    if (device) devs.set(device, pid);
+    if (user.mute_perm || (user.mute_until && new Date(user.mute_until) > new Date())) mutes.set(pid, { perm: !!user.mute_perm, until: user.mute_until ? new Date(user.mute_until).getTime() : 0 });
 
     const old = socks.get(pid);                // (owner) one session per account: the new one replaces the old
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
@@ -44,10 +61,10 @@ export function attachGameServer(httpServer) {
 
     let saved = null;                          // (owner, 2026-10-13) the side this account chose last time: the client re-joins it unless resetting
     try { saved = await world.savedTeam(pid); } catch (e) { console.error("saved side", e); }
-    if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) socks.delete(pid); return; }   // closed or replaced meanwhile
+    if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
-      you: { id: pid, name: user.username },
+      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) },   // staff: the Admin button
       cfg: { loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       roster: world.roster(),
     }));
@@ -68,7 +85,7 @@ export function attachGameServer(httpServer) {
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
       else if (m.t === "chat") {               // (owner, 2026-10-13) simple chat: global to everyone, faction to your side
-        const me = world.players.get(pid); if (!me || typeof m.text !== "string") return;
+        const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;   // (owner) a muted player's lines go nowhere
         const text = m.text.slice(0, 240); if (!text.trim()) return;
         const ch = m.ch === "side" ? "side" : "global";
         const msg = JSON.stringify({ t: "chat", ch, n: user.username, s: me.team, text });
@@ -80,7 +97,8 @@ export function attachGameServer(httpServer) {
     ws.on("close", () => {
       clearInterval(cmdReset);
       if (socks.get(pid) !== ws) return;       // replaced: the newer socket owns the player now
-      socks.delete(pid);
+      socks.delete(pid); mutes.delete(pid);
+      if (device && devs.get(device) === pid) devs.delete(device);
       if (!joined) return;
       world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));
     });

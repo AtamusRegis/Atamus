@@ -1,15 +1,14 @@
 import http from "node:http";
-import { startWatch } from "./watch.js";
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
-import { migrate, cleanupExpired, runWipes } from "./db.js";
+import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
 import { game } from "./gamehttp.js";
-import { admin, loadPersonas } from "./admin.js";
+import { admin } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
 import { loadNameData } from "./names.js";
-import { loadRelations } from "./relations.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -52,12 +51,10 @@ app.use((err, _req, res, _next) => {
 });
 
 async function main() {
+  // (owner, 2026-10-13) IP geolocation is gone: delete the location databases and VPN lists it downloaded (data/ held only those)
+  try { fs.rmSync(new URL("../data/", import.meta.url), { recursive: true, force: true }); } catch (e) { console.error("geo data cleanup", e.message); }
   await migrate();
-  await loadPersonas();
   await loadNameData();
-  await loadRelations();                                 // (owner) players' mutes and blocks
-  startWatch();
-  await runWipes();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();
 

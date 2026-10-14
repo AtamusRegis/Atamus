@@ -5,8 +5,8 @@
 // atamus.io talks to the live server; anything else (the private PTR copy) talks to whoever served the page
 const API_BASE = /(^|\.)atamus\.io$/.test(location.hostname) ? "https://play.atamus.io" : location.origin;
 
-// (owner) this browser's device id, made once and kept: the server allows one account at a time per device and looks at
-// which devices an account logs in from (kept in memory for the page if storage is unavailable)
+// (owner) this browser's device id, made once and kept: the server allows one account at a time per device (kept in
+// memory for the page if storage is unavailable)
 let deviceMem = null;
 function deviceId() {
   try { let d = localStorage.getItem("atamus.device"); if (!/^[A-Za-z0-9_-]{16,64}$/.test(d || "")) { d = crypto.randomUUID().replace(/-/g, ""); localStorage.setItem("atamus.device", d); } return d; }

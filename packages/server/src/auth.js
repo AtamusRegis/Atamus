@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { checkNewAccount } from "./watch.js";
 import express from "express";
 import { pool } from "./db.js";
 import { config } from "./config.js";
@@ -14,7 +13,6 @@ import { checkName } from "./names.js";
 import { appealToken, tokenUser, appealState, playerWrite } from "./appeals.js";
 import { gameHook } from "./admin.js";
 import * as sec from "./security.js";
-import { HOLD_TEXT } from "./suspicion.js";
 
 export const auth = express.Router();
 
@@ -94,8 +92,6 @@ auth.post("/signup", async (req, res) => {
 
     await client.query("COMMIT");
 
-    { const b = req.body || {}; await sec.checkLogin({ id: userId, username }, clientIp(req), sec.deviceOf(b.device), sec.tzOf(b.tz)).catch((e) => console.error("signup login", e));
-      await checkNewAccount(userId, sec.deviceOf(b.device), clientIp(req), false).catch((e) => console.error("signup watch", e)); }   // (owner) several new accounts from one device or address   // (the first login's place and device)
     const { token, expires } = await createSession(userId);
     setSessionCookie(res, token, expires);
     res.status(201).json({ username, email: email || null, hasRecovery: !!recoveryRows });
@@ -115,14 +111,14 @@ auth.post("/login", async (req, res) => {
     return fail(res, 429, "Too many attempts. Please wait a few minutes.");
 
   const { username, password } = req.body || {}, remembered = (req.body || {}).token;
-  const device = sec.deviceOf((req.body || {}).device), tz = sec.tzOf((req.body || {}).tz);
+  const device = sec.deviceOf((req.body || {}).device);
   // (owner) Remember Password: the browser keeps a token for this account and device, never the password
   const byToken = typeof remembered === "string" && remembered.length >= 20 && remembered.length <= 100 && !!device;
   if (typeof username !== "string" || !username || username.length > 40 || (!byToken && (typeof password !== "string" || !password || password.length > 200))) return fail(res, 400, "Enter your username and password.");
   { const wait = await sec.loginWait(username, device, ip); if (wait) return fail(res, 429, "Too many failed logins. Try again in " + wait + (wait === 1 ? " minute." : " minutes.")); }
 
   const { rows } = await pool.query(
-    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at, locked_reason, login_hold_until,
+    `SELECT id, username, password, email, ban_perm, ban_until, ban_reason, ban_at, locked_reason,
             EXISTS(SELECT 1 FROM recovery_questions rq WHERE rq.user_id = users.id) AS has_recovery
        FROM users WHERE lower(username) = lower($1)`,
     [username]
@@ -135,7 +131,7 @@ auth.post("/login", async (req, res) => {
   if (byToken && !ok) { sec.loginFailed(username, device, ip); return res.status(401).json({ error: "Enter your password.", forget: true }); }
 
   if (!user || !ok) {
-    sec.loginFailed(username, device, ip); if (user) sec.recordFailed(user.id, ip, device, tz).catch((e) => console.error("login record", e));
+    sec.loginFailed(username, device, ip);
     return fail(res, 401, "Incorrect username or password.");
   }
   sec.loginSucceeded(username, device, ip);
@@ -143,11 +139,9 @@ auth.post("/login", async (req, res) => {
   if (isBanned(user))
     return res.status(403).json({ error: banText(user), ban: { perm: !!user.ban_perm, until: user.ban_until, reason: user.ban_reason || "" }, appeal: forPlayer(await appealState(user.id)), appealToken: appealToken(user.id) });
 
-  // (owner) a locked account (suspected sharing or compromise), and where this login comes from
+  // (owner) a locked account (staff locked it; the recovery questions unlock it)
   if (user.locked_reason) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
-  if (user.login_hold_until && new Date(user.login_hold_until) > new Date()) return res.status(403).json({ error: HOLD_TEXT(user.login_hold_until), hold: true });   // (owner) suspicion: logins on hold
   if (device && gameHook("deviceBusy", device, String(user.id))) return fail(res, 409, "Another account is playing on this device.");   // (owner) one account per device
-  if ((await sec.checkLogin(user, ip, device, tz)).locked) return res.status(403).json({ error: sec.LOCK_TEXT, locked: true });
 
   const { token, expires } = await createSession(user.id);
   setSessionCookie(res, token, expires);

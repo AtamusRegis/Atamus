@@ -34,20 +34,23 @@ packages/server/src/
   build.js        SERVER_BUILD, website build polling, update countdown (announceUpdate)
   auth.js         signup / login / logout / password recovery (cookie sessions)
   sessions.js     getSessionUser (always returns the "PTR" user in PTR mode)
-  db.js           schema; the old game's tables stay for reference (WIPES is empty now)
-  security.js, suspicion.js, textsafe.js, names.js, namefilter.js   account security and the name/word filter
-  admin.js, personas.js, staff.js, appeals.js, relations.js, relappeals.js, tickets.js, language.js, watch.js,
-  pilots.js, licenses.js, portraits.js, gamehttp.js
-                  the 2D era's accounts/moderation APIs: still mounted and running, but the game hooks are
-                  disconnected and nothing in the 3D client uses them yet. Don't build on them without asking.
+  db.js           schema for the tables in use; the 2D game's tables stay in the database untouched, unused
+  ptr.js, config.js, hash.js, ratelimit.js   the local test copy, settings, password hashing, rate limits
+  security.js     failed-login backoff, device ids, account unlock (no login records)
+  names.js, namefilter.js, textsafe.js   the name filter and banned names (sign-up), text cleaning
+  admin.js        the small admin panel's API (players: kick / ban / mute; ban appeals) and the game hooks (gameHook)
+  appeals.js      ban appeals (written from the login page, answered in the admin panel)
+  gamehttp.js     the deploy workflows' calls (build-check, update-countdown)
   game/
-    net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), side pick, move /
+    net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
+                  (4003), admin hooks (kick 4005 / ban 4006 / mute), side pick (remembered), move /
                   chat in; 20 Hz sim, 15 Hz per-player snapshots (only ships inside that player's load circle)
     world3d.js    the world: 126 km hexagon, momentum ships (accel / brake / turn-scaled thrust), capacitor,
                   LOAD_R (5,000 m load circle, snapshotFor), positions saved. Weapons/combat were removed
                   (owner, 2026-10-13); the last version is commit 956cb73
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
+  adminpanel.js   the Admin button and panel (staff accounts only)
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
                   own-sphere prediction + snapshot interpolation, countdown and reconnect handling
@@ -70,7 +73,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 
 1. Make the change.
 2. Run `scripts/check.sh`.
-3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts in `website/game.html` and `website/play.html`,.
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/play.html`, and the other pages for `style.css`).
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
 5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;
