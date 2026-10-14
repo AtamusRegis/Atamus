@@ -1,8 +1,9 @@
 // (owner, 2026-10-13) The admin panel: an Admin button (top right) for staff accounts opens it. Being logged in as a staff
 // account is enough (no second password). The sections are floating icon buttons on the panel's left (names on hover):
 //   - Players: Online / Offline tabs, a search box for the selected list, then the list (10 rows, then it scrolls under
-//     the tabs and search, which stay put). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
-//     Discipline (the disciplinary panel).
+//     the tabs and search, which stay put). A row: name (20 characters, monospace) | kicks | Mute tag | Ban tag | last
+//     played | Discipline (the disciplinary panel). Under each, small: the player's totals (kicks counted; time spent
+//     muted / banned, a lifted one counting only until it was lifted).
 //   - Reports: players' reports with the reported player's recent chat.
 //   - Appeals: ban appeals (read, reply, accept or deny).
 // The window is only as wide as what it shows. The disciplinary panel is its own window (AdminPanel.act(id, name), also
@@ -16,6 +17,8 @@
   // a short span: 25m, 6h, 3d
   const short = (ms) => { const m = Math.max(1, Math.round(ms / 60000)); return m < 60 ? m + "m" : m < 1440 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
   const left = (x) => (x.perm ? "∞" : short(new Date(x.until).getTime() - Date.now()));
+  // a total: 45m, 3h 20m, 2d 6h
+  const dur = (sec) => { const m = Math.floor(sec / 60); if (m < 1) return "<1m"; if (m < 60) return m + "m"; const h = Math.floor(m / 60); if (h < 24) return h + "h" + (m % 60 ? " " + (m % 60) + "m" : ""); const d = Math.floor(h / 24); return d + "d" + (h % 24 ? " " + (h % 24) + "h" : ""); };
   const ago = (t) => (t ? short(Date.now() - new Date(t).getTime()) + " ago" : "never");
   const svg = (d) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 24 24"); const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", d); s.appendChild(p); return s; };
   const ICONS = {
@@ -80,11 +83,13 @@
     for (const p of rows) {
       const tr = $("tr");
       const name = $("td", "ap-mono" + (p.side ? " " + p.side : ""), p.name.slice(0, 20)); name.title = p.name;
-      const mute = $("td"); if (p.mute) mute.appendChild($("span", "ap-tag", "Mute " + left(p.mute)));
-      const ban = $("td"); if (p.ban) ban.appendChild($("span", "ap-tag ban", "Ban " + left(p.ban)));
+      const tot = p.totals || {};
+      const kick = $("td", "ap-cell"); if (tot.kicks) kick.appendChild($("span", "ap-total", tot.kicks + (tot.kicks === 1 ? " kick" : " kicks")));
+      const mute = $("td", "ap-cell"); if (p.mute) mute.appendChild($("span", "ap-tag", "Mute " + left(p.mute))); if (tot.muted) mute.appendChild($("span", "ap-total", dur(tot.muted) + " muted"));
+      const ban = $("td", "ap-cell"); if (p.ban) ban.appendChild($("span", "ap-tag ban", "Ban " + left(p.ban))); if (tot.banned) ban.appendChild($("span", "ap-total", dur(tot.banned) + " banned"));
       const last = $("td", "ap-dim", p.online ? "now" : ago(p.lastPlayed));
       const d = $("td"), b = $("button", "", "Discipline"); b.addEventListener("click", () => act(p.id, p.name, p)); d.appendChild(b);
-      tr.append(name, mute, ban, last, d); tb.appendChild(tr);
+      tr.append(name, kick, mute, ban, last, d); tb.appendChild(tr);
     }
     t.appendChild(tb); listBox.replaceChildren(t);
   }

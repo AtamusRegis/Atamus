@@ -48,8 +48,16 @@ admin.get("/me", guard(async (req, res, me) => res.json({ role: me.role })));
 // (owner, 2026-10-13) the player lists: ?list=online (everyone in the game) or offline (everyone else, most recently played
 // first, at most 200), ?q= a name search (any part, any case). Each with their mute and ban and when they last played
 // (world3d.updated_at: saved while playing and on leaving).
-const playerRow = (u, on) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u), lastPlayed: u.last_played || null }; };
-const PLAYER_COLS = `u.id, u.username, u.role, u.ban_perm, u.ban_until, u.ban_reason, u.mute_perm, u.mute_until, u.mute_reason, w.updated_at AS last_played`;
+// (owner) with each player's discipline totals: kicks counted; time spent muted / banned (each one to its end, or to when it
+// was lifted if earlier, or to now if still running), in seconds
+const playerRow = (u, on) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u), lastPlayed: u.last_played || null,
+  totals: { kicks: Number(u.kicks || 0), muted: Math.round(Number(u.muted_s || 0)), banned: Math.round(Number(u.banned_s || 0)) } }; };
+const served = (kind) => `(SELECT coalesce(sum(extract(epoch FROM least(coalesce(d.ended, now()), coalesce(d.until, now()), now()) - d.at)), 0) FROM discipline d WHERE d.user_id = u.id AND d.kind = '${kind}')`;
+const PLAYER_COLS = `u.id, u.username, u.role, u.ban_perm, u.ban_until, u.ban_reason, u.mute_perm, u.mute_until, u.mute_reason, w.updated_at AS last_played,
+  (SELECT count(*) FROM discipline d WHERE d.user_id = u.id AND d.kind = 'kick') AS kicks, ${served("mute")} AS muted_s, ${served("ban")} AS banned_s`;
+// a new mute / ban ends any running one of the same kind; lifting ends it now
+const endDiscipline = (uid, kind) => pool.query(`UPDATE discipline SET ended = now() WHERE user_id = $1 AND kind = $2 AND ended IS NULL AND (until IS NULL OR until > now())`, [uid, kind]);
+async function recordDiscipline(uid, kind, until) { if (kind !== "kick") await endDiscipline(uid, kind); await pool.query(`INSERT INTO discipline (user_id, kind, until) VALUES ($1, $2, $3)`, [uid, kind, until]); }
 admin.get("/players", guard(async (req, res) => {
   const on = hooks.online(), ids = [...on.keys()], q = String(req.query.q || "").slice(0, 40).toLowerCase();
   const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
@@ -88,6 +96,7 @@ admin.post("/act", guard(async (req, res, me) => {
   }
   const tid = String(t.id), shown = reason + (note ? " — " + note : "");
   const until = minutes === null ? null : new Date(Date.now() + minutes * 60_000);
+  if (["kick", "mute", "ban"].includes(type)) await recordDiscipline(tid, type, until);
   if (type === "kick") hooks.kick(tid, 4005, note);
   else if (type === "ban") {
     await pool.query(`UPDATE users SET ban_perm = $2, ban_until = $3, ban_reason = $4, ban_at = now() WHERE id = $1`, [tid, minutes === null, until, shown]);
@@ -108,6 +117,7 @@ admin.post("/unban", guard(async (req, res, me) => {
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   if (!banOf(t)) return fail(res, 400, "That player isn't banned.");
   await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
+  await endDiscipline(t.id, "ban");
   { const { rows } = await pool.query(`SELECT id FROM appeals WHERE user_id = $1 AND status = 'open'`, [t.id]); for (const r of rows) await closeAppeal(String(r.id), me, true, "Unbanned."); }   // (an open appeal is answered by it)
   await log(me, t, "unban", ""); res.json({ ok: true });
 }));
@@ -116,6 +126,7 @@ admin.post("/unmute", guard(async (req, res, me) => {
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   await pool.query(`UPDATE users SET mute_perm = false, mute_until = NULL, mute_reason = NULL, mute_at = NULL WHERE id = $1`, [t.id]);
   hooks.mute(String(t.id), null);
+  await endDiscipline(t.id, "mute");
   await log(me, t, "unmute", ""); res.json({ ok: true });
 }));
 
@@ -156,6 +167,6 @@ admin.post("/appeal", guard(async (req, res, me) => {
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   const accept = !!b.accept, reason = cleanReason(b.reason) || (accept ? "Unbanned." : "Denied.");   // (an optional note)
   await closeAppeal(String(a.id), me, accept, reason);
-  if (accept) await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]);
+  if (accept) { await pool.query(`UPDATE users SET ban_perm = false, ban_until = NULL, ban_reason = NULL, ban_at = NULL WHERE id = $1`, [t.id]); await endDiscipline(t.id, "ban"); }
   await log(me, t, accept ? "appeal accepted" : "appeal denied", reason, { appeal: String(a.id) }); res.json({ ok: true });
 }));

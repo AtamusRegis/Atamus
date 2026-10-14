@@ -140,6 +140,13 @@ export async function migrate() {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE reports ADD COLUMN IF NOT EXISTS chat JSONB;
+    -- (owner, 2026-10-13) each kick, mute and ban, for the totals in the admin panel: a mute / ban runs from at until
+    -- until (NULL: indefinite) or until lifted (ended), whichever is first
+    CREATE TABLE IF NOT EXISTS discipline (
+      id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, kind TEXT NOT NULL,
+      at TIMESTAMPTZ NOT NULL DEFAULT now(), until TIMESTAMPTZ, ended TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS discipline_user_idx ON discipline (user_id, kind);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now());
   `);
 }
