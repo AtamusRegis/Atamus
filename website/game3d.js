@@ -310,8 +310,9 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math
 }));
 sky.position.y = -9000; sky.renderOrder = -5; sky.frustumCulled = false; sky.layers.set(3); scene.add(sky);
 // (owner, 2026-10-14: speed) the colored space is smooth (its patterns span kilometers), so it's drawn into a picture a
-// third the screen's size each frame (a ninth of the pixels) and stretched behind everything; the stars stay sharp.
-const SKY_DIV = 3, skyRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+// sixth the screen's size each frame (owner: halved again from a third; a 36th of the pixels) and stretched behind
+// everything; the stars stay sharp.
+const SKY_DIV = 6, skyRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
 const skyBack = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
   uniforms: { t: { value: skyRT.texture } }, depthTest: false, depthWrite: false,
   vertexShader: "varying vec2 vU; void main() { vU = uv; gl_Position = vec4(position.xy, 1.0, 1.0); }",
