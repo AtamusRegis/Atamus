@@ -1,4 +1,4 @@
-// (owner, 2026-10-13) The admin panel: an Admin button (top right) for staff accounts opens it. Being logged in as a staff
+// (owner, 2026-10-13) The admin panel: an [A] button at the left of the chat input, for staff accounts, opens it. Being logged in as a staff
 // account is enough (no second password). The sections are floating icon buttons on the panel's left (names on hover):
 //   - Players: Online / Offline tabs, a search box for the selected list, then the list (6 rows, then it scrolls under
 //     the tabs and search, which stay put; the window shows 6 rows). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
@@ -32,7 +32,9 @@
 
   function mount() {
     if (root) return;
-    const btn = $("button", "", "Admin"); btn.id = "admin-btn"; document.body.appendChild(btn);
+    // (owner) the button is an [A] at the left of the chat input
+    const btn = $("button", "", "A"); btn.id = "admin-btn"; btn.type = "button"; btn.title = "Admin";
+    const form = document.getElementById("chat-form"); if (form) form.insertBefore(btn, form.firstChild); else document.body.appendChild(btn);
     root = $("div"); root.id = "admin-panel"; root.hidden = true;
     rail = $("div", "ap-rail");
     for (const [k, label] of [["players", "Players"], ["reports", "Reports"], ["appeals", "Appeals"]]) {
