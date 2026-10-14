@@ -65,8 +65,8 @@ const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 50
 const camera = new THREE.PerspectiveCamera(60, 1, 5, 30000);
 let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
-// (owner, 2026-10-13) the wheel zooms in from 600 m down to 200 m (never out past 600); starting to aim snaps the
-// zoom straight back to 600 m, and the wheel does nothing while aiming
+// (owner, 2026-10-13) the wheel zooms in from 600 m down to 200 m (never out past 600); starting to aim eases the
+// zoom back to 600 m (owner: not a snap), and the wheel does nothing while aiming
 const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100,
   dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
@@ -251,7 +251,7 @@ const mouse = { x: 0, y: 0 };
 let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
-  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; camDist = viewDist = cam.zmax; e.preventDefault(); } });   // (owner) aiming snaps the zoom back
+  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; camDist = cam.zmax; e.preventDefault(); } });   // (owner) aiming eases the zoom back to 600 m (the usual camera easing)
 addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {

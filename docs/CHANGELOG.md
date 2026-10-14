@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Smooth zoom-out on aim (owner):** pressing the right button now eases the zoom back to 600 m instead of snapping.
 - **Zoom in (owner):** the wheel now zooms in from 600 m to 200 m; pressing the right button snaps back to 600 m, and the wheel is ignored while aiming.
 - **Shorter camera trail (owner):** the trail now reaches 80 m at full speed instead of 200.
 - **Camera trail (owner):** moving without the aim steering the camera (not aiming, or the pointer in the middle dead zone), the camera now trails behind the ship, up to 200 m at full speed (the ship sits ahead of the screen center).
