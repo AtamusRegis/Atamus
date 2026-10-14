@@ -1,14 +1,14 @@
 // (owner, 2026-10-14) The Weapon panel (staff: Nyssary and admins): Z, or the [Z] button left of [X], opens it. Pick a
 // weapon in the dropdown to change it, or leave it on "New weapon" to make one from the fields. The name changes in the
-// dropdown as it's typed. CHANGE / CREATE saves it on the server (for everyone) and equips it on my ship; CANCEL closes
-// without saving. Every field is checked again on the server. game3d.js hands it the weapon list and a send function.
+// dropdown as it's typed. CHANGE / CREATE saves it on the server (for everyone) and equips it on my ship, and the panel
+// stays open showing it as saved; CANCEL closes without saving. Every field is checked again on the server. game3d.js hands it the weapon list and a send function.
 (function () {
   const FIELDS = [
     ["optimal", "Optimal Range", 10], ["falloff", "Falloff Rate", 1], ["life", "Lifetime", 0.01], ["speed", "Speed", 10],
     ["rate", "Shot Rate", 0.01], ["dmg", "Damage", 1], ["spread0", "Default Spread", 0.1], ["spreadAdd", "Spread Per Shot", 0.1],
     ["aimSpeed", "Aim Speed", 0.1], ["rotSpeed", "Rotation Speed", 1], ["reload", "Reload Speed", 0.1], ["mag", "Magazine", 1],
   ];
-  const DEF = { name: "", type: "bullet", optimal: 1000, falloff: 10, life: 1.43, speed: 700, rate: 0.5, dmg: 25, spread0: 0, spreadAdd: 1.5, aimSpeed: 3, rotSpeed: 360, reload: 2, mag: 20 };
+  const DEF = { name: "", type: "bullet", optimal: 0, falloff: 0, life: 0, speed: 0, rate: 0, dmg: 0, spread0: 0, spreadAdd: 0, aimSpeed: 0, rotSpeed: 0, reload: 0, mag: 0 };   // (owner: a new weapon starts at 0 all round)
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   let api = null, win = null, btn = null, sel, nameIn, typeSel, inputs = {}, okBtn, errEl, current = "", busy = false;
 
@@ -80,7 +80,7 @@
   function saved(m) {
     busy = false; if (okBtn) okBtn.disabled = false;
     if (m.error) { errEl.textContent = m.error; errEl.hidden = false; return; }
-    current = m.id; if (win && !win.hidden) toggle(false);
+    current = m.id; if (win && !win.hidden) { options(); fill(); }   // (owner) the panel stays open, showing what was saved
   }
   function refresh() { if (win && !win.hidden && !busy) { options(); } }
   window.WeaponPanel = { mount, refresh, saved, toggle };

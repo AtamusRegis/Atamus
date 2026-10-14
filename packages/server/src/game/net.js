@@ -107,7 +107,8 @@ export function attachGameServer(httpServer) {
         }).catch((e) => { joined = false; console.error("join", e); });
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
-      else if (m.t === "fire") world.fire(pid, m.x, m.y);   // (owner, 2026-10-14) the railgun; the world checks it and keeps the cooldown
+      else if (m.t === "fire") world.fire(pid, m.x, m.y);
+      else if (m.t === "reload") world.reload(pid);   // (owner, 2026-10-14) R   // (owner, 2026-10-14) the railgun; the world checks it and keeps the cooldown
       else if (m.t === "chat") {               // (owner, 2026-10-13) World (everyone), Faction (your side), Whisper (one player)
         const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;   // (owner) a muted player's lines go nowhere
         const text = m.text.slice(0, 240); if (!text.trim()) return;

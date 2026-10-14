@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Manual reload and panel tweaks (owner):** reloading now needs R (an empty magazine stops firing until you press it). In the Weapon panel a new weapon's numbers start at 0, and the panel stays open after CHANGE / CREATE.
 - **Draggable Weapon panel (owner):** the Weapon panel can be dragged by its top bar.
 - **Weapon panel (owner):** staff can open a Weapon panel (Z) to tune or create weapons: optimal range and falloff, bullet lifetime and speed, shot rate, damage, spread (default, per shot, recovery), aim line rotation speed, magazine and reload. The Railgun is the first weapon; saving equips it on your ship. Shots now follow the aim line, which turns toward the pointer at the weapon's rotation speed, and run out after a magazine until reloaded.
 - **Gentler spread (owner):** each railgun shot now widens the aim cone by 1.5° each way (was 3°).

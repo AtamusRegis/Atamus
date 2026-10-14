@@ -445,9 +445,17 @@ export class World3D {
     const w = this.weaponOf(p), now = Date.now(); if (p.lastFire && now - p.lastFire < w.rate * 1000 - 50) return null;
     if (p.reloadAt) { if (now < p.reloadAt - 50) return null; p.reloadAt = 0; p.ammo = w.mag; }   // reloading / just reloaded
     if (p.ammo === undefined) p.ammo = w.mag;
+    if (p.ammo <= 0) return null;              // (owner, 2026-10-14) empty: R reloads
     const q = this.shoot(p, dx, dy, w); if (!q) return null;
-    if (--p.ammo <= 0) p.reloadAt = now + w.reload * 1000;   // out: reload
-    return q;
+    p.ammo--; return q;
+  }
+  // (owner, 2026-10-14) R: reload (when the magazine isn't full and it isn't already reloading)
+  reload(id) {
+    const p = this.players.get(String(id)); if (!p || p.bot) return false;
+    const w = this.weaponOf(p), now = Date.now();
+    if (p.reloadAt) { if (now < p.reloadAt) return false; p.reloadAt = 0; p.ammo = w.mag; }
+    if (p.ammo === undefined || p.ammo >= w.mag) return false;
+    p.reloadAt = now + w.reload * 1000; return true;
   }
   shoot(p, dx, dy, w = this.defaultWeapon()) {   // (also the test ships' shots)
     let L = Math.hypot(dx, dy); if (L < 1e-6) return null; const now = Date.now(); p.lastFire = now;

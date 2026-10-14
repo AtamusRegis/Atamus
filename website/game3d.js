@@ -813,14 +813,24 @@ let spreadDeg = 0, spreadT = 0;                // the extra spread from shooting
 const spreadNow = (now = performance.now()) => Math.min(SPREAD_MAX, wpn().spread0 + Math.max(0, spreadDeg - wpn().aimSpeed * (now - spreadT) / 1000));
 let aimAng = null;                             // the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
 const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
+// (owner, 2026-10-14) R reloads the magazine (not while building, where R turns pieces, nor while typing)
+function reloadGun() {
+  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing()) return;
+  const w = wpn(), now = performance.now();
+  if (reloadAt) { if (now < reloadAt) return; reloadAt = 0; ammo = w.mag; }
+  if (ammo === null || ammo >= w.mag) return;
+  reloadAt = now + w.reload * 1000; ws.send(JSON.stringify({ t: "reload" }));
+}
+addEventListener("keydown", (e) => { if (e.code === "KeyR" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) reloadGun(); });
 function fireRail(px, py) {
   if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing() || amSpawning()) return;
   const w = wpn(), now = performance.now(); if (now - railAt < w.rate * 1000) return;
   if (reloadAt) { if (now < reloadAt) return; reloadAt = 0; ammo = w.mag; }   // (reloading)
   if (ammo === null) ammo = w.mag;
+  if (ammo <= 0) return;                       // (owner, 2026-10-14) empty: R reloads
   const d = aimDir(); if (!d) return;                                       // along the aim line (it lags the pointer by the rotation speed)
   railAt = now; spreadDeg = Math.min(SPREAD_MAX, Math.max(0, spreadDeg - w.aimSpeed * (now - spreadT) / 1000) + w.spreadAdd); spreadT = now;
-  if (--ammo <= 0) reloadAt = now + w.reload * 1000;
+  ammo--;
   void px; void py;
   ws.send(JSON.stringify({ t: "fire", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }));
 }
