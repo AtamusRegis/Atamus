@@ -2,8 +2,8 @@
 // account is enough (no second password). The sections are floating icon buttons on the panel's left (names on hover):
 //   - Players: Online / Offline tabs, a search box for the selected list, then the list (10 rows, then it scrolls under
 //     the tabs and search, which stay put). A row: name (20 characters, monospace) | kicks | Mute tag | Ban tag | last
-//     played | Discipline (the disciplinary panel). Under each, small: the player's totals (kicks counted; time spent
-//     muted / banned, a lifted one counting only until it was lifted).
+//     played | Discipline (the disciplinary panel). A tag is lit while that discipline is running, grayed when they've
+//     had it before; under it, small, the total (kicks counted; time spent muted / banned, a lifted one only until lifted).
 //   - Reports: players' reports with the reported player's recent chat.
 //   - Appeals: ban appeals (read, reply, accept or deny).
 // The window is only as wide as what it shows. The disciplinary panel is its own window (AdminPanel.act(id, name), also
@@ -84,9 +84,13 @@
       const tr = $("tr");
       const name = $("td", "ap-mono" + (p.side ? " " + p.side : ""), p.name.slice(0, 20)); name.title = p.name;
       const tot = p.totals || {};
-      const kick = $("td", "ap-cell"); if (tot.kicks) kick.appendChild($("span", "ap-total", tot.kicks + (tot.kicks === 1 ? " kick" : " kicks")));
-      const mute = $("td", "ap-cell"); if (p.mute) mute.appendChild($("span", "ap-tag", "Mute " + left(p.mute))); if (tot.muted) mute.appendChild($("span", "ap-total", dur(tot.muted)));
-      const ban = $("td", "ap-cell"); if (p.ban) ban.appendChild($("span", "ap-tag ban", "Ban " + left(p.ban))); if (tot.banned) ban.appendChild($("span", "ap-total", dur(tot.banned)));
+      // a tag per kind: lit while it's running (with the time left), grayed when they've had one before; the total under it
+      const cell = (label, active, cls, total) => { const td = $("td", "ap-cell"); if (!active && !total) return td;
+        td.appendChild($("span", "ap-tag " + cls + (active ? "" : " off"), active ? label + " " + left(active) : label));
+        if (total) td.appendChild($("span", "ap-total", total)); return td; };
+      const kick = cell("Kick", null, "kick", tot.kicks ? String(tot.kicks) : "");
+      const mute = cell("Mute", p.mute, "mute", tot.muted ? dur(tot.muted) : "");
+      const ban = cell("Ban", p.ban, "ban", tot.banned ? dur(tot.banned) : "");
       const last = $("td", "ap-dim", p.online ? "now" : ago(p.lastPlayed));
       const d = $("td"), b = $("button", "", "Discipline"); b.addEventListener("click", () => act(p.id, p.name, p)); d.appendChild(b);
       tr.append(name, kick, mute, ban, last, d); tb.appendChild(tr);
