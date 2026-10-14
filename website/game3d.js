@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791975594";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791976214";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -469,6 +469,27 @@ function cloudFactor(x, y, spd, id) {
   }
   return f;
 }
+// (owner, 2026-10-14) the ships the clouds' edge puffs bounce off: mine and the ones I can see, near a cloud, with their
+// speed (x, y, vx, vy)
+let cloudShips = [];
+const shipLast = new Map();                    // ship id -> [x, y, time, vx, vy]
+function cloudFx(now) {
+  cloudShips = []; if (!haveMe) return;
+  let any = false; for (const b of builds.values()) if (b.k === "cloud") { any = true; break; }
+  if (!any) { shipLast.clear(); return; }
+  const seen = new Set();
+  const track = (id, x, y) => {
+    seen.add(id); const l = shipLast.get(id), dt = l ? (now - l[2]) / 1000 : 0;
+    const vx = l && dt > 0.001 ? l[3] + ((x - l[0]) / dt - l[3]) * Math.min(1, dt * 10) : 0, vy = l && dt > 0.001 ? l[4] + ((y - l[1]) / dt - l[4]) * Math.min(1, dt * 10) : 0;
+    shipLast.set(id, [x, y, now, vx, vy]); cloudShips.push([x, y, vx, vy]);
+  };
+  track(myId, me.x, me.y);
+  for (const p of players.values()) {
+    if (p.id === myId || !p.near) continue; const t = visTargets.get(p.holder.children[0]); if (!t || t.a < 0.05) continue;   // (a hidden ship doesn't give itself away)
+    track(p.id, p.holder.position.x, -p.holder.position.z);
+  }
+  for (const id of [...shipLast.keys()]) if (!seen.has(id)) shipLast.delete(id);
+}
 function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
@@ -491,7 +512,7 @@ function updateShipVis(dt, now) {
     if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
     v.visible = t.a > 0.01;
   }
-  visGizmo(edit);
+  visGizmo(edit); cloudFx(now);
 }
 // ---- (owner, 2026-10-14) impacts throw out debris and fire sparks where two ships met, more the harder the hit:
 // gray-white debris that tumbles out and fades, and bright orange-yellow sparks that fly fast, arc and burn out ----
@@ -712,7 +733,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ noiseTex, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
+const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
   botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame

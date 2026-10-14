@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Cloud edges react to ships (owner):** a cloud's edge is lined with tethered puffs that ships knock aside as they fly in or out, which then drift back into place.
 - **Cloud core at 150 m (owner):** ships fade out over the first 150 m of a cloud (was 200 m), and the red core line moves in to match. **Fix:** clouds can be picked up again in the Build menu (click inside the outline).
 - **Cloud cores shown (owner):** with the Build menu open, each cloud's core (where ships are hidden and sight is blocked) is outlined in red.
 - **Fix: ships in the same cloud vanished at its edge (owner).** The edge fade now applies to everyone; being in the same cloud within 200 m only adds a faint 25% floor for moving (or just-hit) ships, mainly in the core.

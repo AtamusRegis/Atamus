@@ -163,7 +163,7 @@ export function initBuild(ctx) {
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
     if (held && held.id === id) { if (b.mesh) holo(b.mesh, false); held = null; }
-    if (b.mesh) scene.remove(b.mesh); builds.delete(id); if (ctx.onChange) ctx.onChange();
+    if (b.mesh) scene.remove(b.mesh); dropEdge(b); builds.delete(id); if (ctx.onChange) ctx.onChange();
   }
 
   // ---- state ----
@@ -279,10 +279,81 @@ export function initBuild(ctx) {
     });
     const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; return mesh;
   }
+  // (owner, 2026-10-14) leashed puffs along a cloud's edge, like a wall of tethered balloons: each one is tied to its spot,
+  // a ship flying into them knocks them aside (they bounce off its hull), and they float back to where they were. The main
+  // cloud stays put. Simulated here on the client, for the clouds near me.
+  const EDGE_SP = 34, EDGE_R = 46, EDGE_K = 5, EDGE_C = 1.8, EDGE_MAX = 360;
+  function edgeAnchors(pts) {                  // local spots along the outline (a little inside and outside it), heights, sizes
+    let area = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; area += x * v - u * y; }); const sg = area >= 0 ? 1 : -1;
+    let per = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; per += Math.hypot(u - x, v - y); });
+    const sp = Math.max(EDGE_SP, per / EDGE_MAX), A = [];
+    pts.forEach(([x, y], i) => {
+      const [u, v] = pts[(i + 1) % pts.length], L = Math.hypot(u - x, v - y), n = Math.max(1, Math.round(L / sp)), nx = -(v - y) / (L || 1) * sg, ny = (u - x) / (L || 1) * sg;   // (n: inward)
+      for (let k = 0; k < n; k++) { const t = (k + Math.random()) / n, o = -12 + Math.random() * 40; A.push(x + (u - x) * t + nx * o, y + (v - y) * t + ny * o, 6 + Math.random() * 34, 26 + Math.random() * 26, Math.random()); }
+    });
+    return A;                                  // [x, y, h, size, seed] each
+  }
+  function edgeMesh(b) {
+    const A = edgeAnchors(b.extra.pts), n = A.length / 5, th = CLOUD_THEMES[b.extra.v] || CLOUD_THEMES[0];
+    const q = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
+    g.index = q.index; g.setAttribute("position", q.getAttribute("position")); g.setAttribute("uv", q.getAttribute("uv")); q.dispose();
+    const P = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); P.setUsage(THREE.DynamicDrawUsage);
+    const S = new Float32Array(n * 2); for (let i = 0; i < n; i++) { S[i * 2] = A[i * 5 + 3]; S[i * 2 + 1] = A[i * 5 + 4]; }
+    g.setAttribute("iP", P); g.setAttribute("iS", new THREE.InstancedBufferAttribute(S, 2)); g.instanceCount = n;
+    const m = new THREE.ShaderMaterial({
+      uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, uS: { value: 1 }, c1: { value: new THREE.Vector3(...th[0]) }, c2: { value: new THREE.Vector3(...th[1]) }, c3: { value: new THREE.Vector3(...th[2]) } },
+      transparent: true, depthWrite: false,
+      vertexShader: `attribute vec3 iP; attribute vec2 iS; uniform float uT, uS; varying vec2 vU; varying float vS, vH;
+        void main() {
+          float a = iS.y * 6.283 + uT * 0.05 * (iS.y - 0.5), c = cos(a), s = sin(a); vU = mat2(c, -s, s, c) * (uv - 0.5); vS = iS.y; vH = iP.z / 40.0;
+          vec4 e = viewMatrix * vec4(iP.x, iP.z, -iP.y, 1.0); e.xy += position.xy * iS.x * uS * 2.0;
+          gl_Position = projectionMatrix * e;
+        }`,
+      fragmentShader: `uniform sampler2D nt; uniform float uT; uniform vec3 c1, c2, c3; varying vec2 vU; varying float vS, vH;
+        void main() {
+          float r = length(vU) * 2.0; if (r > 1.0) discard;
+          float n = texture2D(nt, vU * 0.6 + vS * 7.3 + uT * 0.002).r, f = texture2D(nt, vU * 1.6 + vS * 3.1 - uT * 0.004).g;
+          float blob = smoothstep(0.12, 0.75, (1.0 - r * r) * (0.55 + (n - 0.5) * 2.6) + (f - 0.5) * 0.7);
+          vec3 col = mix(mix(c1, c2, clamp(vS * 0.7 + vH * 0.4 + (n - 0.5), 0.0, 1.0)), c3, smoothstep(0.55, 0.9, f + vH * 0.2) * 0.55 * blob);
+          gl_FragColor = vec4(col * 1.08, blob * 0.4);   // (screen colors; a touch brighter than the main cloud)
+        }`,
+    });
+    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1;
+    return { mesh, A, n, pos: null, vel: new Float32Array(n * 3) };
+  }
+  // anchors into the world (the cloud can be moved, turned and scaled; the puffs then drift to their new spots)
+  function edgeWorld(b, e) {
+    const s = b.w / 100, c = Math.cos(b.r), sn = Math.sin(b.r), W = new Float32Array(e.n * 3);
+    for (let i = 0; i < e.n; i++) { const lx = e.A[i * 5] * s, ly = e.A[i * 5 + 1] * s; W[i * 3] = b.x + lx * c - ly * sn; W[i * 3 + 1] = b.y + lx * sn + ly * c; W[i * 3 + 2] = e.A[i * 5 + 2]; }
+    return W;
+  }
+  function updateEdges(dt) {
+    const me = ctx.myPos ? ctx.myPos() : null, ships = ctx.cloudShips ? ctx.cloudShips() : [];
+    for (const b of builds.values()) {
+      const e = b.edge; if (b.k !== "cloud" || !e) continue;
+      const W = edgeWorld(b, e), P = e.mesh.geometry.attributes.iP.array, V = e.vel;
+      e.mesh.material.uniforms.uS.value = Math.sqrt(b.w / 100);
+      if (!e.pos) { e.pos = true; P.set(W); }
+      if (me && Math.hypot(me.x - b.x, me.y - b.y) > b.rad + 1500) continue;   // far away: left as they are
+      const near = ships.filter((sh) => Math.hypot(sh[0] - b.x, sh[1] - b.y) < b.rad + EDGE_R + 40);
+      for (let i = 0; i < e.n; i++) {
+        const j = i * 3;
+        for (let k = 0; k < 3; k++) { V[j + k] += ((W[j + k] - P[j + k]) * EDGE_K - V[j + k] * EDGE_C) * dt; P[j + k] += V[j + k] * dt; }   // the leash
+        for (const sh of near) {               // a ship's hull: pushed out of it, bounced off it
+          const dx = P[j] - sh[0], dy = P[j + 1] - sh[1], d = Math.hypot(dx, dy); if (d >= EDGE_R || d < 1e-3) continue;
+          const nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny;
+          P[j] = sh[0] + nx * EDGE_R; P[j + 1] = sh[1] + ny * EDGE_R;
+          if (vn < 0) { V[j] -= nx * vn * 1.5; V[j + 1] -= ny * vn * 1.5; V[j + 2] += -vn * 0.25 * (Math.random() - 0.3); }
+        }
+      }
+      e.mesh.geometry.attributes.iP.needsUpdate = true;
+    }
+  }
+  function dropEdge(b) { if (b.edge) { scene.remove(b.edge.mesh); b.edge.mesh.geometry.dispose(); b.edge.mesh.material.dispose(); b.edge = null; } }
   function placeCloud(b) {
     const key = JSON.stringify(b.extra.pts) + "|" + b.extra.v;
-    if (b.mesh && b.mesh.userData.key !== key) { scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose(); b.mesh = null; }
-    if (!b.mesh) { b.mesh = cloudMesh(b.extra.pts, b.extra.v); Object.assign(b.mesh.userData, { k: "cloud", id: b.id, key }); scene.add(b.mesh); }
+    if (b.mesh && b.mesh.userData.key !== key) { scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose(); b.mesh = null; dropEdge(b); }
+    if (!b.mesh) { dropEdge(b); b.mesh = cloudMesh(b.extra.pts, b.extra.v); Object.assign(b.mesh.userData, { k: "cloud", id: b.id, key }); scene.add(b.mesh); b.edge = edgeMesh(b); scene.add(b.edge.mesh); }
     b.mesh.material.uniforms.uS.value = b.w / 100; b.mesh.material.uniforms.uG.value = held && held.id === b.id ? 0.5 : 1;   // held: see-through
     b.mesh.position.copy(toWorld(b.x, b.y, 0)); b.mesh.scale.setScalar(b.w / 100); b.mesh.rotation.y = b.r;
   }
@@ -413,7 +484,8 @@ export function initBuild(ctx) {
   let lastF = performance.now();
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
-    eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); } cloudHandles();
+    eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
+    updateEdges(dt); cloudHandles();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
