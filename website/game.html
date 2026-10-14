@@ -30,19 +30,19 @@
     html.touch #helpers-box { display: none; }
     /* (owner, 2026-10-13) the admin panel (adminpanel.js), for staff accounts: as wide as its contents, section icons floating on its left */
     #admin-btn { position: fixed; top: 12px; right: 158px; padding: 5px 12px; background: rgba(10, 14, 22, .85); border: 1px solid #6a5a2a; border-radius: 6px; color: #ffd27a; font: 600 12px system-ui, sans-serif; }
-    #admin-panel { position: fixed; top: 52px; right: 12px; width: max-content; max-width: calc(100vw - 80px); background: rgba(10, 14, 22, .96); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 12px system-ui, sans-serif; z-index: 9; }
+    #admin-panel { position: fixed; top: 52px; right: 12px; width: 560px; height: 262px; max-width: calc(100vw - 80px); background: rgba(10, 14, 22, .96); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 12px system-ui, sans-serif; z-index: 9; }
     #admin-panel button, #admin-panel input { background: #16202f; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 4px; padding: 3px 8px; font: 12px system-ui, sans-serif; }
     #admin-panel input { background: #0c121c; }
     .ap-rail { position: absolute; right: calc(100% + 8px); top: 0; display: grid; gap: 6px; }
     .ap-rail button { width: 34px; height: 34px; padding: 0 !important; display: grid; place-items: center; background: rgba(10, 14, 22, .92) !important; border-radius: 8px !important; }
     .ap-rail svg { width: 18px; height: 18px; fill: #9fb3cf; } .ap-rail button.on { border-color: #e8902a !important; } .ap-rail button.on svg, .ap-rail button:hover svg { fill: #fff; }
     .ap-x { position: absolute; top: 6px; right: 6px; font-size: 14px !important; line-height: 1; padding: 2px 7px !important; }
-    .ap-body { display: grid; gap: 6px; padding: 8px 40px 8px 8px; }
+    .ap-body { box-sizing: border-box; height: 100%; display: grid; gap: 6px; padding: 8px 40px 8px 8px; grid-template-rows: minmax(0, 1fr); }
+    .ap-body.with-head { grid-template-rows: auto auto minmax(0, 1fr); }   /* one size for every section: Players is tabs + search + 6 rows */
     .ap-tabs { display: flex; gap: 4px; } .ap-tabs button.on { border-color: #e8902a !important; color: #fff !important; }
     .ap-search { width: 100%; box-sizing: border-box; }
-    .ap-scroll { max-height: 300px; overflow-y: auto; }   /* about 10 rows, then it scrolls (the tabs and search stay) */
-    .ap-wide { max-height: 370px; }   /* Reports / Appeals: the Players width (set from the script) */
-    .ap-table { border-collapse: separate; border-spacing: 0 2px; }
+    .ap-scroll { min-height: 0; overflow-y: auto; }   /* fills the rest of the window and scrolls (the tabs and search stay) */
+    .ap-table { width: 100%; border-collapse: separate; border-spacing: 0 2px; }
     .ap-table td { padding: 3px 8px; background: #0f1724; white-space: nowrap; height: 22px; } .ap-table td:first-child { border-radius: 4px 0 0 4px; } .ap-table td:last-child { border-radius: 0 4px 4px 0; }
     .ap-mono { font-family: ui-monospace, Menlo, Consolas, monospace; width: 20ch; min-width: 20ch; font-weight: 600; } .ap-mono.red { color: #ff6a50; } .ap-mono.blue { color: #6fa8ff; }
     .ap-tag { display: inline-block; padding: 0 6px; border: 1px solid #c9a24a; border-radius: 3px; color: #ffd27a; font-size: 11px; font-variant-numeric: tabular-nums; } .ap-tag.ban { border-color: #e04848; color: #ff8a8a; } .ap-tag.off { border-color: #3a4658; color: #66768c; }
@@ -118,7 +118,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791949804"></script>
+  <script src="adminpanel.js?v=1791950085"></script>
   <script type="module" src="game3d.js?v=1791949804"></script>
 </body>
 </html>

@@ -1,13 +1,13 @@
 // (owner, 2026-10-13) The admin panel: an Admin button (top right) for staff accounts opens it. Being logged in as a staff
 // account is enough (no second password). The sections are floating icon buttons on the panel's left (names on hover):
-//   - Players: Online / Offline tabs, a search box for the selected list, then the list (10 rows, then it scrolls under
-//     the tabs and search, which stay put). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
+//   - Players: Online / Offline tabs, a search box for the selected list, then the list (6 rows, then it scrolls under
+//     the tabs and search, which stay put; the window shows 6 rows). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
 //     Discipline (the disciplinary panel). The tags are always there: grayed, or lit while running (mute yellow, ban red)
 //     with the time left inside; grayed, they hold the total time served (a lifted one counts only until it was lifted).
-//   Reports and Appeals open at the same width as Players.
+//   Every section uses the same window at the same size (the Players size).
 //   - Reports: players' reports with the reported player's recent chat.
 //   - Appeals: ban appeals (read, reply, accept or deny).
-// The window is only as wide as what it shows. The disciplinary panel is its own window (AdminPanel.act(id, name), also
+// One window, one size for every section. The disciplinary panel is its own window (AdminPanel.act(id, name), also
 // the Admin item on a name in chat): Type (kick, mute, ban, kill, respawn, teleport to me, teleport to player; Unmute /
 // Unban when they apply), a reason from a list for mutes and bans, a length slider (5 min, 30 min, 6 h, 1 day, 3 days,
 // 7 days, indefinite), an optional note to the player, Cancel / Accept. Text is always inserted as text. Talks to
@@ -28,7 +28,7 @@
     appeals: "M4 4h16v11H9l-5 4z",
   };
   let root, rail, body, section = "players", list = "online", query = "", openAppeal = null, timer = 0, searchT = 0;
-  let listBox = null, playersWidth = 0;
+  let listBox = null;
 
   function mount() {
     if (root) return;
@@ -52,30 +52,41 @@
   }
   const err = (box, e) => { box.textContent = e && e.message ? e.message : String(e); box.hidden = false; };
 
-  // the section's fixed parts (tabs, search), then its contents (which scroll)
-  function build() {
+  // the section's fixed parts (tabs, search), then its contents (which scroll). (owner: no flicker) The new section is
+  // built off-screen and swapped in only once its contents have arrived; the window keeps one size for every section.
+  let buildSeq = 0;
+  async function build() {
+    const seq = ++buildSeq;
     for (const b of rail.children) b.classList.toggle("on", b.dataset.k === section);
-    body.replaceChildren(); listBox = null;
+    const parts = [];
+    const box = $("div", "ap-scroll");
     if (section === "players") {
       const tabs = $("div", "ap-tabs");
       for (const [k, label] of [["online", "Online"], ["offline", "Offline"]]) { const b = $("button", k === list ? "on" : "", label); b.addEventListener("click", () => { list = k; build(); }); tabs.appendChild(b); }
       const search = $("input", "ap-search"); search.value = query; search.maxLength = 40;
       search.addEventListener("input", () => { query = search.value; clearTimeout(searchT); searchT = setTimeout(refresh, 200); });
       search.addEventListener("keydown", (e) => e.stopPropagation());
-      listBox = $("div", "ap-scroll");
-      body.append(tabs, search, listBox);
-    } else { listBox = $("div", "ap-scroll ap-wide"); body.append(listBox); }
-    root.style.width = section !== "players" && playersWidth ? playersWidth + "px" : "";
-    refresh();
+      parts.push(tabs, search);
+    }
+    parts.push(box);
+    const prev = listBox; listBox = box;
+    await refresh();
+    if (seq !== buildSeq) return;                 // a newer section was picked meanwhile
+    body.className = "ap-body" + (section === "players" ? " with-head" : "");
+    body.replaceChildren(...parts);
+    void prev;
   }
   async function refresh() {
-    if (!listBox) return;
+    const box = listBox; if (!box) return;
     try {
-      if (section === "players") drawPlayers(await Api.get("/game/admin/players?list=" + list + "&q=" + encodeURIComponent(query.trim())));
-      else if (section === "reports") drawReports(await Api.get("/game/admin/reports"));
-      else if (openAppeal) drawAppeal(await Api.get("/game/admin/appeal/" + openAppeal));
-      else drawAppeals(await Api.get("/game/admin/appeals"));
-    } catch (e) { listBox.replaceChildren($("p", "ap-err", e.message)); }
+      let rows;
+      if (section === "players") rows = await Api.get("/game/admin/players?list=" + list + "&q=" + encodeURIComponent(query.trim()));
+      else if (section === "reports") rows = await Api.get("/game/admin/reports");
+      else if (openAppeal) rows = await Api.get("/game/admin/appeal/" + openAppeal);
+      else rows = await Api.get("/game/admin/appeals");
+      if (box !== listBox) return;
+      if (section === "players") drawPlayers(rows); else if (section === "reports") drawReports(rows); else if (openAppeal) drawAppeal(rows); else drawAppeals(rows);
+    } catch (e) { if (box === listBox) box.replaceChildren($("p", "ap-err", e.message)); }
   }
 
   // ---- players: a table, so the columns (and the window) are as wide as what's in them ----
@@ -96,7 +107,6 @@
       tr.append(name, mute, ban, last, d); tb.appendChild(tr);
     }
     t.appendChild(tb); listBox.replaceChildren(t);
-    playersWidth = root.offsetWidth;            // (owner) Reports and Appeals open at this same width
   }
 
   // ---- the disciplinary panel ----
