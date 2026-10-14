@@ -118,8 +118,8 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 - Escape or × closes it.
 
 ## Rejected / removed (don't reintroduce)
-- **Clouds: still ships invisible anywhere inside, moving ships down to 25% at 150 m in** (owner, 2026-10-14): replaced the same day by the plain depth fade (invisible at 150 m in, whether moving or not).
 
+- **Clouds: still ships invisible anywhere inside, moving ships down to 25% at 150 m in** (owner, 2026-10-14): replaced the same day by the plain depth fade (invisible at 150 m in, whether moving or not).
 - **Ships drawn only where my center can see them (per-pixel, 2026-10-13/14):** an enemy behind a corner could see a sliver of you and shoot while you saw nothing. Replaced by mutual visibility (opacity).
 
 - **The front page's "Help build Atamus" panel and the older versions' Updates entries (owner, 2026-10-14).** Also the load circle's ground ring (hidden under the solid haze anyway).
