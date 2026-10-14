@@ -245,7 +245,7 @@ const visGeo = new THREE.BufferGeometry(); let visCap = 0;
 const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })); visMesh.frustumCulled = false; visScene.add(visMesh);
 // (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
 // (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
-const FAR_IN = cam.leash + 500, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-14) the fade starts 500 m past the leash circle
+const FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-14) the fade starts 200 m (two grid squares) past the leash circle
 const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S }, visFar: { value: FAR_OUT } };
 const farCache = new Map();
 function farMat(m) {                           // a material that isn't drawn past FAR_OUT from my ship
