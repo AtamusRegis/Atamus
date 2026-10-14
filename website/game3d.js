@@ -383,25 +383,27 @@ const walls = () => {                          // everything that blocks sight, 
   for (const b of builds.values()) if (b.k !== "ship") out.push({ v: b.poly, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
   return out;
 };
+const VIS_LO = 0.25, VIS_HI = 0.75;          // (owner) the visibility at which a ship starts to show / is fully solid
 const visTargets = new Map();                  // ship visual -> { a: visibility now, lines: [[x0, y0, x1, y1, clear]] }
 let visAt = 0;
 // (owner, 2026-10-14) the lines run from each of one ship's points to the other ship's pivot, and from each of the other's
 // points to this one's pivot; the share of all of them that's clear is the pair's visibility
-// (owner) the line between the two pivots counts for half the visibility; the corner and side lines share the other half
+// (owner, 2026-10-14) the line between the two pivots counts for PIV_W of the visibility; the points' lines share the rest
+const PIV_W = 0.2;
 function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: their pivots; W: walls
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const [x, y] of A.concat(B)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const near = W.filter((w) => w.x1 >= x0 && w.x0 <= x1 && w.y1 >= y0 && w.y0 <= y1), lines = keepLines ? [] : null;
   let clear = 0;
   const test = (ax, ay, bx, by, show) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (lines && show) lines.push([ax, ay, bx, by, ok]); return ok; };   // show: drawn in the editor (owner: only their lines to my pivot, and the pivot line)
-  const piv = test(pa[0], pa[1], pb[0], pb[1], true) ? 0.5 : 0;
+  const piv = test(pa[0], pa[1], pb[0], pb[1], true) ? PIV_W : 0;
   for (const [ax, ay] of A) if (test(ax, ay, pb[0], pb[1], false)) clear++;
   for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], true)) clear++;
-  return { f: piv + 0.5 * clear / Math.max(1, A.length + B.length), lines };
+  return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
 function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
-  if (haveMe && now - visAt > 100) {
+  if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
     const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the aim bounds
     const look = (vis, poly, x, y) => {
@@ -413,9 +415,11 @@ function updateShipVis(dt, now) {
     for (const b of builds.values()) if (b.k === "ship" && b.mesh) look(b.mesh, visPtsOf(b), b.x, b.y);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
-  const k = Math.min(1, dt / 0.2);
   for (const [v, t] of visTargets) {
-    const goal = t.f >= 0.75 ? 1 : t.f >= 0.5 ? 0.5 : t.f >= 0.35 ? 0.25 : 0;   // (owner, 2026-10-14) opacity by visibility: 75%+ solid, 50-75% half, 35-50% a quarter, under 35% hidden
+    // (owner, 2026-10-14) opacity rises smoothly from 0 at 25% visible to solid at 75% (no steps); it fades in fast
+    // (about 0.15 s) and out slowly (about 0.6 s), so ships show promptly but don't flicker at corners
+    const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x);
+    const k = Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
     v.visible = t.a > 0.01;
