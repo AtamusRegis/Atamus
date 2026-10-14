@@ -453,19 +453,19 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
 // (owner, 2026-10-14) nebula clouds hide ships inside them.
-// Seen from outside a cloud: a ship in it fades from solid at the edge to invisible 200 m in (and deeper: the core).
-// Seen from inside the same cloud: only ships within 200 m show, at 25%, and only while they move (or for a moment after
-// I hit them); a ship sitting still is invisible.
+// A ship in a cloud fades from solid at the edge to invisible 200 m in (and deeper: the core), for everyone. If I'm in the
+// same cloud within 200 m of it, it shows at least at 25% while it moves (or for a moment after I hit it); still, it
+// gets only the edge fade (so in the core it's invisible).
 const CLOUD_DEEP = 200, CLOUD_IN = 0.25, CLOUD_NEAR = 200, STILL = 3, REVEAL_MS = 3000;
 const revealed = new Map();                    // ship id -> when I last hit it
 function cloudFactor(x, y, spd, id) {
   let f = 1;
   for (const b of builds.values()) {
     if (b.k !== "cloud" || !b.poly || Math.hypot(x - b.x, y - b.y) > b.rad + 1 || !inPoly(x, y, b.poly)) continue;
-    if (haveMe && inPoly(me.x, me.y, b.poly)) {  // we're both in this cloud
-      const moving = spd >= STILL || performance.now() - (revealed.get(id) || -1e9) < REVEAL_MS;
-      f = Math.min(f, Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR && moving ? CLOUD_IN : 0);
-    } else { const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP); f = Math.min(f, 1 - d * d * (3 - 2 * d)); }
+    const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP); let c = 1 - d * d * (3 - 2 * d);   // the edge fade, for everyone
+    if (haveMe && inPoly(me.x, me.y, b.poly) && Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR &&   // we're both in this cloud, close
+        (spd >= STILL || performance.now() - (revealed.get(id) || -1e9) < REVEAL_MS)) c = Math.max(c, CLOUD_IN);
+    f = Math.min(f, c);
   }
   return f;
 }
