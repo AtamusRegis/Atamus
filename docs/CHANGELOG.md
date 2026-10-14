@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Build menu reworked (owner):** no more on-screen controls: the pointer positions, the wheel scales and holding R turns the blueprint or a picked-up piece; click to place or drop. Blueprints and held pieces show as a shimmering hologram. The ship can fly while the menu is open.
+- **Haze past the map (owner):** everything beyond the map's edge gets the same dark, dusty haze as the ground out of sight.
 - **Test ships in the Build menu (owner):** a second slot places parked player ships for testing: they collide like ships, stop the aim line and hide behind walls like ships, and can be moved, turned, copied and deleted.
 - **Shaded blind spots (owner):** the ground you can't see past walls and structures is covered by a dark, dusty, slowly shifting haze.
 - **Line of sight (owner):** other ships are only drawn where your ship can see them past blocks and Build pieces: a ship partly behind a wall shows only the visible part, and one fully hidden is off the minimap too.

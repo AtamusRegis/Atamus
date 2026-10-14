@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791957091";
+import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791957612";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -260,25 +260,28 @@ function losMat(m) {                           // a copy of a ship material that
 // (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
 // ship, drawn only where the shadow texture says it's out of sight
 // (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
-const shadeT = { value: 0 };
+const shadeT = { value: 0 }, shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, uT: shadeT }, transparent: true, depthWrite: false,
+  uniforms: { ...visU, uT: shadeT, hexA: shadeHex }, transparent: true, depthWrite: false,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; varying vec3 vW;
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; varying vec3 vW;
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
     float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += a * n(p); p = p * 2.03 + 17.0; a *= 0.5; } return v; }
     void main() {
       vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
-      float lit = texture2D(visTex, uv).r; if (lit > 0.99) discard;
+      float lit = (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0;
+      float ed = max(abs(g.y), max(abs(1.7320508 * g.x + g.y), abs(1.7320508 * g.x - g.y)) * 0.5) - hexA;   // past the hexagon's edge
+      lit = min(lit, 1.0 - smoothstep(0.0, 30.0, ed));
+      if (lit > 0.99) discard;
       float a = fbm(g / 260.0 + vec2(uT * 0.020, uT * 0.013)), b = fbm(g / 110.0 - vec2(uT * 0.031, -uT * 0.017));
       float d = mix(a, b, 0.45);
       vec3 col = mix(vec3(0.015, 0.02, 0.035), vec3(0.16, 0.14, 0.115), smoothstep(0.3, 0.85, d));
       gl_FragColor = vec4(col, (0.3 + 0.38 * d) * (1.0 - lit));
     }`,
 });
-const shade = new THREE.Mesh(new THREE.PlaneGeometry(2 * VIS_S, 2 * VIS_S).rotateX(-Math.PI / 2), shadeMat);
+const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);
 shade.position.y = 0.3; shade.renderOrder = 1; shade.frustumCulled = false; scene.add(shade);
 function updateVis() {                         // the shadows from where my ship is now
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
@@ -297,7 +300,7 @@ function updateVis() {                         // the shadows from where my ship
   for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
-  shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeT.value = performance.now() / 1000;
+  shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
   renderer.setRenderTarget(visRT); renderer.render(visScene, visCam); renderer.setRenderTarget(null);
 }
