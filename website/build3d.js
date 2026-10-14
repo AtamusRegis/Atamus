@@ -288,6 +288,7 @@ export function initBuild(ctx) {
   }
   // ---- editing a cloud's outline in the world (Build menu open): drag a corner, click an edge's middle dot to add one,
   // right-click a corner to remove it (3 at least). Clicking inside the cloud picks it all up as usual. ----
+  const inPolyF = (x, y, v) => { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; };
   const NSv = "http://www.w3.org/2000/svg";
   const cLayer = document.createElementNS(NSv, "svg"); cLayer.id = "cloud-handles"; cLayer.setAttribute("width", "100%"); cLayer.setAttribute("height", "100%"); document.body.appendChild(cLayer);
   let dragPt = null, lastPtSend = 0;
@@ -362,9 +363,11 @@ export function initBuild(ctx) {
     if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r, ...(picking.extra ? { extra: picking.extra } : {}) }); return; }
     if (held) { const b = builds.get(held.id); if (b && ctx.inside(b.x, b.y)) drop(true); return; }
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
-    const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
+    const hits = ray.intersectObjects([...builds.values()].filter((b) => b.k !== "cloud").map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
     let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
-    if (o && g) pickUp(builds.get(o.userData.id), g);
+    if (o && g) { pickUp(builds.get(o.userData.id), g); return; }
+    // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline picks it up
+    if (g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { pickUp(b, g); return; }
   });
 
   // the wheel scales the blueprint or the held piece (test ships keep their size); it doesn't zoom the camera meanwhile

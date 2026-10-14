@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791975439";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791975594";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -343,8 +343,8 @@ const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math
 shade.position.y = 0; shade.renderOrder = -1; shade.frustumCulled = false; scene.add(shade);
 function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
 function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
-// (owner, 2026-10-14) a cloud's thick core (150 m and more in from its edge, where ships can't be seen) blocks sight like
-// a wall: it casts a shadow from its far side and cuts visibility lines, so nobody sees through a nebula to the other
+// (owner, 2026-10-14) a cloud's thick core (CLOUD_DEEP and more in from its edge, where ships can't be seen) blocks sight like
+// a wall (150 m and more in, owner): it casts a shadow from its far side and cuts visibility lines, so nobody sees through a nebula to the other
 // side. Its outline is traced once per shape (a grid of distances to the edge, then the 150 m contour), as one or more
 // loops. While I'm inside a cloud (anywhere in it), that cloud doesn't block my sight at all; other clouds still do.
 function cloudCores(b) {
@@ -453,10 +453,10 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
 // (owner, 2026-10-14) nebula clouds hide ships inside them.
-// A ship in a cloud fades from solid at the edge to invisible 200 m in (and deeper: the core), for everyone. If I'm in the
+// A ship in a cloud fades from solid at the edge to invisible 150 m in (and deeper: the core), for everyone. If I'm in the
 // same cloud within 200 m of it, it shows at least at 25% while it moves (or for a moment after I hit it); still, it
 // gets only the edge fade (so in the core it's invisible).
-const CLOUD_DEEP = 200, CLOUD_IN = 0.25, CLOUD_NEAR = 200, STILL = 3, REVEAL_MS = 3000;
+const CLOUD_DEEP = 150, CLOUD_IN = 0.25, CLOUD_NEAR = 200, STILL = 3, REVEAL_MS = 3000;
 const revealed = new Map();                    // ship id -> when I last hit it
 function cloudFactor(x, y, spd, id) {
   let f = 1;
