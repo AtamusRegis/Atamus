@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Object Editor rulers (owner):** a horizontal and a vertical dashed red line, each draggable, that corners, ellipse handles and the pivot snap to.
 - **Object Editor upgrades (owner):** zoom (wheel), a draggable window, Mirrored editing (on by default), Reset for each of Sight / Movement / Pivot, Ctrl+Z / Ctrl+U undo and redo, and every collider drawn in the world while it's open. Player ships now collide by the ship's Movement ellipse (turned with the ship) instead of a fixed circle.
 - **Object Editor: Sight, Movement, Pivot (owner):** each object kind now has a Sight outline (blocks line of sight; starts as a rectangle around the object), a Movement ellipse (what ships bump into) and a Pivot (the point it turns around), each edited in the [X] window. The ship's outline and pivot apply to player ships too (shadows and how the model turns).
 - **Object Editor (owner):** staff get [X] (or the X key): a window showing each Build object top down with its collider outline; drag corners, click an edge's middle dot to add one, right-click to remove. Changes save and apply to every piece of that kind for everyone. For staff, X no longer drops a block.

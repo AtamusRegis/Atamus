@@ -319,6 +319,9 @@ export function initBuild(ctx) {
   // ship's) are drawn in the world.
   let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePts = null, ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
   let eZoom = 1, mirror = true, past = [], future = [];
+  // (owner, 2026-10-14) two rulers: a horizontal and a vertical dashed red line, each dragged on its own; corners, the
+  // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
+  const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
   for (const [k, label] of [["sight", "Sight"], ["move", "Movement"], ["pivot", "Pivot"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
@@ -401,6 +404,12 @@ export function initBuild(ctx) {
     sv("polygon", { points: px.map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("ellipse", { cx: ex, cy: ey, rx: erx, ry: ery, class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
+    const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
+    for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
+      sv("line", { x1, y1, x2, y2, class: "ce-guide" });
+      const hit = sv("line", { x1, y1, x2, y2, class: "ce-guide-hit" + (ax === "x" ? " v" : " h") });
+      hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); eGrab(e, "g" + ax); });
+    }
     if (eMode === "sight") {
       px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
         const q = px[(i + 1) % px.length];
@@ -437,6 +446,10 @@ export function initBuild(ctx) {
   ceSvg.addEventListener("pointermove", (e) => {
     if (!eDrag || e.pointerId !== eDrag.id) return;
     const r = ceSvg.getBoundingClientRect(), u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
+    if (eDrag.type === "gx") { guide.x = u[0]; eDraw(); return; }
+    if (eDrag.type === "gy") { guide.y = u[1]; eDraw(); return; }
+    if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x;                 // snap to the rulers
+    if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     if (eDrag.type === "pt") {
       if (eDrag.mate === -2) ePts[eDrag.i] = [0, u[1]];                 // mirrored, on the middle line: stays on it
       else { ePts[eDrag.i] = u; if (eDrag.mate >= 0) ePts[eDrag.mate] = [-u[0], u[1]]; }
@@ -447,7 +460,7 @@ export function initBuild(ctx) {
     else if (eDrag.type === "pv") ePv = [mirror ? 0 : u[0], u[1]];
     eDraw();
   });
-  const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} eSave(); eDraw(); };
+  const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; const g = eDrag.type[0] === "g"; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} if (!g) eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
   const r4 = (x) => Math.round(x * 10000) / 10000;
   function eSave() { send({ t: "coll", k: eKind, pts: ePts.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), mv: eMv.map(r4) }); }
