@@ -99,8 +99,10 @@ const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x18181e);   // (owner, 2026-10-13) dark charcoal, from the owner's reference
-scene.fog = new THREE.Fog(0x18181e, 3000, 14000);
+// (owner, 2026-10-14) deep blue space under the field grid (was dark charcoal)
+const SPACE = 0x0c2266;
+scene.background = new THREE.Color(SPACE);
+scene.fog = new THREE.Fog(SPACE, 3000, 14000);
 scene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 5000, 2000); scene.add(sun);
 
@@ -118,25 +120,81 @@ let camDist = cam.zmax;
 // so nothing z-fights or shimmers the way a second layer of rendered lines did
 const groundMat = new THREE.ShaderMaterial({
   uniforms: {
-    base: { value: new THREE.Color(0x18181e) }, gline: { value: new THREE.Color(0x46464c) },   // (owner) charcoal ground, soft gray lines
-    fogColor: { value: new THREE.Color(0x18181e) }, fogNear: { value: 3000 }, fogFar: { value: 14000 },
-  },
+    gline: { value: new THREE.Color(0x46464c) },   // (owner) soft gray lines; (owner, 2026-10-14) only the lines are drawn, space shows between them
+    fogNear: { value: 3000 }, fogFar: { value: 14000 },
+  }, transparent: true, depthWrite: false,
   vertexShader: `varying vec3 vW; varying float vD;
     void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vD = -mv.z; gl_Position = projectionMatrix * mv; }`,
   fragmentShader: `varying vec3 vW; varying float vD;
-    uniform vec3 base, gline, fogColor; uniform float fogNear, fogFar;
+    uniform vec3 gline; uniform float fogNear, fogFar;
     void main() {
       vec2 c = vW.xz / 100.0;
       vec2 g = abs(fract(c - 0.5) - 0.5) / fwidth(c);
       float l = 1.0 - min(min(g.x, g.y), 1.0);
-      vec3 col = mix(base, gline, l * 0.85);
-      col = mix(col, fogColor, smoothstep(fogNear, fogFar, vD));
-      gl_FragColor = vec4(col, 1.0);
+      float a = l * 0.85 * (1.0 - smoothstep(fogNear, fogFar, vD));
+      if (a < 0.003) discard;
+      gl_FragColor = vec4(gline, a);
       #include <colorspace_fragment>
     }`,
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), groundMat);
-ground.rotation.x = -Math.PI / 2; scene.add(ground);
+ground.rotation.x = -Math.PI / 2; ground.renderOrder = -1; scene.add(ground);
+
+// (owner, 2026-10-14) the space background (from the owner's reference): a deep blue field with soft cyan glows, very far
+// below the grid so it drifts slowest of all as you move. A big plane that follows the camera; its pattern is fixed in
+// the world (stretched noise, so the glows run in soft diagonal bands).
+const skyT = { value: 0 };
+const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+  uniforms: { uT: skyT }, depthWrite: false,
+  vertexShader: "varying vec2 vG; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }",
+  fragmentShader: `uniform float uT; varying vec2 vG;
+    vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
+    float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+      return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+                 mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
+    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }   // smooth, few layers: soft glows, no clouds
+    void main() {
+      vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;                 // a slant for the bands
+      float n = fbm(vec2(d.x / 26000.0, d.y / 9000.0) + uT * 0.002);
+      float g = smoothstep(0.55, 0.9, fbm(vec2(d.x / 30000.0, d.y / 10000.0) + 31.0 - uT * 0.0015));   // where the cyan glows sit
+      vec3 deep = vec3(0.03, 0.08, 0.26), royal = vec3(0.09, 0.25, 0.62), cyan = vec3(0.12, 0.78, 0.92);   // (screen colors, no conversion)
+      vec3 col = mix(deep, royal, smoothstep(0.3, 0.75, n));
+      col = mix(col, cyan, g * 0.8);
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+}));
+sky.position.y = -8000; sky.renderOrder = -3; sky.frustumCulled = false; scene.add(sky);
+// (owner, 2026-10-14) stars far below the grid: thin points that drift slower than the grid as you move (they're deeper),
+// each slowly dimming in and out on its own. They tile around the camera so the field never runs out.
+const STAR_T = 24000, STAR_N = 6000;
+{
+  const pos = new Float32Array(STAR_N * 3), ph = new Float32Array(STAR_N), sp = new Float32Array(STAR_N), br = new Float32Array(STAR_N), sz = new Float32Array(STAR_N), hu = new Float32Array(STAR_N);
+  for (let i = 0; i < STAR_N; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * STAR_T; pos[i * 3 + 1] = -1500 - Math.random() * 4500; pos[i * 3 + 2] = (Math.random() - 0.5) * STAR_T;
+    ph[i] = Math.random() * Math.PI * 2; sp[i] = 0.15 + Math.random() * 0.45; br[i] = 0.35 + Math.random() * 0.65;
+    sz[i] = Math.random() < 0.03 ? 2.2 + Math.random() * 1.5 : 0.8 + Math.random() * 0.7;   // (owner) thin, a few bigger ones that glow
+    hu[i] = Math.random();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("ph", new THREE.BufferAttribute(ph, 1)); g.setAttribute("sp", new THREE.BufferAttribute(sp, 1));
+  g.setAttribute("br", new THREE.BufferAttribute(br, 1)); g.setAttribute("sz", new THREE.BufferAttribute(sz, 1)); g.setAttribute("hu", new THREE.BufferAttribute(hu, 1));
+  var starT = { value: 0 };
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uT: starT, tile: { value: STAR_T }, pr: { value: Math.min(devicePixelRatio || 1, 2) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `attribute float ph; attribute float sp; attribute float br; attribute float sz; attribute float hu; uniform float uT, tile, pr; varying float vA; varying vec3 vC; varying float vS;
+      void main() {
+        vec3 p = position; p.xz += tile * floor((cameraPosition.xz - p.xz) / tile + 0.5);   // the copy of the tile nearest the camera
+        float tw = 0.5 + 0.5 * sin(uT * sp + ph); vA = br * (0.15 + 0.85 * tw * tw);
+        vC = hu < 0.6 ? vec3(0.88, 0.93, 1.0) : hu < 0.8 ? vec3(0.55, 0.75, 1.0) : hu < 0.92 ? vec3(0.5, 0.95, 1.0) : vec3(1.0, 0.82, 0.5);   // white, blue, cyan, a few gold
+        vS = sz; gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0); gl_PointSize = (sz > 2.0 ? sz * 3.0 : sz) * pr;   // the big ones get room for a glow
+      }`,
+    fragmentShader: `varying float vA; varying vec3 vC; varying float vS;
+      void main() { float d = length(gl_PointCoord - 0.5);
+        float a = vS > 2.0 ? vA * (smoothstep(0.17, 0.05, d) + 0.45 * smoothstep(0.5, 0.0, d) * smoothstep(0.5, 0.0, d)) : vA * smoothstep(0.5, 0.15, d);
+        if (a < 0.01) discard; gl_FragColor = vec4(vC * a, a); }`,
+  });
+  const stars = new THREE.Points(g, m); stars.frustumCulled = false; stars.renderOrder = -2; scene.add(stars);
+}
 
 // the hexagon border: a flat glowing band on the ground (flat edges top and bottom, points east and west)
 function hexShapeBand() {
@@ -816,7 +874,7 @@ renderer.setAnimationLoop(() => {
     if (left <= 0) { countAt = 0; goUpdating(); } else countEl.textContent = "Update incoming — " + left + " s";
   }
 
-  build.frame();
+  build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderer.render(scene, camera);
 });
