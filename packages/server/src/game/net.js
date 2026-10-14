@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -72,7 +72,7 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
     let joined = false;
-    let cmds = 0;                              // rough flood cap: ~40 commands a second
+    let cmds = 0, blockAt = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
     let saved = null;                          // (owner, 2026-10-13) the side this account chose last time: the client re-joins it unless resetting
@@ -81,8 +81,8 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) },   // staff: the Admin button
-      cfg: { loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
-      roster: world.roster(),
+      cfg: { shipR: SHIP_R, blockHalf: BLOCK_HALF, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      roster: world.roster(), blocks: world.blocks.map((b) => [b.id, b.x, b.y]),
     }));
 
     ws.on("message", (data) => {
@@ -128,6 +128,11 @@ export function attachGameServer(httpServer) {
         const chat = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
         pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
+      }
+      else if (m.t === "block") {             // (owner) X drops a block where the ship is (at most ~2 a second)
+        const now = Date.now(); if (now - blockAt < 450) return; blockAt = now;
+        const r = world.addBlock(pid); if (!r) return;
+        broadcast({ t: "block", b: [r.b.id, r.b.x, r.b.y], gone: r.gone });
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

@@ -59,6 +59,29 @@ function steer(vx, vy, tx, ty, a, brake, dt) {
   if (el > s) { ex *= s / el; ey *= s / el; }
   return [vx + ex, vy + ey];
 }
+// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored): each ship is a circle of SHIP_R,
+// each block a square BLOCK_HALF from its center. A ship overlapping one is pushed out along the shortest way, and the
+// part of its velocity going into it is dropped (it slides along). Mirrored in the client's prediction.
+let SHIP_R = 45, BLOCK_HALF = 25;   // (the server sends both in the hello)
+function pushOut(p, cx, cy, minD) {           // p: {x, y, vx, vy}; push p's center to at least minD from (cx, cy)
+  let nx = p.x - cx, ny = p.y - cy, d = Math.hypot(nx, ny);
+  if (d >= minD) return false;
+  if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
+  p.x = cx + nx * minD; p.y = cy + ny * minD;
+  const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
+  return true;
+}
+function pushFromBlock(p, b) {                 // a ship's circle out of an axis-aligned square
+  const qx = Math.max(b.x - BLOCK_HALF, Math.min(b.x + BLOCK_HALF, p.x)), qy = Math.max(b.y - BLOCK_HALF, Math.min(b.y + BLOCK_HALF, p.y));
+  if (qx === p.x && qy === p.y) {              // the center is inside the square: out through the nearest side
+    const dl = p.x - (b.x - BLOCK_HALF), dr = b.x + BLOCK_HALF - p.x, dd = p.y - (b.y - BLOCK_HALF), du = b.y + BLOCK_HALF - p.y, m = Math.min(dl, dr, dd, du);
+    const nx = m === dl ? -1 : m === dr ? 1 : 0, ny = m === dd ? -1 : m === du ? 1 : 0;
+    if (nx) p.x = b.x + nx * (BLOCK_HALF + SHIP_R); else p.y = b.y + ny * (BLOCK_HALF + SHIP_R);
+    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
+    return true;
+  }
+  return pushOut(p, qx, qy, SHIP_R);
+}
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 // (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
@@ -141,10 +164,11 @@ const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o));
 // (owner, 2026-10-13) right-click: a dashed white line from the ship's center on the ground plane to the reticle,
 // fading out over its last stretch (owner: no dot at the end). Three points: full from the ship to AIM_FADE of the
 // way, then fading to nothing at the reticle (per-vertex alpha).
+// (owner, 2026-10-13) aimed at something with a block or a ship in the way: white to where it would hit, red past it
 const AIM_FADE = 0.6;
 const aimLineGeo = new THREE.BufferGeometry();
-aimLineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
-aimLineGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array([1, 1, 1, 0.85, 1, 1, 1, 0.85, 1, 1, 1, 0]), 4));
+aimLineGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(12), 3));
+aimLineGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(16), 4));
 const aimLineMat = new THREE.LineDashedMaterial({ color: 0xffffff, vertexColors: true, transparent: true, dashSize: 12, gapSize: 8, depthWrite: false });
 const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = false;
 // (owner, 2026-10-13) the weapon UI helpers toggle (top right): the leash circle for now; off by default, kept per browser
@@ -245,18 +269,51 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
   }
 }
 
+// (owner, 2026-10-13) my ship against the blocks and the other ships (as drawn), as the server does it
+function collideMe() {
+  const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y };
+  for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF + SHIP_R && Math.abs(q.y - b.y) <= BLOCK_HALF + SHIP_R) pushFromBlock(q, b);
+  for (const p of players.values()) { if (p.id === myId || !p.near) continue; pushOut(q, p.holder.position.x, -p.holder.position.z, 2 * SHIP_R); }
+  if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
+}
+// (owner) the first thing the aim line runs into, from my ship toward the reticle: a block (its square) or another ship
+// (its circle). Returns the fraction of the way (0-1) or null.
+function aimBlocked(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0; let best = null;
+  const hit = (t) => { if (t > 1e-4 && t < 1 && (best === null || t < best)) best = t; };
+  for (const b of blocks.values()) {               // segment vs square (slabs)
+    let t0 = 0, t1 = 1, ok = true;
+    for (const [o, d, lo, hi] of [[x0, dx, b.x - BLOCK_HALF, b.x + BLOCK_HALF], [y0, dy, b.y - BLOCK_HALF, b.y + BLOCK_HALF]]) {
+      if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { ok = false; break; } continue; }
+      let a = (lo - o) / d, c = (hi - o) / d; if (a > c) [a, c] = [c, a];
+      t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) { ok = false; break; }
+    }
+    if (ok && t0 > 0) hit(t0);
+  }
+  for (const p of players.values()) {              // segment vs circle
+    if (p.id === myId || !p.near) continue;
+    const cx = p.holder.position.x - x0, cy = -p.holder.position.z - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-9) continue;
+    const tc = (cx * dx + cy * dy) / L2, px = dx * tc - cx, py = dy * tc - cy, h2 = SHIP_R * SHIP_R - (px * px + py * py);
+    if (h2 < 0) continue; hit(tc - Math.sqrt(h2 / L2));
+  }
+  return best;
+}
+
 // ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
 const keys = new Set();
 let sprint = false;                            // (owner) Shift = sprint (30% faster)
-// (owner) X drops a cube where the player is, as a movement reference on the grid; local to this browser
+// (owner) X drops a block where the ship is. (owner, 2026-10-13) Blocks are the server's now: everyone sees them and
+// ships collide with them (the ship that dropped one is pushed out of it)
 const cubeGeo = new THREE.BoxGeometry(50, 50, 50);
 const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.6, metalness: 0.1 });
-const cubes = [];
-function dropCube() {
-  if (!haveMe) return;
-  const c = new THREE.Mesh(cubeGeo, cubeMat); c.position.copy(toWorld(me.x, me.y, 25)); scene.add(c); cubes.push(c);
-  if (cubes.length > 200) scene.remove(cubes.shift());
+const blocks = new Map();                      // id -> { x, y, mesh }
+function addBlock(id, x, y) {
+  if (blocks.has(id)) return;
+  const mesh = new THREE.Mesh(cubeGeo, cubeMat); mesh.scale.setScalar(BLOCK_HALF / 25); mesh.position.copy(toWorld(x, y, BLOCK_HALF)); scene.add(mesh);
+  blocks.set(id, { x, y, mesh });
 }
+function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); } }
+function dropCube() { if (haveMe) send({ t: "block" }); }
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 addEventListener("keydown", (e) => {
   if (typing()) return;
@@ -348,12 +405,14 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "hello") {
       srvBuild = m.build || "";
-      if (m.cfg) { if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
+      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
+      for (const id of [...blocks.keys()]) dropBlock(id);
+      for (const [id, x, y] of m.blocks || []) addBlock(id, x, y);
       // (owner, 2026-10-13) the side is remembered: re-join it, unless this is the first time or the player ticked
       // Reset faction on the Welcome back page (game.html?reset=1), which shows the picker
       const reset = new URLSearchParams(location.search).get("reset") === "1";
@@ -389,6 +448,7 @@ function connect() {
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
     else if (m.t === "chat") addChat(m);
+    else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
     else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
@@ -472,6 +532,7 @@ renderer.setAnimationLoop(() => {
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }
+    collideMe();
   }
 
   // other ships are drawn 150 ms in the past on the server's clock, between the two snapshots around that moment
@@ -589,9 +650,14 @@ renderer.setAnimationLoop(() => {
     const a = aimAt(aimPx().x, aimPx().y);
     if (a) {
       aimShown = true;
-      const lp = aimLineGeo.attributes.position, sx = me.x, sz = -me.y;
-      lp.setXYZ(0, sx, 0.4, sz); lp.setXYZ(1, sx + (a.x - sx) * AIM_FADE, 0.4, sz + (a.z - sz) * AIM_FADE); lp.setXYZ(2, a.x, 0.4, a.z);
-      lp.needsUpdate = true; aimLine.computeLineDistances();
+      const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = me.x, sz = -me.y;
+      const at = (f) => [sx + (a.x - sx) * f, sz + (a.z - sz) * f];
+      const tb = aimBlocked(me.x, me.y, a.x, -a.z);
+      // four points: white from the ship, then (blocked) red from the hit to the reticle, else fading out over the last stretch
+      const pts = tb === null ? [[0, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [1, 1, 1, 1, 0]]
+        : [[0, 1, 1, 1, 0.85], [tb, 1, 1, 1, 0.85], [tb, 1, 0.25, 0.2, 0.9], [1, 1, 0.25, 0.2, 0.5]];
+      pts.forEach(([f, r, g, bl, al], i) => { const [x, z] = at(f); lp.setXYZ(i, x, 0.4, z); lc.setXYZW(i, r, g, bl, al); });
+      lp.needsUpdate = true; lc.needsUpdate = true; aimLine.computeLineDistances();
       const ds = Math.max(1, viewDist / 500); aimLineMat.dashSize = 12 * ds; aimLineMat.gapSize = 8 * ds;   // dashes keep their look zoomed out
       aimHit.set(a.x, 0, a.z); myAim = { x: a.x, z: a.z };
     }
@@ -805,4 +871,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

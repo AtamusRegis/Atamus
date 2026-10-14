@@ -67,6 +67,29 @@ export function steer(vx, vy, tx, ty, a, brake, dt) {
   if (el > s) { ex *= s / el; ey *= s / el; }
   return [vx + ex, vy + ey];
 }
+// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored): each ship is a circle of SHIP_R,
+// each block a square BLOCK_HALF from its center. A ship overlapping one is pushed out along the shortest way, and the
+// part of its velocity going into it is dropped (it slides along). Mirrored in the client's prediction.
+export const SHIP_R = 45, BLOCK_HALF = 25;
+export function pushOut(p, cx, cy, minD) {           // p: {x, y, vx, vy}; push p's center to at least minD from (cx, cy)
+  let nx = p.x - cx, ny = p.y - cy, d = Math.hypot(nx, ny);
+  if (d >= minD) return false;
+  if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
+  p.x = cx + nx * minD; p.y = cy + ny * minD;
+  const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
+  return true;
+}
+export function pushFromBlock(p, b) {                 // a ship's circle out of an axis-aligned square
+  const qx = Math.max(b.x - BLOCK_HALF, Math.min(b.x + BLOCK_HALF, p.x)), qy = Math.max(b.y - BLOCK_HALF, Math.min(b.y + BLOCK_HALF, p.y));
+  if (qx === p.x && qy === p.y) {              // the center is inside the square: out through the nearest side
+    const dl = p.x - (b.x - BLOCK_HALF), dr = b.x + BLOCK_HALF - p.x, dd = p.y - (b.y - BLOCK_HALF), du = b.y + BLOCK_HALF - p.y, m = Math.min(dl, dr, dd, du);
+    const nx = m === dl ? -1 : m === dr ? 1 : 0, ny = m === dd ? -1 : m === du ? 1 : 0;
+    if (nx) p.x = b.x + nx * (BLOCK_HALF + SHIP_R); else p.y = b.y + ny * (BLOCK_HALF + SHIP_R);
+    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
+    return true;
+  }
+  return pushOut(p, qx, qy, SHIP_R);
+}
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
@@ -79,7 +102,9 @@ export function inside(x, y) {
 
 export class World3D {
   constructor() {
-    this.players = new Map();                // id -> { id, name, x, y, dx, dy, dirty }
+    this.players = new Map();
+    this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
+    this.blockSeq = 1;                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -174,6 +199,36 @@ export class World3D {
       }
       p.dirty = true;
     }
+    this.collide();
+  }
+  // (owner, 2026-10-13) ships against blocks and against each other (two overlapping ships each move half the overlap
+  // apart); a push that would leave the hexagon isn't applied
+  collide() {
+    const ps = [...this.players.values()];
+    for (const p of ps) for (const b of this.blocks) {
+      if (Math.abs(p.x - b.x) > BLOCK_HALF + SHIP_R || Math.abs(p.y - b.y) > BLOCK_HALF + SHIP_R) continue;
+      const ox = p.x, oy = p.y; if (pushFromBlock(p, b)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
+    }
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+      const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+      if (d >= 2 * SHIP_R) continue;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const ax = a.x, ay = a.y, bx = b.x, by = b.y;
+      pushOut(a, mx + (d < 1e-6 ? 1e-3 : 0), my, SHIP_R); pushOut(b, mx, my, SHIP_R);
+      if (!inside(a.x, a.y)) { a.x = ax; a.y = ay; } if (!inside(b.x, b.y)) { b.x = bx; b.y = by; }
+      a.dirty = b.dirty = true;
+    }
+  }
+  // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
+  addBlock(pid) {
+    const p = this.players.get(pid); if (!p) return null;
+    const mine = this.blocks.filter((b) => b.owner === pid), gone = [];
+    if (mine.length >= 30) gone.push(mine[0]);
+    if (this.blocks.length - gone.length >= 400) gone.push(this.blocks.find((b) => !gone.includes(b)));
+    this.blocks = this.blocks.filter((b) => !gone.includes(b));
+    const b = { id: this.blockSeq++, x: Math.round(p.x * 10) / 10, y: Math.round(p.y * 10) / 10, owner: pid };
+    this.blocks.push(b);
+    return { b, gone: gone.map((g) => g.id) };
   }
 
   async _save(p) {

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Colliders (owner):** ships collide with blocks and with each other (on the ground plane). X's blocks are now kept by the server and everyone sees them. When aiming at something blocked by a block or ship, the aim line turns red past the obstruction.
 - **Small map for now (owner):** the hexagon is 2,500 m flat to flat (was 126 km). Ships saved outside it come back in near the center. The load circle (5,000 m) now covers the whole map.
 - **Reset location (owner):** a Reset location checkbox under Enter System on the Welcome back page puts your ship back near the center when you enter.
 - **Map edge on the zoomed minimap (owner):** zoomed in, the map's border shows as a gray hexagon inside the blue frame, so a nearby edge is visible.
