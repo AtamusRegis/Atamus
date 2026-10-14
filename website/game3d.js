@@ -195,7 +195,7 @@ function addPlayer(id, name, x = 0, y = 0) {
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
-const TRAIL_MAX = 200, TRAIL_S = 1;            // (owner) the camera trail: up to 200 m behind, 1 m per m/s of speed
+const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
@@ -520,11 +520,11 @@ renderer.setAnimationLoop(() => {
     }
   }
   // (owner, 2026-10-13) the trail: moving with the aim not steering the camera (not aiming, or the pointer in the dead zone),
-  // the focus sits behind the ship along its motion, 0-200 m with speed (a metre per m/s, capped); it fades out as the
+  // the focus sits behind the ship along its motion, 0-80 m with speed; it fades out as the
   // aim takes over beyond the dead zone
   if (haveMe && !orbitLock) {
     const v = Math.hypot(vel.x, vel.y);
-    // the focus easing below already lags a moving target by v / 6 m, so only the rest is added: the real trail is the 0-200 m
+    // the focus easing below already lags a moving target by v / 6 m, so only the rest is added: the real trail is the 0-80 m
     if (v > 1) { const t = Math.max(0, Math.min(TRAIL_MAX, v * TRAIL_S) - v / 6) * (1 - aimEase) / v; fx -= vel.x * t; fy -= vel.y * t; }
   }
   if (orbitLock && haveMe) {                   // (owner) MMB: the camera and its target orbit the player at the frame they had

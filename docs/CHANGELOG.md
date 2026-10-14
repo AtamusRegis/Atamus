@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Shorter camera trail (owner):** the trail now reaches 80 m at full speed instead of 200.
 - **Camera trail (owner):** moving without the aim steering the camera (not aiming, or the pointer in the middle dead zone), the camera now trails behind the ship, up to 200 m at full speed (the ship sits ahead of the screen center).
 - **Reversals turn the remembered way (owner):** flipping WASD to the opposite direction now turns the ship through the last middle direction you used (A W D, then A D A D turns over the top each time), instead of always the same side.
 - **Dot cursor (owner):** the mouse cursor is hidden in the game; a small white dot shows where it points, everywhere on the page including the UI.
