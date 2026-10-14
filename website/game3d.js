@@ -452,15 +452,20 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], true)) clear++;
   return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
-// (owner, 2026-10-14) nebula clouds hide ships inside them: fully visible at the edge, fading the deeper in (from the
-// nearest edge) to invisible at 150 m in. If I'm in the same cloud within 100 m of the ship, it fades only to 25%.
-const CLOUD_DEEP = 150, CLOUD_MIN = 0.25, CLOUD_NEAR = 100;
-function cloudFactor(x, y, spd) {
+// (owner, 2026-10-14) nebula clouds hide ships inside them.
+// Seen from outside a cloud: a ship in it fades from solid at the edge to invisible 200 m in (and deeper: the core).
+// Seen from inside the same cloud: only ships within 200 m show, at 25%, and only while they move (or for a moment after
+// I hit them); a ship sitting still is invisible.
+const CLOUD_DEEP = 200, CLOUD_IN = 0.25, CLOUD_NEAR = 200, STILL = 3, REVEAL_MS = 3000;
+const revealed = new Map();                    // ship id -> when I last hit it
+function cloudFactor(x, y, spd, id) {
   let f = 1;
   for (const b of builds.values()) {
     if (b.k !== "cloud" || !b.poly || Math.hypot(x - b.x, y - b.y) > b.rad + 1 || !inPoly(x, y, b.poly)) continue;
-    const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP), meNear = haveMe && inPoly(me.x, me.y, b.poly) && Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR;
-    f = Math.min(f, 1 - (meNear ? 1 - CLOUD_MIN : 1) * d * d * (3 - 2 * d));
+    if (haveMe && inPoly(me.x, me.y, b.poly)) {  // we're both in this cloud
+      const moving = spd >= STILL || performance.now() - (revealed.get(id) || -1e9) < REVEAL_MS;
+      f = Math.min(f, Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR && moving ? CLOUD_IN : 0);
+    } else { const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP); f = Math.min(f, 1 - d * d * (3 - 2 * d)); }
   }
   return f;
 }
@@ -469,12 +474,12 @@ function updateShipVis(dt, now) {
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
     const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the aim bounds
-    const look = (vis, poly, x, y, spd = 99) => {
+    const look = (vis, poly, x, y, spd = 99, id = null) => {
       if (!vis) return; seen.add(vis);
       const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
-      const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd); visTargets.set(vis, t);
+      const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0));
+    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
@@ -839,6 +844,7 @@ function connect() {
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
     else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
       const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
+      if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
       if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)));
     }
     else if (m.t === "chat") addChat(m);
