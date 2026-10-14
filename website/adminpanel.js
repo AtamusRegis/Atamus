@@ -34,7 +34,7 @@
     if (root) return;
     // (owner) the button is an [A] at the left of the chat input
     const btn = $("button", "", "A"); btn.id = "admin-btn"; btn.type = "button"; btn.title = "Admin";
-    const form = document.getElementById("chat-form"); if (form) form.insertBefore(btn, form.firstChild); else document.body.appendChild(btn);
+    const row = document.getElementById("chat-row"); if (row) row.insertBefore(btn, row.firstChild); else document.body.appendChild(btn);   // outside the input bar, on its left
     root = $("div"); root.id = "admin-panel"; root.hidden = true;
     rail = $("div", "ap-rail");
     for (const [k, label] of [["players", "Players"], ["reports", "Reports"], ["appeals", "Appeals"]]) {
