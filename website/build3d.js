@@ -462,8 +462,20 @@ export function initBuild(ctx) {
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x;                 // snap to the rulers
     if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     if (eDrag.type === "pt") {
-      if (eDrag.mate === -2) ePts[eDrag.i] = [0, u[1]];                 // mirrored, on the middle line: stays on it
-      else { ePts[eDrag.i] = u; if (eDrag.mate >= 0) ePts[eDrag.mate] = [-u[0], u[1]]; }
+      const near = Math.abs(u[0]) * S() < SNAP, n = ePts.length;
+      if (eDrag.mate === -2) {                   // mirrored, on the middle line: stays on it until dragged clear sideways,
+        if (near) ePts[eDrag.i] = [0, u[1]];     // then (owner) it splits into a mirrored pair
+        else {
+          const i = eDrag.i, prev = ePts[(i - 1 + n) % n], next = ePts[(i + 1) % n], me = u, mm = [-u[0], u[1]];
+          // the copy goes on the side of the neighbor that's on its own side, so the outline doesn't cross itself
+          if ((prev[0] - next[0]) * u[0] >= 0) { ePts[i] = me; ePts.splice(i + 1, 0, mm); eDrag.mate = i + 1; }
+          else { ePts[i] = mm; ePts.splice(i + 1, 0, me); eDrag.i = i + 1; eDrag.mate = i; }
+        }
+      } else if (eDrag.mate >= 0 && near) {      // (owner) a mirrored pair dragged together merges back into one on the middle line
+        const keep = Math.min(eDrag.i, eDrag.mate), gone = Math.max(eDrag.i, eDrag.mate);
+        if (n > 3) { ePts.splice(gone, 1); ePts[keep] = [0, u[1]]; eDrag.i = keep; eDrag.mate = -2; }
+        else { ePts[eDrag.i] = u; ePts[eDrag.mate] = [-u[0], u[1]]; }
+      } else { ePts[eDrag.i] = u; if (eDrag.mate >= 0) ePts[eDrag.mate] = [-u[0], u[1]]; }
     }
     else if (eDrag.type === "mc") { eMv[0] = mirror ? 0 : u[0]; eMv[1] = u[1]; }
     else if (eDrag.type === "mx") eMv[2] = Math.max(0.02, Math.abs(u[0] - eMv[0]));
