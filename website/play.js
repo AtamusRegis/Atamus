@@ -42,7 +42,7 @@ async function waitForUpdate() {
 }
 
 // always open the game fresh, never a cached copy of an older build
-document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const rs = document.getElementById("reset-side"); location.href = "game.html?cb=" + Date.now() + (rs && rs.checked ? "&reset=1" : ""); }));   // (owner) Reset faction: choose a side again
+document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const rs = document.getElementById("reset-side"), rp = document.getElementById("reset-pos"); location.href = "game.html?cb=" + Date.now() + (rs && rs.checked ? "&reset=1" : "") + (rp && rp.checked ? "&resetpos=1" : ""); }));   // (owner) Reset faction: choose a side again; Reset location: back near the center
 if (params.get("updating")) waitForUpdate();
 else showSteps().catch(() => { location.href = "login.html"; });
 

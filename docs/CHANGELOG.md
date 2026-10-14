@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Reset location (owner):** a Reset location checkbox under Enter System on the Welcome back page puts your ship back near the center when you enter.
 - **Map edge on the zoomed minimap (owner):** zoomed in, the map's border shows as a gray hexagon inside the blue frame, so a nearby edge is visible.
 - **Minimap frame and zoom limit (owner):** the minimap keeps its hexagon outline when zoomed (the map zooms inside it), and zooming in stops where the load circle around your ship just fits.
 - **Minimap zoom (owner):** scrolling over the minimap zooms the minimap (up to about 3 km across, centered on your ship) instead of the game camera.

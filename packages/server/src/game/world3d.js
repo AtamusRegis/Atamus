@@ -101,14 +101,14 @@ export class World3D {
     const t = rows[0] && rows[0].team; return t === "red" || t === "blue" ? t : null;
   }
 
-  async join(id, name, team) {
+  async join(id, name, team, resetPos = false) {   // resetPos: (owner) "Reset location" on the Welcome back page: back near the center
     id = String(id);
     let p = this.players.get(id);
-    if (p) { p.name = name; p.team = team; return p; }
+    if (p) { p.name = name; p.team = team; if (resetPos) this.respawn(id); return p; }
     await this.ready;
     const { rows } = await pool.query(`SELECT x, y FROM world3d WHERE user_id = $1`, [id]);
     let x, y;
-    if (rows[0] && inside(rows[0].x, rows[0].y)) ({ x, y } = rows[0]);
+    if (!resetPos && rows[0] && inside(rows[0].x, rows[0].y)) ({ x, y } = rows[0]);
     else { const a = Math.random() * Math.PI * 2, d = Math.random() * 300; x = Math.cos(a) * d; y = Math.sin(a) * d; }
     p = { id, name, team, x, y, dx: 0, dy: 0, dirty: true };
     await this._save(p).catch((e) => console.error("world3d join", e));   // remembers the side at once   // team: "red" | "blue", picked every time they enter (owner)

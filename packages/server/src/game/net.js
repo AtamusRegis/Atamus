@@ -93,7 +93,7 @@ export function attachGameServer(httpServer) {
       if (m.t === "side") {
         if (joined || (m.s !== "red" && m.s !== "blue")) return;   // once per session, and only a real side
         joined = true;
-        world.join(pid, user.username, m.s).then((me) => {
+        world.join(pid, user.username, m.s, m.rp === 1).then((me) => {
           if (socks.get(pid) !== ws) return;
           try { ws.send(JSON.stringify({ t: "spawn", x: me.x, y: me.y, s: me.team })); } catch {}
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });

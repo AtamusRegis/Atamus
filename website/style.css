@@ -412,6 +412,7 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 
 /* (owner, 2026-10-13) Reset faction under Enter System; everything on the Welcome back card is centered */
 .reset-side { margin-top: 12px; justify-content: center; }
+.reset-pos { margin-top: 6px; justify-content: center; }
 #play-card .form { align-items: center; text-align: center; }
 #play-card h1 { text-align: center; }
 #play-card #enter-step { display: flex; flex-direction: column; align-items: center; }
