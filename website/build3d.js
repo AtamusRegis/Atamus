@@ -221,50 +221,70 @@ export function initBuild(ctx) {
 
 
   // ---- (owner, 2026-10-14) nebula clouds: a colored, drifting gradient filling the outline, fading out at its edges ----
-  const CLOUD_Y = 4;                           // just above the grid, under the ships
-  // One flat sheet over the outline's box (plus a margin for the wisps); the shader works out each pixel's distance to the
-  // outline (any shape, dents too), so the cloud fills it right to the edge and frays a little past it.
-  const CLOUD_PAD = 70;
-  function cloudGeo(pts) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const g = new THREE.PlaneGeometry(x1 - x0 + 2 * CLOUD_PAD, y1 - y0 + 2 * CLOUD_PAD); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, -(y0 + y1) / 2);
-    return g;
+  const CLOUD_Y = 4;                           // the outline handles' height
+  // (owner, 2026-10-14) a 3D volume: soft puffs (billboards, always facing the camera) scattered through the outline at
+  // different heights, smaller and fainter toward the edges. Each puff is a noisy blob that slowly turns and drifts, tinted
+  // from the theme. Puffs near my own ship thin out so it stays in view. One instanced draw per cloud.
+  const CLOUD_SP = 46, CLOUD_TOP = 70, CLOUD_MAX = 2400;
+  const cloudT = { value: 0 }, cloudMe = { value: new THREE.Vector2(1e9, 1e9) };
+  const hash = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+  function cloudPuffs(pts) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, area = 0;
+    pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; area += x * v - u * y; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); });
+    const sp = Math.max(CLOUD_SP, Math.sqrt(Math.abs(area / 2) * 2 / CLOUD_MAX));
+    const inside = (x, y) => { let c = false; for (let i = 0, n = pts.length; i < n; i++) { const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; };
+    const edge = (x, y) => { let d = Infinity; for (let i = 0, n = pts.length; i < n; i++) { const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % n], ex = bx - ax, ey = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey || 1e-9))); d = Math.min(d, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return d; };
+    const P = [], S = [];
+    for (let ix = Math.floor(x0 / sp); ix <= Math.ceil(x1 / sp); ix++) for (let iy = Math.floor(y0 / sp); iy <= Math.ceil(y1 / sp); iy++) for (let l = 0; l < 2; l++) {
+      const x = (ix + hash(ix, iy, l * 3 + 1)) * sp, y = (iy + hash(ix, iy, l * 3 + 2)) * sp; if (!inside(x, y) || (l && hash(ix, iy, 29) < 0.5)) continue;
+      const d = edge(x, y), k = Math.min(1, d / 90), r = hash(ix, iy, l * 3 + 3);
+      P.push(x, y, 4 + (CLOUD_TOP * (0.35 + 0.65 * k)) * hash(ix, iy, l + 9));
+      S.push((55 + 55 * r) * (0.5 + 0.5 * k), hash(ix, iy, l + 17), d);
+    }
+    return { P, S };
   }
-  const cloudT = { value: 0 };
-  function cloudMat(v, pts, ghost) {
-    const th = CLOUD_THEMES[v] || CLOUD_THEMES[0], P = []; for (let i = 0; i < 64; i++) { const p = pts[i] || pts[0]; P.push(new THREE.Vector2(p[0], p[1])); }
-    return new THREE.ShaderMaterial({
-      uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, P: { value: P }, N: { value: pts.length }, uS: { value: 1 }, uG: { value: ghost ? 0.55 : 1 },
+  function cloudMesh(pts, v, ghost) {
+    const th = CLOUD_THEMES[v] || CLOUD_THEMES[0], { P, S } = cloudPuffs(pts), q = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
+    g.index = q.index; g.setAttribute("position", q.getAttribute("position")); g.setAttribute("uv", q.getAttribute("uv")); q.dispose();
+    g.setAttribute("iP", new THREE.InstancedBufferAttribute(new Float32Array(P), 3)); g.setAttribute("iS", new THREE.InstancedBufferAttribute(new Float32Array(S), 3)); g.instanceCount = P.length / 3;
+    const m = new THREE.ShaderMaterial({
+      uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, uMe: cloudMe, uS: { value: 1 }, uG: { value: ghost ? 0.5 : 1 },
         c1: { value: new THREE.Vector3(...th[0]) }, c2: { value: new THREE.Vector3(...th[1]) }, c3: { value: new THREE.Vector3(...th[2]) } },
-      transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      vertexShader: "varying vec2 vL; varying vec2 vG; void main() { vL = vec2(position.x, -position.z); vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }",
-      fragmentShader: `uniform sampler2D nt; uniform float uT, uS, uG; uniform vec2 P[64]; uniform int N; uniform vec3 c1, c2, c3; varying vec2 vL; varying vec2 vG;
+      transparent: true, depthWrite: false,
+      vertexShader: `attribute vec3 iP; attribute vec3 iS; uniform float uS, uT; uniform vec2 uMe; varying vec2 vU, vN, vM; varying vec3 vS; varying float vR, vH; varying vec2 vC; uniform sampler2D nt;
         void main() {
-          float d = 1e9; bool inside = false;
-          for (int i = 0; i < 64; i++) { if (i >= N) break;
-            vec2 a = P[i], b = P[i + 1 == N ? 0 : i + 1], e = b - a, w = vL - a;
-            d = min(d, length(w - e * clamp(dot(w, e) / max(dot(e, e), 1e-6), 0.0, 1.0)));
-            if ((a.y > vL.y) != (b.y > vL.y) && vL.x < e.x * (vL.y - a.y) / e.y + a.x) inside = !inside; }
-          float di = (inside ? d : -d) * uS;                  // meters in from the edge (negative outside)
-          vec2 q = vG / 260.0, t = vec2(uT * 0.006, uT * 0.004);
-          vec2 wp = texture2D(nt, q * 0.5 + t * 0.5).gb - 0.5;
-          float n = texture2D(nt, q + wp * 0.6 + t).r, f = texture2D(nt, vG / 110.0 + wp - t * 1.5).g, m = texture2D(nt, vG / 520.0 - t * 0.7).a;
-          float edge = smoothstep(-15.0, 45.0, di + (n - 0.5) * 120.0 + (f - 0.5) * 50.0);
-          float core = smoothstep(0.0, 220.0, di);
-          float dens = clamp((n - 0.3) * 2.2 + (f - 0.5) * 0.8, 0.0, 1.0);
-          vec3 col = mix(c1, c2, clamp(dens * 0.8 + core * 0.35, 0.0, 1.0));
-          col = mix(col, c3, smoothstep(0.55, 0.85, m * 0.6 + dens * 0.5) * 0.6);
-          float a = edge * (0.4 + 0.45 * dens + 0.15 * core) * uG;
-          gl_FragColor = vec4(col, a);   // (screen colors, no conversion)
+          vec4 w = modelMatrix * vec4(iP.x, iP.z / uS, -iP.y, 1.0);          // (heights aren't scaled)
+          w.xz += vec2(sin(uT * 0.07 + iS.y * 40.0), cos(uT * 0.05 + iS.y * 23.0)) * 6.0 * uS;   // a slow drift
+          vC = vec2(texture2D(nt, w.xz / 520.0 + uT * 0.0015).a, texture2D(nt, w.xz / 260.0 - uT * 0.002).b);   // big swirls of color across the cloud
+          float a = iS.y * 6.283 + uT * 0.03 * (iS.y - 0.5), c = cos(a), s = sin(a);
+          vU = mat2(c, -s, s, c) * (uv - 0.5); vS = iS; vH = iP.z / ${CLOUD_TOP}.0;
+          vec4 e = viewMatrix * w; e.xy += position.xy * iS.x * uS * 2.0;
+          gl_Position = projectionMatrix * e;
+          // a clear patch on screen around my own ship, about its size wherever the camera is
+          vec4 me = projectionMatrix * viewMatrix * vec4(uMe.x, 8.0, -uMe.y, 1.0); float asp = projectionMatrix[1][1] / projectionMatrix[0][0];
+          vN = gl_Position.xy / gl_Position.w * vec2(asp, 1.0); vM = me.xy / me.w * vec2(asp, 1.0); vR = 45.0 * projectionMatrix[1][1] / me.w;
+        }`,
+      fragmentShader: `uniform sampler2D nt; uniform float uT, uG; uniform vec3 c1, c2, c3; varying vec2 vU, vN, vM; varying vec3 vS; varying float vR, vH; varying vec2 vC;
+        void main() {
+          float r = length(vU) * 2.0; if (r > 1.0) discard;
+          float n = texture2D(nt, vU * 0.6 + vS.y * 7.3 + uT * 0.002).r, f = texture2D(nt, vU * 1.6 + vS.y * 3.1 - uT * 0.004).g;
+          float v = (1.0 - r * r) * (0.55 + (n - 0.5) * 2.6) + (f - 0.5) * 0.7;
+          float blob = smoothstep(0.12, 0.75, v);
+          float k = smoothstep(0.0, 120.0, vS.z);
+          vec3 col = mix(c1, c2, clamp(smoothstep(0.38, 0.62, vC.x) * 0.9 + vH * 0.35 + (n - 0.5) * 1.2 + (vS.y - 0.5) * 0.4, 0.0, 1.0));
+          col = mix(col, c3, smoothstep(0.5, 0.85, vC.y * 0.7 + f * 0.4 + vH * 0.3) * 0.7 * blob);
+          float me = smoothstep(0.7, 1.5, length(vN - vM) / vR);
+          gl_FragColor = vec4(col, blob * (0.12 + 0.12 * k) * (0.35 + 0.65 * smoothstep(0.0, 50.0, vS.z)) * mix(0.08, 1.0, me) * uG);   // (screen colors)
         }`,
     });
+    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; return mesh;
   }
   function placeCloud(b) {
     const key = JSON.stringify(b.extra.pts) + "|" + b.extra.v;
     if (b.mesh && b.mesh.userData.key !== key) { scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose(); b.mesh = null; }
-    if (!b.mesh) { b.mesh = new THREE.Mesh(cloudGeo(b.extra.pts), cloudMat(b.extra.v, b.extra.pts)); b.mesh.renderOrder = 1; b.mesh.frustumCulled = false; Object.assign(b.mesh.userData, { k: "cloud", id: b.id, key }); scene.add(b.mesh); }
-    b.mesh.material.uniforms.uS.value = b.w / 100; b.mesh.material.uniforms.uG.value = held && held.id === b.id ? 0.55 : 1;   // held: see-through
-    b.mesh.position.copy(toWorld(b.x, b.y, CLOUD_Y)); b.mesh.scale.setScalar(b.w / 100); b.mesh.rotation.y = b.r;
+    if (!b.mesh) { b.mesh = cloudMesh(b.extra.pts, b.extra.v); Object.assign(b.mesh.userData, { k: "cloud", id: b.id, key }); scene.add(b.mesh); }
+    b.mesh.material.uniforms.uS.value = b.w / 100; b.mesh.material.uniforms.uG.value = held && held.id === b.id ? 0.5 : 1;   // held: see-through
+    b.mesh.position.copy(toWorld(b.x, b.y, 0)); b.mesh.scale.setScalar(b.w / 100); b.mesh.rotation.y = b.r;
   }
   // ---- editing a cloud's outline in the world (Build menu open): drag a corner, click an edge's middle dot to add one,
   // right-click a corner to remove it (3 at least). Clicking inside the cloud picks it all up as usual. ----
@@ -386,17 +406,17 @@ export function initBuild(ctx) {
   let lastF = performance.now();
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
-    eRender(); gizFrame(); cloudT.value = now / 1000; cloudHandles();
+    eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); } cloudHandles();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
       picking.r = Math.atan2(Math.sin(picking.r - turn), Math.cos(picking.r - turn));
       if (!ghost || ghost.userData.k !== picking.k) {
         if (ghost) scene.remove(ghost);
-        ghost = picking.k === "ship" ? ctx.makeShip() : picking.k === "cloud" ? new THREE.Mesh(cloudGeo(picking.extra.pts), cloudMat(picking.extra.v, picking.extra.pts, true)) : new THREE.Mesh(GEO[picking.k], holoMat);
+        ghost = picking.k === "ship" ? ctx.makeShip() : picking.k === "cloud" ? cloudMesh(picking.extra.pts, picking.extra.v, true) : new THREE.Mesh(GEO[picking.k], holoMat);
         if (picking.k !== "cloud") holo(ghost, true); ghost.userData.k = picking.k; scene.add(ghost);
       }
-      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, picking.k === "cloud" ? CLOUD_Y : 0)); if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
+      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, 0)); if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
     } else if (held) {
       const b = builds.get(held.id); if (!b) { held = null; return; }
       let moved = false;
