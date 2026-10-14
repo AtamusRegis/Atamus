@@ -144,26 +144,35 @@ ground.rotation.x = -Math.PI / 2; ground.renderOrder = -1; scene.add(ground);
 // below the grid so it drifts slowest of all as you move. A big plane that follows the camera; its pattern is fixed in
 // the world (stretched noise, so the glows run in soft diagonal bands).
 const skyT = { value: 0 };
-const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
-  uniforms: { uT: skyT }, depthWrite: false,
-  vertexShader: "varying vec2 vG; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `uniform float uT; varying vec2 vG;
+const SKY_NOISE = `
     vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
     float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
       return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
                  mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
-    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }   // smooth, few layers: soft glows, no clouds
-    void main() {
-      vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;                 // a slant for the bands
-      float n = fbm(vec2(d.x / 26000.0, d.y / 9000.0) + uT * 0.002);
-      float g = smoothstep(0.55, 0.9, fbm(vec2(d.x / 30000.0, d.y / 10000.0) + 31.0 - uT * 0.0015));   // where the cyan glows sit
-      vec3 deep = vec3(0.03, 0.08, 0.26), royal = vec3(0.09, 0.25, 0.62), cyan = vec3(0.12, 0.78, 0.92);   // (screen colors, no conversion)
-      vec3 col = mix(deep, royal, smoothstep(0.3, 0.75, n));
-      col = mix(col, cyan, g * 0.8);
-      gl_FragColor = vec4(col, 1.0);
-    }`,
-}));
-sky.position.y = -8000; sky.renderOrder = -3; sky.frustumCulled = false; scene.add(sky);
+    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }`;
+const skyVert = "varying vec2 vG; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }";
+// (owner, 2026-10-14) the colored space in parallax layers: a deep blue base furthest down, then two see-through layers
+// of soft glows nearer the grid, each at its own depth so they slide past each other as you move
+const skyLayers = [];
+function skyLayer(depth, order, frag, transparent) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
+    uniforms: { uT: skyT }, depthWrite: false, transparent, blending: transparent ? THREE.AdditiveBlending : THREE.NormalBlending, vertexShader: skyVert,
+    fragmentShader: "uniform float uT; varying vec2 vG;" + SKY_NOISE + frag,
+  }));
+  m.position.y = depth; m.renderOrder = order; m.frustumCulled = false; scene.add(m); skyLayers.push(m);
+}
+skyLayer(-9000, -5, `void main() {                               // the base: navy to royal blue in slanted bands
+    vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;
+    float n = fbm(vec2(d.x / 26000.0, d.y / 9000.0) + uT * 0.002);
+    gl_FragColor = vec4(mix(vec3(0.03, 0.08, 0.26), vec3(0.09, 0.25, 0.62), smoothstep(0.3, 0.75, n)), 1.0); }`, false);
+skyLayer(-6000, -4, `void main() {                               // cyan glows (screen colors, no conversion)
+    vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;
+    float g = smoothstep(0.45, 0.85, fbm(vec2(d.x / 18000.0, d.y / 6500.0) + 31.0 - uT * 0.0015));
+    gl_FragColor = vec4(vec3(0.05, 0.42, 0.55) * g, 1.0); }`, true);
+skyLayer(-3500, -3, `void main() {                               // nearer, smaller blue-cyan wisps
+    vec2 d = mat2(0.9, 0.44, -0.44, 0.9) * vG;
+    float g = smoothstep(0.5, 0.88, fbm(vec2(d.x / 9000.0, d.y / 3800.0) + 77.0 + uT * 0.002));
+    gl_FragColor = vec4(vec3(0.06, 0.22, 0.5) * g, 1.0); }`, true);
 // (owner, 2026-10-14) stars far below the grid: thin points that drift slower than the grid as you move (they're deeper),
 // each slowly dimming in and out on its own. They tile around the camera so the field never runs out.
 const STAR_T = 24000, STAR_N = 6000;
@@ -874,7 +883,7 @@ renderer.setAnimationLoop(() => {
     if (left <= 0) { countAt = 0; goUpdating(); } else countEl.textContent = "Update incoming — " + left + " s";
   }
 
-  build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
+  build.frame(); starT.value = skyT.value = performance.now() / 1000; for (const l of skyLayers) { l.position.x = camera.position.x; l.position.z = camera.position.z; }
   updateVis();
   renderer.render(scene, camera);
 });
