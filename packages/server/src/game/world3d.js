@@ -4,7 +4,7 @@
 // within its load circle sees each other. Positions persist per account.
 import { pool } from "../db.js";
 
-export const HEX_FLAT = 126_000;           // 126 km flat to flat (owner, 2026-10-12)
+export const HEX_FLAT = 2_500;             // 2.5 km flat to flat "for now" (owner, 2026-10-13; was 126 km)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
 export const SPEED = 200;                    // m/s on the ground (owner, 2026-10-13; was 300)
 // (owner, 2026-10-13) weight: the ship accelerates toward its input; full ACCEL when the nose points where

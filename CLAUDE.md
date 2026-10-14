@@ -7,7 +7,7 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. `docs/DESIGN.md` holds the agreed direction (short right now: the 3D rebuild has just begun).
-4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. The live game is one shared 3D world: a sphere per account on a gridded plane inside a 126 km hexagon. **Old database data stays untouched for reference.**
+4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. The live game is one shared 3D world: a ship per account on a gridded plane inside a hexagon (2.5 km flat to flat for now). **Old database data stays untouched for reference.**
 
 **In the same commit as any change to behavior:**
 
@@ -45,7 +45,7 @@ packages/server/src/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
                   (4003), admin hooks (kick 4005 / ban 4006 / mute), side pick (remembered), move /
                   chat in; 20 Hz sim, 15 Hz per-player snapshots (only ships inside that player's load circle)
-    world3d.js    the world: 126 km hexagon, momentum ships (accel / brake / turn-scaled thrust), capacitor,
+    world3d.js    the world: 2.5 km hexagon (for now), momentum ships (accel / brake / turn-scaled thrust), capacitor,
                   LOAD_R (5,000 m load circle, snapshotFor), positions saved. Weapons/combat were removed
                   (owner, 2026-10-13); the last version is commit 956cb73
 website/          GitHub Pages site (atamus.io) and the game client

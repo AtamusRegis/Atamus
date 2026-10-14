@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Small map for now (owner):** the hexagon is 2,500 m flat to flat (was 126 km). Ships saved outside it come back in near the center. The load circle (5,000 m) now covers the whole map.
 - **Reset location (owner):** a Reset location checkbox under Enter System on the Welcome back page puts your ship back near the center when you enter.
 - **Map edge on the zoomed minimap (owner):** zoomed in, the map's border shows as a gray hexagon inside the blue frame, so a nearby edge is visible.
 - **Minimap frame and zoom limit (owner):** the minimap keeps its hexagon outline when zoomed (the map zooms inside it), and zooming in stops where the load circle around your ship just fits.
