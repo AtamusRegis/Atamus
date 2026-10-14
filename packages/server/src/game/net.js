@@ -20,8 +20,10 @@ export function attachGameServer(httpServer) {
   const mutes = new Map();                     // account id -> { perm, until } (ms), the connected players' chat mutes
   // (owner, 2026-10-13) the admin panel's hooks into the world: who's online, kicks (and bans), mutes; and one account
   // per device (auth.js asks at login; a second account's socket on a device in use is refused below)
+  // (owner, 2026-10-14) each connected player's staff role, for the badge by their name in chat (m: moderator, a: admin)
+  const roles = new Map(), badge = (pid) => { const r = roles.get(pid); return r === "mod" ? "m" : r === "head" || r === "admin" ? "a" : undefined; };
   setGameHooks({
-    staffChanged: (pid) => { const w = socks.get(pid); if (w) { try { w.send(JSON.stringify({ t: "staff" })); } catch {} } },   // (owner, 2026-10-14) made / removed as a moderator: their Admin button follows
+    staffChanged: (pid, role) => { roles.set(pid, role || null); const w = socks.get(pid); if (w) { try { w.send(JSON.stringify({ t: "staff" })); } catch {} } },   // (owner, 2026-10-14) made / removed as a moderator: their Admin button follows
     online: () => { const m = new Map(); for (const [pid] of socks) { const p = world.players.get(pid); m.set(pid, { side: p ? p.team : null }); } return m; },
     kick: (pid, code, reason) => { const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
@@ -68,7 +70,7 @@ export function attachGameServer(httpServer) {
 
     const old = socks.get(pid);                // (owner) one session per account: the new one replaces the old
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
-    socks.set(pid, ws);
+    socks.set(pid, ws); roles.set(pid, user.role || null);
 
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
@@ -117,12 +119,12 @@ export function attachGameServer(httpServer) {
           }
           const tws = socks.get(to), tp = world.players.get(to);
           if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to, text: "offline" })); return; }
-          const line = { t: "chat", ch, i: pid, n: user.username, s: me.team, text };
+          const line = { t: "chat", ch, i: pid, n: user.username, s: me.team, r: badge(pid), text };
           tws.send(JSON.stringify({ ...line, with: pid, withName: user.username }));
           ws.send(JSON.stringify({ ...line, with: to, withName: tp.name }));
           remember({ at: Date.now(), i: pid, n: user.username, ch: "whisper", text }); return;
         }
-        const msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, s: me.team, text });
+        const msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, s: me.team, r: badge(pid), text });
         for (const [qid, qws] of socks) { const q = world.players.get(qid); if (q && qws.readyState === qws.OPEN && (ch === "global" || q.team === me.team)) qws.send(msg); }
         remember({ at: Date.now(), i: pid, n: user.username, ch, text });
       }
@@ -164,7 +166,7 @@ export function attachGameServer(httpServer) {
     ws.on("close", () => {
       clearInterval(cmdReset);
       if (socks.get(pid) !== ws) return;       // replaced: the newer socket owns the player now
-      socks.delete(pid); mutes.delete(pid);
+      socks.delete(pid); mutes.delete(pid); roles.delete(pid);
       if (device && devs.get(device) === pid) devs.delete(device);
       if (!joined) return;
       world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));

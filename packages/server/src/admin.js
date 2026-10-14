@@ -136,7 +136,7 @@ admin.post("/role", headOnly(async (req, res, me) => {
   const make = b.role === "mod";
   if (make ? t.role : t.role !== "mod") return fail(res, 400, make ? "That player is already staff." : "That player isn't a moderator.");
   await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make ? "mod" : null]);
-  hooks.staffChanged(String(t.id));
+  hooks.staffChanged(String(t.id), make ? "mod" : null);
   await log(me, t, make ? "made moderator" : "removed moderator", ""); res.json({ ok: true });
 }));
 // ---- (owner, 2026-10-14) Approvals (Nyssary only): moderators' requests for 7-day / indefinite mutes and bans ----

@@ -1323,10 +1323,13 @@ function lineEl(m) {
   const tag = document.createElement("span");
   tag.className = "chat-ch " + (m.ch === "side" ? "side " + (m.s === "red" ? "red" : "blue") : m.ch === "whisper" ? "whisper" : "world");
   tag.textContent = m.ch === "side" ? "[Faction] " : m.ch === "whisper" ? (m.i === myId ? "[To " + (m.withName || "?") + "] " : "[Whisper] ") : "[World] ";
+  // (owner, 2026-10-14) staff badges left of the name: a blue circle with a white m (moderator), a red one with an A (admin)
+  const badge = m.r === "m" || m.r === "a" ? document.createElement("span") : null;
+  if (badge) { badge.className = "chat-badge " + (m.r === "m" ? "mod" : "adm"); badge.textContent = m.r === "m" ? "m" : "A"; badge.title = m.r === "m" ? "Moderator" : "Admin"; }
   const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
   if (m.i && m.i !== myId) { who.dataset.id = m.i; who.dataset.name = m.n; }
   const txt = document.createElement("span"); txt.textContent = m.text;
-  line.append(tag, who, txt); return line;
+  line.append(tag, ...(badge ? [badge] : []), who, txt); return line;
 }
 function selectTab(k) {
   chatTab = k; unread.delete(k);

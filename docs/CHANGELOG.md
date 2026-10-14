@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Staff badges in chat (owner):** moderators get a blue circle with a white m left of their name in chat, admins a red circle with an A.
 - **Moderators (owner):** Nyssary can make and remove moderators from the disciplinary panel. Moderators can kick, mute and ban (up to 3 days at once); their 7-day and indefinite mutes and bans go to Nyssary, who approves or denies them in a new Approvals section. Moderators see only Players and Reports, and don't get the Build menu.
 - **Background at half again (owner):** the colored space is now drawn at a sixth of the screen's resolution (was a third).
 - **Materializing respawns (owner):** a respawned ship now appears as a hologram revealed from nose to tail, then solidifies; it can't move, fire or be damaged until it's solid.
