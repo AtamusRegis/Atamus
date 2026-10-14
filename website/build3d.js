@@ -153,7 +153,7 @@ export function initBuild(ctx) {
     if (!b.mesh) {
       // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
       b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], ctx.farMat(pieceMat));   // (not drawn past the sight limit)
-      Object.assign(b.mesh.userData, { k: b.k, id: b.id }); scene.add(b.mesh);   // (keeps a test ship's line-of-sight number holder)
+      Object.assign(b.mesh.userData, { k: b.k, id: b.id }); scene.add(b.mesh);
       if (held && held.id === b.id) holo(b.mesh, true);
     }
     const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;

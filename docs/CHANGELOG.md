@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Ships cast no shadows (owner):** ships (and test ships) no longer block line of sight at all; only blocks and Build pieces do.
 - **Ships don't hide ships (owner):** ships still cast hazed shadows, but a ship behind another ship stays visible (on screen and on the minimap); only walls and Build pieces hide ships.
 - **Shadows start behind objects (owner):** line-of-sight shadows are now cast only from an object's far side, so the haze no longer covers the object itself.
 - **Fix: ships hidden by their own shadow.** With more than one ship around, all but one could be hidden by their own line-of-sight shadow (they shared one setting); each ship now keeps its own.
