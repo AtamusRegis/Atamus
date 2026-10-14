@@ -419,7 +419,8 @@ function updateShipVis(dt, now) {
   }
   const k = Math.min(1, dt / 0.2);
   for (const [v, t] of visTargets) {
-    t.a += (t.f - t.a) * k; if (Math.abs(t.f - t.a) < 0.003) t.a = t.f;
+    const goal = t.f >= 0.75 ? 1 : t.f >= 0.5 ? 0.5 : 0;   // (owner, 2026-10-14) 75%+ visible: solid; 50-75%: half see-through; under 50%: hidden
+    t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
     v.visible = t.a > 0.01;
   }
