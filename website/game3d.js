@@ -617,13 +617,23 @@ document.querySelectorAll("#side-pick button").forEach((btn) => btn.addEventList
 // arrow pointing the way it faces (friendlies, your side, blue; enemies red); a tick from yours for where the camera faces
 const mm = document.getElementById("minimap"), mmx = mm && mm.getContext("2d");
 let mmNext = 0;
+// (owner, 2026-10-13) scrolling over the minimap zooms it (1x the whole hexagon, up to 40x: about 3 km across), not the game
+let mmZoom = 1; try { const z = +localStorage.getItem("atamus.mmZoom"); if (z >= 1 && z <= 40) mmZoom = z; } catch {}
+if (mm) mm.addEventListener("wheel", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  mmZoom = Math.min(40, Math.max(1, mmZoom * (e.deltaY > 0 ? 1 / 1.25 : 1.25)));
+  try { localStorage.setItem("atamus.mmZoom", String(mmZoom)); } catch {}
+  mmNext = 0;
+}, { passive: false });
 function drawMinimap(now) {
   if (!mmx || now < mmNext) return; mmNext = now + 100;
   const dpr = Math.min(devicePixelRatio || 1, 2), W = mm.clientWidth, H = mm.clientHeight;
   if (mm.width !== Math.round(W * dpr)) { mm.width = Math.round(W * dpr); mm.height = Math.round(H * dpr); }
   mmx.setTransform(dpr, 0, 0, dpr, 0, 0); mmx.clearRect(0, 0, W, H);
-  const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), k = (W / 2 - 3) / Rv, cx = W / 2, cy = H / 2;
-  const P = (x, y) => [cx + x * k, cy - y * k];
+  // (owner) zoom: the wheel over the minimap; zoomed in, it centers toward your ship (fully at high zoom)
+  const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), k = (W / 2 - 3) / Rv * mmZoom, cx = W / 2, cy = H / 2;
+  const ox = haveMe ? me.x * (1 - 1 / mmZoom) : 0, oy = haveMe ? me.y * (1 - 1 / mmZoom) : 0;
+  const P = (x, y) => [cx + (x - ox) * k, cy - (y - oy) * k];
   mmx.beginPath();
   for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = P(Math.cos(t) * Rv, Math.sin(t) * Rv); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); }
   mmx.closePath(); mmx.fillStyle = "rgba(10,14,22,0.85)"; mmx.fill(); mmx.strokeStyle = "#4f8fe8"; mmx.lineWidth = 1.5; mmx.stroke();

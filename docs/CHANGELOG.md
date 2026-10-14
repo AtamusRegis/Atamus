@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Minimap zoom (owner):** scrolling over the minimap zooms the minimap (up to about 3 km across, centered on your ship) instead of the game camera.
 - **Old-game slots (owner):** the hotbar and inventory use the old game's slot style (dark tray, darker wells, warm ring on filled slots, cyan outline while dragging over a slot) instead of the window colors.
 - **Hotbar and inventory (owner):** a 3-slot hotbar at the bottom center, and an inventory panel (5 × 2) that TAB opens and closes when not typing. One placeholder item can be dragged between any of the slots (kept in this browser for now).
 - **Floating chat controls (owner):** the chat panel now holds only the lines and the input; the tabs, the [A] button and the +/− float outside it. The +/− has no background and is thicker.
