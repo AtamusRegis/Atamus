@@ -703,27 +703,33 @@ function whisperTab(id, name) {
 }
 function cycleTab() { const i = tabs.findIndex((t) => t.key === chatTab); selectTab(tabs[(i + 1) % tabs.length].key); }
 function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); }
+// sending: the form's submit, so a phone keyboard's Go / Send key works as well as Enter (owner). "/whisper Name message"
+// (or /whisper "Name with spaces" message) whispers that player from any tab; their whisper tab opens with it.
+function sendChat() {
+  const raw = chatIn.value; chatIn.value = ""; chatIn.blur();
+  const text = raw.trim(); if (!text) return;
+  const wm = /^\/whisper\s+(?:"([^"]+)"|(\S+))\s+([\s\S]+)$/i.exec(text);
+  if (wm) { send({ t: "chat", ch: "whisper", toName: wm[1] || wm[2], text: wm[3] }); return; }
+  if (chatTab.startsWith("w:")) send({ t: "chat", ch: "whisper", to: chatTab.slice(2), text: raw });
+  else send({ t: "chat", ch: chatTab, text: raw });
+}
+const chatForm = $i("chat-form");
+if (chatForm) chatForm.addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
 if (chatIn) chatIn.addEventListener("keydown", (e) => {
-  if (e.code === "Enter") {
-    e.preventDefault(); const text = chatIn.value;
-    if (text.trim()) {
-      if (chatTab.startsWith("w:")) send({ t: "chat", ch: "whisper", to: chatTab.slice(2), text });
-      else send({ t: "chat", ch: chatTab, text });
-    }
-    chatIn.value = ""; chatIn.blur();
-  }
-  else if (e.code === "Escape") { chatIn.value = ""; chatIn.blur(); }
+  if (e.code === "Escape" || e.key === "Escape") { chatIn.value = ""; chatIn.blur(); }
   e.stopPropagation();
 });
 function addChat(m) {
   let key = m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
   if (m.ch === "whisper") {
-    if (!m.with) return;
-    key = whisperTab(m.with, m.withName);
-    if (m.sys) { const t = tabs.find((x) => x.key === key); m = { sys: 1, text: (t ? t.label : "They") + " is offline." }; }
+    if (!m.with) {                             // /whisper to a name no one online has: say so in the tab you're on
+      if (!m.sys) return; key = chatTab; m = { sys: 1, text: (m.withName || "They") + " is offline." };
+    } else key = whisperTab(m.with, m.withName);
+    if (m.sys && m.text === "offline") { const t = tabs.find((x) => x.key === key); m = { sys: 1, text: (t ? t.label : "They") + " is offline." }; }
   }
   const list = logs.get(key); list.push(m); if (list.length > CHAT_MAX) list.shift();
   if (key === chatTab) { if (chatLog) { chatLog.appendChild(lineEl(m)); while (chatLog.children.length > CHAT_MAX) chatLog.firstChild.remove(); chatLog.scrollTop = chatLog.scrollHeight; } }
+  else if (m.i && m.i === myId) { selectTab(key); return; }   // your own /whisper: its tab comes up
   else unread.add(key);
   drawTabs();
 }

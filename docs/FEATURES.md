@@ -52,7 +52,8 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 - **At the bottom right:** the selected tab's lines on top, the input below them, and the tabs below the input (owner). Each tab keeps its own lines (the last 100).
 - **Tabs: Faction | World | Whisper <name> …** World is everyone, Faction your side, and a Whisper tab is one player. **Whispers are endless and each can be closed** (×). A whisper tab opens by itself when someone whispers you. A tab that gets a line while another is shown is marked (amber) until opened.
-- **T cycles the tabs**; **Enter** opens the input and sends to the selected tab; Escape or an empty line closes it. Game keys are ignored while typing.
+- **T cycles the tabs**; **Enter** opens the input and sends to the selected tab (on a phone, the keyboard's Go / Send key sends too); Escape or an empty line closes it. Game keys are ignored while typing.
+- **`/whisper Name message`** (or `/whisper "Name with spaces" message`) whispers an online player by name from any tab (any case); their whisper tab opens and comes up. No one online by that name: "<name> is offline." in the tab you're on.
 - **Right-clicking a name in the chat** (owner): **Whisper** (opens that whisper tab, ready to type), **Report** (a short note to the admins; the server keeps the reported player's recent lines with it; at most 5 reports in 10 minutes), and **for staff, Admin** (the admin panel on that player). Right-click on ships stays aiming.
 - Messages go through as typed (240 characters at most), shown as plain text with the speaker's name in their side's color. Whispering someone who isn't online shows "<name> is offline." in that tab. A muted player's lines (any tab) go nowhere. No history: you see what's said while you're online.
 

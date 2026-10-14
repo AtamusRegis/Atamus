@@ -97,7 +97,13 @@ export function attachGameServer(httpServer) {
         const text = m.text.slice(0, 240); if (!text.trim()) return;
         const ch = m.ch === "side" ? "side" : m.ch === "whisper" ? "whisper" : "global";
         if (ch === "whisper") {                // to one player by account id; both sides get it, tagged with the other one
-          const to = typeof m.to === "string" ? m.to : "", tws = socks.get(to), tp = world.players.get(to);
+          let to = typeof m.to === "string" ? m.to : "";
+          if (!to && typeof m.toName === "string") {   // (owner) /whisper Name: an online player by name, any case
+            const want = m.toName.trim().toLowerCase().slice(0, 40);
+            for (const [qid, q] of world.players) if (socks.has(qid) && String(q.name).toLowerCase() === want) { to = qid; break; }
+            if (!to) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, withName: m.toName.trim().slice(0, 40), text: "offline" })); return; }
+          }
+          const tws = socks.get(to), tp = world.players.get(to);
           if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to, text: "offline" })); return; }
           const line = { t: "chat", ch, i: pid, n: user.username, s: me.team, text };
           tws.send(JSON.stringify({ ...line, with: pid, withName: user.username }));
