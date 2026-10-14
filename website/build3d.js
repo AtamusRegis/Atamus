@@ -513,5 +513,5 @@ export function initBuild(ctx) {
     for (const id of [...builds.keys()]) unBuild(id);
     for (const o of list || []) setBuild(o);
   }
-  return { onMsg, load, frame, setStaff, refreshShips, get open() { return open; } };
+  return { onMsg, load, frame, setStaff, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
 }

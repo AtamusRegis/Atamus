@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Mutual visibility (owner):** ships are no longer cut off at walls: if you can see a ship it can see you, and both are see-through by how little of each other is visible (10% visible = 10% opaque), on screen and on the minimap. With the Object Editor open, the sight lines and percentage show for testing.
 - **Flat shadows (owner):** areas out of sight are now a flat, see-through black instead of an animated dusty texture.
 - **Speed and cleanup (owner):** the space background and haze were making the game crawl: their noise is now worked out once into a texture, the nebula layers draw in one pass, the grid shares the haze's pass, hidden sky isn't drawn, the line-of-sight shadows are redrawn only when something changes, and the game draws at most 1.5 pixels per screen pixel. Removed unused code (old circle colliders, the hidden ground load ring).
 - **Front page (owner):** the description is now "WIP prototype of a persistent space warfare game."; the Help panel is gone; Updates lists only the current game.
