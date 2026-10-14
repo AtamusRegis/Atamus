@@ -31,7 +31,18 @@
     cancel.addEventListener("click", () => toggle(false));
     okBtn.addEventListener("click", save);
     btns.append(cancel, okBtn);
-    win.append(grid, errEl, btns); document.body.appendChild(win);
+    // (owner, 2026-10-14) dragged by its top bar (like the Object Editor's); it stays where it's put while the page is open
+    const top = $("div", "we-top"); top.append($("span", "we-title", "WEAPONS"));
+    top.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return; e.preventDefault();
+      const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
+      win.style.transform = "none"; win.style.left = r0.left + "px"; win.style.top = r0.top + "px";
+      const move = (ev) => { const r = win.getBoundingClientRect();
+        win.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; };
+      const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
+      addEventListener("pointermove", move); addEventListener("pointerup", up);
+    });
+    win.append(top, grid, errEl, btns); document.body.appendChild(win);
     win.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") toggle(false); });   // typing here never steers the ship
     addEventListener("keydown", (e) => {
       if (e.code !== "KeyZ" || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;

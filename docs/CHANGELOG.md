@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Draggable Weapon panel (owner):** the Weapon panel can be dragged by its top bar.
 - **Weapon panel (owner):** staff can open a Weapon panel (Z) to tune or create weapons: optimal range and falloff, bullet lifetime and speed, shot rate, damage, spread (default, per shot, recovery), aim line rotation speed, magazine and reload. The Railgun is the first weapon; saving equips it on your ship. Shots now follow the aim line, which turns toward the pointer at the weapon's rotation speed, and run out after a magazine until reloaded.
 - **Gentler spread (owner):** each railgun shot now widens the aim cone by 1.5° each way (was 3°).
 - **Railgun fire rate and spread (owner):** the railgun fires every half second now, but every shot widens your aim cone by 3° each way (it narrows back 3° a second), and shots land anywhere inside it, so rapid fire gets inaccurate. The aim line shows the cone.
