@@ -226,6 +226,10 @@ export function initBuild(ctx) {
   // different heights, smaller and fainter toward the edges. Each puff is a noisy blob that slowly turns and drifts, tinted
   // from the theme. Puffs near my own ship thin out so it stays in view. One instanced draw per cloud.
   const CLOUD_SP = 46, CLOUD_TOP = 70, CLOUD_MAX = 2400;
+  // (owner, 2026-10-14: speed) clouds are drawn on their own layer into a half-size picture that's laid over the scene
+  // (game3d.js): soft puffs cost a lot of pixels, a quarter as many there. Their blending keeps that picture's colors
+  // premultiplied by its transparency.
+  const CLOUD_LAYER = 2, cloudBlend = { blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor };
   const cloudT = { value: 0 }, cloudMe = { value: new THREE.Vector2(1e9, 1e9) };
   const hash = (a, b, c) => { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
   function cloudPuffs(pts) {
@@ -250,7 +254,7 @@ export function initBuild(ctx) {
     const m = new THREE.ShaderMaterial({
       uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, uMe: cloudMe, uS: { value: 1 }, uG: { value: ghost ? 0.5 : 1 },
         c1: { value: new THREE.Vector3(...th[0]) }, c2: { value: new THREE.Vector3(...th[1]) }, c3: { value: new THREE.Vector3(...th[2]) } },
-      transparent: true, depthWrite: false,
+      transparent: true, depthWrite: false, ...cloudBlend,
       vertexShader: `attribute vec3 iP; attribute vec3 iS; uniform float uS, uT; uniform vec2 uMe; varying vec2 vU, vN, vM; varying vec3 vS; varying float vR, vH; varying vec2 vC; uniform sampler2D nt;
         void main() {
           vec4 w = modelMatrix * vec4(iP.x, iP.z / uS, -iP.y, 1.0);          // (heights aren't scaled)
@@ -277,7 +281,7 @@ export function initBuild(ctx) {
           gl_FragColor = vec4(col, blob * (0.12 + 0.12 * k) * (0.35 + 0.65 * smoothstep(0.0, 50.0, vS.z)) * mix(0.3, 1.0, me) * uG);   // (screen colors)
         }`,
     });
-    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; return mesh;
+    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; mesh.layers.set(CLOUD_LAYER); return mesh;
   }
   // (owner, 2026-10-14) leashed puffs along a cloud's edge, like a wall of tethered balloons: each one is tied to its spot,
   // a ship flying into them knocks them aside (they bounce off its hull), and they float back to where they were. The main
@@ -312,7 +316,7 @@ export function initBuild(ctx) {
     g.setAttribute("iP", P); g.setAttribute("iS", new THREE.InstancedBufferAttribute(S, 2)); g.instanceCount = n;
     const m = new THREE.ShaderMaterial({
       uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, uS: { value: 1 }, c1: { value: new THREE.Vector3(...th[0]) }, c2: { value: new THREE.Vector3(...th[1]) }, c3: { value: new THREE.Vector3(...th[2]) } },
-      transparent: true, depthWrite: false,
+      transparent: true, depthWrite: false, ...cloudBlend,
       vertexShader: `attribute vec3 iP; attribute vec2 iS; uniform float uT, uS; varying vec2 vU; varying float vS, vH;
         void main() {
           float a = iS.y * 6.283 + uT * 0.05 * (iS.y - 0.5), c = cos(a), s = sin(a); vU = mat2(c, -s, s, c) * (uv - 0.5); vS = iS.y; vH = iP.z / 40.0;
@@ -328,7 +332,7 @@ export function initBuild(ctx) {
           gl_FragColor = vec4(col * 1.08, blob * 0.45);   // (screen colors; a touch brighter than the main cloud)
         }`,
     });
-    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1;
+    const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; mesh.layers.set(CLOUD_LAYER);
     return { mesh, A, n, w: b.w, pos: null, vel: new Float32Array(n * 3) };
   }
   // anchors into the world (the cloud can be moved, turned and scaled; the puffs then drift to their new spots)
@@ -341,11 +345,16 @@ export function initBuild(ctx) {
     const me = ctx.myPos ? ctx.myPos() : null, ships = ctx.cloudShips ? ctx.cloudShips() : [];
     for (const b of builds.values()) {
       const e = b.edge; if (b.k !== "cloud" || !e) continue;
-      const W = edgeWorld(b, e), P = e.mesh.geometry.attributes.iP.array, V = e.vel;
+      // (owner, 2026-10-14: speed) the anchors are worked out again only when the cloud moves; a cloud whose puffs have
+      // settled with no ship near them sleeps (no work, nothing sent to the graphics card)
+      const tk = b.x + "," + b.y + "," + b.r + "," + b.w; if (e.tk !== tk) { e.tk = tk; e.W = edgeWorld(b, e); e.awake = true; }
+      const W = e.W, P = e.mesh.geometry.attributes.iP.array, V = e.vel;
       if (e.w !== b.w && !(held && held.id === b.id)) { dropEdge(b); b.edge = edgeMesh(b); scene.add(b.edge.mesh); continue; }   // (rescaled: laid out again)
       if (!e.pos) { e.pos = true; P.set(W); }
       if (me && Math.hypot(me.x - b.x, me.y - b.y) > b.rad + 1500) continue;   // far away: left as they are
       const near = ships.filter((sh) => Math.hypot(sh[0] - b.x, sh[1] - b.y) < b.rad + EDGE_R + 40);
+      if (!e.awake && !near.some((sh) => Math.hypot(sh[2], sh[3]) > 1)) continue;   // (a parked ship doesn't stir them)
+      let moving = 0;
       for (let i = 0; i < e.n; i++) {
         const j = i * 3;
         for (let k = 0; k < 3; k++) { V[j + k] += ((W[j + k] - P[j + k]) * EDGE_K - V[j + k] * EDGE_C) * dt; P[j + k] += V[j + k] * dt; }   // the leash
@@ -359,6 +368,8 @@ export function initBuild(ctx) {
           if (vn < 0) { const k = -vn * m * Math.min(1, dt * 6) * (1 - d / EDGE_R * 0.5); V[j] += nx * k; V[j + 1] += ny * k; V[j + 2] += k * 0.3 * (Math.random() - 0.3); }
         }
       }
+      for (let j = 0; j < e.n * 3; j++) moving = Math.max(moving, Math.abs(V[j]), Math.abs(W[j] - P[j]));
+      e.awake = moving > 0.02; if (!e.awake) { P.set(W); V.fill(0); }   // settled: exactly home
       e.mesh.geometry.attributes.iP.needsUpdate = true;
     }
   }

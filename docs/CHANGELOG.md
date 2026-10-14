@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Faster clouds (owner: optimization pass):** nebula clouds are drawn at half resolution and laid over the scene (they look the same, at about half the drawing cost), and their edge puffs stop updating once they've settled with no moving ship nearby.
 - **Railgun projectiles (owner):** the railgun now fires a fast glowing slug instead of an instant beam. A ship the shooter can't see past walls and structures isn't hit: the slug flies straight through it.
 - **Railgun (owner):** left click fires an instant railgun shot toward the pointer (once a second, 1,000 m); it's stopped by blocks, Build pieces and ships, and a ship hit takes 25 damage. Everyone nearby sees the beam.
 - **Stop marker removed (owner):** the dashed line to where the ship would come to rest is gone.

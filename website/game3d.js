@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791977286";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791978507";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -952,6 +952,30 @@ function goUpdating(parts) {
 let lastT = performance.now();
 const focus = { x: 0, y: 0 };                  // where the camera looks (the player, or toward the aim circle)
 let viewDist = camDist;                        // the eased camera distance
+// (owner, 2026-10-14: speed) the clouds (their own layer, 2) are drawn into a half-size picture, then laid over the scene
+// (its colors are premultiplied, so it's added as "over"). A quarter of the pixels for the softest, most layered thing on
+// screen; they're soft enough not to show it. Skipped when no cloud is on that layer.
+const CLOUD_LAYER = 2, cloudRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+const cloudComp = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { t: { value: cloudRT.texture } }, transparent: true, depthTest: false, depthWrite: false,
+  blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+  vertexShader: "varying vec2 vU; void main() { vU = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }",
+  fragmentShader: "uniform sampler2D t; varying vec2 vU; void main() { gl_FragColor = texture2D(t, vU); }",
+}));
+cloudComp.frustumCulled = false;
+const cloudCompScene = new THREE.Scene(); cloudCompScene.add(cloudComp);
+const cloudCompCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), cloudSz = new THREE.Vector2(), clearC = new THREE.Color();
+function renderClouds() {
+  let any = false; for (const b of builds.values()) if (b.k === "cloud") { any = true; break; }
+  if (!any && !build.open) return;
+  renderer.getDrawingBufferSize(cloudSz); const w = Math.max(2, Math.ceil(cloudSz.x / 2)), h = Math.max(2, Math.ceil(cloudSz.y / 2));
+  if (cloudRT.width !== w || cloudRT.height !== h) cloudRT.setSize(w, h);
+  const bg = scene.background, ca = renderer.getClearAlpha(); renderer.getClearColor(clearC);
+  scene.background = null; camera.layers.set(CLOUD_LAYER); renderer.setClearColor(0x000000, 0);
+  renderer.setRenderTarget(cloudRT); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(null); camera.layers.set(0); scene.background = bg; renderer.setClearColor(clearC, ca);
+  const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(cloudCompScene, cloudCompCam); renderer.autoClear = ac;
+}
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const camOff = new THREE.Vector3();
@@ -1118,6 +1142,7 @@ renderer.setAnimationLoop(() => {
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderer.render(scene, camera);
+  renderClouds();
 });
 
 // (owner, 2026-10-13) choosing a side: Red or Blue, every time the game is entered
