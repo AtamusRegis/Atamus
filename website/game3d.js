@@ -427,6 +427,38 @@ function updateShipVis(dt, now) {
   }
   visGizmo(edit);
 }
+// ---- (owner, 2026-10-14) impacts throw out debris and fire sparks where two ships met, more the harder the hit:
+// gray-white debris that tumbles out and fades, and bright orange-yellow sparks that fly fast, arc and burn out ----
+const SPARK_N = 600, sparkPos = new Float32Array(SPARK_N * 3), sparkCol = new Float32Array(SPARK_N * 3), sparkV = new Float32Array(SPARK_N * 3), sparkLife = new Float32Array(SPARK_N), sparkMax = new Float32Array(SPARK_N), sparkHue = [];
+let sparkNext = 0;
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute("color", new THREE.BufferAttribute(sparkCol, 3));
+const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 4, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
+sparks.frustumCulled = false; sparks.renderOrder = 8; scene.add(sparks);
+function burst(x, y, s) {
+  const n = Math.min(80, Math.round(10 + s * 0.25));
+  for (let k = 0; k < n; k++) {
+    const i = sparkNext; sparkNext = (sparkNext + 1) % SPARK_N;
+    const fire = k % 3 !== 0, a = Math.random() * Math.PI * 2, sp = (fire ? 60 + Math.random() * 160 : 20 + Math.random() * 60) * (0.6 + s / 300);
+    sparkPos[i * 3] = x; sparkPos[i * 3 + 1] = 15 + Math.random() * 15; sparkPos[i * 3 + 2] = -y;
+    sparkV[i * 3] = Math.cos(a) * sp; sparkV[i * 3 + 1] = (fire ? 40 : 15) + Math.random() * 60; sparkV[i * 3 + 2] = Math.sin(a) * sp;
+    sparkLife[i] = sparkMax[i] = fire ? 0.5 + Math.random() * 0.5 : 0.8 + Math.random() * 0.6;
+    sparkHue[i] = fire ? [2.2, 1.3 + Math.random() * 0.6, 0.35] : [1.1, 1.1, 1.15];   // (bright: they're added over the dark blue)
+  }
+}
+function updateSparks(dt) {
+  let any = false;
+  for (let i = 0; i < SPARK_N; i++) {
+    if (sparkLife[i] <= 0) { sparkCol[i * 3] = sparkCol[i * 3 + 1] = sparkCol[i * 3 + 2] = 0; continue; }
+    any = true; sparkLife[i] -= dt;
+    const f = Math.max(0, sparkLife[i] / sparkMax[i]), drag = Math.exp(-dt * 2.5);
+    sparkV[i * 3] *= drag; sparkV[i * 3 + 2] *= drag; sparkV[i * 3 + 1] -= 160 * dt;   // they slow and fall
+    sparkPos[i * 3] += sparkV[i * 3] * dt; sparkPos[i * 3 + 1] = Math.max(0.5, sparkPos[i * 3 + 1] + sparkV[i * 3 + 1] * dt); sparkPos[i * 3 + 2] += sparkV[i * 3 + 2] * dt;
+    const c = sparkHue[i], g = Math.sqrt(f); sparkCol[i * 3] = c[0] * g; sparkCol[i * 3 + 1] = c[1] * f; sparkCol[i * 3 + 2] = c[2] * f;   // sparks cool from yellow to orange-red as they fade
+  }
+  if (any || sparks.visible) { sparkGeo.attributes.position.needsUpdate = true; sparkGeo.attributes.color.needsUpdate = true; }
+  sparks.visible = any;
+}
 // ---- (owner, 2026-10-14) health bars over damaged ships (mine too); a ship I can't see shows none ----
 const hpBars = new Map();                      // player id -> element
 function drawHpBars() {
@@ -743,6 +775,10 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
+    else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
+      const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
+      if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)));
+    }
     else if (m.t === "chat") addChat(m);
     else if (build.onMsg(m)) { /* Build menu pieces */ }
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
@@ -977,7 +1013,7 @@ renderer.setAnimationLoop(() => {
   }
 
   updateShipVis(Math.min(0.1, dt || 0.016), performance.now());
-  drawHpBars();
+  drawHpBars(); updateSparks(Math.min(0.1, dt || 0.016));
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderer.render(scene, camera);
@@ -1181,4 +1217,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r })); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r })); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

@@ -204,7 +204,17 @@ export function attachGameServer(httpServer) {
   }
   setInterval(syncObjects, 500);
 
-  setInterval(() => world.step(), 50);                                          // 20 Hz simulation
+  setInterval(() => {                                                           // 20 Hz simulation
+    world.step();
+    if (world.hits.length) {                   // (owner, 2026-10-14) impacts: to the players whose load circle has them
+      for (const [pid, ws] of socks) {
+        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+        const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R);
+        for (const h of near) ws.send(JSON.stringify({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b }));
+      }
+      world.hits.length = 0;
+    }
+  }, 50);
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)
   setInterval(() => {
     const ts = Date.now();
