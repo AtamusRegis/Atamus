@@ -50,12 +50,12 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 ## Chat (owner, 2026-10-13)
 
-- **At the bottom right:** the selected tab's lines on top, the input below them, and the tabs below the input (owner). Each tab keeps its own lines (the last 100).
-- **Tabs: Faction | World | Whisper <name> …** World is everyone, Faction your side, and a Whisper tab is one player. **Whispers are endless and each can be closed** (×). A whisper tab opens by itself when someone whispers you. A tab that gets a line while another is shown is marked (amber) until opened.
-- **T cycles the tabs**; **Enter** opens the input and sends to the selected tab (on a phone, the keyboard's Go / Send key sends too); Escape or an empty line closes it. Game keys are ignored while typing.
-- **`/whisper Name message`** (or `/whisper "Name with spaces" message`) whispers an online player by name from any tab (any case); their whisper tab opens and comes up. No one online by that name: "<name> is offline." in the tab you're on.
-- **Right-clicking a name in the chat** (owner): **Whisper** (opens that whisper tab, ready to type), **Report** (a short note to the admins; the server keeps the reported player's recent lines with it; at most 5 reports in 10 minutes), and **for staff, Admin** (the admin panel on that player). Right-click on ships stays aiming.
-- Messages go through as typed (240 characters at most), shown as plain text with the speaker's name in their side's color. Whispering someone who isn't online shows "<name> is offline." in that tab. A muted player's lines (any tab) go nowhere. No history: you see what's said while you're online.
+- **At the bottom right:** the lines, then the input. **The input shows its channel and your name at its start** (owner): "[World] Name:", "[Faction] Name:", "[Whisper Bob] Name:". **World and Faction lines share one log**, each tagged [World] / [Faction] (the last 100).
+- **Tabs appear under the input only once there's a whisper** (owner): **Chat** (the shared log) | **Whisper <name>** … — endless, each closable (×). A whisper tab opens by itself when someone whispers you; one that gets a line while another is shown is marked (amber). Showing a whisper tab sends there; showing Chat sends to World or Faction (whichever was last).
+- **While typing, TAB switches the channel** (owner): World → Faction → each whisper → World (a whisper shows its tab). **Enter** opens the input and sends (on a phone, the keyboard's Go / Send key too); Escape or an empty line closes it. Game keys are ignored while typing.
+- **`/whisper Name message`** (or `/whisper "Name with spaces" message`) whispers an online player by name from anywhere (any case); their whisper tab opens and comes up. No one online by that name: "<name> is offline." where you're looking.
+- **Right-clicking a name in the chat** (owner): **Whisper** (opens that whisper, ready to type), **Report** (a short note to the admins; the server keeps the reported player's recent lines with it; at most 5 reports in 10 minutes), and **for staff, Admin** (the disciplinary panel). Right-click on ships stays aiming.
+- Messages go through as typed (240 characters at most), shown as plain text with the speaker's name in their side's color. Whispering someone who isn't online shows "<name> is offline." in that tab. A muted player's lines go nowhere. No history: you see what's said while you're online.
 
 ## Accounts and sessions
 

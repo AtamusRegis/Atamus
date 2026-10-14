@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Chat channel in the input (owner):** the World / Faction tabs are gone: the input shows "[World] Name:" (or Faction / Whisper) at its start, World and Faction lines share one tagged log, and TAB switches the channel while typing. Tabs (Chat | Whisper …) appear only when there are whispers. T no longer cycles tabs.
 - **Tag times under the word (owner):** in the admin panel's Mute / Ban tags the time now sits under the word, inside the box; the window grew to keep 6 rows.
 - **Admin panel: one size, no flicker (owner):** every section uses the same window at the Players size (tabs, search, 6 rows), and a section is swapped in only once its contents have loaded, so switching no longer flickers.
 - **Admin tags, widths; no browser menu (owner):** every player row always shows a Mute and a Ban tag: grayed, or lit while running (mute yellow, ban red) with the time left inside; grayed tags hold the total time served. Kick counts are gone. Reports and Appeals open at the Players width. Right-click never opens the browser's menu anywhere on the game page.

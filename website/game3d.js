@@ -260,7 +260,6 @@ const typing = () => { const el = document.activeElement; return !!el && ((el.ta
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
-  if (e.code === "KeyT" && !e.repeat) { cycleTab(); return; }   // (owner) T cycles the chat tabs
   if (e.code === "Escape") hideMenu();
 });
 addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
@@ -362,6 +361,7 @@ function connect() {
       me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
       focus.x = me.x; focus.y = me.y;
       { const mp = addPlayer(myId, myName, me.x, me.y); mp.side = m.s; mp.near = true; mp.holder.visible = true; }
+      drawPrefix();
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
       const inSnap = new Set();
@@ -653,28 +653,38 @@ if ($i("helpers")) {
   $i("helpers").checked = helpers;
   $i("helpers").addEventListener("change", () => { helpers = $i("helpers").checked; try { localStorage.setItem("atamus.helpers", helpers ? "1" : "0"); } catch {} $i("helpers").blur(); });
 }
-// (owner, 2026-10-13) chat, at the bottom right: the selected tab's lines, the input, then the tabs: Faction | World |
-// Whisper <name>... (as many whispers as wanted, each closable). T cycles the tabs; Enter opens the input and sends to
-// the selected tab; Escape or an empty line closes it. A tab that gets a line while another is shown is marked. Right-
-// clicking a name: Whisper, Report, and for staff Admin (the admin panel on that player). Lines are inserted as text.
-const chatLog = $i("chat-log"), chatIn = $i("chat-in"), chatTabs = $i("chat-tabs"), ctxMenu = $i("ctx-menu");
+// (owner, 2026-10-13) chat, at the bottom right: the lines, then the input. The input carries its channel and your
+// name at its start ("[World] Name:"). World and Faction lines share the main log, each tagged. Tabs under the input
+// appear only once there's a whisper: Chat (the main log) | Whisper <name> × ... (endless, each closable; a tab that
+// gets a line while another is shown is marked). While typing, TAB switches the channel (World, Faction, then each
+// whisper); Enter sends (a phone's Go / Send too); Escape or an empty line closes it. "/whisper Name message" (quotes for
+// names with spaces) whispers someone from anywhere. Right-clicking a name: Whisper, Report, and for staff Admin.
+// Lines are inserted as text.
+const chatLog = $i("chat-log"), chatIn = $i("chat-in"), chatTabs = $i("chat-tabs"), chatPre = $i("chat-pre"), ctxMenu = $i("ctx-menu");
 const CHAT_MAX = 100;
-const tabs = [{ key: "side", label: "Faction" }, { key: "global", label: "World" }];   // + { key: "w:<id>", id, label: name }
-const logs = new Map([["side", []], ["global", []]]), unread = new Set();
-let chatTab = "global", amStaff = false;
+const whispers = [];                           // { key: "w:<id>", id, label: name }
+const logs = new Map([["main", []]]), unread = new Set();
+let chatTab = "main", chatCh = "global", amStaff = false;   // chatTab: the log shown; chatCh: where the input sends
+const chLabel = (ch) => ch === "global" ? "World" : ch === "side" ? "Faction" : "Whisper " + ((whispers.find((w) => w.key === ch) || {}).label || "?");
+function drawPrefix() {
+  if (!chatPre) return;
+  chatPre.replaceChildren();
+  const tag = document.createElement("span"); tag.className = "chat-ch " + (chatCh === "side" ? "side" : chatCh.startsWith("w:") ? "whisper" : "world"); tag.textContent = "[" + chLabel(chatCh) + "] ";
+  const who = document.createElement("span"); who.className = "chat-who " + (mySide === "red" ? "red" : "blue"); who.textContent = (myName || "") + ":";
+  chatPre.append(tag, who);
+  if (chatIn) chatIn.style.paddingLeft = (chatPre.offsetWidth + 10) + "px";
+}
 function drawTabs() {
   if (!chatTabs) return;
-  chatTabs.replaceChildren(...tabs.map((t) => {
-    const b = document.createElement("button"); b.className = (t.key === chatTab ? "on" : "") + (unread.has(t.key) ? " new" : "");
-    b.append(t.key.startsWith("w:") ? "Whisper " + t.label : t.label);
-    b.addEventListener("click", () => selectTab(t.key));
-    if (t.key.startsWith("w:")) {
-      const x = document.createElement("span"); x.className = "chat-x"; x.textContent = "×";
-      x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(t.key); });
-      b.append(x);
-    }
+  chatTabs.hidden = !whispers.length;
+  if (!whispers.length) { chatTabs.replaceChildren(); return; }
+  const tab = (key, label, closable) => {
+    const b = document.createElement("button"); b.className = (key === chatTab ? "on" : "") + (unread.has(key) ? " new" : "");
+    b.append(label); b.addEventListener("click", () => selectTab(key));
+    if (closable) { const x = document.createElement("span"); x.className = "chat-x"; x.textContent = "×"; x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(key); }); b.append(x); }
     return b;
-  }));
+  };
+  chatTabs.replaceChildren(tab("main", "Chat", false), ...whispers.map((w) => tab(w.key, "Whisper " + w.label, true)));
 }
 function drawLog() {
   if (!chatLog) return;
@@ -684,35 +694,47 @@ function drawLog() {
 function lineEl(m) {
   const line = document.createElement("div"); line.className = "chat-line";
   if (m.sys) { line.classList.add("sys"); line.textContent = m.text; return line; }
+  if (m.ch === "global" || m.ch === "side") { const tag = document.createElement("span"); tag.className = "chat-ch " + (m.ch === "side" ? "side" : "world"); tag.textContent = m.ch === "side" ? "[Faction] " : "[World] "; line.append(tag); }
   const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
   if (m.i && m.i !== myId) { who.dataset.id = m.i; who.dataset.name = m.n; }
   const txt = document.createElement("span"); txt.textContent = m.text;
   line.append(who, txt); return line;
 }
-function selectTab(key) { chatTab = key; unread.delete(key); drawTabs(); drawLog(); }
+// showing a whisper's log also sends there; showing the main log sends to World / Faction (whichever was last)
+let lastPublic = "global";
+function selectTab(key) {
+  chatTab = key; unread.delete(key);
+  chatCh = key === "main" ? lastPublic : key;
+  drawTabs(); drawLog(); drawPrefix();
+}
 function closeTab(key) {
-  const i = tabs.findIndex((t) => t.key === key); if (i < 0) return;
-  tabs.splice(i, 1); logs.delete(key); unread.delete(key);
-  if (chatTab === key) chatTab = "global";
-  drawTabs(); drawLog();
+  const i = whispers.findIndex((w) => w.key === key); if (i < 0) return;
+  whispers.splice(i, 1); logs.delete(key); unread.delete(key);
+  if (chatTab === key) chatTab = "main";
+  if (chatCh === key) chatCh = lastPublic;
+  drawTabs(); drawLog(); drawPrefix();
 }
 function whisperTab(id, name) {
   const key = "w:" + id;
-  if (!logs.has(key)) { tabs.push({ key, id, label: name || "?" }); logs.set(key, []); }
-  else if (name) { const t = tabs.find((x) => x.key === key); if (t) t.label = name; }
+  if (!logs.has(key)) { whispers.push({ key, id, label: name || "?" }); logs.set(key, []); }
+  else if (name) { const w = whispers.find((x) => x.key === key); if (w) w.label = name; }
   return key;
 }
-function cycleTab() { const i = tabs.findIndex((t) => t.key === chatTab); selectTab(tabs[(i + 1) % tabs.length].key); }
-function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); }
-// sending: the form's submit, so a phone keyboard's Go / Send key works as well as Enter (owner). "/whisper Name message"
-// (or /whisper "Name with spaces" message) whispers that player from any tab; their whisper tab opens with it.
+// TAB while typing: World -> Faction -> each whisper -> World
+function cycleChannel() {
+  const chans = ["global", "side", ...whispers.map((w) => w.key)], i = chans.indexOf(chatCh), next = chans[(i + 1) % chans.length];
+  if (next.startsWith("w:")) selectTab(next);
+  else { lastPublic = next; if (chatTab !== "main") selectTab("main"); else { chatCh = next; drawPrefix(); } }
+}
+function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); drawPrefix(); }
+// sending: the form's submit, so a phone keyboard's Go / Send key works as well as Enter (owner)
 function sendChat() {
   const raw = chatIn.value; chatIn.value = ""; chatIn.blur();
   const text = raw.trim(); if (!text) return;
   const wm = /^\/whisper\s+(?:"([^"]+)"|(\S+))\s+([\s\S]+)$/i.exec(text);
   if (wm) { send({ t: "chat", ch: "whisper", toName: wm[1] || wm[2], text: wm[3] }); return; }
-  if (chatTab.startsWith("w:")) send({ t: "chat", ch: "whisper", to: chatTab.slice(2), text: raw });
-  else send({ t: "chat", ch: chatTab, text: raw });
+  if (chatCh.startsWith("w:")) send({ t: "chat", ch: "whisper", to: chatCh.slice(2), text: raw });
+  else send({ t: "chat", ch: chatCh, text: raw });
 }
 const chatForm = $i("chat-form");
 if (chatForm) chatForm.addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
@@ -722,19 +744,20 @@ if (chatForm) chatForm.addEventListener("submit", (e) => { e.preventDefault(); s
 if (chatIn) {
   chatIn.addEventListener("keydown", (e) => {
     if (e.code === "Escape" || e.key === "Escape") { chatIn.value = ""; chatIn.blur(); }
+    else if (e.key === "Tab" || e.code === "Tab") { e.preventDefault(); cycleChannel(); }   // (owner) TAB switches the channel while typing
     else if (e.key === "Enter" || e.code === "Enter" || e.keyCode === 13) { e.preventDefault(); sendChat(); }
     e.stopPropagation();
   });
   chatIn.addEventListener("beforeinput", (e) => { if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") { e.preventDefault(); sendChat(); } });
 }
 function addChat(m) {
-  if (m.ch === "sys") m = { sys: 1, text: m.text };   // (owner) a line from an admin action: in the tab you're on
-  let key = m.sys && !m.ch ? chatTab : m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
+  if (m.ch === "sys") m = { sys: 1, text: m.text };   // (owner) a line from an admin action: in the log you're looking at
+  let key = m.sys && !m.ch ? chatTab : m.ch === "whisper" ? null : "main";
   if (m.ch === "whisper") {
-    if (!m.with) {                             // /whisper to a name no one online has: say so in the tab you're on
+    if (!m.with) {                             // /whisper to a name no one online has: say so where you're looking
       if (!m.sys) return; key = chatTab; m = { sys: 1, text: (m.withName || "They") + " is offline." };
     } else key = whisperTab(m.with, m.withName);
-    if (m.sys && m.text === "offline") { const t = tabs.find((x) => x.key === key); m = { sys: 1, text: (t ? t.label : "They") + " is offline." }; }
+    if (m.sys && m.text === "offline") { const w = whispers.find((x) => x.key === key); m = { sys: 1, text: (w ? w.label : "They") + " is offline." }; }
   }
   const list = logs.get(key); list.push(m); if (list.length > CHAT_MAX) list.shift();
   if (key === chatTab) { if (chatLog) { chatLog.appendChild(lineEl(m)); while (chatLog.children.length > CHAT_MAX) chatLog.firstChild.remove(); chatLog.scrollTop = chatLog.scrollHeight; } }
