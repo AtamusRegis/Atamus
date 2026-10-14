@@ -85,6 +85,7 @@
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
     #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
     .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
+    #chat:has(#admin-btn) #chat-tabs, #chat:has(#admin-btn) #chat-log { margin-left: 32px; }   /* (owner) the tabs (and lines) start over the input, not over [A] */
     #chat-row { display: flex; gap: 4px; align-items: stretch; } #chat-row #chat-form { flex: 1; min-width: 0; }
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
@@ -122,6 +123,6 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1791951342"></script>
-  <script type="module" src="game3d.js?v=1791951066"></script>
+  <script type="module" src="game3d.js?v=1791951426"></script>
 </body>
 </html>
