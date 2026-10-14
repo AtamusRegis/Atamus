@@ -6,7 +6,10 @@
 //     with the time left inside, under the word; grayed, they hold the total time served (a lifted one counts only until it was lifted).
 //   Every section uses the same window at the same size (the Players size).
 //   - Reports: players' reports with the reported player's recent chat.
-//   - Appeals: ban appeals (read, reply, accept or deny).
+//   - Appeals: ban appeals (read, reply, accept or deny). (Not for moderators.)
+//   - Approvals (owner, 2026-10-14; Nyssary only): moderators' requests for 7-day / indefinite mutes and bans: Approve / Deny.
+// (owner, 2026-10-14) Moderators: their disciplinary panel has Kick, Mute and Ban only (a 7-day or indefinite one goes to
+// Nyssary for approval); Nyssary's has Make moderator / Remove moderator.
 // One window, one size for every section. The disciplinary panel is its own window (AdminPanel.act(id, name), also
 // the Admin item on a name in chat): Type (kick, mute, ban, kill, respawn, teleport to me, teleport to player; Unmute /
 // Unban when they apply), a reason from a list for mutes and bans, a length slider (5 min, 30 min, 6 h, 1 day, 3 days,
@@ -26,26 +29,33 @@
     players: "M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4.4 0-8 2.2-8 5v2h16v-2c0-2.8-3.6-5-8-5z",
     reports: "M5 2h2v20H5zM8 3h11l-2.5 4.5L19 12H8z",
     appeals: "M4 4h16v11H9l-5 4z",
+    approvals: "M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5zm-1.5 13.5l6-6-1.4-1.4-4.6 4.6-2.1-2.1-1.4 1.4z",
   };
+  let role = null;                               // mine: head | admin | mod
   let root, rail, body, section = "players", list = "online", query = "", openAppeal = null, timer = 0, searchT = 0;
   let listBox = null;
 
-  function mount() {
-    if (root) return;
+  // (re)check my role: the rail and the disciplinary panel follow it; false (and the button goes) if I'm not staff any more
+  async function mount(recheck) {
+    try { role = (await Api.get("/game/admin/me")).role; } catch { role = null; }
+    if (!role) { if (root) { root.hidden = true; const b = document.getElementById("admin-btn"); if (b) b.remove(); root.remove(); root = null; } return false; }
+    if (root) { drawRail(); return true; }
     // (owner) the button is an [A] at the left of the chat input
     const btn = $("button", "", "A"); btn.id = "admin-btn"; btn.type = "button"; btn.title = "Admin";
     const row = document.getElementById("chat-row"); if (row) row.insertBefore(btn, row.firstChild); else document.body.appendChild(btn);   // outside the input bar, on its left
     root = $("div"); root.id = "admin-panel"; root.hidden = true;
-    rail = $("div", "ap-rail");
-    for (const [k, label] of [["players", "Players"], ["reports", "Reports"], ["appeals", "Appeals"]]) {
-      const b = $("button"); b.title = label; b.dataset.k = k; b.appendChild(svg(ICONS[k]));
-      b.addEventListener("click", () => { section = k; openAppeal = null; build(); });
-      rail.appendChild(b);
-    }
+    rail = $("div", "ap-rail"); drawRail();
     const x = $("button", "ap-x", "×"); x.title = "Close"; x.addEventListener("click", () => toggle(false));
     body = $("div", "ap-body");
     root.append(rail, x, body); document.body.appendChild(root);
     btn.addEventListener("click", () => toggle());
+    return true;
+  }
+  function drawRail() {
+    const secs = [["players", "Players"], ["reports", "Reports"], ...(role !== "mod" ? [["appeals", "Appeals"]] : []), ...(role === "head" ? [["approvals", "Approvals"]] : [])];
+    if (!secs.some(([k]) => k === section)) section = "players";
+    rail.replaceChildren(...secs.map(([k, label]) => { const b = $("button"); b.title = label; b.dataset.k = k; b.appendChild(svg(ICONS[k]));
+      b.classList.toggle("on", k === section); b.addEventListener("click", () => { section = k; openAppeal = null; build(); }); return b; }));
   }
   function toggle(open) {
     root.hidden = open === undefined ? !root.hidden : !open;
@@ -84,10 +94,11 @@
       let rows;
       if (section === "players") rows = await Api.get("/game/admin/players?list=" + list + "&q=" + encodeURIComponent(query.trim()));
       else if (section === "reports") rows = await Api.get("/game/admin/reports");
+      else if (section === "approvals") rows = await Api.get("/game/admin/approvals");
       else if (openAppeal) rows = await Api.get("/game/admin/appeal/" + openAppeal);
       else rows = await Api.get("/game/admin/appeals");
       if (box !== listBox) return;
-      if (section === "players") drawPlayers(rows); else if (section === "reports") drawReports(rows); else if (openAppeal) drawAppeal(rows); else drawAppeals(rows);
+      if (section === "players") drawPlayers(rows); else if (section === "reports") drawReports(rows); else if (section === "approvals") drawApprovals(rows); else if (openAppeal) drawAppeal(rows); else drawAppeals(rows);
     } catch (e) { if (box === listBox) box.replaceChildren($("p", "ap-err", e.message)); }
   }
 
@@ -120,8 +131,13 @@
   async function act(id, name, state) {
     if (!disc) { disc = $("div"); disc.id = "disc-panel"; disc.hidden = true; document.body.appendChild(disc); }
     if (!state) { try { state = await Api.get("/game/admin/player/" + id); name = state.name || name; } catch { state = {}; } }
-    const types = [...TYPES, ...(state.mute ? [["unmute", "Unmute"]] : []), ...(state.ban ? [["unban", "Unban"]] : [])];
-    let type = "kick", reason = null, notch = 0;
+    const full = role === "head" || role === "admin";
+    const types = state.staff
+      ? [...(full ? TYPES.filter(([k]) => k.startsWith("tp")) : []), ...(role === "head" && state.role === "mod" ? [["unmod", "Remove moderator"]] : [])]   // (staff can't be disciplined)
+      : [...(full ? TYPES : TYPES.filter(([k]) => ["kick", "mute", "ban"].includes(k))), ...(full && state.mute ? [["unmute", "Unmute"]] : []), ...(full && state.ban ? [["unban", "Unban"]] : []),
+         ...(role === "head" ? [["mod", "Make moderator"]] : [])];
+    if (!types.length) return;
+    let type = types[0][0], reason = REASONS[type] ? REASONS[type][0] : null, notch = 0;
     const box = $("div", "dp-box"), title = $("p", "dp-title", name);
     const typeRow = $("div", "dp-seg"), reasonWrap = $("div", "dp-row"), reasonRow = $("div", "dp-seg"), lenWrap = $("div", "dp-row");
     const slider = $("input"); slider.type = "range"; slider.min = "0"; slider.max = String(NOTCHES.length - 1); slider.step = "1"; slider.value = "0";
@@ -134,7 +150,7 @@
       seg(typeRow, types, type, (k) => { type = k; reason = REASONS[k] ? REASONS[k][0] : null; redraw(); });
       const rs = REASONS[type];
       reasonWrap.hidden = lenWrap.hidden = !rs;
-      noteWrap.hidden = type === "unmute" || type === "unban";
+      noteWrap.hidden = ["unmute", "unban", "mod", "unmod"].includes(type);
       if (rs) seg(reasonRow, rs.map((r) => [r, r]), reason, (k) => { reason = k; redraw(); });
       [...ticks.children].forEach((t, i) => t.classList.toggle("on", i === notch));
     }
@@ -145,13 +161,17 @@
     ok.addEventListener("click", async () => {
       ok.disabled = true; e.hidden = true;
       try {
+        let pending = false;
         if (type === "unmute" || type === "unban") await Api.post("/game/admin/" + type, { id });
+        else if (type === "mod" || type === "unmod") await Api.post("/game/admin/role", { id, role: type === "mod" ? "mod" : null });
         else {
           const data = { id, type, note: note.hidden ? "" : note.value };
           if (REASONS[type]) { data.reason = reason; data.minutes = NOTCHES[notch][0]; }
-          await Api.post("/game/admin/act", data);
+          pending = !!(await Api.post("/game/admin/act", data)).pending;
         }
-        disc.hidden = true; if (root && !root.hidden) refresh();
+        if (pending) { e.textContent = "Sent to Nyssary for approval."; e.hidden = false; setTimeout(() => { disc.hidden = true; }, 1500); }   // (a moderator's long one)
+        else disc.hidden = true;
+        if (root && !root.hidden) refresh();
       } catch (x) { err(e, x); ok.disabled = false; }
     });
     reasonWrap.append($("span", "dp-label", "Reason"), reasonRow);
@@ -220,6 +240,26 @@
     }
     listBox.replaceChildren(wrap);
     lines.scrollTop = lines.scrollHeight;
+  }
+
+  // ---- (owner, 2026-10-14) approvals (Nyssary): moderators' 7-day / indefinite mutes and bans ----
+  function drawApprovals(rows) {
+    const t = $("div", "ap-list");
+    if (!rows.length) t.appendChild($("p", "ap-dim", "No requests."));
+    for (const a of rows) {
+      const row = $("div", "ap-row");
+      const what = (a.kind === "ban" ? "Ban" : "Mute") + " " + a.length + " · " + a.reason + (a.note ? " — " + a.note : "");
+      row.append($("span", "ap-name", a.targetName), $("span", "ap-st", (a.status === "open" ? "open" : a.status + " by " + (a.by || "?")) + " · " + when(a.at) + " · " + a.mod), $("span", "ap-last", what));
+      if (a.status === "open") {
+        const e = $("p", "ap-err"); e.hidden = true;
+        const btns = $("div", "dp-seg"), yes = $("button", "", "Approve"), no = $("button", "", "Deny");
+        const decide = async (approve) => { yes.disabled = no.disabled = true; try { await Api.post("/game/admin/approval", { id: a.id, approve }); refresh(); } catch (x) { err(e, x); yes.disabled = no.disabled = false; } };
+        yes.addEventListener("click", () => decide(true)); no.addEventListener("click", () => decide(false));
+        btns.append(yes, no); row.append(btns, e);
+      }
+      t.appendChild(row);
+    }
+    listBox.replaceChildren(t);
   }
 
   function open(id) { act(String(id), ""); }

@@ -21,6 +21,7 @@ export function attachGameServer(httpServer) {
   // (owner, 2026-10-13) the admin panel's hooks into the world: who's online, kicks (and bans), mutes; and one account
   // per device (auth.js asks at login; a second account's socket on a device in use is refused below)
   setGameHooks({
+    staffChanged: (pid) => { const w = socks.get(pid); if (w) { try { w.send(JSON.stringify({ t: "staff" })); } catch {} } },   // (owner, 2026-10-14) made / removed as a moderator: their Admin button follows
     online: () => { const m = new Map(); for (const [pid] of socks) { const p = world.players.get(pid); m.set(pid, { side: p ? p.team : null }); } return m; },
     kick: (pid, code, reason) => { const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
@@ -72,7 +73,7 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
     let joined = false;
-    const staff = ["head", "admin", "mod"].includes(user.role);   // (owner, 2026-10-13) staff can use the Build menu
+    const staff = ["head", "admin"].includes(user.role);   // (owner, 2026-10-13) staff can use the Build menu (2026-10-14: not moderators)
     let cmds = 0, blockAt = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
@@ -81,7 +82,7 @@ export function attachGameServer(httpServer) {
     if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
-      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) },   // staff: the Admin button
+      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: staff },   // staff: the Admin button; builder: the Build menu and Object Editor
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, movers: world.movers, visOutlines: world.visOutlines,

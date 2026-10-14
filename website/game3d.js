@@ -887,7 +887,7 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines);
+      build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);
@@ -937,6 +937,7 @@ function connect() {
       if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
       if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)));
     }
+    else if (m.t === "staff") { if (window.AdminPanel) window.AdminPanel.mount(true).then((ok) => { amStaff = ok; }); }   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
     else if (m.t === "chat") addChat(m);
     else if (build.onMsg(m)) { /* Build menu pieces */ }
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }

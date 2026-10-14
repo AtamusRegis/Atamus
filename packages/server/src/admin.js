@@ -4,6 +4,9 @@
 // teleports) and unban / unmute, player reports, and the ban appeals.
 // Every action goes in the admin log; staff can't act on themselves or on other staff. Admins appear
 // to players as "Admin" (appeal lines), never by username.
+// (owner, 2026-10-14) Nyssary (head) makes and removes moderators from the disciplinary panel. A moderator can kick, mute
+// and ban (and sees Players and Reports); a mute or ban of up to 3 days applies at once, longer ones (7 days, indefinite)
+// are requests Nyssary approves or denies in an Approvals section only she has.
 import express from "express";
 import { safeText } from "./textsafe.js";
 import { pool } from "./db.js";
@@ -11,9 +14,9 @@ import { getSessionUser, readCookie, destroyAllSessions } from "./sessions.js";
 import { PTR, ptrAs } from "./ptr.js";
 import { appealState, lines, adminWrite, closeAppeal } from "./appeals.js";
 
-const REASON_MAX = 500, STAFF = ["head", "admin", "mod"];
+const REASON_MAX = 500, STAFF = ["head", "admin", "mod"], MOD_MAX = 4320;   // MOD_MAX: the longest a moderator's mute / ban goes through without approval (3 days)
 // the game socket's side (net.js registers these): who's online (id -> { name, side }), kicking, mutes, devices in use
-let hooks = { online: () => new Map(), kick: () => {}, mute: () => {}, respawn: () => false, teleportTo: () => false, inWorld: () => false, note: () => {}, deviceBusy: () => false };
+let hooks = { staffChanged: () => {}, online: () => new Map(), kick: () => {}, mute: () => {}, respawn: () => false, teleportTo: () => false, inWorld: () => false, note: () => {}, deviceBusy: () => false };
 /** For the other server modules: ask or tell the game something. */
 export const gameHook = (name, ...args) => hooks[name] && hooks[name](...args);
 export const setGameHooks = (h) => { hooks = { ...hooks, ...h }; };
@@ -30,6 +33,9 @@ async function who(req, res) {
   if (!STAFF.includes(u.role)) { fail(res, 403, "Not an admin."); return null; }
   return { id: String(u.id), name: "Admin", username: u.username, role: u.role };
 }
+const full = (me) => me.role === "head" || me.role === "admin";   // everything; a moderator gets kick / mute / ban only
+const headOnly = (fn) => guard(async (req, res, me) => { if (me.role !== "head") return fail(res, 403, "Only Nyssary can do that."); await fn(req, res, me); });
+const fullOnly = (fn) => guard(async (req, res, me) => { if (!full(me)) return fail(res, 403, "Moderators can't do that."); await fn(req, res, me); });
 const guard = (fn) => async (req, res) => { try { const me = await who(req, res); if (me) await fn(req, res, me); } catch (e) { console.error("admin", e); fail(res, 500, "Something went wrong."); } };
 async function target(id) {
   if (!isId(String(id || ""))) return null;
@@ -50,7 +56,7 @@ admin.get("/me", guard(async (req, res, me) => res.json({ role: me.role })));
 // (world3d.updated_at: saved while playing and on leaving).
 // (owner) with each player's discipline totals: kicks counted; time spent muted / banned (each one to its end, or to when it
 // was lifted if earlier, or to now if still running), in seconds
-const playerRow = (u, on) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u), lastPlayed: u.last_played || null,
+const playerRow = (u, on) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, role: u.role || null, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u), lastPlayed: u.last_played || null,
   totals: { kicks: Number(u.kicks || 0), muted: Math.round(Number(u.muted_s || 0)), banned: Math.round(Number(u.banned_s || 0)) } }; };
 const served = (kind) => `(SELECT coalesce(sum(extract(epoch FROM least(coalesce(d.ended, now()), coalesce(d.until, now()), now()) - d.at)), 0) FROM discipline d WHERE d.user_id = u.id AND d.kind = '${kind}')`;
 const PLAYER_COLS = `u.id, u.username, u.role, u.ban_perm, u.ban_until, u.ban_reason, u.mute_perm, u.mute_until, u.mute_reason, w.updated_at AS last_played,
@@ -88,12 +94,23 @@ admin.post("/act", guard(async (req, res, me) => {
   if (!["kick", "mute", "ban", "kill", "respawn", "tpme", "tpto"].includes(type)) return fail(res, 400, "Bad request.");
   if (String(t.id) === me.id) return fail(res, 403, "You can't do that to yourself.");
   if (!type.startsWith("tp") && t.role) return fail(res, 403, "You can't do that to staff.");
+  if (!full(me) && !["kick", "mute", "ban"].includes(type)) return fail(res, 403, "Moderators can't do that.");
   const note = safeText(b.note, 300);
   let reason = "", minutes = null;
   if (REASONS[type]) {
     reason = String(b.reason || ""); if (!REASONS[type].includes(reason)) return fail(res, 400, "Pick a reason.");
     if (b.minutes !== null && b.minutes !== undefined) { minutes = Number(b.minutes); if (!NOTCHES.includes(minutes)) return fail(res, 400, "Bad length."); }
   }
+  if (!full(me) && REASONS[type] && (minutes === null || minutes > MOD_MAX)) {   // (owner) a moderator's long one: a request for Nyssary
+    await pool.query(`INSERT INTO approvals (mod_id, mod_name, target_id, target_name, kind, reason, minutes, note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [me.id, me.username, t.id, t.username, type, reason, minutes, note || null]);
+    await log(me, t, type + " requested", reason, { length: lengthText(minutes), ...(note ? { note } : {}) });
+    return res.json({ ok: true, pending: true });
+  }
+  try { await apply(me, t, type, reason, minutes, note); } catch (e) { return fail(res, 400, e.message); }
+  res.json({ ok: true });
+}));
+// carry out an action (also an approved request); throws with the message to show when it can't
+async function apply(me, t, type, reason, minutes, note) {
   const tid = String(t.id), shown = reason + (note ? " — " + note : "");
   const until = minutes === null ? null : new Date(Date.now() + minutes * 60_000);
   if (["kick", "mute", "ban"].includes(type)) await recordDiscipline(tid, type, until);
@@ -105,14 +122,43 @@ admin.post("/act", guard(async (req, res, me) => {
     await pool.query(`UPDATE users SET mute_perm = $2, mute_until = $3, mute_reason = $4, mute_at = now() WHERE id = $1`, [tid, minutes === null, until, shown]);
     hooks.mute(tid, { perm: minutes === null, until: until && until.getTime() });
     hooks.note(tid, "Muted " + lengthText(minutes) + ": " + shown);
-  } else if (type === "kill" || type === "respawn") { if (!hooks.respawn(tid)) return fail(res, 400, "That player isn't in the world."); }
-  else if (type === "tpme") { if (!hooks.inWorld(me.id)) return fail(res, 400, "You're not in the world."); if (!hooks.teleportTo(tid, me.id)) return fail(res, 400, "That player isn't in the world."); }
-  else if (type === "tpto") { if (!hooks.inWorld(tid)) return fail(res, 400, "That player isn't in the world."); if (!hooks.teleportTo(me.id, tid)) return fail(res, 400, "You're not in the world."); }
+  } else if (type === "kill" || type === "respawn") { if (!hooks.respawn(tid)) throw new Error("That player isn't in the world."); }
+  else if (type === "tpme") { if (!hooks.inWorld(me.id)) throw new Error("You're not in the world."); if (!hooks.teleportTo(tid, me.id)) throw new Error("That player isn't in the world."); }
+  else if (type === "tpto") { if (!hooks.inWorld(tid)) throw new Error("That player isn't in the world."); if (!hooks.teleportTo(me.id, tid)) throw new Error("You're not in the world."); }
   if (note && !["kick", "ban", "mute"].includes(type)) hooks.note(tid, note);
   await log(me, t, type, reason, { ...(REASONS[type] ? { length: lengthText(minutes) } : {}), ...(note ? { note } : {}) });
+}
+
+// ---- (owner, 2026-10-14) moderators: Nyssary makes and removes them (players only; not other staff) ----
+admin.post("/role", headOnly(async (req, res, me) => {
+  const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
+  if (String(t.id) === me.id) return fail(res, 403, "You can't do that to yourself.");
+  const make = b.role === "mod";
+  if (make ? t.role : t.role !== "mod") return fail(res, 400, make ? "That player is already staff." : "That player isn't a moderator.");
+  await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make ? "mod" : null]);
+  hooks.staffChanged(String(t.id));
+  await log(me, t, make ? "made moderator" : "removed moderator", ""); res.json({ ok: true });
+}));
+// ---- (owner, 2026-10-14) Approvals (Nyssary only): moderators' requests for 7-day / indefinite mutes and bans ----
+admin.get("/approvals", headOnly(async (req, res) => {
+  const { rows } = await pool.query(`SELECT * FROM approvals ORDER BY (status = 'open') DESC, id DESC LIMIT 100`);
+  res.json(rows.map((a) => ({ id: String(a.id), mod: a.mod_name, target: String(a.target_id), targetName: a.target_name, kind: a.kind, reason: a.reason, length: lengthText(a.minutes), note: a.note || "", status: a.status, at: a.created_at, by: a.decided_by, decidedAt: a.decided_at })));
+}));
+admin.post("/approval", headOnly(async (req, res, me) => {
+  const b = req.body || {}, id = String(b.id || ""); if (!isId(id)) return fail(res, 400, "Bad request.");
+  const { rows } = await pool.query(`SELECT * FROM approvals WHERE id = $1`, [id]); const a = rows[0];
+  if (!a || a.status !== "open") return fail(res, 404, "That request isn't open.");
+  const t = await target(String(a.target_id)); if (!t) return fail(res, 404, "No such player.");
+  const approve = !!b.approve;
+  if (approve) {
+    if (t.role) return fail(res, 403, "That player is staff now.");
+    try { await apply(me, t, a.kind, a.reason, a.minutes, a.note || ""); } catch (e) { return fail(res, 400, e.message); }   // (the length runs from now)
+  }
+  await pool.query(`UPDATE approvals SET status = $2, decided_by = $3, decided_at = now() WHERE id = $1`, [id, approve ? "approved" : "denied", me.username]);
+  await log(me, t, a.kind + (approve ? " approved" : " denied"), a.reason, { request: id, by: a.mod_name, length: lengthText(a.minutes) });
   res.json({ ok: true });
 }));
-admin.post("/unban", guard(async (req, res, me) => {
+admin.post("/unban", fullOnly(async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   if (!banOf(t)) return fail(res, 400, "That player isn't banned.");
@@ -121,7 +167,7 @@ admin.post("/unban", guard(async (req, res, me) => {
   { const { rows } = await pool.query(`SELECT id FROM appeals WHERE user_id = $1 AND status = 'open'`, [t.id]); for (const r of rows) await closeAppeal(String(r.id), me, true, "Unbanned."); }   // (an open appeal is answered by it)
   await log(me, t, "unban", ""); res.json({ ok: true });
 }));
-admin.post("/unmute", guard(async (req, res, me) => {
+admin.post("/unmute", fullOnly(async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (!mayAct(me, t)) return fail(res, 403, "You can't do that to this player.");
   await pool.query(`UPDATE users SET mute_perm = false, mute_until = NULL, mute_reason = NULL, mute_at = NULL WHERE id = $1`, [t.id]);
@@ -144,23 +190,23 @@ admin.post("/report/close", guard(async (req, res, me) => {
 }));
 
 // ---- ban appeals (appeals.js): a conversation with a banned player while the ban lasts; Accept unbans, Deny closes it ----
-admin.get("/appeals", guard(async (req, res) => {
+admin.get("/appeals", fullOnly(async (req, res) => {
   const { rows } = await pool.query(`SELECT a.id, a.user_id, a.username, a.ban_reason, a.status, a.created_at,
       (SELECT row_to_json(m) FROM (SELECT text, at, from_admin FROM appeal_messages WHERE appeal_id = a.id ORDER BY id DESC LIMIT 1) m) AS last
     FROM appeals a ORDER BY (a.status = 'open') DESC, a.id DESC LIMIT 100`);
   res.json(rows.map((a) => ({ id: String(a.id), name: a.username, banReason: a.ban_reason, status: a.status, at: a.created_at, last: a.last && { text: a.last.text, at: a.last.at, admin: a.last.from_admin } })));
 }));
 async function appealOf(id) { if (!isId(String(id || ""))) return null; const { rows } = await pool.query(`SELECT * FROM appeals WHERE id = $1`, [String(id)]); return rows[0] || null; }
-admin.get("/appeal/:id", guard(async (req, res) => {
+admin.get("/appeal/:id", fullOnly(async (req, res) => {
   const a = await appealOf(req.params.id); if (!a) return fail(res, 404, "No such appeal.");
   const st = a.user_id ? await appealState(String(a.user_id)) : null;
   res.json({ id: String(a.id), name: a.username, banReason: a.ban_reason, status: a.status, at: a.created_at, lines: await lines(String(a.id)), ban: st && st.ban });
 }));
-admin.post("/appeal/say", guard(async (req, res, me) => {
+admin.post("/appeal/say", fullOnly(async (req, res, me) => {
   const b = req.body || {}, a = await appealOf(b.id); if (!a) return fail(res, 404, "No such appeal.");
   try { await adminWrite(String(a.id), me, b.text); res.json({ ok: true }); } catch (e) { fail(res, 400, e.message); }
 }));
-admin.post("/appeal", guard(async (req, res, me) => {
+admin.post("/appeal", fullOnly(async (req, res, me) => {
   const b = req.body || {}, a = await appealOf(b.id);
   if (!a || a.status !== "open") return fail(res, 404, "That appeal isn't open.");
   const t = await target(String(a.user_id)); if (!t) return fail(res, 404, "No such player.");

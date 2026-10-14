@@ -148,6 +148,12 @@ export async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS discipline_user_idx ON discipline (user_id, kind);
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now());
+    -- (owner, 2026-10-14) a moderator's mute / ban longer than 3 days (7 days, indefinite) waits here for Nyssary
+    CREATE TABLE IF NOT EXISTS approvals (
+      id BIGSERIAL PRIMARY KEY, mod_id BIGINT, mod_name TEXT NOT NULL, target_id BIGINT NOT NULL, target_name TEXT NOT NULL,
+      kind TEXT NOT NULL, reason TEXT NOT NULL, minutes INTEGER, note TEXT, status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(), decided_by TEXT, decided_at TIMESTAMPTZ
+    );
   `);
 }
 
