@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Visibility tuning (owner):** every side of a ship's outline now adds a point at its middle; steps are 75%+ solid, 50-75% half, 35-50% a quarter, under 35% hidden.
 - **Visibility steps (owner):** a ship 75%+ visible is solid, 50-75% is half see-through, under 50% is hidden (on screen and on the minimap).
 - **Visibility lines to pivots (owner):** mutual visibility now uses lines from each ship's outline points to the other ship's pivot (both ways) instead of every point against every point.
 - **Mutual visibility (owner):** ships are no longer cut off at walls: if you can see a ship it can see you, and both are see-through by how little of each other is visible (10% visible = 10% opaque), on screen and on the minimap. With the Object Editor open, the sight lines and percentage show for testing.

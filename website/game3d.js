@@ -372,15 +372,15 @@ function updateVis() {                         // the shadows from where my ship
   renderer.setRenderTarget(null);
 }
 // ---- (owner, 2026-10-14) mutual visibility: if a player can see you, you can see them, and the less of each other you
-// can see, the more see-through you are to each other. About 9 points on each ship's Sight outline (its corners, the
-// middles of its sides when it has few corners, and its middle); lines from each of theirs to my pivot and from each of
+// can see, the more see-through you are to each other. Points on each ship's Sight outline (its corners, the middle of
+// every side, and its middle; at most 33); lines from each of theirs to my pivot and from each of
 // mine to their pivot; the share of those lines no block or Build piece cuts is the visibility, the same both ways. A ship is drawn whole at that
 // opacity (fading over about 0.2 s), and on the minimap the same; at 0 it's hidden. Worked out ten times a second. ----
 function hullPts(v) {
   const n = v.length / 2, out = []; let cx = 0, cy = 0;
   for (let i = 0; i < n; i++) { out.push([v[2 * i], v[2 * i + 1]]); cx += v[2 * i]; cy += v[2 * i + 1]; }
-  if (n <= 6) for (let i = 0; i < n; i++) { const j = (i + 1) % n; out.push([(v[2 * i] + v[2 * j]) / 2, (v[2 * i + 1] + v[2 * j + 1]) / 2]); }
-  let pts = out; if (pts.length > 12) { const step = pts.length / 12; pts = Array.from({ length: 12 }, (_, k) => out[Math.floor(k * step)]); }
+  for (let i = 0; i < n; i++) { const j = (i + 1) % n; out.push([(v[2 * i] + v[2 * j]) / 2, (v[2 * i + 1] + v[2 * j + 1]) / 2]); }   // (owner) a point in the middle of every side too
+  let pts = out; if (pts.length > 32) { const step = pts.length / 32; pts = Array.from({ length: 32 }, (_, k) => out[Math.floor(k * step)]); }
   pts.push([cx / n, cy / n]); return pts;
 }
 const walls = () => {                          // everything that blocks sight, with a bounding box each
@@ -419,7 +419,7 @@ function updateShipVis(dt, now) {
   }
   const k = Math.min(1, dt / 0.2);
   for (const [v, t] of visTargets) {
-    const goal = t.f >= 0.75 ? 1 : t.f >= 0.5 ? 0.5 : 0;   // (owner, 2026-10-14) 75%+ visible: solid; 50-75%: half see-through; under 50%: hidden
+    const goal = t.f >= 0.75 ? 1 : t.f >= 0.5 ? 0.5 : t.f >= 0.35 ? 0.25 : 0;   // (owner, 2026-10-14) opacity by visibility: 75%+ solid, 50-75% half, 35-50% a quarter, under 35% hidden
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
     v.visible = t.a > 0.01;
