@@ -271,6 +271,10 @@ export class World3D {
       p.dirty = true;
     }
     this.collide();
+    for (const p of this.players.values()) {   // test ships shoved somewhere: the piece follows
+      if (!p.bot) continue; const b = this.builds.get(String(p.bot));
+      if (b && (b.x !== p.x || b.y !== p.y)) { b.x = Math.round(p.x * 100) / 100; b.y = Math.round(p.y * 100) / 100; b.dirty = true; this._shape(b); }
+    }
   }
   // (owner, 2026-10-13) ships against blocks and against each other (two overlapping ships each move half the overlap
   // apart); a push that would leave the hexagon isn't applied
@@ -284,6 +288,7 @@ export class World3D {
       const n = satPush(polys.get(p), squarePoly(b.x, b.y, BLOCK_HALF)); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
     for (const p of ps) for (const b of this.builds.values()) {
+      if (b.k === "ship") continue;           // test ships collide as ships (their stand-in players), below
       const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + rads.get(p); if (dx * dx + dy * dy > R * R) continue;
       const n = satPush(polys.get(p), b.mpoly); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
@@ -307,7 +312,7 @@ export class World3D {
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
   hurt(p, d) {
     p.hp = (p.hp ?? HP_MAX) - d;
-    if (p.hp <= 0) { p.hp = HP_MAX; this.respawn(p.id); }
+    if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); }   // a test ship just heals where it is
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
   addBlock(pid) {
@@ -331,7 +336,16 @@ export class World3D {
     const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
     return { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
   }
-  _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); return b; }
+  _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b); return b; }
+  // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players
+  // map ("b" + its id, side "test") that collides, gets shoved, takes damage, shows in snapshots and the roster. A Build
+  // menu edit puts it there (stopped); where shoves take it is written back to the piece.
+  _bot(b) {
+    const id = "b" + b.id; let p = this.players.get(id);
+    if (!p) { p = { id, name: "Test Ship", team: "test", bot: b.id, dx: 0, dy: 0, hp: HP_MAX }; this.players.set(id, p); }
+    p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.brakeA = 0;
+    return p;
+  }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
@@ -356,6 +370,7 @@ export class World3D {
   }
   async delBuild(id) {
     if (!this.builds.delete(id)) return false;
+    this.players.delete("b" + id);            // its stand-in goes too
     await pool.query(`DELETE FROM world3d_builds WHERE id = $1`, [id]); return true;
   }
 
@@ -367,7 +382,7 @@ export class World3D {
     p.dirty = false;
   }
   async saveDirty() {
-    for (const p of this.players.values()) if (p.dirty) await this._save(p);
+    for (const p of this.players.values()) if (p.dirty && !p.bot) await this._save(p);
     for (const b of this.builds.values()) if (b.dirty) { b.dirty = false; await pool.query(`UPDATE world3d_builds SET k = $2, x = $3, y = $4, w = $5, d = $6, r = $7, updated_at = now() WHERE id = $1`, [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
   }
 

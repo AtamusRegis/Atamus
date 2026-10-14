@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791967015";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791970376";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -413,7 +413,6 @@ function updateShipVis(dt, now) {
       const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; visTargets.set(vis, t);
     };
     for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z);
-    for (const b of builds.values()) if (b.k === "ship" && b.mesh) look(b.mesh, visPtsOf(b), b.x, b.y);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
@@ -515,6 +514,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
   const holder = new THREE.Group();
   holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId)); scene.add(holder);
+  if (/^b[0-9]+$/.test(id)) holder.userData.id = id.slice(1);   // (owner, 2026-10-14) a test ship's stand-in: clicking it in the Build menu picks up the piece
   holder.visible = id === myId;                // others show once a snapshot has them inside the load circle
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y }, near: false };   // buf: recent snapshot positions on the server's clock; near: inside my load circle
   players.set(id, p); applyShipPivot(); return p;
@@ -576,7 +576,7 @@ function collideMe() {                       // (owner, 2026-10-14) by the ship'
   let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
   const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
-  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // Build menu pieces (their movement ellipses)
+  for (const b of builds.values()) { if (b.k === "ship") continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
   for (const p of players.values()) {          // (owner, 2026-10-14) other ships: pushed apart, trading momentum like the server does
     if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
     const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
@@ -612,7 +612,7 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { if (b.k === "ship") { const vt = b.mesh && visTargets.get(b.mesh); if (!vt || vt.a <= 0.01) continue; } const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
+  for (const b of builds.values()) { if (b.k === "ship") continue; const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
   for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
     if (p.id === myId || !p.near) continue;
     const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
@@ -647,7 +647,8 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
+  botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };

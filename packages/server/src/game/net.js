@@ -145,11 +145,12 @@ export function attachGameServer(httpServer) {
           world.addBuild(m, pid).then((b) => {
             if (!b) return;
             objCast("b", b);
+            if (b.k === "ship") broadcast({ t: "join", i: "b" + b.id, n: "Test Ship", s: "test" });   // (owner) its stand-in ship
             if (socks.get(pid) === ws) ws.send(JSON.stringify({ t: "bnew", q, id: b.id }));   // so the builder can select it
           }).catch((e) => console.error("build", e));
         } else if (m.t === "bset") {
           const b = bid && world.setBuild(bid, m); if (b) objCast("b", b);
-        } else if (bid) world.delBuild(bid).then((ok) => { if (ok) objGone("b", [bid]); }).catch((e) => console.error("unbuild", e));
+        } else if (bid) { const wasShip = world.builds.get(bid)?.k === "ship"; world.delBuild(bid).then((ok) => { if (ok) { objGone("b", [bid]); if (wasShip) broadcast({ t: "leave", i: "b" + bid }); } }).catch((e) => console.error("unbuild", e)); }
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;

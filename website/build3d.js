@@ -129,10 +129,13 @@ export function initBuild(ctx) {
   const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
+    // (owner, 2026-10-14) a test ship is drawn by its stand-in ship (it acts as a player); only while held does it get
+    // a hologram of its own here
+    if (b.k === "ship" && !(held && held.id === b.id)) { if (b.mesh) { scene.remove(b.mesh); b.mesh = null; } hold(b); return; }
     if (!b.mesh) {
       // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
       b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], ctx.farMat(pieceMat));   // (not drawn past the sight limit)
-      Object.assign(b.mesh.userData, { k: b.k, id: b.id }); scene.add(b.mesh);
+      Object.assign(b.mesh.userData, { k: b.k, id: b.id }); scene.add(b.mesh); b.mesh.visible = true;
       if (held && held.id === b.id) holo(b.mesh, true);
     }
     const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
@@ -144,8 +147,8 @@ export function initBuild(ctx) {
   }
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
-    if (held && held.id === id) { holo(b.mesh, false); held = null; }
-    scene.remove(b.mesh); builds.delete(id); if (ctx.onChange) ctx.onChange();
+    if (held && held.id === id) { if (b.mesh) holo(b.mesh, false); held = null; }
+    if (b.mesh) scene.remove(b.mesh); builds.delete(id); if (ctx.onChange) ctx.onChange();
   }
 
   // ---- state ----
@@ -198,11 +201,15 @@ export function initBuild(ctx) {
   const fields = (b) => ({ k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b) }); }
   function create(o) { send({ t: "bnew", ...o }); }
-  function pickUp(b, g) { stopPicking(); held = { id: b.id, ox: b.x - g.x, oy: b.y - g.y, b0: fields(b) }; holo(b.mesh, true); }
+  function pickUp(b, g) {
+    stopPicking();
+    if (b.k === "ship" && ctx.botPos) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now
+    held = { id: b.id, ox: b.x - g.x, oy: b.y - g.y, b0: fields(b) }; place(b); holo(b.mesh, true);
+  }
   function drop(commit) {                       // commit: keep where it is now; otherwise put it back where it was
     if (!held) return; const b = builds.get(held.id), b0 = held.b0; held = null; if (!b) return;
     if (!commit) Object.assign(b, b0);
-    holo(b.mesh, false); place(b); push(b, true);
+    if (b.mesh) holo(b.mesh, false); place(b); push(b, true);
   }
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -211,7 +218,7 @@ export function initBuild(ctx) {
     if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r }); return; }
     if (held) { const b = builds.get(held.id); if (b && ctx.inside(b.x, b.y)) drop(true); return; }
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
-    const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh), true);
+    const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
     let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
     if (o && g) pickUp(builds.get(o.userData.id), g);
   });
@@ -504,7 +511,7 @@ export function initBuild(ctx) {
     const loop = (v, col) => { for (let i = 0; i < v.length; i += 2) { P.push(v[i], 2, -v[i + 1], v[(i + 2) % v.length], 2, -v[(i + 3) % v.length]); C.push(...col, ...col); } };
     const dots = (v) => { const a = 4; for (let i = 0; i < v.length; i += 2) { const x = v[i], y = v[i + 1]; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_VIS); } };
     const cross = (x, y) => { const a = 8; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_PIV); };
-    for (const b of builds.values()) { loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); if (b.k === "ship") dots(toWorldPts(b, visOutlines[b.k] || VIS_DEFAULT[b.k], pivots[b.k] || [0, 0])); cross(b.x, b.y); }
+    for (const b of builds.values()) { if (b.k === "ship") continue; loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }   // (test ships: drawn with the ships below)
     for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { loop(s.sight, C_SIGHT); loop(s.move, C_MOVE); if (s.vis) dots(s.vis); cross(s.x, s.y); }
     if (P.length > gizCap) { gizCap = Math.max(P.length, gizCap * 2, 3000); gizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); gizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); }
     gizGeo.attributes.position.array.set(P); gizGeo.attributes.color.array.set(C); gizGeo.attributes.position.needsUpdate = gizGeo.attributes.color.needsUpdate = true;
