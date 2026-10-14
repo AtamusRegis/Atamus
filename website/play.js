@@ -19,21 +19,26 @@ async function showSteps() {
 }
 
 // Sent here by an update countdown: wait until the new version is live, then let them back in.
+// (owner, 2026-10-14: it could hang) every check gives up after 4 s (a request to a restarting server can stall forever),
+// the whole wait is at most 90 s, and that 90 s is kept across reloads (Ctrl+F5 doesn't start it over)
+const timed = (p, ms) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]);
+const getJson = (url) => { const c = new AbortController(), t = setTimeout(() => c.abort(), 4000); return fetch(url, { cache: "no-store", signal: c.signal }).then((r) => r.json()).finally(() => clearTimeout(t)); };
 async function waitForUpdate() {
   updateStep.hidden = false; enterStep.hidden = true;
-  Api.get("/auth/me").then((me) => { who.textContent = me.username; }).catch(() => {});
+  timed(Api.get("/auth/me"), 4000).then((me) => { who.textContent = me.username; }).catch(() => {});
   const parts = (params.get("parts") || "server,web").split(","), web = params.get("web"), srv = params.get("srv");
-  const started = Date.now();
-  const webLive = async () => { try { const j = await fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()); return j.v && j.v !== web; } catch { return false; } };
-  const srvLive = async () => { try { const j = await fetch(API_BASE + "/healthz?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()); return j.build && j.build !== srv; } catch { return false; } };
-  for (;;) {
+  let started = Date.now();
+  try { const k = "atamus.updWait:" + location.search, s0 = +sessionStorage.getItem(k); if (s0 && Date.now() - s0 < 600_000) started = s0; else sessionStorage.setItem(k, String(started)); } catch {}
+  const webLive = async () => { try { const j = await getJson("version.json?t=" + Date.now()); return !!j.v && j.v !== web; } catch { return false; } };
+  const srvLive = async () => { try { const j = await getJson(API_BASE + "/healthz?t=" + Date.now()); return !!j.build && j.build !== srv; } catch { return false; } };
+  while (Date.now() - started < 90_000) {
     const done = (!parts.includes("web") || await webLive()) && (!parts.includes("server") || await srvLive());
-    if (done || Date.now() - started > 120_000) break;
+    if (done) break;
     await new Promise((r) => setTimeout(r, 2000));
   }
   let ok = false;
-  for (let i = 0; i < 30 && !ok; i++) {                // the server may still be warming up: retry; signed out: log in
-    try { await showSteps(); ok = true; }
+  for (let i = 0; i < 20 && !ok; i++) {                // the server may still be warming up: retry; signed out: log in
+    try { await timed(showSteps(), 5000); ok = true; }
     catch (e) { if (e.status === 401) { location.href = "login.html"; return; } await new Promise((r) => setTimeout(r, 2000)); }
   }
   if (!ok) { location.href = "login.html"; return; }   // never a dead end with no way in
