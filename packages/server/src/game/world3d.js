@@ -38,7 +38,11 @@ export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
 // (owner, 2026-10-14) the railgun (left click): a fast projectile from the ship's pivot toward the pointer, stopped by the
 // first block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG. A ship
 // the shooter can't see by line of sight (blocks and Build pieces; clouds don't count here) isn't hit: it flies through.
-export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 1.0, RAIL_SPEED = 700;
+export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 0.5, RAIL_SPEED = 700;   // (owner, 2026-10-14: every half second)
+// (owner, 2026-10-14) spread: each shot widens the shooter's cone by SPREAD_ADD degrees each way, and it narrows back by
+// SPREAD_BACK degrees a second; a shot leaves at a random angle inside the cone as it was (the server's dice, not the client's)
+export const SPREAD_ADD = 3, SPREAD_BACK = 3, SPREAD_MAX = 45;
+export const spreadNow = (p, now = Date.now()) => Math.max(0, (p.spread || 0) - SPREAD_BACK * (now - (p.spreadT || now)) / 1000);
 export const PIV_W = 0.2, VIS_LO = 0.25;
 // (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
 // in all; until then it can't move, turn or fire (and, half there, takes no damage)
@@ -406,7 +410,9 @@ export class World3D {
     return this.shoot(p, dx, dy);
   }
   shoot(p, dx, dy) {                          // (also the test ships' shots)
-    const L = Math.hypot(dx, dy); if (L < 1e-6) return null; p.lastFire = Date.now();
+    let L = Math.hypot(dx, dy); if (L < 1e-6) return null; const now = Date.now(); p.lastFire = now;
+    { const sp = spreadNow(p, now), off = (Math.random() * 2 - 1) * sp * Math.PI / 180, c = Math.cos(off), n = Math.sin(off);   // somewhere in the cone
+      [dx, dy] = [dx * c - dy * n, dx * n + dy * c]; p.spread = Math.min(SPREAD_MAX, sp + SPREAD_ADD); p.spreadT = now; L = Math.hypot(dx, dy); }
     const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * RAIL_SPEED, vy: dy / L * RAIL_SPEED, left: RAIL_RANGE };
     this.projs.push(q); this.projEv.push({ t: "proj", i: q.id, a: q.a, x: q.x, y: q.y, vx: q.vx, vy: q.vy });
     return q;

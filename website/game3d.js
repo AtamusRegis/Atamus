@@ -177,6 +177,12 @@ function drawCap() {
   capFill.classList.toggle("out", capOut);
 }
 aimLine.visible = false; scene.add(aimLine);
+// (owner, 2026-10-14) the aim cone: from my ship toward the reticle, as wide as the spread now (a line when it's 0)
+const coneGeo = new THREE.BufferGeometry(); coneGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
+const cone = new THREE.Mesh(coneGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, side: THREE.DoubleSide, depthWrite: false }));
+const coneEdgeGeo = new THREE.BufferGeometry(); coneEdgeGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(12), 3));
+const coneEdges = new THREE.LineSegments(coneEdgeGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false }));
+cone.frustumCulled = coneEdges.frustumCulled = false; cone.visible = coneEdges.visible = false; cone.renderOrder = coneEdges.renderOrder = 2; scene.add(cone, coneEdges);
 const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), aimHit = new THREE.Vector3();
 
 // ---- players: the ship (owner, 2026-10-12: Combat_Cruiser.glb, Y up, +Z forward) ----
@@ -795,15 +801,20 @@ const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b
 // ---- (owner, 2026-10-14) the railgun: left click fires a fast projectile from my ship toward the pointer (the server
 // flies it, decides what it hits and keeps the 1 s cooldown); everyone near sees the glowing slug, sparks where it hits a
 // ship. A ship the shooter can't see (line of sight) isn't hit: the slug flies through it. ----
-const RAIL_CD = 1000;
+const RAIL_CD = 500;                           // (owner, 2026-10-14: every half second)
 let railAt = 0;
+// (owner, 2026-10-14) the spread cone, as the server keeps it: +3 degrees each way per shot, back 3 degrees a second
+const SPREAD_ADD = 3, SPREAD_BACK = 3, SPREAD_MAX = 45;
+let spreadDeg = 0, spreadT = 0;
+const spreadNow = (now = performance.now()) => Math.max(0, spreadDeg - SPREAD_BACK * (now - spreadT) / 1000);
 function fireRail(px, py) {
   if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing() || amSpawning()) return;
   const now = performance.now(); if (now - railAt < RAIL_CD) return;
   raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
   const g = new THREE.Vector3(); if (!raycaster.ray.intersectPlane(groundPlane, g)) return;
   const dx = g.x - me.x, dy = -g.z - me.y, L = Math.hypot(dx, dy); if (L < 1) return;
-  railAt = now; ws.send(JSON.stringify({ t: "fire", x: Math.round(dx / L * 1000) / 1000, y: Math.round(dy / L * 1000) / 1000 }));
+  railAt = now; spreadDeg = Math.min(SPREAD_MAX, spreadNow(now) + SPREAD_ADD); spreadT = now;
+  ws.send(JSON.stringify({ t: "fire", x: Math.round(dx / L * 1000) / 1000, y: Math.round(dy / L * 1000) / 1000 }));
 }
 const projs = new Map();                       // id -> { g, x, y, vx, vy, t0 }
 const projCore = new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -1224,6 +1235,14 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimShown;
+  { const sp = spreadNow() * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line)
+    cone.visible = coneEdges.visible = !!on;
+    if (on) {
+      const sx = me.x, sz = -me.y, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
+      const lx = sx + Math.cos(a - sp) * L, lz = sz + Math.sin(a - sp) * L, rx = sx + Math.cos(a + sp) * L, rz = sz + Math.sin(a + sp) * L;
+      coneGeo.attributes.position.array.set([sx, 0.35, sz, lx, 0.35, lz, rx, 0.35, rz]); coneGeo.attributes.position.needsUpdate = true;
+      coneEdgeGeo.attributes.position.array.set([sx, 0.38, sz, lx, 0.38, lz, sx, 0.38, sz, rx, 0.38, rz]); coneEdgeGeo.attributes.position.needsUpdate = true;
+    } }
   updateShots(nowP);
   drawMinimap(nowP);
 

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Railgun fire rate and spread (owner):** the railgun fires every half second now, but every shot widens your aim cone by 3° each way (it narrows back 3° a second), and shots land anywhere inside it, so rapid fire gets inaccurate. The aim line shows the cone.
 - **Smooth routes (owner):** test ship routes have rounded corners, drawn and flown as curves, so ships sweep through them at speed instead of stopping to turn at each point.
 - **Test ship AI and route editing (owner):** test ships now respect clouds (they can't see a player deep in a nebula or through its core) along with every other line-of-sight blocker. A handle in the middle of a route moves the whole path; editing or moving a path no longer snaps the ship back to spawn: it flies back to its path, shown by a white dotted leash. Route dashes are animated toward the next point.
 - **Test ship routes and attacks (owner):** placed test ships respawn like players. Selecting one in the Build menu shows Add route and Attack player buttons above it: a route is an editable loop starting and ending at its spawn (marked S) that it flies; with Attack player on it shoots players it can see within 400 m, and a route ship chases them up to 400 m from where it left its route before going back.
