@@ -520,9 +520,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   players.set(id, p); applyShipPivot(); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
-let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
-const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 2;                                // rad/s (owner: first 12, then 4, 8, 4, and on 2026-10-14 cut to 25% of 8)
 const TURN_A = 10, TURN_K = 4, BANK_MAX = 0.32;
 const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
@@ -701,16 +699,17 @@ if (TOUCH) {
   base.addEventListener("pointerup", end); base.addEventListener("pointercancel", end);
 }
 
-function inputDir() {                          // forward = where the camera faces, on the ground
+// (owner, 2026-10-14) ship-relative controls: W thrusts the way the ship faces, S flies it backward, A and D turn it.
+// The push sent to the server is along the nose (or against it), so the physics is the same as before.
+function inputDir() {
   let f = 0, r = 0;
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
-  if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: analog, a small dead zone
-  const b = sprint && !aiming ? 1 : 0;          // (owner, 2026-10-13) no sprinting while aiming
-  if (!f && !r) return { x: 0, y: 0, b };
-  const n = Math.max(1, Math.hypot(f, r)); f /= n; r /= n;
-  const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
-  return { x: f * sin + r * cos, y: f * cos - r * sin, b };   // game plane: +y north at yaw 0
+  if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: up / down thrust, left / right turn
+  const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
+  if (!f) return { x: 0, y: 0, b, turn };
+  f = Math.max(-1, Math.min(1, f));
+  return { x: Math.sin(h) * f, y: -Math.cos(h) * f, b, turn };   // the nose on the game plane: (sin h, -cos h)
 }
 
 // ---- socket ----
@@ -806,7 +805,9 @@ function connect() {
 connect();
 let lastH = 0, lastAim = null, trailing = 0;
 // the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
-const aimAngle = () => null;                   // (owner, 2026-10-14) the reticle is independent of the ship: it never turns it or changes "forward" (was its direction while aiming)                   // trailing: settled-state resends still owed after the last change
+// (owner, 2026-10-14) "forward" for top speed and sprint is the nose: backing up is at the side / back rate and can't sprint.
+// (The reticle is independent of the ship.)
+const aimAngle = () => { const mine = players.get(myId); return haveMe && mine ? Math.atan2(Math.sin(mine.heading), -(-Math.cos(mine.heading))) : null; };                   // trailing: settled-state resends still owed after the last change
 function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
@@ -878,25 +879,12 @@ renderer.setAnimationLoop(() => {
   // (only the last two used to be kept, older than the render time, so they stepped and never glided)
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
-    if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift
-      // (owner, 2026-10-13) while aiming (right button, with or without the middle), it turns toward the reticle instead
-      const face = (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;   // (owner, 2026-10-14) WASD only, even while aiming
-      // (owner, 2026-10-13) reversals turn through the last "middle" direction: going A W D, then D A D A..., the nose
-      // swings over the top (W) every time instead of whichever way is shortest. Each input direction change that
-      // isn't a reversal records the direction it came from as the middle; a reversal then picks the turn direction
-      // whose arc passes through it, fixed until the input changes again.
-      if (d.x || d.y) {
-        const T2 = Math.PI * 2, tgt = Math.atan2(d.x, -d.y), w = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
-        if (turnTgt === null) turnTgt = tgt;
-        else if (Math.abs(w(tgt - turnTgt)) > 1e-3) {
-          if (Math.abs(w(tgt - turnTgt)) > REVERSAL) {
-            turnSign = 0;
-            if (turnMid !== null) { const r = ((tgt - p.heading) % T2 + T2) % T2, m = ((turnMid - p.heading) % T2 + T2) % T2; turnSign = m < r ? 1 : -1; }
-          } else { turnMid = turnTgt; turnSign = 0; }
-          turnTgt = tgt;
-        }
-      }
-      placeShip(p, me.x, me.y, dt, face, false, turnSign); bank(p, dt); continue;
+    if (p.id === myId) {                       // (owner, 2026-10-14) A / D turn the ship: the turn spins up and eases off (TURN_A)
+      const T2 = Math.PI * 2, want = (d.turn || 0) * TURN, dw = want - (p.omega || 0), lim = TURN_A * dt;
+      p.omega = (p.omega || 0) + Math.max(-lim, Math.min(lim, dw)); if (!d.turn && Math.abs(p.omega) < 0.02) p.omega = 0;
+      p.heading = ((p.heading + p.omega * dt + Math.PI) % T2 + T2) % T2 - Math.PI;
+      p.holder.rotation.y = p.heading; p.holder.position.copy(toWorld(me.x, me.y, 0));
+      bank(p, dt); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
