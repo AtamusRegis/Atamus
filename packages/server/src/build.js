@@ -55,4 +55,4 @@ export async function announceUpdate(part, seconds = 30) {
   return { ok: true, at: announcedAt, parts: [...parts] };
 }
 // A countdown that's still running, for players who connect in the middle of it.
-export const activeCountdown = () => (announced && announcedAt > Date.now() ? { in: announcedAt - Date.now(), parts: [...parts] } : null);
+export const activeCountdown = () => (announced && announcedAt > Date.now() ? { in: announcedAt - Date.now(), parts: [...parts], head: /^[0-9a-f]{7,40}$/.test(announced) ? announced : undefined } : null);

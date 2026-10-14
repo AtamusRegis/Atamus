@@ -53,7 +53,7 @@ export function attachGameServer(httpServer) {
   const broadcast = (obj) => { const msg = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); };
 
   // ---- deploys: the 30 s countdown, and "the website switched: reload" ----
-  onCountdown((at, head, parts) => { broadcast({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts }); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });
+  onCountdown((at, head, parts) => { broadcast({ t: "countdown", at, in: Math.max(0, at - Date.now()), parts, head: /^[0-9a-f]{7,40}$/.test(head) ? head : undefined }); console.log("[build] update " + head.slice(0, 7) + " in " + Math.round((at - Date.now()) / 1000) + " s"); });   // head: the commit going live, for the waiting page
   onWebsiteUpdate((v) => { broadcast({ t: "update", web: v }); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
 
   wss.on("connection", async (ws, req) => {

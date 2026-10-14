@@ -896,7 +896,7 @@ function connect() {
       // Reset faction on the Welcome back page (game.html?reset=1), which shows the picker
       const reset = new URLSearchParams(location.search).get("reset") === "1";
       if (m.side && !reset) sendSide(m.side); else sidePick.hidden = false;
-      if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts);
+      if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts, m.countdown.head);
     } else if (m.t === "spawn") {
       me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
       focus.x = me.x; focus.y = me.y;
@@ -943,8 +943,8 @@ function connect() {
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
     else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
-    else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts);
-    else if (m.t === "update") goUpdating(["web"]);
+    else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts, m.head);
+    else if (m.t === "update") { if (typeof m.web === "string" && /^[0-9a-f]{7,40}$/.test(m.web)) countHead = m.web; goUpdating(["web"]); }
   };
   ws.onclose = (ev) => {
     if (closedForGood) return;
@@ -985,13 +985,14 @@ function sendDir(d, now) {
 }
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
-let countAt = 0, countParts = ["server", "web"];
-function startCountdown(at, parts) { countAt = at; if (parts && parts.length) countParts = parts; countEl.hidden = false; }
+let countAt = 0, countParts = ["server", "web"], countHead = "";   // countHead: (owner, 2026-10-14) the commit going live
+function startCountdown(at, parts, head) { countAt = at; if (parts && parts.length) countParts = parts; if (typeof head === "string" && /^[0-9a-f]{7,40}$/.test(head)) countHead = head; countEl.hidden = false; }
 function goUpdating(parts) {
   closedForGood = true; try { ws && ws.close(); } catch {}
   const q = new URLSearchParams({ updating: "1", parts: (parts || countParts).join(",") });
   if (WEB_BUILD && WEB_BUILD !== "__" + "BUILD__") q.set("web", WEB_BUILD);
   if (srvBuild) q.set("srv", srvBuild);
+  if (countHead) q.set("to", countHead);
   location.href = "play.html?" + q.toString();
 }
 
