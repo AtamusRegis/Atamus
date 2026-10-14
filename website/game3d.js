@@ -546,6 +546,13 @@ const sparkGeo = new THREE.BufferGeometry();
 sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute("color", new THREE.BufferAttribute(sparkCol, 3));
 const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 4, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
 sparks.frustumCulled = false; sparks.renderOrder = 8; scene.add(sparks);
+// (owner, 2026-10-14) black soot among the sparks: its own normally blended points (added light can't be black), fading out
+const SOOT_N = 300, sootPos = new Float32Array(SOOT_N * 3), sootCol = new Float32Array(SOOT_N * 4), sootV = new Float32Array(SOOT_N * 3), sootLife = new Float32Array(SOOT_N), sootMax = new Float32Array(SOOT_N);
+let sootNext = 0;
+const sootGeo = new THREE.BufferGeometry();
+sootGeo.setAttribute("position", new THREE.BufferAttribute(sootPos, 3)); sootGeo.setAttribute("color", new THREE.BufferAttribute(sootCol, 4));
+const soot = new THREE.Points(sootGeo, new THREE.PointsMaterial({ size: 6, vertexColors: true, transparent: true, depthWrite: false, sizeAttenuation: false }));
+soot.frustumCulled = false; soot.renderOrder = 9; soot.visible = false; scene.add(soot);   // (over the sparks, so the black shows)
 // (owner, 2026-10-14) with a direction (dx, dy: back the way the hit came from), the sparks start right at the impact and
 // spray out in a cone that way (a narrow core of fast sparks, slower debris a little wider); without one, all round
 const CONE = 0.5;                              // the cone's half-angle (radians)
@@ -559,10 +566,19 @@ function burst(x, y, s, dx, dy) {
     const j = dir === null ? 0 : 1.5;          // (a cone starts at one point)
     sparkPos[i * 3] = x + (Math.random() - 0.5) * j; sparkPos[i * 3 + 1] = dir === null ? 15 + Math.random() * 15 : 10 + Math.random() * 6; sparkPos[i * 3 + 2] = -y + (Math.random() - 0.5) * j;
     sparkV[i * 3] = Math.cos(a) * sp; sparkV[i * 3 + 1] = dir === null ? (fire ? 40 : 15) + Math.random() * 60 : (fire ? 15 : 5) + Math.random() * 30; sparkV[i * 3 + 2] = Math.sin(a) * sp;
-    sparkLife[i] = sparkMax[i] = fire ? 0.5 + Math.random() * 0.5 : 0.8 + Math.random() * 0.6;
+    sparkLife[i] = sparkMax[i] = fire ? 0.22 + Math.random() * 0.25 : 0.35 + Math.random() * 0.3;   // (owner, 2026-10-14: shorter-lived)
     sparkHue[i] = fire ? [2.2, 1.3 + Math.random() * 0.6, 0.35] : [1.1, 1.1, 1.15];   // (bright: they're added over the dark blue)
   }
+  // black soot: about a third as many again, slower, in the same direction
+  for (let k = 0, m = Math.round(n * 0.35); k < m; k++) {
+    const i = sootNext; sootNext = (sootNext + 1) % SOOT_N;
+    const a = dir === null ? Math.random() * Math.PI * 2 : dir + (Math.random() + Math.random() - 1) * CONE * 1.4, sp = (40 + Math.random() * 110) * (0.6 + s / 300);
+    sootPos[i * 3] = x + (Math.random() - 0.5) * 2; sootPos[i * 3 + 1] = 10 + Math.random() * 8; sootPos[i * 3 + 2] = -y + (Math.random() - 0.5) * 2;
+    sootV[i * 3] = Math.cos(a) * sp; sootV[i * 3 + 1] = 5 + Math.random() * 20; sootV[i * 3 + 2] = Math.sin(a) * sp;
+    sootLife[i] = sootMax[i] = 0.3 + Math.random() * 0.3;
+  }
 }
+
 function updateSparks(dt) {
   let any = false;
   for (let i = 0; i < SPARK_N; i++) {
@@ -575,6 +591,17 @@ function updateSparks(dt) {
   }
   if (any || sparks.visible) { sparkGeo.attributes.position.needsUpdate = true; sparkGeo.attributes.color.needsUpdate = true; }
   sparks.visible = any;
+  let anyS = false;
+  for (let i = 0; i < SOOT_N; i++) {
+    if (sootLife[i] <= 0) { sootCol[i * 4 + 3] = 0; continue; }
+    anyS = true; sootLife[i] -= dt;
+    const f = Math.max(0, sootLife[i] / sootMax[i]), drag = Math.exp(-dt * 3);
+    sootV[i * 3] *= drag; sootV[i * 3 + 2] *= drag; sootV[i * 3 + 1] -= 40 * dt;
+    sootPos[i * 3] += sootV[i * 3] * dt; sootPos[i * 3 + 1] = Math.max(0.5, sootPos[i * 3 + 1] + sootV[i * 3 + 1] * dt); sootPos[i * 3 + 2] += sootV[i * 3 + 2] * dt;
+    sootCol[i * 4] = sootCol[i * 4 + 1] = sootCol[i * 4 + 2] = 0; sootCol[i * 4 + 3] = Math.min(1, f * 1.8);   // (solid until it fades at the end)
+  }
+  if (anyS || soot.visible) { sootGeo.attributes.position.needsUpdate = true; sootGeo.attributes.color.needsUpdate = true; }
+  soot.visible = anyS;
 }
 // ---- (owner, 2026-10-14) health bars over damaged ships (mine too); a ship I can't see shows none ----
 const hpBars = new Map();                      // player id -> element
