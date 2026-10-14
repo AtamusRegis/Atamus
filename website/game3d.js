@@ -373,8 +373,8 @@ function updateVis() {                         // the shadows from where my ship
 }
 // ---- (owner, 2026-10-14) mutual visibility: if a player can see you, you can see them, and the less of each other you
 // can see, the more see-through you are to each other. About 9 points on each ship's Sight outline (its corners, the
-// middles of its sides when it has few corners, and its middle); every point of mine against every point of theirs; the
-// share of those lines no block or Build piece cuts is the visibility, the same both ways. A ship is drawn whole at that
+// middles of its sides when it has few corners, and its middle); lines from each of theirs to my pivot and from each of
+// mine to their pivot; the share of those lines no block or Build piece cuts is the visibility, the same both ways. A ship is drawn whole at that
 // opacity (fading over about 0.2 s), and on the minimap the same; at 0 it's hidden. Worked out ten times a second. ----
 function hullPts(v) {
   const n = v.length / 2, out = []; let cx = 0, cy = 0;
@@ -391,16 +391,17 @@ const walls = () => {                          // everything that blocks sight, 
 };
 const visTargets = new Map();                  // ship visual -> { a: visibility now, lines: [[x0, y0, x1, y1, clear]] }
 let visAt = 0;
-function mutual(A, B, W, keepLines) {          // A, B: point lists; W: walls; the share of clear lines (and the lines, for the editor)
+// (owner, 2026-10-14) the lines run from each of one ship's points to the other ship's pivot, and from each of the other's
+// points to this one's pivot; the share of all of them that's clear is the pair's visibility
+function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: their pivots; W: walls
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const [x, y] of A.concat(B)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const near = W.filter((w) => w.x1 >= x0 && w.x0 <= x1 && w.y1 >= y0 && w.y0 <= y1), lines = keepLines ? [] : null;
   let clear = 0;
-  for (const [ax, ay] of A) for (const [bx, by] of B) {
-    let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; }
-    if (ok) clear++; if (lines) lines.push([ax, ay, bx, by, ok]);
-  }
-  return { f: clear / (A.length * B.length), lines };
+  const test = (ax, ay, bx, by) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (ok) clear++; if (lines) lines.push([ax, ay, bx, by, ok]); };
+  for (const [ax, ay] of A) test(ax, ay, pb[0], pb[1]);
+  for (const [bx, by] of B) test(bx, by, pa[0], pa[1]);
+  return { f: clear / (A.length + B.length), lines };
 }
 function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
@@ -409,7 +410,7 @@ function updateShipVis(dt, now) {
     const W = walls(), M = hullPts(buildPoly({ k: "ship", x: me.x, y: me.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: mine ? mine.heading : 0 }, colliders, pivots)), seen = new Set();
     const look = (vis, poly, x, y) => {
       if (!vis) return; seen.add(vis);
-      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, hullPts(poly), W, edit);
+      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], hullPts(poly), [x, y], W, edit);
       const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; visTargets.set(vis, t);
     };
     for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipSight(p), p.holder.position.x, -p.holder.position.z);
