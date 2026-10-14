@@ -346,7 +346,7 @@ function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; 
 // (owner, 2026-10-14) a cloud's thick core (150 m and more in from its edge, where ships can't be seen) blocks sight like
 // a wall: it casts a shadow from its far side and cuts visibility lines, so nobody sees through a nebula to the other
 // side. Its outline is traced once per shape (a grid of distances to the edge, then the 150 m contour), as one or more
-// loops. From inside a core I see out of it (that core doesn't block me).
+// loops. While I'm inside a cloud (anywhere in it), that cloud doesn't block my sight at all; other clouds still do.
 function cloudCores(b) {
   const key = b.poly.join(","); if (b._ck === key) return b._cores;
   const v = b.poly, D = CLOUD_DEEP; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -385,8 +385,8 @@ function cloudCores(b) {
   }
   b._ck = key; b._cores = out; return out;
 }
-// the cloud cores that block my sight now (not one I'm inside)
-function* coresFor(vx, vy) { for (const b of builds.values()) if (b.k === "cloud" && b.poly) for (const c of cloudCores(b)) if (!inPoly(vx, vy, c.v)) yield c; }
+// the cloud cores that block my sight now
+function* coresFor(vx, vy) { for (const b of builds.values()) if (b.k === "cloud" && b.poly && !inPoly(vx, vy, b.poly)) yield* cloudCores(b); }   // (owner) not the cloud I'm in
 let visVer = 0, visKey = "";                    // visVer: bumped whenever a block or Build piece changes
 function updateVis() {                         // the shadows from where my ship is now
   shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
