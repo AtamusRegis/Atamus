@@ -1,9 +1,10 @@
 // (owner, 2026-10-13) The admin panel: an Admin button (top right) for staff accounts opens it. Being logged in as a staff
 // account is enough (no second password). The sections are floating icon buttons on the panel's left (names on hover):
 //   - Players: Online / Offline tabs, a search box for the selected list, then the list (10 rows, then it scrolls under
-//     the tabs and search, which stay put). A row: name (20 characters, monospace) | kicks | Mute tag | Ban tag | last
-//     played | Discipline (the disciplinary panel). A tag is lit while that discipline is running, grayed when they've
-//     had it before; under it, small, the total (kicks counted; time spent muted / banned, a lifted one only until lifted).
+//     the tabs and search, which stay put). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
+//     Discipline (the disciplinary panel). The tags are always there: grayed, or lit while running (mute yellow, ban red)
+//     with the time left inside; grayed, they hold the total time served (a lifted one counts only until it was lifted).
+//   Reports and Appeals open at the same width as Players.
 //   - Reports: players' reports with the reported player's recent chat.
 //   - Appeals: ban appeals (read, reply, accept or deny).
 // The window is only as wide as what it shows. The disciplinary panel is its own window (AdminPanel.act(id, name), also
@@ -27,7 +28,7 @@
     appeals: "M4 4h16v11H9l-5 4z",
   };
   let root, rail, body, section = "players", list = "online", query = "", openAppeal = null, timer = 0, searchT = 0;
-  let listBox = null;
+  let listBox = null, playersWidth = 0;
 
   function mount() {
     if (root) return;
@@ -64,6 +65,7 @@
       listBox = $("div", "ap-scroll");
       body.append(tabs, search, listBox);
     } else { listBox = $("div", "ap-scroll ap-wide"); body.append(listBox); }
+    root.style.width = section !== "players" && playersWidth ? playersWidth + "px" : "";
     refresh();
   }
   async function refresh() {
@@ -84,18 +86,17 @@
       const tr = $("tr");
       const name = $("td", "ap-mono" + (p.side ? " " + p.side : ""), p.name.slice(0, 20)); name.title = p.name;
       const tot = p.totals || {};
-      // a tag per kind: lit while it's running (with the time left), grayed when they've had one before; the total under it
-      const cell = (label, active, cls, total) => { const td = $("td", "ap-cell"); if (!active && !total) return td;
-        td.appendChild($("span", "ap-tag " + cls + (active ? "" : " off"), active ? label + " " + left(active) : label));
-        if (total) td.appendChild($("span", "ap-total", total)); return td; };
-      const kick = cell("Kick", null, "kick", tot.kicks ? String(tot.kicks) : "");
-      const mute = cell("Mute", p.mute, "mute", tot.muted ? dur(tot.muted) : "");
-      const ban = cell("Ban", p.ban, "ban", tot.banned ? dur(tot.banned) : "");
+      // (owner) a Mute and a Ban tag on every row: grayed unless running (mute yellow, ban red); inside it, the time left while
+      // it runs, else the total time they've spent under it (nothing if never)
+      const cell = (label, active, cls, total) => { const td = $("td", "ap-cell");
+        td.appendChild($("span", "ap-tag " + cls + (active ? "" : " off"), active ? label + " " + left(active) : total ? label + " " + dur(total) : label)); return td; };
+      const mute = cell("Mute", p.mute, "mute", tot.muted), ban = cell("Ban", p.ban, "ban", tot.banned);
       const last = $("td", "ap-dim", p.online ? "now" : ago(p.lastPlayed));
       const d = $("td"), b = $("button", "", "Discipline"); b.addEventListener("click", () => act(p.id, p.name, p)); d.appendChild(b);
-      tr.append(name, kick, mute, ban, last, d); tb.appendChild(tr);
+      tr.append(name, mute, ban, last, d); tb.appendChild(tr);
     }
     t.appendChild(tb); listBox.replaceChildren(t);
+    playersWidth = root.offsetWidth;            // (owner) Reports and Appeals open at this same width
   }
 
   // ---- the disciplinary panel ----

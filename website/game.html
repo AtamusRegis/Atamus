@@ -41,12 +41,11 @@
     .ap-tabs { display: flex; gap: 4px; } .ap-tabs button.on { border-color: #e8902a !important; color: #fff !important; }
     .ap-search { width: 100%; box-sizing: border-box; }
     .ap-scroll { max-height: 300px; overflow-y: auto; }   /* about 10 rows, then it scrolls (the tabs and search stay) */
-    .ap-wide { width: 520px; max-width: 100%; max-height: 60vh; }
+    .ap-wide { max-height: 370px; }   /* Reports / Appeals: the Players width (set from the script) */
     .ap-table { border-collapse: separate; border-spacing: 0 2px; }
     .ap-table td { padding: 3px 8px; background: #0f1724; white-space: nowrap; height: 22px; } .ap-table td:first-child { border-radius: 4px 0 0 4px; } .ap-table td:last-child { border-radius: 0 4px 4px 0; }
     .ap-mono { font-family: ui-monospace, Menlo, Consolas, monospace; width: 20ch; min-width: 20ch; font-weight: 600; } .ap-mono.red { color: #ff6a50; } .ap-mono.blue { color: #6fa8ff; }
-    .ap-tag { display: inline-block; padding: 0 6px; border: 1px solid #c9a24a; border-radius: 3px; color: #ffd27a; font-size: 11px; } .ap-tag.ban { border-color: #e04848; color: #ff8a8a; } .ap-tag.off { border-color: #3a4658; color: #66768c; }
-    .ap-cell { vertical-align: middle; } .ap-cell > * { display: block; width: max-content; } .ap-total { color: #7f93ad; font-size: 10px; line-height: 1.3; } .ap-tag + .ap-total { margin-top: 1px; }
+    .ap-tag { display: inline-block; padding: 0 6px; border: 1px solid #c9a24a; border-radius: 3px; color: #ffd27a; font-size: 11px; font-variant-numeric: tabular-nums; } .ap-tag.ban { border-color: #e04848; color: #ff8a8a; } .ap-tag.off { border-color: #3a4658; color: #66768c; }
     .ap-list { display: grid; gap: 4px; }
     .ap-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 4px; background: #0f1724; }
     .ap-click { cursor: pointer; grid-template-columns: 130px 150px 1fr; } .ap-click:hover { background: #16202f; }
@@ -119,7 +118,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791949524"></script>
-  <script type="module" src="game3d.js?v=1791949219"></script>
+  <script src="adminpanel.js?v=1791949804"></script>
+  <script type="module" src="game3d.js?v=1791949804"></script>
 </body>
 </html>
