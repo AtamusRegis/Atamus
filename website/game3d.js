@@ -57,8 +57,8 @@ const canvas = document.getElementById("view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070c);
-scene.fog = new THREE.Fog(0x05070c, 3000, 14000);
+scene.background = new THREE.Color(0x18181e);   // (owner, 2026-10-13) dark charcoal, from the owner's reference
+scene.fog = new THREE.Fog(0x18181e, 3000, 14000);
 scene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 0.9));
 const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(3000, 5000, 2000); scene.add(sun);
 
@@ -76,8 +76,8 @@ let camDist = cam.zmax;
 // so nothing z-fights or shimmers the way a second layer of rendered lines did
 const groundMat = new THREE.ShaderMaterial({
   uniforms: {
-    base: { value: new THREE.Color(0x0a0e16) }, gline: { value: new THREE.Color(0x33455f) },
-    fogColor: { value: new THREE.Color(0x05070c) }, fogNear: { value: 3000 }, fogFar: { value: 14000 },
+    base: { value: new THREE.Color(0x18181e) }, gline: { value: new THREE.Color(0x46464c) },   // (owner) charcoal ground, soft gray lines
+    fogColor: { value: new THREE.Color(0x18181e) }, fogNear: { value: 3000 }, fogFar: { value: 14000 },
   },
   vertexShader: `varying vec3 vW; varying float vD;
     void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vec4 mv = viewMatrix * w; vD = -mv.z; gl_Position = projectionMatrix * mv; }`,
@@ -90,6 +90,7 @@ const groundMat = new THREE.ShaderMaterial({
       vec3 col = mix(base, gline, l * 0.85);
       col = mix(col, fogColor, smoothstep(fogNear, fogFar, vD));
       gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
     }`,
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(140000, 140000), groundMat);
