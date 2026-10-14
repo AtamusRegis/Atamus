@@ -3,7 +3,7 @@
 //   - Players: Online / Offline tabs, a search box for the selected list, then the list (6 rows, then it scrolls under
 //     the tabs and search, which stay put; the window shows 6 rows). A row: name (20 characters, monospace) | Mute tag | Ban tag | last played |
 //     Discipline (the disciplinary panel). The tags are always there: grayed, or lit while running (mute yellow, ban red)
-//     with the time left inside; grayed, they hold the total time served (a lifted one counts only until it was lifted).
+//     with the time left inside, under the word; grayed, they hold the total time served (a lifted one counts only until it was lifted).
 //   Every section uses the same window at the same size (the Players size).
 //   - Reports: players' reports with the reported player's recent chat.
 //   - Appeals: ban appeals (read, reply, accept or deny).
@@ -100,7 +100,8 @@
       // (owner) a Mute and a Ban tag on every row: grayed unless running (mute yellow, ban red); inside it, the time left while
       // it runs, else the total time they've spent under it (nothing if never)
       const cell = (label, active, cls, total) => { const td = $("td", "ap-cell");
-        td.appendChild($("span", "ap-tag " + cls + (active ? "" : " off"), active ? label + " " + left(active) : total ? label + " " + dur(total) : label)); return td; };
+        const tag = $("span", "ap-tag " + cls + (active ? "" : " off")); tag.append($("b", "", label), $("i", "", active ? left(active) : total ? dur(total) : "\u00a0"));   // the time under the word
+        td.appendChild(tag); return td; };
       const mute = cell("Mute", p.mute, "mute", tot.muted), ban = cell("Ban", p.ban, "ban", tot.banned);
       const last = $("td", "ap-dim", p.online ? "now" : ago(p.lastPlayed));
       const d = $("td"), b = $("button", "", "Discipline"); b.addEventListener("click", () => act(p.id, p.name, p)); d.appendChild(b);
