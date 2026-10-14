@@ -153,7 +153,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -174,8 +174,9 @@ export class World3D {
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_colliders (k TEXT PRIMARY KEY, pts JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
-    for (const o of (await pool.query(`SELECT k, pts, pivot, mover FROM world3d_colliders`)).rows) {
-      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv;
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility outline
+    for (const o of (await pool.query(`SELECT k, pts, pivot, mover, vis FROM world3d_colliders`)).rows) {
+      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
     for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
@@ -311,13 +312,13 @@ export class World3D {
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, pts, pivot, mover) {   // (owner) the sight outline, the pivot and the movement ellipse together
-    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k]; if (!c) return null;
+  async setCollider(k, pts, pivot, mover, vis) {   // (owner) the aim bounds, the pivot, the movement ellipse and the visibility outline together
+    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis) || COLL_DEFAULT[k]; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, updated_at) VALUES ($1, $2, $3, $4, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv)]);
-    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, vis, updated_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, vis = $5, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs)]);
+    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv; this.visOutlines[k] = vs;
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
-    return { pts: c, pv, mv };
+    return { pts: c, pv, mv, vis: vs };
   }
   buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
   async addBuild(o, by) {

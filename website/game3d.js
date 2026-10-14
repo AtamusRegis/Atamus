@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791965698";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791966872";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -372,8 +372,8 @@ function updateVis() {                         // the shadows from where my ship
   renderer.setRenderTarget(null);
 }
 // ---- (owner, 2026-10-14) mutual visibility: if a player can see you, you can see them, and the less of each other you
-// can see, the more see-through you are to each other. Points on each ship's Sight outline (its corners, the middle of
-// every side, and its middle; at most 33); lines from each of theirs to my pivot and from each of
+// can see, the more see-through you are to each other. Points on each ship's Visibility outline (its corners and the
+// middle of every side; at most 32); lines from each of theirs to my pivot and from each of
 // mine to their pivot; the share of those lines no block or Build piece cuts is the visibility, the same both ways. A ship is drawn whole at that
 // opacity (fading over about 0.2 s), and on the minimap the same; at 0 it's hidden. Worked out ten times a second. ----
 function hullPts(v) {
@@ -381,7 +381,7 @@ function hullPts(v) {
   for (let i = 0; i < n; i++) { out.push([v[2 * i], v[2 * i + 1]]); cx += v[2 * i]; cy += v[2 * i + 1]; }
   for (let i = 0; i < n; i++) { const j = (i + 1) % n; out.push([(v[2 * i] + v[2 * j]) / 2, (v[2 * i + 1] + v[2 * j + 1]) / 2]); }   // (owner) a point in the middle of every side too
   let pts = out; if (pts.length > 32) { const step = pts.length / 32; pts = Array.from({ length: 32 }, (_, k) => out[Math.floor(k * step)]); }
-  pts.push([cx / n, cy / n]); return pts;
+  return pts;
 }
 const walls = () => {                          // everything that blocks sight, with a bounding box each
   const out = [], h = BLOCK_HALF;
@@ -393,28 +393,30 @@ const visTargets = new Map();                  // ship visual -> { a: visibility
 let visAt = 0;
 // (owner, 2026-10-14) the lines run from each of one ship's points to the other ship's pivot, and from each of the other's
 // points to this one's pivot; the share of all of them that's clear is the pair's visibility
+// (owner) the line between the two pivots counts for half the visibility; the corner and side lines share the other half
 function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: their pivots; W: walls
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
   for (const [x, y] of A.concat(B)) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const near = W.filter((w) => w.x1 >= x0 && w.x0 <= x1 && w.y1 >= y0 && w.y0 <= y1), lines = keepLines ? [] : null;
   let clear = 0;
-  const test = (ax, ay, bx, by) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (ok) clear++; if (lines) lines.push([ax, ay, bx, by, ok]); };
-  for (const [ax, ay] of A) test(ax, ay, pb[0], pb[1]);
-  for (const [bx, by] of B) test(bx, by, pa[0], pa[1]);
-  return { f: clear / (A.length + B.length), lines };
+  const test = (ax, ay, bx, by) => { let ok = true; for (const w of near) if (segPoly(ax, ay, bx, by, w.v) !== null) { ok = false; break; } if (lines) lines.push([ax, ay, bx, by, ok]); return ok; };
+  const piv = test(pa[0], pa[1], pb[0], pb[1]) ? 0.5 : 0;
+  for (const [ax, ay] of A) if (test(ax, ay, pb[0], pb[1])) clear++;
+  for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1])) clear++;
+  return { f: piv + 0.5 * clear / Math.max(1, A.length + B.length), lines };
 }
 function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 100) {
     visAt = now;
-    const W = walls(), M = hullPts(buildPoly({ k: "ship", x: me.x, y: me.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: mine ? mine.heading : 0 }, colliders, pivots)), seen = new Set();
+    const W = walls(), M = hullPts(buildPoly({ k: "ship", x: me.x, y: me.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: mine ? mine.heading : 0 }, visOutlines, pivots)), seen = new Set();   // (owner) the Visibility outline, not the aim bounds
     const look = (vis, poly, x, y) => {
       if (!vis) return; seen.add(vis);
       const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], hullPts(poly), [x, y], W, edit);
       const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipSight(p), p.holder.position.x, -p.holder.position.z);
-    for (const b of builds.values()) if (b.k === "ship" && b.mesh) look(b.mesh, b.poly, b.x, b.y);
+    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z);
+    for (const b of builds.values()) if (b.k === "ship" && b.mesh) look(b.mesh, buildPoly(b, visOutlines, pivots), b.x, b.y);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   const k = Math.min(1, dt / 0.2);
@@ -448,6 +450,8 @@ function visGizmo(on) {
   if (visGizGeo.attributes.position) { visGizGeo.attributes.position.array.set(P); visGizGeo.attributes.color.array.set(C); visGizGeo.attributes.position.needsUpdate = visGizGeo.attributes.color.needsUpdate = true; }
   visGizGeo.setDrawRange(0, P.length / 3);
 }
+// (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the aim bounds are separate)
+function shipVisOutline(x, y, h) { return buildPoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, visOutlines, pivots); }
 // a player ship's sight outline where it's drawn (the ship kind's outline and pivot, turned with its heading)
 function shipSight(p) { return buildPoly({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
 // (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
@@ -511,7 +515,7 @@ function shipGizmos() {
   for (const p of players.values()) {
     if (p.id !== myId && !p.near) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
-    out.push({ x, y, sight: buildPoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading) });
+    out.push({ x, y, sight: buildPoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading) });
   }
   return out;
 }
@@ -652,7 +656,7 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers);
+      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);
