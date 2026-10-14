@@ -546,13 +546,19 @@ const sparkGeo = new THREE.BufferGeometry();
 sparkGeo.setAttribute("position", new THREE.BufferAttribute(sparkPos, 3)); sparkGeo.setAttribute("color", new THREE.BufferAttribute(sparkCol, 3));
 const sparks = new THREE.Points(sparkGeo, new THREE.PointsMaterial({ size: 4, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: false }));
 sparks.frustumCulled = false; sparks.renderOrder = 8; scene.add(sparks);
-function burst(x, y, s) {
-  const n = Math.min(80, Math.round(10 + s * 0.25));
+// (owner, 2026-10-14) with a direction (dx, dy: back the way the hit came from), the sparks start right at the impact and
+// spray out in a cone that way (a narrow core of fast sparks, slower debris a little wider); without one, all round
+const CONE = 0.5;                              // the cone's half-angle (radians)
+function burst(x, y, s, dx, dy) {
+  const n = Math.min(80, Math.round(10 + s * 0.25)), dir = Number.isFinite(dx) && Number.isFinite(dy) && Math.hypot(dx, dy) > 0.1 ? Math.atan2(-dy, dx) : null;   // (in the scene, z = -y)
   for (let k = 0; k < n; k++) {
     const i = sparkNext; sparkNext = (sparkNext + 1) % SPARK_N;
-    const fire = k % 3 !== 0, a = Math.random() * Math.PI * 2, sp = (fire ? 60 + Math.random() * 160 : 20 + Math.random() * 60) * (0.6 + s / 300);
-    sparkPos[i * 3] = x; sparkPos[i * 3 + 1] = 15 + Math.random() * 15; sparkPos[i * 3 + 2] = -y;
-    sparkV[i * 3] = Math.cos(a) * sp; sparkV[i * 3 + 1] = (fire ? 40 : 15) + Math.random() * 60; sparkV[i * 3 + 2] = Math.sin(a) * sp;
+    const fire = k % 3 !== 0;
+    const a = dir === null ? Math.random() * Math.PI * 2 : dir + (Math.random() + Math.random() - 1) * CONE * (fire ? 0.8 : 1.3);   // (clustered toward the middle)
+    const sp = (dir === null ? (fire ? 60 + Math.random() * 160 : 20 + Math.random() * 60) : (fire ? 80 + Math.random() * 180 : 25 + Math.random() * 70)) * (0.6 + s / 300);
+    const j = dir === null ? 0 : 1.5;          // (a cone starts at one point)
+    sparkPos[i * 3] = x + (Math.random() - 0.5) * j; sparkPos[i * 3 + 1] = dir === null ? 15 + Math.random() * 15 : 10 + Math.random() * 6; sparkPos[i * 3 + 2] = -y + (Math.random() - 0.5) * j;
+    sparkV[i * 3] = Math.cos(a) * sp; sparkV[i * 3 + 1] = dir === null ? (fire ? 40 : 15) + Math.random() * 60 : (fire ? 15 : 5) + Math.random() * 30; sparkV[i * 3 + 2] = Math.sin(a) * sp;
     sparkLife[i] = sparkMax[i] = fire ? 0.5 + Math.random() * 0.5 : 0.8 + Math.random() * 0.6;
     sparkHue[i] = fire ? [2.2, 1.3 + Math.random() * 0.6, 0.35] : [1.1, 1.1, 1.15];   // (bright: they're added over the dark blue)
   }
@@ -787,8 +793,9 @@ function addProj(m) {
 function endProj(m) {
   const q = projs.get(m.i); if (q) { scene.remove(q.g); projs.delete(m.i); }
   if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
-  if (m.h != null) { burst(m.x, m.y, 260); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // sparks on the ship it hit (a ship I hit shows in a cloud)
-  else if (m.s) burst(m.x, m.y, 60);           // a small puff of sparks on a wall
+  const bx = q ? -q.vx : undefined, by = q ? -q.vy : undefined;   // (owner, 2026-10-14) sparks fly back the way the slug came
+  if (m.h != null) { burst(m.x, m.y, 260, bx, by); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // sparks on the ship it hit (a ship I hit shows in a cloud)
+  else if (m.s) burst(m.x, m.y, 60, bx, by);   // a small puff of sparks on a wall
 }
 function updateShots(now) {
   for (const [id, q] of projs) {
@@ -935,7 +942,7 @@ function connect() {
     else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
       const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
       if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
-      if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)));
+      if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)), +m.dx, +m.dy);
     }
     else if (m.t === "staff") { if (window.AdminPanel) window.AdminPanel.mount(true).then((ok) => { amStaff = ok; }); }   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
     else if (m.t === "chat") addChat(m);
@@ -1408,4 +1415,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

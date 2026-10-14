@@ -345,7 +345,14 @@ export class World3D {
         a.vx = (a.vx || 0) + j * n.nx; a.vy = (a.vy || 0) + j * n.ny; b.vx = (b.vx || 0) - j * n.nx; b.vy = (b.vy || 0) - j * n.ny;
         if (!a.dx && !a.dy) a.brakeA = 0; if (!b.dx && !b.dy) b.brakeA = 0;   // a drifting ship brakes again from its new speed
         const dmg = Math.max(0, -vn - BUMP_SAFE) * BUMP_DMG; if (dmg > 0) { this.hurt(a, dmg); this.hurt(b, dmg); }
-        if (-vn > 5) this.hits.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.round(-vn * 4), a: a.id, b: b.id });   // (owner) sparks where they met (s: the hit's strength, x4 since speeds were cut to 25%)
+        if (-vn > 5) {                         // (owner) sparks where they met (s: the hit's strength, x4 since speeds were cut to 25%)
+          // (owner, 2026-10-14) where the hulls touched (between each one's point deepest toward the other), and the way the hit
+          // came from: back toward whichever ship drove into the other harder (n points from b toward a)
+          const sup = (P, dx, dy) => { let bi = 0, bv = -Infinity; for (let k = 0; k < P.length; k += 2) { const v = P[k] * dx + P[k + 1] * dy; if (v > bv) { bv = v; bi = k; } } return [P[bi], P[bi + 1]]; };
+          const pa = sup(polys.get(a), -n.nx, -n.ny), pb = sup(polys.get(b), n.nx, n.ny);
+          const inA = -(((a.vx || 0) * n.nx) + ((a.vy || 0) * n.ny)), inB = ((b.vx || 0) * n.nx) + ((b.vy || 0) * n.ny), sg = inA >= inB ? 1 : -1;
+          this.hits.push({ x: (pa[0] + pb[0]) / 2, y: (pa[1] + pb[1]) / 2, s: Math.round(-vn * 4), a: a.id, b: b.id, dx: n.nx * sg, dy: n.ny * sg });
+        }
       }
       polys.set(a, this.shipPoly(a)); polys.set(b, this.shipPoly(b));
     }

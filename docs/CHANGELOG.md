@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Directional sparks (owner):** collision and railgun sparks now burst from the exact impact point and spray in a cone back toward where the hit came from.
 - **Enter System returns when the update is live (owner):** the update page now waits for the exact new version on the server and website and for the server to accept logins, then brings Enter System back for everyone at once (checked every second), instead of relying on a timer.
 - **Staff badges (owner):** the letters now sit centered in their circles, and the badges also show in the admin panel's player list and on the disciplinary panel.
 - **Fix: stuck on "Atamus is updating" (owner).** The update page's checks could hang forever on a restarting server; now each check gives up after 4 s, the wait is at most 90 s, and reloading the page (even Ctrl+F5) continues the same wait instead of starting over.

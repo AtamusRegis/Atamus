@@ -215,7 +215,7 @@ export function attachGameServer(httpServer) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
         const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R);
-        for (const h of near) ws.send(JSON.stringify({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b }));
+        for (const h of near) ws.send(JSON.stringify({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100 }));
       }
       world.hits.length = 0;
     }
