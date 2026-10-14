@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Map edge on the zoomed minimap (owner):** zoomed in, the map's border shows as a gray hexagon inside the blue frame, so a nearby edge is visible.
 - **Minimap frame and zoom limit (owner):** the minimap keeps its hexagon outline when zoomed (the map zooms inside it), and zooming in stops where the load circle around your ship just fits.
 - **Minimap zoom (owner):** scrolling over the minimap zooms the minimap (up to about 3 km across, centered on your ship) instead of the game camera.
 - **Old-game slots (owner):** the hotbar and inventory use the old game's slot style (dark tray, darker wells, warm ring on filled slots, cyan outline while dragging over a slot) instead of the window colors.

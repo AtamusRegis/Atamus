@@ -632,18 +632,18 @@ function drawMinimap(now) {
   const dpr = Math.min(devicePixelRatio || 1, 2), W = mm.clientWidth, H = mm.clientHeight;
   if (mm.width !== Math.round(W * dpr)) { mm.width = Math.round(W * dpr); mm.height = Math.round(H * dpr); }
   mmx.setTransform(dpr, 0, 0, dpr, 0, 0); mmx.clearRect(0, 0, W, H);
-  // (owner) zoom: the wheel over the minimap; zoomed in, it centers toward your ship (fully at high zoom). The minimap keeps
+  // (owner) zoom: the wheel over the minimap; zoomed in, it centers on your ship (fully from 2x). The minimap keeps
   // its hexagon shape at every zoom (the map is drawn inside it); at 1x the frame is the map's own border.
   const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), FR = W / 2 - 3, cx = W / 2, cy = H / 2;
   mmZoom = Math.min(mmZoom, mmMaxZoom(W));
   const k = FR / Rv * mmZoom;
-  const ox = haveMe ? me.x * (1 - 1 / mmZoom) : 0, oy = haveMe ? me.y * (1 - 1 / mmZoom) : 0;
+  const cf = Math.min(1, mmZoom - 1), ox = haveMe ? me.x * cf : 0, oy = haveMe ? me.y * cf : 0;   // centered on your ship from 2x in
   const P = (x, y) => [cx + (x - ox) * k, cy - (y - oy) * k];
   const hexPath = (R, at) => { mmx.beginPath(); for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = at(Math.cos(t) * R, Math.sin(t) * R); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); } mmx.closePath(); };
   const frame = (x, y) => [cx + x, cy - y];
   hexPath(FR, frame); mmx.fillStyle = "rgba(10,14,22,0.85)"; mmx.fill();
   mmx.save(); hexPath(FR, frame); mmx.clip();
-  if (mmZoom > 1.001) { hexPath(Rv, P); mmx.strokeStyle = "rgba(79,143,232,0.7)"; mmx.lineWidth = 1; mmx.stroke(); }   // the map's border, when zoomed
+  if (mmZoom > 1.001) { hexPath(Rv, P); mmx.strokeStyle = "#8d96a6"; mmx.lineWidth = 1.5; mmx.stroke(); }   // (owner) zoomed in, the map's border in gray where it's in view, so a nearby edge shows
   // a ship's heading h faces three's (sin h, cos h) on x / z: on the map (north up) that's (sin h, cos h) in screen x / y
   const arrow = (x, y, h, col, r, ring) => {
     const [X, Y] = P(x, y), fx = Math.sin(h), fy = Math.cos(h);
