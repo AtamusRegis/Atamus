@@ -351,11 +351,11 @@ export function initBuild(ctx) {
         for (let k = 0; k < 3; k++) { V[j + k] += ((W[j + k] - P[j + k]) * EDGE_K - V[j + k] * EDGE_C) * dt; P[j + k] += V[j + k] * dt; }   // the leash
         for (const sh of near) {               // a ship's hull: pushed out of it, bounced off it
           const dx = P[j] - sh[0], dy = P[j + 1] - sh[1], d = Math.hypot(dx, dy); if (d >= EDGE_R || d < 1e-3) continue;
-          // (owner) the bigger a puff, the less a ship moves it (small ones fly, the big ones near the red line barely budge)
-          const m = Math.min(1, Math.max(0.12, 10 / e.A[i * 5 + 3]));
-          const nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny, push = (EDGE_R - d) * m;
-          P[j] += nx * push; P[j + 1] += ny * push;
-          if (vn < 0) { V[j] -= nx * vn * 1.5 * m; V[j + 1] -= ny * vn * 1.5 * m; V[j + 2] += -vn * 0.25 * m * (Math.random() - 0.3); }
+          // (owner) a ship only nudges a puff: it gives it some of its speed as it sweeps into it (nothing holds the puff
+          // out of the hull), so the leash always pulls it back home, even with a ship parked on its spot. The bigger the
+          // puff, the heavier: small ones get swept along, big ones near the red line barely stir.
+          const m = Math.min(0.55, Math.max(0.04, 5 / e.A[i * 5 + 3])), nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny;
+          if (vn < 0) { const k = -vn * m * Math.min(1, dt * 6) * (1 - d / EDGE_R * 0.5); V[j] += nx * k; V[j + 1] += ny * k; V[j + 2] += k * 0.3 * (Math.random() - 0.3); }
         }
       }
       e.mesh.geometry.attributes.iP.needsUpdate = true;
