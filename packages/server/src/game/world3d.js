@@ -35,7 +35,7 @@ export const LOAD_R = 1300;
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
-export const VEL_TURN = 8;                   // rad/s: how fast held WASD swings the motion round (the ship turns as fast)
+export const VEL_TURN = 3.5;                 // rad/s: how fast held WASD swings the motion round (owner, 2026-10-14: was 8, the nose's rate; slower so ships drift slightly through turns)
 // (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
 // its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
 // motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it

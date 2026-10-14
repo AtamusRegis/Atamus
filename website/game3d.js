@@ -27,7 +27,7 @@ const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
-let VEL_TURN = 8;                               // (owner) as on the server (world3d.js)
+let VEL_TURN = 3.5;                             // (owner) as on the server (world3d.js); the hello sends it
 // (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
 // its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
 // motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
@@ -474,7 +474,7 @@ let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direc
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
-const TURN_A = 70, TURN_K = 14, BANK_MAX = 0.32;   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
+const TURN_A = 40, TURN_K = 9, BANK_MAX = 0.32;   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
 function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced turn direction (+1 / -1), 0 = the short way
@@ -554,9 +554,10 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces, by their Sight outlines (owner, 2026-10-14)
+  for (const b of builds.values()) { if (b.k === "ship") { const vt = b.mesh && visTargets.get(b.mesh); if (!vt || vt.a <= 0.01) continue; } const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
   for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
     if (p.id === myId || !p.near) continue;
+    const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
     const t = segPoly(x0, y0, x1, y1, shipSight(p)); if (t !== null) hit(t);
   }
   return best;

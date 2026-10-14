@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Drift (owner):** a ship's motion now swings toward a new direction more slowly than the nose turns (3.5 rad/s, was 8), so ships drift slightly through turns; the nose's turning eases a little more. **Fix: hidden ships no longer stop the aim line** (it could reveal them before they showed).
 - **Smoother ship movement (owner):** turning spins up and eases in instead of starting and stopping dead, ships lean into turns, corrections from the server blend in smoothly, and other ships glide along curves between updates. Speeds and handling are unchanged.
 - **Smoother visibility (owner):** ships fade smoothly from hidden at 25% visible to solid at 75% (no steps), appear fast and disappear slowly, the pivot line now counts 20% (was half), and visibility updates 30 times a second.
 - **Editor visibility lines (owner):** only other ships' lines to your pivot (and the pivot-to-pivot line) are drawn, not yours to them (the percentage still counts both).
