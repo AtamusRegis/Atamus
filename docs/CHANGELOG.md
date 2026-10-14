@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Nebulas block sight (owner):** a cloud's thick core casts a shadow past its far side and hides ships behind it, so you can't see through a nebula to the other side (from inside the core you can still see out).
 - **Cloud hiding by depth (owner):** ships in a nebula cloud are fully visible at its edge and fade out to invisible 150 m in (moving or not); a ship within 100 m of you in the same cloud fades only to 25%. The rule that hid any ship sitting still in a cloud is gone.
 - **3D nebula clouds (owner):** clouds are now a volume of soft drifting puffs at different heights instead of a flat sheet, with swirls of color through them; they clear around your own ship so you can still see it.
 - **Nebula clouds (owner):** a third Build menu slot places colored, drifting nebula clouds (Q picks the color theme) whose outline can be reshaped in the world (drag corners, add them from an edge's middle, right-click to remove). Ships fly through them; inside, a ship fades the deeper it goes (25% at 150 m in), and a ship sitting still is invisible unless you're in the same cloud within 100 m.

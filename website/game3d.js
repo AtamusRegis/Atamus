@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791973945";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791974158";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -341,6 +341,52 @@ const shadeMat = new THREE.ShaderMaterial({
 });
 const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);   // (also the grid)
 shade.position.y = 0; shade.renderOrder = -1; shade.frustumCulled = false; scene.add(shade);
+function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
+function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
+// (owner, 2026-10-14) a cloud's thick core (150 m and more in from its edge, where ships can't be seen) blocks sight like
+// a wall: it casts a shadow from its far side and cuts visibility lines, so nobody sees through a nebula to the other
+// side. Its outline is traced once per shape (a grid of distances to the edge, then the 150 m contour), as one or more
+// loops. From inside a core I see out of it (that core doesn't block me).
+function cloudCores(b) {
+  const key = b.poly.join(","); if (b._ck === key) return b._cores;
+  const v = b.poly, D = CLOUD_DEEP; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < v.length; i += 2) { x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); }
+  const cs = Math.max(10, Math.max(x1 - x0, y1 - y0) / 160), nx = Math.ceil((x1 - x0) / cs) + 3, ny = Math.ceil((y1 - y0) / cs) + 3, ox = x0 - cs, oy = y0 - cs;
+  const F = (x, y) => (inPoly(x, y, v) ? edgeDist(x, y, v) : -edgeDist(x, y, v)) - D;
+  const val = new Float32Array(nx * ny); for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) val[j * nx + i] = (i === 0 || j === 0 || i === nx - 1 || j === ny - 1) ? -1 : F(ox + i * cs, oy + j * cs);
+  const V = (i, j) => val[j * nx + i], pts = new Map(), adj = new Map();
+  const pt = (k, ax, ay, va, bx, by, vb) => { if (!pts.has(k)) { const t = va / (va - vb); pts.set(k, [ax + (bx - ax) * t, ay + (by - ay) * t]); } return k; };
+  const link = (a, b) => { (adj.get(a) || adj.set(a, []).get(a)).push(b); (adj.get(b) || adj.set(b, []).get(b)).push(a); };
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = V(i, j), b2 = V(i + 1, j), c = V(i + 1, j + 1), d = V(i, j + 1), m = (a > 0) | ((b2 > 0) << 1) | ((c > 0) << 2) | ((d > 0) << 3);
+    if (m === 0 || m === 15) continue;
+    const X = ox + i * cs, Y = oy + j * cs;
+    const B = () => pt("h" + i + "," + j, X, Y, a, X + cs, Y, b2), R = () => pt("v" + (i + 1) + "," + j, X + cs, Y, b2, X + cs, Y + cs, c);
+    const T = () => pt("h" + i + "," + (j + 1), X, Y + cs, d, X + cs, Y + cs, c), L = () => pt("v" + i + "," + j, X, Y, a, X, Y + cs, d);
+    const ctr = (a + b2 + c + d) / 4 > 0;
+    switch (m) {
+      case 1: case 14: link(L(), B()); break; case 2: case 13: link(B(), R()); break; case 3: case 12: link(L(), R()); break;
+      case 4: case 11: link(R(), T()); break; case 6: case 9: link(B(), T()); break; case 7: case 8: link(L(), T()); break;
+      case 5: if (ctr) { link(B(), R()); link(T(), L()); } else { link(L(), B()); link(R(), T()); } break;
+      case 10: if (ctr) { link(L(), B()); link(R(), T()); } else { link(B(), R()); link(T(), L()); } break;
+    }
+  }
+  const out = [], used = new Set();
+  for (const start of adj.keys()) {
+    if (used.has(start)) continue;
+    const loop = []; let prev = null, cur = start;
+    while (cur && !used.has(cur)) { used.add(cur); loop.push(pts.get(cur)); const n = adj.get(cur); const nxt = n.find((k) => k !== prev && !used.has(k)); prev = cur; cur = nxt; }
+    let L2 = loop;                             // thin out points that sit on a straight run
+    for (let pass = 0; pass < 3 && L2.length > 3; pass++) L2 = L2.filter((p, k) => { const a = L2[(k + L2.length - 1) % L2.length], c = L2[(k + 1) % L2.length], ex = c[0] - a[0], ey = c[1] - a[1], l = Math.hypot(ex, ey) || 1; return k % 2 === 1 || Math.abs((p[0] - a[0]) * ey - (p[1] - a[1]) * ex) / l > 1.5; });
+    if (L2.length < 3) continue;
+    const flat = L2.flat(); let cx0 = Infinity, cy0 = Infinity, cx1 = -Infinity, cy1 = -Infinity;
+    for (const [x, y] of L2) { cx0 = Math.min(cx0, x); cx1 = Math.max(cx1, x); cy0 = Math.min(cy0, y); cy1 = Math.max(cy1, y); }
+    out.push({ v: flat, x0: cx0, x1: cx1, y0: cy0, y1: cy1 });
+  }
+  b._ck = key; b._cores = out; return out;
+}
+// the cloud cores that block my sight now (not one I'm inside)
+function* coresFor(vx, vy) { for (const b of builds.values()) if (b.k === "cloud" && b.poly) for (const c of cloudCores(b)) if (!inPoly(vx, vy, c.v)) yield c; }
 let visVer = 0, visKey = "";                    // visVer: bumped whenever a block or Build piece changes
 function updateVis() {                         // the shadows from where my ship is now
   shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
@@ -368,6 +414,7 @@ function updateVis() {                         // the shadows from where my ship
   }
   // (owner, 2026-10-14) ships cast no shadows (only blocks and Build pieces do)
   for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
+  for (const c of coresFor(vx, vy)) if (c.x1 >= vx - VIS_S && c.x0 <= vx + VIS_S && c.y1 >= vy - VIS_S && c.y0 <= vy + VIS_S) edges(c.v);   // (owner) nebula cores
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
@@ -384,6 +431,7 @@ const walls = () => {                          // everything that blocks sight, 
   const out = [], h = BLOCK_HALF;
   for (const b of blocks.values()) out.push({ v: [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h], x0: b.x - h, x1: b.x + h, y0: b.y - h, y1: b.y + h });
   for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud") out.push({ v: b.poly, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
+  if (haveMe) for (const c of coresFor(me.x, me.y)) out.push(c);   // (owner) nebula cores
   return out;
 };
 const VIS_LO = 0.25, VIS_HI = 0.75;          // (owner) the visibility at which a ship starts to show / is fully solid
@@ -407,8 +455,6 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
 // (owner, 2026-10-14) nebula clouds hide ships inside them: fully visible at the edge, fading the deeper in (from the
 // nearest edge) to invisible at 150 m in. If I'm in the same cloud within 100 m of the ship, it fades only to 25%.
 const CLOUD_DEEP = 150, CLOUD_MIN = 0.25, CLOUD_NEAR = 100;
-function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
-function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
 function cloudFactor(x, y, spd) {
   let f = 1;
   for (const b of builds.values()) {
