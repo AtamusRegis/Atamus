@@ -195,6 +195,7 @@ function addPlayer(id, name, x = 0, y = 0) {
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
+const TRAIL_MAX = 200, TRAIL_S = 1;            // (owner) the camera trail: up to 200 m behind, 1 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
@@ -476,7 +477,7 @@ renderer.setAnimationLoop(() => {
 
   // right-click aiming (owner): the reticle is the ground point under the pointer, CLAMPED to the leash circle (push
   // past it and the reticle rides its edge); the camera's focus slides toward it, zooming out to keep the ship in shot
-  let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist;
+  let fx = haveMe ? me.x : 0, fy = haveMe ? me.y : 0, wantDist = camDist, aimEase = 0;   // aimEase: how far the aim is steering the camera (0 in the dead zone)
   function aimAt(px, py) {
     const sx = (px / innerWidth) * 2 - 1, sy = -(py / innerHeight) * 2 + 1;
     raycaster.setFromCamera({ x: sx, y: sy }, camera);
@@ -510,13 +511,21 @@ renderer.setAnimationLoop(() => {
       const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
       const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
       const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));
-      const DZ = 0.3, rr = Math.min(1, Math.max(0, (r - DZ) / (0.8 - DZ))), ease = rr * rr * (3 - 2 * rr);
+      const DZ = 0.3, rr = Math.min(1, Math.max(0, (r - DZ) / (0.8 - DZ))), ease = rr * rr * (3 - 2 * rr); aimEase = ease;
       wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
       let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
       lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
       lam = Math.min(1, Math.max(0, lam)) * ease;
       fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;
     }
+  }
+  // (owner, 2026-10-13) the trail: moving with the aim not steering the camera (not aiming, or the pointer in the dead zone),
+  // the focus sits behind the ship along its motion, 0-200 m with speed (a metre per m/s, capped); it fades out as the
+  // aim takes over beyond the dead zone
+  if (haveMe && !orbitLock) {
+    const v = Math.hypot(vel.x, vel.y);
+    // the focus easing below already lags a moving target by v / 6 m, so only the rest is added: the real trail is the 0-200 m
+    if (v > 1) { const t = Math.max(0, Math.min(TRAIL_MAX, v * TRAIL_S) - v / 6) * (1 - aimEase) / v; fx -= vel.x * t; fy -= vel.y * t; }
   }
   if (orbitLock && haveMe) {                   // (owner) MMB: the camera and its target orbit the player at the frame they had
     const th = camYaw + orbitLock.ang;
@@ -630,4 +639,4 @@ function addChat(m) {
   chatLog.scrollTop = chatLog.scrollHeight;
 }
 // for the test harness and the console
-window.Atamus = { get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
