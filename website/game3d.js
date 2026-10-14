@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791973675";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791973945";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -404,18 +404,17 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], true)) clear++;
   return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
-// (owner, 2026-10-14) nebula clouds hide ships inside them: the deeper in (from the nearest edge), the fainter, down to
-// 25% at 150 m in; a ship sitting still in a cloud is invisible, unless I'm in that cloud too within 100 m of it
-const CLOUD_DEEP = 150, CLOUD_MIN = 0.25, CLOUD_NEAR = 100, STILL = 3;
+// (owner, 2026-10-14) nebula clouds hide ships inside them: fully visible at the edge, fading the deeper in (from the
+// nearest edge) to invisible at 150 m in. If I'm in the same cloud within 100 m of the ship, it fades only to 25%.
+const CLOUD_DEEP = 150, CLOUD_MIN = 0.25, CLOUD_NEAR = 100;
 function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
 function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
 function cloudFactor(x, y, spd) {
   let f = 1;
   for (const b of builds.values()) {
     if (b.k !== "cloud" || !b.poly || Math.hypot(x - b.x, y - b.y) > b.rad + 1 || !inPoly(x, y, b.poly)) continue;
-    const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP), deep = 1 - (1 - CLOUD_MIN) * d * d * (3 - 2 * d);
-    const meNear = haveMe && inPoly(me.x, me.y, b.poly) && Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR;
-    f = Math.min(f, spd < STILL && !meNear ? 0 : deep);
+    const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP), meNear = haveMe && inPoly(me.x, me.y, b.poly) && Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR;
+    f = Math.min(f, 1 - (meNear ? 1 - CLOUD_MIN : 1) * d * d * (3 - 2 * d));
   }
   return f;
 }
