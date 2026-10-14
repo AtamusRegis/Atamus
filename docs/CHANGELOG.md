@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Second rendering pass (owner, aiming for 60 fps):** the colored space and the clouds are drawn at a third of the resolution and stretched (they're soft, so it doesn't show), the shadows are now flat 50% black shapes drawn straight on the ground (no shadow texture), the resolution adapts automatically when frames run slow, and MSAA is skipped on high-DPI screens. In testing, frame rates roughly doubled to tripled.
+- **Reverse steering (owner):** while backing up, A and D swap, so backing up with A swings the ship back toward its left, like a car in reverse.
 - **Front page (owner):** today's Updates entry brought up to date (railgun slugs, clouds blocking sight, mutual line of sight, the new flight controls); the stop marker dropped from Oct 13's entry since it's gone.
 - **Faster clouds (owner: optimization pass):** nebula clouds are drawn at half resolution and laid over the scene (they look the same, at about half the drawing cost), and their edge puffs stop updating once they've settled with no moving ship nearby.
 - **Railgun projectiles (owner):** the railgun now fires a fast glowing slug instead of an instant beam. A ship the shooter can't see past walls and structures isn't hit: the slug flies straight through it.

@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791978507";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791979443";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -79,7 +79,8 @@ const toWorld = (x, y, h = 0) => new THREE.Vector3(x, h, -y);
 
 // ---- scene ----
 const canvas = document.getElementById("view");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// (owner, 2026-10-14: speed) MSAA edge smoothing only on ordinary screens; a high-DPI screen's pixels are fine enough without it
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: (devicePixelRatio || 1) < 1.25, stencil: true });   // (stencil: the flat shadows mark each pixel once)
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));   // (owner, 2026-10-14: speed) at most 1.5 pixels per screen pixel
 const scene = new THREE.Scene();
 // (owner, 2026-10-14) deep blue space under the field grid (was dark charcoal)
@@ -214,19 +215,18 @@ function makeVisual(remote) {
 }
 
 // ---- (owner, 2026-10-13) line of sight: other ships are drawn only where my ship's center can see them ----
-// On the ground plane (height ignored, like the colliders): each block and Build piece casts a shadow away from my
-// ship's center. The shadows are drawn top-down into a texture around me every frame, and the other ships' materials
-// skip every pixel that lies in shadow, so a ship half behind a wall shows only its visible half.
-const VIS_S = 2700, VIS_N = 2048;              // the texture covers 2 x VIS_S m square around me (the whole 2.5 km map)
-const visRT = new THREE.WebGLRenderTarget(VIS_N, VIS_N, { depthBuffer: false });
-const visScene = new THREE.Scene(); visScene.background = new THREE.Color(0xffffff);
-const visCam = new THREE.OrthographicCamera(-VIS_S, VIS_S, VIS_S, -VIS_S, 1, 4000); visCam.up.set(0, 0, -1);   // north up, east right
+// On the ground plane (height ignored, like the colliders): each block and Build piece (and nebula core) casts a shadow
+// away from my ship's center. (owner, 2026-10-14) The shadows are drawn straight onto the ground as a flat 50% black (no
+// texture); the stencil buffer marks each pixel once, so overlapping shadows don't get darker.
+const VIS_S = 1400;                            // shadows are worked out for objects within this of me (past ~1,300 m is solid haze anyway)
 const visGeo = new THREE.BufferGeometry(); let visCap = 0;
-const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })); visMesh.frustumCulled = false; visScene.add(visMesh);
+const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false,
+  stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc, stencilZPass: THREE.ReplaceStencilOp }));
+visMesh.frustumCulled = false; visMesh.position.y = 0.3; visMesh.renderOrder = -1; scene.add(visMesh);
 // (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
 // (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
 const FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-14) the fade starts 200 m (two grid squares) past the leash circle
-const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S }, visFar: { value: FAR_OUT } };
+const visU = { visC: { value: new THREE.Vector2() }, visFar: { value: FAR_OUT } };
 const farCache = new Map();
 function farMat(m) {                           // a material that isn't drawn past FAR_OUT from my ship
   if (farCache.has(m)) return farCache.get(m);
@@ -296,20 +296,33 @@ const sky = new THREE.Mesh(new THREE.PlaneGeometry(200000, 200000).rotateX(-Math
       gl_FragColor = vec4(col, 1.0);   // (screen colors, no conversion)
     }`,
 }));
-sky.position.y = -9000; sky.renderOrder = -5; sky.frustumCulled = false; scene.add(sky);
-// (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
-// ship, drawn only where the shadow texture says it's out of sight
+sky.position.y = -9000; sky.renderOrder = -5; sky.frustumCulled = false; sky.layers.set(3); scene.add(sky);
+// (owner, 2026-10-14: speed) the colored space is smooth (its patterns span kilometers), so it's drawn into a picture a
+// third the screen's size each frame (a ninth of the pixels) and stretched behind everything; the stars stay sharp.
+const SKY_DIV = 3, skyRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+const skyBack = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { t: { value: skyRT.texture } }, depthTest: false, depthWrite: false,
+  vertexShader: "varying vec2 vU; void main() { vU = uv; gl_Position = vec4(position.xy, 1.0, 1.0); }",
+  fragmentShader: "uniform sampler2D t; varying vec2 vU; void main() { gl_FragColor = vec4(texture2D(t, vU).rgb, 1.0); }",
+}));
+skyBack.frustumCulled = false; skyBack.renderOrder = -10; scene.add(skyBack);
+const skySz = new THREE.Vector2();
+function renderSky() {
+  renderer.getDrawingBufferSize(skySz); const w = Math.max(2, Math.ceil(skySz.x / SKY_DIV)), h = Math.max(2, Math.ceil(skySz.y / SKY_DIV));
+  if (skyRT.width !== w || skyRT.height !== h) skyRT.setSize(w, h);
+  camera.layers.set(3); renderer.setRenderTarget(skyRT); renderer.clear(); renderer.render(scene, camera);   // (cleared to the space color)
+  renderer.setRenderTarget(null); camera.layers.set(0);
+}
+// (owner, 2026-10-13) the grid, the haze past the map's edge and the fade into solid haze far out: one layer just above the
+// ground, following my ship (the shadows themselves are their own flat shapes, above)
 const shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N }, gline: { value: new THREE.Vector3(0x46 / 255, 0x46 / 255, 0x4c / 255) } }, transparent: true, depthWrite: false,   // (gline: screen color)
+  uniforms: { ...visU, hexA: shadeHex, farIn: { value: FAR_IN }, gline: { value: new THREE.Vector3(0x46 / 255, 0x46 / 255, 0x4c / 255) } }, transparent: true, depthWrite: false,   // (gline: screen color)
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; uniform vec3 gline; varying vec3 vW;
-    float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0; }
+  fragmentShader: `uniform vec2 visC; uniform float hexA; uniform float farIn; uniform float visFar; uniform vec3 gline; varying vec3 vW;
     void main() {
-      vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
-      float o = visPx * 1.5;                   // a small blur, so the shadow edges are smooth rather than stepped
-      float lit = (sightAt(uv) * 2.0 + sightAt(uv + vec2(o, 0.0)) + sightAt(uv - vec2(o, 0.0)) + sightAt(uv + vec2(0.0, o)) + sightAt(uv - vec2(0.0, o))) / 6.0;
+      vec2 g = vec2(vW.x, -vW.z); float lit = 1.0;
       float ed = max(abs(g.y), max(abs(1.7320508 * g.x + g.y), abs(1.7320508 * g.x - g.y)) * 0.5) - hexA;   // past the hexagon's edge
       lit = min(lit, 1.0 - smoothstep(0.0, 30.0, ed));
       float far = smoothstep(farIn, visFar, length(g - visC));   // (owner) clear at the leash circle, solid 400 m past it
@@ -372,9 +385,10 @@ function cloudCores(b) {
 function* coresFor(vx, vy) { for (const b of builds.values()) if (b.k === "cloud" && b.poly && !inPoly(vx, vy, b.poly)) yield* cloudCores(b); }   // (owner) not the cloud I'm in
 let visVer = 0, visKey = "";                    // visVer: bumped whenever a block or Build piece changes
 function updateVis() {                         // the shadows from where my ship is now
-  shade.position.x = me.x; shade.position.z = -me.y; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
-  // (owner, 2026-10-14: speed) the shadow texture is only redrawn when my ship has moved or an object changed
-  const key = Math.round(me.x * 4) + "," + Math.round(me.y * 4) + "," + visVer; if (key === visKey) return; visKey = key;
+  shade.position.x = me.x; shade.position.z = -me.y; shade.visible = visMesh.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
+  // (owner, 2026-10-14: speed) the shadows are only worked out again when my ship has moved or an object changed
+  // (speed: worked out again after a meter of movement)
+  const key = Math.round(me.x) + "," + Math.round(me.y) + "," + visVer; if (key === visKey) return; visKey = key;
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   // (owner, 2026-10-14) shadows start behind the outline, wherever the line of sight can't reach: only the edges facing
   // away from me cast, so the object itself and the ground up to its far side stay clear
@@ -400,9 +414,7 @@ function updateVis() {                         // the shadows from where my ship
   for (const c of coresFor(vx, vy)) if (c.x1 >= vx - VIS_S && c.x0 <= vx + VIS_S && c.y1 >= vy - VIS_S && c.y0 <= vy + VIS_S) edges(c.v);   // (owner) nebula cores
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
-  visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
-  renderer.setRenderTarget(visRT); renderer.render(visScene, visCam);
-  renderer.setRenderTarget(null);
+  visU.visC.value.set(vx, vy);
 }
 // ---- (owner, 2026-10-14) mutual visibility: if a player can see you, you can see them, and the less of each other you
 // can see, the more see-through you are to each other. Each ship's Visibility points (placed in the Object Editor; at most
@@ -818,7 +830,9 @@ function inputDir() {
   const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
   if (!f) return { x: 0, y: 0, b, turn };
   f = Math.max(-1, Math.min(1, f));
-  return { x: Math.sin(h) * f, y: -Math.cos(h) * f, b, turn };   // the nose on the game plane: (sin h, -cos h)
+  // (owner, 2026-10-14) reversing, left and right swap: backing up with A swings the ship's tail to the left, the way it
+  // goes, like a car in reverse
+  return { x: Math.sin(h) * f, y: -Math.cos(h) * f, b, turn: f < 0 ? -turn : turn };   // the nose on the game plane: (sin h, -cos h)
 }
 
 // ---- socket ----
@@ -952,10 +966,10 @@ function goUpdating(parts) {
 let lastT = performance.now();
 const focus = { x: 0, y: 0 };                  // where the camera looks (the player, or toward the aim circle)
 let viewDist = camDist;                        // the eased camera distance
-// (owner, 2026-10-14: speed) the clouds (their own layer, 2) are drawn into a half-size picture, then laid over the scene
-// (its colors are premultiplied, so it's added as "over"). A quarter of the pixels for the softest, most layered thing on
+// (owner, 2026-10-14: speed) the clouds (their own layer, 2) are drawn into a picture a third the screen's size, then laid over the scene
+// (its colors are premultiplied, so it's added as "over"). A ninth of the pixels for the softest, most layered thing on
 // screen; they're soft enough not to show it. Skipped when no cloud is on that layer.
-const CLOUD_LAYER = 2, cloudRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
+const CLOUD_LAYER = 2, CLOUD_DIV = 3, cloudRT = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false });
 const cloudComp = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
   uniforms: { t: { value: cloudRT.texture } }, transparent: true, depthTest: false, depthWrite: false,
   blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
@@ -968,7 +982,7 @@ const cloudCompCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), cloudSz =
 function renderClouds() {
   let any = false; for (const b of builds.values()) if (b.k === "cloud") { any = true; break; }
   if (!any && !build.open) return;
-  renderer.getDrawingBufferSize(cloudSz); const w = Math.max(2, Math.ceil(cloudSz.x / 2)), h = Math.max(2, Math.ceil(cloudSz.y / 2));
+  renderer.getDrawingBufferSize(cloudSz); const w = Math.max(2, Math.ceil(cloudSz.x / CLOUD_DIV)), h = Math.max(2, Math.ceil(cloudSz.y / CLOUD_DIV));
   if (cloudRT.width !== w || cloudRT.height !== h) cloudRT.setSize(w, h);
   const bg = scene.background, ca = renderer.getClearAlpha(); renderer.getClearColor(clearC);
   scene.background = null; camera.layers.set(CLOUD_LAYER); renderer.setClearColor(0x000000, 0);
@@ -976,11 +990,24 @@ function renderClouds() {
   renderer.setRenderTarget(null); camera.layers.set(0); scene.background = bg; renderer.setClearColor(clearC, ca);
   const ac = renderer.autoClear; renderer.autoClear = false; renderer.render(cloudCompScene, cloudCompCam); renderer.autoClear = ac;
 }
+// (owner, 2026-10-14: speed, aiming for 60 fps) the resolution adapts: if frames come slower than ~50 a second over a
+// couple of seconds the game draws fewer pixels (down to 60% of the screen's), and steps back up when there's room. A
+// step up that's undone at once isn't tried again for a minute, so it doesn't keep flickering between the two.
+const DPR_MAX = Math.min(devicePixelRatio || 1, 1.5), DPR_MIN = DPR_MAX * 0.6;
+let dprNow = DPR_MAX, adAcc = 0, adN = 0, adT = 0, adUpAt = -1e9, adBlock = 0;
+function adaptRes(now, ms) {
+  if (ms > 250 || document.hidden) return;   // (a paused tab, a hitch: not counted)
+  adAcc += ms; adN++; if (now - adT < 2000) return;
+  const avg = adAcc / adN; adAcc = 0; adN = 0; adT = now; let next = dprNow;
+  if (avg > 20 && dprNow > DPR_MIN + 0.01) { next = Math.max(DPR_MIN, dprNow * 0.85); if (now - adUpAt < 4500) adBlock = now + 60000; }
+  else if (avg < 17.6 && dprNow < DPR_MAX - 0.01 && now > adBlock) { next = Math.min(DPR_MAX, dprNow * 1.1); adUpAt = now; }
+  if (next !== dprNow) { dprNow = next; renderer.setPixelRatio(dprNow); resize(); }
+}
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const camOff = new THREE.Vector3();
 renderer.setAnimationLoop(() => {
-  const nowP = performance.now(), dt = Math.min((nowP - lastT) / 1000, 0.1), now = Date.now(); lastT = nowP;
+  const nowP = performance.now(), dt = Math.min((nowP - lastT) / 1000, 0.1), now = Date.now(); adaptRes(nowP, nowP - lastT); lastT = nowP;
 
   const d = inputDir(); sendDir(d, now);
   const movingIn = !!(d.x || d.y);
@@ -1141,6 +1168,7 @@ renderer.setAnimationLoop(() => {
   drawHpBars(); updateSparks(Math.min(0.1, dt || 0.016));
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
+  renderSky();
   renderer.render(scene, camera);
   renderClouds();
 });
@@ -1343,4 +1371,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

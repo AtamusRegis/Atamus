@@ -226,8 +226,8 @@ export function initBuild(ctx) {
   // different heights, smaller and fainter toward the edges. Each puff is a noisy blob that slowly turns and drifts, tinted
   // from the theme. Puffs near my own ship thin out so it stays in view. One instanced draw per cloud.
   const CLOUD_SP = 46, CLOUD_TOP = 70, CLOUD_MAX = 2400;
-  // (owner, 2026-10-14: speed) clouds are drawn on their own layer into a half-size picture that's laid over the scene
-  // (game3d.js): soft puffs cost a lot of pixels, a quarter as many there. Their blending keeps that picture's colors
+  // (owner, 2026-10-14: speed) clouds are drawn on their own layer into a picture a third the screen's size that's laid over the scene
+  // (game3d.js): soft puffs cost a lot of pixels, a ninth as many there. Their blending keeps that picture's colors
   // premultiplied by its transparency.
   const CLOUD_LAYER = 2, cloudBlend = { blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor };
   const cloudT = { value: 0 }, cloudMe = { value: new THREE.Vector2(1e9, 1e9) };
