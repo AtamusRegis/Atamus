@@ -83,7 +83,7 @@ export function attachGameServer(httpServer) {
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) },   // staff: the Admin button
       cfg: { shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
-      roster: world.roster(), blocks: world.blocks.map((b) => [b.id, b.x, b.y]), builds: world.buildList(), colliders: world.colliders, pivots: world.pivots, movers: world.movers,
+      roster: world.roster(), blocks: [], builds: [],   // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world colliders: world.colliders, pivots: world.pivots, movers: world.movers,
     }));
 
     ws.on("message", (data) => {
@@ -133,7 +133,7 @@ export function attachGameServer(httpServer) {
       else if (m.t === "block") {             // (owner) X drops a block where the ship is (at most ~2 a second)
         const now = Date.now(); if (now - blockAt < 450) return; blockAt = now;
         const r = world.addBlock(pid); if (!r) return;
-        broadcast({ t: "block", b: [r.b.id, r.b.x, r.b.y], gone: r.gone });
+        if (r.gone.length) objGone("k", r.gone.map(String)); objCast("k", r.b);
       }
       // (owner, 2026-10-13) the admin Build menu: staff place, edit and delete pieces; everyone is sent the result
       else if (m.t === "bnew" || m.t === "bset" || m.t === "bdel") {
@@ -143,12 +143,12 @@ export function attachGameServer(httpServer) {
           const q = Number.isInteger(m.q) ? m.q : 0;
           world.addBuild(m, pid).then((b) => {
             if (!b) return;
-            broadcast({ t: "build", o: [b.id, b.k, b.x, b.y, b.w, b.d, b.r] });
+            objCast("b", b);
             if (socks.get(pid) === ws) ws.send(JSON.stringify({ t: "bnew", q, id: b.id }));   // so the builder can select it
           }).catch((e) => console.error("build", e));
         } else if (m.t === "bset") {
-          const b = bid && world.setBuild(bid, m); if (b) broadcast({ t: "build", o: [b.id, b.k, b.x, b.y, b.w, b.d, b.r], by: pid });
-        } else if (bid) world.delBuild(bid).then((ok) => { if (ok) broadcast({ t: "unbuild", id: bid }); }).catch((e) => console.error("unbuild", e));
+          const b = bid && world.setBuild(bid, m); if (b) objCast("b", b);
+        } else if (bid) world.delBuild(bid).then((ok) => { if (ok) objGone("b", [bid]); }).catch((e) => console.error("unbuild", e));
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;
@@ -167,6 +167,41 @@ export function attachGameServer(httpServer) {
     });
     ws.on("error", (e) => console.error("ws", e.message));
   });
+
+  // ---- (owner, 2026-10-14) objects (Build pieces "b", blocks "k") are sent only to players whose load circle reaches
+  // them: each socket keeps the ids it has been sent (ws.known), topped up and trimmed twice a second as ships move ----
+  const msgOf = (kind, o) => kind === "b" ? { t: "build", o: [o.id, o.k, o.x, o.y, o.w, o.d, o.r] } : { t: "block", b: [o.id, o.x, o.y] };
+  const goneOf = (kind, ids) => kind === "b" ? ids.map((id) => ({ t: "unbuild", id })) : [{ t: "block", gone: ids.map(Number) }];
+  const reach = (p, kind, o) => Math.hypot(o.x - p.x, o.y - p.y) - (kind === "b" ? o.far : BLOCK_HALF * 1.5) <= LOAD_R;
+  const sockOf = (ws) => { if (!ws.known) ws.known = { b: new Set(), k: new Set() }; return ws.known; };
+  function objCast(kind, o) {                  // a new or changed object: to whoever has it or can now see it
+    const id = String(o.id);
+    for (const [qid, qws] of socks) {
+      const p = world.players.get(qid); if (!p || qws.readyState !== qws.OPEN) continue;
+      const k = sockOf(qws)[kind];
+      if (k.has(id) || reach(p, kind, o)) { k.add(id); qws.send(JSON.stringify(msgOf(kind, o))); }
+    }
+  }
+  function objGone(kind, ids) {                // removed objects: to whoever had them
+    for (const [, qws] of socks) {
+      if (qws.readyState !== qws.OPEN) continue; const k = sockOf(qws)[kind], had = ids.filter((id) => k.delete(id));
+      for (const m of had.length ? goneOf(kind, had) : []) qws.send(JSON.stringify(m));
+    }
+  }
+  function syncObjects() {
+    for (const [pid, ws] of socks) {
+      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      const known = sockOf(ws), out = [];
+      for (const [kind, list] of [["b", world.builds.values()], ["k", world.blocks]]) {
+        const k = known[kind], seen = new Set();
+        for (const o of list) { const id = String(o.id); if (!reach(p, kind, o)) continue; seen.add(id); if (!k.has(id)) { k.add(id); out.push(msgOf(kind, o)); } }
+        const drop = [...k].filter((id) => !seen.has(id)); for (const id of drop) k.delete(id);
+        if (drop.length) out.push(...goneOf(kind, drop));
+      }
+      if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
+    }
+  }
+  setInterval(syncObjects, 500);
 
   setInterval(() => world.step(), 50);                                          // 20 Hz simulation
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)

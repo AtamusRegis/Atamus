@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Load circle shrunk to the solid haze (owner):** players, Build pieces and blocks are now only sent while within 1,300 m (where the distance haze turns solid, was 5,000 m for players and everything for objects), so they load in while still hidden.
 - **Map border over the haze (owner):** the hexagon border band now draws on top of the haze instead of under it.
 - **Ships cast no shadows (owner):** ships (and test ships) no longer block line of sight at all; only blocks and Build pieces do.
 - **Ships don't hide ships (owner):** ships still cast hazed shadows, but a ship behind another ship stays visible (on screen and on the minimap); only walls and Build pieces hide ships.

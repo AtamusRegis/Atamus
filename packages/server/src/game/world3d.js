@@ -27,9 +27,10 @@ export const TURN_ACCEL = 0.3;
 // sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
 export const CAP_MAX = 100, CAP_DRAIN = 1, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESUME = 15;
 // (owner, 2026-10-13) CAP_DRAIN is per 100 m sprinted (was 20 a second): 1% of the bar for every 100 m covered
-// (owner, 2026-10-13) the load circle: each player is sent only the players (and, later, objects) within this
-// distance of their ship. It reaches well past the camera, so nothing pops in on screen.
-export const LOAD_R = 5000;
+// (owner, 2026-10-13) the load circle: each player is sent only the players and objects within this distance of their
+// ship. (owner, 2026-10-14) It's where the client's distance haze turns solid (the 700 m leash circle + 200 m + 400 m),
+// so things load in while still hidden and nothing beyond it is sent at all. Keep it equal to the client's FAR_OUT.
+export const LOAD_R = 1300;
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -355,7 +356,7 @@ export class World3D {
   }
   _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); return b; }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
-  _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); }
+  _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
   async setCollider(k, pts, pivot, mover) {   // (owner) the sight outline, the pivot and the movement ellipse together
     const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k]; if (!c) return null;
