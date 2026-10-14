@@ -249,6 +249,11 @@ function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
   if (r && r.catch) r.catch(() => { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch {} });
 }
+// (owner, 2026-10-13) the cursor: the system one is hidden (game.html); this dot sits wherever the pointer is, over the
+// UI as well. While the middle mouse holds the pointer lock it stays put; leaving the window hides it.
+const cursorEl = document.getElementById("cursor");
+addEventListener("pointermove", (e) => { if (!cursorEl || e.pointerType === "touch") return; cursorEl.hidden = false; cursorEl.style.transform = "translate(" + e.clientX + "px," + e.clientY + "px)"; }, { capture: true, passive: true });
+document.addEventListener("mouseleave", () => { if (cursorEl) cursorEl.hidden = true; });
 addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; if (orbiting) { let dx = e.movementX; if (Math.abs(dx) > 200) dx = 0; camYaw += dx * 0.005 * cam.rot; } });   // (owner) inverted; spikes from the pointer-lock cursor wrap are dropped
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); camDist = Math.min(cam.zmax, Math.max(cam.zmin, camDist * (e.deltaY > 0 ? 1.12 : 0.9))); }, { passive: false });
 // touch: one finger orbits (drag = drag), two fingers pinch the distance

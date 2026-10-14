@@ -42,6 +42,10 @@
     #chat-in { background: rgba(10, 14, 22, .85); color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 6px; font: 12px system-ui, sans-serif; outline: none; }
     #chat-in:focus { border-color: #4f8fe8; }
     html.touch #chat { left: 12px; top: 140px; bottom: auto; width: 240px; }
+    /* (owner, 2026-10-13) the system cursor is never shown on the game page; a small white dot follows the pointer instead, over the UI too */
+    html:not(.touch), html:not(.touch) * { cursor: none !important; }
+    #cursor { position: fixed; left: 0; top: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); pointer-events: none; z-index: 1000; will-change: transform; }
+    html.touch #cursor { display: none; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -55,7 +59,8 @@
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
+  <div id="cursor" hidden></div>
   <script src="api.js?v=1791864850"></script>
-  <script type="module" src="game3d.js?v=1791934569"></script>
+  <script type="module" src="game3d.js?v=1791942283"></script>
 </body>
 </html>
