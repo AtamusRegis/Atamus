@@ -804,7 +804,7 @@ const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b
 const RAIL_CD = 500;                           // (owner, 2026-10-14: every half second)
 let railAt = 0;
 // (owner, 2026-10-14) the spread cone, as the server keeps it: +3 degrees each way per shot, back 3 degrees a second
-const SPREAD_ADD = 3, SPREAD_BACK = 3, SPREAD_MAX = 45;
+const SPREAD_ADD = 1.5, SPREAD_BACK = 3, SPREAD_MAX = 45;   // (owner, 2026-10-14: 1.5 degrees a shot, was 3)
 let spreadDeg = 0, spreadT = 0;
 const spreadNow = (now = performance.now()) => Math.max(0, spreadDeg - SPREAD_BACK * (now - spreadT) / 1000);
 function fireRail(px, py) {

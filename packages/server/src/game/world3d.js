@@ -41,7 +41,7 @@ export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
 export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 0.5, RAIL_SPEED = 700;   // (owner, 2026-10-14: every half second)
 // (owner, 2026-10-14) spread: each shot widens the shooter's cone by SPREAD_ADD degrees each way, and it narrows back by
 // SPREAD_BACK degrees a second; a shot leaves at a random angle inside the cone as it was (the server's dice, not the client's)
-export const SPREAD_ADD = 3, SPREAD_BACK = 3, SPREAD_MAX = 45;
+export const SPREAD_ADD = 1.5, SPREAD_BACK = 3, SPREAD_MAX = 45;   // (owner, 2026-10-14: 1.5 degrees a shot, was 3)
 export const spreadNow = (p, now = Date.now()) => Math.max(0, (p.spread || 0) - SPREAD_BACK * (now - (p.spreadT || now)) / 1000);
 export const PIV_W = 0.2, VIS_LO = 0.25;
 // (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
