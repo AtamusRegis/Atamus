@@ -65,6 +65,27 @@ export function pushFromPoly(p, v, R, pushOut) {
   }
   return pushOut(p, bx, by, R);
 }
+// (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
+// outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
+export function satPush(A, B) {
+  let best = Infinity, bx = 0, by = 0;
+  for (const P of [A, B]) for (let i = 0; i < P.length; i += 2) {
+    let nx = -(P[(i + 3) % P.length] - P[i + 1]), ny = P[(i + 2) % P.length] - P[i]; const L = Math.hypot(nx, ny); if (L < 1e-9) continue; nx /= L; ny /= L;
+    let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+    for (let k = 0; k < A.length; k += 2) { const t = A[k] * nx + A[k + 1] * ny; if (t < a0) a0 = t; if (t > a1) a1 = t; }
+    for (let k = 0; k < B.length; k += 2) { const t = B[k] * nx + B[k + 1] * ny; if (t < b0) b0 = t; if (t > b1) b1 = t; }
+    const o = Math.min(a1, b1) - Math.max(a0, b0); if (o <= 0) return null;
+    if (o < best) { best = o; bx = nx; by = ny; }
+  }
+  const [ax, ay] = polyMid(A), [cx, cy] = polyMid(B); if ((ax - cx) * bx + (ay - cy) * by < 0) { bx = -bx; by = -by; }
+  return { nx: bx, ny: by, d: best };
+}
+export function polyMid(v) { let x = 0, y = 0; for (let i = 0; i < v.length; i += 2) { x += v[i]; y += v[i + 1]; } return [x * 2 / v.length, y * 2 / v.length]; }
+export function nudge(p, n, d) {               // move p by d along n, dropping the part of its velocity going back in
+  p.x += n.nx * d; p.y += n.ny * d;
+  const vn = (p.vx || 0) * n.nx + (p.vy || 0) * n.ny; if (vn < 0) { p.vx -= vn * n.nx; p.vy -= vn * n.ny; }
+}
+export const squarePoly = (x, y, h) => [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h];
 // where a segment first crosses an outline's edge (fraction 0-1), or null
 export function segPoly(x0, y0, x1, y1, v) {
   const dx = x1 - x0, dy = y1 - y0; let best = null;
@@ -257,7 +278,7 @@ export function initBuild(ctx) {
   let lastF = performance.now();
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
-    eRender();
+    eRender(); gizFrame();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
@@ -290,27 +311,48 @@ export function initBuild(ctx) {
   const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
   const ceShape = document.createElement("div"), ceShip = document.createElement("div");
   ceShape.className = ceShip.className = "inv-slot build-slot"; ceShip.title = NAMES.ship; ceShip.innerHTML = shipSlot.innerHTML; ceSlots.append(ceShape, ceShip);
-  // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (the outline that blocks line
-  // of sight: drag corners, click an edge's middle dot to add one, right-click to remove), Movement (the ellipse ships
-  // bump into: drag its middle to move it, a side handle to stretch it) and Pivot (the point the model turns around)
+  // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (where line of sight is
+  // stopped: drag corners, click an edge's middle dot to add one, right-click to remove), Movement (where ships collide:
+  // drag its middle to move it, a side handle to stretch it) and Pivot (where the ship turns around). The wheel zooms the
+  // view; the header drags the window; Mirrored (on at first) keeps the left and right halves matching; Reset puts the
+  // current one back to its start; Ctrl+Z / Ctrl+U undo and redo. While it's open, every piece's colliders (and every
+  // ship's) are drawn in the world.
   let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePts = null, ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  let eZoom = 1, mirror = true, past = [], future = [];
   const modes = document.createElement("div"); modes.className = "ce-modes";
   for (const [k, label] of [["sight", "Sight"], ["move", "Movement"], ["pivot", "Pivot"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   ceSlots.after(modes);
+  const foot = document.createElement("div"); foot.className = "ce-foot";
+  foot.innerHTML = '<label class="ce-mirror"><input type="checkbox" checked> Mirrored</label><button type="button" class="ce-reset">Reset</button>';
+  win.appendChild(foot);
+  const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
+  foot.querySelector(".ce-reset").addEventListener("click", () => {
+    snap();
+    if (eMode === "sight") ePts = COLL_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = MOVE_DEFAULT[eKind].slice(); else ePv = [0, 0];
+    eSave(); eDraw();
+  });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); };
+  // the window drags by its header
+  const top = win.querySelector(".ce-top"); let wDrag = null;
+  top.addEventListener("pointerdown", (e) => { if (e.button !== 0 || e.target.closest("button")) return; const r = win.getBoundingClientRect(); wDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top }; top.setPointerCapture(e.pointerId); e.preventDefault(); });
+  top.addEventListener("pointermove", (e) => { if (!wDrag || e.pointerId !== wDrag.id) return; const W = win.offsetWidth, Hh = win.offsetHeight;
+    win.style.left = Math.max(0, Math.min(innerWidth - W, e.clientX - wDrag.dx)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - Hh, e.clientY - wDrag.dy)) + "px"; win.style.transform = "none"; });
+  const wEnd = (e) => { if (wDrag && e.pointerId === wDrag.id) wDrag = null; }; top.addEventListener("pointerup", wEnd); top.addEventListener("pointercancel", wEnd);
+
   const fp = () => (eKind === "ship" ? SHIP_D : 100);   // the footprint shown, m
-  const H = () => fp() * 1.0;                            // half the view, m
+  const H = () => fp() / eZoom;                          // half the view, m
   const S = () => fp() * VIEW / (2 * H());               // px per footprint fraction
   const toPx = ([ux, uy]) => [VIEW / 2 + ux * S(), VIEW / 2 - uy * S()];
-  const fromPx = (px, py) => { const lim = H() / fp(); return [Math.max(-lim, Math.min(lim, (px - VIEW / 2) / S())), Math.max(-lim, Math.min(lim, -(py - VIEW / 2) / S()))]; };
+  const fromPx = (px, py) => { const cl = (v) => Math.max(-1.5, Math.min(1.5, v)); return [cl((px - VIEW / 2) / S()), cl(-(py - VIEW / 2) / S())]; };
+  ceSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); eDraw(); }, { passive: false });
   const drawESlots = () => { ceShape.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[eShape] + "</svg>"; ceShape.title = NAMES[eShape];
     ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
   function eSetKind(k) {
     eKind = k; if (k !== "ship") eShape = k;
     ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice();
-    eDrag = null; drawESlots(); drawModes(); eDraw();
+    eDrag = null; past = []; future = []; drawESlots(); drawModes(); eDraw();
   }
   ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
   ceShip.addEventListener("click", () => eSetKind("ship"));
@@ -320,6 +362,7 @@ export function initBuild(ctx) {
     if (!staff) return;
     eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", eOpen);
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
+    giz.visible = eOpen;
   }
   function eInit() {
     eRen = new THREE.WebGLRenderer({ canvas: ceCanvas, antialias: true, alpha: true }); eRen.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); eRen.setSize(VIEW, VIEW, false);
@@ -338,6 +381,15 @@ export function initBuild(ctx) {
     const h = H(); eCam.left = -h; eCam.right = h; eCam.top = h; eCam.bottom = -h; eCam.updateProjectionMatrix();
     eRen.render(eScene, eCam);
   }
+  // ---- undo / redo: the kind's three things before each change ----
+  const state = () => JSON.stringify({ pts: ePts, pv: ePv, mv: eMv });
+  const apply = (j) => { const o = JSON.parse(j); ePts = o.pts; ePv = o.pv; eMv = o.mv; eSave(); eDraw(); };
+  function snap() { past.push(state()); if (past.length > 100) past.shift(); future = []; }
+  function undo() { if (!past.length) return; future.push(state()); apply(past.pop()); }
+  function redo() { if (!future.length) return; past.push(state()); apply(future.pop()); }
+  // ---- mirrored editing: each corner's partner is the corner at its mirror image (left <-> right) ----
+  const partner = (i) => { const [x, y] = ePts[i]; if (Math.abs(x) < 0.004) return -2; let best = -1, bd = 0.03;
+    ePts.forEach(([a, b], j) => { if (j === i) return; const d = Math.hypot(a + x, b - y); if (d < bd) { bd = d; best = j; } }); return best; };   // -2: on the middle line
   const SV = "http://www.w3.org/2000/svg";
   const sv = (tag, attrs) => { const n = document.createElementNS(SV, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); ceSvg.appendChild(n); return n; };
   const handle = (x, y, r, cls, onDown) => { const c = sv("circle", { cx: x, cy: y, r, class: cls }); c.addEventListener("pointerdown", onDown); return c; };
@@ -352,30 +404,47 @@ export function initBuild(ctx) {
     if (eMode === "sight") {
       px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
         const q = px[(i + 1) % px.length];
-        handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); ePts.splice(i + 1, 0, fromPx((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)); eGrab(e, "pt", i + 1); });
+        handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); snap(); eGrab(e, "pt", addCorner(i)); });
       });
       px.forEach((p, i) => handle(p[0], p[1], 6, "ce-pt", (e) => {
         e.preventDefault();
-        if (e.button === 2) { if (ePts.length > 3) { ePts.splice(i, 1); eSave(); eDraw(); } return; }   // right-click removes it
-        if (e.button === 0) eGrab(e, "pt", i);
+        if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
+        if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
     } else if (eMode === "move") {
-      handle(ex, ey, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "mc"); } });
+      handle(ex, ey, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "mc"); } });
       for (const [hx, hy, ax] of [[ex + erx, ey, "x"], [ex - erx, ey, "x"], [ex, ey - ery, "y"], [ex, ey + ery, "y"]])
-        handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "m" + ax); } });
+        handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "m" + ax); } });
     } else {
-      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "pv"); } });
+      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "pv"); } });
     }
   }
-  function eGrab(e, type, i) { eDrag = { type, i, id: e.pointerId }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
+  function addCorner(i) {                      // a corner in the middle of edge i (and, mirrored, on its mirror edge); returns its index
+    const n = ePts.length, a = ePts[i], b = ePts[(i + 1) % n], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let mi = -1;
+    if (mirror) { const pa = partner(i), pb = partner((i + 1) % n); if (pa >= 0 && pb >= 0 && (pb + 1) % n === pa && pb !== i) mi = pb; }   // the mirror edge runs pb -> pa
+    if (mi < 0) { ePts.splice(i + 1, 0, m); return i + 1; }
+    const mm = [-m[0], m[1]];
+    if (mi > i) { ePts.splice(mi + 1, 0, mm); ePts.splice(i + 1, 0, m); return i + 1; }
+    ePts.splice(i + 1, 0, m); ePts.splice(mi + 1, 0, mm); return i + 2;
+  }
+  function removeCorner(i) {
+    const j = mirror ? partner(i) : -1, gone = j >= 0 ? [i, j] : [i];
+    if (ePts.length - gone.length < 3) return;
+    snap(); ePts = ePts.filter((_, k) => !gone.includes(k)); eSave(); eDraw();
+  }
+  function eGrab(e, type, i) { eDrag = { type, i, id: e.pointerId, mate: type === "pt" && mirror ? partner(i) : -1 }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
   ceSvg.addEventListener("pointermove", (e) => {
     if (!eDrag || e.pointerId !== eDrag.id) return;
     const r = ceSvg.getBoundingClientRect(), u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
-    if (eDrag.type === "pt") ePts[eDrag.i] = u;
-    else if (eDrag.type === "mc") { eMv[0] = u[0]; eMv[1] = u[1]; }
+    if (eDrag.type === "pt") {
+      if (eDrag.mate === -2) ePts[eDrag.i] = [0, u[1]];                 // mirrored, on the middle line: stays on it
+      else { ePts[eDrag.i] = u; if (eDrag.mate >= 0) ePts[eDrag.mate] = [-u[0], u[1]]; }
+    }
+    else if (eDrag.type === "mc") { eMv[0] = mirror ? 0 : u[0]; eMv[1] = u[1]; }
     else if (eDrag.type === "mx") eMv[2] = Math.max(0.02, Math.abs(u[0] - eMv[0]));
     else if (eDrag.type === "my") eMv[3] = Math.max(0.02, Math.abs(u[1] - eMv[1]));
-    else if (eDrag.type === "pv") ePv = u;
+    else if (eDrag.type === "pv") ePv = [mirror ? 0 : u[0], u[1]];
     eDraw();
   });
   const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} eSave(); eDraw(); };
@@ -389,9 +458,26 @@ export function initBuild(ctx) {
     if (k === "ship" && ctx.onPivot) ctx.onPivot();
     if (eOpen && eKind === k && !eDrag) { ePts = pts.map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice(); eDraw(); }
   }
+  // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----
+  const gizGeo = new THREE.BufferGeometry(); let gizCap = 0;
+  const giz = new THREE.LineSegments(gizGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthTest: false }));
+  giz.renderOrder = 10; giz.frustumCulled = false; giz.visible = false; scene.add(giz);
+  const C_SIGHT = [0.62, 0.85, 1], C_MOVE = [1, 0.75, 0.35], C_PIV = [0.82, 0.7, 1];
+  function gizFrame() {
+    if (!eOpen) return;
+    const P = [], C = [];
+    const loop = (v, col) => { for (let i = 0; i < v.length; i += 2) { P.push(v[i], 2, -v[i + 1], v[(i + 2) % v.length], 2, -v[(i + 3) % v.length]); C.push(...col, ...col); } };
+    const cross = (x, y) => { const a = 8; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_PIV); };
+    for (const b of builds.values()) { loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }
+    for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { loop(s.sight, C_SIGHT); loop(s.move, C_MOVE); cross(s.x, s.y); }
+    if (P.length > gizCap) { gizCap = Math.max(P.length, gizCap * 2, 3000); gizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); gizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); }
+    gizGeo.attributes.position.array.set(P); gizGeo.attributes.color.array.set(C); gizGeo.attributes.position.needsUpdate = gizGeo.attributes.color.needsUpdate = true;
+    gizGeo.setDrawRange(0, P.length / 3);
+  }
   addEventListener("keydown", (e) => {
     if (ctx.typing() || !staff) return;
     if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) eToggle(); return; }   // (staff: X is the editor, not a block)
+    if (eOpen && (e.ctrlKey || e.metaKey) && (e.code === "KeyZ" || e.code === "KeyU")) { e.preventDefault(); e.stopImmediatePropagation(); if (e.code === "KeyZ") undo(); else redo(); return; }   // (owner) Ctrl+Z undo, Ctrl+U redo
     if (eOpen && e.code === "Escape" && !open) { eToggle(false); }
     if (eOpen && !open && e.code === "KeyQ" && eKind !== "ship") { e.preventDefault(); eSetKind(SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]); }
   }, true);

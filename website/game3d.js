@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, buildPoly, pushFromPoly, segPoly } from "./build3d.js?v=1791959451";
+import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791960255";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -404,13 +404,27 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
 }
 
 // (owner, 2026-10-13) my ship against the blocks and the other ships (as drawn), as the server does it
-function collideMe() {
-  const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y };
-  for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF + SHIP_R && Math.abs(q.y - b.y) <= BLOCK_HALF + SHIP_R) pushFromBlock(q, b);
-  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy <= R * R) pushFromPoly(q, b.mpoly, SHIP_R, pushOut); }   // Build menu pieces (their movement ellipses)
-  for (const p of players.values()) { if (p.id === myId || !p.near) continue; pushOut(q, p.holder.position.x, -p.holder.position.z, 2 * SHIP_R); }
+function collideMe() {                       // (owner, 2026-10-14) by the ship's Movement ellipse, turned with its heading, like the server
+  const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y }, mine = players.get(myId), h = mine ? mine.heading : 0;
+  let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
+  const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
+  for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
+  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // Build menu pieces (their movement ellipses)
+  for (const p of players.values()) { if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) <= 2 * R + 10) hitBy(shipMove(x, y, p.heading)); }
   if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
 }
+// (owner, 2026-10-14) every ship's colliders and pivot, for the Object Editor's drawing in the world
+function shipGizmos() {
+  const out = [];
+  for (const p of players.values()) {
+    if (p.id !== myId && !p.near) continue;
+    const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
+    out.push({ x, y, sight: buildPoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading) });
+  }
+  return out;
+}
+// a ship's Movement ellipse in the world (the ship kind's, from the Object Editor)
+function shipMove(x, y, h) { return movePoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, movers, pivots); }
 // (owner) the first thing the aim line runs into, from my ship toward the reticle: a block (its square) or another ship
 // (its circle). Returns the fraction of the way (0-1) or null.
 function aimBlocked(x0, y0, x1, y1) {
@@ -426,11 +440,9 @@ function aimBlocked(x0, y0, x1, y1) {
     if (ok && t0 > 0) hit(t0);
   }
   for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.mpoly); if (t !== null) hit(t); }   // Build menu pieces (what you'd bump into)
-  for (const p of players.values()) {              // segment vs circle
+  for (const p of players.values()) {              // other ships, by their Movement ellipses
     if (p.id === myId || !p.near) continue;
-    const cx = p.holder.position.x - x0, cy = -p.holder.position.z - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-9) continue;
-    const tc = (cx * dx + cy * dy) / L2, px = dx * tc - cx, py = dy * tc - cy, h2 = SHIP_R * SHIP_R - (px * px + py * py);
-    if (h2 < 0) continue; hit(tc - Math.sqrt(h2 / L2));
+    const t = segPoly(x0, y0, x1, y1, shipMove(p.holder.position.x, -p.holder.position.z, p.heading)); if (t !== null) hit(t);
   }
   return best;
 }
@@ -461,7 +473,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };

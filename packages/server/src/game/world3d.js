@@ -144,6 +144,27 @@ export function pushFromPoly(p, v, R) {
   }
   return pushOut(p, bx, by, R);
 }
+// (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
+// outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
+export function satPush(A, B) {
+  let best = Infinity, bx = 0, by = 0;
+  for (const P of [A, B]) for (let i = 0; i < P.length; i += 2) {
+    let nx = -(P[(i + 3) % P.length] - P[i + 1]), ny = P[(i + 2) % P.length] - P[i]; const L = Math.hypot(nx, ny); if (L < 1e-9) continue; nx /= L; ny /= L;
+    let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+    for (let k = 0; k < A.length; k += 2) { const t = A[k] * nx + A[k + 1] * ny; if (t < a0) a0 = t; if (t > a1) a1 = t; }
+    for (let k = 0; k < B.length; k += 2) { const t = B[k] * nx + B[k + 1] * ny; if (t < b0) b0 = t; if (t > b1) b1 = t; }
+    const o = Math.min(a1, b1) - Math.max(a0, b0); if (o <= 0) return null;
+    if (o < best) { best = o; bx = nx; by = ny; }
+  }
+  const [ax, ay] = polyMid(A), [cx, cy] = polyMid(B); if ((ax - cx) * bx + (ay - cy) * by < 0) { bx = -bx; by = -by; }
+  return { nx: bx, ny: by, d: best };
+}
+export function polyMid(v) { let x = 0, y = 0; for (let i = 0; i < v.length; i += 2) { x += v[i]; y += v[i + 1]; } return [x * 2 / v.length, y * 2 / v.length]; }
+export function nudge(p, n, d) {               // move p by d along n, dropping the part of its velocity going back in
+  p.x += n.nx * d; p.y += n.ny * d;
+  const vn = (p.vx || 0) * n.nx + (p.vy || 0) * n.ny; if (vn < 0) { p.vx -= vn * n.nx; p.vy -= vn * n.ny; }
+}
+export const squarePoly = (x, y, h) => [x - h, y - h, x + h, y - h, x + h, y + h, x - h, y + h];
 // where a segment first crosses an outline's edge (fraction 0-1), or null
 export function segPoly(x0, y0, x1, y1, v) {
   const dx = x1 - x0, dy = y1 - y0; let best = null;
@@ -290,24 +311,24 @@ export class World3D {
   }
   // (owner, 2026-10-13) ships against blocks and against each other (two overlapping ships each move half the overlap
   // apart); a push that would leave the hexagon isn't applied
+  // (owner, 2026-10-14) each ship by the ship kind's Movement ellipse (Object Editor), turned with its heading
+  shipPoly(p) { return movePoly({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.movers, this.pivots); }
   collide() {
-    const ps = [...this.players.values()];
+    const ps = [...this.players.values()], keep = (p, f) => { const ox = p.x, oy = p.y; f(); if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; };
+    const polys = new Map(ps.map((p) => [p, this.shipPoly(p)])), rads = new Map(ps.map((p) => [p, polyRad(p, polys.get(p))]));
     for (const p of ps) for (const b of this.blocks) {
-      if (Math.abs(p.x - b.x) > BLOCK_HALF + SHIP_R || Math.abs(p.y - b.y) > BLOCK_HALF + SHIP_R) continue;
-      const ox = p.x, oy = p.y; if (pushFromBlock(p, b)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
+      const R = rads.get(p) + BLOCK_HALF * 1.5; if (Math.abs(p.x - b.x) > R || Math.abs(p.y - b.y) > R) continue;
+      const n = satPush(polys.get(p), squarePoly(b.x, b.y, BLOCK_HALF)); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
     for (const p of ps) for (const b of this.builds.values()) {
-      const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy > R * R) continue;
-      const ox = p.x, oy = p.y; if (pushFromPoly(p, b.mpoly, SHIP_R)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
+      const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + rads.get(p); if (dx * dx + dy * dy > R * R) continue;
+      const n = satPush(polys.get(p), b.mpoly); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
-    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
-      const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-      if (d >= 2 * SHIP_R) continue;
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const ax = a.x, ay = a.y, bx = b.x, by = b.y;
-      pushOut(a, mx + (d < 1e-6 ? 1e-3 : 0), my, SHIP_R); pushOut(b, mx, my, SHIP_R);
-      if (!inside(a.x, a.y)) { a.x = ax; a.y = ay; } if (!inside(b.x, b.y)) { b.x = bx; b.y = by; }
-      a.dirty = b.dirty = true;
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {   // two ships: each moves half the overlap apart
+      const a = ps[i], b = ps[j], R = rads.get(a) + rads.get(b); if (Math.abs(a.x - b.x) > R || Math.abs(a.y - b.y) > R) continue;
+      const n = satPush(polys.get(a), polys.get(b)); if (!n) continue;
+      keep(a, () => nudge(a, n, n.d / 2)); keep(b, () => nudge(b, { nx: -n.nx, ny: -n.ny }, n.d / 2));
+      polys.set(a, this.shipPoly(a)); polys.set(b, this.shipPoly(b));
     }
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all

@@ -182,7 +182,7 @@
     #chat:has(#edit-btn:not([hidden])) #chat-tabs { margin-left: 96px; }
     html.touch #edit-btn, html.touch #coll-edit { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
-    .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; }
+    .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
     .ce-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
     .ce-x { background: none; border: none; color: var(--text-dim); font-size: 16px; line-height: 1; padding: 0 4px; cursor: pointer; } .ce-x:hover { color: #fff; }
     .ce-slots { display: flex; gap: 3px; margin-bottom: 6px; }
@@ -191,6 +191,9 @@
     .ce-poly { fill: rgba(159,216,255,0.14); stroke: #9fd8ff; stroke-width: 2; stroke-linejoin: round; pointer-events: none; }
     .ce-pt { fill: #ffffff; stroke: #2f9bd6; stroke-width: 2; cursor: pointer; } .ce-pt:hover { fill: #9fd8ff; }
     .ce-mid { fill: #9fd8ff; opacity: .55; cursor: pointer; } .ce-mid:hover { opacity: 1; }
+    .ce-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 11px; color: var(--text-dim); }
+    .ce-mirror { display: flex; align-items: center; gap: 5px; cursor: pointer; } .ce-mirror input { margin: 0; accent-color: #38c6ff; }
+    .ce-reset { padding: 4px 12px; border: none; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--text-dim); font: 600 11px var(--font); cursor: pointer; } .ce-reset:hover { background: rgba(255,255,255,0.12); color: #fff; }
     .ce-modes { display: flex; gap: 4px; margin-bottom: 6px; }
     .ce-modes button { flex: 1; padding: 5px 0; border: none; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--text-dim); font: 600 11px var(--font); cursor: pointer; }
     .ce-modes button:hover { background: rgba(255,255,255,0.12); color: #fff; } .ce-modes button.on { background: var(--accent-grad); color: #06121c; }
@@ -223,6 +226,6 @@
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
   <script src="adminpanel.js?v=1791952387"></script>
-  <script type="module" src="game3d.js?v=1791959451"></script>
+  <script type="module" src="game3d.js?v=1791960255"></script>
 </body>
 </html>
