@@ -260,9 +260,9 @@ export function initBuild(ctx) {
           vU = mat2(c, -s, s, c) * (uv - 0.5); vS = iS; vH = iP.z / ${CLOUD_TOP}.0;
           vec4 e = viewMatrix * w; e.xy += position.xy * iS.x * uS * 2.0;
           gl_Position = projectionMatrix * e;
-          // a clear patch on screen around my own ship, about its size wherever the camera is
+          // a thinned-out patch on screen around my own ship (still faintly tinted, so it feels inside the cloud)
           vec4 me = projectionMatrix * viewMatrix * vec4(uMe.x, 8.0, -uMe.y, 1.0); float asp = projectionMatrix[1][1] / projectionMatrix[0][0];
-          vN = gl_Position.xy / gl_Position.w * vec2(asp, 1.0); vM = me.xy / me.w * vec2(asp, 1.0); vR = 45.0 * projectionMatrix[1][1] / me.w;
+          vN = gl_Position.xy / gl_Position.w * vec2(asp, 1.0); vM = me.xy / me.w * vec2(asp, 1.0); vR = 90.0 * projectionMatrix[1][1] / me.w;   // (owner: 4x the area it was)
         }`,
       fragmentShader: `uniform sampler2D nt; uniform float uT, uG; uniform vec3 c1, c2, c3; varying vec2 vU, vN, vM; varying vec3 vS; varying float vR, vH; varying vec2 vC;
         void main() {
@@ -274,7 +274,7 @@ export function initBuild(ctx) {
           vec3 col = mix(c1, c2, clamp(smoothstep(0.38, 0.62, vC.x) * 0.9 + vH * 0.35 + (n - 0.5) * 1.2 + (vS.y - 0.5) * 0.4, 0.0, 1.0));
           col = mix(col, c3, smoothstep(0.5, 0.85, vC.y * 0.7 + f * 0.4 + vH * 0.3) * 0.7 * blob);
           float me = smoothstep(0.7, 1.5, length(vN - vM) / vR);
-          gl_FragColor = vec4(col, blob * (0.12 + 0.12 * k) * (0.35 + 0.65 * smoothstep(0.0, 50.0, vS.z)) * mix(0.08, 1.0, me) * uG);   // (screen colors)
+          gl_FragColor = vec4(col, blob * (0.12 + 0.12 * k) * (0.35 + 0.65 * smoothstep(0.0, 50.0, vS.z)) * mix(0.3, 1.0, me) * uG);   // (screen colors)
         }`,
     });
     const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1; return mesh;

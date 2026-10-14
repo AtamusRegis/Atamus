@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Wider view in clouds (owner):** the clear patch around your own ship inside a cloud is about 4x the area, and keeps a faint tint of the cloud.
 - **Seeing from inside a nebula (owner):** while you're anywhere inside a cloud, that cloud no longer blocks your sight; other clouds still do.
 - **Nebulas block sight (owner):** a cloud's thick core casts a shadow past its far side and hides ships behind it, so you can't see through a nebula to the other side (from inside the core you can still see out).
 - **Cloud hiding by depth (owner):** ships in a nebula cloud are fully visible at its edge and fade out to invisible 150 m in (moving or not); a ship within 100 m of you in the same cloud fades only to 25%. The rule that hid any ship sitting still in a cloud is gone.
