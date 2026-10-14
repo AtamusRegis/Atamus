@@ -100,7 +100,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
 const scene = new THREE.Scene();
 // (owner, 2026-10-14) deep blue space under the field grid (was dark charcoal)
-const SPACE = 0x0c2266;
+const SPACE = 0x081538;
 scene.background = new THREE.Color(SPACE);
 scene.fog = new THREE.Fog(SPACE, 3000, 14000);
 scene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 0.9));
@@ -167,17 +167,20 @@ function skyLayer(depth, order, frag, transparent) {
 skyLayer(-9000, -5, `void main() {                               // the base: deep blue with marbled lighter clouds and dark dust lanes
     vec2 p = vG / 14000.0 + vec2(uT * 0.0012, 0.0);
     float n = marble(p), dust = smoothstep(0.42, 0.62, fbm4(vG / 9000.0 + 13.0 + uT * 0.0008));
-    vec3 col = mix(vec3(0.01, 0.05, 0.2), vec3(0.03, 0.2, 0.55), smoothstep(0.35, 0.7, n));
-    col = mix(col, vec3(0.1, 0.42, 0.85), smoothstep(0.62, 0.85, n) * 0.6);
-    col *= 1.0 - 0.45 * dust * smoothstep(0.45, 0.75, n);           // the dust lanes darken the bright clouds
+    // (owner, 2026-10-14) mostly near-black space: the blue clouds only where the marbling is high, with dark gaps between
+    float dark = smoothstep(0.32, 0.58, fbm4(vG / 20000.0 + 51.0 - uT * 0.0006));   // big dark regions with no clouds
+    vec3 col = mix(vec3(0.012, 0.035, 0.11), vec3(0.03, 0.17, 0.48), smoothstep(0.4, 0.72, n));
+    col = mix(col, vec3(0.09, 0.38, 0.8), smoothstep(0.64, 0.87, n) * 0.6);
+    col *= 1.0 - 0.55 * dust * smoothstep(0.45, 0.75, n);           // the dust lanes darken the bright clouds
+    col *= 0.6 + 0.4 * dark;
     gl_FragColor = vec4(col, 1.0); }`, false);
 skyLayer(-6000, -4, `void main() {                               // bright cyan glow spots in the clouds (screen colors, no conversion)
     float g = marble(vG / 9000.0 + 31.0 - uT * 0.0015);
     g = pow(smoothstep(0.55, 0.9, g), 2.0);
-    gl_FragColor = vec4(vec3(0.08, 0.45, 0.8) * g, 1.0); }`, true);
+    gl_FragColor = vec4(vec3(0.07, 0.4, 0.72) * g, 1.0); }`, true);
 skyLayer(-3500, -3, `void main() {                               // nearer, faint blue wisps
     float g = smoothstep(0.55, 0.9, marble(vG / 5000.0 + 77.0 + uT * 0.002));
-    gl_FragColor = vec4(vec3(0.03, 0.14, 0.35) * g, 1.0); }`, true);
+    gl_FragColor = vec4(vec3(0.025, 0.11, 0.29) * g, 1.0); }`, true);
 // (owner, 2026-10-14) stars far below the grid: thin points that drift slower than the grid as you move (they're deeper),
 // each slowly dimming in and out on its own. They tile around the camera so the field never runs out.
 const STAR_T = 24000, STAR_N = 6000;

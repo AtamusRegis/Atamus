@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Nebula background (owner):** marbled blue nebula clouds with dust lanes, cyan glows and wisps in parallax layers, toned down with larger dark regions so it's less saturated.
 - **Nebula background (owner):** the space background is now a marbled blue nebula with dark dust lanes, cyan glows and faint wisps, in layers that parallax against each other.
 - **Space in layers (owner):** the space background's colors are now three layers at different depths (blue base, cyan glows, blue wisps) that parallax against each other.
 - **Space background (owner):** the charcoal ground is gone: the grid now floats over a deep blue space background with soft cyan glows and a field of thin, slowly twinkling stars that parallax as you move.
