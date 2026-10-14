@@ -60,6 +60,7 @@ function geos() {
 }
 let GEO = geos();
 const COLOR = 0x8c96aa;
+const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
 export const builds = new Map();               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
@@ -92,7 +93,7 @@ export function initBuild(ctx) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
     if (!b.mesh) {
       // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
-      b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 }));
+      b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], ctx.farMat(pieceMat));   // (not drawn past the sight limit)
       b.mesh.userData = { k: b.k, id: b.id }; scene.add(b.mesh);
       if (held && held.id === b.id) holo(b.mesh, true);
     }
@@ -106,7 +107,7 @@ export function initBuild(ctx) {
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
     if (held && held.id === id) { holo(b.mesh, false); held = null; }
-    scene.remove(b.mesh); if (b.k !== "ship") b.mesh.material.dispose(); builds.delete(id);
+    scene.remove(b.mesh); builds.delete(id);
   }
 
   // ---- state ----

@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791957612";
+import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791957761";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -243,7 +243,22 @@ const visScene = new THREE.Scene(); visScene.background = new THREE.Color(0xffff
 const visCam = new THREE.OrthographicCamera(-VIS_S, VIS_S, VIS_S, -VIS_S, 1, 4000); visCam.up.set(0, 0, -1);   // north up, east right
 const visGeo = new THREE.BufferGeometry(); let visCap = 0;
 const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })); visMesh.frustumCulled = false; visScene.add(visMesh);
-const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S } };
+// (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
+// (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
+const FAR_IN = cam.leash, FAR_OUT = cam.leash + 400;
+const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S }, visFar: { value: FAR_OUT } };
+const farCache = new Map();
+function farMat(m) {                           // a material that isn't drawn past FAR_OUT from my ship
+  if (farCache.has(m)) return farCache.get(m);
+  const c = m.clone();
+  c.onBeforeCompile = (sh) => {
+    sh.uniforms.visC = visU.visC; sh.uniforms.visFar = visU.visFar;
+    sh.vertexShader = "varying vec3 vFarW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vFarW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+    sh.fragmentShader = "uniform vec2 visC; uniform float visFar; varying vec3 vFarW;\n" + sh.fragmentShader.replace("void main() {", "void main() {\n  if (length(vec2(vFarW.x, -vFarW.z) - visC) > visFar) discard;");
+  };
+  c.customProgramCacheKey = () => "far";
+  farCache.set(m, c); return c;
+}
 const losCache = new Map();
 function losMat(m) {                           // a copy of a ship material that leaves out the parts in shadow
   if (losCache.has(m)) return losCache.get(m);
@@ -251,8 +266,8 @@ function losMat(m) {                           // a copy of a ship material that
   c.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, visU);
     sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
-    sh.fragmentShader = "uniform sampler2D visTex; uniform vec2 visC; uniform float visS; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
-      "void main() {\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0 && texture2D(visTex, vuv).r < 0.5) discard;");
+    sh.fragmentShader = "uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float visFar; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
+      "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0 && texture2D(visTex, vuv).r < 0.5) discard;");
   };
   c.customProgramCacheKey = () => "los";
   losCache.set(m, c); return c;
@@ -262,9 +277,9 @@ function losMat(m) {                           // a copy of a ship material that
 // (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
 const shadeT = { value: 0 }, shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, uT: shadeT, hexA: shadeHex }, transparent: true, depthWrite: false,
+  uniforms: { ...visU, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN } }, transparent: true, depthWrite: false,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; varying vec3 vW;
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; varying vec3 vW;
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
@@ -274,15 +289,16 @@ const shadeMat = new THREE.ShaderMaterial({
       float lit = (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0;
       float ed = max(abs(g.y), max(abs(1.7320508 * g.x + g.y), abs(1.7320508 * g.x - g.y)) * 0.5) - hexA;   // past the hexagon's edge
       lit = min(lit, 1.0 - smoothstep(0.0, 30.0, ed));
-      if (lit > 0.99) discard;
+      float far = smoothstep(farIn, visFar, length(g - visC));   // (owner) clear at the leash circle, solid 400 m past it
+      if (lit > 0.99 && far <= 0.0) discard;
       float a = fbm(g / 260.0 + vec2(uT * 0.020, uT * 0.013)), b = fbm(g / 110.0 - vec2(uT * 0.031, -uT * 0.017));
       float d = mix(a, b, 0.45);
       vec3 col = mix(vec3(0.015, 0.02, 0.035), vec3(0.16, 0.14, 0.115), smoothstep(0.3, 0.85, d));
-      gl_FragColor = vec4(col, (0.3 + 0.38 * d) * (1.0 - lit));
+      gl_FragColor = vec4(col, mix((0.3 + 0.38 * d) * (1.0 - lit), 1.0, far));
     }`,
 });
 const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);
-shade.position.y = 0.3; shade.renderOrder = 1; shade.frustumCulled = false; scene.add(shade);
+shade.position.y = 0.6; shade.renderOrder = 1; shade.frustumCulled = false; scene.add(shade);
 function updateVis() {                         // the shadows from where my ship is now
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   const edges = (v) => {                       // v: a convex outline [x0, y0, x1, y1, ...]; each edge's shadow quad
@@ -392,7 +408,7 @@ const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.6
 const blocks = new Map();                      // id -> { x, y, mesh }
 function addBlock(id, x, y) {
   if (blocks.has(id)) return;
-  const mesh = new THREE.Mesh(cubeGeo, cubeMat); mesh.scale.setScalar(BLOCK_HALF / 25); mesh.position.copy(toWorld(x, y, BLOCK_HALF)); scene.add(mesh);
+  const mesh = new THREE.Mesh(cubeGeo, farMat(cubeMat)); mesh.scale.setScalar(BLOCK_HALF / 25); mesh.position.copy(toWorld(x, y, BLOCK_HALF)); scene.add(mesh);
   blocks.set(id, { x, y, mesh });
 }
 function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); } }
@@ -408,7 +424,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ scene, camera, canvas, toWorld, send, typing, makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
@@ -820,7 +836,7 @@ function drawMinimap(now) {
   }
   for (const p of players.values()) {
     if (p.id === myId || !p.side || !p.near) continue;
-    if (haveMe && sightBlocked(me.x, me.y, p.holder.position.x, -p.holder.position.z)) continue;   // (owner) out of my line of sight
+    if (haveMe && (Math.hypot(p.holder.position.x - me.x, -p.holder.position.z - me.y) > FAR_OUT || sightBlocked(me.x, me.y, p.holder.position.x, -p.holder.position.z))) continue;   // (owner) out of my line of sight
     arrow(p.holder.position.x, -p.holder.position.z, p.heading, mySide && p.side === mySide ? "#4f8fe8" : "#e04848", 3, false);
   }
   if (haveMe) {

@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-14
+
+- **Sight fades with distance (owner):** beyond the leash circle the haze thickens until it's solid 400 m further out; nothing past that is drawn or shown on the minimap.
+
 ## 2026-10-13
 
 - **Build menu reworked (owner):** no more on-screen controls: the pointer positions, the wheel scales and holding R turns the blueprint or a picked-up piece; click to place or drop. Blueprints and held pieces show as a shimmering hologram. The ship can fly while the menu is open.
