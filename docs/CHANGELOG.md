@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Cloud cores shown (owner):** with the Build menu open, each cloud's core (where ships are hidden and sight is blocked) is outlined in red.
 - **Fix: ships in the same cloud vanished at its edge (owner).** The edge fade now applies to everyone; being in the same cloud within 200 m only adds a faint 25% floor for moving (or just-hit) ships, mainly in the core.
 - **Cloud visibility reworked (owner):** from outside a cloud, ships in it fade out over the first 200 m and the core beyond is fully hidden (and blocks sight). From inside the same cloud you see other ships only within 200 m, faintly, and only while they move or just after you hit them.
 - **Wider view in clouds (owner):** the clear patch around your own ship inside a cloud is about 4x the area, and keeps a faint tint of the cloud.

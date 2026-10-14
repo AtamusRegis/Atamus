@@ -300,19 +300,23 @@ export function initBuild(ctx) {
     if (open && !picking && !held) for (const b of builds.values()) {
       if (b.k !== "cloud" || !b.poly) continue;
       const pts = []; for (let i = 0; i < b.poly.length; i += 2) pts.push(scr2(b.poly[i], b.poly[i + 1]));
-      if (pts.some((p) => p[2] && p[0] > -50 && p[0] < innerWidth + 50 && p[1] > -50 && p[1] < innerHeight + 50)) list.push([b, pts]);
+      // (owner, 2026-10-14) its core outline (where ships are hidden and sight is blocked), drawn red
+      const cores = (ctx.cloudCores ? ctx.cloudCores(b) : []).map((v) => { const o = []; for (let i = 0; i < v.length; i += 2) o.push(scr2(v[i], v[i + 1])); return o; });
+      if (pts.some((p) => p[2] && p[0] > -50 && p[0] < innerWidth + 50 && p[1] > -50 && p[1] < innerHeight + 50)) list.push([b, pts, cores]);
     }
-    const key = list.map(([b, pts]) => b.id + ":" + pts.length).join(",");
+    const key = list.map(([b, pts, cores]) => b.id + ":" + pts.length + ":" + cores.length).join(",");
     if (key !== hKey) {
       hKey = key; while (cLayer.firstChild) cLayer.removeChild(cLayer.firstChild);
-      for (const [b, pts] of list) {
+      for (const [b, pts, cores] of list) {
+        for (const c of cores) { const cp = document.createElementNS(NSv, "polygon"); cp.setAttribute("class", "ch-core"); cLayer.appendChild(cp); }
         const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "ch-line"); cLayer.appendChild(pl);
         pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 4); c.setAttribute("class", "ch-mid"); c.dataset.id = b.id; c.dataset.i = i; cLayer.appendChild(c); });
         pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 6); c.setAttribute("class", "ch-pt"); c.dataset.id = b.id; c.dataset.i = i; cLayer.appendChild(c); });
       }
     }
     let el = cLayer.firstChild;
-    for (const [, pts] of list) {
+    for (const [, pts, cores] of list) {
+      for (const c of cores) { el.setAttribute("points", c.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling; }
       el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
       pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; el.setAttribute("cx", (p[0] + q[0]) / 2); el.setAttribute("cy", (p[1] + q[1]) / 2); el = el.nextSibling; });
       pts.forEach((p) => { el.setAttribute("cx", p[0]); el.setAttribute("cy", p[1]); el = el.nextSibling; });
