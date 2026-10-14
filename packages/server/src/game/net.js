@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -216,13 +216,15 @@ export function attachGameServer(httpServer) {
       }
       world.hits.length = 0;
     }
-    if (world.shots.length) {                  // (owner, 2026-10-14) railgun shots: to the players whose load circle has either end
+    if (world.projEv.length) {                 // (owner, 2026-10-14) railgun projectiles starting / ending, to the players near them
+      const r1 = (v) => Math.round(v * 10) / 10;
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-        for (const h of world.shots) if (Math.hypot(h.x0 - p.x, h.y0 - p.y) <= LOAD_R || Math.hypot(h.x1 - p.x, h.y1 - p.y) <= LOAD_R)
-          ws.send(JSON.stringify({ t: "shot", a: h.a, h: h.h, x0: Math.round(h.x0 * 10) / 10, y0: Math.round(h.y0 * 10) / 10, x1: Math.round(h.x1 * 10) / 10, y1: Math.round(h.y1 * 10) / 10 }));
+        const out = world.projEv.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) <= LOAD_R + (e.t === "proj" ? RAIL_RANGE : 0))
+          .map((e) => (e.t === "proj" ? { t: "proj", i: e.i, a: e.a, x: r1(e.x), y: r1(e.y), vx: r1(e.vx), vy: r1(e.vy) } : { t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s }));
+        if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
       }
-      world.shots.length = 0;
+      world.projEv.length = 0;
     }
   }, 50);
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)

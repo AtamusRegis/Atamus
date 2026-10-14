@@ -35,9 +35,11 @@ export const LOAD_R = 1300;
 // (owner, 2026-10-14) ship bumps: the bounce (0 = dead stop, 1 = full rebound), the closing speed that does no damage
 // (m/s), and damage per m/s above it; health
 export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
-// (owner, 2026-10-14) the railgun (left click): an instant shot from the ship's pivot toward the pointer, stopped by the first
-// block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG.
-export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 1.0;   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
+// (owner, 2026-10-14) the railgun (left click): a fast projectile from the ship's pivot toward the pointer, stopped by the
+// first block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG. A ship
+// the shooter can't see by line of sight (blocks and Build pieces; clouds don't count here) isn't hit: it flies through.
+export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 1.0, RAIL_SPEED = 700;
+export const PIV_W = 0.2, VIS_LO = 0.25;   // mutual visibility, as the client works it out: below VIS_LO a ship isn't drawn   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -188,7 +190,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.hits = []; this.shots = [];   // shots: (owner, 2026-10-14) this tick's railgun shots, for the clients' beams
+    this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
@@ -301,6 +303,7 @@ export class World3D {
       p.dirty = true;
     }
     this.collide();
+    this.stepProjs(dt);
     for (const p of this.players.values()) {   // test ships shoved somewhere: the piece follows
       if (!p.bot) continue; const b = this.builds.get(String(p.bot));
       if (b && (b.x !== p.x || b.y !== p.y)) { b.x = Math.round(p.x * 100) / 100; b.y = Math.round(p.y * 100) / 100; b.dirty = true; this._shape(b); }
@@ -350,18 +353,50 @@ export class World3D {
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
     const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
     const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null; p.lastFire = now;
-    const x0 = p.x, y0 = p.y, x1 = x0 + dx / L * RAIL_RANGE, y1 = y0 + dy / L * RAIL_RANGE;
-    let t = 1, hit = null; const near = (x, y, R) => { const ex = x - x0, ey = y - y0, f = Math.max(0, Math.min(1, (ex * (x1 - x0) + ey * (y1 - y0)) / (RAIL_RANGE * RAIL_RANGE))); return Math.hypot(x - x0 - (x1 - x0) * f, y - y0 - (y1 - y0) * f) <= R; };
-    for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
-    for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; const u = segPoly(x0, y0, x1, y1, b.poly); if (u !== null && u < t) { t = u; hit = null; } }
-    for (const q of this.players.values()) {
-      if (q === p || !near(q.x, q.y, SHIP_R * 2)) continue;
-      const u = segPoly(x0, y0, x1, y1, buildPoly({ k: "ship", x: q.x, y: q.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: q.h || 0 }, this.colliders, this.pivots));
-      if (u !== null && u < t) { t = u; hit = q; }
+    const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * RAIL_SPEED, vy: dy / L * RAIL_SPEED, left: RAIL_RANGE };
+    this.projs.push(q); this.projEv.push({ t: "proj", i: q.id, a: q.a, x: q.x, y: q.y, vx: q.vx, vy: q.vy });
+    return q;
+  }
+  // the outlines that block sight (blocks and Build pieces; not ships or clouds)
+  _sightBlocked(x0, y0, x1, y1) {
+    const lo = (a, b) => Math.min(a, b), hi = (a, b) => Math.max(a, b), X0 = lo(x0, x1), X1 = hi(x0, x1), Y0 = lo(y0, y1), Y1 = hi(y0, y1);
+    for (const b of this.blocks) { if (b.x + BLOCK_HALF < X0 || b.x - BLOCK_HALF > X1 || b.y + BLOCK_HALF < Y0 || b.y - BLOCK_HALF > Y1) continue; if (segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)) !== null) return true; }
+    for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const R = b.far || b.rad; if (b.x + R < X0 || b.x - R > X1 || b.y + R < Y0 || b.y - R > Y1) continue; if (segPoly(x0, y0, x1, y1, b.poly) !== null) return true; }
+    return false;
+  }
+  // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
+  sees(a, b) {
+    const pts = (p) => toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines.ship || VIS_DEFAULT.ship, this.pivots.ship || [0, 0]);
+    const A = pts(a), B = pts(b); let clear = 0;
+    const piv = this._sightBlocked(a.x, a.y, b.x, b.y) ? 0 : PIV_W;
+    for (let i = 0; i < A.length; i += 2) if (!this._sightBlocked(A[i], A[i + 1], b.x, b.y)) clear++;
+    for (let i = 0; i < B.length; i += 2) if (!this._sightBlocked(B[i], B[i + 1], a.x, a.y)) clear++;
+    return piv + (1 - PIV_W) * clear / Math.max(1, (A.length + B.length) / 2) > VIS_LO;
+  }
+  // projectiles fly a step each tick; the first thing on the step stops them
+  stepProjs(dt) {
+    for (let k = this.projs.length - 1; k >= 0; k--) {
+      const q = this.projs[k], step = Math.min(q.left, RAIL_SPEED * dt), x0 = q.x, y0 = q.y, x1 = x0 + q.vx / RAIL_SPEED * step, y1 = y0 + q.vy / RAIL_SPEED * step;
+      let t = 2, hit = null;
+      const near = (x, y, R) => Math.max(Math.abs(x - (x0 + x1) / 2), Math.abs(y - (y0 + y1) / 2)) <= R + step / 2;
+      for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
+      for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; const u = segPoly(x0, y0, x1, y1, b.poly); if (u !== null && u < t) { t = u; hit = null; } }
+      const shooter = this.players.get(q.a);
+      for (const p of this.players.values()) {
+        if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6)) continue;
+        const u = segPoly(x0, y0, x1, y1, buildPoly({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots));
+        if (u === null || u >= t) continue;
+        if (shooter && !this.sees(shooter, p)) continue;   // (owner) a ship the shooter can't see: the shot flies through it
+        t = u; hit = p;
+      }
+      if (t <= 1) {
+        const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
+        if (hit) this.hurt(hit, RAIL_DMG);
+        this.projEv.push({ t: "pend", i: q.id, x, y, h: hit ? hit.id : null, s: 1 }); this.projs.splice(k, 1); continue;
+      }
+      q.x = x1; q.y = y1; q.left -= step;
+      if (q.left <= 0.01 || !inside(q.x, q.y)) { this.projEv.push({ t: "pend", i: q.id, x: q.x, y: q.y, h: null, s: 0 }); this.projs.splice(k, 1); }
     }
-    const shot = { a: p.id, x0, y0, x1: x0 + (x1 - x0) * t, y1: y0 + (y1 - y0) * t, h: hit ? hit.id : null };
-    if (hit) this.hurt(hit, RAIL_DMG);
-    this.shots.push(shot); return shot;
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
   addBlock(pid) {

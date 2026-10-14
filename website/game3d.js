@@ -718,8 +718,9 @@ addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
 const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
   botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
-// ---- (owner, 2026-10-14) the railgun: left click fires an instant shot from my ship toward the pointer (the server
-// decides what it hits and keeps the 1 s cooldown); everyone near sees a bright beam that fades out, sparks where it hit ----
+// ---- (owner, 2026-10-14) the railgun: left click fires a fast projectile from my ship toward the pointer (the server
+// flies it, decides what it hits and keeps the 1 s cooldown); everyone near sees the glowing slug, sparks where it hits a
+// ship. A ship the shooter can't see (line of sight) isn't hit: the slug flies through it. ----
 const RAIL_CD = 1000;
 let railAt = 0;
 function fireRail(px, py) {
@@ -730,26 +731,28 @@ function fireRail(px, py) {
   const dx = g.x - me.x, dy = -g.z - me.y, L = Math.hypot(dx, dy); if (L < 1) return;
   railAt = now; ws.send(JSON.stringify({ t: "fire", x: Math.round(dx / L * 1000) / 1000, y: Math.round(dy / L * 1000) / 1000 }));
 }
-const shots = [], SHOT_T = 0.45;
-const shotCore = new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-const shotGlow = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
-const shotGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).rotateZ(Math.PI / 2);   // along x, length 1
-function addShot(m) {
-  if (![m.x0, m.y0, m.x1, m.y1].every(Number.isFinite)) return;
-  const len = Math.hypot(m.x1 - m.x0, m.y1 - m.y0); if (len < 0.5) return;
-  const g = new THREE.Group(), core = new THREE.Mesh(shotGeo, shotCore.clone()), glow = new THREE.Mesh(shotGeo, shotGlow.clone());
-  core.scale.set(len, 1.2, 1.2); glow.scale.set(len, 5, 5); g.add(glow, core);
-  g.position.set((m.x0 + m.x1) / 2, shipMid, -(m.y0 + m.y1) / 2); g.rotation.y = Math.atan2(m.y1 - m.y0, m.x1 - m.x0);
-  g.renderOrder = 3; scene.add(g); shots.push({ g, t0: performance.now() });
-  if (m.h != null) burst(m.x1, m.y1, 260);           // sparks on the ship it hit
-  if (m.a === myId && m.h != null) revealed.set(m.h, performance.now());   // (a ship I hit shows in a cloud)
+const projs = new Map();                       // id -> { g, x, y, vx, vy, t0 }
+const projCore = new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
+const projGlow = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+const projTrail = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
+const projGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false).rotateZ(Math.PI / 2).translate(-0.5, 0, 0);   // along x, from -1 to 0 (the tip at its origin)
+function addProj(m) {
+  if (![m.x, m.y, m.vx, m.vy].every(Number.isFinite) || projs.has(m.i)) return;
+  const g = new THREE.Group(), core = new THREE.Mesh(projGeo, projCore), glow = new THREE.Mesh(projGeo, projGlow), trail = new THREE.Mesh(projGeo, projTrail);
+  core.scale.set(18, 1, 1); glow.scale.set(26, 3, 3); trail.scale.set(70, 1.6, 1.6); g.add(trail, glow, core);
+  g.rotation.y = Math.atan2(m.vy, m.vx); g.renderOrder = 3; scene.add(g);
+  projs.set(m.i, { g, x: m.x, y: m.y, vx: m.vx, vy: m.vy, t0: performance.now() });
+}
+function endProj(m) {
+  const q = projs.get(m.i); if (q) { scene.remove(q.g); projs.delete(m.i); }
+  if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
+  if (m.h != null) { burst(m.x, m.y, 260); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // sparks on the ship it hit (a ship I hit shows in a cloud)
+  else if (m.s) burst(m.x, m.y, 60);           // a small puff of sparks on a wall
 }
 function updateShots(now) {
-  for (let i = shots.length - 1; i >= 0; i--) {
-    const u = shots[i], a = (now - u.t0) / 1000 / SHOT_T;
-    if (a >= 1) { scene.remove(u.g); for (const c of u.g.children) c.material.dispose(); shots.splice(i, 1); continue; }
-    const f = (1 - a) * (1 - a); u.g.children[0].material.opacity = 0.45 * f; u.g.children[1].material.opacity = f;
-    u.g.children[0].scale.y = u.g.children[0].scale.z = 5 + a * 6;
+  for (const [id, q] of projs) {
+    const t = (now - q.t0) / 1000; if (t > 3) { scene.remove(q.g); projs.delete(id); continue; }   // (never told it ended)
+    q.g.position.set(q.x + q.vx * t, shipMid, -(q.y + q.vy * t));
   }
 }
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
@@ -881,7 +884,8 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
-    else if (m.t === "shot") addShot(m);
+    else if (m.t === "proj") { addProj(m); const q = projs.get(m.i); if (q) q.a = m.a; }
+    else if (m.t === "pend") endProj(m);
     else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
       const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
       if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
