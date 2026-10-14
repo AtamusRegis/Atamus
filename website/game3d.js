@@ -521,8 +521,8 @@ function addPlayer(id, name, x = 0, y = 0) {
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
-const TURN = 2;                                // rad/s (owner: first 12, then 4, 8, 4, and on 2026-10-14 cut to 25% of 8)
-const TURN_A = 10, TURN_K = 4, BANK_MAX = 0.32;
+const TURN = 0.5;                              // rad/s (owner: first 12, then 4, 8, 4, 2, and on 2026-10-14 cut by another 75% to 0.5)
+const TURN_A = 2.5, TURN_K = 4, BANK_MAX = 0.32;
 const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
 let HP_MAX = 100;                               // (the server sends it)   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
@@ -564,7 +564,7 @@ function bank(p, dt) {
   const v = p.holder.children[0]; if (!v) return;
   const h = p.heading; let dh = h - (p.lastH ?? h); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; p.lastH = h;
   const w = dt > 0 ? dh / dt : 0; p.turnRate = (p.turnRate || 0) + (w - (p.turnRate || 0)) * Math.min(1, dt * 10);
-  const roll = Math.max(-BANK_MAX, Math.min(BANK_MAX, -p.turnRate * 0.16));   // turning left (heading rising) dips the left wing
+  const roll = Math.max(-BANK_MAX, Math.min(BANK_MAX, -p.turnRate * 0.64));   // turning left (heading rising) dips the left wing
   v.rotation.z += (roll - v.rotation.z) * Math.min(1, dt * 8);
 }
 
