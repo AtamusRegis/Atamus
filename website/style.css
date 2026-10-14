@@ -420,3 +420,6 @@ canvas.portrait { image-rendering: pixelated; image-rendering: crisp-edges; disp
 /* (owner) the DB-IP credit its free database asks for */
 .site-foot { position: relative; z-index: 2; text-align: center; padding: 8px 16px 20px; font-size: 11px; }
 .site-foot a { color: var(--muted, #6f8aa6); text-decoration: none; }
+
+/* (owner, 2026-10-13) Reset faction under Enter System */
+.reset-side { margin-top: 12px; }

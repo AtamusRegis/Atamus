@@ -28,7 +28,7 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 ## Sides and the minimap (owner, 2026-10-13)
 
-- **Every time a player enters the game they choose a side: Red or Blue** ("Choose a side", two buttons over the world). They join the world only once they've picked; the server keeps the side for the session (`{t:"side", s}`, once per session, only "red" or "blue"). Reconnecting asks again.
+- **Sides: Red or Blue, remembered per account** (owner, 2026-10-13). The first time, a player picks one ("Choose a side", two buttons over the world); after that **the game re-joins the remembered side by itself**. **A "Reset faction" checkbox under Enter System on the Welcome back page** brings the picker back for that entry (`game.html?reset=1`, dropped from the address once picked, so reconnects re-join). The side is saved in `world3d.team` when the player joins and sent back in the hello (`side`); the player joins only once a side is sent (`{t:"side", s}`, once per session, only "red" or "blue").
 - **The minimap:** the map's hexagon at the bottom left, **always north up**. It shows **your load circle** and **every ship inside it as an arrow pointing the way the ship faces** (owner, 2026-10-13): friendlies (your side) blue, enemies red; yours is blue with a white outline, plus a short white tick for where the camera faces. Ships outside your load circle aren't shown (they aren't sent). Redrawn ten times a second.
 - Ships themselves look the same for both sides for now.
 - PTR only: `game.html?as=Name` connects as another account (for testing several players locally).
@@ -56,7 +56,7 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 
 Kept from before, unchanged (`auth.js`, `sessions.js`, `security.js` and the rest): sign-up with the EULA, log in / log out, Remember Password, password recovery and reset requests, device ids, failed-login backoff, impossible-travel locks, bans and the session cookie. **One session per account:** a new tab or device replaces the old one (close 4002: "Playing on another tab or device"). A dead session (4001) goes back to the login page.
 
-- **The website** (atamus.io) is unchanged except play.html: **no more character or pilot creation** — a logged-in account goes straight to **Enter System**. The front page, login, signup, recovery and the EULA are as they were. The pixel logo and icons stay.
+- **The website** (atamus.io) is unchanged except play.html: **no more character or pilot creation** — a logged-in account goes straight to **Enter System** (with the Reset faction checkbox under it). The front page, login, signup, recovery and the EULA are as they were. The pixel logo and icons stay.
 - The admin panel's API, moderation, appeals, tickets, the name filter and the trade-watch tables still exist server-side but have no frontend; admin hooks into the game world are disconnected (kicks and freezes don't reach the 3D world yet).
 
 ## Live updates (kept)

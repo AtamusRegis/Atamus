@@ -330,7 +330,10 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
-      sidePick.hidden = false;                 // (owner) every time they enter, they choose a side first
+      // (owner, 2026-10-13) the side is remembered: re-join it, unless this is the first time or the player ticked
+      // Reset faction on the Welcome back page (game.html?reset=1), which shows the picker
+      const reset = new URLSearchParams(location.search).get("reset") === "1";
+      if (m.side && !reset) send({ t: "side", s: m.side }); else sidePick.hidden = false;
       if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts);
     } else if (m.t === "spawn") {
       me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
@@ -576,6 +579,7 @@ renderer.setAnimationLoop(() => {
 const sidePick = document.getElementById("side-pick");
 document.querySelectorAll("#side-pick button").forEach((btn) => btn.addEventListener("click", () => {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "side", s: btn.dataset.side }));
+  try { const u = new URL(location.href); if (u.searchParams.has("reset")) { u.searchParams.delete("reset"); history.replaceState(null, "", u); } } catch {}   // picked: reconnects re-join it
 }));
 // (owner, 2026-10-13) the minimap, always north up: the hexagon, your load circle, and every ship inside it as an
 // arrow pointing the way it faces (friendlies, your side, blue; enemies red); a tick from yours for where the camera faces

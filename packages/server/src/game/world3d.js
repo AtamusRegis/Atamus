@@ -73,6 +73,14 @@ export class World3D {
       y DOUBLE PRECISION NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+    await pool.query(`ALTER TABLE world3d ADD COLUMN IF NOT EXISTS team TEXT`);   // (owner, 2026-10-13) the side, remembered
+  }
+
+  // (owner, 2026-10-13) the side this account last chose, or null
+  async savedTeam(id) {
+    await this.ready;
+    const { rows } = await pool.query(`SELECT team FROM world3d WHERE user_id = $1`, [String(id)]);
+    const t = rows[0] && rows[0].team; return t === "red" || t === "blue" ? t : null;
   }
 
   async join(id, name, team) {
@@ -84,7 +92,8 @@ export class World3D {
     let x, y;
     if (rows[0] && inside(rows[0].x, rows[0].y)) ({ x, y } = rows[0]);
     else { const a = Math.random() * Math.PI * 2, d = Math.random() * 300; x = Math.cos(a) * d; y = Math.sin(a) * d; }
-    p = { id, name, team, x, y, dx: 0, dy: 0, dirty: true };   // team: "red" | "blue", picked every time they enter (owner)
+    p = { id, name, team, x, y, dx: 0, dy: 0, dirty: true };
+    await this._save(p).catch((e) => console.error("world3d join", e));   // remembers the side at once   // team: "red" | "blue", picked every time they enter (owner)
     this.players.set(id, p);
     return p;
   }
@@ -144,8 +153,8 @@ export class World3D {
   async _save(p) {
     await this.ready;
     await pool.query(
-      `INSERT INTO world3d (user_id, x, y, updated_at) VALUES ($1, $2, $3, now())
-       ON CONFLICT (user_id) DO UPDATE SET x = $2, y = $3, updated_at = now()`, [p.id, p.x, p.y]);
+      `INSERT INTO world3d (user_id, x, y, team, updated_at) VALUES ($1, $2, $3, $4, now())
+       ON CONFLICT (user_id) DO UPDATE SET x = $2, y = $3, team = $4, updated_at = now()`, [p.id, p.x, p.y, p.team || null]);
     p.dirty = false;
   }
   async saveDirty() { for (const p of this.players.values()) if (p.dirty) await this._save(p); }

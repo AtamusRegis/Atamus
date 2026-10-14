@@ -36,14 +36,17 @@ export function attachGameServer(httpServer) {
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
     socks.set(pid, ws);
 
-    // (owner, 2026-10-13) every time a player enters they choose a side first: they join the world only
-    // once they've sent {t:"side", s:"red"|"blue"}
+    // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
+    // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
     let joined = false;
     let cmds = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
+    let saved = null;                          // (owner, 2026-10-13) the side this account chose last time: the client re-joins it unless resetting
+    try { saved = await world.savedTeam(pid); } catch (e) { console.error("saved side", e); }
+    if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) socks.delete(pid); return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
-      t: "hello", build: SERVER_BUILD, countdown: activeCountdown(),
+      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username },
       cfg: { loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       roster: world.roster(),

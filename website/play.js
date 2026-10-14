@@ -43,7 +43,7 @@ async function waitForUpdate() {
 }
 
 // always open the game fresh, never a cached copy of an older build
-document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); location.href = "game.html?cb=" + Date.now(); }));
+document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const rs = document.getElementById("reset-side"); location.href = "game.html?cb=" + Date.now() + (rs && rs.checked ? "&reset=1" : ""); }));   // (owner) Reset faction: choose a side again
 if (params.get("updating")) waitForUpdate();
 else showSteps().catch(() => { location.href = "login.html"; });
 

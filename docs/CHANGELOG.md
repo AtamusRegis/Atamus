@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Remembered side; Reset faction (owner):** the side you pick is saved to your account and re-joined automatically next time. A Reset faction checkbox under Enter System on the Welcome back page lets you pick again.
 - **Smooth zoom-out on aim (owner):** pressing the right button now eases the zoom back to 600 m instead of snapping.
 - **Zoom in (owner):** the wheel now zooms in from 600 m to 200 m; pressing the right button snaps back to 600 m, and the wheel is ignored while aiming.
 - **Shorter camera trail (owner):** the trail now reaches 80 m at full speed instead of 200.
