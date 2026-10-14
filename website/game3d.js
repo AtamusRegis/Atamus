@@ -45,7 +45,8 @@ function steer(vx, vy, tx, ty, a, brake, dt) {
 const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
 // (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
-let CAPC = { max: 100, drain: 20, walk: 4, idle: 12, resume: 15 }, cap = 100, capOut = false;
+let CAPC = { max: 100, drain: 1,   // drain: per 100 m sprinted (owner)
+  walk: 4, idle: 12, resume: 15 }, cap = 100, capOut = false;
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 
@@ -428,7 +429,7 @@ renderer.setAnimationLoop(() => {
   const dh = movingIn ? wrap(want - (mineP ? mineP.heading : 0)) : 0;    // off the nose: the acceleration share (as the server)
   const df = movingIn && ag !== null ? wrap(want - ag) : 0;             // (owner) off "forward": not aiming, everything is forward
   const sprintOn = !!d.b && movingIn && Math.abs(df) <= FWD_ARC && !capOut;   // (owner) sprint only forward
-  if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * dt) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
+  if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * Math.hypot(vel.x, vel.y) * dt / 100) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
     const spd = SPEED * dirSpeed(df) * (sprintOn ? SPRINT : 1), tx = d.x * spd, ty = d.y * spd;

@@ -25,7 +25,8 @@ const wrapA = (a) => { a %= Math.PI * 2; return a > Math.PI ? a - Math.PI * 2 : 
 export const TURN_ACCEL = 0.3;
 // (owner, 2026-10-13) the capacitor, 0-100: sprinting drains it; moving without sprinting recharges it slowly,
 // sitting still faster. Run dry and sprint stays off until it's back to CAP_RESUME.
-export const CAP_MAX = 100, CAP_DRAIN = 20, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESUME = 15;
+export const CAP_MAX = 100, CAP_DRAIN = 1, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESUME = 15;
+// (owner, 2026-10-13) CAP_DRAIN is per 100 m sprinted (was 20 a second): 1% of the bar for every 100 m covered
 // (owner, 2026-10-13) the load circle: each player is sent only the players (and, later, objects) within this
 // distance of their ship. It reaches well past the camera, so nothing pops in on screen.
 export const LOAD_R = 5000;
@@ -128,7 +129,7 @@ export class World3D {
       const dh = moving ? wrapA(want - (p.h || 0)) : 0;                      // off the nose: how much acceleration it gets
       const df = moving && p.aim != null ? wrapA(want - p.aim) : 0;         // off "forward": the top speed and sprint
       const sprinting = !!p.boost && moving && Math.abs(df) <= FWD_ARC && !p.capOut;   // (owner) sprint only forward
-      p.cap = sprinting ? Math.max(0, p.cap - CAP_DRAIN * dt) : Math.min(CAP_MAX, p.cap + (moving ? CAP_WALK : CAP_IDLE) * dt);
+      p.cap = sprinting ? Math.max(0, p.cap - CAP_DRAIN * Math.hypot(p.vx || 0, p.vy || 0) * dt / 100) : Math.min(CAP_MAX, p.cap + (moving ? CAP_WALK : CAP_IDLE) * dt);
       const vx0 = p.vx || 0, vy0 = p.vy || 0;
       if (!moving && !vx0 && !vy0) continue;
       // accelerate toward the input's velocity; a push off the nose gets only part of the acceleration
