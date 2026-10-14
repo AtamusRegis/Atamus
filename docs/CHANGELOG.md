@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Bigger small puffs (owner):** the smallest edge puffs are about 3x bigger; the big ones near the red line and how heavy they all feel are unchanged.
 - **Heavier cloud puffs (owner):** ships now only nudge the edge puffs as they move through them, the puffs always drift back home (even with a ship parked there), and they're heavier, the big ones most.
 - **Cloud edge puffs fill the band (owner):** the tethered puffs now spread from the edge to the red core line, growing bigger toward it, and bigger ones get pushed around less by ships.
 - **Finer cloud edges (owner):** the tethered edge puffs are now many small ones instead of a few big ones.

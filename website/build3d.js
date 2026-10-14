@@ -295,7 +295,7 @@ export function initBuild(ctx) {
     for (let x = x0 - 16; x <= x1 + 16; x += G) for (let y = y0 - 16; y <= y1 + 16; y += G) {
       const px = x + (Math.random() - 0.5) * G, py = y + (Math.random() - 0.5) * G, e = edge(px, py), d = inside(px, py) ? e : -e;
       if (d < -14 || d > EDGE_DEEP + 15) continue;
-      const k = Math.max(0, Math.min(1, d / EDGE_DEEP)), size = (7 + 33 * k) * (0.75 + 0.5 * Math.random());
+      const k = Math.max(0, Math.min(1, d / EDGE_DEEP)), size = (21 + 19 * k) * (0.75 + 0.5 * Math.random());   // (owner: the smallest 3x what they were, the biggest as before)
       if (Math.random() > Math.min(1, 1.3 * (G * G) / (size * size))) continue;   // bigger: sparser
       cand.push(px / sc, py / sc, 4 + Math.random() * (14 + 30 * k), size, Math.random());
     }
@@ -354,7 +354,7 @@ export function initBuild(ctx) {
           // (owner) a ship only nudges a puff: it gives it some of its speed as it sweeps into it (nothing holds the puff
           // out of the hull), so the leash always pulls it back home, even with a ship parked on its spot. The bigger the
           // puff, the heavier: small ones get swept along, big ones near the red line barely stir.
-          const m = Math.min(0.55, Math.max(0.04, 5 / e.A[i * 5 + 3])), nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny;
+          const m = Math.min(0.55, Math.max(0.04, 5 / (7 + (e.A[i * 5 + 3] - 21) * 33 / 19))),   // (weights kept as tuned before the small ones grew) nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny;
           if (vn < 0) { const k = -vn * m * Math.min(1, dt * 6) * (1 - d / EDGE_R * 0.5); V[j] += nx * k; V[j + 1] += ny * k; V[j + 2] += k * 0.3 * (Math.random() - 0.3); }
         }
       }
