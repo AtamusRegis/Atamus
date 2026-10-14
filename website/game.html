@@ -85,11 +85,11 @@
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
     #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
     .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
-    #chat-form { display: grid; margin: 0; position: relative; }
-    #chat-pre { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); pointer-events: none; white-space: nowrap; font: 12px system-ui, sans-serif; }
+    #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
+    #chat-form:focus-within { border-color: #4f8fe8; }
+    #chat-pre { flex: none; white-space: nowrap; font: 12px system-ui, sans-serif; }
     .chat-ch.world { color: #9fb3cf; } .chat-ch.side { color: #7fd8a0; } .chat-ch.whisper { color: #d79bff; }
-    #chat-in { background: rgba(10, 14, 22, .85); color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 6px; font: 12px system-ui, sans-serif; outline: none; }
-    #chat-in:focus { border-color: #4f8fe8; }
+    #chat-in { flex: 1; min-width: 0; background: transparent; color: #e8f0fb; border: 0; padding: 2px 0; font: 12px system-ui, sans-serif; outline: none; }   /* (owner) not white: dark, inside the dark bar */
     html.touch #chat { left: 12px; right: auto; top: 140px; bottom: auto; width: 240px; }
     #ctx-menu { position: fixed; z-index: 20; display: grid; min-width: 100px; padding: 3px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 6px; }
     #ctx-menu button { background: none; border: 0; color: #cfe0f4; text-align: left; padding: 5px 10px; border-radius: 4px; font: 12px system-ui, sans-serif; }
@@ -112,7 +112,7 @@
   <div id="countdown" class="overlay" hidden></div>
   <label id="helpers-box"><input id="helpers" type="checkbox">Weapon helpers</label>
   <canvas id="minimap"></canvas>
-  <div id="chat"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" autocorrect="off" enterkeyhint="send"></form><div id="chat-tabs" hidden></div></div>
+  <div id="chat"><div id="chat-tabs"></div><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" autocorrect="off" enterkeyhint="send"></form></div>
   <div id="ctx-menu" hidden></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-send">Send</button><button id="report-cancel">Cancel</button></div></div></div>
   <div id="joy"><div id="joy-knob"></div></div>
@@ -121,6 +121,6 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1791950241"></script>
-  <script type="module" src="game3d.js?v=1791950701"></script>
+  <script type="module" src="game3d.js?v=1791951066"></script>
 </body>
 </html>

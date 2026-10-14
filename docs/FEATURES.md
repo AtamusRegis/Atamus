@@ -48,14 +48,15 @@ The owner wiped the 2D game to rebuild Atamus in 3D. **The whole 2D game — its
 - **The browser's own right-click menu never opens on the game page**, over the UI either (owner, 2026-10-13); only the game's own menus (a name in chat) open.
 - **Touch devices (owner, 2026-10-13: "this will be a PC game, just using mobile to test as a second account"):** a **joystick** at the bottom left drives movement like WASD (analog, small dead zone; forward = where the camera faces); **dragging anywhere else turns the camera**, two fingers on the world pinch the zoom. The minimap moves to the top left. **Right-click has no touch version, by the owner's decision** (an exception to mobile parity), and there's no sprint on touch.
 
-## Chat (owner, 2026-10-13)
+## Chat (owner, 2026-10-13, Foxhole-style)
 
-- **At the bottom right:** the lines, then the input. **The input shows its channel and your name at its start** (owner): "[World] Name:", "[Faction] Name:", "[Whisper Bob] Name:". **World and Faction lines share one log**, each tagged [World] / [Faction] (the last 100).
-- **Tabs appear under the input only once there's a whisper** (owner): **Chat** (the shared log) | **Whisper <name>** … — endless, each closable (×). A whisper tab opens by itself when someone whispers you; one that gets a line while another is shown is marked (amber). Showing a whisper tab sends there; showing Chat sends to World or Faction (whichever was last).
-- **While typing, TAB switches the channel** (owner): World → Faction → each whisper → World (a whisper shows its tab). **Enter** opens the input and sends (on a phone, the keyboard's Go / Send key too); Escape or an empty line closes it. Game keys are ignored while typing.
-- **`/whisper Name message`** (or `/whisper "Name with spaces" message`) whispers an online player by name from anywhere (any case); their whisper tab opens and comes up. No one online by that name: "<name> is offline." where you're looking.
-- **Right-clicking a name in the chat** (owner): **Whisper** (opens that whisper, ready to type), **Report** (a short note to the admins; the server keeps the reported player's recent lines with it; at most 5 reports in 10 minutes), and **for staff, Admin** (the disciplinary panel). Right-click on ships stays aiming.
-- Messages go through as typed (240 characters at most), shown as plain text with the speaker's name in their side's color. Whispering someone who isn't online shows "<name> is offline." in that tab. A muted player's lines go nowhere. No history: you see what's said while you're online.
+- **At the bottom right:** **tabs on top — All | World | Faction | Whisper** (which lines show), the lines, then the input bar with its label **"[Type] Name:"** on the left (dark, not white). Lines are tagged [World], [Faction], [Whisper] (received) or [To <name>] (sent); the last 200 are kept. A tab that gets a line while another is shown is marked (amber).
+- **The tab is what you read; the channel is where you type** (owner). **While typing, TAB switches the channel** — World → Faction → Whisper (to the last person whispered, either way) → World — **without changing the tab**, so you can read World and type to Faction. Picking a tab also points the channel at it (All leaves it; Whisper only once there's someone to whisper).
+- **All whispers share the Whisper tab** (owner). Receiving or sending a whisper makes that person the one Whisper sends to; sending one switches your channel to Whisper.
+- **Enter** opens the input and sends (on a phone, the keyboard's Go / Send key too); Escape or an empty line closes it. Game keys are ignored while typing.
+- **`/whisper Name message`** (or `/whisper "Name with spaces" message`) whispers an online player by name from anywhere (any case). No one online by that name: "<name> is offline."
+- **Right-clicking a name in the chat** (owner): **Whisper** (the channel becomes a whisper to them, ready to type), **Report** (a short note to the admins; the server keeps the reported player's recent lines with it; at most 5 reports in 10 minutes), and **for staff, Admin** (the disciplinary panel). Right-click on ships stays aiming.
+- Messages go through as typed (240 characters at most), shown as plain text with the speaker's name in their side's color. A muted player's lines go nowhere. No history: you see what's said while you're online.
 
 ## Accounts and sessions
 
