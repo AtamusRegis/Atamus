@@ -144,7 +144,7 @@ function hexShapeBand() {
   const shape = new THREE.Shape(pts(HEX_FLAT / 2));
   shape.holes.push(new THREE.Path(pts(HEX_FLAT / 2 - 25).reverse()));
   const geo = new THREE.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2);
-  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9 }));
+  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9, depthWrite: false }));   // (no depth: the haze always draws over it)
 }
 let border = hexShapeBand(); border.position.y = 0.3; scene.add(border);
 function rebuildBorder() { scene.remove(border); border.geometry.dispose(); border = hexShapeBand(); border.position.y = 0.3; scene.add(border); }   // when the hello changes the size
@@ -277,28 +277,37 @@ function losMat(m) {                           // a copy of a ship material that
 // (owner) a dusty, shifting look: two layers of value noise drifting different ways vary its darkness and tint
 const shadeT = { value: 0 }, shadeHex = { value: HEX_FLAT / 2 };   // (owner) everything past the map's edge gets it too
 const shadeMat = new THREE.ShaderMaterial({
-  uniforms: { ...visU, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN } }, transparent: true, depthWrite: false,
+  uniforms: { ...visU, uT: shadeT, hexA: shadeHex, farIn: { value: FAR_IN }, visPx: { value: 1 / VIS_N } }, transparent: true, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; varying vec3 vW;
-    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-      return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
-    float fbm(vec2 p) { float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += a * n(p); p = p * 2.03 + 17.0; a *= 0.5; } return v; }
+  // gradient noise (no grid squares), each octave turned, two layers drifting different ways; colors from near-black
+  // navy through dark blue to a dusky purple (owner, 2026-10-14)
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; varying vec3 vW;
+    vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
+    float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+      return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+                 mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
+    float fbm(vec2 p) { float v = 0.0, a = 0.55; mat2 r = mat2(0.8, -0.6, 0.6, 0.8);
+      for (int k = 0; k < 5; k++) { v += a * gn(p); p = r * p * 2.02 + 11.7; a *= 0.5; } return 0.5 + 0.5 * v; }
+    float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0; }
     void main() {
       vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
-      float lit = (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0;
+      float o = visPx * 1.5;                   // a small blur, so the shadow edges are smooth rather than stepped
+      float lit = (sightAt(uv) * 2.0 + sightAt(uv + vec2(o, 0.0)) + sightAt(uv - vec2(o, 0.0)) + sightAt(uv + vec2(0.0, o)) + sightAt(uv - vec2(0.0, o))) / 6.0;
       float ed = max(abs(g.y), max(abs(1.7320508 * g.x + g.y), abs(1.7320508 * g.x - g.y)) * 0.5) - hexA;   // past the hexagon's edge
       lit = min(lit, 1.0 - smoothstep(0.0, 30.0, ed));
       float far = smoothstep(farIn, visFar, length(g - visC));   // (owner) clear at the leash circle, solid 400 m past it
       if (lit > 0.99 && far <= 0.0) discard;
-      float a = fbm(g / 260.0 + vec2(uT * 0.020, uT * 0.013)), b = fbm(g / 110.0 - vec2(uT * 0.031, -uT * 0.017));
-      float d = mix(a, b, 0.45);
-      vec3 col = mix(vec3(0.015, 0.02, 0.035), vec3(0.16, 0.14, 0.115), smoothstep(0.3, 0.85, d));
-      gl_FragColor = vec4(col, mix((0.3 + 0.38 * d) * (1.0 - lit), 1.0, far));
+      float a = fbm(g / 300.0 + vec2(uT * 0.018, uT * 0.011)), b = fbm(g / 120.0 - vec2(uT * 0.027, -uT * 0.016));
+      float d = clamp(mix(a, b, 0.4) * 1.5 - 0.25, 0.0, 1.0);    // stretched, so the light and dark patches read clearly
+      float hue = smoothstep(0.35, 0.7, fbm(g / 520.0 + vec2(-uT * 0.009, uT * 0.006) + 40.0));
+      vec3 deep = vec3(0.008, 0.012, 0.035), blue = vec3(0.05, 0.09, 0.24), purple = vec3(0.17, 0.07, 0.24);
+      vec3 col = mix(deep, mix(blue, purple, hue), smoothstep(0.15, 0.95, d));
+      gl_FragColor = vec4(col, mix((0.28 + 0.5 * d) * (1.0 - lit), 1.0, far));
     }`,
 });
 const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2), shadeMat);
-shade.position.y = 0.6; shade.renderOrder = 1; shade.frustumCulled = false; scene.add(shade);
+shade.position.y = 1; shade.renderOrder = 2; shade.frustumCulled = false; scene.add(shade);
 function updateVis() {                         // the shadows from where my ship is now
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   const edges = (v) => {                       // v: a convex outline [x0, y0, x1, y1, ...]; each edge's shadow quad
