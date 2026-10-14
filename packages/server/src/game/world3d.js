@@ -3,6 +3,7 @@
 // only (no Z). The border is the same flat-top hexagon, 126 km flat to flat. Everyone
 // within its load circle sees each other. Positions persist per account.
 import { pool } from "../db.js";
+import { safeText } from "../textsafe.js";
 
 export const HEX_FLAT = 2_500;             // 2.5 km flat to flat "for now" (owner, 2026-10-13; was 126 km)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
@@ -42,7 +43,23 @@ export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 0.5, RAIL_SPEED = 700; 
 // (owner, 2026-10-14) spread: each shot widens the shooter's cone by SPREAD_ADD degrees each way, and it narrows back by
 // SPREAD_BACK degrees a second; a shot leaves at a random angle inside the cone as it was (the server's dice, not the client's)
 export const SPREAD_ADD = 1.5, SPREAD_BACK = 3, SPREAD_MAX = 45;   // (owner, 2026-10-14: 1.5 degrees a shot, was 3)
-export const spreadNow = (p, now = Date.now()) => Math.max(0, (p.spread || 0) - SPREAD_BACK * (now - (p.spreadT || now)) / 1000);
+export const spreadNow = (p, now = Date.now(), back = SPREAD_BACK) => Math.max(0, (p.spread || 0) - back * (now - (p.spreadT || now)) / 1000);
+// (owner, 2026-10-14) weapons, made and tuned in the staff Weapon panel (Z): each field with its limits and default (the
+// Railgun's). optimal: full damage out to it (m; the aim line's length); falloff: % of the damage lost per 100 m past it;
+// life: s before the bullet's gone; speed: m/s; rate: s between shots; dmg: per hit; spread0: the cone's least half-angle
+// (degrees); spreadAdd: degrees more each way per shot; aimSpeed: degrees a second it narrows back; rotSpeed: degrees a
+// second the aim line turns toward the pointer; reload: s to reload once the magazine's empty; mag: shots per magazine.
+export const WEAPON_FIELDS = [["optimal", 50, 3000, 1000], ["falloff", 0, 100, 10], ["life", 0.1, 10, 1.43], ["speed", 50, 3000, 700], ["rate", 0.05, 10, 0.5],
+  ["dmg", 0, 1000, 25], ["spread0", 0, 45, 0], ["spreadAdd", 0, 20, 1.5], ["aimSpeed", 0, 90, 3], ["rotSpeed", 1, 1440, 360], ["reload", 0, 20, 2], ["mag", 1, 500, 20]];
+export const WEAPON_TYPES = ["bullet"];
+export function cleanWeapon(o) {               // a weapon from the panel, checked as hostile; null if unusable
+  if (!o || typeof o !== "object") return null;
+  const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
+  const w = { name, type: WEAPON_TYPES.includes(o.type) ? o.type : "bullet" };
+  for (const [k, lo, hi, d] of WEAPON_FIELDS) { const v = Number(o[k]); w[k] = Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; if (k === "mag") w[k] = Math.round(w[k]); else w[k] = Math.round(w[k] * 1000) / 1000; }
+  return w;
+}
+export const falloffAt = (w, d) => (d <= w.optimal ? 1 : Math.max(0, 1 - (w.falloff / 100) * (d - w.optimal) / 100));
 export const PIV_W = 0.2, VIS_LO = 0.25;
 // (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
 // in all; until then it can't move, turn or fire (and, half there, takes no damage)
@@ -230,6 +247,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
+    this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
@@ -251,6 +269,11 @@ export class World3D {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_colliders (k TEXT PRIMARY KEY, pts JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    // (owner, 2026-10-14) the weapons (the Weapon panel); the Railgun is made the first time
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_weapons (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    let wr = (await pool.query(`SELECT id, data FROM world3d_weapons ORDER BY id`)).rows;
+    if (!wr.length) { await pool.query(`INSERT INTO world3d_weapons (data) VALUES ($1)`, [JSON.stringify(cleanWeapon({ name: "Railgun" }))]); wr = (await pool.query(`SELECT id, data FROM world3d_weapons ORDER BY id`)).rows; }
+    for (const o of wr) { const w = cleanWeapon(o.data); if (w) this.weapons.set(String(o.id), { id: String(o.id), ...w }); }
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
@@ -401,19 +424,36 @@ export class World3D {
     p.hp = (p.hp ?? HP_MAX) - d;
     if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn
   }
-  // (owner, 2026-10-14) a railgun shot: (dx, dy) the direction, checked as hostile (finite, not zero); one a RAIL_CD
+  // (owner, 2026-10-14) weapons: everyone has the first one unless staff equip another (the Weapon panel)
+  weaponList() { return [...this.weapons.values()]; }
+  defaultWeapon() { let best = null; for (const w of this.weapons.values()) if (!best || +w.id < +best.id) best = w; return best || { id: "0", ...cleanWeapon({ name: "Railgun" }) }; }
+  weaponOf(p) { return (p.weapon && this.weapons.get(p.weapon)) || this.defaultWeapon(); }
+  async setWeapon(id, o) {                     // id: change that one, or null: a new one; returns it (or null)
+    const w = cleanWeapon(o); if (!w) return null; await this.ready;
+    if (id) { if (!this.weapons.has(id)) return null; await pool.query(`UPDATE world3d_weapons SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(w)]); }
+    else id = String((await pool.query(`INSERT INTO world3d_weapons (data) VALUES ($1) RETURNING id`, [JSON.stringify(w)])).rows[0].id);
+    const out = { id, ...w }; this.weapons.set(id, out);
+    for (const p of this.players.values()) if (this.weaponOf(p).id === id) { p.ammo = undefined; p.reloadAt = 0; }   // (a fresh magazine with the new numbers)
+    return out;
+  }
+  equip(pid, wid) { const p = this.players.get(String(pid)); if (!p || !this.weapons.has(wid)) return false; p.weapon = wid; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; return true; }
+  // a shot from a player: (dx, dy) the direction, checked as hostile (finite, not zero); their weapon's shot rate, magazine and reload
   fire(id, dx, dy) {
     const p = this.players.get(String(id)); if (!p || p.bot || spawning(p)) return null;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
     const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
-    const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null;
-    return this.shoot(p, dx, dy);
+    const w = this.weaponOf(p), now = Date.now(); if (p.lastFire && now - p.lastFire < w.rate * 1000 - 50) return null;
+    if (p.reloadAt) { if (now < p.reloadAt - 50) return null; p.reloadAt = 0; p.ammo = w.mag; }   // reloading / just reloaded
+    if (p.ammo === undefined) p.ammo = w.mag;
+    const q = this.shoot(p, dx, dy, w); if (!q) return null;
+    if (--p.ammo <= 0) p.reloadAt = now + w.reload * 1000;   // out: reload
+    return q;
   }
-  shoot(p, dx, dy) {                          // (also the test ships' shots)
+  shoot(p, dx, dy, w = this.defaultWeapon()) {   // (also the test ships' shots)
     let L = Math.hypot(dx, dy); if (L < 1e-6) return null; const now = Date.now(); p.lastFire = now;
-    { const sp = spreadNow(p, now), off = (Math.random() * 2 - 1) * sp * Math.PI / 180, c = Math.cos(off), n = Math.sin(off);   // somewhere in the cone
-      [dx, dy] = [dx * c - dy * n, dx * n + dy * c]; p.spread = Math.min(SPREAD_MAX, sp + SPREAD_ADD); p.spreadT = now; L = Math.hypot(dx, dy); }
-    const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * RAIL_SPEED, vy: dy / L * RAIL_SPEED, left: RAIL_RANGE };
+    { const ex = spreadNow(p, now, w.aimSpeed), sp = Math.min(SPREAD_MAX, w.spread0 + ex), off = (Math.random() * 2 - 1) * sp * Math.PI / 180, c = Math.cos(off), n = Math.sin(off);   // somewhere in the cone
+      [dx, dy] = [dx * c - dy * n, dx * n + dy * c]; p.spread = Math.min(SPREAD_MAX, ex + w.spreadAdd); p.spreadT = now; L = Math.hypot(dx, dy); }
+    const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * w.speed, vy: dy / L * w.speed, sp: w.speed, left: w.speed * w.life, went: 0, w };
     this.projs.push(q); this.projEv.push({ t: "proj", i: q.id, a: q.a, x: q.x, y: q.y, vx: q.vx, vy: q.vy });
     return q;
   }
@@ -454,7 +494,7 @@ export class World3D {
   // projectiles fly a step each tick; the first thing on the step stops them
   stepProjs(dt) {
     for (let k = this.projs.length - 1; k >= 0; k--) {
-      const q = this.projs[k], step = Math.min(q.left, RAIL_SPEED * dt), x0 = q.x, y0 = q.y, x1 = x0 + q.vx / RAIL_SPEED * step, y1 = y0 + q.vy / RAIL_SPEED * step;
+      const q = this.projs[k], spd = q.sp || RAIL_SPEED, step = Math.min(q.left, spd * dt), x0 = q.x, y0 = q.y, x1 = x0 + q.vx / spd * step, y1 = y0 + q.vy / spd * step;
       let t = 2, hit = null;
       const near = (x, y, R) => Math.max(Math.abs(x - (x0 + x1) / 2), Math.abs(y - (y0 + y1) / 2)) <= R + step / 2;
       for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
@@ -469,10 +509,10 @@ export class World3D {
       }
       if (t <= 1) {
         const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
-        if (hit) this.hurt(hit, RAIL_DMG);
+        if (hit) this.hurt(hit, q.w ? q.w.dmg * falloffAt(q.w, q.went + step * t) : RAIL_DMG);   // (owner) full damage out to the optimal range, less past it
         this.projEv.push({ t: "pend", i: q.id, x, y, h: hit ? hit.id : null, s: 1 }); this.projs.splice(k, 1); continue;
       }
-      q.x = x1; q.y = y1; q.left -= step;
+      q.x = x1; q.y = y1; q.left -= step; q.went += step;
       if (q.left <= 0.01 || !inside(q.x, q.y)) { this.projEv.push({ t: "pend", i: q.id, x: q.x, y: q.y, h: null, s: 0 }); this.projs.splice(k, 1); }
     }
   }

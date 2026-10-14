@@ -186,6 +186,19 @@
     #edit-btn:hover, #edit-btn.on { background: linear-gradient(135deg, #c9a4ff, #8a5cf0); color: #12061f; }
     #chat:has(#edit-btn:not([hidden])) #chat-tabs { margin-left: 96px; }
     html.touch #edit-btn, html.touch #coll-edit { display: none !important; }
+    /* (owner, 2026-10-14) the Weapon panel (weaponpanel.js), staff: [Z] left of [X] */
+    #weapon-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    #weapon-btn:hover, #weapon-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
+    #chat:has(#weapon-btn) #chat-tabs { margin-left: 128px; }
+    #weapon-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
+    #weapon-edit .we-grid { display: grid; grid-template-columns: auto 180px; gap: 6px 14px; align-items: center; }
+    #weapon-edit .we-label { color: var(--text-dim); white-space: nowrap; }
+    #weapon-edit input, #weapon-edit select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
+    #weapon-edit .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+    #weapon-edit .we-btns button { padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
+    #weapon-edit .we-btns .we-ok { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; border: none; }
+    #weapon-edit .we-err { margin: 8px 0 0; color: #ff8a80; }
+    html.touch #weapon-btn, html.touch #weapon-edit { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
     .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
     .ce-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
@@ -259,7 +272,8 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
+  <script src="weaponpanel.js?v=1792004376"></script>
   <script src="adminpanel.js?v=1792000287"></script>
-  <script type="module" src="game3d.js?v=1792003517"></script>
+  <script type="module" src="game3d.js?v=1792004376"></script>
 </body>
 </html>

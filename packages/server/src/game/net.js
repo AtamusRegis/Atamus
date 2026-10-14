@@ -88,6 +88,7 @@ export function attachGameServer(httpServer) {
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: staff },   // staff: the Admin button; builder: the Build menu and Object Editor
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
+      weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
@@ -156,6 +157,15 @@ export function attachGameServer(httpServer) {
         } else if (m.t === "bset") {
           const b = bid && world.setBuild(bid, m); if (b) objCast("b", b);
         } else if (bid) { const wasShip = world.builds.get(bid)?.k === "ship"; world.delBuild(bid).then((ok) => { if (ok) { objGone("b", [bid]); if (wasShip) broadcast({ t: "leave", i: "b" + bid }); } }).catch((e) => console.error("unbuild", e)); }
+      }
+      else if (m.t === "wset") {               // (owner, 2026-10-14) the Weapon panel: staff change a weapon (id) or make one (no id), and equip it
+        if (!staff) return;
+        const wid = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        world.setWeapon(wid, m.w).then((w) => {
+          if (!w) { try { ws.send(JSON.stringify({ t: "wsaved", error: "That weapon can't be saved." })); } catch {} return; }
+          broadcast({ t: "weapons", list: world.weaponList() });
+          world.equip(pid, w.id); try { ws.send(JSON.stringify({ t: "wsaved", id: w.id })); } catch {}
+        }).catch((e) => console.error("weapon", e));
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;

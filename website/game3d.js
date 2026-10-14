@@ -801,20 +801,28 @@ const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b
 // ---- (owner, 2026-10-14) the railgun: left click fires a fast projectile from my ship toward the pointer (the server
 // flies it, decides what it hits and keeps the 1 s cooldown); everyone near sees the glowing slug, sparks where it hits a
 // ship. A ship the shooter can't see (line of sight) isn't hit: the slug flies through it. ----
-const RAIL_CD = 500;                           // (owner, 2026-10-14: every half second)
-let railAt = 0;
-// (owner, 2026-10-14) the spread cone, as the server keeps it: +3 degrees each way per shot, back 3 degrees a second
-const SPREAD_ADD = 1.5, SPREAD_BACK = 3, SPREAD_MAX = 45;   // (owner, 2026-10-14: 1.5 degrees a shot, was 3)
-let spreadDeg = 0, spreadT = 0;
-const spreadNow = (now = performance.now()) => Math.max(0, spreadDeg - SPREAD_BACK * (now - spreadT) / 1000);
+// (owner, 2026-10-14) weapons (the staff Weapon panel, Z): the list from the server and the one I have. Its numbers drive
+// the shot rate, magazine and reload, the spread cone, the aim line's length (the optimal range) and how fast the aim
+// line turns toward the pointer; the server keeps all of it, this mirrors it so the screen matches
+let weapons = [], myWeapon = null;
+const WPN0 = { id: "0", name: "Railgun", type: "bullet", optimal: 1000, falloff: 10, life: 1.43, speed: 700, rate: 0.5, dmg: 25, spread0: 0, spreadAdd: 1.5, aimSpeed: 3, rotSpeed: 360, reload: 2, mag: 20 };
+const wpn = () => weapons.find((w) => w.id === myWeapon) || weapons[0] || WPN0;
+let railAt = 0, ammo = null, reloadAt = 0;
+const SPREAD_MAX = 45;
+let spreadDeg = 0, spreadT = 0;                // the extra spread from shooting (over the weapon's default), and when
+const spreadNow = (now = performance.now()) => Math.min(SPREAD_MAX, wpn().spread0 + Math.max(0, spreadDeg - wpn().aimSpeed * (now - spreadT) / 1000));
+let aimAng = null;                             // the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
+const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
 function fireRail(px, py) {
   if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing() || amSpawning()) return;
-  const now = performance.now(); if (now - railAt < RAIL_CD) return;
-  raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-  const g = new THREE.Vector3(); if (!raycaster.ray.intersectPlane(groundPlane, g)) return;
-  const dx = g.x - me.x, dy = -g.z - me.y, L = Math.hypot(dx, dy); if (L < 1) return;
-  railAt = now; spreadDeg = Math.min(SPREAD_MAX, spreadNow(now) + SPREAD_ADD); spreadT = now;
-  ws.send(JSON.stringify({ t: "fire", x: Math.round(dx / L * 1000) / 1000, y: Math.round(dy / L * 1000) / 1000 }));
+  const w = wpn(), now = performance.now(); if (now - railAt < w.rate * 1000) return;
+  if (reloadAt) { if (now < reloadAt) return; reloadAt = 0; ammo = w.mag; }   // (reloading)
+  if (ammo === null) ammo = w.mag;
+  const d = aimDir(); if (!d) return;                                       // along the aim line (it lags the pointer by the rotation speed)
+  railAt = now; spreadDeg = Math.min(SPREAD_MAX, Math.max(0, spreadDeg - w.aimSpeed * (now - spreadT) / 1000) + w.spreadAdd); spreadT = now;
+  if (--ammo <= 0) reloadAt = now + w.reload * 1000;
+  void px; void py;
+  ws.send(JSON.stringify({ t: "fire", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }));
 }
 const projs = new Map();                       // id -> { g, x, y, vx, vy, t0 }
 const projCore = new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -927,11 +935,13 @@ function connect() {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
+      if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
       srvBuild = m.build || "";
       if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; if (m.cfg.hpMax) HP_MAX = m.cfg.hpMax; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
+      if (m.you.builder && window.WeaponPanel) window.WeaponPanel.mount({ list: () => weapons, current: () => myWeapon, send });   // (owner, 2026-10-14) the Weapon panel (Z)
       build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -975,6 +985,8 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
+    else if (m.t === "weapons") { if (Array.isArray(m.list)) { weapons = m.list; ammo = null; reloadAt = 0; if (window.WeaponPanel) window.WeaponPanel.refresh(); } }
+    else if (m.t === "wsaved") { if (typeof m.id === "string") { myWeapon = m.id; ammo = null; reloadAt = 0; spreadDeg = 0; } if (window.WeaponPanel) window.WeaponPanel.saved(m); }
     else if (m.t === "proj") { addProj(m); const q = projs.get(m.i); if (q) q.a = m.a; }
     else if (m.t === "pend") endProj(m);
     else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
@@ -1218,9 +1230,13 @@ renderer.setAnimationLoop(() => {
   // the line from the ship's center on the ground plane to the reticle, worked out against the camera as it renders
   // this frame so it never trails the pointer
   let aimShown = false; myAim = null;
-  if (aiming && haveMe) {
-    const a = aimAt(aimPx().x, aimPx().y);
-    if (a) {
+  if (haveMe) {                                // (owner, 2026-10-14) the aim direction turns toward the pointer at the weapon's rotation speed
+    const r0 = aimAt(aimPx().x, aimPx().y);
+    if (r0) { const want = Math.atan2(r0.uz, r0.ux); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = wpn().rotSpeed * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
+  }
+  if (aiming && haveMe && aimAng !== null) {
+    const L0 = wpn().optimal, a = { x: me.x + Math.cos(aimAng) * L0, z: -me.y + Math.sin(aimAng) * L0 };   // (owner) the line runs the optimal range
+    {
       aimShown = true;
       const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = me.x, sz = -me.y;
       const at = (f) => [sx + (a.x - sx) * f, sz + (a.z - sz) * f];
@@ -1235,7 +1251,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimShown;
-  { const sp = spreadNow() * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line)
+  { const sp = Math.min(SPREAD_MAX, spreadNow()) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line)
     cone.visible = coneEdges.visible = !!on;
     if (on) {
       const sx = me.x, sz = -me.y, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
