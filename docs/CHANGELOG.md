@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Fix: S didn't reverse a moving ship.** Pressing S while flying forward swung the motion round slowly, so the ship kept going forward; it now brakes and then backs up.
 - **Slower turning (owner):** A / D turn at 0.5 rad/s (was 2).
 - **Ship-relative controls (owner):** W flies the way the ship faces, S flies it backward (slower), A and D turn it. Sprint works only flying forward, and now also while aiming.
 - **Reticle independent of the ship (owner):** aiming no longer turns the ship toward the reticle or slows strafing; the ship always faces and moves the way WASD pushes it.

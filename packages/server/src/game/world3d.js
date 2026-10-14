@@ -51,7 +51,9 @@ export function carry(vx, vy, dx, dy, target, up, down, dt, nose) {
   let va = v > 1 ? Math.atan2(vx, -vy) : want;
   const d = wrap(want - va);
   let sign = Math.sign(d), left = Math.abs(d);
-  if (left > Math.PI * 5 / 6 && Number.isFinite(nose)) { const s = wrap(nose - va); if (Math.abs(s) > 1e-3 && Math.sign(s) !== sign) { sign = Math.sign(s); left = T2 - left; } }
+  // (owner, 2026-10-14) with ship-relative controls, pushing more than 120 degrees against the motion (S while flying
+  // forward) brakes it and then builds up the other way, instead of swinging the motion round in a long U-turn
+  if (left > Math.PI * 2 / 3 && v > 1) return steer(vx, vy, Math.sin(want) * target, -Math.cos(want) * target, up, down, dt);
   va += sign * Math.min(left, VEL_TURN * dt);
   v = v < target ? Math.min(target, v + up * dt) : Math.max(target, v - down * dt);
   return [Math.sin(va) * v, -Math.cos(va) * v];
