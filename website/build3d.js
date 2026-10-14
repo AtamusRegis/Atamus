@@ -282,19 +282,29 @@ export function initBuild(ctx) {
   // (owner, 2026-10-14) leashed puffs along a cloud's edge, like a wall of tethered balloons: each one is tied to its spot,
   // a ship flying into them knocks them aside (they bounce off its hull), and they float back to where they were. The main
   // cloud stays put. Simulated here on the client, for the clouds near me.
-  const EDGE_SP = 7, EDGE_R = 46, EDGE_K = 5, EDGE_C = 1.8, EDGE_MAX = 1800;   // (owner: lots of small ones)
-  function edgeAnchors(pts) {                  // local spots along the outline (a little inside and outside it), heights, sizes
-    let area = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; area += x * v - u * y; }); const sg = area >= 0 ? 1 : -1;
-    let per = 0; pts.forEach(([x, y], i) => { const [u, v] = pts[(i + 1) % pts.length]; per += Math.hypot(u - x, v - y); });
-    const sp = Math.max(EDGE_SP, per / EDGE_MAX), A = [];
-    pts.forEach(([x, y], i) => {
-      const [u, v] = pts[(i + 1) % pts.length], L = Math.hypot(u - x, v - y), n = Math.max(1, Math.round(L / sp)), nx = -(v - y) / (L || 1) * sg, ny = (u - x) / (L || 1) * sg;   // (n: inward)
-      for (let k = 0; k < n; k++) { const t = (k + Math.random()) / n, o = -15 + Math.random() * 45; A.push(x + (u - x) * t + nx * o, y + (v - y) * t + ny * o, 4 + Math.random() * 38, 7 + Math.random() * 9, Math.random()); }
-    });
-    return A;                                  // [x, y, h, size, seed] each
+  const EDGE_R = 46, EDGE_K = 5, EDGE_C = 1.8, EDGE_MAX = 2600;   // (owner: lots of small ones)
+  // (owner, 2026-10-14) spread from just outside the white edge in to a little past the red line (150 m in), small at the
+  // edge and growing toward the red line (bigger ones sparser). Laid out in meters at the cloud's current scale.
+  const EDGE_DEEP = 150;
+  function edgeAnchors(pts, sc) {
+    const W = pts.map(([x, y]) => [x * sc, y * sc]), n = W.length;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of W) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const inside = (x, y) => { let c = false; for (let i = 0; i < n; i++) { const [ax, ay] = W[i], [bx, by] = W[(i + 1) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; };
+    const edge = (x, y) => { let d = Infinity; for (let i = 0; i < n; i++) { const [ax, ay] = W[i], [bx, by] = W[(i + 1) % n], ex = bx - ax, ey = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey || 1e-9))); d = Math.min(d, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return d; };
+    const cand = [], G = 8;
+    for (let x = x0 - 16; x <= x1 + 16; x += G) for (let y = y0 - 16; y <= y1 + 16; y += G) {
+      const px = x + (Math.random() - 0.5) * G, py = y + (Math.random() - 0.5) * G, e = edge(px, py), d = inside(px, py) ? e : -e;
+      if (d < -14 || d > EDGE_DEEP + 15) continue;
+      const k = Math.max(0, Math.min(1, d / EDGE_DEEP)), size = (7 + 33 * k) * (0.75 + 0.5 * Math.random());
+      if (Math.random() > Math.min(1, 1.3 * (G * G) / (size * size))) continue;   // bigger: sparser
+      cand.push(px / sc, py / sc, 4 + Math.random() * (14 + 30 * k), size, Math.random());
+    }
+    const keep = Math.min(1, EDGE_MAX * 5 / cand.length), A = [];
+    for (let i = 0; i < cand.length; i += 5) if (keep >= 1 || Math.random() < keep) A.push(cand[i], cand[i + 1], cand[i + 2], cand[i + 3], cand[i + 4]);
+    return A;                                  // [x, y (local), h, size (m), seed] each
   }
   function edgeMesh(b) {
-    const A = edgeAnchors(b.extra.pts), n = A.length / 5, th = CLOUD_THEMES[b.extra.v] || CLOUD_THEMES[0];
+    const A = edgeAnchors(b.extra.pts, b.w / 100), n = A.length / 5, th = CLOUD_THEMES[b.extra.v] || CLOUD_THEMES[0];
     const q = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
     g.index = q.index; g.setAttribute("position", q.getAttribute("position")); g.setAttribute("uv", q.getAttribute("uv")); q.dispose();
     const P = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); P.setUsage(THREE.DynamicDrawUsage);
@@ -319,7 +329,7 @@ export function initBuild(ctx) {
         }`,
     });
     const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 1;
-    return { mesh, A, n, pos: null, vel: new Float32Array(n * 3) };
+    return { mesh, A, n, w: b.w, pos: null, vel: new Float32Array(n * 3) };
   }
   // anchors into the world (the cloud can be moved, turned and scaled; the puffs then drift to their new spots)
   function edgeWorld(b, e) {
@@ -332,7 +342,7 @@ export function initBuild(ctx) {
     for (const b of builds.values()) {
       const e = b.edge; if (b.k !== "cloud" || !e) continue;
       const W = edgeWorld(b, e), P = e.mesh.geometry.attributes.iP.array, V = e.vel;
-      e.mesh.material.uniforms.uS.value = Math.sqrt(b.w / 100);
+      if (e.w !== b.w && !(held && held.id === b.id)) { dropEdge(b); b.edge = edgeMesh(b); scene.add(b.edge.mesh); continue; }   // (rescaled: laid out again)
       if (!e.pos) { e.pos = true; P.set(W); }
       if (me && Math.hypot(me.x - b.x, me.y - b.y) > b.rad + 1500) continue;   // far away: left as they are
       const near = ships.filter((sh) => Math.hypot(sh[0] - b.x, sh[1] - b.y) < b.rad + EDGE_R + 40);
@@ -341,9 +351,11 @@ export function initBuild(ctx) {
         for (let k = 0; k < 3; k++) { V[j + k] += ((W[j + k] - P[j + k]) * EDGE_K - V[j + k] * EDGE_C) * dt; P[j + k] += V[j + k] * dt; }   // the leash
         for (const sh of near) {               // a ship's hull: pushed out of it, bounced off it
           const dx = P[j] - sh[0], dy = P[j + 1] - sh[1], d = Math.hypot(dx, dy); if (d >= EDGE_R || d < 1e-3) continue;
-          const nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny;
-          P[j] = sh[0] + nx * EDGE_R; P[j + 1] = sh[1] + ny * EDGE_R;
-          if (vn < 0) { V[j] -= nx * vn * 1.5; V[j + 1] -= ny * vn * 1.5; V[j + 2] += -vn * 0.25 * (Math.random() - 0.3); }
+          // (owner) the bigger a puff, the less a ship moves it (small ones fly, the big ones near the red line barely budge)
+          const m = Math.min(1, Math.max(0.12, 10 / e.A[i * 5 + 3]));
+          const nx = dx / d, ny = dy / d, vn = (V[j] - sh[2]) * nx + (V[j + 1] - sh[3]) * ny, push = (EDGE_R - d) * m;
+          P[j] += nx * push; P[j + 1] += ny * push;
+          if (vn < 0) { V[j] -= nx * vn * 1.5 * m; V[j + 1] -= ny * vn * 1.5 * m; V[j + 2] += -vn * 0.25 * m * (Math.random() - 0.3); }
         }
       }
       e.mesh.geometry.attributes.iP.needsUpdate = true;

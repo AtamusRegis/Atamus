@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Cloud edge puffs fill the band (owner):** the tethered puffs now spread from the edge to the red core line, growing bigger toward it, and bigger ones get pushed around less by ships.
 - **Finer cloud edges (owner):** the tethered edge puffs are now many small ones instead of a few big ones.
 - **Cloud edges react to ships (owner):** a cloud's edge is lined with tethered puffs that ships knock aside as they fly in or out, which then drift back into place.
 - **Cloud core at 150 m (owner):** ships fade out over the first 150 m of a cloud (was 200 m), and the red core line moves in to match. **Fix:** clouds can be picked up again in the Build menu (click inside the outline).
