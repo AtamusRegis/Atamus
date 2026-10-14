@@ -127,6 +127,19 @@ export async function migrate() {
       decided_by    BIGINT,
       decided_at    TIMESTAMPTZ
     );
+    -- (owner) player reports (net.js), read in the admin panel: the reported player's recent chat goes with each
+    CREATE TABLE IF NOT EXISTS reports (
+      id          BIGSERIAL PRIMARY KEY,
+      reporter    BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      target      BIGINT REFERENCES users(id) ON DELETE SET NULL,
+      target_name TEXT NOT NULL,
+      category    TEXT NOT NULL,
+      text        TEXT NOT NULL,
+      context     TEXT,
+      status      TEXT NOT NULL DEFAULT 'open',
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE reports ADD COLUMN IF NOT EXISTS chat JSONB;
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now());
   `);
 }

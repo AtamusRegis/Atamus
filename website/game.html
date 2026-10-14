@@ -48,21 +48,34 @@
     .ap-err { color: #ff8a8a; margin: 0; width: 100%; }
     .ap-appeal { display: grid; gap: 6px; } .ap-appeal > button { justify-self: start; } .ap-title { margin: 0; font-weight: 600; } .ap-appeal .ap-dim { margin: 0; white-space: normal; }
     .ap-lines { max-height: 260px; overflow-y: auto; display: grid; gap: 3px; padding: 6px; background: #0c121c; border-radius: 4px; } .ap-lines p { margin: 0; } .ap-lines p.admin b { color: #ffd27a; }
+    .ap-focus { outline: 1px solid #e8902a; } .ap-report { display: grid; } .ap-report .ap-text { margin: 0; white-space: pre-wrap; } .ap-report button { justify-self: start; }
     html.touch #admin-btn, html.touch #admin-panel { display: none; }
     #cap { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); width: 208px; height: 14px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; overflow: hidden; pointer-events: none; }
     #cap-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #2f9bd6, #7fd8ff); transition: width .08s linear; }
     #cap-fill.out { background: #6a4a2a; }
     #cap-num { position: absolute; inset: 0; display: grid; place-items: center; font: 600 10px system-ui, sans-serif; color: #e8f4ff; text-shadow: 0 0 2px #000; }
     html.touch #cap { bottom: 20px; left: auto; right: 20px; transform: none; }
-    #chat { position: fixed; left: 12px; bottom: 196px; width: 320px; display: grid; gap: 4px; font: 12px system-ui, sans-serif; }
-    #chat-log { max-height: 160px; overflow-y: auto; display: grid; gap: 1px; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }
-    .chat-tag { color: #7f93ad; } .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; }
-    #chat-tabs { display: flex; gap: 4px; }
-    #chat-tabs button { background: rgba(10, 14, 22, .85); color: #9fb3cf; border: 1px solid #2a3a52; border-radius: 4px; padding: 2px 8px; font: 11px system-ui, sans-serif; cursor: pointer; }
+    /* (owner, 2026-10-13) chat at the bottom right: the selected tab's lines, the input, the tabs */
+    #chat { position: fixed; right: 12px; bottom: 12px; width: 340px; display: grid; gap: 4px; font: 12px system-ui, sans-serif; }
+    #chat-log { max-height: 180px; overflow-y: auto; display: grid; gap: 1px; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }
+    .chat-line.sys { color: #7f93ad; font-style: italic; }
+    .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; } .chat-who[data-id] { cursor: pointer; }
+    #chat-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+    #chat-tabs button { display: flex; align-items: center; gap: 5px; background: rgba(10, 14, 22, .85); color: #9fb3cf; border: 1px solid #2a3a52; border-radius: 4px; padding: 2px 8px; font: 11px system-ui, sans-serif; }
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
+    #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
+    .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
     #chat-in { background: rgba(10, 14, 22, .85); color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 6px; font: 12px system-ui, sans-serif; outline: none; }
     #chat-in:focus { border-color: #4f8fe8; }
-    html.touch #chat { left: 12px; top: 140px; bottom: auto; width: 240px; }
+    html.touch #chat { left: 12px; right: auto; top: 140px; bottom: auto; width: 240px; }
+    #ctx-menu { position: fixed; z-index: 20; display: grid; min-width: 100px; padding: 3px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 6px; }
+    #ctx-menu button { background: none; border: 0; color: #cfe0f4; text-align: left; padding: 5px 10px; border-radius: 4px; font: 12px system-ui, sans-serif; }
+    #ctx-menu button:hover { background: #16202f; }
+    #report-box { position: fixed; inset: 0; z-index: 15; display: grid; place-items: center; background: rgba(5, 7, 12, .5); }
+    #report-box .box { display: grid; gap: 8px; width: 320px; padding: 14px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 13px system-ui, sans-serif; }
+    #report-box textarea { height: 80px; resize: vertical; background: #0c121c; color: #e8f0fb; border: 1px solid #2a3a52; border-radius: 4px; padding: 6px; font: 12px system-ui, sans-serif; }
+    #report-box .row { display: flex; gap: 6px; justify-content: flex-end; }
+    #report-box button { background: #16202f; color: #cfe0f4; border: 1px solid #2a3a52; border-radius: 4px; padding: 4px 10px; font: 12px system-ui, sans-serif; }
     /* (owner, 2026-10-13) the system cursor is never shown on the game page; a small white dot follows the pointer instead, over the UI too */
     html:not(.touch), html:not(.touch) * { cursor: none !important; }
     #cursor { position: fixed; left: 0; top: 0; width: 4px; height: 4px; margin: -2px 0 0 -2px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .55); pointer-events: none; z-index: 1000; will-change: transform; }
@@ -76,13 +89,15 @@
   <div id="countdown" class="overlay" hidden></div>
   <label id="helpers-box"><input id="helpers" type="checkbox">Weapon helpers</label>
   <canvas id="minimap"></canvas>
-  <div id="chat"><div id="chat-log"></div><div id="chat-tabs"><button data-ch="global" class="on">Global</button><button data-ch="side">Faction</button></div><input id="chat-in" maxlength="240" autocomplete="off"></div>
+  <div id="chat"><div id="chat-log"></div><input id="chat-in" maxlength="240" autocomplete="off"><div id="chat-tabs"></div></div>
+  <div id="ctx-menu" hidden></div>
+  <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-send">Send</button><button id="report-cancel">Cancel</button></div></div></div>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791945557"></script>
-  <script type="module" src="game3d.js?v=1791945557"></script>
+  <script src="adminpanel.js?v=1791946227"></script>
+  <script type="module" src="game3d.js?v=1791946227"></script>
 </body>
 </html>

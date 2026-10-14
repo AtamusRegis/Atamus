@@ -1,6 +1,7 @@
 // The admin panel's server side (owner, 2026-10-13: a small panel for the 3D game). Staff are accounts with a role
 // ('head' = Nyssary, 'admin', 'mod'); being logged in as one is enough (owner: no second admin password). The panel
-// lists online players (plus anyone banned or muted) with kick / ban / unban / mute / unmute, and the ban appeals.
+// lists online players (plus anyone banned or muted) with kick / ban / unban / mute / unmute, player reports, and the
+// ban appeals.
 // Every action needs a reason and goes in the admin log; staff can't act on themselves or on other staff. Admins appear
 // to players as "Admin" (appeal lines), never by username.
 import express from "express";
@@ -46,9 +47,11 @@ const lengthOf = (b) => { const n = Number(b.amount), unit = b.unit === "days" ?
 
 admin.get("/me", guard(async (req, res, me) => res.json({ role: me.role })));
 
-// online players, and everyone banned or muted (so they can be lifted while offline)
+// online players, and everyone banned or muted (so they can be lifted while offline); ?focus=id adds that account too
+// (opened from a player's name in chat, or from a report)
 admin.get("/players", guard(async (req, res) => {
   const on = hooks.online(), ids = [...on.keys()];
+  if (isId(String(req.query.focus || ""))) ids.push(String(req.query.focus));
   const { rows } = await pool.query(`SELECT id, username, role, ban_perm, ban_until, ban_reason, mute_perm, mute_until, mute_reason FROM users
     WHERE id = ANY($1::bigint[]) OR ban_perm OR ban_until > now() OR mute_perm OR mute_until > now() ORDER BY lower(username)`, [ids]);
   res.json(rows.map((u) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u) }; }));
@@ -96,6 +99,19 @@ admin.post("/unmute", guard(async (req, res, me) => {
   await pool.query(`UPDATE users SET mute_perm = false, mute_until = NULL, mute_reason = NULL, mute_at = NULL WHERE id = $1`, [t.id]);
   hooks.mute(String(t.id), null);
   await log(me, t, "unmute", reason); res.json({ ok: true });
+}));
+
+// ---- (owner, 2026-10-13) player reports (made from a name in chat): open first; each with the reported player's recent lines ----
+admin.get("/reports", guard(async (req, res) => {
+  const { rows } = await pool.query(`SELECT r.id, r.target, r.target_name, r.text, r.chat, r.status, r.created_at, u.username AS reporter
+    FROM reports r LEFT JOIN users u ON u.id = r.reporter WHERE r.category = 'player' ORDER BY (r.status = 'open') DESC, r.id DESC LIMIT 100`);
+  res.json(rows.map((r) => ({ id: String(r.id), target: r.target == null ? null : String(r.target), targetName: r.target_name, reporter: r.reporter || "?", text: r.text, chat: r.chat || [], status: r.status, at: r.created_at })));
+}));
+admin.post("/report/close", guard(async (req, res, me) => {
+  const id = String((req.body || {}).id || ""); if (!isId(id)) return fail(res, 400, "Bad request.");
+  const { rows } = await pool.query(`UPDATE reports SET status = 'closed' WHERE id = $1 AND category = 'player' RETURNING target, target_name`, [id]);
+  if (!rows[0]) return fail(res, 404, "No such report.");
+  await log(me, { id: rows[0].target, username: rows[0].target_name }, "report closed", "", { report: id }); res.json({ ok: true });
 }));
 
 // ---- ban appeals (appeals.js): a conversation with a banned player while the ban lasts; Accept unbans, Deny closes it ----

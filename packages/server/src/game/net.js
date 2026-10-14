@@ -10,6 +10,8 @@ import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, SIDE_
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
+import { pool } from "../db.js";
+import { safeText } from "../textsafe.js";
 
 export function attachGameServer(httpServer) {
   const world = new World3D();
@@ -24,6 +26,12 @@ export function attachGameServer(httpServer) {
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
   });
+  // (owner, 2026-10-13) the last chat lines (everything sent, any channel), kept to go with a report: the reported
+  // player's recent lines
+  const recent = [];
+  const remember = (line) => { recent.push(line); if (recent.length > 500) recent.shift(); };
+  const reports = new Map();                   // account id -> recent report times: at most 5 in 10 minutes
+  const reportOk = (pid) => { const now = Date.now(), l = (reports.get(pid) || []).filter((t) => now - t < 600_000); if (l.length >= 5) return false; l.push(now); reports.set(pid, l); return true; };
   const muted = (pid) => { const m = mutes.get(pid); return !!m && (m.perm || (m.until && m.until > Date.now())); };
 
   const wss = new WebSocketServer({
@@ -84,12 +92,28 @@ export function attachGameServer(httpServer) {
         }).catch((e) => { joined = false; console.error("join", e); });
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
-      else if (m.t === "chat") {               // (owner, 2026-10-13) simple chat: global to everyone, faction to your side
+      else if (m.t === "chat") {               // (owner, 2026-10-13) World (everyone), Faction (your side), Whisper (one player)
         const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;   // (owner) a muted player's lines go nowhere
         const text = m.text.slice(0, 240); if (!text.trim()) return;
-        const ch = m.ch === "side" ? "side" : "global";
-        const msg = JSON.stringify({ t: "chat", ch, n: user.username, s: me.team, text });
+        const ch = m.ch === "side" ? "side" : m.ch === "whisper" ? "whisper" : "global";
+        if (ch === "whisper") {                // to one player by account id; both sides get it, tagged with the other one
+          const to = typeof m.to === "string" ? m.to : "", tws = socks.get(to), tp = world.players.get(to);
+          if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to, text: "offline" })); return; }
+          const line = { t: "chat", ch, i: pid, n: user.username, s: me.team, text };
+          tws.send(JSON.stringify({ ...line, with: pid, withName: user.username }));
+          ws.send(JSON.stringify({ ...line, with: to, withName: tp.name }));
+          remember({ at: Date.now(), i: pid, n: user.username, ch: "whisper", text }); return;
+        }
+        const msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, s: me.team, text });
         for (const [qid, qws] of socks) { const q = world.players.get(qid); if (q && qws.readyState === qws.OPEN && (ch === "global" || q.team === me.team)) qws.send(msg); }
+        remember({ at: Date.now(), i: pid, n: user.username, ch, text });
+      }
+      else if (m.t === "report") {             // (owner, 2026-10-13) a player reports another: kept for the admin panel with their recent lines
+        if (!reportOk(pid) || typeof m.i !== "string" || m.i === pid || !/^[0-9]{1,15}$/.test(m.i)) return;
+        const text = safeText(m.text, 1000); if (!text) return;
+        const chat = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
+        pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
+          .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

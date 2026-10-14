@@ -243,6 +243,8 @@ const typing = () => { const el = document.activeElement; return !!el && ((el.ta
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
+  if (e.code === "KeyT" && !e.repeat) { cycleTab(); return; }   // (owner) T cycles the chat tabs
+  if (e.code === "Escape") hideMenu();
 });
 addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
@@ -330,6 +332,7 @@ function connect() {
       srvBuild = m.build || "";
       if (m.cfg) { HEX_FLAT = m.cfg.hexFlat || HEX_FLAT; SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR && m.cfg.loadR !== LOAD_R) { LOAD_R = m.cfg.loadR; loadRingFor(LOAD_R); } }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
+      amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -627,31 +630,114 @@ function drawMinimap(now) {
     arrow(me.x, me.y, mine ? mine.heading : 0, "#4f8fe8", 4, true);
   }
 }
-// (owner, 2026-10-13) chat: Global (everyone) and Faction (your side). Enter opens the box and sends; Escape
-// or sending an empty line closes it. Lines are inserted as plain text.
 const $i = (id) => document.getElementById(id);
 if ($i("helpers")) {
   $i("helpers").checked = helpers;
   $i("helpers").addEventListener("change", () => { helpers = $i("helpers").checked; try { localStorage.setItem("atamus.helpers", helpers ? "1" : "0"); } catch {} $i("helpers").blur(); });
 }
-const chatLog = $i("chat-log"), chatIn = $i("chat-in");
-let chatCh = "global";
-document.querySelectorAll("#chat-tabs button").forEach((b) => b.addEventListener("click", () => { chatCh = b.dataset.ch; document.querySelectorAll("#chat-tabs button").forEach((x) => x.classList.toggle("on", x === b)); if (chatIn) chatIn.focus(); }));
+// (owner, 2026-10-13) chat, at the bottom right: the selected tab's lines, the input, then the tabs: Faction | World |
+// Whisper <name>... (as many whispers as wanted, each closable). T cycles the tabs; Enter opens the input and sends to
+// the selected tab; Escape or an empty line closes it. A tab that gets a line while another is shown is marked. Right-
+// clicking a name: Whisper, Report, and for staff Admin (the admin panel on that player). Lines are inserted as text.
+const chatLog = $i("chat-log"), chatIn = $i("chat-in"), chatTabs = $i("chat-tabs"), ctxMenu = $i("ctx-menu");
+const CHAT_MAX = 100;
+const tabs = [{ key: "side", label: "Faction" }, { key: "global", label: "World" }];   // + { key: "w:<id>", id, label: name }
+const logs = new Map([["side", []], ["global", []]]), unread = new Set();
+let chatTab = "global", amStaff = false;
+function drawTabs() {
+  if (!chatTabs) return;
+  chatTabs.replaceChildren(...tabs.map((t) => {
+    const b = document.createElement("button"); b.className = (t.key === chatTab ? "on" : "") + (unread.has(t.key) ? " new" : "");
+    b.append(t.key.startsWith("w:") ? "Whisper " + t.label : t.label);
+    b.addEventListener("click", () => selectTab(t.key));
+    if (t.key.startsWith("w:")) {
+      const x = document.createElement("span"); x.className = "chat-x"; x.textContent = "×";
+      x.addEventListener("click", (e) => { e.stopPropagation(); closeTab(t.key); });
+      b.append(x);
+    }
+    return b;
+  }));
+}
+function drawLog() {
+  if (!chatLog) return;
+  chatLog.replaceChildren(...(logs.get(chatTab) || []).map(lineEl));
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+function lineEl(m) {
+  const line = document.createElement("div"); line.className = "chat-line";
+  if (m.sys) { line.classList.add("sys"); line.textContent = m.text; return line; }
+  const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
+  if (m.i && m.i !== myId) { who.dataset.id = m.i; who.dataset.name = m.n; }
+  const txt = document.createElement("span"); txt.textContent = m.text;
+  line.append(who, txt); return line;
+}
+function selectTab(key) { chatTab = key; unread.delete(key); drawTabs(); drawLog(); }
+function closeTab(key) {
+  const i = tabs.findIndex((t) => t.key === key); if (i < 0) return;
+  tabs.splice(i, 1); logs.delete(key); unread.delete(key);
+  if (chatTab === key) chatTab = "global";
+  drawTabs(); drawLog();
+}
+function whisperTab(id, name) {
+  const key = "w:" + id;
+  if (!logs.has(key)) { tabs.push({ key, id, label: name || "?" }); logs.set(key, []); }
+  else if (name) { const t = tabs.find((x) => x.key === key); if (t) t.label = name; }
+  return key;
+}
+function cycleTab() { const i = tabs.findIndex((t) => t.key === chatTab); selectTab(tabs[(i + 1) % tabs.length].key); }
 function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); }
 if (chatIn) chatIn.addEventListener("keydown", (e) => {
-  if (e.code === "Enter") { e.preventDefault(); const text = chatIn.value; if (text.trim()) send({ t: "chat", ch: chatCh, text }); chatIn.value = ""; chatIn.blur(); }
+  if (e.code === "Enter") {
+    e.preventDefault(); const text = chatIn.value;
+    if (text.trim()) {
+      if (chatTab.startsWith("w:")) send({ t: "chat", ch: "whisper", to: chatTab.slice(2), text });
+      else send({ t: "chat", ch: chatTab, text });
+    }
+    chatIn.value = ""; chatIn.blur();
+  }
   else if (e.code === "Escape") { chatIn.value = ""; chatIn.blur(); }
   e.stopPropagation();
 });
 function addChat(m) {
-  if (!chatLog) return;
-  const line = document.createElement("div"); line.className = "chat-line";
-  const tag = document.createElement("span"); tag.className = "chat-tag"; tag.textContent = m.ch === "side" ? "[Faction] " : "[Global] ";
-  const who = document.createElement("span"); who.className = "chat-who " + (m.s === "red" ? "red" : "blue"); who.textContent = m.n + ": ";
-  const txt = document.createElement("span"); txt.textContent = m.text;
-  line.append(tag, who, txt); chatLog.appendChild(line);
-  while (chatLog.children.length > 60) chatLog.firstChild.remove();
-  chatLog.scrollTop = chatLog.scrollHeight;
+  let key = m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
+  if (m.ch === "whisper") {
+    if (!m.with) return;
+    key = whisperTab(m.with, m.withName);
+    if (m.sys) { const t = tabs.find((x) => x.key === key); m = { sys: 1, text: (t ? t.label : "They") + " is offline." }; }
+  }
+  const list = logs.get(key); list.push(m); if (list.length > CHAT_MAX) list.shift();
+  if (key === chatTab) { if (chatLog) { chatLog.appendChild(lineEl(m)); while (chatLog.children.length > CHAT_MAX) chatLog.firstChild.remove(); chatLog.scrollTop = chatLog.scrollHeight; } }
+  else unread.add(key);
+  drawTabs();
+}
+drawTabs();
+// the right-click menu on a name
+function hideMenu() { if (ctxMenu) ctxMenu.hidden = true; }
+if (chatLog) chatLog.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const who = e.target.closest && e.target.closest(".chat-who[data-id]"); if (!who || !ctxMenu) return;
+  const id = who.dataset.id, name = who.dataset.name;
+  const item = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", () => { hideMenu(); fn(); }); return b; };
+  ctxMenu.replaceChildren(item("Whisper", () => { selectTab(whisperTab(id, name)); openChat(); }), item("Report", () => openReport(id, name)),
+    ...(amStaff && window.AdminPanel ? [item("Admin", () => window.AdminPanel.open(id))] : []));
+  ctxMenu.hidden = false;
+  ctxMenu.style.left = Math.min(e.clientX, innerWidth - 120) + "px"; ctxMenu.style.top = Math.min(e.clientY, innerHeight - 100) + "px";
+});
+addEventListener("pointerdown", (e) => { if (ctxMenu && !ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
+// reporting a player: a short note to the admins (their recent chat goes with it)
+const reportBox = $i("report-box");
+let reportFor = null;
+function openReport(id, name) {
+  if (!reportBox) return; reportFor = id;
+  $i("report-title").textContent = "Report " + name; $i("report-text").value = ""; reportBox.hidden = false; keys.clear(); $i("report-text").focus();
+}
+if (reportBox) {
+  $i("report-text").addEventListener("keydown", (e) => { e.stopPropagation(); if (e.code === "Escape") reportBox.hidden = true; });
+  $i("report-cancel").addEventListener("click", () => { reportBox.hidden = true; });
+  $i("report-send").addEventListener("click", () => {
+    const text = $i("report-text").value.trim(); if (!text || !reportFor) return;
+    send({ t: "report", i: reportFor, text }); reportBox.hidden = true;
+  });
 }
 // for the test harness and the console
 window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
