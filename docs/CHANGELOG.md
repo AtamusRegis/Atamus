@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Staff badges (owner):** the letters now sit centered in their circles, and the badges also show in the admin panel's player list and on the disciplinary panel.
 - **Fix: stuck on "Atamus is updating" (owner).** The update page's checks could hang forever on a restarting server; now each check gives up after 4 s, the wait is at most 90 s, and reloading the page (even Ctrl+F5) continues the same wait instead of starting over.
 - **Staff badges in chat (owner):** moderators get a blue circle with a white m left of their name in chat, admins a red circle with an A.
 - **Moderators (owner):** Nyssary can make and remove moderators from the disciplinary panel. Moderators can kick, mute and ban (up to 3 days at once); their 7-day and indefinite mutes and bans go to Nyssary, who approves or denies them in a new Approvals section. Moderators see only Players and Reports, and don't get the Build menu.

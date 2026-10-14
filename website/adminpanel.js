@@ -32,6 +32,8 @@
     approvals: "M12 2l8 3v6c0 5-3.5 9-8 11-4.5-2-8-6-8-11V5zm-1.5 13.5l6-6-1.4-1.4-4.6 4.6-2.1-2.1-1.4 1.4z",
   };
   let role = null;                               // mine: head | admin | mod
+  // (owner, 2026-10-14) the staff badge by a name, as in chat: blue m (moderator), red A (admin)
+  const badgeOf = (r) => { if (r !== "mod" && r !== "head" && r !== "admin") return null; const b = $("span", "chat-badge " + (r === "mod" ? "mod" : "adm"), r === "mod" ? "m" : "A"); b.title = r === "mod" ? "Moderator" : "Admin"; return b; };
   let root, rail, body, section = "players", list = "online", query = "", openAppeal = null, timer = 0, searchT = 0;
   let listBox = null;
 
@@ -109,6 +111,7 @@
     for (const p of rows) {
       const tr = $("tr");
       const name = $("td", "ap-mono" + (p.side ? " " + p.side : ""), p.name.slice(0, 20)); name.title = p.name;
+      { const bg = badgeOf(p.role); if (bg) name.prepend(bg); }
       const tot = p.totals || {};
       // (owner) a Mute and a Ban tag on every row: grayed unless running (mute yellow, ban red); inside it, the time left while
       // it runs, else the total time they've spent under it (nothing if never)
@@ -139,6 +142,7 @@
     if (!types.length) return;
     let type = types[0][0], reason = REASONS[type] ? REASONS[type][0] : null, notch = 0;
     const box = $("div", "dp-box"), title = $("p", "dp-title", name);
+    { const bg = badgeOf(state.role); if (bg) title.prepend(bg); }
     const typeRow = $("div", "dp-seg"), reasonWrap = $("div", "dp-row"), reasonRow = $("div", "dp-seg"), lenWrap = $("div", "dp-row");
     const slider = $("input"); slider.type = "range"; slider.min = "0"; slider.max = String(NOTCHES.length - 1); slider.step = "1"; slider.value = "0";
     const ticks = $("div", "dp-ticks"); for (const [, l] of NOTCHES) ticks.appendChild($("span", "", l));

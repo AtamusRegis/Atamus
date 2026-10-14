@@ -84,8 +84,11 @@
     #chat #chat-size:hover { color: #fff !important; background: none !important; }
     .chat-line.sys { color: #7f93ad; font-style: italic; }
     .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; } .chat-who[data-id] { cursor: pointer; }
-    .chat-badge { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; margin-right: 4px; vertical-align: -2px; color: #fff; font: 700 10px/1 system-ui, sans-serif; }
-    .chat-badge.mod { background: #2f6fe0; } .chat-badge.adm { background: #d8392f; }
+    /* (owner, 2026-10-14) staff badges: a circle centered on the text's middle, the letter centered in it (a lowercase m
+       sits low in its line, so it's lifted to look centered) */
+    .chat-badge { display: inline-block; box-sizing: border-box; width: 15px; height: 15px; border-radius: 50%; margin-right: 4px; vertical-align: middle; position: relative; top: -1px;
+      color: #fff; font: 700 10px/15px system-ui, sans-serif; text-align: center; }
+    .chat-badge.mod { background: #2f6fe0; line-height: 13.5px; } .chat-badge.adm { background: #d8392f; line-height: 15.5px; }
     #chat-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
     #chat-tabs button { display: flex; align-items: center; gap: 5px; background: rgba(10, 14, 22, .85); color: #9fb3cf; border: 1px solid #2a3a52; border-radius: 4px; padding: 2px 8px; font: 11px system-ui, sans-serif; }
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
@@ -243,7 +246,7 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
-  <script src="adminpanel.js?v=1791999712"></script>
+  <script src="adminpanel.js?v=1792000287"></script>
   <script type="module" src="game3d.js?v=1791999996"></script>
 </body>
 </html>
