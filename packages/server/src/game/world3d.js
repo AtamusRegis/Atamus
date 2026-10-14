@@ -6,15 +6,16 @@ import { pool } from "../db.js";
 
 export const HEX_FLAT = 2_500;             // 2.5 km flat to flat "for now" (owner, 2026-10-13; was 126 km)
 export const SPHERE_R = 50;                  // the player sphere: 100 m in diameter (owner)
-export const SPEED = 200;                    // m/s on the ground (owner, 2026-10-13; was 300)
+// (owner, 2026-10-14) all movement cut to 25% to slow the game down: speed, thrust, braking, the stop distance, the swing
+export const SPEED = 50;                     // m/s on the ground (owner: 300, then 200, now 50)
 // (owner, 2026-10-13) weight: the ship accelerates toward its input; full ACCEL when the nose points where
 // it's being pushed, down to TURN_ACCEL of it when pushing against the nose (it has to come round first)
-export const ACCEL = 200;                    // m/s^2: 0 to 200 m/s in 1 s straight
-export const BRAKE = 400;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
+export const ACCEL = 50;                     // m/s^2: 0 to full speed in 1 s straight
+export const BRAKE = 100;                    // m/s^2 (owner): letting go of WASD stops faster than it accelerates, however the nose points
 // (owner, 2026-10-13) "no matter the speed, stop within 100 m": when WASD is let go the braking rate is fixed for that stop
 // at whichever is harder, BRAKE or the rate that stops the current speed in STOP_D (v^2 / 2 STOP_D); held constant,
 // it brings the ship to rest within STOP_D. Pressing WASD again ends the stop.
-export const STOP_D = 100;
+export const STOP_D = 25;
 export const SPRINT = 1.3;                   // (owner, 2026-10-13) sprint is 30% faster (was double), forward only
 // (owner, 2026-10-13) top speed by direction relative to the nose: forward 100%, sideways and backward 60%, blended
 // (diagonal ~88%). "Forward" for sprinting means within FWD_ARC. (owner, 2026-10-13) Not aiming, every push is forward
@@ -33,12 +34,12 @@ export const CAP_MAX = 100, CAP_DRAIN = 1, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESU
 export const LOAD_R = 1300;
 // (owner, 2026-10-14) ship bumps: the bounce (0 = dead stop, 1 = full rebound), the closing speed that does no damage
 // (m/s), and damage per m/s above it; health
-export const BUMP_E = 0.5, BUMP_SAFE = 60, BUMP_DMG = 0.1, HP_MAX = 100;
+export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
-export const VEL_TURN = 3.5;                 // rad/s: how fast held WASD swings the motion round (owner, 2026-10-14: was 8, the nose's rate; slower so ships drift slightly through turns)
+export const VEL_TURN = 0.875;               // rad/s: how fast held WASD swings the motion round (owner, 2026-10-14: was 8, then 3.5 for a slight drift, then cut to 25%)
 // (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
 // its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
 // motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
@@ -304,7 +305,7 @@ export class World3D {
         a.vx = (a.vx || 0) + j * n.nx; a.vy = (a.vy || 0) + j * n.ny; b.vx = (b.vx || 0) - j * n.nx; b.vy = (b.vy || 0) - j * n.ny;
         if (!a.dx && !a.dy) a.brakeA = 0; if (!b.dx && !b.dy) b.brakeA = 0;   // a drifting ship brakes again from its new speed
         const dmg = Math.max(0, -vn - BUMP_SAFE) * BUMP_DMG; if (dmg > 0) { this.hurt(a, dmg); this.hurt(b, dmg); }
-        if (-vn > 20) this.hits.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.round(-vn), a: a.id, b: b.id });   // (owner) sparks where they met
+        if (-vn > 5) this.hits.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, s: Math.round(-vn * 4), a: a.id, b: b.id });   // (owner) sparks where they met (s: the hit's strength, x4 since speeds were cut to 25%)
       }
       polys.set(a, this.shipPoly(a)); polys.set(b, this.shipPoly(b));
     }

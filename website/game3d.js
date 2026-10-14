@@ -18,16 +18,16 @@ const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).co
 // ---- world constants (the server's hello can override them) ----
 let HEX_FLAT = 2_500;                          // 2.5 km flat to flat for now (owner; the server sends it in the hello)
 let SPHERE_R = 50;                             // 100 m diameter
-let SPEED = 200;                               // m/s (owner, 2026-10-13; the server sends it in the hello)
-let ACCEL = 200, BRAKE = 400, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
+let SPEED = 50;                               // m/s (owner, 2026-10-13; the server sends it in the hello)
+let ACCEL = 50, BRAKE = 100, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
 let SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;   // (owner) forward 100%, sideways / backward 60% (blended); sprint only within FWD_ARC of the nose
 const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
-let STOP_D = 100, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
+let STOP_D = 25, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
 const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
 // up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
-let VEL_TURN = 3.5;                             // (owner) as on the server (world3d.js); the hello sends it
+let VEL_TURN = 0.875;                             // (owner) as on the server (world3d.js); the hello sends it
 // (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
 // its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
 // motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
@@ -523,8 +523,8 @@ function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remov
 let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
-const TURN = 4;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8; 2026-10-14: halved to 4)
-const TURN_A = 25, TURN_K = 6, BANK_MAX = 0.32;
+const TURN = 2;                                // rad/s (owner: first 12, then 4, 8, 4, and on 2026-10-14 cut to 25% of 8)
+const TURN_A = 10, TURN_K = 4, BANK_MAX = 0.32;
 const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
 let HP_MAX = 100;                               // (the server sends it)   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
@@ -566,7 +566,7 @@ function bank(p, dt) {
   const v = p.holder.children[0]; if (!v) return;
   const h = p.heading; let dh = h - (p.lastH ?? h); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; p.lastH = h;
   const w = dt > 0 ? dh / dt : 0; p.turnRate = (p.turnRate || 0) + (w - (p.turnRate || 0)) * Math.min(1, dt * 10);
-  const roll = Math.max(-BANK_MAX, Math.min(BANK_MAX, -p.turnRate * 0.05));   // turning left (heading rising) dips the left wing
+  const roll = Math.max(-BANK_MAX, Math.min(BANK_MAX, -p.turnRate * 0.16));   // turning left (heading rising) dips the left wing
   v.rotation.z += (roll - v.rotation.z) * Math.min(1, dt * 8);
 }
 
