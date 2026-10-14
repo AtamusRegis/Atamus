@@ -446,6 +446,19 @@ export function initBuild(ctx) {
   let rDrag = null, rKey = "", lastRSend = 0;
   const botGoals = new Map();                  // (owner) stand-in id -> [x, y]: where a test ship heading back to its path is going (from the server)
   const ROUTE_START = [[250, 0], [250, 250], [0, 250]];
+  // (owner, 2026-10-14) the route as the ship flies it: corners rounded (the same smoothing as the server's smoothRoute)
+  const ROUTE_CUT = 90;
+  function smoothRoute(P) {
+    const n = P.length; if (n < 3) return P.slice();
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const a = P[(i + n - 1) % n], v = P[i], z = P[(i + 1) % n];
+      const l1 = Math.hypot(v[0] - a[0], v[1] - a[1]) || 1, l2 = Math.hypot(z[0] - v[0], z[1] - v[1]) || 1, c1 = Math.min(ROUTE_CUT, l1 / 2), c2 = Math.min(ROUTE_CUT, l2 / 2);
+      const s0 = [v[0] - (v[0] - a[0]) / l1 * c1, v[1] - (v[1] - a[1]) / l1 * c1], s1 = [v[0] + (z[0] - v[0]) / l2 * c2, v[1] + (z[1] - v[1]) / l2 * c2];
+      for (let k = 0; k <= 8; k++) { const t = k / 8, u = 1 - t; out.push([u * u * s0[0] + 2 * u * t * v[0] + t * t * s1[0], u * u * s0[1] + 2 * u * t * v[1] + t * t * s1[1]]); }
+    }
+    return out;
+  }
   function routeHandles() {
     const list = [];
     if (open && !picking) for (const b of builds.values()) {
@@ -475,7 +488,8 @@ export function initBuild(ctx) {
     }
     let el = rLayer.firstChild;
     for (const [b, pts] of list) {
-      el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
+      const S = smoothRoute([[b.x, b.y], ...b.extra.route.map(([x, y]) => [b.x + x, b.y + y])]).map(([x, y]) => scr2(x, y));
+      el.setAttribute("points", S.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;   // (the rounded path; the points stay as handles)
       { const gl = botGoals.get("b" + b.id), q = gl && ctx.botPos ? ctx.botPos(b.id) : null;   // the leash: from the ship to where it's going back to
         if (gl && q) { const a = scr2(q.x, q.y), z = scr2(gl[0], gl[1]); el.setAttribute("x1", a[0]); el.setAttribute("y1", a[1]); el.setAttribute("x2", z[0]); el.setAttribute("y2", z[1]); el.style.display = ""; } else el.style.display = "none";
         el = el.nextSibling; }

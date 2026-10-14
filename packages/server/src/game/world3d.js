@@ -54,6 +54,21 @@ export const BOT_LEASH = 400, BOT_TURN = 0.9, BOT_CD = 1.6, BOT_ARRIVE = 35, BOT
 export const CLOUD_DEEP = 150, CLOUD_NEAR = 200;
 export function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
 export function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
+// (owner, 2026-10-14) a route's corners are rounded so ships curve through them instead of stopping to turn: each corner is
+// cut up to ROUTE_CUT before and after the point (at most half of either leg) and joined by a curve through it. The same
+// smoothing draws the route on screen (build3d.js), so the ship flies what's drawn.
+export const ROUTE_CUT = 90, ROUTE_LOOK = 110;
+export function smoothRoute(P) {               // P: the loop's points (world); returns the rounded loop as points
+  const n = P.length; if (n < 3) return P.slice();
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = P[(i + n - 1) % n], v = P[i], z = P[(i + 1) % n];
+    const l1 = Math.hypot(v[0] - a[0], v[1] - a[1]) || 1, l2 = Math.hypot(z[0] - v[0], z[1] - v[1]) || 1, c1 = Math.min(ROUTE_CUT, l1 / 2), c2 = Math.min(ROUTE_CUT, l2 / 2);
+    const s0 = [v[0] - (v[0] - a[0]) / l1 * c1, v[1] - (v[1] - a[1]) / l1 * c1], s1 = [v[0] + (z[0] - v[0]) / l2 * c2, v[1] + (z[1] - v[1]) / l2 * c2];
+    for (let k = 0; k <= 8; k++) { const t = k / 8, u = 1 - t; out.push([u * u * s0[0] + 2 * u * t * v[0] + t * t * s1[0], u * u * s0[1] + 2 * u * t * v[1] + t * t * s1[1]]); }
+  }
+  return out;
+}
 export function cleanRoute(pts) {
   if (!Array.isArray(pts) || pts.length < 1 || pts.length > 32) return null;
   const out = [];
@@ -480,7 +495,26 @@ export class World3D {
       if (route) {
         if (target) { if (ai.mode !== "chase") { ai.anchor = ai.anchor || { x: p.x, y: p.y }; ai.mode = "chase"; } goal = target; stop = BOT_STANDOFF; }
         else if (ai.anchor) { ai.mode = "return"; goal = ai.anchor; if (Math.hypot(p.x - ai.anchor.x, p.y - ai.anchor.y) < BOT_ARRIVE) { ai.anchor = null; ai.mode = "patrol"; } }
-        if (!goal) { const w = route[ai.wp % route.length]; if (Math.hypot(p.x - w[0], p.y - w[1]) < BOT_ARRIVE) { ai.wp = (ai.wp + 1) % route.length; if (ai.mode === "rejoin") ai.mode = "patrol"; } goal = { x: route[ai.wp][0], y: route[ai.wp][1] }; }
+        if (!goal) {
+          const key = route.flat().join(","); if (b._sk !== key) { b._sk = key; b._smooth = smoothRoute(route); }
+          const S = b._smooth, n = S.length; if (ai.si == null || ai.si >= n) ai.si = 0;
+          if (ai.mode === "rejoin") {             // back to where it was on the path first (straight there), then along it
+            const w = S[ai.si]; goal = { x: w[0], y: w[1] };
+            if (Math.hypot(p.x - w[0], p.y - w[1]) < 60) ai.mode = "patrol";
+          }
+          if (ai.mode !== "rejoin") {             // follow the rounded loop: a point a little ahead of where it is on it
+            let bi = ai.si, bd = Infinity, bt = 0;
+            for (let k = 0; k < 12; k++) { const i = (ai.si + k) % n, A = S[i], B = S[(i + 1) % n], ex = B[0] - A[0], ey = B[1] - A[1], L2 = ex * ex + ey * ey || 1e-9;
+              const t = Math.max(0, Math.min(1, ((p.x - A[0]) * ex + (p.y - A[1]) * ey) / L2)), d = Math.hypot(p.x - A[0] - ex * t, p.y - A[1] - ey * t);
+              if (d < bd) { bd = d; bi = i; bt = t; } }
+            ai.si = bi;
+            let i = bi, A = S[i], B = S[(i + 1) % n], px = A[0] + (B[0] - A[0]) * bt, py = A[1] + (B[1] - A[1]) * bt, left = ROUTE_LOOK;
+            for (let k = 0; k < n && left > 0; k++) { const sx = B[0] - px, sy = B[1] - py, sl = Math.hypot(sx, sy);
+              if (sl >= left) { px += sx / sl * left; py += sy / sl * left; left = 0; break; }
+              left -= sl; px = B[0]; py = B[1]; i = (i + 1) % n; B = S[(i + 1) % n]; }
+            goal = { x: px, y: py }; stop = 0;
+          }
+        }
         ai.goal = ai.mode === "return" || ai.mode === "rejoin" ? goal : null;   // (owner) shown to builders as a leash back to the path
       }
       // turn toward what it's after (the target, else where it's going) and thrust when roughly facing it
@@ -494,7 +528,7 @@ export class World3D {
       }
       if (goal) {                              // thrust toward it once roughly facing that way (it turns first)
         const gx = goal.x - p.x, gy = goal.y - p.y, want = Math.atan2(gx, -gy);
-        if (Math.hypot(gx, gy) > stop && Math.abs(wrapA(want - (p.h || 0))) < 0.6) { p.dx = Math.sin(want); p.dy = -Math.cos(want); }
+        if (Math.hypot(gx, gy) > stop && Math.abs(wrapA(want - (p.h || 0))) < 0.9) { p.dx = Math.sin(want); p.dy = -Math.cos(want); }
       }
       p.aim = p.h;
       // shoot at the target when facing it closely enough
@@ -542,7 +576,7 @@ export class World3D {
   // keep: (owner, 2026-10-14) its route or spawn was edited: the ship stays where it is and flies back to its route point
   _bot(b, keep = false) {
     const id = "b" + b.id; let p = this.players.get(id);
-    if (p && keep) { const wp = p.ai ? p.ai.wp : 1; p.ai = b.extra && b.extra.route ? { wp: wp % (b.extra.route.length + 1), mode: "rejoin", anchor: null } : null; return p; }
+    if (p && keep) { const si = p.ai ? p.ai.si : 0; p.ai = b.extra && b.extra.route ? { wp: 1, si: si || 0, mode: "rejoin", anchor: null } : null; return p; }   // (si: its place on the rounded path)
     if (!p) { p = { id, name: "Test Ship", team: "test", bot: b.id, dx: 0, dy: 0, hp: HP_MAX }; this.players.set(id, p); }
     p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.brakeA = 0; p.ai = null;   // (moved in the Build menu: starts its route over)
     return p;
