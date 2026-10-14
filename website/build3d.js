@@ -158,17 +158,18 @@ export function initBuild(ctx) {
   function setBuild([id, k, x, y, w, d, r, extra]) {
     if (held && held.id === id) return;        // the piece I'm holding is ahead of the server's echo
     if (dragPt && dragPt.id === id) return;    // nor the cloud whose point I'm dragging
+    if (rDrag && rDrag.id === id) return;      // nor the ship whose route I'm editing
     const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); if (extra) b.extra = extra; builds.set(id, b); place(b);
   }
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
     if (held && held.id === id) { if (b.mesh) holo(b.mesh, false); held = null; }
-    if (b.mesh) scene.remove(b.mesh); dropEdge(b); builds.delete(id); if (ctx.onChange) ctx.onChange();
+    if (b.mesh) scene.remove(b.mesh); dropEdge(b); builds.delete(id); if (sel === id) sel = null; if (ctx.onChange) ctx.onChange();
   }
 
   // ---- state ----
   // picking: the blueprint of a new piece ({ k, w, d, r }); held: a placed piece picked up ({ id, ox, oy, b0 })
-  let staff = false, open = false, picking = null, held = null, clip = null, rDown = false, lastSend = 0;
+  let staff = false, open = false, picking = null, held = null, clip = null, rDown = false, lastSend = 0, sel = null;   // sel: (owner, 2026-10-14) the test ship last picked up (its buttons show over it)
   try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && KINDS.includes(c.k)) clip = c; } catch {}
   const mouse = { x: 0, y: 0 };
   addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { capture: true, passive: true });
@@ -437,13 +438,91 @@ export function initBuild(ctx) {
   const endPt = (e) => { if (!dragPt || e.pointerId !== dragPt.pid) return; const b = builds.get(dragPt.id); dragPt = null; try { cLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
   cLayer.addEventListener("pointerup", endPt); cLayer.addEventListener("pointercancel", endPt);
 
+  // ---- (owner, 2026-10-14) test ships' routes and orders. With the Build menu open, the selected test ship (the last one
+  // picked up) shows two buttons above it: Add route / Remove route, and Attack player (lit when on). A route is a loop of
+  // points that starts and ends at the ship's spawn (where it was placed, marked "S"); drag a point to move it, drag an
+  // edge's middle dot to add one, right-click a point to remove it (one at least). Points are kept in meters from the spawn. ----
+  const rLayer = document.createElementNS(NSv, "svg"); rLayer.id = "route-handles"; rLayer.setAttribute("width", "100%"); rLayer.setAttribute("height", "100%"); document.body.appendChild(rLayer);
+  let rDrag = null, rKey = "", lastRSend = 0;
+  const ROUTE_START = [[250, 0], [250, 250], [0, 250]];
+  function routeHandles() {
+    const list = [];
+    if (open && !picking) for (const b of builds.values()) {
+      if (b.k !== "ship" || !b.extra || !b.extra.route || (held && held.id === b.id)) continue;
+      const pts = [[b.x, b.y], ...b.extra.route.map(([x, y]) => [b.x + x, b.y + y])].map(([x, y]) => scr2(x, y));
+      if (pts.some((p) => p[2] && p[0] > -50 && p[0] < innerWidth + 50 && p[1] > -50 && p[1] < innerHeight + 50)) list.push([b, pts]);
+    }
+    const key = list.map(([b, pts]) => b.id + ":" + pts.length).join(",");
+    if (key !== rKey) {
+      rKey = key; while (rLayer.firstChild) rLayer.removeChild(rLayer.firstChild);
+      for (const [b, pts] of list) {
+        const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "rt-line"); rLayer.appendChild(pl);
+        pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 4); c.setAttribute("class", "rt-mid"); c.dataset.id = b.id; c.dataset.i = i; rLayer.appendChild(c); });
+        pts.forEach((p, i) => {
+          if (i === 0) {                         // the spawn: an S, not draggable (moving the ship moves it)
+            const g = document.createElementNS(NSv, "g"); g.setAttribute("class", "rt-spawn");
+            const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 10); const t = document.createElementNS(NSv, "text"); t.textContent = "S"; t.setAttribute("text-anchor", "middle"); t.setAttribute("dominant-baseline", "central");
+            g.append(c, t); rLayer.appendChild(g); return;
+          }
+          const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 6); c.setAttribute("class", "rt-pt"); c.dataset.id = b.id; c.dataset.i = i; rLayer.appendChild(c);
+        });
+      }
+    }
+    let el = rLayer.firstChild;
+    for (const [, pts] of list) {
+      el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
+      pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; el.setAttribute("cx", (p[0] + q[0]) / 2); el.setAttribute("cy", (p[1] + q[1]) / 2); el = el.nextSibling; });
+      pts.forEach((p, i) => { if (i === 0) el.setAttribute("transform", "translate(" + p[0] + "," + p[1] + ")"); else { el.setAttribute("cx", p[0]); el.setAttribute("cy", p[1]); } el = el.nextSibling; });
+    }
+  }
+  rLayer.addEventListener("contextmenu", (e) => e.preventDefault());
+  rLayer.addEventListener("pointerdown", (e) => {
+    const t = e.target, b = t.dataset && builds.get(t.dataset.id); if (!b || b.k !== "ship" || !b.extra || !b.extra.route) return;
+    const i = +t.dataset.i, R = b.extra.route; e.preventDefault(); e.stopPropagation(); sel = b.id;
+    if (t.classList.contains("rt-mid")) {       // a new point in the middle of that leg (point i to i + 1; 0 is the spawn)
+      if (e.button !== 0 || R.length >= 32) return;
+      const all = [[0, 0], ...R], a = all[i], z = all[(i + 1) % all.length];
+      R.splice(i, 0, [(a[0] + z[0]) / 2, (a[1] + z[1]) / 2]); startR(e, b, i + 1);
+    } else if (e.button === 2) { if (R.length > 1) { R.splice(i - 1, 1); push(b, true); } }
+    else if (e.button === 0) startR(e, b, i);
+  });
+  function startR(e, b, i) { rDrag = { id: b.id, i, pid: e.pointerId }; try { rLayer.setPointerCapture(e.pointerId); } catch {} }
+  rLayer.addEventListener("pointermove", (e) => {
+    if (!rDrag || e.pointerId !== rDrag.pid) return; const b = builds.get(rDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g || !b.extra || !b.extra.route) return;
+    b.extra.route[rDrag.i - 1] = [Math.round((g.x - b.x) * 10) / 10, Math.round((g.y - b.y) * 10) / 10];
+    const t = performance.now(); if (t - lastRSend > 90) { lastRSend = t; push(b, true); }
+  });
+  const endR = (e) => { if (!rDrag || e.pointerId !== rDrag.pid) return; const b = builds.get(rDrag.id); rDrag = null; try { rLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  rLayer.addEventListener("pointerup", endR); rLayer.addEventListener("pointercancel", endR);
+  // the selected ship's buttons, above it
+  const sBox = document.createElement("div"); sBox.id = "ship-btns"; sBox.hidden = true;
+  const routeBtn = document.createElement("button"), atkBtn = document.createElement("button"); routeBtn.type = atkBtn.type = "button"; atkBtn.textContent = "Attack player";
+  sBox.append(routeBtn, atkBtn); document.body.appendChild(sBox);
+  const selShip = () => { const b = sel && builds.get(sel); return b && b.k === "ship" ? b : null; };
+  routeBtn.addEventListener("click", () => { const b = selShip(); if (!b) return; b.extra = { ...(b.extra || {}) };
+    if (b.extra.route) delete b.extra.route; else b.extra.route = ROUTE_START.map((q) => q.slice());
+    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true); });
+  atkBtn.addEventListener("click", () => { const b = selShip(); if (!b) return; b.extra = { ...(b.extra || {}) };
+    if (b.extra.atk) delete b.extra.atk; else b.extra.atk = true;
+    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true); });
+  for (const bt of [routeBtn, atkBtn]) bt.addEventListener("pointerdown", (e) => e.stopPropagation());
+  function shipButtons() {
+    const b = open && !picking && !held ? selShip() : null;
+    if (!b) { sBox.hidden = true; return; }
+    const q = ctx.botPos ? ctx.botPos(b.id) : null, x = q ? q.x : b.x, y = q ? q.y : b.y, r = canvas.getBoundingClientRect(), v = new THREE.Vector3(x, 70, -y).project(camera);
+    if (v.z > 1) { sBox.hidden = true; return; }
+    routeBtn.textContent = b.extra && b.extra.route ? "Remove route" : "Add route"; atkBtn.classList.toggle("on", !!(b.extra && b.extra.atk));
+    sBox.hidden = false; sBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; sBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
+  }
+
   // ---- picking up and dropping placed pieces ----
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b) }); }
   function create(o) { send({ t: "bnew", ...o }); }
   function pickUp(b, g) {
     stopPicking();
-    if (b.k === "ship" && ctx.botPos) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now
+    if (b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route)) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now (a route ship: its spawn stays)
+    sel = b.k === "ship" ? b.id : null;
     held = { id: b.id, ox: b.x - g.x, oy: b.y - g.y, b0: fields(b) }; place(b); holo(b.mesh, true);
   }
   function drop(commit) {                       // commit: keep where it is now; otherwise put it back where it was
@@ -463,6 +542,7 @@ export function initBuild(ctx) {
     if (o && g) { pickUp(builds.get(o.userData.id), g); return; }
     // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline picks it up
     if (g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { pickUp(b, g); return; }
+    sel = null;                                  // (clicked nothing: no ship selected)
   });
 
   // the wheel scales the blueprint or the held piece (test ships keep their size); it doesn't zoom the camera meanwhile
@@ -498,7 +578,7 @@ export function initBuild(ctx) {
       else if (b) { b.k = next(b.k); place(b); push(b, true); }
       else { slotShape = next(slotShape); drawSlot(); }
       return; }
-    if (e.code === "Escape") { if (picking) stopPicking(); else if (held) drop(false); else toggle(false); }
+    if (e.code === "Escape") { if (picking) stopPicking(); else if (held) drop(false); else if (sel) sel = null; else toggle(false); }
   }, true);
   addEventListener("keyup", (e) => { if (e.code === "KeyR") rDown = false; });
   addEventListener("blur", () => { rDown = false; });
@@ -509,7 +589,7 @@ export function initBuild(ctx) {
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
     eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
-    updateEdges(dt); cloudHandles();
+    updateEdges(dt); cloudHandles(); routeHandles(); shipButtons();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {

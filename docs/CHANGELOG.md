@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Test ship routes and attacks (owner):** placed test ships respawn like players. Selecting one in the Build menu shows Add route and Attack player buttons above it: a route is an editable loop starting and ending at its spawn (marked S) that it flies; with Attack player on it shoots players it can see within 400 m, and a route ship chases them up to 400 m from where it left its route before going back.
 - **Snappier impacts (owner):** impact sparks and debris burn out about twice as fast, and black soot particles now fly among them.
 - **Directional sparks (owner):** collision and railgun sparks now burst from the exact impact point and spray in a cone back toward where the hit came from.
 - **Enter System returns when the update is live (owner):** the update page now waits for the exact new version on the server and website and for the server to accept logins, then brings Enter System back for everyone at once (checked every second), instead of relying on a timer.

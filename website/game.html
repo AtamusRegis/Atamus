@@ -228,6 +228,16 @@
     #cloud-handles .ch-pt { fill: #ffffff; stroke: #6b4fd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #cloud-handles .ch-pt:hover { fill: #d9ccff; }
     #cloud-handles .ch-mid { fill: rgba(255,255,255,0.6); pointer-events: auto; cursor: pointer; } #cloud-handles .ch-mid:hover { fill: #fff; }
     html.touch #cloud-handles { display: none !important; }
+    /* (owner, 2026-10-14) test ships' routes and the selected ship's buttons, in the Build menu */
+    #route-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+    #route-handles .rt-line { fill: none; stroke: rgba(255,170,80,0.75); stroke-width: 2; stroke-dasharray: 8 6; }
+    #route-handles .rt-pt { fill: #ffffff; stroke: #e07a1f; stroke-width: 2; pointer-events: auto; cursor: pointer; } #route-handles .rt-pt:hover { fill: #ffe3c4; }
+    #route-handles .rt-mid { fill: rgba(255,200,140,0.7); pointer-events: auto; cursor: pointer; } #route-handles .rt-mid:hover { fill: #fff; }
+    #route-handles .rt-spawn circle { fill: #e07a1f; stroke: #fff; stroke-width: 2; } #route-handles .rt-spawn text { fill: #fff; font: 700 12px system-ui, sans-serif; }
+    #ship-btns { position: fixed; z-index: 5; transform: translate(-50%, -100%); display: flex; gap: 6px; }
+    #ship-btns button { padding: 5px 10px; border: 1px solid #2a3a52; border-radius: 6px; background: rgba(10,14,22,0.88); color: #cfd9e8; font: 12px system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
+    #ship-btns button:hover { background: rgba(30,42,62,0.95); } #ship-btns button.on { background: #b8322a; border-color: #e0574d; color: #fff; }
+    html.touch #route-handles, html.touch #ship-btns { display: none !important; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -247,6 +257,6 @@
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
   <script src="adminpanel.js?v=1792000287"></script>
-  <script type="module" src="game3d.js?v=1792001596"></script>
+  <script type="module" src="game3d.js?v=1792002038"></script>
 </body>
 </html>

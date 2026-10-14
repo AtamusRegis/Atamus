@@ -43,7 +43,18 @@ export const PIV_W = 0.2, VIS_LO = 0.25;
 // (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
 // in all; until then it can't move, turn or fire (and, half there, takes no damage)
 export const SPAWN_MS = 3000;
-export const spawning = (p) => !!p.spawnUntil && Date.now() < p.spawnUntil;   // mutual visibility, as the client works it out: below VIS_LO a ship isn't drawn   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
+export const spawning = (p) => !!p.spawnUntil && Date.now() < p.spawnUntil;
+// (owner, 2026-10-14) placed (test) ships' behavior: a route (a loop of points around their spawn, which is where the piece
+// was placed; meters from it) they fly, and "attack player": shoot at players they can see nearby. A route ship that goes
+// after a player remembers where it left its route and chases up to BOT_LEASH from there; past that it goes back.
+export const BOT_LEASH = 400, BOT_TURN = 0.9, BOT_CD = 1.6, BOT_ARRIVE = 35, BOT_STANDOFF = 220;
+export function cleanRoute(pts) {
+  if (!Array.isArray(pts) || pts.length < 1 || pts.length > 32) return null;
+  const out = [];
+  for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    out.push([Math.round(Math.max(-3000, Math.min(3000, x)) * 10) / 10, Math.round(Math.max(-3000, Math.min(3000, y)) * 10) / 10]); }
+  return out;
+}   // mutual visibility, as the client works it out: below VIS_LO a ship isn't drawn   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -282,6 +293,7 @@ export class World3D {
   }
 
   step(dt = TICK) {
+    this.think(dt);
     for (const p of this.players.values()) {
       const moving = !!(p.dx || p.dy);
       if (p.cap === undefined) p.cap = CAP_MAX;
@@ -314,6 +326,7 @@ export class World3D {
     this.stepProjs(dt);
     for (const p of this.players.values()) {   // test ships shoved somewhere: the piece follows
       if (!p.bot) continue; const b = this.builds.get(String(p.bot));
+      if (b && b.extra && b.extra.route) continue;   // (a ship flying a route keeps its spawn where it was placed)
       if (b && (b.x !== p.x || b.y !== p.y)) { b.x = Math.round(p.x * 100) / 100; b.y = Math.round(p.y * 100) / 100; b.dirty = true; this._shape(b); }
     }
   }
@@ -361,14 +374,18 @@ export class World3D {
   hurt(p, d) {
     if (spawning(p)) return;                   // (still materializing)
     p.hp = (p.hp ?? HP_MAX) - d;
-    if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); }   // a test ship just heals where it is
+    if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn
   }
   // (owner, 2026-10-14) a railgun shot: (dx, dy) the direction, checked as hostile (finite, not zero); one a RAIL_CD
   fire(id, dx, dy) {
     const p = this.players.get(String(id)); if (!p || p.bot || spawning(p)) return null;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
     const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
-    const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null; p.lastFire = now;
+    const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null;
+    return this.shoot(p, dx, dy);
+  }
+  shoot(p, dx, dy) {                          // (also the test ships' shots)
+    const L = Math.hypot(dx, dy); if (L < 1e-6) return null; p.lastFire = Date.now();
     const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * RAIL_SPEED, vy: dy / L * RAIL_SPEED, left: RAIL_RANGE };
     this.projs.push(q); this.projEv.push({ t: "proj", i: q.id, a: q.a, x: q.x, y: q.y, vx: q.vx, vy: q.vy });
     return q;
@@ -414,6 +431,54 @@ export class World3D {
       if (q.left <= 0.01 || !inside(q.x, q.y)) { this.projEv.push({ t: "pend", i: q.id, x: q.x, y: q.y, h: null, s: 0 }); this.projs.splice(k, 1); }
     }
   }
+  respawnBot(p) {
+    const b = this.builds.get(String(p.bot)); if (!b) return;
+    p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.dx = p.dy = 0; p.brakeA = 0; p.ai = null; p.spawnUntil = Date.now() + SPAWN_MS;
+  }
+  // (owner, 2026-10-14) the test ships' brains, every tick before they move: fly the route, go after a player, shoot
+  think(dt) {
+    const now = Date.now();
+    for (const p of this.players.values()) {
+      if (!p.bot) continue;
+      const b = this.builds.get(String(p.bot)); if (!b) continue;
+      const e = b.extra || {}, route = e.route ? [[0, 0], ...e.route].map(([x, y]) => [b.x + x, b.y + y]) : null;
+      p.dx = p.dy = 0;
+      if ((!route && !e.atk) || spawning(p)) continue;
+      const ai = p.ai || (p.ai = { wp: route ? 1 % route.length : 0, mode: "patrol", anchor: null }); if (route) ai.wp %= route.length;   // (the route may have been edited shorter)
+      // the nearest player it can see within the leash (of where it left its route, or of itself)
+      let target = null, best = Infinity; const from = ai.anchor || p;
+      if (e.atk) for (const q of this.players.values()) {
+        if (q.bot || spawning(q)) continue;
+        const dq = Math.hypot(q.x - from.x, q.y - from.y); if (dq > BOT_LEASH || dq >= best) continue;
+        if (!this.sees(p, q)) continue; best = dq; target = q;
+      }
+      let goal = null, stop = BOT_ARRIVE;
+      if (route) {
+        if (target) { if (ai.mode !== "chase") { ai.anchor = ai.anchor || { x: p.x, y: p.y }; ai.mode = "chase"; } goal = target; stop = BOT_STANDOFF; }
+        else if (ai.anchor) { ai.mode = "return"; goal = ai.anchor; if (Math.hypot(p.x - ai.anchor.x, p.y - ai.anchor.y) < BOT_ARRIVE) { ai.anchor = null; ai.mode = "patrol"; } }
+        if (!goal) { const w = route[ai.wp % route.length]; if (Math.hypot(p.x - w[0], p.y - w[1]) < BOT_ARRIVE) ai.wp = (ai.wp + 1) % route.length; goal = { x: route[ai.wp][0], y: route[ai.wp][1] }; }
+      }
+      // turn toward what it's after (the target, else where it's going) and thrust when roughly facing it
+      const look = target || goal;
+      if (look) {
+        const ux = look.x - p.x, uy = look.y - p.y;
+        if (Math.hypot(ux, uy) > 1) {
+          const want = Math.atan2(ux, -uy), err = wrapA(want - (p.h || 0)), step = BOT_TURN * dt;
+          p.h = wrapA((p.h || 0) + Math.max(-step, Math.min(step, err)));
+        }
+      }
+      if (goal) {                              // thrust toward it once roughly facing that way (it turns first)
+        const gx = goal.x - p.x, gy = goal.y - p.y, want = Math.atan2(gx, -gy);
+        if (Math.hypot(gx, gy) > stop && Math.abs(wrapA(want - (p.h || 0))) < 0.6) { p.dx = Math.sin(want); p.dy = -Math.cos(want); }
+      }
+      p.aim = p.h;
+      // shoot at the target when facing it closely enough
+      if (target && (!p.lastFire || now - p.lastFire >= BOT_CD * 1000)) {
+        const tx = target.x - p.x, ty = target.y - p.y, err = Math.abs(wrapA(Math.atan2(tx, -ty) - (p.h || 0)));
+        if (err < 0.35 && Math.hypot(tx, ty) <= RAIL_RANGE * 0.8) this.shoot(p, tx, ty);
+      }
+    }
+  }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
   addBlock(pid) {
     const p = this.players.get(pid); if (!p) return null;
@@ -435,6 +500,10 @@ export class World3D {
     const cl = (v) => Math.max(BUILD_MIN, Math.min(BUILD_MAX, v)), rd = (v) => Math.round(v * 100) / 100;
     const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
     const b = { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
+    if (ship && o.extra && typeof o.extra === "object") {   // (owner, 2026-10-14) a test ship's route and attack setting
+      const route = o.extra.route == null ? null : cleanRoute(o.extra.route), atk = o.extra.atk === true;
+      if (route || atk) b.extra = { ...(route ? { route } : {}), ...(atk ? { atk: true } : {}) };
+    }
     if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
       const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
       if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
@@ -448,7 +517,7 @@ export class World3D {
   _bot(b) {
     const id = "b" + b.id; let p = this.players.get(id);
     if (!p) { p = { id, name: "Test Ship", team: "test", bot: b.id, dx: 0, dy: 0, hp: HP_MAX }; this.players.set(id, p); }
-    p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.brakeA = 0;
+    p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.brakeA = 0; p.ai = null;   // (moved in the Build menu: starts its route over)
     return p;
   }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
