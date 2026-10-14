@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Fix: Android chat still didn't send.** Android keyboards report Enter / Go without a key code (or as a line break in the box); the chat input now sends on any of those, as well as on the form's submit.
 - **/whisper and phone sending (owner):** `/whisper Name message` (quotes for names with spaces) whispers a player by name. Fix: a phone keyboard's Go / Send key didn't send chat (the input only listened for the Enter key); it's now a form, so any submit sends.
 - **Momentum carries into turns (owner):** changing WASD direction no longer bleeds speed and builds it back; the motion keeps its speed and swings to the new direction at the ship's turn rate (a quick U-turn for a reversal).
 - **Chat rework (owner):** chat moved to the bottom right (lines, input, then tabs). Tabs are Faction | World | Whisper <name>…, each with its own lines; whispers are unlimited and closable; T cycles tabs. Right-click a name in chat to Whisper or Report, and staff get Admin (opens the admin panel on that player). The admin panel has a new Reports tab.

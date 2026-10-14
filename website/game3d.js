@@ -715,10 +715,17 @@ function sendChat() {
 }
 const chatForm = $i("chat-form");
 if (chatForm) chatForm.addEventListener("submit", (e) => { e.preventDefault(); sendChat(); });
-if (chatIn) chatIn.addEventListener("keydown", (e) => {
-  if (e.code === "Escape" || e.key === "Escape") { chatIn.value = ""; chatIn.blur(); }
-  e.stopPropagation();
-});
+// Android keyboards report Enter / Go with an empty e.code (only e.key or keyCode 13), and some send it as a line break
+// in the input instead of a key at all: every one of those sends. (sendChat empties the box, so a second trigger for the
+// same press finds nothing to send.)
+if (chatIn) {
+  chatIn.addEventListener("keydown", (e) => {
+    if (e.code === "Escape" || e.key === "Escape") { chatIn.value = ""; chatIn.blur(); }
+    else if (e.key === "Enter" || e.code === "Enter" || e.keyCode === 13) { e.preventDefault(); sendChat(); }
+    e.stopPropagation();
+  });
+  chatIn.addEventListener("beforeinput", (e) => { if (e.inputType === "insertLineBreak" || e.inputType === "insertParagraph") { e.preventDefault(); sendChat(); } });
+}
 function addChat(m) {
   let key = m.ch === "side" ? "side" : m.ch === "whisper" ? null : "global";
   if (m.ch === "whisper") {
