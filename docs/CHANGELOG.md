@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Ships block sight (owner, to try out):** other ships and test ships now cast line-of-sight shadows, hiding ships behind them.
 - **Sight fade starts further out (owner):** the haze now begins thickening 200 m past the leash circle instead of at it (solid 400 m after that).
 - **Haze look (owner):** dark navy, blue and purple patches with stronger light/dark gradients instead of black and gray; smooth noise (no more squares) and softened shadow edges. Fix: the map's border band flickered through the haze; it now always stays under it.
 - **Sight fades with distance (owner):** beyond the leash circle the haze thickens until it's solid 400 m further out; nothing past that is drawn or shown on the minimap.

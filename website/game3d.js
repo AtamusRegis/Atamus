@@ -322,6 +322,17 @@ function updateVis() {                         // the shadows from where my ship
     if (Math.abs(b.x - vx) > VIS_S + BLOCK_HALF || Math.abs(b.y - vy) > VIS_S + BLOCK_HALF) continue;
     const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
   }
+  // (owner, 2026-10-14) ships block sight too: each other ship (and test ship) casts the cone behind its circle, starting
+  // just past the ship itself so it never hides its own model
+  const shipCast = (cx, cy) => {
+    const dx = cx - vx, dy = cy - vy, D = Math.hypot(dx, dy); if (D <= SHIP_R + 1 || D > VIS_S) return;
+    const half = Math.asin(SHIP_R / D), a = Math.atan2(dy, dx), d0 = D + 52, r = [];
+    for (const t of [a - half, a + half]) { const c = Math.cos(t), s = Math.sin(t); r.push([vx + c * d0, vy + s * d0, vx + c * F, vy + s * F]); }
+    const [[n1x, n1y, f1x, f1y], [n2x, n2y, f2x, f2y]] = r;
+    pos.push(n1x, 0, -n1y, n2x, 0, -n2y, f2x, 0, -f2y, n1x, 0, -n1y, f2x, 0, -f2y, f1x, 0, -f1y);
+  };
+  for (const p of players.values()) if (p.id !== myId && p.near && p.holder.visible) shipCast(p.holder.position.x, -p.holder.position.z);
+  for (const b of builds.values()) if (b.k === "ship") shipCast(b.x, b.y);
   for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
@@ -332,7 +343,12 @@ function updateVis() {                         // the shadows from where my ship
 // whether a block or Build piece stands between two points (the minimap hides ships my ship can't see)
 function sightBlocked(x0, y0, x1, y1) {
   for (const b of blocks.values()) { const h = BLOCK_HALF; if (segPoly(x0, y0, x1, y1, [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]) !== null) return true; }
-  for (const b of builds.values()) if (b.k !== "ship" && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;   // test ships don't block sight, like ships
+  for (const b of builds.values()) if (b.k !== "ship" && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
+  // (owner, 2026-10-14) ships (and test ships) in between, other than the one being looked at
+  const circ = (cx, cy) => { if (Math.hypot(cx - x1, cy - y1) < 1) return false; const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-6) return false;
+    const t = Math.max(0, Math.min(1, ((cx - x0) * dx + (cy - y0) * dy) / L2)); return t > 0 && t < 1 && Math.hypot(x0 + dx * t - cx, y0 + dy * t - cy) < SHIP_R; };
+  for (const p of players.values()) if (p.id !== myId && p.near && circ(p.holder.position.x, -p.holder.position.z)) return true;
+  for (const b of builds.values()) if (b.k === "ship" && circ(b.x, b.y)) return true;
   return false;
 }
 
