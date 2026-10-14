@@ -318,7 +318,7 @@ export function initBuild(ctx) {
   // current one back to its start; Ctrl+Z / Ctrl+U undo and redo. While it's open, every piece's colliders (and every
   // ship's) are drawn in the world.
   let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePts = null, ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
-  let eZoom = 1, mirror = true, past = [], future = [];
+  let eZoom = 1, mirror = true, past = [], future = [], ePan = [0, 0];   // ePan: (owner) the view's middle, in footprint fractions (middle mouse pans)
   // (owner, 2026-10-14) two rulers: a horizontal and a vertical dashed red line, each dragged on its own; corners, the
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
@@ -347,15 +347,26 @@ export function initBuild(ctx) {
   const fp = () => (eKind === "ship" ? SHIP_D : 100);   // the footprint shown, m
   const H = () => fp() / eZoom;                          // half the view, m
   const S = () => fp() * VIEW / (2 * H());               // px per footprint fraction
-  const toPx = ([ux, uy]) => [VIEW / 2 + ux * S(), VIEW / 2 - uy * S()];
-  const fromPx = (px, py) => { const cl = (v) => Math.max(-1.5, Math.min(1.5, v)); return [cl((px - VIEW / 2) / S()), cl(-(py - VIEW / 2) / S())]; };
-  ceSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); eDraw(); }, { passive: false });
+  const toPx = ([ux, uy]) => [VIEW / 2 + (ux - ePan[0]) * S(), VIEW / 2 - (uy - ePan[1]) * S()];
+  const fromPx = (px, py) => { const cl = (v) => Math.max(-1.5, Math.min(1.5, v)); return [cl((px - VIEW / 2) / S() + ePan[0]), cl(-(py - VIEW / 2) / S() + ePan[1])]; };
+  ceSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); if (eZoom <= 1) ePan = [0, 0]; eDraw(); }, { passive: false });
+  // (owner) zoomed in, the middle mouse drags the view around
+  let ePanDrag = null;
+  ceSvg.addEventListener("pointerdown", (e) => { if (e.button !== 1) return; e.preventDefault(); e.stopPropagation(); ePanDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, p0: ePan.slice() }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} }, true);
+  ceSvg.addEventListener("pointermove", (e) => {
+    if (!ePanDrag || e.pointerId !== ePanDrag.id) return; e.stopPropagation();
+    const r = ceSvg.getBoundingClientRect(), k = VIEW / r.width / S(), cl = (v) => Math.max(-1.5, Math.min(1.5, v));
+    ePan = [cl(ePanDrag.p0[0] - (e.clientX - ePanDrag.x) * k), cl(ePanDrag.p0[1] + (e.clientY - ePanDrag.y) * k)]; eDraw();
+  }, true);
+  const panEnd = (e) => { if (ePanDrag && e.pointerId === ePanDrag.id) { ePanDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} } };
+  ceSvg.addEventListener("pointerup", panEnd, true); ceSvg.addEventListener("pointercancel", panEnd, true);
+  ceSvg.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });   // no browser autoscroll
   const drawESlots = () => { ceShape.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[eShape] + "</svg>"; ceShape.title = NAMES[eShape];
     ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
   function eSetKind(k) {
     eKind = k; if (k !== "ship") eShape = k;
     ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice();
-    eDrag = null; past = []; future = []; drawESlots(); drawModes(); eDraw();
+    eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawModes(); eDraw();
   }
   ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
   ceShip.addEventListener("click", () => eSetKind("ship"));
@@ -381,7 +392,7 @@ export function initBuild(ctx) {
       if (eKind !== "ship") eMesh.scale.set(fp(), 1, fp());
       eScene.add(eMesh); eMeshK = key;
     }
-    const h = H(); eCam.left = -h; eCam.right = h; eCam.top = h; eCam.bottom = -h; eCam.updateProjectionMatrix();
+    const h = H(), ox = ePan[0] * fp(), oy = ePan[1] * fp(); eCam.left = ox - h; eCam.right = ox + h; eCam.top = oy + h; eCam.bottom = oy - h; eCam.updateProjectionMatrix();
     eRen.render(eScene, eCam);
   }
   // ---- undo / redo: the kind's three things before each change ----

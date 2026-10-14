@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791960413";
+import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791961190";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -230,7 +230,11 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
 }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
 function makeVisual(remote) {
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
-  if (remote) v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(losMat) : losMat(o.material); });
+  if (remote) v.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = Array.isArray(o.material) ? o.material.map(losMat) : losMat(o.material);
+    o.onBeforeRender = (r, sc, cm, g, mat) => { visSelf.value = (v.userData.losId || 0) / 255; if (mat) mat.uniformsNeedUpdate = true; };   // which ship this is (its own shadow doesn't hide it)
+  });
   return v;
 }
 
@@ -244,10 +248,20 @@ const visScene = new THREE.Scene(); visScene.background = new THREE.Color(0xffff
 const visCam = new THREE.OrthographicCamera(-VIS_S, VIS_S, VIS_S, -VIS_S, 1, 4000); visCam.up.set(0, 0, -1);   // north up, east right
 const visGeo = new THREE.BufferGeometry(); let visCap = 0;
 const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })); visMesh.frustumCulled = false; visScene.add(visMesh);
+// (owner, 2026-10-14) a ship's own sight shadow never hides the ship itself, only what's behind it. Ship shadows go into
+// two more textures, each shadow painted with its ship's number: one keeps the highest number on each spot, the other
+// the lowest. A ship's pixel is hidden by ship shadows when some number is there and it isn't only its own.
+const shipRTopt = { depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter };
+const visMaxRT = new THREE.WebGLRenderTarget(VIS_N, VIS_N, shipRTopt), visMinRT = new THREE.WebGLRenderTarget(VIS_N, VIS_N, shipRTopt);
+const shipScene = new THREE.Scene(), shipGeo = new THREE.BufferGeometry(); let shipCap = 0;
+const idBlend = (eq) => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false, blending: THREE.CustomBlending, blendEquation: eq, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor });
+const maxMat = idBlend(THREE.MaxEquation), minMat = idBlend(THREE.MinEquation);
+const shipMesh = new THREE.Mesh(shipGeo, maxMat); shipMesh.frustumCulled = false; shipScene.add(shipMesh);
+const visSelf = { value: 0 };                  // the ship being drawn's number (set just before each of its parts is drawn)
 // (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
 // (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
 const FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-14) the fade starts 200 m (two grid squares) past the leash circle
-const visU = { visTex: { value: visRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S }, visFar: { value: FAR_OUT } };
+const visU = { visTex: { value: visRT.texture }, visMax: { value: visMaxRT.texture }, visMin: { value: visMinRT.texture }, visC: { value: new THREE.Vector2() }, visS: { value: VIS_S }, visFar: { value: FAR_OUT } };
 const farCache = new Map();
 function farMat(m) {                           // a material that isn't drawn past FAR_OUT from my ship
   if (farCache.has(m)) return farCache.get(m);
@@ -265,10 +279,12 @@ function losMat(m) {                           // a copy of a ship material that
   if (losCache.has(m)) return losCache.get(m);
   const c = m.clone();
   c.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, visU);
+    Object.assign(sh.uniforms, visU); sh.uniforms.visSelf = visSelf;
     sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
-    sh.fragmentShader = "uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float visFar; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
-      "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0 && texture2D(visTex, vuv).r < 0.5) discard;");
+    sh.fragmentShader = "uniform sampler2D visTex; uniform sampler2D visMax; uniform sampler2D visMin; uniform float visSelf; uniform vec2 visC; uniform float visS; uniform float visFar; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
+      "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n" +
+      "  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0) {\n    if (texture2D(visTex, vuv).r < 0.5) discard;\n" +
+      "    float mx = texture2D(visMax, vuv).r, mn = texture2D(visMin, vuv).r;\n    if (mx > 0.002 && (abs(mx - visSelf) > 0.002 || abs(mn - visSelf) > 0.002)) discard;\n  }");
   };
   c.customProgramCacheKey = () => "los";
   losCache.set(m, c); return c;
@@ -283,14 +299,14 @@ const shadeMat = new THREE.ShaderMaterial({
   vertexShader: "varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
   // gradient noise (no grid squares), each octave turned, two layers drifting different ways; colors from near-black
   // navy through dark blue to a dusky purple (owner, 2026-10-14)
-  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; varying vec3 vW;
+  fragmentShader: `uniform sampler2D visTex; uniform vec2 visC; uniform float visS; uniform float uT; uniform float hexA; uniform float farIn; uniform float visFar; uniform float visPx; uniform sampler2D visMax; varying vec3 vW;
     vec2 hash2(vec2 p) { vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy) * 2.0 - 1.0; }
     float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
       return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
                  mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
     float fbm(vec2 p) { float v = 0.0, a = 0.55; mat2 r = mat2(0.8, -0.6, 0.6, 0.8);
       for (int k = 0; k < 5; k++) { v += a * gn(p); p = r * p * 2.02 + 11.7; a *= 0.5; } return 0.5 + 0.5 * v; }
-    float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? texture2D(visTex, uv).r : 1.0; }
+    float sightAt(vec2 uv) { return (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) ? min(texture2D(visTex, uv).r, texture2D(visMax, uv).r > 0.002 ? 0.0 : 1.0) : 1.0; }   // walls' and ships' shadows
     void main() {
       vec2 g = vec2(vW.x, -vW.z), uv = (g - visC) / (2.0 * visS) + 0.5;
       float o = visPx * 1.5;                   // a small blur, so the shadow edges are smooth rather than stepped
@@ -323,29 +339,40 @@ function updateVis() {                         // the shadows from where my ship
     if (Math.abs(b.x - vx) > VIS_S + BLOCK_HALF || Math.abs(b.y - vy) > VIS_S + BLOCK_HALF) continue;
     const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
   }
-  // (owner, 2026-10-14) ships block sight too, by the ship's sight outline (the Object Editor's): only the edges facing
-  // away from me cast, so a ship never hides its own model
-  const backEdges = (v) => {
-    let area = 0; for (let i = 0; i < v.length; i += 2) area += v[i] * v[(i + 3) % v.length] - v[(i + 2) % v.length] * v[i + 1];
-    const sg = area >= 0 ? 1 : -1, one = [];
+  // (owner, 2026-10-14) ships block sight too, by the ship's Sight outline (the Object Editor's); each ship's shadow
+  // carries its number so it never hides that ship itself
+  const sp = [], sc = []; let sid = 0;
+  const shipShadow = (v, id) => {
+    const c = id / 255, n0 = sp.length;
     for (let i = 0; i < v.length; i += 2) {
       const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
-      if (((by - ay) * ((ax + bx) / 2 - vx) - (bx - ax) * ((ay + by) / 2 - vy)) * sg > 0) { one.length = 0; one.push(ax, ay, bx, by); edges2(one); }
+      const da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
+      const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
+      sp.push(ax, 0, -ay, bx, 0, -by, fbx, 0, -fby, ax, 0, -ay, fbx, 0, -fby, fax, 0, -fay);
     }
+    for (let k = n0; k < sp.length; k += 3) sc.push(c, c, c);
   };
-  const edges2 = (e) => {                      // one edge's shadow quad (not closed back to its start like edges())
-    const [ax, ay, bx, by] = e, da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
-    const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
-    pos.push(ax, 0, -ay, bx, 0, -by, fbx, 0, -fby, ax, 0, -ay, fbx, 0, -fby, fax, 0, -fay);
-  };
-  for (const p of players.values()) if (p.id !== myId && p.near && p.holder.visible && Math.hypot(p.holder.position.x - vx, -p.holder.position.z - vy) < VIS_S) backEdges(shipSight(p));
-  for (const b of builds.values()) if (b.k === "ship" && Math.hypot(b.x - vx, b.y - vy) < VIS_S) backEdges(b.poly);
+  for (const p of players.values()) {
+    const v = p.holder.children[0]; if (v) v.userData.losId = 0;
+    if (p.id === myId || !p.near || !p.holder.visible || sid >= 254 || Math.hypot(p.holder.position.x - vx, -p.holder.position.z - vy) > VIS_S) continue;
+    sid++; if (v) v.userData.losId = sid; shipShadow(shipSight(p), sid);
+  }
+  for (const b of builds.values()) if (b.k === "ship" && b.mesh) {
+    b.mesh.userData.losId = 0; if (sid >= 254 || Math.hypot(b.x - vx, b.y - vy) > VIS_S) continue;
+    sid++; b.mesh.userData.losId = sid; shipShadow(b.poly, sid);
+  }
+  if (sp.length > shipCap) { shipCap = Math.max(sp.length, shipCap * 2, 1800); shipGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(shipCap), 3)); shipGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(shipCap), 3)); }
+  if (shipGeo.attributes.position) { shipGeo.attributes.position.array.set(sp); shipGeo.attributes.color.array.set(sc); shipGeo.attributes.position.needsUpdate = shipGeo.attributes.color.needsUpdate = true; }
+  shipGeo.setDrawRange(0, sp.length / 3);
   for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
   shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
-  renderer.setRenderTarget(visRT); renderer.render(visScene, visCam); renderer.setRenderTarget(null);
+  renderer.setRenderTarget(visRT); renderer.render(visScene, visCam);
+  shipMesh.material = maxMat; shipScene.background = new THREE.Color(0x000000); renderer.setRenderTarget(visMaxRT); renderer.render(shipScene, visCam);
+  shipMesh.material = minMat; shipScene.background = new THREE.Color(0xffffff); renderer.setRenderTarget(visMinRT); renderer.render(shipScene, visCam);
+  renderer.setRenderTarget(null);
 }
 // whether a block or Build piece stands between two points (the minimap hides ships my ship can't see)
 function sightBlocked(x0, y0, x1, y1) {
@@ -439,10 +466,10 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.mpoly); if (t !== null) hit(t); }   // Build menu pieces (what you'd bump into)
-  for (const p of players.values()) {              // other ships, by their Movement ellipses
+  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces, by their Sight outlines (owner, 2026-10-14)
+  for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
     if (p.id === myId || !p.near) continue;
-    const t = segPoly(x0, y0, x1, y1, shipMove(p.holder.position.x, -p.holder.position.z, p.heading)); if (t !== null) hit(t);
+    const t = segPoly(x0, y0, x1, y1, shipSight(p)); if (t !== null) hit(t);
   }
   return best;
 }
