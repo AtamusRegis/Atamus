@@ -51,6 +51,7 @@ packages/server/src/
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
+  build3d.js      the staff Build menu ([B]): shapes, Position / Scale / Rotate controls, copy / paste; footprint colliders
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop (placeholder item, per browser)
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,

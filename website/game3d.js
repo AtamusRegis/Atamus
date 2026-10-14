@@ -6,6 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
+import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791956065";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -273,6 +274,7 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
 function collideMe() {
   const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF + SHIP_R && Math.abs(q.y - b.y) <= BLOCK_HALF + SHIP_R) pushFromBlock(q, b);
+  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy <= R * R) pushFromPoly(q, b.poly, SHIP_R, pushOut); }   // Build menu pieces
   for (const p of players.values()) { if (p.id === myId || !p.near) continue; pushOut(q, p.holder.position.x, -p.holder.position.z, 2 * SHIP_R); }
   if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
 }
@@ -290,6 +292,7 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
+  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces
   for (const p of players.values()) {              // segment vs circle
     if (p.id === myId || !p.near) continue;
     const cx = p.holder.position.x - x0, cy = -p.holder.position.z - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-9) continue;
@@ -324,6 +327,8 @@ addEventListener("keydown", (e) => {
 addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
+// (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
+const build = initBuild({ scene, camera, canvas, toWorld, send, typing, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
@@ -409,6 +414,7 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
+      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);
@@ -448,6 +454,7 @@ function connect() {
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
     else if (m.t === "chat") addChat(m);
+    else if (build.onMsg(m)) { /* Build menu pieces */ }
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
     else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
@@ -671,6 +678,7 @@ renderer.setAnimationLoop(() => {
     if (left <= 0) { countAt = 0; goUpdating(); } else countEl.textContent = "Update incoming — " + left + " s";
   }
 
+  build.frame();
   renderer.render(scene, camera);
 });
 
@@ -871,4 +879,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r })); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

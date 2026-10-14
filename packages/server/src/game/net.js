@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -72,6 +72,7 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
     let joined = false;
+    const staff = ["head", "admin", "mod"].includes(user.role);   // (owner, 2026-10-13) staff can use the Build menu
     let cmds = 0, blockAt = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
@@ -81,8 +82,8 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) },   // staff: the Admin button
-      cfg: { shipR: SHIP_R, blockHalf: BLOCK_HALF, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
-      roster: world.roster(), blocks: world.blocks.map((b) => [b.id, b.x, b.y]),
+      cfg: { shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      roster: world.roster(), blocks: world.blocks.map((b) => [b.id, b.x, b.y]), builds: world.buildList(),
     }));
 
     ws.on("message", (data) => {
@@ -133,6 +134,21 @@ export function attachGameServer(httpServer) {
         const now = Date.now(); if (now - blockAt < 450) return; blockAt = now;
         const r = world.addBlock(pid); if (!r) return;
         broadcast({ t: "block", b: [r.b.id, r.b.x, r.b.y], gone: r.gone });
+      }
+      // (owner, 2026-10-13) the admin Build menu: staff place, edit and delete pieces; everyone is sent the result
+      else if (m.t === "bnew" || m.t === "bset" || m.t === "bdel") {
+        if (!staff) return;
+        const bid = typeof m.id === "string" && /^[0-9]{1,15}$/.test(m.id) ? m.id : null;
+        if (m.t === "bnew") {
+          const q = Number.isInteger(m.q) ? m.q : 0;
+          world.addBuild(m, pid).then((b) => {
+            if (!b) return;
+            broadcast({ t: "build", o: [b.id, b.k, b.x, b.y, b.w, b.d, b.r] });
+            if (socks.get(pid) === ws) ws.send(JSON.stringify({ t: "bnew", q, id: b.id }));   // so the builder can select it
+          }).catch((e) => console.error("build", e));
+        } else if (m.t === "bset") {
+          const b = bid && world.setBuild(bid, m); if (b) broadcast({ t: "build", o: [b.id, b.k, b.x, b.y, b.w, b.d, b.r], by: pid });
+        } else if (bid) world.delBuild(bid).then((ok) => { if (ok) broadcast({ t: "unbuild", id: bid }); }).catch((e) => console.error("unbuild", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

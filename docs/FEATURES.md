@@ -85,6 +85,18 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 - **The game UI uses the website's look (the login page):** flat, unbordered shapes with light gradients for depth — panels in the dark blue panel gradient with a soft shadow, buttons as soft flat chips (selected ones tinted blue, primary ones like Accept, Send and Blue in the blue gradient), inputs as dark wells with a blue glow when focused, rows as light cards. The capacitor fill is the blue gradient. The [A] button is gold. The mute / ban tags stay outlined.
 - **Scroll bars:** a rounded gray bar with no track.
 
+## Build menu (owner, 2026-10-13; staff only)
+
+- **[B]** (a button left of [A], or the B key) opens the Build menu: a slot row above the capacitor bar, styled like the hotbar. The first slot is **basic shapes**: square, cylinder, triangle (its icon shows the current one). B or Escape closes it.
+- **While it's open the ship takes no WASD** (W is a build key); everything else works as usual.
+- **Placing:** click the slot and a translucent ghost follows the pointer on the ground; a left click places the piece (50 × 50 m footprint, 50 m tall) and selects it. Q cycles the ghost's shape.
+- **Selecting:** clicking a piece selects it (it tints blue); clicking empty ground deselects.
+- **Keys on the selected piece:** Q cycles its shape (square → cylinder → triangle); W = Position, E = Scale, R = Rotate (the controls drawn over it); Delete removes it; Ctrl+C copies it; Ctrl+X copies and removes it; Ctrl+V pastes a copy where the pointer is (the copy is selected). The copy is kept in this browser.
+- **Position:** a small square at the piece's center (drag it anywhere) with arrows north, south, east and west (drag one to move along that line only).
+- **Scale:** a line ending in a square on each side of the piece (along its own sides, so it follows the rotation); dragging one moves that side and the opposite side stays put. 5 m to 1,000 m.
+- **Rotate:** a circle around the piece; grab it anywhere and the piece turns by however far you drag around, either way.
+- **Pieces are the server's:** saved in the database (its own table, `world3d_builds`), sent to everyone, and **ships collide with them** like blocks (their footprint: rectangle, triangle, or ellipse for the cylinder). They also stop the aim line (red past them). The server checks every edit: staff only, a known shape, finite numbers, the center inside the map, sizes clamped.
+
 ## Rejected / removed (don't reintroduce)
 
 - **Local cubes (2026-10-13):** X's cubes were only in the dropping browser; they are now shared blocks with colliders.

@@ -90,6 +90,32 @@ export function pushFromBlock(p, b) {                 // a ship's circle out of 
   }
   return pushOut(p, qx, qy, SHIP_R);
 }
+// (owner, 2026-10-13) the admin Build menu's pieces: a shape (square, cylinder or triangle) with a footprint w (east-west)
+// by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
+// Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
+export const SHAPES = ["square", "cylinder", "triangle"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
+export function buildPoly(o) {                 // the footprint's corners, counterclockwise: [x0, y0, x1, y1, ...]
+  const hw = o.w / 2, hd = o.d / 2, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
+  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+  for (const [lx, ly] of loc) out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c);
+  return out;
+}
+export function pushFromPoly(p, v, R) {        // a ship's circle (radius R) out of a convex polygon
+  const n = v.length / 2; let inside = true, best = Infinity, bx = 0, by = 0, pen = Infinity, pnx = 0, pny = 0;
+  for (let i = 0; i < n; i++) {
+    const ax = v[2 * i], ay = v[2 * i + 1], ex = v[(2 * i + 2) % v.length] - ax, ey = v[(2 * i + 3) % v.length] - ay, L = Math.hypot(ex, ey) || 1;
+    const nx = ey / L, ny = -ex / L, sd = (p.x - ax) * nx + (p.y - ay) * ny;
+    if (sd > 0) inside = false; if (-sd < pen) { pen = -sd; pnx = nx; pny = ny; }
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / (L * L))), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
+    if (d < best) { best = d; bx = qx; by = qy; }
+  }
+  if (inside) {
+    p.x += pnx * (pen + R); p.y += pny * (pen + R);
+    const vn = (p.vx || 0) * pnx + (p.vy || 0) * pny; if (vn < 0) { p.vx -= vn * pnx; p.vy -= vn * pny; }
+    return true;
+  }
+  return pushOut(p, bx, by, R);
+}
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
@@ -104,7 +130,8 @@ export class World3D {
   constructor() {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
-    this.blockSeq = 1;                // id -> { id, name, x, y, dx, dy, dirty }
+    this.blockSeq = 1;
+    this.builds = new Map();                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -117,6 +144,13 @@ export class World3D {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
     await pool.query(`ALTER TABLE world3d ADD COLUMN IF NOT EXISTS team TEXT`);   // (owner, 2026-10-13) the side, remembered
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_builds (
+      id BIGSERIAL PRIMARY KEY, k TEXT NOT NULL, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL,
+      w DOUBLE PRECISION NOT NULL, d DOUBLE PRECISION NOT NULL, r DOUBLE PRECISION NOT NULL, by_user TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`);
+    const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
+    for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
   }
 
   // (owner, 2026-10-13) the side this account last chose, or null
@@ -209,6 +243,10 @@ export class World3D {
       if (Math.abs(p.x - b.x) > BLOCK_HALF + SHIP_R || Math.abs(p.y - b.y) > BLOCK_HALF + SHIP_R) continue;
       const ox = p.x, oy = p.y; if (pushFromBlock(p, b)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
     }
+    for (const p of ps) for (const b of this.builds.values()) {
+      const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy > R * R) continue;
+      const ox = p.x, oy = p.y; if (pushFromPoly(p, b.poly, SHIP_R)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
+    }
     for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
       const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
       if (d >= 2 * SHIP_R) continue;
@@ -231,6 +269,32 @@ export class World3D {
     return { b, gone: gone.map((g) => g.id) };
   }
 
+  // (owner, 2026-10-13) Build menu pieces. _clean checks a piece from a client as hostile: a known shape, finite numbers,
+  // its center inside the map, sizes clamped, the angle wrapped. null if it isn't usable.
+  _clean(o) {
+    if (!o || !SHAPES.includes(o.k)) return null;
+    const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null), x = n(+o.x), y = n(+o.y), w = n(+o.w), d = n(+o.d), r = n(+o.r);
+    if (x === null || y === null || w === null || d === null || r === null || !inside(x, y)) return null;
+    const cl = (v) => Math.max(BUILD_MIN, Math.min(BUILD_MAX, v)), rd = (v) => Math.round(v * 100) / 100;
+    return { k: o.k, x: rd(x), y: rd(y), w: rd(cl(w)), d: rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
+  }
+  _put(id, b) { b.id = id; b.poly = buildPoly(b); b.rad = Math.hypot(b.w, b.d) / 2; this.builds.set(id, b); return b; }
+  buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
+  async addBuild(o, by) {
+    const b = this._clean(o); if (!b || this.builds.size >= BUILD_CAP) return null;
+    await this.ready;
+    const { rows } = await pool.query(`INSERT INTO world3d_builds (k, x, y, w, d, r, by_user) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`, [b.k, b.x, b.y, b.w, b.d, b.r, String(by)]);
+    return this._put(String(rows[0].id), b);
+  }
+  setBuild(id, o) {                          // an edit: kept at once, written to the database with the next save
+    if (!this.builds.has(id)) return null; const b = this._clean(o); if (!b) return null;
+    b.dirty = true; return this._put(id, b);
+  }
+  async delBuild(id) {
+    if (!this.builds.delete(id)) return false;
+    await pool.query(`DELETE FROM world3d_builds WHERE id = $1`, [id]); return true;
+  }
+
   async _save(p) {
     await this.ready;
     await pool.query(
@@ -238,7 +302,10 @@ export class World3D {
        ON CONFLICT (user_id) DO UPDATE SET x = $2, y = $3, team = $4, updated_at = now()`, [p.id, p.x, p.y, p.team || null]);
     p.dirty = false;
   }
-  async saveDirty() { for (const p of this.players.values()) if (p.dirty) await this._save(p); }
+  async saveDirty() {
+    for (const p of this.players.values()) if (p.dirty) await this._save(p);
+    for (const b of this.builds.values()) if (b.dirty) { b.dirty = false; await pool.query(`UPDATE world3d_builds SET k = $2, x = $3, y = $4, w = $5, d = $6, r = $7, updated_at = now() WHERE id = $1`, [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
+  }
 
   // compact: [id, x (cm), y (cm), heading (mrad)] for every player within the viewer's load circle (themselves included)
   snapshotFor(viewer) {
