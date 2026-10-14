@@ -80,7 +80,8 @@
     #chat-log { height: 160px; overflow-y: auto; display: flex; flex-direction: column; color: #dce7f5; text-shadow: 0 0 2px #000, 0 0 1px #000; }   /* (owner) 10 rows */
     #chat-log .chat-line { line-height: 16px; } #chat-log > :first-child { margin-top: auto; }   /* lines sit at the bottom */
     #chat.small #chat-log { height: 32px; }   /* (owner) collapsed: 2 rows */
-    #chat-size { flex: none; width: 26px; margin-left: auto; font-size: 15px !important; line-height: 1; padding: 2px 0 !important; }   /* (owner) anchored at the far right of the tab row */
+    #chat #chat-size { flex: none; width: 24px; margin-left: auto; display: grid; place-items: center; padding: 0 !important; background: none !important; color: #cfd8e6 !important; font: 800 20px/1 var(--font) !important; text-shadow: 0 0 3px #000; }   /* (owner) far right of the tab row: no background, thick, centered */
+    #chat #chat-size:hover { color: #fff !important; background: none !important; }
     .chat-line.sys { color: #7f93ad; font-style: italic; }
     .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; } .chat-who[data-id] { cursor: pointer; }
     #chat-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -88,8 +89,8 @@
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
     #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
     .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
-    #chat:has(#admin-btn) #chat-log, #chat:has(#admin-btn) #chat-tabs { margin-left: 32px; }   /* (owner) the tabs and lines start over the input, not over [A] */
-    #chat-row { display: flex; gap: 4px; align-items: stretch; } #chat-row #chat-form { flex: 1; min-width: 0; }
+    #chat:has(#admin-btn) #chat-tabs { margin-left: 32px; }   /* (owner) the tabs start over the panel, not over [A] */
+    #chat-row { display: flex; gap: 4px; align-items: flex-end; } #chat-panel { flex: 1; min-width: 0; display: grid; gap: 4px; }   /* (owner) [A] floats left of the panel, by the input */
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
     #chat-pre { flex: none; white-space: nowrap; font: 12px system-ui, sans-serif; }
@@ -142,7 +143,10 @@
     #cap { background: rgba(0,0,0,0.45) !important; border: none !important; border-radius: 4px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
     #cap-fill { background: var(--accent-grad) !important; } #cap-fill.out { background: linear-gradient(135deg, #8a6a3a, #5a3a1a) !important; }
     /* the chat: one soft panel; tabs, lines, then the input bar (a dark well); the [A] button in gold */
-    #chat { padding: 6px; border-radius: var(--radius); background: var(--panel-soft); box-shadow: 0 10px 30px rgba(0,0,0,0.35); font-family: var(--font); }
+    #chat { font-family: var(--font); }   /* (owner) the tabs, [A] and +/- float; only the lines and the input sit on the panel */
+    #chat-panel { padding: 6px; border-radius: var(--radius); background: var(--panel-soft); box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+    #chat-tabs button { box-shadow: 0 4px 12px rgba(0,0,0,0.35); } #chat-tabs button:not(.on) { background: rgba(14,20,32,0.82) !important; }
+    #admin-btn { height: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #chat-form { background: rgba(0,0,0,0.35) !important; border: none !important; border-radius: 5px !important; }
     #chat-form:focus-within { box-shadow: 0 0 0 2px rgba(56,198,255,0.45); }
     #admin-btn { background: rgba(255,207,80,0.14) !important; border: none !important; border-radius: 5px !important; color: #ffd766 !important; }
@@ -160,7 +164,7 @@
   <div id="countdown" class="overlay" hidden></div>
   <label id="helpers-box"><input id="helpers" type="checkbox">Weapon helpers</label>
   <canvas id="minimap"></canvas>
-  <div id="chat"><div id="chat-tabs"></div><div id="chat-log"></div><div id="chat-row"><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" autocorrect="off" enterkeyhint="send"></form></div></div>
+  <div id="chat"><div id="chat-tabs"></div><div id="chat-row"><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" autocorrect="off" enterkeyhint="send"></form></div></div></div>
   <div id="ctx-menu" hidden></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-send">Send</button><button id="report-cancel">Cancel</button></div></div></div>
   <div id="joy"><div id="joy-knob"></div></div>
@@ -168,7 +172,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1791951755"></script>
-  <script type="module" src="game3d.js?v=1791951943"></script>
+  <script src="adminpanel.js?v=1791952387"></script>
+  <script type="module" src="game3d.js?v=1791952387"></script>
 </body>
 </html>
