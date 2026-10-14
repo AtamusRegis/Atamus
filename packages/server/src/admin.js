@@ -45,14 +45,27 @@ const muteOf = (u) => u.mute_perm ? { perm: true, reason: u.mute_reason || "" } 
 
 admin.get("/me", guard(async (req, res, me) => res.json({ role: me.role })));
 
-// online players, and everyone banned or muted (so they can be lifted while offline); ?focus=id adds that account too
-// (opened from a player's name in chat, or from a report)
+// (owner, 2026-10-13) the player lists: ?list=online (everyone in the game) or offline (everyone else, most recently played
+// first, at most 200), ?q= a name search (any part, any case). Each with their mute and ban and when they last played
+// (world3d.updated_at: saved while playing and on leaving).
+const playerRow = (u, on) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u), lastPlayed: u.last_played || null }; };
+const PLAYER_COLS = `u.id, u.username, u.role, u.ban_perm, u.ban_until, u.ban_reason, u.mute_perm, u.mute_until, u.mute_reason, w.updated_at AS last_played`;
 admin.get("/players", guard(async (req, res) => {
-  const on = hooks.online(), ids = [...on.keys()];
-  if (isId(String(req.query.focus || ""))) ids.push(String(req.query.focus));
-  const { rows } = await pool.query(`SELECT id, username, role, ban_perm, ban_until, ban_reason, mute_perm, mute_until, mute_reason FROM users
-    WHERE id = ANY($1::bigint[]) OR ban_perm OR ban_until > now() OR mute_perm OR mute_until > now() ORDER BY lower(username)`, [ids]);
-  res.json(rows.map((u) => { const o = on.get(String(u.id)); return { id: String(u.id), name: u.username, staff: !!u.role, online: !!o, side: o ? o.side || null : null, ban: banOf(u), mute: muteOf(u) }; }));
+  const on = hooks.online(), ids = [...on.keys()], q = String(req.query.q || "").slice(0, 40).toLowerCase();
+  const like = "%" + q.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+  const { rows } = req.query.list === "offline"
+    ? await pool.query(`SELECT ${PLAYER_COLS} FROM users u LEFT JOIN world3d w ON w.user_id = u.id::text
+        WHERE NOT (u.id = ANY($1::bigint[])) AND lower(u.username) LIKE $2 ORDER BY w.updated_at DESC NULLS LAST, lower(u.username) LIMIT 200`, [ids, like])
+    : await pool.query(`SELECT ${PLAYER_COLS} FROM users u LEFT JOIN world3d w ON w.user_id = u.id::text
+        WHERE u.id = ANY($1::bigint[]) AND lower(u.username) LIKE $2 ORDER BY lower(u.username)`, [ids, like]);
+  res.json(rows.map((u) => playerRow(u, on)));
+}));
+// one player (the disciplinary panel, opened from a name in chat: to offer Unmute / Unban when they apply)
+admin.get("/player/:id", guard(async (req, res) => {
+  if (!isId(req.params.id)) return fail(res, 400, "Bad request.");
+  const { rows } = await pool.query(`SELECT ${PLAYER_COLS} FROM users u LEFT JOIN world3d w ON w.user_id = u.id::text WHERE u.id = $1`, [req.params.id]);
+  if (!rows[0]) return fail(res, 404, "No such player.");
+  res.json(playerRow(rows[0], hooks.online()));
 }));
 
 // (owner, 2026-10-13) the disciplinary panel: one action on a player. type: kick | mute | ban | kill | respawn | tpme

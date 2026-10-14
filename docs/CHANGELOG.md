@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Admin panel layout (owner):** sections are now icon buttons floating on the panel's left; Players has Online / Offline tabs, a search box, and a scrolling list (10 rows, tabs and search stay put) of name | Mute tag | Ban tag | last played | Discipline. The window fits its contents. Unmute / Unban moved into the disciplinary panel.
 - **Disciplinary panel (owner):** admin actions now have their own window: Type (kick, mute, ban, kill, respawn, teleport to me, teleport to player), a reason list for mutes and bans, a length slider (5 min to indefinite), an optional note to the player, Cancel / Accept. No more reason text boxes; Unban / Unmute act at once; appeal decisions take an optional note.
 - **Fix: Android chat still didn't send.** Android keyboards report Enter / Go without a key code (or as a line break in the box); the chat input now sends on any of those, as well as on the form's submit.
 - **/whisper and phone sending (owner):** `/whisper Name message` (quotes for names with spaces) whispers a player by name. Fix: a phone keyboard's Go / Send key didn't send chat (the input only listened for the Enter key); it's now a form, so any submit sends.
