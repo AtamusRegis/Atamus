@@ -617,11 +617,13 @@ document.querySelectorAll("#side-pick button").forEach((btn) => btn.addEventList
 // arrow pointing the way it faces (friendlies, your side, blue; enemies red); a tick from yours for where the camera faces
 const mm = document.getElementById("minimap"), mmx = mm && mm.getContext("2d");
 let mmNext = 0;
-// (owner, 2026-10-13) scrolling over the minimap zooms it (1x the whole hexagon, up to 40x: about 3 km across), not the game
-let mmZoom = 1; try { const z = +localStorage.getItem("atamus.mmZoom"); if (z >= 1 && z <= 40) mmZoom = z; } catch {}
+// (owner, 2026-10-13) scrolling over the minimap zooms it (1x the whole hexagon, in until the load circle fills it), not the game
+let mmZoom = 1; try { const z = +localStorage.getItem("atamus.mmZoom"); if (z >= 1 && z <= 100) mmZoom = z; } catch {}
+// (owner) the closest zoom still shows the whole load circle inside the hexagon (its radius = the frame's inner radius)
+const mmMaxZoom = (W) => { const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), FR = W / 2 - 3; return Math.max(1, (FR * Math.cos(Math.PI / 6) - 2) / (LOAD_R * FR / Rv)); };
 if (mm) mm.addEventListener("wheel", (e) => {
   e.preventDefault(); e.stopPropagation();
-  mmZoom = Math.min(40, Math.max(1, mmZoom * (e.deltaY > 0 ? 1 / 1.25 : 1.25)));
+  mmZoom = Math.min(mmMaxZoom(mm.clientWidth), Math.max(1, mmZoom * (e.deltaY > 0 ? 1 / 1.25 : 1.25)));
   try { localStorage.setItem("atamus.mmZoom", String(mmZoom)); } catch {}
   mmNext = 0;
 }, { passive: false });
@@ -630,13 +632,18 @@ function drawMinimap(now) {
   const dpr = Math.min(devicePixelRatio || 1, 2), W = mm.clientWidth, H = mm.clientHeight;
   if (mm.width !== Math.round(W * dpr)) { mm.width = Math.round(W * dpr); mm.height = Math.round(H * dpr); }
   mmx.setTransform(dpr, 0, 0, dpr, 0, 0); mmx.clearRect(0, 0, W, H);
-  // (owner) zoom: the wheel over the minimap; zoomed in, it centers toward your ship (fully at high zoom)
-  const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), k = (W / 2 - 3) / Rv * mmZoom, cx = W / 2, cy = H / 2;
+  // (owner) zoom: the wheel over the minimap; zoomed in, it centers toward your ship (fully at high zoom). The minimap keeps
+  // its hexagon shape at every zoom (the map is drawn inside it); at 1x the frame is the map's own border.
+  const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), FR = W / 2 - 3, cx = W / 2, cy = H / 2;
+  mmZoom = Math.min(mmZoom, mmMaxZoom(W));
+  const k = FR / Rv * mmZoom;
   const ox = haveMe ? me.x * (1 - 1 / mmZoom) : 0, oy = haveMe ? me.y * (1 - 1 / mmZoom) : 0;
   const P = (x, y) => [cx + (x - ox) * k, cy - (y - oy) * k];
-  mmx.beginPath();
-  for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = P(Math.cos(t) * Rv, Math.sin(t) * Rv); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); }
-  mmx.closePath(); mmx.fillStyle = "rgba(10,14,22,0.85)"; mmx.fill(); mmx.strokeStyle = "#4f8fe8"; mmx.lineWidth = 1.5; mmx.stroke();
+  const hexPath = (R, at) => { mmx.beginPath(); for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = at(Math.cos(t) * R, Math.sin(t) * R); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); } mmx.closePath(); };
+  const frame = (x, y) => [cx + x, cy - y];
+  hexPath(FR, frame); mmx.fillStyle = "rgba(10,14,22,0.85)"; mmx.fill();
+  mmx.save(); hexPath(FR, frame); mmx.clip();
+  if (mmZoom > 1.001) { hexPath(Rv, P); mmx.strokeStyle = "rgba(79,143,232,0.7)"; mmx.lineWidth = 1; mmx.stroke(); }   // the map's border, when zoomed
   // a ship's heading h faces three's (sin h, cos h) on x / z: on the map (north up) that's (sin h, cos h) in screen x / y
   const arrow = (x, y, h, col, r, ring) => {
     const [X, Y] = P(x, y), fx = Math.sin(h), fy = Math.cos(h);
@@ -658,6 +665,8 @@ function drawMinimap(now) {
     mmx.strokeStyle = "#ffffff"; mmx.lineWidth = 1.5; mmx.beginPath(); mmx.moveTo(X, Y); mmx.lineTo(X + Math.sin(camYaw) * 9, Y - Math.cos(camYaw) * 9); mmx.stroke();
     arrow(me.x, me.y, mine ? mine.heading : 0, "#4f8fe8", 4, true);
   }
+  mmx.restore();
+  hexPath(FR, frame); mmx.strokeStyle = "#4f8fe8"; mmx.lineWidth = 1.5; mmx.stroke();   // the frame
 }
 const $i = (id) => document.getElementById(id);
 if ($i("helpers")) {
