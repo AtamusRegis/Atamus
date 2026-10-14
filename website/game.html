@@ -198,7 +198,10 @@
     #weapon-edit input, #weapon-edit select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
     #weapon-edit .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
     #weapon-edit .we-btns button { padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
-    #weapon-edit .we-btns .we-ok { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; border: none; }
+    #weapon-edit .we-btns button:hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
+    #weapon-edit .we-btns .we-ok { background: linear-gradient(135deg, #5fb4ff, #2f6fe0); color: #fff; border: none; }   /* (owner) blue */
+    #weapon-edit .we-btns .we-ok:hover { background: linear-gradient(135deg, #85c6ff, #4a86f0); }
+    #weapon-edit .we-btns button:disabled { opacity: .6; cursor: default; }
     #weapon-edit .we-err { margin: 8px 0 0; color: #ff8a80; }
     html.touch #weapon-btn, html.touch #weapon-edit { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
@@ -274,7 +277,7 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
-  <script src="weaponpanel.js?v=1792005058"></script>
+  <script src="weaponpanel.js?v=1792005333"></script>
   <script src="adminpanel.js?v=1792000287"></script>
   <script type="module" src="game3d.js?v=1792005058"></script>
 </body>

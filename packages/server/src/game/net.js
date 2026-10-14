@@ -168,6 +168,11 @@ export function attachGameServer(httpServer) {
           world.equip(pid, w.id); try { ws.send(JSON.stringify({ t: "wsaved", id: w.id })); } catch {}
         }).catch((e) => console.error("weapon", e));
       }
+      else if (m.t === "wdel") {               // (owner, 2026-10-14) the Weapon panel's REVERT on a weapon it just made
+        if (!staff) return;
+        const wid = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!wid) return;
+        world.delWeapon(wid).then((ok) => { if (!ok) return; broadcast({ t: "weapons", list: world.weaponList() }); try { ws.send(JSON.stringify({ t: "wsaved", id: world.weaponOf(world.players.get(pid) || {}).id, deleted: wid })); } catch {} }).catch((e) => console.error("weapon del", e));
+      }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;
         world.setCollider(m.k, m.pts, m.pv, m.mv, m.vis).then((c) => { if (c) broadcast({ t: "coll", k: m.k, pts: c.pts, pv: c.pv, mv: c.mv, vis: c.vis }); }).catch((e) => console.error("collider", e));

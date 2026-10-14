@@ -436,6 +436,12 @@ export class World3D {
     for (const p of this.players.values()) if (this.weaponOf(p).id === id) { p.ammo = undefined; p.reloadAt = 0; }   // (a fresh magazine with the new numbers)
     return out;
   }
+  async delWeapon(id) {                        // (owner, 2026-10-14) REVERT on a weapon made just now; never the first (everyone's)
+    if (!this.weapons.has(id) || id === this.defaultWeapon().id) return false; await this.ready;
+    await pool.query(`DELETE FROM world3d_weapons WHERE id = $1`, [id]); this.weapons.delete(id);
+    for (const p of this.players.values()) if (p.weapon === id) { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; }
+    return true;
+  }
   equip(pid, wid) { const p = this.players.get(String(pid)); if (!p || !this.weapons.has(wid)) return false; p.weapon = wid; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; return true; }
   // a shot from a player: (dx, dy) the direction, checked as hostile (finite, not zero); their weapon's shot rate, magazine and reload
   fire(id, dx, dy) {
