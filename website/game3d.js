@@ -281,7 +281,7 @@ function losMat(m, self) {                     // a copy of a ship material that
     sh.fragmentShader = "uniform sampler2D visTex; uniform sampler2D visMax; uniform sampler2D visMin; uniform float visSelf; uniform vec2 visC; uniform float visS; uniform float visFar; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
       "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n" +
       "  if (vuv.x > 0.0 && vuv.y > 0.0 && vuv.x < 1.0 && vuv.y < 1.0) {\n    if (texture2D(visTex, vuv).r < 0.5) discard;\n" +
-      "    float mx = texture2D(visMax, vuv).r, mn = texture2D(visMin, vuv).r;\n    if (mx > 0.002 && (abs(mx - visSelf) > 0.002 || abs(mn - visSelf) > 0.002)) discard;\n  }");
+      "  }");   // (owner, 2026-10-14) ships' shadows don't hide other ships' models (only walls and pieces do)
   };
   c.customProgramCacheKey = () => "los";
   return c;
@@ -376,16 +376,13 @@ function updateVis() {                         // the shadows from where my ship
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
   renderer.setRenderTarget(visRT); renderer.render(visScene, visCam);
   shipMesh.material = maxMat; shipScene.background = new THREE.Color(0x000000); renderer.setRenderTarget(visMaxRT); renderer.render(shipScene, visCam);
-  shipMesh.material = minMat; shipScene.background = new THREE.Color(0xffffff); renderer.setRenderTarget(visMinRT); renderer.render(shipScene, visCam);
   renderer.setRenderTarget(null);
 }
 // whether a block or Build piece stands between two points (the minimap hides ships my ship can't see)
 function sightBlocked(x0, y0, x1, y1) {
   for (const b of blocks.values()) { const h = BLOCK_HALF; if (segPoly(x0, y0, x1, y1, [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]) !== null) return true; }
   for (const b of builds.values()) if (b.k !== "ship" && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
-  // (owner, 2026-10-14) ships (and test ships) in between, by their sight outlines, other than the one being looked at
-  for (const p of players.values()) if (p.id !== myId && p.near && Math.hypot(p.holder.position.x - x1, -p.holder.position.z - y1) > 1 && segPoly(x0, y0, x1, y1, shipSight(p)) !== null) return true;
-  for (const b of builds.values()) if (b.k === "ship" && Math.hypot(b.x - x1, b.y - y1) > 1 && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
+  // (owner, 2026-10-14) ships don't hide each other
   return false;
 }
 // a player ship's sight outline where it's drawn (the ship kind's outline and pivot, turned with its heading)
