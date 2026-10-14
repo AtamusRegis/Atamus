@@ -7,14 +7,16 @@
 import * as THREE from "./vendor/three.module.js";
 
 export const SHAPES = ["square", "cylinder", "triangle"];
-const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle" };
+const KINDS = [...SHAPES, "ship"];
+const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", ship: "Ship" };
+let SHIP_D = 90;                               // a test ship's footprint: a circle the size of a real ship's collider
 let BUILD_H = 50;
 const MIN = 5, MAX = 1000;
 
 // ---- the footprint, as the server works it out (keep the two the same) ----
 export function buildPoly(o) {
   const hw = o.w / 2, hd = o.d / 2, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" || o.k === "ship" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
   for (const [lx, ly] of loc) out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c);
   return out;
 }
@@ -64,19 +66,23 @@ export function initBuild(ctx) {
   const hold = (b) => { b.poly = buildPoly(b); b.rad = Math.hypot(b.w, b.d) / 2; };
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
-    if (!b.mesh) { b.mesh = new THREE.Mesh(GEO[b.k], new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 })); b.mesh.userData = { k: b.k, id: b.id }; scene.add(b.mesh); }
-    b.mesh.position.copy(toWorld(b.x, b.y, 0)); b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
+    if (!b.mesh) {
+      // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
+      b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 }));
+      b.mesh.userData = { k: b.k, id: b.id }; scene.add(b.mesh);
+    }
+    b.mesh.position.copy(toWorld(b.x, b.y, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
     hold(b);
   }
   function setBuild([id, k, x, y, w, d, r]) {
     if (drag && drag.id === id) return;        // my own drag is ahead of the server's echo
     const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); builds.set(id, b); place(b);
   }
-  function unBuild(id) { const b = builds.get(id); if (!b) return; scene.remove(b.mesh); b.mesh.material.dispose(); builds.delete(id); if (sel === id) select(null); }
+  function unBuild(id) { const b = builds.get(id); if (!b) return; scene.remove(b.mesh); if (b.k !== "ship") b.mesh.material.dispose(); builds.delete(id); if (sel === id) select(null); }
 
   // ---- state ----
   let staff = false, open = false, picking = null, sel = null, tool = "pos", drag = null, clip = null, reqSeq = 1, pendingSel = 0, lastSend = 0;
-  try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && SHAPES.includes(c.k)) clip = c; } catch {}
+  try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && KINDS.includes(c.k)) clip = c; } catch {}
   const mouse = { x: 0, y: 0 };
   addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { capture: true, passive: true });
 
@@ -85,11 +91,14 @@ export function initBuild(ctx) {
   btn.addEventListener("click", () => toggle());
   const bar = document.createElement("div"); bar.id = "build-bar"; bar.hidden = true;
   const slot = document.createElement("div"); slot.className = "inv-slot build-slot"; bar.appendChild(slot);
+  const shipSlot = document.createElement("div"); shipSlot.className = "inv-slot build-slot"; shipSlot.title = NAMES.ship; bar.appendChild(shipSlot);   // (owner) the second option: test ships
+  shipSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>';
+  shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
   let slotShape = "square";
   const ICON = { square: '<rect x="5" y="5" width="20" height="20" rx="1.5"/>', cylinder: '<circle cx="15" cy="15" r="10.5"/>', triangle: '<path d="M15 4 L26 25 L4 25 Z"/>' };
-  const drawSlot = () => { slot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[slotShape] + "</svg>"; slot.title = NAMES[slotShape]; slot.classList.toggle("sel", !!picking); };
+  const drawSlot = () => { slot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[slotShape] + "</svg>"; slot.title = NAMES[slotShape]; slot.classList.toggle("sel", !!picking && picking.k !== "ship"); shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); };
   drawSlot();
-  slot.addEventListener("click", () => { if (picking) stopPicking(); else startPicking(slotShape); });
+  slot.addEventListener("click", () => { if (picking && picking.k !== "ship") stopPicking(); else startPicking(slotShape); });
   const NS = "http://www.w3.org/2000/svg";
   const layer = document.createElementNS(NS, "svg"); layer.id = "build-gizmo"; layer.setAttribute("width", "100%"); layer.setAttribute("height", "100%");
   document.body.append(bar, layer);
@@ -106,7 +115,7 @@ export function initBuild(ctx) {
   // ---- the ghost (picking a slot) ----
   let ghost = null;
   const ghostMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.45, depthWrite: false });
-  function startPicking(k) { select(null); picking = { k, w: 50, d: 50, r: 0 }; drawSlot(); }
+  function startPicking(k) { select(null); if (ghost) { scene.remove(ghost); ghost = null; } picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : { k, w: 50, d: 50, r: 0 }; drawSlot(); }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
 
   // ---- screen <-> ground ----
@@ -118,9 +127,8 @@ export function initBuild(ctx) {
 
   // ---- selecting and editing ----
   function select(id) {
-    if (sel && builds.get(sel)) builds.get(sel).mesh.material.emissive.setHex(0x000000);
-    sel = id && builds.has(id) ? id : null; drag = null;
-    if (sel) builds.get(sel).mesh.material.emissive.setHex(0x1c3348);
+    const tint = (v) => { const b = sel && builds.get(sel); if (b && b.k !== "ship") b.mesh.material.emissive.setHex(v); };   // (a test ship shares the ship materials: no tint)
+    tint(0x000000); sel = id && builds.has(id) ? id : null; drag = null; tint(0x1c3348);
   }
   const fields = (b) => ({ k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b) }); }
@@ -131,8 +139,9 @@ export function initBuild(ctx) {
     const g = ground(e.clientX, e.clientY);
     if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r }); stopPicking(); return; }
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
-    const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh), false);
-    select(hits.length ? hits[0].object.userData.id : null);
+    const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh), true);
+    let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
+    select(o ? o.userData.id : null);
   });
 
   // a control is grabbed: what the pointer does to the piece until it's let go
@@ -176,6 +185,7 @@ export function initBuild(ctx) {
     if (ctrl) return;
     if (e.code === "Delete") { eat(); if (b) send({ t: "bdel", id: b.id }); return; }
     if (e.code === "KeyQ") { eat(); if (e.repeat) return;
+      if ((picking && picking.k === "ship") || (!picking && b && b.k === "ship")) return;   // a test ship has no variations
       if (picking) { picking.k = slotShape = SHAPES[(SHAPES.indexOf(picking.k) + 1) % SHAPES.length]; if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
       else if (b) { b.k = SHAPES[(SHAPES.indexOf(b.k) + 1) % SHAPES.length]; place(b); select(b.id); push(b, true); }
       else { slotShape = SHAPES[(SHAPES.indexOf(slotShape) + 1) % SHAPES.length]; drawSlot(); }
@@ -224,11 +234,15 @@ export function initBuild(ctx) {
   function frame() {
     if (open && picking) {                       // the ghost follows the pointer
       const g = ground(mouse.x, mouse.y);
-      if (!ghost || ghost.userData.k !== picking.k) { if (ghost) scene.remove(ghost); ghost = new THREE.Mesh(GEO[picking.k], ghostMat); ghost.userData.k = picking.k; scene.add(ghost); }
-      ghost.visible = !!g; if (g) { ghost.position.copy(toWorld(g.x, g.y, 0)); ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
+      if (!ghost || ghost.userData.k !== picking.k) {
+        if (ghost) scene.remove(ghost);
+        if (picking.k === "ship") { ghost = ctx.makeShip(); ghost.traverse((o) => { if (o.isMesh) o.material = ghostMat; }); } else ghost = new THREE.Mesh(GEO[picking.k], ghostMat);
+        ghost.userData.k = picking.k; scene.add(ghost);
+      }
+      ghost.visible = !!g; if (g) { ghost.position.copy(toWorld(g.x, g.y, 0)); if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
     }
     const b = open && sel && builds.get(sel), c = b && scr(b.x, b.y), on = !!(b && c.ok);
-    show(gPos, on && tool === "pos"); show(gScale, on && tool === "scale"); show(gRot, on && tool === "rot");
+    show(gPos, on && tool === "pos"); show(gScale, on && tool === "scale" && b.k !== "ship"); show(gRot, on && tool === "rot");
     if (!on) return;
     if (tool === "pos") {
       for (const p of posArrows) { const [sx, sy] = screenDir(b.x, b.y, p.ux, p.uy); putArrow(p.a, c.x + sx * 14, c.y + sy * 14, sx, sy, 34); }
@@ -252,10 +266,13 @@ export function initBuild(ctx) {
     if (m.t === "bnew") { if (m.q === pendingSel && open) { select(m.id); tool = "pos"; } return true; }
     return false;
   }
-  function load(list, h) {
+  // the ship model arrived (or changed): rebuild the test ships with it
+  function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
+  function load(list, h, shipD) {
+    if (shipD) SHIP_D = shipD;
     if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
     for (const id of [...builds.keys()]) unBuild(id);
     for (const o of list || []) setBuild(o);
   }
-  return { onMsg, load, frame, setStaff, get open() { return open; } };
+  return { onMsg, load, frame, setStaff, refreshShips, get open() { return open; } };
 }

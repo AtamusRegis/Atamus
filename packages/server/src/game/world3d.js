@@ -93,10 +93,10 @@ export function pushFromBlock(p, b) {                 // a ship's circle out of 
 // (owner, 2026-10-13) the admin Build menu's pieces: a shape (square, cylinder or triangle) with a footprint w (east-west)
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
-export const SHAPES = ["square", "cylinder", "triangle"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
+export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
 export function buildPoly(o) {                 // the footprint's corners, counterclockwise: [x0, y0, x1, y1, ...]
   const hw = o.w / 2, hd = o.d / 2, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" || o.k === "ship" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
   for (const [lx, ly] of loc) out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c);
   return out;
 }
@@ -272,11 +272,12 @@ export class World3D {
   // (owner, 2026-10-13) Build menu pieces. _clean checks a piece from a client as hostile: a known shape, finite numbers,
   // its center inside the map, sizes clamped, the angle wrapped. null if it isn't usable.
   _clean(o) {
-    if (!o || !SHAPES.includes(o.k)) return null;
+    if (!o || !KINDS.includes(o.k)) return null;
     const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null), x = n(+o.x), y = n(+o.y), w = n(+o.w), d = n(+o.d), r = n(+o.r);
     if (x === null || y === null || w === null || d === null || r === null || !inside(x, y)) return null;
     const cl = (v) => Math.max(BUILD_MIN, Math.min(BUILD_MAX, v)), rd = (v) => Math.round(v * 100) / 100;
-    return { k: o.k, x: rd(x), y: rd(y), w: rd(cl(w)), d: rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
+    const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
+    return { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
   }
   _put(id, b) { b.id = id; b.poly = buildPoly(b); b.rad = Math.hypot(b.w, b.d) / 2; this.builds.set(id, b); return b; }
   buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
