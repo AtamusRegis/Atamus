@@ -324,8 +324,15 @@ const shade = new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math
 shade.position.y = 1; shade.renderOrder = 2; shade.frustumCulled = false; scene.add(shade);
 function updateVis() {                         // the shadows from where my ship is now
   const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
-  const edges = (v) => {                       // v: a convex outline [x0, y0, x1, y1, ...]; each edge's shadow quad
+  // (owner, 2026-10-14) shadows start behind the outline, wherever the line of sight can't reach: only the edges facing
+  // away from me cast, so the object itself and the ground up to its far side stay clear
+  const back = (v, i, sg) => { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
+    return ((by - ay) * ((ax + bx) / 2 - vx) - (bx - ax) * ((ay + by) / 2 - vy)) * sg > 0; };
+  const turn = (v) => { let a = 0; for (let i = 0; i < v.length; i += 2) a += v[i] * v[(i + 3) % v.length] - v[(i + 2) % v.length] * v[i + 1]; return a >= 0 ? 1 : -1; };
+  const edges = (v) => {                       // v: an outline [x0, y0, x1, y1, ...]; each far-side edge's shadow quad
+    const sg = turn(v);
     for (let i = 0; i < v.length; i += 2) {
+      if (!back(v, i, sg)) continue;
       const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
       const da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
       const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
@@ -340,8 +347,9 @@ function updateVis() {                         // the shadows from where my ship
   // carries its number so it never hides that ship itself
   const sp = [], sc = []; let sid = 0;
   const shipShadow = (v, id) => {
-    const c = id / 255, n0 = sp.length;
+    const c = id / 255, n0 = sp.length, sg = turn(v);
     for (let i = 0; i < v.length; i += 2) {
+      if (!back(v, i, sg)) continue;
       const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
       const da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
       const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
