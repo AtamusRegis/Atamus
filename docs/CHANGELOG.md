@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Slower turning (owner):** the ship's nose now turns at half the speed (4 rad/s, was 8).
 - **Test ships act as players (owner):** placed test ships now collide, get shoved, take damage, show health bars and sparks, and follow visibility exactly like player ships (they don't move on their own). They can still be picked up and moved in the Build menu.
 - **Impact sparks (owner):** ship collisions throw out debris and fire sparks at the point of impact, more for harder hits.
 - **Ship bumps and health (owner):** ships shove each other on impact and both take damage by how hard they closed on each other (same direction barely, a stationary target more, head-on most). Ships have health; a health bar shows over damaged ships, and a ship at 0 comes back at full health near the center.

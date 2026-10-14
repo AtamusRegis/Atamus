@@ -523,8 +523,8 @@ function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remov
 let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
-const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
-const TURN_A = 40, TURN_K = 9, BANK_MAX = 0.32;
+const TURN = 4;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8; 2026-10-14: halved to 4)
+const TURN_A = 25, TURN_K = 6, BANK_MAX = 0.32;
 const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
 let HP_MAX = 100;                               // (the server sends it)   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
