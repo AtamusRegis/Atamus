@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Fix: ships hidden by their own shadow.** With more than one ship around, all but one could be hidden by their own line-of-sight shadow (they shared one setting); each ship now keeps its own.
 - **Mirrored split / merge (owner):** in the Object Editor, a middle-line corner dragged sideways splits into a mirrored pair, and a pair dragged together merges back into one.
 - **Aim and sight (owner):** the aim line now stops at Sight outlines (pieces and ships) instead of Movement ellipses. A ship's own sight shadow no longer hides any part of that ship, only what's behind it. The editor view pans with the middle mouse when zoomed in.
 - **Object Editor rulers (owner):** a horizontal and a vertical dashed red line, each draggable, that corners, ellipse handles and the pivot snap to.

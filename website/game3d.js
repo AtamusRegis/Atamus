@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791961414";
+import { initBuild, builds, colliders, pivots, movers, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791961780";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -230,11 +230,11 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
 }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
 function makeVisual(remote) {
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
-  if (remote) v.traverse((o) => {
-    if (!o.isMesh) return;
-    o.material = Array.isArray(o.material) ? o.material.map(losMat) : losMat(o.material);
-    o.onBeforeRender = (r, sc, cm, g, mat) => { visSelf.value = (v.userData.losId || 0) / 255; if (mat) mat.uniformsNeedUpdate = true; };   // which ship this is (its own shadow doesn't hide it)
-  });
+  if (remote) {                                 // each ship gets its own copies of the materials, holding its own number
+    const self = { value: 0 }, mine = new Map(); v.userData.losSelf = self;
+    const one = (m) => { if (!mine.has(m)) mine.set(m, losMat(m, self)); return mine.get(m); };
+    v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  }
   return v;
 }
 
@@ -257,7 +257,6 @@ const shipScene = new THREE.Scene(), shipGeo = new THREE.BufferGeometry(); let s
 const idBlend = (eq) => new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, depthTest: false, depthWrite: false, blending: THREE.CustomBlending, blendEquation: eq, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor });
 const maxMat = idBlend(THREE.MaxEquation), minMat = idBlend(THREE.MinEquation);
 const shipMesh = new THREE.Mesh(shipGeo, maxMat); shipMesh.frustumCulled = false; shipScene.add(shipMesh);
-const visSelf = { value: 0 };                  // the ship being drawn's number (set just before each of its parts is drawn)
 // (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
 // (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
 const FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-14) the fade starts 200 m (two grid squares) past the leash circle
@@ -274,12 +273,10 @@ function farMat(m) {                           // a material that isn't drawn pa
   c.customProgramCacheKey = () => "far";
   farCache.set(m, c); return c;
 }
-const losCache = new Map();
-function losMat(m) {                           // a copy of a ship material that leaves out the parts in shadow
-  if (losCache.has(m)) return losCache.get(m);
+function losMat(m, self) {                     // a copy of a ship material that leaves out the parts in shadow (self: the ship's number)
   const c = m.clone();
   c.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, visU); sh.uniforms.visSelf = visSelf;
+    Object.assign(sh.uniforms, visU); sh.uniforms.visSelf = self;
     sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
     sh.fragmentShader = "uniform sampler2D visTex; uniform sampler2D visMax; uniform sampler2D visMin; uniform float visSelf; uniform vec2 visC; uniform float visS; uniform float visFar; varying vec3 vVisW;\n" + sh.fragmentShader.replace("void main() {",
       "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  vec2 vuv = vec2((vVisW.x - visC.x), (-vVisW.z - visC.y)) / (2.0 * visS) + 0.5;\n" +
@@ -287,7 +284,7 @@ function losMat(m) {                           // a copy of a ship material that
       "    float mx = texture2D(visMax, vuv).r, mn = texture2D(visMin, vuv).r;\n    if (mx > 0.002 && (abs(mx - visSelf) > 0.002 || abs(mn - visSelf) > 0.002)) discard;\n  }");
   };
   c.customProgramCacheKey = () => "los";
-  losCache.set(m, c); return c;
+  return c;
 }
 // (owner, 2026-10-13) the ground I can't see is shaded: a dark see-through layer just above the grid, following my
 // ship, drawn only where the shadow texture says it's out of sight
@@ -353,13 +350,13 @@ function updateVis() {                         // the shadows from where my ship
     for (let k = n0; k < sp.length; k += 3) sc.push(c, c, c);
   };
   for (const p of players.values()) {
-    const v = p.holder.children[0]; if (v) v.userData.losId = 0;
+    const v = p.holder.children[0], self = v && v.userData.losSelf; if (self) self.value = 0;
     if (p.id === myId || !p.near || !p.holder.visible || sid >= 254 || Math.hypot(p.holder.position.x - vx, -p.holder.position.z - vy) > VIS_S) continue;
-    sid++; if (v) v.userData.losId = sid; shipShadow(shipSight(p), sid);
+    sid++; if (self) self.value = sid / 255; shipShadow(shipSight(p), sid);
   }
   for (const b of builds.values()) if (b.k === "ship" && b.mesh) {
-    b.mesh.userData.losId = 0; if (sid >= 254 || Math.hypot(b.x - vx, b.y - vy) > VIS_S) continue;
-    sid++; b.mesh.userData.losId = sid; shipShadow(b.poly, sid);
+    const self = b.mesh.userData.losSelf; if (self) self.value = 0; if (sid >= 254 || Math.hypot(b.x - vx, b.y - vy) > VIS_S) continue;
+    sid++; if (self) self.value = sid / 255; shipShadow(b.poly, sid);
   }
   if (sp.length > shipCap) { shipCap = Math.max(sp.length, shipCap * 2, 1800); shipGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(shipCap), 3)); shipGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(shipCap), 3)); }
   if (shipGeo.attributes.position) { shipGeo.attributes.position.array.set(sp); shipGeo.attributes.color.array.set(sc); shipGeo.attributes.position.needsUpdate = shipGeo.attributes.color.needsUpdate = true; }
