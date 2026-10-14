@@ -203,6 +203,9 @@
     #weapon-edit .we-btns .we-ok:hover { background: linear-gradient(135deg, #85c6ff, #4a86f0); }
     #weapon-edit .we-btns button:disabled { opacity: .6; cursor: default; }
     #weapon-edit .we-err { margin: 8px 0 0; color: #ff8a80; }
+    /* (owner, 2026-10-14) a field changed from the weapon's defaults: green better, red worse, white neither */
+    #weapon-edit .we-up { border-color: #4ade80; box-shadow: 0 0 0 2px #4ade80; outline: none; } #weapon-edit .we-down { border-color: #f87171; box-shadow: 0 0 0 2px #f87171; outline: none; }
+    #weapon-edit .we-diff { border-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; outline: none; }
     html.touch #weapon-btn, html.touch #weapon-edit { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
     .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
@@ -277,7 +280,7 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
-  <script src="weaponpanel.js?v=1792005333"></script>
+  <script src="weaponpanel.js?v=1792005551"></script>
   <script src="adminpanel.js?v=1792000287"></script>
   <script type="module" src="game3d.js?v=1792005058"></script>
 </body>

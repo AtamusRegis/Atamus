@@ -2,9 +2,11 @@
 // weapon in the dropdown to change it, or leave it on "New weapon" to make one from the fields. The name changes in the
 // dropdown as it's typed. CHANGE / CREATE saves it on the server (for everyone) and equips it on my ship, and the panel
 // stays open showing it as saved; CANCEL closes without saving. Every field is checked again on the server. game3d.js
-// hands it the weapon list and a send function. (owner, 2026-10-14) ENTER in a field saves too; REVERT (next to CHANGE /
-// CREATE) undoes this weapon's last save (one step back each press, back to its stats before it; a weapon made in this
-// session goes away again, back to nothing); with no save to undo it throws away the edits in the fields.
+// hands it the weapon list and a send function. (owner, 2026-10-14) ENTER in a field saves too. Each weapon's stats when
+// the panel opened are its defaults while it stays open: a field that differs from them is outlined green if the change
+// is better, red if worse, white if it's neither (name, type). REVERT (next to CHANGE / CREATE) puts the weapon back to
+// its defaults (a weapon made while the panel is open goes away again). Closing the panel makes the stats as they are
+// the new defaults.
 (function () {
   const FIELDS = [
     ["optimal", "Optimal Range", 10], ["falloff", "Falloff Rate", 1], ["life", "Lifetime", 0.01], ["speed", "Speed", 10],
@@ -14,8 +16,9 @@
   const DEF = { name: "", type: "bullet", optimal: 0, falloff: 0, life: 0, speed: 0, rate: 0, dmg: 0, spread0: 0, spreadAdd: 0, aimSpeed: 0, rotSpeed: 0, reload: 0, mag: 0 };   // (owner: a new weapon starts at 0 all round)
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   let api = null, win = null, btn = null, sel, nameIn, typeSel, inputs = {}, okBtn, errEl, current = "", busy = false;
-  const hist = new Map();                       // weapon id -> its stats before each save this session (null: it was made then)
-  let pend = null;                              // the save in flight: { prev, revert }
+  const base = new Map();                       // weapon id -> its stats when the panel opened (its defaults while it's open)
+  // which way is better for each number: +1 more is better, -1 less is better
+  const BETTER = { optimal: 1, falloff: -1, life: 1, speed: 1, rate: -1, dmg: 1, spread0: -1, spreadAdd: -1, aimSpeed: 1, rotSpeed: 1, reload: -1, mag: 1 };
 
   function mount(a) {
     api = a; if (win) return;
@@ -29,7 +32,8 @@
     nameIn = $("input"); nameIn.maxLength = 32; nameIn.addEventListener("input", () => { const o = sel.selectedOptions[0]; if (o && o.value) o.textContent = nameIn.value || "?"; });
     typeSel = $("select"); typeSel.append(new Option("bullet", "bullet"));
     field("Weapon", sel); field("Name", nameIn); field("Type", typeSel);
-    for (const [k, label, step] of FIELDS) { const i = $("input"); i.type = "number"; i.step = String(step); inputs[k] = i; field(label, i); }
+    for (const [k, label, step] of FIELDS) { const i = $("input"); i.type = "number"; i.step = String(step); inputs[k] = i; field(label, i); i.addEventListener("input", marks); }
+    nameIn.addEventListener("input", marks); typeSel.addEventListener("change", marks);
     errEl = $("p", "we-err"); errEl.hidden = true;
     const btns = $("div", "we-btns"), cancel = $("button", "", "CANCEL"), revert = $("button", "", "REVERT"); okBtn = $("button", "we-ok", "CHANGE");
     cancel.type = revert.type = okBtn.type = "button";
@@ -67,43 +71,49 @@
     const w = api.list().find((x) => x.id === current) || DEF;
     nameIn.value = w.name; typeSel.value = w.type || "bullet";
     for (const [k] of FIELDS) inputs[k].value = String(w[k]);
-    okBtn.textContent = current ? "CHANGE" : "CREATE"; errEl.hidden = true;
+    okBtn.textContent = current ? "CHANGE" : "CREATE"; errEl.hidden = true; marks();
+  }
+  // the outlines: each field against the weapon's defaults (none for a weapon that wasn't there when the panel opened)
+  function marks() {
+    const b = current && base.get(current);
+    const set = (el, c) => { el.classList.remove("we-up", "we-down", "we-diff"); if (c) el.classList.add(c); };
+    set(nameIn, b && nameIn.value.trim() !== b.name ? "we-diff" : null); set(typeSel, b && typeSel.value !== b.type ? "we-diff" : null);
+    for (const [k] of FIELDS) {
+      const v = Number(inputs[k].value), d = b ? v - b[k] : 0;
+      set(inputs[k], !b || !Number.isFinite(v) || Math.abs(d) < 1e-9 ? null : d * BETTER[k] > 0 ? "we-up" : "we-down");
+    }
   }
   function toggle(open) {
     if (!win) return;
     const show = open === undefined ? win.hidden : !!open;
     win.hidden = !show; btn.classList.toggle("on", show);
-    if (show) { current = api.current() || current; options(); fill(); }
+    base.clear();                              // (closed: what's there now is the next opening's defaults)
+    if (!show && document.activeElement && win.contains(document.activeElement)) document.activeElement.blur();   // (closed: the keys go back to the game)
+    if (show) { for (const w of api.list()) base.set(w.id, strip(w)); current = api.current() || current; options(); fill(); }
   }
   function save() {
     if (busy) return;
     const w = { name: nameIn.value.trim(), type: typeSel.value };
     if (!w.name) { errEl.textContent = "Give it a name."; errEl.hidden = false; return; }
     for (const [k] of FIELDS) w[k] = Number(inputs[k].value);
-    const was = current ? api.list().find((x) => x.id === current) : null;
-    pend = { prev: was ? strip(was) : null, revert: false };
     busy = true; okBtn.disabled = true; errEl.hidden = true;
     api.send({ t: "wset", ...(current ? { id: current } : {}), w });
   }
   const strip = (w) => { const o = { name: w.name, type: w.type }; for (const [k] of FIELDS) o[k] = w[k]; return o; };
   function undo() {
     if (busy) return;
-    const h = current && hist.get(current);
-    if (h && h.length) {
-      const prev = h.pop(); busy = true; okBtn.disabled = true; errEl.hidden = true; pend = { revert: true };
-      if (prev === null) api.send({ t: "wdel", id: current });    // made in this session: gone again
-      else api.send({ t: "wset", id: current, w: prev });
-      return;
-    }
-    fill();                                    // nothing saved to undo: the fields go back to what's saved (or to 0s for a new one)
+    if (!current) { fill(); return; }          // "New weapon": the fields back to 0s
+    const b = base.get(current), now = api.list().find((x) => x.id === current);
+    busy = true; okBtn.disabled = true; errEl.hidden = true;
+    if (!b) { api.send({ t: "wdel", id: current }); return; }      // made while the panel's open: gone again
+    if (now && FIELDS.every(([k]) => now[k] === b[k]) && now.name === b.name && now.type === b.type) { busy = false; okBtn.disabled = false; fill(); return; }   // saved as the defaults: just the fields
+    api.send({ t: "wset", id: current, w: b });
   }
   // the server's answer: saved (now equipped) or refused
   function saved(m) {
     busy = false; if (okBtn) okBtn.disabled = false;
-    if (m.error) { errEl.textContent = m.error; errEl.hidden = false; pend = null; return; }
-    if (m.deleted) { hist.delete(m.deleted); current = ""; }
-    else { if (pend && !pend.revert) { if (!hist.has(m.id)) hist.set(m.id, []); hist.get(m.id).push(pend.prev); } current = m.id; }
-    pend = null;
+    if (m.error) { errEl.textContent = m.error; errEl.hidden = false; return; }
+    if (m.deleted) current = ""; else current = m.id;
     if (win && !win.hidden) { options(); fill(); }   // (owner) the panel stays open, showing what was saved
   }
   function refresh() { if (win && !win.hidden && !busy) { options(); } }
