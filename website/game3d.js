@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791957761";
+import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791959047";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -449,7 +449,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
@@ -535,7 +535,7 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR);
+      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);

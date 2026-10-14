@@ -15,39 +15,52 @@ let BUILD_H = 50;
 const MIN = 5, MAX = 1000;
 
 // ---- the footprint, as the server works it out (keep the two the same) ----
-export function buildPoly(o) {
-  const hw = o.w / 2, hd = o.d / 2, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" || o.k === "ship" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
-  for (const [lx, ly] of loc) out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c);
+// (owner, 2026-10-14) each kind's collider outline, in the piece's own frame as fractions of its footprint (x across
+// its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
+// them (any simple outline, concave allowed); these are the defaults.
+const ring = Array.from({ length: 24 }, (_, i) => [Math.round(Math.cos(i * Math.PI / 12) * 5000) / 10000, Math.round(Math.sin(i * Math.PI / 12) * 5000) / 10000]);
+export const COLL_DEFAULT = { square: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], triangle: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]], cylinder: ring, ship: ring };
+export function buildPoly(o, coll) {           // the outline in the world: [x0, y0, x1, y1, ...]
+  const loc = (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
+  for (const [ux, uy] of loc) { const lx = ux * o.w, ly = uy * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
 }
+export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
+// a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
 export function pushFromPoly(p, v, R, pushOut) {
-  const n = v.length / 2; let inside = true, best = Infinity, bx = 0, by = 0, pen = Infinity, pnx = 0, pny = 0;
-  for (let i = 0; i < n; i++) {
-    const ax = v[2 * i], ay = v[2 * i + 1], ex = v[(2 * i + 2) % v.length] - ax, ey = v[(2 * i + 3) % v.length] - ay, L = Math.hypot(ex, ey) || 1;
-    const nx = ey / L, ny = -ex / L, sd = (p.x - ax) * nx + (p.y - ay) * ny;
-    if (sd > 0) inside = false; if (-sd < pen) { pen = -sd; pnx = nx; pny = ny; }
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / (L * L))), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
+  let inside = false, best = Infinity, bx = 0, by = 0;
+  for (let i = 0; i < v.length; i += 2) {
+    const ax = v[i], ay = v[i + 1], cx = v[(i + 2) % v.length], cy = v[(i + 3) % v.length], ex = cx - ax, ey = cy - ay, L2 = ex * ex + ey * ey || 1e-9;
+    if ((ay > p.y) !== (cy > p.y) && p.x < ex * (p.y - ay) / (cy - ay) + ax) inside = !inside;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / L2)), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
     if (d < best) { best = d; bx = qx; by = qy; }
   }
   if (inside) {
-    p.x += pnx * (pen + R); p.y += pny * (pen + R);
-    const vn = (p.vx || 0) * pnx + (p.vy || 0) * pny; if (vn < 0) { p.vx -= vn * pnx; p.vy -= vn * pny; }
+    let nx = bx - p.x, ny = by - p.y; const d = Math.hypot(nx, ny); if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
+    p.x = bx + nx * R; p.y = by + ny * R;
+    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
     return true;
   }
   return pushOut(p, bx, by, R);
 }
-// where a segment first enters a convex polygon (fraction 0-1), or null (Cyrus-Beck)
+// where a segment first crosses an outline's edge (fraction 0-1), or null
 export function segPoly(x0, y0, x1, y1, v) {
-  const dx = x1 - x0, dy = y1 - y0, n = v.length / 2; let tE = 0, tL = 1;
-  for (let i = 0; i < n; i++) {
-    const ax = v[2 * i], ay = v[2 * i + 1], ex = v[(2 * i + 2) % v.length] - ax, ey = v[(2 * i + 3) % v.length] - ay;
-    const nx = ey, ny = -ex, num = (ax - x0) * nx + (ay - y0) * ny, den = dx * nx + dy * ny;
-    if (Math.abs(den) < 1e-12) { if (num < 0) return null; continue; }
-    const t = num / den; if (den < 0) tE = Math.max(tE, t); else tL = Math.min(tL, t);
-    if (tE > tL) return null;
+  const dx = x1 - x0, dy = y1 - y0; let best = null;
+  for (let i = 0; i < v.length; i += 2) {
+    const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % v.length] - ax, ey = v[(i + 3) % v.length] - ay, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((ax - x0) * ey - (ay - y0) * ex) / den, u = ((ax - x0) * dy - (ay - y0) * dx) / den;
+    if (t > 1e-4 && t < 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
   }
-  return tE > 1e-4 && tE < 1 ? tE : null;
+  return best;
+}
+// a submitted outline, checked as hostile: 3-64 points, finite, inside +-1.5 of the footprint; null if unusable
+export function cleanColl(pts) {
+  if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;
+  const out = [];
+  for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
+  return out;
 }
 
 // ---- meshes: unit footprints, BUILD_H tall, standing on the grid; scaled to w x d and turned r ----
@@ -61,7 +74,8 @@ function geos() {
 let GEO = geos();
 const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
-export const builds = new Map();               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+export const builds = new Map();
+export const colliders = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -88,7 +102,7 @@ export function initBuild(ctx) {
   });
   const holo = (obj, on) => obj.traverse((o) => { if (!o.isMesh) return; if (on) { if (!o.userData.mat) o.userData.mat = o.material; o.material = holoMat; } else if (o.userData.mat) { o.material = o.userData.mat; delete o.userData.mat; } });
 
-  const hold = (b) => { b.poly = buildPoly(b); b.rad = Math.hypot(b.w, b.d) / 2; };
+  const hold = (b) => { b.poly = buildPoly(b, colliders); b.rad = polyRad(b, b.poly); };
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
     if (!b.mesh) {
@@ -132,9 +146,9 @@ export function initBuild(ctx) {
   slot.addEventListener("click", () => { if (picking && picking.k !== "ship") stopPicking(); else startPicking(slotShape); });
   shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
   document.body.append(bar);
-  function mountBtn() { const row = document.getElementById("chat-row"); if (row && !btn.parentNode) row.insertBefore(btn, row.firstChild); else if (!btn.parentNode) document.body.appendChild(btn); }
+  function mountBtn() { const row = document.getElementById("chat-row") || document.body; if (!btn.parentNode) row.insertBefore(btn, row.firstChild); if (!xbtn.parentNode) row.insertBefore(xbtn, row.firstChild); }
 
-  function setStaff(v) { staff = !!v; btn.hidden = !staff; if (staff) mountBtn(); if (!staff && open) toggle(false); }
+  function setStaff(v) { staff = !!v; btn.hidden = !staff; xbtn.hidden = !staff; if (staff) mountBtn(); if (!staff && open) toggle(false); if (!staff && eOpen) eToggle(false); }
   function toggle(v) {
     if (!staff) return;
     open = v === undefined ? !open : !!v;
@@ -219,6 +233,7 @@ export function initBuild(ctx) {
   let lastF = performance.now();
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
+    eRender();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
@@ -238,16 +253,106 @@ export function initBuild(ctx) {
     }
   }
 
+
+  // ---- (owner, 2026-10-14) the Object Editor: [X] (or the X key) opens a window with the same objects as the Build
+  // menu, drawn top down, with its collider outline over it. Drag a corner to move it; click the dot in the middle of
+  // an edge to add a corner there (and drag it); right-click a corner to remove it (3 at least). Every change is saved
+  // and goes to everyone: all pieces of that kind take the new outline at once.
+  const xbtn = document.createElement("button"); xbtn.id = "edit-btn"; xbtn.type = "button"; xbtn.textContent = "X"; xbtn.title = "Object Editor"; xbtn.hidden = true;
+  const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
+  const VIEW = 400;
+  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
+  document.body.appendChild(win);
+  const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
+  const ceShape = document.createElement("div"), ceShip = document.createElement("div");
+  ceShape.className = ceShip.className = "inv-slot build-slot"; ceShip.title = NAMES.ship; ceShip.innerHTML = shipSlot.innerHTML; ceSlots.append(ceShape, ceShip);
+  let eOpen = false, eKind = "square", eShape = "square", ePts = null, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  const fp = () => (eKind === "ship" ? SHIP_D : 100);   // the footprint shown, m
+  const H = () => fp() * 1.0;                            // half the view, m
+  const toPx = ([ux, uy]) => [VIEW / 2 + ux * fp() * VIEW / (2 * H()), VIEW / 2 - uy * fp() * VIEW / (2 * H())];
+  const fromPx = (px, py) => { const k = (2 * H()) / (VIEW * fp()), lim = H() / fp(); return [Math.max(-lim, Math.min(lim, (px - VIEW / 2) * k)), Math.max(-lim, Math.min(lim, -(py - VIEW / 2) * k))]; };
+  const drawESlots = () => { ceShape.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[eShape] + "</svg>"; ceShape.title = NAMES[eShape];
+    ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
+  function eSetKind(k) { eKind = k; if (k !== "ship") eShape = k; ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); eDrag = null; drawESlots(); eDraw(); }
+  ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
+  ceShip.addEventListener("click", () => eSetKind("ship"));
+  win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
+  xbtn.addEventListener("click", () => eToggle());
+  function eToggle(v) {
+    if (!staff) return;
+    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", eOpen);
+    if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
+  }
+  function eInit() {
+    eRen = new THREE.WebGLRenderer({ canvas: ceCanvas, antialias: true, alpha: true }); eRen.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); eRen.setSize(VIEW, VIEW, false);
+    eScene = new THREE.Scene(); eScene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 1.0)); const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(300, 500, 200); eScene.add(sun);
+    eCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000); eCam.up.set(0, 0, -1); eCam.position.set(0, 800, 0); eCam.lookAt(0, 0, 0);
+  }
+  function eRender() {
+    if (!eOpen || !eRen) return;
+    const key = eKind + (eKind === "ship" ? ":" + ctx.shipReady() : "");
+    if (eMeshK !== key) {
+      if (eMesh) eScene.remove(eMesh);
+      eMesh = eKind === "ship" ? ctx.makeShipPlain() : new THREE.Mesh(GEO[eKind], pieceMat);
+      if (eKind !== "ship") eMesh.scale.set(fp(), 1, fp());
+      eScene.add(eMesh); eMeshK = key;
+    }
+    const h = H(); eCam.left = -h; eCam.right = h; eCam.top = h; eCam.bottom = -h; eCam.updateProjectionMatrix();
+    eRen.render(eScene, eCam);
+  }
+  const SV = "http://www.w3.org/2000/svg";
+  const sv = (tag, attrs) => { const n = document.createElementNS(SV, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); ceSvg.appendChild(n); return n; };
+  function eDraw() {
+    while (ceSvg.firstChild) ceSvg.removeChild(ceSvg.firstChild);
+    if (!ePts) return;
+    const px = ePts.map(toPx);
+    sv("polygon", { points: px.map((p) => p.join(",")).join(" "), class: "ce-poly" });
+    px.forEach((p, i) => {                       // the middle of each edge: click to add a corner there
+      const q = px[(i + 1) % px.length], m = sv("circle", { cx: (p[0] + q[0]) / 2, cy: (p[1] + q[1]) / 2, r: 4, class: "ce-mid" });
+      m.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); ePts.splice(i + 1, 0, fromPx((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)); eGrab(e, i + 1); });
+    });
+    px.forEach((p, i) => {
+      const c = sv("circle", { cx: p[0], cy: p[1], r: 6, class: "ce-pt" });
+      c.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        if (e.button === 2) { if (ePts.length > 3) { ePts.splice(i, 1); eSave(); eDraw(); } return; }   // right-click removes it
+        if (e.button === 0) eGrab(e, i);
+      });
+    });
+  }
+  function eGrab(e, i) { eDrag = { i, id: e.pointerId }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
+  ceSvg.addEventListener("pointermove", (e) => {
+    if (!eDrag || e.pointerId !== eDrag.id) return;
+    const r = ceSvg.getBoundingClientRect(); ePts[eDrag.i] = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height); eDraw();
+  });
+  const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} eSave(); };
+  ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
+  function eSave() { send({ t: "coll", k: eKind, pts: ePts.map(([x, y]) => [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]) }); }
+  function setColl(k, pts) {
+    if (!KINDS.includes(k) || !Array.isArray(pts)) return;
+    colliders[k] = pts;
+    for (const b of builds.values()) if (b.k === k) hold(b);
+    if (eOpen && eKind === k && !eDrag) { ePts = pts.map((q) => q.slice()); eDraw(); }
+  }
+  addEventListener("keydown", (e) => {
+    if (ctx.typing() || !staff) return;
+    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) eToggle(); return; }   // (staff: X is the editor, not a block)
+    if (eOpen && e.code === "Escape" && !open) { eToggle(false); }
+    if (eOpen && !open && e.code === "KeyQ" && eKind !== "ship") { e.preventDefault(); eSetKind(SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]); }
+  }, true);
+
   function onMsg(m) {
     if (m.t === "build") { setBuild(m.o); return true; }
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
+    if (m.t === "coll") { setColl(m.k, m.pts); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
-  function load(list, h, shipD) {
+  function load(list, h, shipD, coll) {
     if (shipD) SHIP_D = shipD;
+    for (const k of Object.keys(colliders)) delete colliders[k]; if (coll && typeof coll === "object") for (const k of KINDS) if (Array.isArray(coll[k])) colliders[k] = coll[k];
     if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
     held = null;
     for (const id of [...builds.keys()]) unBuild(id);

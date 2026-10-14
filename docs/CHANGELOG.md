@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Object Editor (owner):** staff get [X] (or the X key): a window showing each Build object top down with its collider outline; drag corners, click an edge's middle dot to add one, right-click to remove. Changes save and apply to every piece of that kind for everyone. For staff, X no longer drops a block.
 - **Ships block sight (owner, to try out):** other ships and test ships now cast line-of-sight shadows, hiding ships behind them.
 - **Sight fade starts further out (owner):** the haze now begins thickening 200 m past the leash circle instead of at it (solid 400 m after that).
 - **Haze look (owner):** dark navy, blue and purple patches with stronger light/dark gradients instead of black and gray; smooth noise (no more squares) and softened shadow edges. Fix: the map's border band flickered through the haze; it now always stays under it.

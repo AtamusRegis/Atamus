@@ -94,27 +94,52 @@ export function pushFromBlock(p, b) {                 // a ship's circle out of 
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
 export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
-export function buildPoly(o) {                 // the footprint's corners, counterclockwise: [x0, y0, x1, y1, ...]
-  const hw = o.w / 2, hd = o.d / 2, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  const loc = o.k === "triangle" ? [[-hw, -hd], [hw, -hd], [0, hd]] : o.k === "cylinder" || o.k === "ship" ? Array.from({ length: 24 }, (_, i) => [Math.cos(i * Math.PI / 12) * hw, Math.sin(i * Math.PI / 12) * hd]) : [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
-  for (const [lx, ly] of loc) out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c);
+// (owner, 2026-10-14) each kind's collider outline, in the piece's own frame as fractions of its footprint (x across
+// its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
+// them (any simple outline, concave allowed); these are the defaults.
+const ring = Array.from({ length: 24 }, (_, i) => [Math.round(Math.cos(i * Math.PI / 12) * 5000) / 10000, Math.round(Math.sin(i * Math.PI / 12) * 5000) / 10000]);
+export const COLL_DEFAULT = { square: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], triangle: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]], cylinder: ring, ship: ring };
+export function buildPoly(o, coll) {           // the outline in the world: [x0, y0, x1, y1, ...]
+  const loc = (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
+  for (const [ux, uy] of loc) { const lx = ux * o.w, ly = uy * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
 }
-export function pushFromPoly(p, v, R) {        // a ship's circle (radius R) out of a convex polygon
-  const n = v.length / 2; let inside = true, best = Infinity, bx = 0, by = 0, pen = Infinity, pnx = 0, pny = 0;
-  for (let i = 0; i < n; i++) {
-    const ax = v[2 * i], ay = v[2 * i + 1], ex = v[(2 * i + 2) % v.length] - ax, ey = v[(2 * i + 3) % v.length] - ay, L = Math.hypot(ex, ey) || 1;
-    const nx = ey / L, ny = -ex / L, sd = (p.x - ax) * nx + (p.y - ay) * ny;
-    if (sd > 0) inside = false; if (-sd < pen) { pen = -sd; pnx = nx; pny = ny; }
-    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / (L * L))), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
+export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
+// a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
+export function pushFromPoly(p, v, R) {
+  let inside = false, best = Infinity, bx = 0, by = 0;
+  for (let i = 0; i < v.length; i += 2) {
+    const ax = v[i], ay = v[i + 1], cx = v[(i + 2) % v.length], cy = v[(i + 3) % v.length], ex = cx - ax, ey = cy - ay, L2 = ex * ex + ey * ey || 1e-9;
+    if ((ay > p.y) !== (cy > p.y) && p.x < ex * (p.y - ay) / (cy - ay) + ax) inside = !inside;
+    const t = Math.max(0, Math.min(1, ((p.x - ax) * ex + (p.y - ay) * ey) / L2)), qx = ax + ex * t, qy = ay + ey * t, d = Math.hypot(p.x - qx, p.y - qy);
     if (d < best) { best = d; bx = qx; by = qy; }
   }
   if (inside) {
-    p.x += pnx * (pen + R); p.y += pny * (pen + R);
-    const vn = (p.vx || 0) * pnx + (p.vy || 0) * pny; if (vn < 0) { p.vx -= vn * pnx; p.vy -= vn * pny; }
+    let nx = bx - p.x, ny = by - p.y; const d = Math.hypot(nx, ny); if (d < 1e-6) { nx = 1; ny = 0; } else { nx /= d; ny /= d; }
+    p.x = bx + nx * R; p.y = by + ny * R;
+    const vn = (p.vx || 0) * nx + (p.vy || 0) * ny; if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
     return true;
   }
   return pushOut(p, bx, by, R);
+}
+// where a segment first crosses an outline's edge (fraction 0-1), or null
+export function segPoly(x0, y0, x1, y1, v) {
+  const dx = x1 - x0, dy = y1 - y0; let best = null;
+  for (let i = 0; i < v.length; i += 2) {
+    const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % v.length] - ax, ey = v[(i + 3) % v.length] - ay, den = dx * ey - dy * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((ax - x0) * ey - (ay - y0) * ex) / den, u = ((ax - x0) * dy - (ay - y0) * dx) / den;
+    if (t > 1e-4 && t < 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+  }
+  return best;
+}
+// a submitted outline, checked as hostile: 3-64 points, finite, inside +-1.5 of the footprint; null if unusable
+export function cleanColl(pts) {
+  if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;
+  const out = [];
+  for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
+  return out;
 }
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
@@ -131,7 +156,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.builds = new Map();                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -149,6 +174,8 @@ export class World3D {
       w DOUBLE PRECISION NOT NULL, d DOUBLE PRECISION NOT NULL, r DOUBLE PRECISION NOT NULL, by_user TEXT,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_colliders (k TEXT PRIMARY KEY, pts JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    for (const o of (await pool.query(`SELECT k, pts FROM world3d_colliders`)).rows) { const c = KINDS.includes(o.k) && cleanColl(o.pts); if (c) this.colliders[o.k] = c; }
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
     for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
   }
@@ -279,7 +306,16 @@ export class World3D {
     const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
     return { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
   }
-  _put(id, b) { b.id = id; b.poly = buildPoly(b); b.rad = Math.hypot(b.w, b.d) / 2; this.builds.set(id, b); return b; }
+  _put(id, b) { b.id = id; b.poly = buildPoly(b, this.colliders); b.rad = polyRad(b, b.poly); this.builds.set(id, b); return b; }
+  // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
+  async setCollider(k, pts) {
+    const c = KINDS.includes(k) && cleanColl(pts); if (!c) return null;
+    await this.ready;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, updated_at) VALUES ($1, $2, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, updated_at = now()`, [k, JSON.stringify(c)]);
+    this.colliders[k] = c;
+    for (const b of this.builds.values()) if (b.k === k) { b.poly = buildPoly(b, this.colliders); b.rad = polyRad(b, b.poly); }
+    return c;
+  }
   buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
   async addBuild(o, by) {
     const b = this._clean(o); if (!b || this.builds.size >= BUILD_CAP) return null;
