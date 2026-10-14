@@ -201,6 +201,7 @@ const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x4f8fe8, roughness:
 const players = new Map();                     // id -> { holder, heading, name, from:{x,y,ts}, to:{x,y,ts} }
 let myId = null, myName = "", mySide = null;
 const me = { x: 0, y: 0 };                     // my ship, predicted locally and corrected by snapshots
+const corr = { x: 0, y: 0 };                   // the correction still to work off (a little each frame)
 let haveMe = false;
 let shipTemplate = null, shipMid = SPHERE_R;   // shipMid: the hull's center height, for the camera
 new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
@@ -473,6 +474,7 @@ let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direc
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
 const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
+const TURN_A = 70, TURN_K = 14, BANK_MAX = 0.32;   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
 function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced turn direction (+1 / -1), 0 = the short way
@@ -484,19 +486,36 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
   let target = null;
   if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // my own ship: toward the input or the reticle
   else if ((moving === undefined ? p.spd > 30 : moving) && spd > 1) target = Math.atan2(dx, dz);   // only frames that really moved
-  if (target !== null && sign) {               // a reversal: keep turning the chosen way round until the nose arrives
-    const T2 = Math.PI * 2, r = ((sign * (target - p.heading)) % T2 + T2) % T2;
-    if (r > 1e-3 && r < T2 - 1e-3) p.heading += sign * Math.min(TURN * dt, r);
-    p.heading = ((p.heading + Math.PI) % T2 + T2) % T2 - Math.PI;
-    p.holder.rotation.y = p.heading;
-  } else if (target !== null) {
-    let diff = (target - p.heading) % (Math.PI * 2);                  // shortest arc, valid however far the
-    if (diff > Math.PI) diff -= Math.PI * 2;                          // heading has accumulated (circling the
-    else if (diff < -Math.PI) diff += Math.PI * 2;                    // aim around the ship adds a turn per lap)
-    p.heading += Math.max(-TURN * dt, Math.min(TURN * dt, diff));
-    p.heading = ((p.heading + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;   // kept bounded
+  // (owner, 2026-10-14: smooth but responsive) the nose turns on a spring: it spins up to TURN fast (TURN_A) and eases
+  // into the target instead of starting and stopping dead. A reversal keeps turning the chosen way round.
+  const T2 = Math.PI * 2;
+  let want = 0;
+  if (target !== null && sign) { const r = ((sign * (target - p.heading)) % T2 + T2) % T2; want = r > 1e-3 && r < T2 - 1e-3 ? sign * Math.min(TURN, r * TURN_K, Math.sqrt(2 * TURN_A * r)) : 0; }
+  else if (target !== null) {
+    let diff = (target - p.heading) % T2;                             // shortest arc, valid however far the
+    if (diff > Math.PI) diff -= T2; else if (diff < -Math.PI) diff += T2;   // heading has accumulated
+    want = Math.sign(diff) * Math.min(TURN, Math.abs(diff) * TURN_K, Math.sqrt(2 * TURN_A * Math.abs(diff)));   // never faster than it can stop in (no overshoot)
+  }
+  if (target !== null || p.omega) {
+    const dw = want - (p.omega || 0), lim = TURN_A * dt;
+    p.omega = (p.omega || 0) + Math.max(-lim, Math.min(lim, dw));
+    if (target === null && Math.abs(p.omega) < 0.05) p.omega = 0;
+    let step = p.omega * dt;
+    if (target !== null && !sign) {             // never step past the target (big frames at a low frame rate)
+      let diff = (target - p.heading) % T2; if (diff > Math.PI) diff -= T2; else if (diff < -Math.PI) diff += T2;
+      if (Math.abs(step) >= Math.abs(diff) && Math.sign(step) === Math.sign(diff)) { step = diff; p.omega = 0; }
+    }
+    p.heading = ((p.heading + step + Math.PI) % T2 + T2) % T2 - Math.PI;   // kept bounded
     p.holder.rotation.y = p.heading;
   }
+}
+// (owner, 2026-10-14) a ship leans into its turns: the model rolls with how fast it's turning (smoothed), up to BANK_MAX
+function bank(p, dt) {
+  const v = p.holder.children[0]; if (!v) return;
+  const h = p.heading; let dh = h - (p.lastH ?? h); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; p.lastH = h;
+  const w = dt > 0 ? dh / dt : 0; p.turnRate = (p.turnRate || 0) + (w - (p.turnRate || 0)) * Math.min(1, dt * 10);
+  const roll = Math.max(-BANK_MAX, Math.min(BANK_MAX, -p.turnRate * 0.05));   // turning left (heading rising) dips the left wing
+  v.rotation.z += (roll - v.rotation.z) * Math.min(1, dt * 8);
 }
 
 // (owner, 2026-10-13) my ship against the blocks and the other ships (as drawn), as the server does it
@@ -683,7 +702,7 @@ function connect() {
           let tx = x + vel.x * lead, ty = y + vel.y * lead;
           if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
-          if (err > lspd * 0.4) { me.x = tx; me.y = ty; } else { me.x += (tx - me.x) * 0.1; me.y += (ty - me.y) * 0.1; }
+          if (err > lspd * 0.4) { me.x = tx; me.y = ty; corr.x = corr.y = 0; } else { corr.x = tx - me.x; corr.y = ty - me.y; }   // (owner, 2026-10-14) small errors are worked off smoothly every frame, not in jumps
           continue;
         }
         const p = players.get(id) || addPlayer(id, "");
@@ -783,6 +802,11 @@ renderer.setAnimationLoop(() => {
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }
     collideMe();
   }
+  if (haveMe && (corr.x || corr.y)) {           // (owner, 2026-10-14) the server's correction, eased in over about 0.1 s
+    const k = 1 - Math.exp(-dt * 10), cx = corr.x * k, cy = corr.y * k;
+    if (inside(me.x + cx, me.y + cy)) { me.x += cx; me.y += cy; }
+    corr.x -= cx; corr.y -= cy; if (Math.hypot(corr.x, corr.y) < 0.01) corr.x = corr.y = 0;
+  }
 
   // other ships are drawn 150 ms in the past on the server's clock, between the two snapshots around that moment
   // (only the last two used to be kept, older than the render time, so they stepped and never glided)
@@ -806,13 +830,16 @@ renderer.setAnimationLoop(() => {
           turnTgt = tgt;
         }
       } else if (aiming) turnSign = 0;
-      placeShip(p, me.x, me.y, dt, face, false, aiming ? 0 : turnSign); continue;
+      placeShip(p, me.x, me.y, dt, face, false, aiming ? 0 : turnSign); bank(p, dt); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
       let i = B.length - 1; while (i > 0 && B[i].t > rt) i--;
       const a = B[i], b = B[i + 1];
-      if (b && b.t > a.t && rt >= a.t) { const t = (rt - a.t) / (b.t - a.t); x = a.x + (b.x - a.x) * t; y = a.y + (b.y - a.y) * t;
+      if (b && b.t > a.t && rt >= a.t) {
+        const t = (rt - a.t) / (b.t - a.t), z = B[i - 1] || a, c = B[i + 2] || b;   // (owner, 2026-10-14) a smooth curve (Catmull-Rom) through the snapshots, not straight lines between them
+        const cr = (p0, p1, p2, p3) => 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t);
+        x = cr(z.x, a.x, b.x, c.x); y = cr(z.y, a.y, b.y, c.y);
         let dh = (b.h - a.h) % (Math.PI * 2); if (dh > Math.PI) dh -= Math.PI * 2; else if (dh < -Math.PI) dh += Math.PI * 2; h = a.h + dh * t; }
       else if (!b && i > 0 && rt > a.t) {      // past the newest: carry on along its last motion briefly, then hold
         const z = B[i - 1], k = Math.min(rt - a.t, 120) / Math.max(1, a.t - z.t); x = a.x + (a.x - z.x) * k; y = a.y + (a.y - z.y) * k; h = a.h;
@@ -820,6 +847,7 @@ renderer.setAnimationLoop(() => {
     }
     placeShip(p, x, y, dt);
     if (h !== null) { p.heading = h; p.holder.rotation.y = h; }   // the owner's own heading, as they see it
+    bank(p, dt);
   }
 
   // right-click aiming (owner): the reticle is the ground point under the pointer, CLAMPED to the leash circle (push
