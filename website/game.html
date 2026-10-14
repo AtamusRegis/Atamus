@@ -155,19 +155,23 @@
     * { scrollbar-width: thin; scrollbar-color: #5c6676 transparent; }
     ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #5c6676; border-radius: 4px; } ::-webkit-scrollbar-thumb:hover { background: #727d8f; }
-    /* (owner, 2026-10-13) the hotbar (3 slots) and the inventory panel (5 x 2), in the same look */
-    #hotbar { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; gap: 6px; z-index: 6; }
-    #cap { bottom: 80px !important; }
-    #inv-panel { position: fixed; left: 50%; bottom: 102px; transform: translateX(-50%); z-index: 7; padding: 10px 12px 12px; background: var(--panel-grad); border-radius: var(--radius); box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
-    .inv-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; color: var(--text-dim); }
-    .inv-grid { display: grid; grid-template-columns: repeat(5, 56px); grid-template-rows: repeat(2, 56px); gap: 6px; }
-    .inv-slot { position: relative; width: 56px; height: 56px; border-radius: 6px; background: rgba(0,0,0,0.35); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); display: grid; place-items: center; }
-    #hotbar .inv-slot { background: var(--panel-grad); box-shadow: 0 6px 18px rgba(0,0,0,0.45); }
-    .inv-num { position: absolute; left: 5px; top: 3px; font: 600 10px var(--font); color: var(--text-faint); pointer-events: none; }
-    .inv-item { width: 40px; height: 40px; border-radius: 7px; background: var(--gold-grad); box-shadow: inset 0 -6px 10px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.35); cursor: grab; touch-action: none; }
+    /* (owner, 2026-10-13) the hotbar (3 slots) and the inventory panel (5 x 2), in the old game's slot style: a dark tray
+       (rgba(14,19,30,.82)) holding darker wells (rgba(0,0,0,.35)); a filled slot gets a thin warm inset ring, a slot under a
+       dragged item a cyan outline, the slot number tiny and faint in the corner */
+    #hotbar { position: fixed; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; gap: 3px; padding: 3px; background: rgba(14,19,30,0.82); border-radius: 7px; box-shadow: var(--shadow); z-index: 6; }
+    #cap { bottom: 64px !important; }
+    #inv-panel { position: fixed; left: 50%; bottom: 86px; transform: translateX(-50%); z-index: 7; padding: 6px 6px 6px; background: rgba(14,19,30,0.82); border-radius: 7px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
+    .inv-title { margin: 0 2px 5px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
+    .inv-grid { display: grid; grid-template-columns: repeat(5, 44px); grid-template-rows: repeat(2, 44px); gap: 3px; }
+    .inv-slot { position: relative; width: 44px; height: 44px; border-radius: 5px; background: rgba(0,0,0,0.35); display: grid; place-items: center; }
+    .inv-slot:has(.inv-item) { box-shadow: inset 0 0 0 1.5px rgba(255,160,70,0.85); }
+    .inv-slot:has(.inv-item):hover { background: rgba(255,255,255,0.08); }
+    .inv-slot.drop { outline: 1px solid #38c6ff; }
+    .inv-num { position: absolute; left: 2px; top: 0; font: 8px var(--font); color: var(--text-faint); pointer-events: none; }
+    .inv-item { width: 30px; height: 30px; border-radius: 5px; background: var(--gold-grad); box-shadow: inset 0 -5px 8px rgba(0,0,0,0.25); cursor: grab; touch-action: none; }
     .inv-item.inv-lifted { opacity: .3; }
-    .inv-ghost { position: fixed; left: 0; top: 0; z-index: 30; width: 44px; height: 44px; pointer-events: none; opacity: .9; }
-    html.touch #inv-panel { display: none; } html.touch #hotbar { bottom: 50px; } html.touch #cap { bottom: 20px !important; }
+    .inv-ghost { position: fixed; left: 0; top: 0; z-index: 30; width: 30px; height: 30px; pointer-events: none; opacity: .9; }
+    html.touch #inv-panel { display: none; } html.touch #hotbar { bottom: 50px; } html.touch .inv-slot { width: 48px; height: 48px; } html.touch #cap { bottom: 20px !important; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -185,7 +189,7 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="inventory.js?v=1791952659"></script>
+  <script src="inventory.js?v=1791952773"></script>
   <script src="adminpanel.js?v=1791952387"></script>
   <script type="module" src="game3d.js?v=1791952659"></script>
 </body>

@@ -75,6 +75,7 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 ## Hotbar and inventory (owner, 2026-10-13)
 
 - **A hotbar of 3 slots** at the bottom center (numbered 1–3), with the capacitor bar above it.
+- **Styled like the old game's slots** (owner, 2026-10-13): a dark tray holding darker wells, a thin warm ring on a filled slot, a cyan outline on the slot under a dragged item, the slot number tiny and faint in the corner.
 - **TAB, when not typing, opens and closes the inventory panel** (Escape closes it too): **5 × 2 slots**, above the capacitor bar. (In the chat input TAB switches the channel instead.)
 - **For now there's one placeholder item** ("Test Item", a gold square) to **drag between any of the 13 slots** — hotbar and inventory; dropping it on a filled slot swaps them. A mouse or a finger drags. Where it sits is kept in this browser (nothing on the server yet; `website/inventory.js`). The panel is hidden on touch; the hotbar shows.
 

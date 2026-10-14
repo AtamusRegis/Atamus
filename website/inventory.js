@@ -1,6 +1,6 @@
 // (owner, 2026-10-13) The hotbar (3 slots, bottom center) and the inventory panel (5 x 2 slots), opened and closed with TAB
 // when not typing (Escape closes it too). For now there's one placeholder item to drag between any of the 13 slots
-// (dropping on a filled slot swaps them). Drag works with a mouse or a finger. Kept in this browser for now (nothing on
+// (dropping on a filled slot swaps them). Drag works with a mouse or a finger. Styled like the old game's hotbar slots. Kept in this browser for now (nothing on
 // the server yet). Item names show on hover.
 (function () {
   const HOT = 3, INV = 10, KEY = "atamus.inv";
@@ -41,12 +41,17 @@
     it.classList.add("inv-lifted");
     move(e);
   }, true);
-  const move = (e) => { if (!drag) return; drag.ghost.style.transform = "translate(" + (e.clientX - 22) + "px," + (e.clientY - 22) + "px)"; };
+  let over = null;                             // the slot under a dragged item (outlined)
+  const move = (e) => {
+    if (!drag) return; drag.ghost.style.transform = "translate(" + (e.clientX - 15) + "px," + (e.clientY - 15) + "px)";
+    const at = document.elementFromPoint(e.clientX, e.clientY), sl = at && at.closest && at.closest(".inv-slot");
+    if (sl !== over) { if (over) over.classList.remove("drop"); over = sl; if (over) over.classList.add("drop"); }
+  };
   document.addEventListener("pointermove", (e) => { if (drag && e.pointerId === drag.id) move(e); }, true);
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
     const at = document.elementFromPoint(e.clientX, e.clientY), to = at && at.closest && at.closest(".inv-slot");
-    const from = drag.from; drag.ghost.remove(); drag = null;
+    const from = drag.from; drag.ghost.remove(); drag = null; if (over) { over.classList.remove("drop"); over = null; }
     if (to && to.dataset.slot && to.dataset.slot !== from && (to.dataset.slot[0] === "h" || !panel.hidden)) {
       const k = to.dataset.slot; [slots[k], slots[from]] = [slots[from], slots[k]]; save();
     }
