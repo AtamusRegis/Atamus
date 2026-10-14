@@ -144,10 +144,10 @@ function hexShapeBand() {
   const shape = new THREE.Shape(pts(HEX_FLAT / 2));
   shape.holes.push(new THREE.Path(pts(HEX_FLAT / 2 - 25).reverse()));
   const geo = new THREE.ShapeGeometry(shape); geo.rotateX(-Math.PI / 2);
-  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9, depthWrite: false }));   // (no depth: the haze always draws over it)
+  return new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.9, depthWrite: false }));
 }
-let border = hexShapeBand(); border.position.y = 0.3; scene.add(border);
-function rebuildBorder() { scene.remove(border); border.geometry.dispose(); border = hexShapeBand(); border.position.y = 0.3; scene.add(border); }   // when the hello changes the size
+let border = hexShapeBand(); border.position.y = 1.5; border.renderOrder = 3; scene.add(border);   // (owner, 2026-10-14) drawn over the haze
+function rebuildBorder() { scene.remove(border); border.geometry.dispose(); border = hexShapeBand(); border.position.y = 1.5; border.renderOrder = 3; scene.add(border); }   // when the hello changes the size
 
 // (owner, 2026-10-13) the load circle: the server sends only the players (and later objects) within LOAD_R of
 // this ship. Drawn for now, a thin ring around the ship.
