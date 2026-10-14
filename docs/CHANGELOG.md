@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-13
 
+- **Reversals turn the remembered way (owner):** flipping WASD to the opposite direction now turns the ship through the last middle direction you used (A W D, then A D A D turns over the top each time), instead of always the same side.
 - **Dot cursor (owner):** the mouse cursor is hidden in the game; a small white dot shows where it points, everywhere on the page including the UI.
 - **Fading aim line; Weapon helpers toggle (owner):** the right-click line now fades out toward the reticle and has no end dot. The blue leash circle is hidden unless the new Weapon helpers checkbox (top right, off by default) is on.
 - **Fix: reversing was sluggish (owner).** Pushing the other way while moving used only the weak off-nose thrust to cancel the old motion, so it was much slower than stopping first. Now the part of a direction change that slows the current motion brakes at the braking rate; reversing is as quick as stop-and-go.

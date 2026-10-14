@@ -194,10 +194,12 @@ function addPlayer(id, name, x = 0, y = 0) {
   players.set(id, p); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
+let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
+const REVERSAL = THREE.MathUtils.degToRad(170);   // an input change this big counts as a reversal
 const TURN = 8;                                // rad/s (owner, 2026-10-13: 3x slower than the first 12, then doubled to 8)
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
-function placeShip(p, x, y, dt, face, moving) {
+function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced turn direction (+1 / -1), 0 = the short way
   const prev = p.holder.position, nx = toWorld(x, y, 0);
   const dx = nx.x - prev.x, dz = nx.z - prev.z;
   prev.copy(nx);
@@ -206,7 +208,12 @@ function placeShip(p, x, y, dt, face, moving) {
   let target = null;
   if (face) target = Math.atan2(face.x - nx.x, face.z - nx.z);        // my own ship: toward the input or the reticle
   else if ((moving === undefined ? p.spd > 30 : moving) && spd > 1) target = Math.atan2(dx, dz);   // only frames that really moved
-  if (target !== null) {
+  if (target !== null && sign) {               // a reversal: keep turning the chosen way round until the nose arrives
+    const T2 = Math.PI * 2, r = ((sign * (target - p.heading)) % T2 + T2) % T2;
+    if (r > 1e-3 && r < T2 - 1e-3) p.heading += sign * Math.min(TURN * dt, r);
+    p.heading = ((p.heading + Math.PI) % T2 + T2) % T2 - Math.PI;
+    p.holder.rotation.y = p.heading;
+  } else if (target !== null) {
     let diff = (target - p.heading) % (Math.PI * 2);                  // shortest arc, valid however far the
     if (diff > Math.PI) diff -= Math.PI * 2;                          // heading has accumulated (circling the
     else if (diff < -Math.PI) diff += Math.PI * 2;                    // aim around the ship adds a turn per lap)
@@ -436,7 +443,22 @@ renderer.setAnimationLoop(() => {
     if (p.id === myId) {                       // (owner) the nose turns toward the input, not the drift
       // (owner, 2026-10-13) while aiming (right button, with or without the middle), it turns toward the reticle instead
       const face = aiming && myAim ? myAim : (d.x || d.y) ? { x: me.x + d.x, z: -me.y - d.y } : null;
-      placeShip(p, me.x, me.y, dt, face, false); continue;
+      // (owner, 2026-10-13) reversals turn through the last "middle" direction: going A W D, then D A D A..., the nose
+      // swings over the top (W) every time instead of whichever way is shortest. Each input direction change that
+      // isn't a reversal records the direction it came from as the middle; a reversal then picks the turn direction
+      // whose arc passes through it, fixed until the input changes again.
+      if (!aiming && (d.x || d.y)) {
+        const T2 = Math.PI * 2, tgt = Math.atan2(d.x, -d.y), w = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
+        if (turnTgt === null) turnTgt = tgt;
+        else if (Math.abs(w(tgt - turnTgt)) > 1e-3) {
+          if (Math.abs(w(tgt - turnTgt)) > REVERSAL) {
+            turnSign = 0;
+            if (turnMid !== null) { const r = ((tgt - p.heading) % T2 + T2) % T2, m = ((turnMid - p.heading) % T2 + T2) % T2; turnSign = m < r ? 1 : -1; }
+          } else { turnMid = turnTgt; turnSign = 0; }
+          turnTgt = tgt;
+        }
+      } else if (aiming) turnSign = 0;
+      placeShip(p, me.x, me.y, dt, face, false, aiming ? 0 : turnSign); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
     if (B.length) {
