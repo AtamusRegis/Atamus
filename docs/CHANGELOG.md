@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Nebula clouds (owner):** a third Build menu slot places colored, drifting nebula clouds (Q picks the color theme) whose outline can be reshaped in the world (drag corners, add them from an edge's middle, right-click to remove). Ships fly through them; inside, a ship fades the deeper it goes (25% at 150 m in), and a ship sitting still is invisible unless you're in the same cloud within 100 m.
 - **Fix: S didn't reverse a moving ship.** Pressing S while flying forward swung the motion round slowly, so the ship kept going forward; it now brakes and then backs up.
 - **Slower turning (owner):** A / D turn at 0.5 rad/s (was 2).
 - **Ship-relative controls (owner):** W flies the way the ship faces, S flies it backward (slower), A and D turn it. Sprint works only flying forward, and now also while aiming.

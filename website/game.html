@@ -216,6 +216,12 @@
     /* (owner, 2026-10-14) a health bar over a damaged ship */
     .hp-bar { position: fixed; left: 0; top: 0; z-index: 4; width: 56px; height: 5px; margin: -3px 0 0 -28px; border-radius: 3px; background: rgba(0,0,0,0.6); overflow: hidden; pointer-events: none; }
     .hp-bar i { display: block; height: 100%; }
+    /* (owner, 2026-10-14) a nebula cloud's outline handles in the Build menu */
+    #cloud-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+    #cloud-handles .ch-line { fill: none; stroke: rgba(255,255,255,0.45); stroke-width: 1.5; stroke-dasharray: 6 5; pointer-events: none; }
+    #cloud-handles .ch-pt { fill: #ffffff; stroke: #6b4fd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #cloud-handles .ch-pt:hover { fill: #d9ccff; }
+    #cloud-handles .ch-mid { fill: rgba(255,255,255,0.6); pointer-events: auto; cursor: pointer; } #cloud-handles .ch-mid:hover { fill: #fff; }
+    html.touch #cloud-handles { display: none !important; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -235,6 +241,6 @@
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
   <script src="adminpanel.js?v=1791952387"></script>
-  <script type="module" src="game3d.js?v=1791972130"></script>
+  <script type="module" src="game3d.js?v=1791973084"></script>
 </body>
 </html>

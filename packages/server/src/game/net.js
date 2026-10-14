@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -172,7 +172,7 @@ export function attachGameServer(httpServer) {
 
   // ---- (owner, 2026-10-14) objects (Build pieces "b", blocks "k") are sent only to players whose load circle reaches
   // them: each socket keeps the ids it has been sent (ws.known), topped up and trimmed twice a second as ships move ----
-  const msgOf = (kind, o) => kind === "b" ? { t: "build", o: [o.id, o.k, o.x, o.y, o.w, o.d, o.r] } : { t: "block", b: [o.id, o.x, o.y] };
+  const msgOf = (kind, o) => kind === "b" ? { t: "build", o: buildMsg(o) } : { t: "block", b: [o.id, o.x, o.y] };
   const goneOf = (kind, ids) => kind === "b" ? ids.map((id) => ({ t: "unbuild", id })) : [{ t: "block", gone: ids.map(Number) }];
   const reach = (p, kind, o) => Math.hypot(o.x - p.x, o.y - p.y) - (kind === "b" ? o.far : BLOCK_HALF * 1.5) <= LOAD_R;
   const sockOf = (ws) => { if (!ws.known) ws.known = { b: new Set(), k: new Set() }; return ws.known; };

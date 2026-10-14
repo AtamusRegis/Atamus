@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791970376";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1791973084";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -367,7 +367,7 @@ function updateVis() {                         // the shadows from where my ship
     const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
   }
   // (owner, 2026-10-14) ships cast no shadows (only blocks and Build pieces do)
-  for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
+  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
   visCam.position.set(vx, 2000, -vy); visCam.lookAt(vx, 0, -vy); visU.visC.value.set(vx, vy);
@@ -383,7 +383,7 @@ const asPts = (v) => { const out = []; for (let i = 0; i < v.length; i += 2) out
 const walls = () => {                          // everything that blocks sight, with a bounding box each
   const out = [], h = BLOCK_HALF;
   for (const b of blocks.values()) out.push({ v: [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h], x0: b.x - h, x1: b.x + h, y0: b.y - h, y1: b.y + h });
-  for (const b of builds.values()) if (b.k !== "ship") out.push({ v: b.poly, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
+  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud") out.push({ v: b.poly, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
   return out;
 };
 const VIS_LO = 0.25, VIS_HI = 0.75;          // (owner) the visibility at which a ship starts to show / is fully solid
@@ -404,23 +404,38 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
   for (const [bx, by] of B) if (test(bx, by, pa[0], pa[1], true)) clear++;
   return { f: piv + (1 - PIV_W) * clear / Math.max(1, A.length + B.length), lines };
 }
+// (owner, 2026-10-14) nebula clouds hide ships inside them: the deeper in (from the nearest edge), the fainter, down to
+// 25% at 150 m in; a ship sitting still in a cloud is invisible, unless I'm in that cloud too within 100 m of it
+const CLOUD_DEEP = 150, CLOUD_MIN = 0.25, CLOUD_NEAR = 100, STILL = 3;
+function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
+function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
+function cloudFactor(x, y, spd) {
+  let f = 1;
+  for (const b of builds.values()) {
+    if (b.k !== "cloud" || !b.poly || Math.hypot(x - b.x, y - b.y) > b.rad + 1 || !inPoly(x, y, b.poly)) continue;
+    const d = Math.min(1, edgeDist(x, y, b.poly) / CLOUD_DEEP), deep = 1 - (1 - CLOUD_MIN) * d * d * (3 - 2 * d);
+    const meNear = haveMe && inPoly(me.x, me.y, b.poly) && Math.hypot(me.x - x, me.y - y) <= CLOUD_NEAR;
+    f = Math.min(f, spd < STILL && !meNear ? 0 : deep);
+  }
+  return f;
+}
 function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
     const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the aim bounds
-    const look = (vis, poly, x, y) => {
+    const look = (vis, poly, x, y, spd = 99) => {
       if (!vis) return; seen.add(vis);
       const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
-      const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; visTargets.set(vis, t);
+      const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd); visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z);
+    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0));
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
     // (owner, 2026-10-14) opacity rises smoothly from 0 at 25% visible to solid at 75% (no steps); it fades in fast
     // (about 0.15 s) and out slowly (about 0.6 s), so ships show promptly but don't flicker at corners
-    const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x);
+    const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
     const k = Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; for (const m of v.userData.mats) m.transparent = t.a < 0.999; }
@@ -576,7 +591,7 @@ function collideMe() {                       // (owner, 2026-10-14) by the ship'
   let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
   const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
-  for (const b of builds.values()) { if (b.k === "ship") continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
+  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
   for (const p of players.values()) {          // (owner, 2026-10-14) other ships: pushed apart, trading momentum like the server does
     if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
     const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
@@ -612,7 +627,7 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { if (b.k === "ship") continue; const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
+  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
   for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
     if (p.id === myId || !p.near) continue;
     const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
@@ -647,7 +662,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
+const build = initBuild({ noiseTex, onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
   botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
@@ -1208,4 +1223,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r })); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { burst: (x, y, s) => burst(x, y, s), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

@@ -81,7 +81,7 @@ export const SHIP_R = 45, BLOCK_HALF = 25;
 // (owner, 2026-10-13) the admin Build menu's pieces: a shape (square, cylinder or triangle) with a footprint w (east-west)
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
-export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
+export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship", "cloud"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
 // (owner, 2026-10-14) each kind's collider outline, in the model's own frame as fractions of its footprint (x across
 // its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
 // them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
@@ -148,6 +148,18 @@ export function cleanColl(pts, min = 3, max = 64) {
     out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
   return out;
 }
+// (owner, 2026-10-14) nebula clouds: an outline of 3-64 points in meters around the cloud's pivot (|coord| up to 3,000),
+// turned by r and scaled by w / 100; CLOUD_THEMES color themes. They don't block movement, sight or aim.
+export const CLOUD_THEMES = 5;
+export function cleanCloud(pts) {
+  if (!Array.isArray(pts) || pts.length < 3 || pts.length > 64) return null;
+  const out = [];
+  for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    out.push([Math.round(Math.max(-3000, Math.min(3000, x)) * 10) / 10, Math.round(Math.max(-3000, Math.min(3000, y)) * 10) / 10]); }
+  return out;
+}
+export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.sin(b.r), out = []; for (const [lx, ly] of b.extra.pts) { const x = lx * s, y = ly * s; out.push(b.x + x * c - y * n, b.y + x * n + y * c); } return out; }
+export const buildMsg = (b) => (b.extra ? [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra] : [b.id, b.k, b.x, b.y, b.w, b.d, b.r]);
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
 const SQ3 = Math.sqrt(3);
@@ -189,7 +201,8 @@ export class World3D {
     for (const o of (await pool.query(`SELECT k, pts, pivot, mover, vis FROM world3d_colliders`)).rows) {
       if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
-    const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
+    await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-14) a nebula cloud's outline and color theme
+    const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r, extra FROM world3d_builds`);
     for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
   }
 
@@ -291,7 +304,7 @@ export class World3D {
       const n = satPush(polys.get(p), squarePoly(b.x, b.y, BLOCK_HALF)); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
     for (const p of ps) for (const b of this.builds.values()) {
-      if (b.k === "ship") continue;           // test ships collide as ships (their stand-in players), below
+      if (b.k === "ship" || b.k === "cloud") continue;   // (clouds don't block)           // test ships collide as ships (their stand-in players), below
       const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + rads.get(p); if (dx * dx + dy * dy > R * R) continue;
       const n = satPush(polys.get(p), b.mpoly); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
@@ -337,7 +350,12 @@ export class World3D {
     if (x === null || y === null || w === null || d === null || r === null || !inside(x, y)) return null;
     const cl = (v) => Math.max(BUILD_MIN, Math.min(BUILD_MAX, v)), rd = (v) => Math.round(v * 100) / 100;
     const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
-    return { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
+    const b = { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
+    if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
+      const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
+      if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
+    }
+    return b;
   }
   _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b); return b; }
   // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players
@@ -350,7 +368,9 @@ export class World3D {
     return p;
   }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
-  _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
+  _shape(b) {
+    if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
+    b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
   async setCollider(k, pts, pivot, mover, vis) {   // (owner) the aim bounds, the pivot, the movement ellipse and the visibility points together
     const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
@@ -360,11 +380,11 @@ export class World3D {
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
     return { pts: c, pv, mv, vis: vs };
   }
-  buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
+  buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
   async addBuild(o, by) {
     const b = this._clean(o); if (!b || this.builds.size >= BUILD_CAP) return null;
     await this.ready;
-    const { rows } = await pool.query(`INSERT INTO world3d_builds (k, x, y, w, d, r, by_user) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`, [b.k, b.x, b.y, b.w, b.d, b.r, String(by)]);
+    const { rows } = await pool.query(`INSERT INTO world3d_builds (k, x, y, w, d, r, by_user, extra) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`, [b.k, b.x, b.y, b.w, b.d, b.r, String(by), b.extra ? JSON.stringify(b.extra) : null]);
     return this._put(String(rows[0].id), b);
   }
   setBuild(id, o) {                          // an edit: kept at once, written to the database with the next save
@@ -386,7 +406,7 @@ export class World3D {
   }
   async saveDirty() {
     for (const p of this.players.values()) if (p.dirty && !p.bot) await this._save(p);
-    for (const b of this.builds.values()) if (b.dirty) { b.dirty = false; await pool.query(`UPDATE world3d_builds SET k = $2, x = $3, y = $4, w = $5, d = $6, r = $7, updated_at = now() WHERE id = $1`, [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
+    for (const b of this.builds.values()) if (b.dirty) { b.dirty = false; await pool.query(`UPDATE world3d_builds SET k = $2, x = $3, y = $4, w = $5, d = $6, r = $7, extra = $8, updated_at = now() WHERE id = $1`, [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra ? JSON.stringify(b.extra) : null]); }
   }
 
   // compact: [id, x (cm), y (cm), heading (mrad)] for every player within the viewer's load circle (themselves included)

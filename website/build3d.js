@@ -8,8 +8,19 @@
 import * as THREE from "./vendor/three.module.js";
 
 export const SHAPES = ["square", "cylinder", "triangle"];
-const KINDS = [...SHAPES, "ship"];
-const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", ship: "Ship" };
+const KINDS = [...SHAPES, "ship", "cloud"];
+const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", ship: "Ship", cloud: "Nebula Cloud" };
+// (owner, 2026-10-14) nebula clouds: their own outline (meters around the pivot, before turning and scaling; w = scale %)
+// and a color theme (Q). Each theme: deep, main and highlight colors.
+export const CLOUD_THEMES = [
+  [[0.3, 0.1, 0.5], [0.8, 0.3, 0.75], [1, 0.75, 0.95]],    // violet / pink
+  [[0.04, 0.28, 0.38], [0.1, 0.72, 0.8], [0.75, 1, 1]],    // teal
+  [[0.45, 0.15, 0.03], [0.95, 0.55, 0.15], [1, 0.9, 0.6]], // amber
+  [[0.03, 0.3, 0.14], [0.2, 0.78, 0.45], [0.85, 1, 0.8]],  // emerald
+  [[0.4, 0.03, 0.08], [0.9, 0.22, 0.25], [1, 0.75, 0.6]],  // crimson
+];
+export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.sin(b.r), out = []; for (const [lx, ly] of b.extra.pts) { const x = lx * s, y = ly * s; out.push(b.x + x * c - y * n, b.y + x * n + y * c); } return out; }
+const CLOUD_START = [[-150, -150], [150, -150], [150, 150], [-150, 150]];
 let SHIP_D = 90;                               // a test ship's footprint: a circle the size of a real ship's collider
 let BUILD_H = 50;
 const MIN = 5, MAX = 1000;
@@ -122,16 +133,19 @@ export function initBuild(ctx) {
         gl_FragColor = vec4(col * a, a);
       }`,
   });
-  const holo = (obj, on) => obj.traverse((o) => { if (!o.isMesh) return; if (on) { if (!o.userData.mat) o.userData.mat = o.material; o.material = holoMat; } else if (o.userData.mat) { o.material = o.userData.mat; delete o.userData.mat; } });
+  const holo = (obj, on) => obj.userData.k === "cloud" || obj.traverse((o) => { if (!o.isMesh) return; if (on) { if (!o.userData.mat) o.userData.mat = o.material; o.material = holoMat; } else if (o.userData.mat) { o.material = o.userData.mat; delete o.userData.mat; } });
 
   // poly / srad: the sight outline; mpoly / rad: the movement ellipse (what ships bump into)
-  const hold = (b) => { b.poly = buildPoly(b, colliders, pivots); b.srad = polyRad(b, b.poly); b.mpoly = movePoly(b, movers, pivots); b.rad = polyRad(b, b.mpoly); };
+  const hold = (b) => {
+    if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.srad = b.rad = polyRad(b, b.poly); return; }
+    b.poly = buildPoly(b, colliders, pivots); b.srad = polyRad(b, b.poly); b.mpoly = movePoly(b, movers, pivots); b.rad = polyRad(b, b.mpoly); };
   const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
     // (owner, 2026-10-14) a test ship is drawn by its stand-in ship (it acts as a player); only while held does it get
     // a hologram of its own here
     if (b.k === "ship" && !(held && held.id === b.id)) { if (b.mesh) { scene.remove(b.mesh); b.mesh = null; } hold(b); return; }
+    if (b.k === "cloud") { placeCloud(b); hold(b); if (ctx.onChange) ctx.onChange(); return; }
     if (!b.mesh) {
       // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
       b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], ctx.farMat(pieceMat));   // (not drawn past the sight limit)
@@ -141,9 +155,10 @@ export function initBuild(ctx) {
     const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
     hold(b); if (ctx.onChange) ctx.onChange();   // (the line-of-sight shadows need redrawing)
   }
-  function setBuild([id, k, x, y, w, d, r]) {
+  function setBuild([id, k, x, y, w, d, r, extra]) {
     if (held && held.id === id) return;        // the piece I'm holding is ahead of the server's echo
-    const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); builds.set(id, b); place(b);
+    if (dragPt && dragPt.id === id) return;    // nor the cloud whose point I'm dragging
+    const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); if (extra) b.extra = extra; builds.set(id, b); place(b);
   }
   function unBuild(id) {
     const b = builds.get(id); if (!b) return;
@@ -164,13 +179,19 @@ export function initBuild(ctx) {
   const bar = document.createElement("div"); bar.id = "build-bar"; bar.hidden = true;
   const slot = document.createElement("div"); slot.className = "inv-slot build-slot"; bar.appendChild(slot);
   const shipSlot = document.createElement("div"); shipSlot.className = "inv-slot build-slot"; shipSlot.title = NAMES.ship; bar.appendChild(shipSlot);   // (owner) the second option: test ships
+  const cloudSlot = document.createElement("div"); cloudSlot.className = "inv-slot build-slot"; cloudSlot.title = NAMES.cloud; bar.appendChild(cloudSlot);   // (owner, 2026-10-14) the third: nebula clouds
+  let cloudTheme = 0;
+  const drawCloudSlot = () => { const c = CLOUD_THEMES[cloudTheme][1].map((v) => Math.round(v * 255)).join(",");
+    cloudSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30"><path d="M8 21 Q3 21 4 16 Q5 12 9 13 Q10 7 16 8 Q21 8 22 13 Q27 13 26 18 Q25 22 21 21 Z" fill="rgba(' + c + ',0.5)" stroke="rgb(' + c + ')" stroke-width="1.6"/></svg>'; };
+  drawCloudSlot();
+  cloudSlot.addEventListener("click", () => { if (picking && picking.k === "cloud") stopPicking(); else startPicking("cloud"); });
   shipSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>';
   let slotShape = "square";
   const ICON = { square: '<rect x="5" y="5" width="20" height="20" rx="1.5"/>', cylinder: '<circle cx="15" cy="15" r="10.5"/>', triangle: '<path d="M15 4 L26 25 L4 25 Z"/>' };
   const drawSlot = () => { slot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[slotShape] + "</svg>"; slot.title = NAMES[slotShape];
-    slot.classList.toggle("sel", !!picking && picking.k !== "ship"); shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); };
+    slot.classList.toggle("sel", !!picking && SHAPES.includes(picking.k)); shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); if (typeof cloudSlot !== "undefined") cloudSlot.classList.toggle("sel", !!picking && picking.k === "cloud"); };
   drawSlot();
-  slot.addEventListener("click", () => { if (picking && picking.k !== "ship") stopPicking(); else startPicking(slotShape); });
+  slot.addEventListener("click", () => { if (picking && SHAPES.includes(picking.k)) stopPicking(); else startPicking(slotShape); });
   shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
   document.body.append(bar);
   function mountBtn() { const row = document.getElementById("chat-row") || document.body; if (!btn.parentNode) row.insertBefore(btn, row.firstChild); if (!xbtn.parentNode) row.insertBefore(xbtn, row.firstChild); }
@@ -187,8 +208,9 @@ export function initBuild(ctx) {
   let ghost = null;
   function startPicking(k) {
     drop(true); if (ghost) { scene.remove(ghost); ghost = null; }
-    const keep = picking && picking.k !== "ship" && k !== "ship" ? picking : null;   // switching shapes keeps the size and turn
-    picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : { k, w: keep ? keep.w : 50, d: keep ? keep.d : 50, r: keep ? keep.r : 0 }; drawSlot();
+    const keep = picking && SHAPES.includes(picking.k) && SHAPES.includes(k) ? picking : null;   // switching shapes keeps the size and turn
+    picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } }
+      : { k, w: keep ? keep.w : 50, d: keep ? keep.d : 50, r: keep ? keep.r : 0 }; drawSlot();
   }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
 
@@ -197,8 +219,106 @@ export function initBuild(ctx) {
   function ndc(cx, cy) { const r = canvas.getBoundingClientRect(); return { x: ((cx - r.left) / r.width) * 2 - 1, y: -((cy - r.top) / r.height) * 2 + 1 }; }
   function ground(cx, cy) { ray.setFromCamera(ndc(cx, cy), camera); return ray.ray.intersectPlane(plane, hit) ? { x: hit.x, y: -hit.z } : null; }
 
+
+  // ---- (owner, 2026-10-14) nebula clouds: a colored, drifting gradient filling the outline, fading out at its edges ----
+  const CLOUD_Y = 4;                           // just above the grid, under the ships
+  // One flat sheet over the outline's box (plus a margin for the wisps); the shader works out each pixel's distance to the
+  // outline (any shape, dents too), so the cloud fills it right to the edge and frays a little past it.
+  const CLOUD_PAD = 70;
+  function cloudGeo(pts) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const g = new THREE.PlaneGeometry(x1 - x0 + 2 * CLOUD_PAD, y1 - y0 + 2 * CLOUD_PAD); g.rotateX(-Math.PI / 2); g.translate((x0 + x1) / 2, 0, -(y0 + y1) / 2);
+    return g;
+  }
+  const cloudT = { value: 0 };
+  function cloudMat(v, pts, ghost) {
+    const th = CLOUD_THEMES[v] || CLOUD_THEMES[0], P = []; for (let i = 0; i < 64; i++) { const p = pts[i] || pts[0]; P.push(new THREE.Vector2(p[0], p[1])); }
+    return new THREE.ShaderMaterial({
+      uniforms: { nt: { value: ctx.noiseTex }, uT: cloudT, P: { value: P }, N: { value: pts.length }, uS: { value: 1 }, uG: { value: ghost ? 0.55 : 1 },
+        c1: { value: new THREE.Vector3(...th[0]) }, c2: { value: new THREE.Vector3(...th[1]) }, c3: { value: new THREE.Vector3(...th[2]) } },
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      vertexShader: "varying vec2 vL; varying vec2 vG; void main() { vL = vec2(position.x, -position.z); vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }",
+      fragmentShader: `uniform sampler2D nt; uniform float uT, uS, uG; uniform vec2 P[64]; uniform int N; uniform vec3 c1, c2, c3; varying vec2 vL; varying vec2 vG;
+        void main() {
+          float d = 1e9; bool inside = false;
+          for (int i = 0; i < 64; i++) { if (i >= N) break;
+            vec2 a = P[i], b = P[i + 1 == N ? 0 : i + 1], e = b - a, w = vL - a;
+            d = min(d, length(w - e * clamp(dot(w, e) / max(dot(e, e), 1e-6), 0.0, 1.0)));
+            if ((a.y > vL.y) != (b.y > vL.y) && vL.x < e.x * (vL.y - a.y) / e.y + a.x) inside = !inside; }
+          float di = (inside ? d : -d) * uS;                  // meters in from the edge (negative outside)
+          vec2 q = vG / 260.0, t = vec2(uT * 0.006, uT * 0.004);
+          vec2 wp = texture2D(nt, q * 0.5 + t * 0.5).gb - 0.5;
+          float n = texture2D(nt, q + wp * 0.6 + t).r, f = texture2D(nt, vG / 110.0 + wp - t * 1.5).g, m = texture2D(nt, vG / 520.0 - t * 0.7).a;
+          float edge = smoothstep(-15.0, 45.0, di + (n - 0.5) * 120.0 + (f - 0.5) * 50.0);
+          float core = smoothstep(0.0, 220.0, di);
+          float dens = clamp((n - 0.3) * 2.2 + (f - 0.5) * 0.8, 0.0, 1.0);
+          vec3 col = mix(c1, c2, clamp(dens * 0.8 + core * 0.35, 0.0, 1.0));
+          col = mix(col, c3, smoothstep(0.55, 0.85, m * 0.6 + dens * 0.5) * 0.6);
+          float a = edge * (0.4 + 0.45 * dens + 0.15 * core) * uG;
+          gl_FragColor = vec4(col, a);   // (screen colors, no conversion)
+        }`,
+    });
+  }
+  function placeCloud(b) {
+    const key = JSON.stringify(b.extra.pts) + "|" + b.extra.v;
+    if (b.mesh && b.mesh.userData.key !== key) { scene.remove(b.mesh); b.mesh.geometry.dispose(); b.mesh.material.dispose(); b.mesh = null; }
+    if (!b.mesh) { b.mesh = new THREE.Mesh(cloudGeo(b.extra.pts), cloudMat(b.extra.v, b.extra.pts)); b.mesh.renderOrder = 1; b.mesh.frustumCulled = false; Object.assign(b.mesh.userData, { k: "cloud", id: b.id, key }); scene.add(b.mesh); }
+    b.mesh.material.uniforms.uS.value = b.w / 100; b.mesh.material.uniforms.uG.value = held && held.id === b.id ? 0.55 : 1;   // held: see-through
+    b.mesh.position.copy(toWorld(b.x, b.y, CLOUD_Y)); b.mesh.scale.setScalar(b.w / 100); b.mesh.rotation.y = b.r;
+  }
+  // ---- editing a cloud's outline in the world (Build menu open): drag a corner, click an edge's middle dot to add one,
+  // right-click a corner to remove it (3 at least). Clicking inside the cloud picks it all up as usual. ----
+  const NSv = "http://www.w3.org/2000/svg";
+  const cLayer = document.createElementNS(NSv, "svg"); cLayer.id = "cloud-handles"; cLayer.setAttribute("width", "100%"); cLayer.setAttribute("height", "100%"); document.body.appendChild(cLayer);
+  let dragPt = null, lastPtSend = 0;
+  const toLocal = (b, g) => { const s = b.w / 100, c = Math.cos(-b.r), n = Math.sin(-b.r), dx = g.x - b.x, dy = g.y - b.y; return [Math.round((dx * c - dy * n) / s * 10) / 10, Math.round((dx * n + dy * c) / s * 10) / 10]; };
+  const scr2 = (x, y) => { const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(x, CLOUD_Y, -y).project(camera); return [r.left + (v.x + 1) / 2 * r.width, r.top + (1 - v.y) / 2 * r.height, v.z < 1]; };
+  // the handles are kept between frames (only moved), and one listener on the layer reads which one was pressed
+  let hKey = "";
+  function cloudHandles() {
+    const list = [];
+    if (open && !picking && !held) for (const b of builds.values()) {
+      if (b.k !== "cloud" || !b.poly) continue;
+      const pts = []; for (let i = 0; i < b.poly.length; i += 2) pts.push(scr2(b.poly[i], b.poly[i + 1]));
+      if (pts.some((p) => p[2] && p[0] > -50 && p[0] < innerWidth + 50 && p[1] > -50 && p[1] < innerHeight + 50)) list.push([b, pts]);
+    }
+    const key = list.map(([b, pts]) => b.id + ":" + pts.length).join(",");
+    if (key !== hKey) {
+      hKey = key; while (cLayer.firstChild) cLayer.removeChild(cLayer.firstChild);
+      for (const [b, pts] of list) {
+        const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "ch-line"); cLayer.appendChild(pl);
+        pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 4); c.setAttribute("class", "ch-mid"); c.dataset.id = b.id; c.dataset.i = i; cLayer.appendChild(c); });
+        pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 6); c.setAttribute("class", "ch-pt"); c.dataset.id = b.id; c.dataset.i = i; cLayer.appendChild(c); });
+      }
+    }
+    let el = cLayer.firstChild;
+    for (const [, pts] of list) {
+      el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
+      pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; el.setAttribute("cx", (p[0] + q[0]) / 2); el.setAttribute("cy", (p[1] + q[1]) / 2); el = el.nextSibling; });
+      pts.forEach((p) => { el.setAttribute("cx", p[0]); el.setAttribute("cy", p[1]); el = el.nextSibling; });
+    }
+  }
+  cLayer.addEventListener("contextmenu", (e) => e.preventDefault());
+  cLayer.addEventListener("pointerdown", (e) => {
+    const t = e.target, b = t.dataset && builds.get(t.dataset.id); if (!b || b.k !== "cloud") return;
+    const i = +t.dataset.i; e.preventDefault(); e.stopPropagation();
+    if (t.classList.contains("ch-mid")) {                   // the middle of an edge: a new corner there
+      if (e.button !== 0 || b.extra.pts.length >= 64) return;
+      const a = b.extra.pts[i], z = b.extra.pts[(i + 1) % b.extra.pts.length]; b.extra.pts.splice(i + 1, 0, [(a[0] + z[0]) / 2, (a[1] + z[1]) / 2]); startPt(e, b, i + 1);
+    } else if (e.button === 2) { if (b.extra.pts.length > 3) { b.extra.pts.splice(i, 1); place(b); push(b, true); } }
+    else if (e.button === 0) startPt(e, b, i);
+  });
+  function startPt(e, b, i) { dragPt = { id: b.id, i, pid: e.pointerId }; try { cLayer.setPointerCapture(e.pointerId); } catch {} place(b); }
+  cLayer.addEventListener("pointermove", (e) => {
+    if (!dragPt || e.pointerId !== dragPt.pid) return; const b = builds.get(dragPt.id), g = ground(e.clientX, e.clientY); if (!b || !g) return;
+    b.extra.pts[dragPt.i] = toLocal(b, g); place(b);
+    const t = performance.now(); if (t - lastPtSend > 90) { lastPtSend = t; push(b, true); }
+  });
+  const endPt = (e) => { if (!dragPt || e.pointerId !== dragPt.pid) return; const b = builds.get(dragPt.id); dragPt = null; try { cLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  cLayer.addEventListener("pointerup", endPt); cLayer.addEventListener("pointercancel", endPt);
+
   // ---- picking up and dropping placed pieces ----
-  const fields = (b) => ({ k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
+  const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b) }); }
   function create(o) { send({ t: "bnew", ...o }); }
   function pickUp(b, g) {
@@ -215,7 +335,7 @@ export function initBuild(ctx) {
   canvas.addEventListener("pointerdown", (e) => {
     if (!open || e.button !== 0) return;
     const g = ground(e.clientX, e.clientY);
-    if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r }); return; }
+    if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r, ...(picking.extra ? { extra: picking.extra } : {}) }); return; }
     if (held) { const b = builds.get(held.id); if (b && ctx.inside(b.x, b.y)) drop(true); return; }
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
     const hits = ray.intersectObjects([...builds.values()].map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
@@ -249,6 +369,8 @@ export function initBuild(ctx) {
     if (e.code === "KeyR") { eat(); rDown = true; return; }
     if (e.code === "KeyQ") { eat(); if (e.repeat) return;
       if ((picking && picking.k === "ship") || (!picking && b && b.k === "ship")) return;   // a test ship has no variations
+      if (picking && picking.k === "cloud") { cloudTheme = picking.extra.v = (picking.extra.v + 1) % CLOUD_THEMES.length; drawCloudSlot(); if (ghost) { scene.remove(ghost); ghost = null; } return; }   // (owner) a cloud's variation: its color theme
+      if (!picking && b && b.k === "cloud") { b.extra.v = (b.extra.v + 1) % CLOUD_THEMES.length; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); return; }
       const next = (k) => SHAPES[(SHAPES.indexOf(k) + 1) % SHAPES.length];
       if (picking) { picking.k = slotShape = next(picking.k); if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
       else if (b) { b.k = next(b.k); place(b); push(b, true); }
@@ -258,23 +380,23 @@ export function initBuild(ctx) {
   }, true);
   addEventListener("keyup", (e) => { if (e.code === "KeyR") rDown = false; });
   addEventListener("blur", () => { rDown = false; });
-  function copy(b) { clip = { k: b.k, w: b.w, d: b.d, r: b.r }; try { localStorage.setItem("atamus.buildclip", JSON.stringify(clip)); } catch {} }
+  function copy(b) { clip = b.extra ? { k: b.k, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, w: b.w, d: b.d, r: b.r }; try { localStorage.setItem("atamus.buildclip", JSON.stringify(clip)); } catch {} }
 
   // ---- every frame: the blueprint and the held piece follow the pointer; R turns them ----
   let lastF = performance.now();
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
-    eRender(); gizFrame();
+    eRender(); gizFrame(); cloudT.value = now / 1000; cloudHandles();
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
       picking.r = Math.atan2(Math.sin(picking.r - turn), Math.cos(picking.r - turn));
       if (!ghost || ghost.userData.k !== picking.k) {
         if (ghost) scene.remove(ghost);
-        ghost = picking.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[picking.k], holoMat);
-        holo(ghost, true); ghost.userData.k = picking.k; scene.add(ghost);
+        ghost = picking.k === "ship" ? ctx.makeShip() : picking.k === "cloud" ? new THREE.Mesh(cloudGeo(picking.extra.pts), cloudMat(picking.extra.v, picking.extra.pts, true)) : new THREE.Mesh(GEO[picking.k], holoMat);
+        if (picking.k !== "cloud") holo(ghost, true); ghost.userData.k = picking.k; scene.add(ghost);
       }
-      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, 0)); if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
+      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, picking.k === "cloud" ? CLOUD_Y : 0)); if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
     } else if (held) {
       const b = builds.get(held.id); if (!b) { held = null; return; }
       let moved = false;
@@ -511,7 +633,7 @@ export function initBuild(ctx) {
     const loop = (v, col) => { for (let i = 0; i < v.length; i += 2) { P.push(v[i], 2, -v[i + 1], v[(i + 2) % v.length], 2, -v[(i + 3) % v.length]); C.push(...col, ...col); } };
     const dots = (v) => { const a = 4; for (let i = 0; i < v.length; i += 2) { const x = v[i], y = v[i + 1]; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_VIS); } };
     const cross = (x, y) => { const a = 8; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_PIV); };
-    for (const b of builds.values()) { if (b.k === "ship") continue; loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }   // (test ships: drawn with the ships below)
+    for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; loop(b.poly, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }   // (test ships: drawn with the ships below)
     for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { loop(s.sight, C_SIGHT); loop(s.move, C_MOVE); if (s.vis) dots(s.vis); cross(s.x, s.y); }
     if (P.length > gizCap) { gizCap = Math.max(P.length, gizCap * 2, 3000); gizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); gizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); }
     gizGeo.attributes.position.array.set(P); gizGeo.attributes.color.array.set(C); gizGeo.attributes.position.needsUpdate = gizGeo.attributes.color.needsUpdate = true;
