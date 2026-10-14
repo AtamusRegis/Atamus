@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, pushFromPoly, segPoly } from "./build3d.js?v=1791959047";
+import { initBuild, builds, colliders, pivots, buildPoly, pushFromPoly, segPoly } from "./build3d.js?v=1791959451";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -225,7 +225,8 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   const wrap = new THREE.Group(); wrap.add(src);
   shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
   for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId)); }
-  try { build.refreshShips(); } catch {}   // the Build menu's test ships
+  try { build.refreshShips(); } catch {}
+  applyShipPivot();   // the Build menu's test ships
 }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
 function makeVisual(remote) {
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
@@ -322,18 +323,24 @@ function updateVis() {                         // the shadows from where my ship
     if (Math.abs(b.x - vx) > VIS_S + BLOCK_HALF || Math.abs(b.y - vy) > VIS_S + BLOCK_HALF) continue;
     const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
   }
-  // (owner, 2026-10-14) ships block sight too: each other ship (and test ship) casts the cone behind its circle, starting
-  // just past the ship itself so it never hides its own model
-  const shipCast = (cx, cy) => {
-    const dx = cx - vx, dy = cy - vy, D = Math.hypot(dx, dy); if (D <= SHIP_R + 1 || D > VIS_S) return;
-    const half = Math.asin(SHIP_R / D), a = Math.atan2(dy, dx), d0 = D + 52, r = [];
-    for (const t of [a - half, a + half]) { const c = Math.cos(t), s = Math.sin(t); r.push([vx + c * d0, vy + s * d0, vx + c * F, vy + s * F]); }
-    const [[n1x, n1y, f1x, f1y], [n2x, n2y, f2x, f2y]] = r;
-    pos.push(n1x, 0, -n1y, n2x, 0, -n2y, f2x, 0, -f2y, n1x, 0, -n1y, f2x, 0, -f2y, f1x, 0, -f1y);
+  // (owner, 2026-10-14) ships block sight too, by the ship's sight outline (the Object Editor's): only the edges facing
+  // away from me cast, so a ship never hides its own model
+  const backEdges = (v) => {
+    let area = 0; for (let i = 0; i < v.length; i += 2) area += v[i] * v[(i + 3) % v.length] - v[(i + 2) % v.length] * v[i + 1];
+    const sg = area >= 0 ? 1 : -1, one = [];
+    for (let i = 0; i < v.length; i += 2) {
+      const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
+      if (((by - ay) * ((ax + bx) / 2 - vx) - (bx - ax) * ((ay + by) / 2 - vy)) * sg > 0) { one.length = 0; one.push(ax, ay, bx, by); edges2(one); }
+    }
   };
-  for (const p of players.values()) if (p.id !== myId && p.near && p.holder.visible) shipCast(p.holder.position.x, -p.holder.position.z);
-  for (const b of builds.values()) if (b.k === "ship") shipCast(b.x, b.y);
-  for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) edges(b.poly);
+  const edges2 = (e) => {                      // one edge's shadow quad (not closed back to its start like edges())
+    const [ax, ay, bx, by] = e, da = Math.hypot(ax - vx, ay - vy) || 1e-3, db = Math.hypot(bx - vx, by - vy) || 1e-3;
+    const fax = vx + (ax - vx) / da * F, fay = vy + (ay - vy) / da * F, fbx = vx + (bx - vx) / db * F, fby = vy + (by - vy) / db * F;
+    pos.push(ax, 0, -ay, bx, 0, -by, fbx, 0, -fby, ax, 0, -ay, fbx, 0, -fby, fax, 0, -fay);
+  };
+  for (const p of players.values()) if (p.id !== myId && p.near && p.holder.visible && Math.hypot(p.holder.position.x - vx, -p.holder.position.z - vy) < VIS_S) backEdges(shipSight(p));
+  for (const b of builds.values()) if (b.k === "ship" && Math.hypot(b.x - vx, b.y - vy) < VIS_S) backEdges(b.poly);
+  for (const b of builds.values()) if (b.k !== "ship" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
   shade.position.x = vx; shade.position.z = -vy; shade.visible = haveMe; shadeHex.value = HEX_FLAT / 2; shadeT.value = performance.now() / 1000;
@@ -344,12 +351,17 @@ function updateVis() {                         // the shadows from where my ship
 function sightBlocked(x0, y0, x1, y1) {
   for (const b of blocks.values()) { const h = BLOCK_HALF; if (segPoly(x0, y0, x1, y1, [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]) !== null) return true; }
   for (const b of builds.values()) if (b.k !== "ship" && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
-  // (owner, 2026-10-14) ships (and test ships) in between, other than the one being looked at
-  const circ = (cx, cy) => { if (Math.hypot(cx - x1, cy - y1) < 1) return false; const dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-6) return false;
-    const t = Math.max(0, Math.min(1, ((cx - x0) * dx + (cy - y0) * dy) / L2)); return t > 0 && t < 1 && Math.hypot(x0 + dx * t - cx, y0 + dy * t - cy) < SHIP_R; };
-  for (const p of players.values()) if (p.id !== myId && p.near && circ(p.holder.position.x, -p.holder.position.z)) return true;
-  for (const b of builds.values()) if (b.k === "ship" && circ(b.x, b.y)) return true;
+  // (owner, 2026-10-14) ships (and test ships) in between, by their sight outlines, other than the one being looked at
+  for (const p of players.values()) if (p.id !== myId && p.near && Math.hypot(p.holder.position.x - x1, -p.holder.position.z - y1) > 1 && segPoly(x0, y0, x1, y1, shipSight(p)) !== null) return true;
+  for (const b of builds.values()) if (b.k === "ship" && Math.hypot(b.x - x1, b.y - y1) > 1 && segPoly(x0, y0, x1, y1, b.poly) !== null) return true;
   return false;
+}
+// a player ship's sight outline where it's drawn (the ship kind's outline and pivot, turned with its heading)
+function shipSight(p) { return buildPoly({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
+// (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
+function applyShipPivot() {
+  const pv = pivots.ship || [0, 0], D = 2 * SHIP_R;
+  for (const p of players.values()) { const v = p.holder.children[0]; if (v) { v.position.x = -pv[0] * D; v.position.z = pv[1] * D; } }
 }
 
 function addPlayer(id, name, x = 0, y = 0) {
@@ -358,7 +370,7 @@ function addPlayer(id, name, x = 0, y = 0) {
   holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId)); scene.add(holder);
   holder.visible = id === myId;                // others show once a snapshot has them inside the load circle
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y }, near: false };   // buf: recent snapshot positions on the server's clock; near: inside my load circle
-  players.set(id, p); return p;
+  players.set(id, p); applyShipPivot(); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 let turnTgt = null, turnMid = null, turnSign = 0;   // my own ship's input direction, the last "middle" direction, a forced turn way
@@ -395,7 +407,7 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
 function collideMe() {
   const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF + SHIP_R && Math.abs(q.y - b.y) <= BLOCK_HALF + SHIP_R) pushFromBlock(q, b);
-  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy <= R * R) pushFromPoly(q, b.poly, SHIP_R, pushOut); }   // Build menu pieces
+  for (const b of builds.values()) { const dx = q.x - b.x, dy = q.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy <= R * R) pushFromPoly(q, b.mpoly, SHIP_R, pushOut); }   // Build menu pieces (their movement ellipses)
   for (const p of players.values()) { if (p.id === myId || !p.near) continue; pushOut(q, p.holder.position.x, -p.holder.position.z, 2 * SHIP_R); }
   if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
 }
@@ -413,7 +425,7 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // Build menu pieces
+  for (const b of builds.values()) { const t = segPoly(x0, y0, x1, y1, b.mpoly); if (t !== null) hit(t); }   // Build menu pieces (what you'd bump into)
   for (const p of players.values()) {              // segment vs circle
     if (p.id === myId || !p.near) continue;
     const cx = p.holder.position.x - x0, cy = -p.holder.position.z - y0, L2 = dx * dx + dy * dy; if (L2 < 1e-9) continue;
@@ -449,7 +461,7 @@ addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift"
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+const build = initBuild({ scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), makeShip: () => makeVisual(true), inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
@@ -535,7 +547,7 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders);
+      build.setStaff(amStaff); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);

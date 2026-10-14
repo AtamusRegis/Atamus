@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Object Editor: Sight, Movement, Pivot (owner):** each object kind now has a Sight outline (blocks line of sight; starts as a rectangle around the object), a Movement ellipse (what ships bump into) and a Pivot (the point it turns around), each edited in the [X] window. The ship's outline and pivot apply to player ships too (shadows and how the model turns).
 - **Object Editor (owner):** staff get [X] (or the X key): a window showing each Build object top down with its collider outline; drag corners, click an edge's middle dot to add one, right-click to remove. Changes save and apply to every piece of that kind for everyone. For staff, X no longer drops a block.
 - **Ships block sight (owner, to try out):** other ships and test ships now cast line-of-sight shadows, hiding ships behind them.
 - **Sight fade starts further out (owner):** the haze now begins thickening 200 m past the leash circle instead of at it (solid 400 m after that).

@@ -15,15 +15,37 @@ let BUILD_H = 50;
 const MIN = 5, MAX = 1000;
 
 // ---- the footprint, as the server works it out (keep the two the same) ----
-// (owner, 2026-10-14) each kind's collider outline, in the piece's own frame as fractions of its footprint (x across
+// (owner, 2026-10-14) each kind's collider outline, in the model's own frame as fractions of its footprint (x across
 // its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
-// them (any simple outline, concave allowed); these are the defaults.
-const ring = Array.from({ length: 24 }, (_, i) => [Math.round(Math.cos(i * Math.PI / 12) * 5000) / 10000, Math.round(Math.sin(i * Math.PI / 12) * 5000) / 10000]);
-export const COLL_DEFAULT = { square: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], triangle: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]], cylinder: ring, ship: ring };
-export function buildPoly(o, coll) {           // the outline in the world: [x0, y0, x1, y1, ...]
-  const loc = (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  for (const [ux, uy] of loc) { const lx = ux * o.w, ly = uy * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
+// them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
+// shapes' own square, the ship model's 59.4 x 100 m box.
+const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
+export const COLL_DEFAULT = { square: box(0.5, 0.5), triangle: box(0.5, 0.5), cylinder: box(0.5, 0.5), ship: box(0.33, 0.5556) };
+// (owner, 2026-10-14) each kind's pivot: the point of the model it turns around, in the same fractions. A piece's
+// position (x, y) is where its pivot is; the model and its outline sit around it. Default: the middle.
+function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
+  const c = Math.cos(o.r), s = Math.sin(o.r), out = [];
+  for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
+}
+// the sight outline in the world: [x0, y0, x1, y1, ...] (owner, 2026-10-14: it decides line of sight)
+export function buildPoly(o, coll, piv) { return toWorldPts(o, (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, (piv && piv[o.k]) || [0, 0]); }
+// (owner, 2026-10-14) the movement collider: an ellipse [cx, cy, rx, ry] in the same fractions (ships bump into it),
+// editable too; it starts as the footprint's own circle / ellipse. In the world, a 24-sided outline.
+export const MOVE_DEFAULT = { square: [0, 0, 0.5, 0.5], triangle: [0, 0, 0.5, 0.5], cylinder: [0, 0, 0.5, 0.5], ship: [0, 0, 0.5, 0.5] };
+export function movePoly(o, mov, piv) {
+  const m = (mov && mov[o.k]) || MOVE_DEFAULT[o.k] || MOVE_DEFAULT.square, loc = [];
+  for (let i = 0; i < 24; i++) loc.push([m[0] + Math.cos(i * Math.PI / 12) * m[2], m[1] + Math.sin(i * Math.PI / 12) * m[3]]);
+  return toWorldPts(o, loc, (piv && piv[o.k]) || [0, 0]);
+}
+export function cleanMove(m) {                 // a submitted ellipse, checked as hostile
+  if (!Array.isArray(m) || m.length !== 4) return null; const v = m.map(Number); if (!v.every(Number.isFinite)) return null;
+  const r4 = (x) => Math.round(x * 10000) / 10000, cl = (x, a, b) => Math.max(a, Math.min(b, x));
+  return [r4(cl(v[0], -1.5, 1.5)), r4(cl(v[1], -1.5, 1.5)), r4(cl(v[2], 0.02, 1.5)), r4(cl(v[3], 0.02, 1.5))];
+}
+export function cleanPivot(pv) {               // a submitted pivot, checked as hostile: two finite numbers inside +-1.5
+  if (!Array.isArray(pv) || pv.length !== 2) return null; const [x, y] = pv.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000];
 }
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
 // a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
@@ -75,7 +97,7 @@ let GEO = geos();
 const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
 export const builds = new Map();
-export const colliders = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+export const colliders = {}, pivots = {}, movers = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -102,7 +124,9 @@ export function initBuild(ctx) {
   });
   const holo = (obj, on) => obj.traverse((o) => { if (!o.isMesh) return; if (on) { if (!o.userData.mat) o.userData.mat = o.material; o.material = holoMat; } else if (o.userData.mat) { o.material = o.userData.mat; delete o.userData.mat; } });
 
-  const hold = (b) => { b.poly = buildPoly(b, colliders); b.rad = polyRad(b, b.poly); };
+  // poly / srad: the sight outline; mpoly / rad: the movement ellipse (what ships bump into)
+  const hold = (b) => { b.poly = buildPoly(b, colliders, pivots); b.srad = polyRad(b, b.poly); b.mpoly = movePoly(b, movers, pivots); b.rad = polyRad(b, b.mpoly); };
+  const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
     if (!b.mesh) {
@@ -111,7 +135,7 @@ export function initBuild(ctx) {
       b.mesh.userData = { k: b.k, id: b.id }; scene.add(b.mesh);
       if (held && held.id === b.id) holo(b.mesh, true);
     }
-    b.mesh.position.copy(toWorld(b.x, b.y, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
+    const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
     hold(b);
   }
   function setBuild([id, k, x, y, w, d, r]) {
@@ -243,7 +267,7 @@ export function initBuild(ctx) {
         ghost = picking.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[picking.k], holoMat);
         holo(ghost, true); ghost.userData.k = picking.k; scene.add(ghost);
       }
-      ghost.visible = !!g; if (g) { ghost.position.copy(toWorld(g.x, g.y, 0)); if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
+      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, 0)); if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
     } else if (held) {
       const b = builds.get(held.id); if (!b) { held = null; return; }
       let moved = false;
@@ -266,14 +290,28 @@ export function initBuild(ctx) {
   const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
   const ceShape = document.createElement("div"), ceShip = document.createElement("div");
   ceShape.className = ceShip.className = "inv-slot build-slot"; ceShip.title = NAMES.ship; ceShip.innerHTML = shipSlot.innerHTML; ceSlots.append(ceShape, ceShip);
-  let eOpen = false, eKind = "square", eShape = "square", ePts = null, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (the outline that blocks line
+  // of sight: drag corners, click an edge's middle dot to add one, right-click to remove), Movement (the ellipse ships
+  // bump into: drag its middle to move it, a side handle to stretch it) and Pivot (the point the model turns around)
+  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePts = null, ePv = [0, 0], eMv = [0, 0, 0.5, 0.5], eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  const modes = document.createElement("div"); modes.className = "ce-modes";
+  for (const [k, label] of [["sight", "Sight"], ["move", "Movement"], ["pivot", "Pivot"]]) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
+  }
+  ceSlots.after(modes);
+  const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); };
   const fp = () => (eKind === "ship" ? SHIP_D : 100);   // the footprint shown, m
   const H = () => fp() * 1.0;                            // half the view, m
-  const toPx = ([ux, uy]) => [VIEW / 2 + ux * fp() * VIEW / (2 * H()), VIEW / 2 - uy * fp() * VIEW / (2 * H())];
-  const fromPx = (px, py) => { const k = (2 * H()) / (VIEW * fp()), lim = H() / fp(); return [Math.max(-lim, Math.min(lim, (px - VIEW / 2) * k)), Math.max(-lim, Math.min(lim, -(py - VIEW / 2) * k))]; };
+  const S = () => fp() * VIEW / (2 * H());               // px per footprint fraction
+  const toPx = ([ux, uy]) => [VIEW / 2 + ux * S(), VIEW / 2 - uy * S()];
+  const fromPx = (px, py) => { const lim = H() / fp(); return [Math.max(-lim, Math.min(lim, (px - VIEW / 2) / S())), Math.max(-lim, Math.min(lim, -(py - VIEW / 2) / S()))]; };
   const drawESlots = () => { ceShape.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[eShape] + "</svg>"; ceShape.title = NAMES[eShape];
     ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
-  function eSetKind(k) { eKind = k; if (k !== "ship") eShape = k; ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); eDrag = null; drawESlots(); eDraw(); }
+  function eSetKind(k) {
+    eKind = k; if (k !== "ship") eShape = k;
+    ePts = (colliders[k] || COLL_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice();
+    eDrag = null; drawESlots(); drawModes(); eDraw();
+  }
   ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
   ceShip.addEventListener("click", () => eSetKind("ship"));
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
@@ -302,37 +340,54 @@ export function initBuild(ctx) {
   }
   const SV = "http://www.w3.org/2000/svg";
   const sv = (tag, attrs) => { const n = document.createElementNS(SV, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); ceSvg.appendChild(n); return n; };
+  const handle = (x, y, r, cls, onDown) => { const c = sv("circle", { cx: x, cy: y, r, class: cls }); c.addEventListener("pointerdown", onDown); return c; };
   function eDraw() {
     while (ceSvg.firstChild) ceSvg.removeChild(ceSvg.firstChild);
     if (!ePts) return;
-    const px = ePts.map(toPx);
-    sv("polygon", { points: px.map((p) => p.join(",")).join(" "), class: "ce-poly" });
-    px.forEach((p, i) => {                       // the middle of each edge: click to add a corner there
-      const q = px[(i + 1) % px.length], m = sv("circle", { cx: (p[0] + q[0]) / 2, cy: (p[1] + q[1]) / 2, r: 4, class: "ce-mid" });
-      m.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); ePts.splice(i + 1, 0, fromPx((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)); eGrab(e, i + 1); });
-    });
-    px.forEach((p, i) => {
-      const c = sv("circle", { cx: p[0], cy: p[1], r: 6, class: "ce-pt" });
-      c.addEventListener("pointerdown", (e) => {
+    const px = ePts.map(toPx), [ex, ey] = toPx([eMv[0], eMv[1]]), erx = eMv[2] * S(), ery = eMv[3] * S(), [vx, vy] = toPx(ePv);
+    // all three always drawn; the one being edited is bright and has handles
+    sv("polygon", { points: px.map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
+    sv("ellipse", { cx: ex, cy: ey, rx: erx, ry: ery, class: "ce-ell" + (eMode === "move" ? "" : " dim") });
+    sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
+    if (eMode === "sight") {
+      px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
+        const q = px[(i + 1) % px.length];
+        handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); ePts.splice(i + 1, 0, fromPx((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)); eGrab(e, "pt", i + 1); });
+      });
+      px.forEach((p, i) => handle(p[0], p[1], 6, "ce-pt", (e) => {
         e.preventDefault();
         if (e.button === 2) { if (ePts.length > 3) { ePts.splice(i, 1); eSave(); eDraw(); } return; }   // right-click removes it
-        if (e.button === 0) eGrab(e, i);
-      });
-    });
+        if (e.button === 0) eGrab(e, "pt", i);
+      }));
+    } else if (eMode === "move") {
+      handle(ex, ey, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "mc"); } });
+      for (const [hx, hy, ax] of [[ex + erx, ey, "x"], [ex - erx, ey, "x"], [ex, ey - ery, "y"], [ex, ey + ery, "y"]])
+        handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "m" + ax); } });
+    } else {
+      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); eGrab(e, "pv"); } });
+    }
   }
-  function eGrab(e, i) { eDrag = { i, id: e.pointerId }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
+  function eGrab(e, type, i) { eDrag = { type, i, id: e.pointerId }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} eDraw(); }
   ceSvg.addEventListener("pointermove", (e) => {
     if (!eDrag || e.pointerId !== eDrag.id) return;
-    const r = ceSvg.getBoundingClientRect(); ePts[eDrag.i] = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height); eDraw();
+    const r = ceSvg.getBoundingClientRect(), u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
+    if (eDrag.type === "pt") ePts[eDrag.i] = u;
+    else if (eDrag.type === "mc") { eMv[0] = u[0]; eMv[1] = u[1]; }
+    else if (eDrag.type === "mx") eMv[2] = Math.max(0.02, Math.abs(u[0] - eMv[0]));
+    else if (eDrag.type === "my") eMv[3] = Math.max(0.02, Math.abs(u[1] - eMv[1]));
+    else if (eDrag.type === "pv") ePv = u;
+    eDraw();
   });
-  const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} eSave(); };
+  const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
-  function eSave() { send({ t: "coll", k: eKind, pts: ePts.map(([x, y]) => [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]) }); }
-  function setColl(k, pts) {
+  const r4 = (x) => Math.round(x * 10000) / 10000;
+  function eSave() { send({ t: "coll", k: eKind, pts: ePts.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), mv: eMv.map(r4) }); }
+  function setColl(k, pts, pv, mv) {
     if (!KINDS.includes(k) || !Array.isArray(pts)) return;
-    colliders[k] = pts;
-    for (const b of builds.values()) if (b.k === k) hold(b);
-    if (eOpen && eKind === k && !eDrag) { ePts = pts.map((q) => q.slice()); eDraw(); }
+    colliders[k] = pts; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(mv)) movers[k] = mv;
+    for (const b of builds.values()) if (b.k === k) place(b);
+    if (k === "ship" && ctx.onPivot) ctx.onPivot();
+    if (eOpen && eKind === k && !eDrag) { ePts = pts.map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = (movers[k] || MOVE_DEFAULT[k]).slice(); eDraw(); }
   }
   addEventListener("keydown", (e) => {
     if (ctx.typing() || !staff) return;
@@ -345,14 +400,17 @@ export function initBuild(ctx) {
     if (m.t === "build") { setBuild(m.o); return true; }
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
-    if (m.t === "coll") { setColl(m.k, m.pts); return true; }
+    if (m.t === "coll") { setColl(m.k, m.pts, m.pv, m.mv); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
-  function load(list, h, shipD, coll) {
+  function load(list, h, shipD, coll, piv, mov) {
     if (shipD) SHIP_D = shipD;
     for (const k of Object.keys(colliders)) delete colliders[k]; if (coll && typeof coll === "object") for (const k of KINDS) if (Array.isArray(coll[k])) colliders[k] = coll[k];
+    for (const o of [pivots, movers]) for (const k of Object.keys(o)) delete o[k];
+    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (mov && Array.isArray(mov[k])) movers[k] = mov[k]; }
+    if (ctx.onPivot) ctx.onPivot();
     if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
     held = null;
     for (const id of [...builds.keys()]) unBuild(id);

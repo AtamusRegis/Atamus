@@ -94,15 +94,37 @@ export function pushFromBlock(p, b) {                 // a ship's circle out of 
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
 export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
-// (owner, 2026-10-14) each kind's collider outline, in the piece's own frame as fractions of its footprint (x across
+// (owner, 2026-10-14) each kind's collider outline, in the model's own frame as fractions of its footprint (x across
 // its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
-// them (any simple outline, concave allowed); these are the defaults.
-const ring = Array.from({ length: 24 }, (_, i) => [Math.round(Math.cos(i * Math.PI / 12) * 5000) / 10000, Math.round(Math.sin(i * Math.PI / 12) * 5000) / 10000]);
-export const COLL_DEFAULT = { square: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], triangle: [[-0.5, -0.5], [0.5, -0.5], [0, 0.5]], cylinder: ring, ship: ring };
-export function buildPoly(o, coll) {           // the outline in the world: [x0, y0, x1, y1, ...]
-  const loc = (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, c = Math.cos(o.r), s = Math.sin(o.r), out = [];
-  for (const [ux, uy] of loc) { const lx = ux * o.w, ly = uy * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
+// them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
+// shapes' own square, the ship model's 59.4 x 100 m box.
+const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
+export const COLL_DEFAULT = { square: box(0.5, 0.5), triangle: box(0.5, 0.5), cylinder: box(0.5, 0.5), ship: box(0.33, 0.5556) };
+// (owner, 2026-10-14) each kind's pivot: the point of the model it turns around, in the same fractions. A piece's
+// position (x, y) is where its pivot is; the model and its outline sit around it. Default: the middle.
+function toWorldPts(o, loc, pv) {              // fractions of the footprint, around the pivot, into the world
+  const c = Math.cos(o.r), s = Math.sin(o.r), out = [];
+  for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
+}
+// the sight outline in the world: [x0, y0, x1, y1, ...] (owner, 2026-10-14: it decides line of sight)
+export function buildPoly(o, coll, piv) { return toWorldPts(o, (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, (piv && piv[o.k]) || [0, 0]); }
+// (owner, 2026-10-14) the movement collider: an ellipse [cx, cy, rx, ry] in the same fractions (ships bump into it),
+// editable too; it starts as the footprint's own circle / ellipse. In the world, a 24-sided outline.
+export const MOVE_DEFAULT = { square: [0, 0, 0.5, 0.5], triangle: [0, 0, 0.5, 0.5], cylinder: [0, 0, 0.5, 0.5], ship: [0, 0, 0.5, 0.5] };
+export function movePoly(o, mov, piv) {
+  const m = (mov && mov[o.k]) || MOVE_DEFAULT[o.k] || MOVE_DEFAULT.square, loc = [];
+  for (let i = 0; i < 24; i++) loc.push([m[0] + Math.cos(i * Math.PI / 12) * m[2], m[1] + Math.sin(i * Math.PI / 12) * m[3]]);
+  return toWorldPts(o, loc, (piv && piv[o.k]) || [0, 0]);
+}
+export function cleanMove(m) {                 // a submitted ellipse, checked as hostile
+  if (!Array.isArray(m) || m.length !== 4) return null; const v = m.map(Number); if (!v.every(Number.isFinite)) return null;
+  const r4 = (x) => Math.round(x * 10000) / 10000, cl = (x, a, b) => Math.max(a, Math.min(b, x));
+  return [r4(cl(v[0], -1.5, 1.5)), r4(cl(v[1], -1.5, 1.5)), r4(cl(v[2], 0.02, 1.5)), r4(cl(v[3], 0.02, 1.5))];
+}
+export function cleanPivot(pv) {               // a submitted pivot, checked as hostile: two finite numbers inside +-1.5
+  if (!Array.isArray(pv) || pv.length !== 2) return null; const [x, y] = pv.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000];
 }
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
 // a ship's circle (radius R) out of an outline (concave works): out through the nearest edge
@@ -156,7 +178,7 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.builds = new Map(); this.colliders = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -175,7 +197,11 @@ export class World3D {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_colliders (k TEXT PRIMARY KEY, pts JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-    for (const o of (await pool.query(`SELECT k, pts FROM world3d_colliders`)).rows) { const c = KINDS.includes(o.k) && cleanColl(o.pts); if (c) this.colliders[o.k] = c; }
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
+    for (const o of (await pool.query(`SELECT k, pts, pivot, mover FROM world3d_colliders`)).rows) {
+      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv;
+    }
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r FROM world3d_builds`);
     for (const o of rows) { const b = this._clean(o); if (b) this._put(String(o.id), b); }
   }
@@ -272,7 +298,7 @@ export class World3D {
     }
     for (const p of ps) for (const b of this.builds.values()) {
       const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + SHIP_R; if (dx * dx + dy * dy > R * R) continue;
-      const ox = p.x, oy = p.y; if (pushFromPoly(p, b.poly, SHIP_R)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
+      const ox = p.x, oy = p.y; if (pushFromPoly(p, b.mpoly, SHIP_R)) { if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; }
     }
     for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
       const a = ps[i], b = ps[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
@@ -306,15 +332,17 @@ export class World3D {
     const ship = o.k === "ship";            // (owner) a test ship: a parked ship, the size of a real one
     return { k: o.k, x: rd(x), y: rd(y), w: ship ? 2 * SHIP_R : rd(cl(w)), d: ship ? 2 * SHIP_R : rd(cl(d)), r: Math.round(wrapA(r) * 10000) / 10000 };
   }
-  _put(id, b) { b.id = id; b.poly = buildPoly(b, this.colliders); b.rad = polyRad(b, b.poly); this.builds.set(id, b); return b; }
+  _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); return b; }
+  // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
+  _shape(b) { b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, pts) {
-    const c = KINDS.includes(k) && cleanColl(pts); if (!c) return null;
+  async setCollider(k, pts, pivot, mover) {   // (owner) the sight outline, the pivot and the movement ellipse together
+    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k]; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, updated_at) VALUES ($1, $2, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, updated_at = now()`, [k, JSON.stringify(c)]);
-    this.colliders[k] = c;
-    for (const b of this.builds.values()) if (b.k === k) { b.poly = buildPoly(b, this.colliders); b.rad = polyRad(b, b.poly); }
-    return c;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, updated_at) VALUES ($1, $2, $3, $4, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv)]);
+    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv;
+    for (const b of this.builds.values()) if (b.k === k) this._shape(b);
+    return { pts: c, pv, mv };
   }
   buildList() { return [...this.builds.values()].map((b) => [b.id, b.k, b.x, b.y, b.w, b.d, b.r]); }
   async addBuild(o, by) {
