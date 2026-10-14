@@ -632,12 +632,12 @@ function drawMinimap(now) {
   const dpr = Math.min(devicePixelRatio || 1, 2), W = mm.clientWidth, H = mm.clientHeight;
   if (mm.width !== Math.round(W * dpr)) { mm.width = Math.round(W * dpr); mm.height = Math.round(H * dpr); }
   mmx.setTransform(dpr, 0, 0, dpr, 0, 0); mmx.clearRect(0, 0, W, H);
-  // (owner) zoom: the wheel over the minimap; zoomed in, it centers on your ship (fully from 2x). The minimap keeps
+  // (owner) zoom: the wheel over the minimap; zoomed in at all, your ship is at its center. The minimap keeps
   // its hexagon shape at every zoom (the map is drawn inside it); at 1x the frame is the map's own border.
   const Rv = (HEX_FLAT / 2) / Math.cos(Math.PI / 6), FR = W / 2 - 3, cx = W / 2, cy = H / 2;
   mmZoom = Math.min(mmZoom, mmMaxZoom(W));
   const k = FR / Rv * mmZoom;
-  const cf = Math.min(1, mmZoom - 1), ox = haveMe ? me.x * cf : 0, oy = haveMe ? me.y * cf : 0;   // centered on your ship from 2x in
+  const cf = mmZoom > 1.001 ? 1 : 0, ox = haveMe ? me.x * cf : 0, oy = haveMe ? me.y * cf : 0;   // (owner) centered on your ship whenever it isn't fully zoomed out
   const P = (x, y) => [cx + (x - ox) * k, cy - (y - oy) * k];
   const hexPath = (R, at) => { mmx.beginPath(); for (let i = 0; i < 6; i++) { const t = (Math.PI / 3) * i, [X, Y] = at(Math.cos(t) * R, Math.sin(t) * R); i ? mmx.lineTo(X, Y) : mmx.moveTo(X, Y); } mmx.closePath(); };
   const frame = (x, y) => [cx + x, cy - y];
