@@ -85,8 +85,8 @@
       const name = $("td", "ap-mono" + (p.side ? " " + p.side : ""), p.name.slice(0, 20)); name.title = p.name;
       const tot = p.totals || {};
       const kick = $("td", "ap-cell"); if (tot.kicks) kick.appendChild($("span", "ap-total", tot.kicks + (tot.kicks === 1 ? " kick" : " kicks")));
-      const mute = $("td", "ap-cell"); if (p.mute) mute.appendChild($("span", "ap-tag", "Mute " + left(p.mute))); if (tot.muted) mute.appendChild($("span", "ap-total", dur(tot.muted) + " muted"));
-      const ban = $("td", "ap-cell"); if (p.ban) ban.appendChild($("span", "ap-tag ban", "Ban " + left(p.ban))); if (tot.banned) ban.appendChild($("span", "ap-total", dur(tot.banned) + " banned"));
+      const mute = $("td", "ap-cell"); if (p.mute) mute.appendChild($("span", "ap-tag", "Mute " + left(p.mute))); if (tot.muted) mute.appendChild($("span", "ap-total", dur(tot.muted)));
+      const ban = $("td", "ap-cell"); if (p.ban) ban.appendChild($("span", "ap-tag ban", "Ban " + left(p.ban))); if (tot.banned) ban.appendChild($("span", "ap-total", dur(tot.banned)));
       const last = $("td", "ap-dim", p.online ? "now" : ago(p.lastPlayed));
       const d = $("td"), b = $("button", "", "Discipline"); b.addEventListener("click", () => act(p.id, p.name, p)); d.appendChild(b);
       tr.append(name, kick, mute, ban, last, d); tb.appendChild(tr);
