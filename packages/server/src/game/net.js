@@ -21,6 +21,7 @@ export function attachGameServer(httpServer) {
   // (owner, 2026-10-13) the admin panel's hooks into the world: who's online, kicks (and bans), mutes; and one account
   // per device (auth.js asks at login; a second account's socket on a device in use is refused below)
   // (owner, 2026-10-14) each connected player's staff role, for the badge by their name in chat (m: moderator, a: admin)
+  const builders = new Set();   // (owner, 2026-10-14) connected accounts that can use the Build menu
   const roles = new Map(), badge = (pid) => { const r = roles.get(pid); return r === "mod" ? "m" : r === "head" || r === "admin" ? "a" : undefined; };
   setGameHooks({
     staffChanged: (pid, role) => { roles.set(pid, role || null); const w = socks.get(pid); if (w) { try { w.send(JSON.stringify({ t: "staff" })); } catch {} } },   // (owner, 2026-10-14) made / removed as a moderator: their Admin button follows
@@ -70,7 +71,7 @@ export function attachGameServer(httpServer) {
 
     const old = socks.get(pid);                // (owner) one session per account: the new one replaces the old
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
-    socks.set(pid, ws); roles.set(pid, user.role || null);
+    socks.set(pid, ws); roles.set(pid, user.role || null); if (["head", "admin"].includes(user.role)) builders.add(pid);
 
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
@@ -166,7 +167,7 @@ export function attachGameServer(httpServer) {
     ws.on("close", () => {
       clearInterval(cmdReset);
       if (socks.get(pid) !== ws) return;       // replaced: the newer socket owns the player now
-      socks.delete(pid); mutes.delete(pid); roles.delete(pid);
+      socks.delete(pid); mutes.delete(pid); roles.delete(pid); builders.delete(pid);
       if (device && devs.get(device) === pid) devs.delete(device);
       if (!joined) return;
       world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));
@@ -230,6 +231,12 @@ export function attachGameServer(httpServer) {
       world.projEv.length = 0;
     }
   }, 50);
+  // (owner, 2026-10-14) for builders: where each test ship heading back to its route is going (drawn as a leash), 3 a second
+  setInterval(() => {
+    const g = []; for (const p of world.players.values()) if (p.bot && p.ai && p.ai.goal) g.push([p.id, Math.round(p.ai.goal.x), Math.round(p.ai.goal.y)]);
+    for (const [pid, ws] of socks) { if (ws.readyState !== ws.OPEN || !builders.has(pid)) continue; const me = world.players.get(pid); if (!me) continue;
+      ws.send(JSON.stringify({ t: "botgoals", g: g.filter(([id]) => { const q = world.players.get(id); return q && Math.hypot(q.x - me.x, q.y - me.y) <= LOAD_R; }) })); }
+  }, 333);
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)
   setInterval(() => {
     const ts = Date.now();

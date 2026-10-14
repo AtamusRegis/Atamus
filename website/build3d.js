@@ -444,6 +444,7 @@ export function initBuild(ctx) {
   // edge's middle dot to add one, right-click a point to remove it (one at least). Points are kept in meters from the spawn. ----
   const rLayer = document.createElementNS(NSv, "svg"); rLayer.id = "route-handles"; rLayer.setAttribute("width", "100%"); rLayer.setAttribute("height", "100%"); document.body.appendChild(rLayer);
   let rDrag = null, rKey = "", lastRSend = 0;
+  const botGoals = new Map();                  // (owner) stand-in id -> [x, y]: where a test ship heading back to its path is going (from the server)
   const ROUTE_START = [[250, 0], [250, 250], [0, 250]];
   function routeHandles() {
     const list = [];
@@ -457,6 +458,7 @@ export function initBuild(ctx) {
       rKey = key; while (rLayer.firstChild) rLayer.removeChild(rLayer.firstChild);
       for (const [b, pts] of list) {
         const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "rt-line"); rLayer.appendChild(pl);
+        const lz = document.createElementNS(NSv, "line"); lz.setAttribute("class", "rt-leash"); rLayer.appendChild(lz);   // (owner) back to its path, while it's heading there
         pts.forEach((p, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 4); c.setAttribute("class", "rt-mid"); c.dataset.id = b.id; c.dataset.i = i; rLayer.appendChild(c); });
         pts.forEach((p, i) => {
           if (i === 0) {                         // the spawn: an S, not draggable (moving the ship moves it)
@@ -466,33 +468,45 @@ export function initBuild(ctx) {
           }
           const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 6); c.setAttribute("class", "rt-pt"); c.dataset.id = b.id; c.dataset.i = i; rLayer.appendChild(c);
         });
+        const mv = document.createElementNS(NSv, "g"); mv.setAttribute("class", "rt-moveg");   // the middle handle: a square with a cross
+        const sq = document.createElementNS(NSv, "rect"); sq.setAttribute("x", -9); sq.setAttribute("y", -9); sq.setAttribute("width", 18); sq.setAttribute("height", 18); sq.setAttribute("rx", 3); sq.setAttribute("class", "rt-move"); sq.dataset.id = b.id;
+        const cr = document.createElementNS(NSv, "path"); cr.setAttribute("d", "M-5 0H5M0 -5V5"); mv.append(sq, cr); rLayer.appendChild(mv);
       }
     }
     let el = rLayer.firstChild;
-    for (const [, pts] of list) {
+    for (const [b, pts] of list) {
       el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
+      { const gl = botGoals.get("b" + b.id), q = gl && ctx.botPos ? ctx.botPos(b.id) : null;   // the leash: from the ship to where it's going back to
+        if (gl && q) { const a = scr2(q.x, q.y), z = scr2(gl[0], gl[1]); el.setAttribute("x1", a[0]); el.setAttribute("y1", a[1]); el.setAttribute("x2", z[0]); el.setAttribute("y2", z[1]); el.style.display = ""; } else el.style.display = "none";
+        el = el.nextSibling; }
       pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; el.setAttribute("cx", (p[0] + q[0]) / 2); el.setAttribute("cy", (p[1] + q[1]) / 2); el = el.nextSibling; });
       pts.forEach((p, i) => { if (i === 0) el.setAttribute("transform", "translate(" + p[0] + "," + p[1] + ")"); else { el.setAttribute("cx", p[0]); el.setAttribute("cy", p[1]); } el = el.nextSibling; });
+      { let cx = 0, cy = 0; for (const p of pts) { cx += p[0]; cy += p[1]; } el.setAttribute("transform", "translate(" + cx / pts.length + "," + cy / pts.length + ")"); el = el.nextSibling; }   // (the middle of the points)
     }
   }
   rLayer.addEventListener("contextmenu", (e) => e.preventDefault());
   rLayer.addEventListener("pointerdown", (e) => {
     const t = e.target, b = t.dataset && builds.get(t.dataset.id); if (!b || b.k !== "ship" || !b.extra || !b.extra.route) return;
     const i = +t.dataset.i, R = b.extra.route; e.preventDefault(); e.stopPropagation(); sel = b.id;
+    if (t.classList.contains("rt-move")) {      // (owner) the middle handle: the whole path (and its spawn) moves; the ship flies back to it
+      if (e.button !== 0) return; const g = ground(e.clientX, e.clientY); if (!g) return;
+      rDrag = { id: b.id, move: true, gx: g.x, gy: g.y, x0: b.x, y0: b.y, pid: e.pointerId }; try { rLayer.setPointerCapture(e.pointerId); } catch {} return;
+    }
     if (t.classList.contains("rt-mid")) {       // a new point in the middle of that leg (point i to i + 1; 0 is the spawn)
       if (e.button !== 0 || R.length >= 32) return;
       const all = [[0, 0], ...R], a = all[i], z = all[(i + 1) % all.length];
       R.splice(i, 0, [(a[0] + z[0]) / 2, (a[1] + z[1]) / 2]); startR(e, b, i + 1);
-    } else if (e.button === 2) { if (R.length > 1) { R.splice(i - 1, 1); push(b, true); } }
+    } else if (e.button === 2) { if (R.length > 1) { R.splice(i - 1, 1); push(b, true, true); } }
     else if (e.button === 0) startR(e, b, i);
   });
   function startR(e, b, i) { rDrag = { id: b.id, i, pid: e.pointerId }; try { rLayer.setPointerCapture(e.pointerId); } catch {} }
   rLayer.addEventListener("pointermove", (e) => {
     if (!rDrag || e.pointerId !== rDrag.pid) return; const b = builds.get(rDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g || !b.extra || !b.extra.route) return;
-    b.extra.route[rDrag.i - 1] = [Math.round((g.x - b.x) * 10) / 10, Math.round((g.y - b.y) * 10) / 10];
-    const t = performance.now(); if (t - lastRSend > 90) { lastRSend = t; push(b, true); }
+    if (rDrag.move) { const nx = rDrag.x0 + g.x - rDrag.gx, ny = rDrag.y0 + g.y - rDrag.gy; if (!ctx.inside(nx, ny)) return; b.x = Math.round(nx * 100) / 100; b.y = Math.round(ny * 100) / 100; hold(b); }
+    else b.extra.route[rDrag.i - 1] = [Math.round((g.x - b.x) * 10) / 10, Math.round((g.y - b.y) * 10) / 10];
+    const t = performance.now(); if (t - lastRSend > 90) { lastRSend = t; push(b, true, true); }
   });
-  const endR = (e) => { if (!rDrag || e.pointerId !== rDrag.pid) return; const b = builds.get(rDrag.id); rDrag = null; try { rLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  const endR = (e) => { if (!rDrag || e.pointerId !== rDrag.pid) return; const b = builds.get(rDrag.id); rDrag = null; try { rLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true, true); };
   rLayer.addEventListener("pointerup", endR); rLayer.addEventListener("pointercancel", endR);
   // the selected ship's buttons, above it
   const sBox = document.createElement("div"); sBox.id = "ship-btns"; sBox.hidden = true;
@@ -501,10 +515,10 @@ export function initBuild(ctx) {
   const selShip = () => { const b = sel && builds.get(sel); return b && b.k === "ship" ? b : null; };
   routeBtn.addEventListener("click", () => { const b = selShip(); if (!b) return; b.extra = { ...(b.extra || {}) };
     if (b.extra.route) delete b.extra.route; else b.extra.route = ROUTE_START.map((q) => q.slice());
-    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true); });
+    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true, true); });
   atkBtn.addEventListener("click", () => { const b = selShip(); if (!b) return; b.extra = { ...(b.extra || {}) };
     if (b.extra.atk) delete b.extra.atk; else b.extra.atk = true;
-    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true); });
+    if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true, true); });
   for (const bt of [routeBtn, atkBtn]) bt.addEventListener("pointerdown", (e) => e.stopPropagation());
   function shipButtons() {
     const b = open && !picking && !held ? selShip() : null;
@@ -517,7 +531,7 @@ export function initBuild(ctx) {
 
   // ---- picking up and dropping placed pieces ----
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
-  function push(b, now) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b) }); }
+  function push(b, now, keep) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b), ...(keep ? { keep: true } : {}) }); }   // keep: (owner) a route / spawn edit: the ship stays where it is
   function create(o) { send({ t: "bnew", ...o }); }
   function pickUp(b, g) {
     stopPicking();
@@ -854,6 +868,7 @@ export function initBuild(ctx) {
     if (m.t === "build") { setBuild(m.o); return true; }
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
+    if (m.t === "botgoals") { botGoals.clear(); for (const g of Array.isArray(m.g) ? m.g : []) if (Array.isArray(g) && g.length === 3) botGoals.set(String(g[0]), [+g[1], +g[2]]); return true; }
     if (m.t === "coll") { setColl(m.k, m.pts, m.pv, m.mv, m.vis); return true; }
     return false;
   }

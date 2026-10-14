@@ -230,7 +230,10 @@
     html.touch #cloud-handles { display: none !important; }
     /* (owner, 2026-10-14) test ships' routes and the selected ship's buttons, in the Build menu */
     #route-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
-    #route-handles .rt-line { fill: none; stroke: rgba(255,170,80,0.75); stroke-width: 2; stroke-dasharray: 8 6; }
+    #route-handles .rt-line { fill: none; stroke: rgba(255,170,80,0.75); stroke-width: 2; stroke-dasharray: 8 6; animation: rt-flow 0.9s linear infinite; }   /* (owner) the dashes run toward the next point */
+    @keyframes rt-flow { to { stroke-dashoffset: -14; } }
+    #route-handles .rt-leash { stroke: rgba(255,255,255,0.85); stroke-width: 2; stroke-dasharray: 2 6; stroke-linecap: round; animation: rt-flow 0.9s linear infinite; }
+    #route-handles .rt-moveg rect { fill: rgba(224,122,31,0.9); stroke: #fff; stroke-width: 2; pointer-events: auto; cursor: move; } #route-handles .rt-moveg path { stroke: #fff; stroke-width: 2; pointer-events: none; }
     #route-handles .rt-pt { fill: #ffffff; stroke: #e07a1f; stroke-width: 2; pointer-events: auto; cursor: pointer; } #route-handles .rt-pt:hover { fill: #ffe3c4; }
     #route-handles .rt-mid { fill: rgba(255,200,140,0.7); pointer-events: auto; cursor: pointer; } #route-handles .rt-mid:hover { fill: #fff; }
     #route-handles .rt-spawn circle { fill: #e07a1f; stroke: #fff; stroke-width: 2; } #route-handles .rt-spawn text { fill: #fff; font: 700 12px system-ui, sans-serif; }
@@ -257,6 +260,6 @@
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
   <script src="adminpanel.js?v=1792000287"></script>
-  <script type="module" src="game3d.js?v=1792002038"></script>
+  <script type="module" src="game3d.js?v=1792002666"></script>
 </body>
 </html>

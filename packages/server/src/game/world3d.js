@@ -48,6 +48,12 @@ export const spawning = (p) => !!p.spawnUntil && Date.now() < p.spawnUntil;
 // was placed; meters from it) they fly, and "attack player": shoot at players they can see nearby. A route ship that goes
 // after a player remembers where it left its route and chases up to BOT_LEASH from there; past that it goes back.
 export const BOT_LEASH = 400, BOT_TURN = 0.9, BOT_CD = 1.6, BOT_ARRIVE = 35, BOT_STANDOFF = 220;
+// (owner, 2026-10-14) the test ships see players by the clouds' rules too: a ship in a cloud fades from its edge to
+// unseen 150 m in (one in the same cloud within 200 m that's moving still shows faintly), and a cloud's core (150 m and
+// more in) blocks sight through it unless the looker is inside that cloud
+export const CLOUD_DEEP = 150, CLOUD_NEAR = 200;
+export function inPoly(x, y, v) { let c = false; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % n], by = v[(i + 3) % n]; if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) c = !c; } return c; }
+export function edgeDist(x, y, v) { let best = Infinity; for (let i = 0, n = v.length; i < n; i += 2) { const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, L2 = ex * ex + ey * ey || 1e-9; const t = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / L2)); best = Math.min(best, Math.hypot(x - ax - ex * t, y - ay - ey * t)); } return best; }
 export function cleanRoute(pts) {
   if (!Array.isArray(pts) || pts.length < 1 || pts.length > 32) return null;
   const out = [];
@@ -406,6 +412,24 @@ export class World3D {
     for (let i = 0; i < B.length; i += 2) if (!this._sightBlocked(B[i], B[i + 1], a.x, a.y)) clear++;
     return piv + (1 - PIV_W) * clear / Math.max(1, (A.length + B.length) / 2) > VIS_LO;
   }
+  // (owner, 2026-10-14) can test ship p make out player q through the clouds (on top of line of sight)?
+  cloudSees(p, q) {
+    for (const b of this.builds.values()) {
+      if (b.k !== "cloud" || !b.poly) continue;
+      const qIn = Math.hypot(q.x - b.x, q.y - b.y) <= b.rad + 1 && inPoly(q.x, q.y, b.poly), pIn = Math.hypot(p.x - b.x, p.y - b.y) <= b.rad + 1 && inPoly(p.x, p.y, b.poly);
+      if (qIn) {
+        const d = Math.min(1, edgeDist(q.x, q.y, b.poly) / CLOUD_DEEP); let c = 1 - d * d * (3 - 2 * d);
+        if (pIn && Math.hypot(p.x - q.x, p.y - q.y) <= CLOUD_NEAR && Math.hypot(q.vx || 0, q.vy || 0) >= 3) c = Math.max(c, 0.25);
+        if (c < 0.2) return false;   // (unseen, as on a player's screen; the 25% floor still counts)
+      }
+      if (!pIn) {                              // the core in between blocks the view (sampled along the way)
+        const L = Math.hypot(q.x - p.x, q.y - p.y), n = Math.ceil(L / 20);
+        for (let i = 1; i < n; i++) { const x = p.x + (q.x - p.x) * i / n, y = p.y + (q.y - p.y) * i / n;
+          if (Math.hypot(x - b.x, y - b.y) <= b.rad && inPoly(x, y, b.poly) && edgeDist(x, y, b.poly) >= CLOUD_DEEP) return false; }
+      }
+    }
+    return true;
+  }
   // projectiles fly a step each tick; the first thing on the step stops them
   stepProjs(dt) {
     for (let k = this.projs.length - 1; k >= 0; k--) {
@@ -450,13 +474,14 @@ export class World3D {
       if (e.atk) for (const q of this.players.values()) {
         if (q.bot || spawning(q)) continue;
         const dq = Math.hypot(q.x - from.x, q.y - from.y); if (dq > BOT_LEASH || dq >= best) continue;
-        if (!this.sees(p, q)) continue; best = dq; target = q;
+        if (!this.sees(p, q) || !this.cloudSees(p, q)) continue; best = dq; target = q;
       }
       let goal = null, stop = BOT_ARRIVE;
       if (route) {
         if (target) { if (ai.mode !== "chase") { ai.anchor = ai.anchor || { x: p.x, y: p.y }; ai.mode = "chase"; } goal = target; stop = BOT_STANDOFF; }
         else if (ai.anchor) { ai.mode = "return"; goal = ai.anchor; if (Math.hypot(p.x - ai.anchor.x, p.y - ai.anchor.y) < BOT_ARRIVE) { ai.anchor = null; ai.mode = "patrol"; } }
-        if (!goal) { const w = route[ai.wp % route.length]; if (Math.hypot(p.x - w[0], p.y - w[1]) < BOT_ARRIVE) ai.wp = (ai.wp + 1) % route.length; goal = { x: route[ai.wp][0], y: route[ai.wp][1] }; }
+        if (!goal) { const w = route[ai.wp % route.length]; if (Math.hypot(p.x - w[0], p.y - w[1]) < BOT_ARRIVE) { ai.wp = (ai.wp + 1) % route.length; if (ai.mode === "rejoin") ai.mode = "patrol"; } goal = { x: route[ai.wp][0], y: route[ai.wp][1] }; }
+        ai.goal = ai.mode === "return" || ai.mode === "rejoin" ? goal : null;   // (owner) shown to builders as a leash back to the path
       }
       // turn toward what it's after (the target, else where it's going) and thrust when roughly facing it
       const look = target || goal;
@@ -510,12 +535,14 @@ export class World3D {
     }
     return b;
   }
-  _put(id, b) { b.id = id; this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b); return b; }
+  _put(id, b, keep = false) { b.id = id; this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b, keep); return b; }
   // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players
   // map ("b" + its id, side "test") that collides, gets shoved, takes damage, shows in snapshots and the roster. A Build
   // menu edit puts it there (stopped); where shoves take it is written back to the piece.
-  _bot(b) {
+  // keep: (owner, 2026-10-14) its route or spawn was edited: the ship stays where it is and flies back to its route point
+  _bot(b, keep = false) {
     const id = "b" + b.id; let p = this.players.get(id);
+    if (p && keep) { const wp = p.ai ? p.ai.wp : 1; p.ai = b.extra && b.extra.route ? { wp: wp % (b.extra.route.length + 1), mode: "rejoin", anchor: null } : null; return p; }
     if (!p) { p = { id, name: "Test Ship", team: "test", bot: b.id, dx: 0, dy: 0, hp: HP_MAX }; this.players.set(id, p); }
     p.x = b.x; p.y = b.y; p.h = b.r; p.vx = p.vy = 0; p.brakeA = 0; p.ai = null;   // (moved in the Build menu: starts its route over)
     return p;
@@ -542,7 +569,7 @@ export class World3D {
   }
   setBuild(id, o) {                          // an edit: kept at once, written to the database with the next save
     if (!this.builds.has(id)) return null; const b = this._clean(o); if (!b) return null;
-    b.dirty = true; return this._put(id, b);
+    b.dirty = true; return this._put(id, b, o.keep === true);
   }
   async delBuild(id) {
     if (!this.builds.delete(id)) return false;
