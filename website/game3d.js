@@ -149,7 +149,10 @@ const SKY_NOISE = `
     float gn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
       return mix(mix(dot(hash2(i), f), dot(hash2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
                  mix(dot(hash2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(hash2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
-    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }`;
+    float fbm(vec2 p) { float v = 0.0, a = 0.6; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 2; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.4; } return 0.5 + 0.5 * v; }
+    float fbm4(vec2 p) { float v = 0.0, a = 0.55; mat2 r = mat2(0.8, -0.6, 0.6, 0.8); for (int k = 0; k < 4; k++) { v += a * gn(p); p = r * p * 2.03 + 7.1; a *= 0.5; } return 0.5 + 0.5 * v; }
+    // (owner, 2026-10-14) marbling: the noise looked up through more noise, so the clouds swirl and streak like a nebula
+    float marble(vec2 p) { vec2 q = vec2(fbm4(p), fbm4(p + vec2(5.2, 1.3))); return fbm4(p + 3.2 * q); }`;
 const skyVert = "varying vec2 vG; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vG = vec2(w.x, -w.z); gl_Position = projectionMatrix * viewMatrix * w; }";
 // (owner, 2026-10-14) the colored space in parallax layers: a deep blue base furthest down, then two see-through layers
 // of soft glows nearer the grid, each at its own depth so they slide past each other as you move
@@ -161,18 +164,20 @@ function skyLayer(depth, order, frag, transparent) {
   }));
   m.position.y = depth; m.renderOrder = order; m.frustumCulled = false; scene.add(m); skyLayers.push(m);
 }
-skyLayer(-9000, -5, `void main() {                               // the base: navy to royal blue in slanted bands
-    vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;
-    float n = fbm(vec2(d.x / 26000.0, d.y / 9000.0) + uT * 0.002);
-    gl_FragColor = vec4(mix(vec3(0.03, 0.08, 0.26), vec3(0.09, 0.25, 0.62), smoothstep(0.3, 0.75, n)), 1.0); }`, false);
-skyLayer(-6000, -4, `void main() {                               // cyan glows (screen colors, no conversion)
-    vec2 d = mat2(0.82, -0.57, 0.57, 0.82) * vG;
-    float g = smoothstep(0.45, 0.85, fbm(vec2(d.x / 18000.0, d.y / 6500.0) + 31.0 - uT * 0.0015));
-    gl_FragColor = vec4(vec3(0.05, 0.42, 0.55) * g, 1.0); }`, true);
-skyLayer(-3500, -3, `void main() {                               // nearer, smaller blue-cyan wisps
-    vec2 d = mat2(0.9, 0.44, -0.44, 0.9) * vG;
-    float g = smoothstep(0.5, 0.88, fbm(vec2(d.x / 9000.0, d.y / 3800.0) + 77.0 + uT * 0.002));
-    gl_FragColor = vec4(vec3(0.06, 0.22, 0.5) * g, 1.0); }`, true);
+skyLayer(-9000, -5, `void main() {                               // the base: deep blue with marbled lighter clouds and dark dust lanes
+    vec2 p = vG / 14000.0 + vec2(uT * 0.0012, 0.0);
+    float n = marble(p), dust = smoothstep(0.42, 0.62, fbm4(vG / 9000.0 + 13.0 + uT * 0.0008));
+    vec3 col = mix(vec3(0.01, 0.05, 0.2), vec3(0.03, 0.2, 0.55), smoothstep(0.35, 0.7, n));
+    col = mix(col, vec3(0.1, 0.42, 0.85), smoothstep(0.62, 0.85, n) * 0.6);
+    col *= 1.0 - 0.45 * dust * smoothstep(0.45, 0.75, n);           // the dust lanes darken the bright clouds
+    gl_FragColor = vec4(col, 1.0); }`, false);
+skyLayer(-6000, -4, `void main() {                               // bright cyan glow spots in the clouds (screen colors, no conversion)
+    float g = marble(vG / 9000.0 + 31.0 - uT * 0.0015);
+    g = pow(smoothstep(0.55, 0.9, g), 2.0);
+    gl_FragColor = vec4(vec3(0.08, 0.45, 0.8) * g, 1.0); }`, true);
+skyLayer(-3500, -3, `void main() {                               // nearer, faint blue wisps
+    float g = smoothstep(0.55, 0.9, marble(vG / 5000.0 + 77.0 + uT * 0.002));
+    gl_FragColor = vec4(vec3(0.03, 0.14, 0.35) * g, 1.0); }`, true);
 // (owner, 2026-10-14) stars far below the grid: thin points that drift slower than the grid as you move (they're deeper),
 // each slowly dimming in and out on its own. They tile around the camera so the field never runs out.
 const STAR_T = 24000, STAR_N = 6000;
