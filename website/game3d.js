@@ -166,23 +166,6 @@ const aimLine = new THREE.Line(aimLineGeo, aimLineMat); aimLine.frustumCulled = 
 // (owner, 2026-10-13) the weapon UI helpers toggle (top right): the leash circle for now; off by default, kept per browser
 let helpers = false;
 try { helpers = localStorage.getItem("atamus.helpers") === "1"; } catch {}
-// (owner, 2026-10-13) the stop marker: a dashed line to a circle where the ship would come to rest if the
-// player let go now (its velocity at the braking rate); only this player sees it
-const stopLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-const stopLineMat = new THREE.LineDashedMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.8, dashSize: 10, gapSize: 8 });
-const stopLine = new THREE.Line(stopLineGeo, stopLineMat); stopLine.frustumCulled = false; stopLine.visible = false; scene.add(stopLine);
-const stopRing = new THREE.Mesh(new THREE.CircleGeometry(2, 24),   // (owner) a small flat filled dot (owner, 2026-10-13: "way thinner", 2 m from 5)
-  new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
-stopRing.rotation.x = -Math.PI / 2; stopRing.visible = false; scene.add(stopRing);
-function updateStop() {
-  const v = Math.hypot(vel.x, vel.y);
-  const on = haveMe && v > 5;
-  stopLine.visible = stopRing.visible = on; if (!on) return;
-  const dist = (v * v) / (2 * stopRate(v)), sx = me.x + (vel.x / v) * dist, sy = me.y + (vel.y / v) * dist;
-  stopLineGeo.setFromPoints([new THREE.Vector3(me.x, 0.7, -me.y), new THREE.Vector3(sx, 0.7, -sy)]); stopLine.computeLineDistances();
-  const k = Math.max(1, viewDist / 500); stopLineMat.dashSize = 10 * k; stopLineMat.gapSize = 8 * k;
-  stopRing.position.set(sx, 0.7, -sy); stopRing.scale.set(k, k, 1);
-}
 // the capacitor bar above the hotbar
 const capFill = document.getElementById("cap-fill"), capNum = document.getElementById("cap-num");
 let capShown = -1;
@@ -735,12 +718,47 @@ addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
 const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
   botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
+// ---- (owner, 2026-10-14) the railgun: left click fires an instant shot from my ship toward the pointer (the server
+// decides what it hits and keeps the 1 s cooldown); everyone near sees a bright beam that fades out, sparks where it hit ----
+const RAIL_CD = 1000;
+let railAt = 0;
+function fireRail(px, py) {
+  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing()) return;
+  const now = performance.now(); if (now - railAt < RAIL_CD) return;
+  raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
+  const g = new THREE.Vector3(); if (!raycaster.ray.intersectPlane(groundPlane, g)) return;
+  const dx = g.x - me.x, dy = -g.z - me.y, L = Math.hypot(dx, dy); if (L < 1) return;
+  railAt = now; ws.send(JSON.stringify({ t: "fire", x: Math.round(dx / L * 1000) / 1000, y: Math.round(dy / L * 1000) / 1000 }));
+}
+const shots = [], SHOT_T = 0.45;
+const shotCore = new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const shotGlow = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+const shotGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).rotateZ(Math.PI / 2);   // along x, length 1
+function addShot(m) {
+  if (![m.x0, m.y0, m.x1, m.y1].every(Number.isFinite)) return;
+  const len = Math.hypot(m.x1 - m.x0, m.y1 - m.y0); if (len < 0.5) return;
+  const g = new THREE.Group(), core = new THREE.Mesh(shotGeo, shotCore.clone()), glow = new THREE.Mesh(shotGeo, shotGlow.clone());
+  core.scale.set(len, 1.2, 1.2); glow.scale.set(len, 5, 5); g.add(glow, core);
+  g.position.set((m.x0 + m.x1) / 2, shipMid, -(m.y0 + m.y1) / 2); g.rotation.y = Math.atan2(m.y1 - m.y0, m.x1 - m.x0);
+  g.renderOrder = 3; scene.add(g); shots.push({ g, t0: performance.now() });
+  if (m.h != null) burst(m.x1, m.y1, 260);           // sparks on the ship it hit
+  if (m.a === myId && m.h != null) revealed.set(m.h, performance.now());   // (a ship I hit shows in a cloud)
+}
+function updateShots(now) {
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const u = shots[i], a = (now - u.t0) / 1000 / SHOT_T;
+    if (a >= 1) { scene.remove(u.g); for (const c of u.g.children) c.material.dispose(); shots.splice(i, 1); continue; }
+    const f = (1 - a) * (1 - a); u.g.children[0].material.opacity = 0.45 * f; u.g.children[1].material.opacity = f;
+    u.g.children[0].scale.y = u.g.children[0].scale.z = 5 + a * 6;
+  }
+}
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
 let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
+  if (e.button === 0) fireRail(e.clientX, e.clientY);
   if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; camDist = cam.zmax; e.preventDefault(); } });   // (owner) aiming eases the zoom back to 600 m (the usual camera easing)
 addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
@@ -863,6 +881,7 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
+    else if (m.t === "shot") addShot(m);
     else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
       const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
       if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
@@ -1082,7 +1101,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimShown;
-  updateStop();
+  updateShots(nowP);
   drawMinimap(nowP);
 
   if (countAt) {

@@ -102,6 +102,7 @@ export function attachGameServer(httpServer) {
         }).catch((e) => { joined = false; console.error("join", e); });
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
+      else if (m.t === "fire") world.fire(pid, m.x, m.y);   // (owner, 2026-10-14) the railgun; the world checks it and keeps the cooldown
       else if (m.t === "chat") {               // (owner, 2026-10-13) World (everyone), Faction (your side), Whisper (one player)
         const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;   // (owner) a muted player's lines go nowhere
         const text = m.text.slice(0, 240); if (!text.trim()) return;
@@ -214,6 +215,14 @@ export function attachGameServer(httpServer) {
         for (const h of near) ws.send(JSON.stringify({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b }));
       }
       world.hits.length = 0;
+    }
+    if (world.shots.length) {                  // (owner, 2026-10-14) railgun shots: to the players whose load circle has either end
+      for (const [pid, ws] of socks) {
+        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+        for (const h of world.shots) if (Math.hypot(h.x0 - p.x, h.y0 - p.y) <= LOAD_R || Math.hypot(h.x1 - p.x, h.y1 - p.y) <= LOAD_R)
+          ws.send(JSON.stringify({ t: "shot", a: h.a, h: h.h, x0: Math.round(h.x0 * 10) / 10, y0: Math.round(h.y0 * 10) / 10, x1: Math.round(h.x1 * 10) / 10, y1: Math.round(h.y1 * 10) / 10 }));
+      }
+      world.shots.length = 0;
     }
   }, 50);
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)

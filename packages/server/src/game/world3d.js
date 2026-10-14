@@ -34,7 +34,10 @@ export const CAP_MAX = 100, CAP_DRAIN = 1, CAP_WALK = 4, CAP_IDLE = 12, CAP_RESU
 export const LOAD_R = 1300;
 // (owner, 2026-10-14) ship bumps: the bounce (0 = dead stop, 1 = full rebound), the closing speed that does no damage
 // (m/s), and damage per m/s above it; health
-export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
+export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
+// (owner, 2026-10-14) the railgun (left click): an instant shot from the ship's pivot toward the pointer, stopped by the first
+// block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG.
+export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 1.0;   // (2026-10-14: scaled with the slower speeds, so hits hurt as much as before)
 // the acceleration share for a push at angle d (radians) off the nose: 1 straight, ~0.48 side-on, 0.3 reversing
 // (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
 // toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
@@ -134,6 +137,16 @@ export function satPush(A, B) {
   const [ax, ay] = polyMid(A), [cx, cy] = polyMid(B); if ((ax - cx) * bx + (ay - cy) * by < 0) { bx = -bx; by = -by; }
   return { nx: bx, ny: by, d: best };
 }
+// where a segment first meets an outline (0..1 along it), or null
+export function segPoly(x0, y0, x1, y1, v) {
+  let best = null; const dx = x1 - x0, dy = y1 - y0;
+  for (let i = 0, n = v.length; i < n; i += 2) {
+    const ax = v[i], ay = v[i + 1], ex = v[(i + 2) % n] - ax, ey = v[(i + 3) % n] - ay, den = dx * ey - dy * ex; if (Math.abs(den) < 1e-12) continue;
+    const t = ((ax - x0) * ey - (ay - y0) * ex) / den, u = ((ax - x0) * dy - (ay - y0) * dx) / den;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+  }
+  return best;
+}
 export function polyMid(v) { let x = 0, y = 0; for (let i = 0; i < v.length; i += 2) { x += v[i]; y += v[i + 1]; } return [x * 2 / v.length, y * 2 / v.length]; }
 export function nudge(p, n, d) {               // move p by d along n, dropping the part of its velocity going back in
   p.x += n.nx * d; p.y += n.ny * d;
@@ -175,7 +188,8 @@ export class World3D {
     this.players = new Map();
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
-    this.hits = [];                          // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
+    this.hits = []; this.shots = [];   // shots: (owner, 2026-10-14) this tick's railgun shots, for the clients' beams
+                             // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
@@ -329,6 +343,25 @@ export class World3D {
   hurt(p, d) {
     p.hp = (p.hp ?? HP_MAX) - d;
     if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); }   // a test ship just heals where it is
+  }
+  // (owner, 2026-10-14) a railgun shot: (dx, dy) the direction, checked as hostile (finite, not zero); one a RAIL_CD
+  fire(id, dx, dy) {
+    const p = this.players.get(String(id)); if (!p || p.bot) return null;
+    if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+    const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
+    const now = Date.now(); if (p.lastFire && now - p.lastFire < RAIL_CD * 1000 - 50) return null; p.lastFire = now;
+    const x0 = p.x, y0 = p.y, x1 = x0 + dx / L * RAIL_RANGE, y1 = y0 + dy / L * RAIL_RANGE;
+    let t = 1, hit = null; const near = (x, y, R) => { const ex = x - x0, ey = y - y0, f = Math.max(0, Math.min(1, (ex * (x1 - x0) + ey * (y1 - y0)) / (RAIL_RANGE * RAIL_RANGE))); return Math.hypot(x - x0 - (x1 - x0) * f, y - y0 - (y1 - y0) * f) <= R; };
+    for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
+    for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; const u = segPoly(x0, y0, x1, y1, b.poly); if (u !== null && u < t) { t = u; hit = null; } }
+    for (const q of this.players.values()) {
+      if (q === p || !near(q.x, q.y, SHIP_R * 2)) continue;
+      const u = segPoly(x0, y0, x1, y1, buildPoly({ k: "ship", x: q.x, y: q.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: q.h || 0 }, this.colliders, this.pivots));
+      if (u !== null && u < t) { t = u; hit = q; }
+    }
+    const shot = { a: p.id, x0, y0, x1: x0 + (x1 - x0) * t, y1: y0 + (y1 - y0) * t, h: hit ? hit.id : null };
+    if (hit) this.hurt(hit, RAIL_DMG);
+    this.shots.push(shot); return shot;
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
   addBlock(pid) {
