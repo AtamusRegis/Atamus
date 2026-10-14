@@ -260,7 +260,8 @@ const typing = () => { const el = document.activeElement; return !!el && ((el.ta
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
-  if (e.code === "Escape") hideMenu();
+  if (e.code === "Tab" || e.key === "Tab") { e.preventDefault(); if (!e.repeat && window.Inventory) window.Inventory.toggle(); return; }   // (owner) TAB opens / closes the inventory (in the chat input it switches channel)
+  if (e.code === "Escape") { hideMenu(); if (window.Inventory && window.Inventory.open) window.Inventory.toggle(false); }
 });
 addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });

@@ -72,6 +72,12 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 - Every push to `main` warns every connected player ahead of the switch — **1 s for now (owner, 2026-10-12: "make countdown 1 second for now"**; it was 30 s and goes back up when the owner says): the game shows **"Update incoming — N s"** top center, then sends them to `play.html?updating=1`, which waits for the new build and offers Enter System again. The length lives in `gamehttp.js` (`announceUpdate(part, 1)`) and the `sleep` in both deploy workflows.
 - The deploy workflows are unchanged (`deploy-website.yml` on `website/**`, `deploy-server.yml` on `packages/server/**`).
 
+## Hotbar and inventory (owner, 2026-10-13)
+
+- **A hotbar of 3 slots** at the bottom center (numbered 1–3), with the capacitor bar above it.
+- **TAB, when not typing, opens and closes the inventory panel** (Escape closes it too): **5 × 2 slots**, above the capacitor bar. (In the chat input TAB switches the channel instead.)
+- **For now there's one placeholder item** ("Test Item", a gold square) to **drag between any of the 13 slots** — hotbar and inventory; dropping it on a filled slot swaps them. A mouse or a finger drags. Where it sits is kept in this browser (nothing on the server yet; `website/inventory.js`). The panel is hidden on touch; the hotbar shows.
+
 ## The UI's look (owner, 2026-10-13)
 
 - **The game UI uses the website's look (the login page):** flat, unbordered shapes with light gradients for depth — panels in the dark blue panel gradient with a soft shadow, buttons as soft flat chips (selected ones tinted blue, primary ones like Accept, Send and Blue in the blue gradient), inputs as dark wells with a blue glow when focused, rows as light cards. The capacitor fill is the blue gradient. The [A] button is gold. The mute / ban tags stay outlined.
