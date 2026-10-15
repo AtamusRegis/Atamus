@@ -3,7 +3,8 @@
 // tabs: Models, Images, Audio; each asset a slot showing its icon (hover: its name). A model's icon is a picture rendered
 // from the model itself (made when it's imported; older models get theirs the first time the Importer sees them); an
 // image's is the image. IMPORT (or a file dropped on the panel) picks a file: a pop-up shows its icon and a Name (the file's
-// name to start), CANCEL / IMPORT. Right-click an asset: Rename / Delete (a model can't go while an object uses it).
+// name to start), CANCEL / IMPORT; a model's icon is a live view there to set (owner, 2026-10-15). Right-click an asset:
+// Edit (its name; a model's icon view) / Delete (a model can't go while an object uses it).
 // The server checks what each file really is.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
@@ -35,25 +36,67 @@ window.Assets = {
 
 // ---- a model's icon: rendered once, three-quarters from above, on a clear background ----
 const gltf = new GLTFLoader();
-let ren = null;
-function renderIcon(obj) {
-  if (!ren) { ren = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); ren.setSize(256, 256, false); ren.setClearColor(0x000000, 0); }
+// (owner, 2026-10-15) its view can be set (the import / edit pop-up): turned around (yaw), tilted (pitch), zoomed (1 = just
+// filling the picture) and shifted (px, py: in the model's radius); kept with the asset
+export const VIEW0 = { yaw: 45, pitch: 28, zoom: 1, px: 0, py: 0 };
+function stage(obj) {
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4658, 2.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 2.6); sun.position.set(2, 3, 2.5); scene.add(sun);
+  const sun = new THREE.DirectionalLight(0xffffff, 2.6); scene.add(sun);
   const box = new THREE.Box3().setFromObject(obj), c = box.getCenter(new THREE.Vector3()), r = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 1e-6);
   const holder = new THREE.Group(); obj.position.sub(c); holder.add(obj); scene.add(holder);
-  const cam = new THREE.PerspectiveCamera(30, 1, r / 100, r * 100), dir = new THREE.Vector3(1, 0.75, 1).normalize();
-  let dist = r / Math.sin(THREE.MathUtils.degToRad(15));
   const corners = []; for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c));
-  for (let k = 0; k < 4; k++) {                  // pulled in until it fills the picture (a little margin)
-    cam.position.copy(dir).multiplyScalar(dist); cam.lookAt(0, 0, 0); cam.near = dist / 100; cam.far = dist * 10; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
-    let m = 0; for (const p of corners) { const q = p.clone().project(cam); m = Math.max(m, Math.abs(q.x), Math.abs(q.y)); }
-    dist *= Math.max(0.3, m / 0.9);
+  const cam = new THREE.PerspectiveCamera(30, 1, r / 100, r * 100), D = THREE.MathUtils.degToRad;
+  function aim(v) {
+    const dir = new THREE.Vector3(Math.cos(D(v.pitch)) * Math.sin(D(v.yaw)), Math.sin(D(v.pitch)), Math.cos(D(v.pitch)) * Math.cos(D(v.yaw)));
+    const up = Math.abs(v.pitch) > 89.5 ? new THREE.Vector3(0, 0, -Math.sign(v.pitch)) : new THREE.Vector3(0, 1, 0); cam.up.copy(up);
+    let dist = r / Math.sin(D(15));
+    for (let k = 0; k < 4; k++) {                // pulled in until it fills the picture (a little margin)
+      cam.position.copy(dir).multiplyScalar(dist); cam.lookAt(0, 0, 0); cam.near = dist / 100; cam.far = dist * 10; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+      let m = 0; for (const p of corners) { const q = p.clone().project(cam); m = Math.max(m, Math.abs(q.x), Math.abs(q.y)); }
+      dist *= Math.max(0.3, m / 0.9);
+    }
+    dist /= v.zoom; cam.position.copy(dir).multiplyScalar(dist); cam.lookAt(0, 0, 0); cam.updateMatrixWorld();
+    const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0), upv = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1);
+    const t = right.multiplyScalar(-v.px * r).add(upv.multiplyScalar(-v.py * r));
+    cam.position.add(t); cam.near = dist / 100; cam.far = dist * 10 + r * 4; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    sun.position.copy(cam.position).add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).multiplyScalar(dist * 0.8)).add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(dist * 0.5));
+    return cam;
   }
-  ren.render(scene, cam);
-  return new Promise((ok, no) => ren.domElement.toBlob((b) => (b ? ok(b) : no(new Error("render"))), "image/png"));
+  return { scene, aim };
 }
+const toPng = (canvas) => new Promise((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("render"))), "image/png"));
+let ren = null;
+function renderIcon(obj, view = VIEW0) {
+  if (!ren) { ren = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); ren.setSize(256, 256, false); ren.setClearColor(0x000000, 0); }
+  const st = stage(obj); ren.render(st.scene, st.aim(view)); return toPng(ren.domElement);
+}
+// the pop-up's live view: drag turns it, right-drag (or Shift-drag) shifts it, the wheel zooms; Reset puts it back
+function viewer(obj, view0, el) {
+  const v = { ...VIEW0, ...(view0 || {}) }, st = stage(obj);
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); r.setClearColor(0x000000, 0); r.setPixelRatio(1); r.setSize(256, 256, false);
+  const cv = r.domElement; cv.className = "imp-view"; el.replaceChildren(cv);
+  const draw = () => r.render(st.scene, st.aim(v)); draw();
+  let drag = null;
+  cv.addEventListener("pointerdown", (e) => { e.preventDefault(); drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.button === 1 || e.shiftKey, id: e.pointerId }; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.pan) { const k = 2.2 / (cv.clientWidth * v.zoom); v.px = clamp(v.px - dx * k, -3, 3); v.py = clamp(v.py + dy * k, -3, 3); }
+    else { v.yaw = ((v.yaw - dx * 0.6) % 360 + 360) % 360; v.pitch = clamp(v.pitch + dy * 0.6, -90, 90); }
+    draw();
+  });
+  const end = (e) => { if (drag && e.pointerId === drag.id) drag = null; };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("wheel", (e) => { e.preventDefault(); v.zoom = clamp(v.zoom * Math.exp(-e.deltaY * 0.0015), 0.2, 8); draw(); }, { passive: false });
+  cv.addEventListener("contextmenu", (e) => e.preventDefault());
+  return {
+    get view() { return { yaw: round(v.yaw), pitch: round(v.pitch), zoom: round(v.zoom, 1000), px: round(v.px, 1000), py: round(v.py, 1000) }; },
+    reset() { Object.assign(v, VIEW0); draw(); },
+    shot() { draw(); return toPng(cv); },
+    dispose() { r.dispose(); try { r.forceContextLoss(); } catch {} },
+  };
+}
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x)), round = (x, k = 10) => Math.round(x * k) / k;
 const parseGlb = (buf) => new Promise((ok, no) => gltf.parse(buf, "", (g) => ok(g.scene), no));
 const loadGlb = (file) => new Promise((ok, no) => gltf.load(BASE() + "/game/models/" + file, (g) => ok(g.scene), undefined, no));
 async function upload(body) {
@@ -122,7 +165,7 @@ async function iconsDue() {
   for (const a of assets) {
     if (a.kind !== "model" || a.thumb || rendering.has(a.file)) continue;
     rendering.add(a.file);
-    try { const obj = await loadGlb(a.file), j = await upload(await renderIcon(obj)); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file } }); }
+    try { const obj = await loadGlb(a.file), j = await upload(await renderIcon(obj, { ...VIEW0, ...(a.view || {}) })); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file } }); }
     catch (e) { console.error("model icon", a.file, e); }
   }
 }
@@ -130,7 +173,7 @@ async function iconsDue() {
 function openMenu(id, x, y) {
   const a = assets.find((o) => o.id === id); if (!a) return; closeMenu();
   menu = $("div", "we-ctx");
-  menu.append(btn("Rename", "", () => { closeMenu(); renameBox(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
+  menu.append(btn("Edit", "", () => { closeMenu(); renameBox(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
   document.body.appendChild(menu); const r = menu.getBoundingClientRect();
   menu.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; menu.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
 }
@@ -146,14 +189,15 @@ function popup(title, okText, picEl, name0, onOk) {
   const err = $("p", "we-err"); err.hidden = true;
   const btns = $("div", "we-btns"), cancel = btn("CANCEL"), ok = btn(okText, "we-ok"); btns.append(cancel, ok);
   box.append($("p", "we-title", title), pic, grid, err, btns);
-  const close = () => { back.remove(); if (pop === me) pop = null; };
+  const close = () => { back.remove(); if (pop === me) pop = null; if (me.onClose) me.onClose(); };
   const fail = (m) => { ok.disabled = false; err.textContent = m; err.hidden = false; };
   const go = () => { const n = name.value.trim(); if (!n) { fail("Give it a name."); return; } ok.disabled = true; err.hidden = true; onOk(n, { close, fail }); };
   cancel.addEventListener("click", close); ok.addEventListener("click", go);
   back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
   back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); go(); } });
   back.addEventListener("contextmenu", (e) => e.preventDefault());
-  const me = pop = { close, pic, ok, fail }; setTimeout(() => { name.focus(); name.select(); }, 0);
+  const reset = btn("Reset View", "imp-reset"); reset.hidden = true; box.insertBefore(reset, grid);
+  const me = pop = { close, pic, ok, fail, reset, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
   return me;
 }
 const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["png", "jpg", "jpeg", "webp"].includes(x) ? "image" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
@@ -163,27 +207,34 @@ async function importBox(file) {
   const p = popup("IMPORT", "IMPORT", null, file.name.replace(/\.[^.]+$/, "").slice(0, 32), async (name, { close, fail }) => {
     try {
       const j = await upload(file);
-      let thumb = null; if (j.kind === "model") thumb = (await upload(icon || await renderIcon(await parseGlb(await file.arrayBuffer())))).file;
+      let thumb = null, view = undefined; if (j.kind === "model" && vw) { view = vw.view; thumb = (await upload(await vw.shot())).file; }
       const n = seq++; pending.set(n, { done: () => { close(); tab = j.kind; draw(); }, fail });
-      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb } });
+      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
-  let icon = null;
+  let vw = null;
   if (!kind) { p.fail("That isn't a model, image or sound the game can use."); p.ok.disabled = true; return; }
   if (file.size > MAX[kind] * 1024 * 1024) { p.fail("That file is over " + MAX[kind] + " MB."); p.ok.disabled = true; return; }
   if (kind === "image") { const im = $("img", "imp-pic"); im.width = im.height = 96; im.src = URL.createObjectURL(file); p.pic.appendChild(im); }
   else if (kind === "audio") p.pic.appendChild($("span", "build-letter imp-big", "♪"));
-  else {                                        // a model: its icon rendered now, shown here and sent with it
+  else {                                        // a model: its icon's view, set here; rendered and sent with it
     p.ok.disabled = true;
-    try { icon = await renderIcon(await parseGlb(await file.arrayBuffer())); const im = $("img", "imp-pic"); im.width = im.height = 96; im.src = URL.createObjectURL(icon); p.pic.appendChild(im); p.ok.disabled = false; }
+    try { vw = viewer(await parseGlb(await file.arrayBuffer()), null, p.pic); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); p.ok.disabled = false; }
     catch (e) { p.fail("That model couldn't be read."); }
   }
 }
+// Edit: its name, and a model's icon view (re-rendered when the view changed)
 function renameBox(a) {
-  popup("RENAME", "SAVE", slotPic(a, 96), a.name, (name, { close, fail }) => {
-    const n = seq++; pending.set(n, { done: close, fail });
-    api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb: a.thumb } });
+  let vw = null;
+  const p = popup("EDIT ASSET", "SAVE", slotPic(a, 96), a.name, async (name, { close, fail }) => {
+    try {
+      let thumb = a.thumb, view = a.view;
+      if (vw) { const nv = vw.view; if (!a.thumb || JSON.stringify(nv) !== JSON.stringify({ ...VIEW0, ...(a.view || {}) })) { view = nv; thumb = (await upload(await vw.shot())).file; } }
+      const n = seq++; pending.set(n, { done: close, fail });
+      api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb, view } });
+    } catch (e) { fail(e.message || "The upload failed."); }
   });
+  if (a.kind === "model") loadGlb(a.file).then((obj) => { if (pop !== p) return; vw = viewer(obj, a.view, p.pic); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); }).catch(() => {});
 }
 
 function set(list) {

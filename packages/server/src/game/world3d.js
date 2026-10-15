@@ -313,7 +313,9 @@ export const assetRef = (kind, v) => (kind === "model" ? modelRef(v) : kind === 
 export function cleanAsset(o) {
   if (!o || typeof o !== "object" || !ASSET_KINDS.includes(o.kind)) return null;
   const name = safeText(String(o.name || ""), 32).trim(), file = assetRef(o.kind, o.file); if (!name || !file) return null;
-  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null };
+  const v = o.view, n = (x, lo, hi, d) => (Number.isFinite(Number(x)) ? Math.max(lo, Math.min(hi, Math.round(Number(x) * 1000) / 1000)) : d);
+  const view = o.kind === "model" && v && typeof v === "object" ? { yaw: n(v.yaw, 0, 360, 45), pitch: n(v.pitch, -90, 90, 28), zoom: n(v.zoom, 0.2, 8, 1), px: n(v.px, -3, 3, 0), py: n(v.py, -3, 3, 0) } : null;   // (owner, 2026-10-15) its icon's camera
+  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view };
 }
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;

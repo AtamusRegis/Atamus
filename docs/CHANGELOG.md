@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Model icon camera (owner):** when importing or editing a model in the Importer, its icon is a live view you can turn, tilt, shift and zoom (with Reset View); the icon is rendered from that view. Rename is now Edit.
 - **The Importer (owner):** I opens a new head-admin panel for importing models, images and sounds, each with a name; a model's icon is a picture rendered from the model. The Object Creator now picks its model from the imported ones (no upload there), and an object without an icon shows its model's picture.
 - **Object categories (owner):** objects now come in five categories: Resource, Region, Object, Structure and Ship, chosen when an object is made in the Object Creator. The Object Placer has one slot per category; with one picked, the left and right arrows cycle through that category's objects. Only Resources hold ore and respawn.
 - **Node depletion and respawn (owner):** a resource node at 0 ore disappears and its respawn timer starts; it comes back with fresh ore somewhere in its spawn zone. In the Object Placer a depleted node shows as a hologram with a live Respawn In countdown.

@@ -358,7 +358,8 @@
     #imp-panel .imp-search { box-sizing: border-box; width: 100%; margin-bottom: 8px; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
     #imp-panel.drop, .we-modal.drop { box-shadow: 0 0 0 2px #38c6ff, var(--shadow); }
     .imp-slot { display: grid; place-items: center; } .imp-pic { display: block; object-fit: contain; pointer-events: none; }
-    .imp-preview { display: grid; place-items: center; min-height: 96px; } .imp-big { width: 72px; height: 72px; font-size: 34px; }
+    .imp-preview { display: grid; place-items: center; min-height: 96px; } .imp-view { width: 192px; height: 192px; border-radius: 6px; cursor: grab; touch-action: none; background: repeating-conic-gradient(rgba(255,255,255,0.05) 0 25%, transparent 0 50%) 0 0 / 16px 16px, rgba(6,10,18,0.9); } .imp-view:active { cursor: grabbing; }
+    .we-modal .imp-reset { justify-self: center; flex: none !important; padding: 4px 12px !important; } .we-modal .imp-reset[hidden] { display: none; } .imp-big { width: 72px; height: 72px; font-size: 34px; }
     #imp-panel .we-err { margin: 8px 0 0; } html.touch #imp-btn, html.touch #imp-panel { display: none !important; }
     #zone-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
     #zone-handles .zn-line { fill: rgba(127,224,255,0.08); stroke: rgba(127,224,255,0.85); stroke-width: 2; stroke-dasharray: 8 6; }
@@ -393,6 +394,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792052471"></script>
+  <script type="module" src="game3d.js?v=1792053780"></script>
 </body>
 </html>
