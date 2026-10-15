@@ -1,9 +1,9 @@
 // (owner, 2026-10-15) The CREATOR (head admin): C (or the [C] button in the staff column) opens it. For now only the ship
 // and module creators (owner, 2026-10-15: everything else scrapped): one row with a search box, a filter button (All,
-// Ship, Module) and a green CREATE; below, the Player Ship and every Ship and Module object as slots (6 a row), sorted by
+// Ship, Module) and a green CREATE; below, every Ship and Module object as slots (6 a row), sorted by
 // name. CREATE asks for a Name, an Icon and a Type (Ship or Module). Right-click a slot: Edit (name, icon; a type stays its
 // own), Edit Object (the Object Editor: a ship's model, module, hitboxes, movement and points; a module's model, size and
-// points) and Delete; the Player Ship: Edit (which Ship object players fly). The server checks it all.
+// points) and Delete. The server checks it all.
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 const C = () => window.Catalog, IC = () => window.ItemCreator;
@@ -62,7 +62,6 @@ const iconPic = (id, px, fallback) => { const ic = id && C() && C().icons.get(id
 function entries() {
   const out = [];
   if (head) {
-    { const ps = playerShip && types.get(playerShip); out.push({ key: "player", k: "ship", name: "Player Ship", pic: (px) => (ps && ps.cat === "ship" ? build.typePic(ps, px) : build.shipPic()) }); }   // (owner, 2026-10-15) shows the Ship object players fly
     for (const t of types.values()) if (t.cat === "ship" || t.cat === "hardpoint") out.push({ key: "type:" + t.id, k: t.cat, id: t.id, name: t.name, o: t, pic: (px) => build.typePic(t, px) });
   }
   return out;
@@ -86,12 +85,9 @@ function closeMenu() { if (menu) { menu.remove(); menu = null; } }
 function openMenu(key, x, y) {
   const e = entries().find((o) => o.key === key); if (!e) return; closeMenu();
   menu = $("div", "we-ctx"); const add = (label, fn) => menu.appendChild(btn(label, "", () => { closeMenu(); fn(); }));
-  if (key === "player") add("Edit", () => playerBox());   // (owner, 2026-10-15) only which Ship object it is: that object's own data does the rest
-  else {
-    add("Edit", () => editBox(e));
-    if (OBJ.includes(e.k)) add("Edit Object", () => build.editObject("t:" + e.id));
-    add("Delete", () => api.send(e.k === "item" ? { t: "itemdel", id: e.id } : OBJ.includes(e.k) ? { t: "tdel", id: e.id } : { t: "sdel", id: e.id }));
-  }
+  add("Edit", () => editBox(e));
+  add("Edit Object", () => build.editObject("t:" + e.id));
+  add("Delete", () => api.send({ t: "tdel", id: e.id }));
   place(menu, x, y);
 }
 
@@ -128,16 +124,8 @@ function editBox(e) {
   }
 }
 
-// (owner, 2026-10-15) the Player Ship: which Ship object players fly (its model, hitboxes, pivot, movement, visibility,
-// hardpoint and effects level are that object's); None: the built-in ship
+// (owner, 2026-10-15: the Player Ship slot is gone from here; the server keeps the ship last picked)
 let playerShip = null;
-function playerBox() {
-  const o = IC().overlay("cr-edit"); o.box.appendChild($("p", "we-title", "PLAYER SHIP"));
-  const g = $("div", "we-grid"), sel = $("select"); sel.append(new Option("None", ""), ...[...types.values()].filter((t) => t.cat === "ship").sort((a, b) => a.name.localeCompare(b.name)).map((t) => new Option(t.name, t.id)));
-  sel.value = playerShip && types.get(playerShip) ? playerShip : ""; g.append($("label", "we-label", "Ship"), sel);
-  const ok = btn("SAVE", "we-ok", () => { api.send({ t: "pship", id: sel.value || null }); o.close(); }), btns = $("div", "we-btns"); btns.append(btn("CANCEL", "", () => o.close()), ok);
-  o.box.append(g, btns);
-}
 function setPlayerShip(id) { playerShip = typeof id === "string" ? id : null; draw(); }
 // the server's answers: a list, or the answer to a save this panel is waiting for (true: handled here)
 function onMsg(m) {
