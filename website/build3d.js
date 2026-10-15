@@ -40,7 +40,11 @@ const MIN = 5, MAX = 1000;
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
 // (owner, 2026-10-14) the combat points are parts: each an outline with a type (body, main engine, left engine, right
 // engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
-export const PART_TYPES = ["body", "main", "left", "right", "hardpoint", "critical"];   // (owner, 2026-10-15) Weapon Emplacement became Hardpoint; Critical added
+export const PART_TYPES = ["body", "main", "left", "right", "hardpoint", "critical"];
+// (owner, 2026-10-15) only Body and Critical can be several parts; the others are one each (an extra becomes a Body)
+export const PART_MULTI = ["body", "critical"];
+export const PART_COLORS = { body: "#8fb7ff", main: "#ffa94d", left: "#5be3a0", right: "#c18bff", hardpoint: "#ff6b6b", critical: "#ffe066" };
+const oneEach = (ps) => { const seen = new Set(); for (const p of ps) { if (PART_MULTI.includes(p.t)) continue; if (seen.has(p.t)) p.t = "body"; else seen.add(p.t); } return ps; };   // (owner, 2026-10-15) Weapon Emplacement became Hardpoint; Critical added
 export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
 // (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
 // other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
@@ -154,7 +158,7 @@ function typeObject(t, mat) {
 const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") + (t.front || 0) : k; };
 export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
-const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), v).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
+const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), oneEach(v)).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
 export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {}, collExtra = {};   // collExtra: (owner, 2026-10-15) each kind's hardpoint elevation / arc / facing and effects level
 export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };
 // (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit (as the server works it out)? dir: degrees
@@ -925,11 +929,13 @@ export function initBuild(ctx) {
     sub.replaceChildren(); sub.hidden = eMode !== "sight" && eMode !== "move";
     if (eMode === "move") { for (const k of MOVE_SHAPES) subBtn(MOVE_NAMES[k], eMv.s === k, null, () => { if (eMv.s === k) return; snap(); eMv = { ...eMv, s: k }; eSave(); drawSub(); eDraw(); }); return; }
     if (eMode !== "sight") return;
-    eParts.forEach((p, i) => subBtn(PART_NAMES[p.t], i === ePart, null, () => { ePart = i; eDrag = null; drawSub(); eDraw(); }));
-    const ty = document.createElement("select"); for (const t of PART_TYPES) ty.append(new Option(PART_NAMES[t], t)); ty.value = eParts[ePart].t;
+    eParts.forEach((p, i) => { const b = subBtn(PART_NAMES[p.t], i === ePart, null, () => { ePart = i; eDrag = null; drawSub(); eDraw(); }); b.classList.add("ce-part"); b.style.setProperty("--pc", PART_COLORS[p.t] || "#9fd8ff"); });   // (owner, 2026-10-15) in its type's color
+    // the type: Body and Critical any number; the others only while no other part has them
+    const taken = new Set(eParts.filter((p, i) => i !== ePart && !PART_MULTI.includes(p.t)).map((p) => p.t));
+    const ty = document.createElement("select"); for (const t of PART_TYPES) { const o = new Option(PART_NAMES[t], t); o.disabled = taken.has(t); ty.append(o); } ty.value = eParts[ePart].t;
     ty.addEventListener("change", () => { snap(); eParts[ePart].t = ty.value; ty.blur(); eSave(); drawSub(); }); sub.appendChild(ty);
     if (eParts.length < 8) subBtn("+", false, "Add part", () => {
-      snap(); const used = new Set(eParts.map((p) => p.t)); eParts.push({ t: PART_TYPES.find((t) => !used.has(t)) || "body", pts: box(0.12, 0.12) }); ePart = eParts.length - 1; eSave(); drawSub(); eDraw(); });
+      snap(); const used = new Set(eParts.map((p) => p.t)); eParts.push({ t: PART_TYPES.find((t) => !used.has(t) && !PART_MULTI.includes(t)) || "body", pts: box(0.12, 0.12) }); ePart = eParts.length - 1; eSave(); drawSub(); eDraw(); });
     if (eParts.length > 1) subBtn("\u2212", false, "Remove part", () => { snap(); eParts.splice(ePart, 1); ePart = Math.max(0, ePart - 1); eSave(); drawSub(); eDraw(); });
   }
   const foot = document.createElement("div"); foot.className = "ce-foot";
@@ -1063,11 +1069,12 @@ export function initBuild(ctx) {
     const [mx0, my0] = toPx([eMv.x0, eMv.y0]), [mx1, my1] = toPx([eMv.x1, eMv.y1]), mcx = (mx0 + mx1) / 2, mcy = (my0 + my1) / 2;
     // all of them always drawn; the one being edited is bright and has handles (the other combat-points parts fainter)
     if (eMode !== "pts") {                      // (owner, 2026-10-15) Points shows neither the hitboxes nor the movement collider
-    eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim") }); });
-    sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
+    const tint = (t) => { const c = PART_COLORS[t] || "#9fd8ff"; return "fill:" + c + ";fill-opacity:0.22;stroke:" + c; };   // (owner, 2026-10-15) each type its own color
+    eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim"), style: tint(p.t) }); });
+    sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim"), style: tint(eParts[ePart].t) });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     }
-    sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
+    sv("path", { d: `M${vx - 18} ${vy} L${vx + 18} ${vy} M${vx} ${vy - 18} L${vx} ${vy + 18}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
     if (isShipKind() && eMode !== "pts") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {

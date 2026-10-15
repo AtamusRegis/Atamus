@@ -305,7 +305,9 @@ export function cleanParts(v) {
   if (Array.isArray(v) && Array.isArray(v[0])) { const c = cleanColl(v); return c ? [{ t: "body", pts: c }] : null; }
   if (!Array.isArray(v) || v.length < 1 || v.length > 8) return null;
   const out = [];
-  for (const p of v) { if (p && p.t === "weapon") p.t = "hardpoint"; if (!p || typeof p !== "object" || !PART_TYPES.includes(p.t)) return null; const c = cleanColl(p.pts); if (!c) return null; out.push({ t: p.t, pts: c }); }
+  const seen = new Set();   // (owner, 2026-10-15) only Body and Critical can be several parts; another of a single type becomes a Body
+  for (const p of v) { if (p && p.t === "weapon") p.t = "hardpoint"; if (!p || typeof p !== "object" || !PART_TYPES.includes(p.t)) return null; const c = cleanColl(p.pts); if (!c) return null;
+    let t = p.t; if (t !== "body" && t !== "critical") { if (seen.has(t)) t = "body"; else seen.add(t); } out.push({ t, pts: c }); }
   return out;
 }
 // (owner, 2026-10-14) nebula clouds: an outline of 3-64 points in meters around the cloud's pivot (|coord| up to 3,000),
