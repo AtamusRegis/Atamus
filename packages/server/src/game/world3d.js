@@ -498,7 +498,8 @@ export class World3D {
     let L = Math.hypot(dx, dy); if (L < 1e-6) return null; const now = Date.now(); p.lastFire = now;
     { const ex = spreadNow(p, now, w.aimSpeed), sp = Math.min(SPREAD_MAX, w.spread0 + ex), off = (Math.random() * 2 - 1) * sp * Math.PI / 180, c = Math.cos(off), n = Math.sin(off);   // somewhere in the cone
       [dx, dy] = [dx * c - dy * n, dx * n + dy * c]; p.spread = Math.min(SPREAD_MAX, ex + w.spreadAdd); p.spreadT = now; L = Math.hypot(dx, dy); }
-    const q = { id: this.projSeq++, a: p.id, x: p.x, y: p.y, vx: dx / L * w.speed, vy: dy / L * w.speed, sp: w.speed, left: w.speed * w.life, went: 0, w };
+    const [ox, oy] = this.shipOrigin(p);   // (owner, 2026-10-14) shots leave from the Weapon Origin
+    const q = { id: this.projSeq++, a: p.id, x: ox, y: oy, vx: dx / L * w.speed, vy: dy / L * w.speed, sp: w.speed, left: w.speed * w.life, went: 0, w };
     this.projs.push(q); this.projEv.push({ t: "proj", i: q.id, a: q.a, x: q.x, y: q.y, vx: q.vx, vy: q.vy });
     return q;
   }
@@ -509,12 +510,12 @@ export class World3D {
     for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const R = b.far || b.rad; if (b.x + R < X0 || b.x - R > X1 || b.y + R < Y0 || b.y - R > Y1) continue; for (const v of b.polys) if (segPoly(x0, y0, x1, y1, v) !== null) return true; }
     return false;
   }
-  // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its line of sight starts (instead of its pivot)
+  // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its shots leave from (line of sight stays at the pivot)
   shipOrigin(p) { return toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, [this.origins.ship || [0, 0]], this.pivots.ship || [0, 0]); }
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
   sees(a, b) {
     const pts = (p) => toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines.ship || VIS_DEFAULT.ship, this.pivots.ship || [0, 0]);
-    const A = pts(a), B = pts(b), [ax, ay] = this.shipOrigin(a), [bx, by] = this.shipOrigin(b); let clear = 0;   // (owner, 2026-10-14) lines run to each ship's Weapon Origin
+    const A = pts(a), B = pts(b), ax = a.x, ay = a.y, bx = b.x, by = b.y; let clear = 0;   // (owner, 2026-10-14) lines run to each ship's pivot
     const piv = this._sightBlocked(ax, ay, bx, by) ? 0 : PIV_W;
     for (let i = 0; i < A.length; i += 2) if (!this._sightBlocked(A[i], A[i + 1], bx, by)) clear++;
     for (let i = 0; i < B.length; i += 2) if (!this._sightBlocked(B[i], B[i + 1], ax, ay)) clear++;
@@ -628,7 +629,7 @@ export class World3D {
       p.aim = p.h;
       // shoot at the target when facing it closely enough
       if (target && (!p.lastFire || now - p.lastFire >= BOT_CD * 1000)) {
-        const tx = target.x - p.x, ty = target.y - p.y, err = Math.abs(wrapA(Math.atan2(tx, -ty) - (p.h || 0)));
+        const [ox, oy] = this.shipOrigin(p), tx = target.x - ox, ty = target.y - oy, err = Math.abs(wrapA(Math.atan2(tx, -ty) - (p.h || 0)));
         if (err < 0.35 && Math.hypot(tx, ty) <= RAIL_RANGE * 0.8) this.shoot(p, tx, ty);
       }
     }

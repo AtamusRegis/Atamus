@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792039044";
+import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792039259";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -407,9 +407,8 @@ function updateVis() {                         // the shadows from where my ship
   shade.position.x = me.x; shade.position.z = -me.y; shade.visible = visMesh.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
   // (owner, 2026-10-14: speed) the shadows are only worked out again when my ship has moved or an object changed
   // (speed: worked out again after a meter of movement)
-  const mine = players.get(myId), [vx, vy] = shipOrigin(me.x, me.y, mine ? mine.heading : 0);   // (owner, 2026-10-14) from my Weapon Origin
-  const key = Math.round(vx) + "," + Math.round(vy) + "," + visVer; if (key === visKey) return; visKey = key;
-  const F = VIS_S * 4, pos = [];
+  const key = Math.round(me.x) + "," + Math.round(me.y) + "," + visVer; if (key === visKey) return; visKey = key;
+  const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
   // (owner, 2026-10-14) shadows start behind the outline, wherever the line of sight can't reach: only the edges facing
   // away from me cast, so the object itself and the ground up to its far side stay clear
   const back = (v, i, sg) => { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
@@ -525,13 +524,13 @@ function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
-    const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), MO = shipOrigin(me.x, me.y, mine ? mine.heading : 0), seen = new Set();   // (owner) the Visibility points, not the combat points
-    const look = (vis, poly, x, y, spd = 99, id = null, h = 0) => {
+    const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the combat points
+    const look = (vis, poly, x, y, spd = 99, id = null) => {
       if (!vis) return; seen.add(vis);
-      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, MO, asPts(poly), shipOrigin(x, y, h), W, edit);   // (owner, 2026-10-14) the lines run to each ship's Weapon Origin
+      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
       const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id, p.heading);
+    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
@@ -652,7 +651,7 @@ function visGizmo(on) {
 }
 // (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the combat points are separate)
 function shipVisOutline(x, y, h) { return visPtsOf({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
-// (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its line of sight starts (instead of its pivot)
+// (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its aim line and shots start (line of sight stays at the pivot)
 function shipOrigin(x, y, h) { return toWorldPts({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, [origins.ship || [0, 0]], pivots.ship || [0, 0]); }
 // an object's visibility points in the world, as [x0, y0, x1, y1, ...]
 function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k], pivots[o.k] || [0, 0]); }
@@ -814,7 +813,8 @@ let railAt = 0, ammo = null, reloadAt = 0;
 const SPREAD_MAX = 45;
 let spreadDeg = 0, spreadT = 0;                // the extra spread from shooting (over the weapon's default), and when
 const spreadNow = (now = performance.now()) => Math.min(SPREAD_MAX, wpn().spread0 + Math.max(0, spreadDeg - wpn().aimSpeed * (now - spreadT) / 1000));
-let aimAng = null;                             // the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
+let aimAng = null, aimOx = 0, aimOy = 0;   // aimOx / aimOy: my Weapon Origin this frame (owner, 2026-10-14: the aim line and shots start there)
+// aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
 const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
 // (owner, 2026-10-14) R reloads the magazine (not while building, where R turns pieces, nor while typing)
 function reloadGun() {
@@ -1245,15 +1245,16 @@ renderer.setAnimationLoop(() => {
   let aimShown = false; myAim = null;
   if (haveMe) {                                // (owner, 2026-10-14) the aim direction turns toward the pointer at the weapon's rotation speed
     const r0 = aimAt(aimPx().x, aimPx().y);
-    if (r0) { const want = Math.atan2(r0.uz, r0.ux); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = wpn().rotSpeed * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
+    const mine = players.get(myId); [aimOx, aimOy] = shipOrigin(me.x, me.y, mine ? mine.heading : 0);   // (owner, 2026-10-14) the aim line runs from the Weapon Origin
+    if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = wpn().rotSpeed * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
   }
   if (aiming && haveMe && aimAng !== null) {
-    const L0 = wpn().optimal, a = { x: me.x + Math.cos(aimAng) * L0, z: -me.y + Math.sin(aimAng) * L0 };   // (owner) the line runs the optimal range
+    const L0 = wpn().optimal, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner) the line runs the optimal range
     {
       aimShown = true;
-      const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = me.x, sz = -me.y;
+      const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = aimOx, sz = -aimOy;
       const at = (f) => [sx + (a.x - sx) * f, sz + (a.z - sz) * f];
-      const tb = aimBlocked(me.x, me.y, a.x, -a.z);
+      const tb = aimBlocked(aimOx, aimOy, a.x, -a.z);
       // four points: white from the ship, then (blocked) red from the hit to the reticle, else fading out over the last stretch
       const pts = tb === null ? [[0, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [1, 1, 1, 1, 0]]
         : [[0, 1, 1, 1, 0.85], [tb, 1, 1, 1, 0.85], [tb, 1, 0.25, 0.2, 0.9], [1, 1, 0.25, 0.2, 0.5]];
@@ -1267,7 +1268,7 @@ renderer.setAnimationLoop(() => {
   { const sp = Math.min(SPREAD_MAX, spreadNow()) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line)
     cone.visible = coneEdges.visible = !!on;
     if (on) {
-      const sx = me.x, sz = -me.y, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
+      const sx = aimOx, sz = -aimOy, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
       const lx = sx + Math.cos(a - sp) * L, lz = sz + Math.sin(a - sp) * L, rx = sx + Math.cos(a + sp) * L, rz = sz + Math.sin(a + sp) * L;
       coneGeo.attributes.position.array.set([sx, 0.35, sz, lx, 0.35, lz, rx, 0.35, rz]); coneGeo.attributes.position.needsUpdate = true;
       coneEdgeGeo.attributes.position.array.set([sx, 0.38, sz, lx, 0.38, lz, sx, 0.38, sz, rx, 0.38, rz]); coneEdgeGeo.attributes.position.needsUpdate = true;
