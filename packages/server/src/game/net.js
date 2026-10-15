@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
-import { World3D, inside, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, inside, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, SH_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -97,7 +97,7 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), ui,
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer, creator, items: staff },   // staff: the Admin button; builder: the Object Placer; creator: the Object Creator; items: the Item Creator
-      cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      cfg: { hpMax: HP_MAX, shMax: SH_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
       items: world.itemList(), icons: world.iconList(), types: world.typeList(), sounds: world.soundList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
@@ -328,7 +328,7 @@ export function attachGameServer(httpServer) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
         const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R)
-          .map((h) => ({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100 }));
+          .map((h) => ({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100, ...(h.sa ? { sa: 1 } : {}), ...(h.sb ? { sb: 1 } : {}) }));
         if (near.length) ws.send(JSON.stringify(near.length === 1 ? near[0] : { t: "batch", m: near }));   // (one message a tick, owner 2026-10-15)
       }
       world.hits.length = 0;
@@ -338,7 +338,7 @@ export function attachGameServer(httpServer) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
         const out = world.projEv.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) <= LOAD_R + (e.t === "proj" ? RAIL_RANGE : 0))
-          .map((e) => (e.t === "proj" ? { t: "proj", i: e.i, a: e.a, x: r1(e.x), y: r1(e.y), vx: r1(e.vx), vy: r1(e.vy) } : { t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s }));
+          .map((e) => (e.t === "proj" ? { t: "proj", i: e.i, a: e.a, x: r1(e.x), y: r1(e.y), vx: r1(e.vx), vy: r1(e.vy) } : { t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s, ...(e.sh ? { sh: 1 } : {}) }));
         if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
       }
       world.projEv.length = 0;

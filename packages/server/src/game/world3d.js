@@ -36,6 +36,26 @@ export const LOAD_R = 1300;
 // (owner, 2026-10-14) ship bumps: the bounce (0 = dead stop, 1 = full rebound), the closing speed that does no damage
 // (m/s), and damage per m/s above it; health
 export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
+// (owner, 2026-10-15) the shield: an oval around the ship that takes damage before the hull, SH_MAX full, recharging
+// SH_REGEN a second; broken (0) it stays down until the ship respawns. Its oval is the combat points' box, grown by SH_GROW
+export const SH_MAX = 50, SH_REGEN = 5, SH_GROW = 1.42, SH_PAD = 4;
+export function shieldOval(k, coll, piv) {       // in meters around the ship's position, unturned: { cx, cy, ax, ay }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const v of buildPolys({ k, x: 0, y: 0, w: 2 * SHIP_R, d: 2 * SHIP_R, r: 0 }, coll, piv)) for (let i = 0; i < v.length; i += 2) {
+    x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); }
+  if (!Number.isFinite(x0)) { x0 = y0 = -SHIP_R; x1 = y1 = SHIP_R; }
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, ax: (x1 - x0) / 2 * SH_GROW + SH_PAD, ay: (y1 - y0) / 2 * SH_GROW + SH_PAD };
+}
+// where along a segment (0..1) it first enters a ship's shield oval (null: it misses, or starts inside)
+export function segShield(x0, y0, x1, y1, px, py, h, o) {
+  const c = Math.cos(h), s = Math.sin(h), ex = px + o.cx * c - o.cy * s, ey = py + o.cx * s + o.cy * c;
+  const loc = (x, y) => { const dx = x - ex, dy = y - ey; return [(dx * c + dy * s) / o.ax, (-dx * s + dy * c) / o.ay]; };
+  const [ax, ay] = loc(x0, y0), [bx, by] = loc(x1, y1), dx = bx - ax, dy = by - ay;
+  const A = dx * dx + dy * dy, B = 2 * (ax * dx + ay * dy), C = ax * ax + ay * ay - 1;
+  if (C <= 0 || A < 1e-12) return null;
+  const D = B * B - 4 * A * C; if (D < 0) return null;
+  const u = (-B - Math.sqrt(D)) / (2 * A); return u >= 0 && u <= 1 ? u : null;
+}
 // (owner, 2026-10-14) the railgun (left click): a fast projectile from the ship's pivot toward the pointer, stopped by the
 // first block, Build piece (their Combat Points) or ship (the ship's Combat Points) it meets; a ship hit takes RAIL_DMG. A ship
 // the shooter can't see by line of sight (blocks and Build pieces; clouds don't count here) isn't hit: it flies through.
@@ -550,6 +570,7 @@ export class World3D {
     for (const p of this.players.values()) {
       const moving = !!(p.dx || p.dy);
       if (p.cap === undefined) p.cap = CAP_MAX;
+      if (p.sh === undefined) p.sh = SH_MAX; else if (!p.shBroken && p.sh < SH_MAX) p.sh = Math.min(SH_MAX, p.sh + SH_REGEN * dt);   // (owner, 2026-10-15) shield recharge
       if (p.cap <= 0) p.capOut = true; else if (p.capOut && p.cap >= CAP_RESUME) p.capOut = false;
       const want = moving ? Math.atan2(p.dx, -p.dy) : 0;                     // the push's direction (client's convention)
       const dh = moving ? wrapA(want - (p.h || 0)) : 0;                      // off the nose: how much acceleration it gets
@@ -620,14 +641,14 @@ export class World3D {
         const j = -(1 + BUMP_E) * vn / 2;
         a.vx = (a.vx || 0) + j * n.nx; a.vy = (a.vy || 0) + j * n.ny; b.vx = (b.vx || 0) - j * n.nx; b.vy = (b.vy || 0) - j * n.ny;
         if (!a.dx && !a.dy) a.brakeA = 0; if (!b.dx && !b.dy) b.brakeA = 0;   // a drifting ship brakes again from its new speed
-        const dmg = Math.max(0, -vn - BUMP_SAFE) * BUMP_DMG; if (dmg > 0) { this.hurt(a, dmg); this.hurt(b, dmg); }
+        const dmg = Math.max(0, -vn - BUMP_SAFE) * BUMP_DMG, sa = dmg > 0 && this.hurt(a, dmg), sb = dmg > 0 && this.hurt(b, dmg);
         if (-vn > 5) {                         // (owner) sparks where they met (s: the hit's strength, x4 since speeds were cut to 25%)
           // (owner, 2026-10-14) where the hulls touched (between each one's point deepest toward the other), and the way the hit
           // came from: back toward whichever ship drove into the other harder (n points from b toward a)
           const sup = (P, dx, dy) => { let bi = 0, bv = -Infinity; for (let k = 0; k < P.length; k += 2) { const v = P[k] * dx + P[k + 1] * dy; if (v > bv) { bv = v; bi = k; } } return [P[bi], P[bi + 1]]; };
           const pa = sup(polys.get(a), -n.nx, -n.ny), pb = sup(polys.get(b), n.nx, n.ny);
           const inA = -(((a.vx || 0) * n.nx) + ((a.vy || 0) * n.ny)), inB = ((b.vx || 0) * n.nx) + ((b.vy || 0) * n.ny), sg = inA >= inB ? 1 : -1;
-          this.hits.push({ x: (pa[0] + pb[0]) / 2, y: (pa[1] + pb[1]) / 2, s: Math.round(-vn * 4), a: a.id, b: b.id, dx: n.nx * sg, dy: n.ny * sg });
+          this.hits.push({ x: (pa[0] + pb[0]) / 2, y: (pa[1] + pb[1]) / 2, s: Math.round(-vn * 4), a: a.id, b: b.id, dx: n.nx * sg, dy: n.ny * sg, sa, sb });
         }
       }
       polys.set(a, this.shipPoly(a)); polys.set(b, this.shipPoly(b));
@@ -636,9 +657,16 @@ export class World3D {
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
   // (owner, 2026-10-14) part: the combat-points part a shot hit (body / main / left / right / weapon); for now every part is HP
   hurt(p, d, part) {
-    if (spawning(p)) return;                   // (still materializing)
+    if (spawning(p)) return false;             // (still materializing)
+    let shield = false;
+    if ((p.sh ?? SH_MAX) > 0) {                // (owner, 2026-10-15) the shield takes it first; what's left goes to the hull
+      const sh = p.sh ?? SH_MAX, take = Math.min(sh, d); p.sh = sh - take; d -= take; shield = true;
+      if (p.sh <= 0) { p.sh = 0; p.shBroken = true; }
+    }
+    if (d <= 0) return shield;
     p.hp = (p.hp ?? HP_MAX) - d;
-    if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn
+    if (p.hp <= 0) { p.hp = HP_MAX; p.sh = SH_MAX; p.shBroken = false; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn; the shield comes back with it
+    return shield;
   }
   // (owner, 2026-10-14) weapons: everyone has the first one (the Railgun). (owner, 2026-10-15) Making and editing weapons
   // was scrapped with the Weapon panel; it'll come back as part of the Item Creator
@@ -768,20 +796,25 @@ export class World3D {
       const near = (x, y, R) => Math.max(Math.abs(x - (x0 + x1) / 2), Math.abs(y - (y0 + y1) / 2)) <= R + step / 2;
       for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
       for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; for (const v of b.polys) { const u = segPoly(x0, y0, x1, y1, v); if (u !== null && u < t) { t = u; hit = null; } } }
-      const shooter = this.players.get(q.a);
+      const shooter = this.players.get(q.a), oval = shieldOval(this.shipK, this.colliders, this.pivots);
+      let shHit = false;
       for (const p of this.players.values()) {
-        if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6)) continue;
+        if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6 + Math.max(oval.ax, oval.ay))) continue;
+        if ((p.sh ?? SH_MAX) > 0 && !spawning(p)) {   // (owner, 2026-10-15) a shield up: the shot stops on its oval
+          const u = segShield(x0, y0, x1, y1, p.x, p.y, p.h || 0, oval);
+          if (u !== null) { if (u < t && !(shooter && !this.sees(shooter, p))) { t = u; hit = p; part = "shield"; shHit = true; } continue; }
+        }
         // (owner, 2026-10-14) each combat-points part separately: the first one the shot meets is the part hit
         const parts = this.colliders[this.shipK] || COLL_DEFAULT.ship, polys = buildPolys({ k: this.shipK, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots);
         let u = null, pi = 0; polys.forEach((v, i) => { const w = segPoly(x0, y0, x1, y1, v); if (w !== null && (u === null || w < u)) { u = w; pi = i; } });
         if (u === null || u >= t) continue;
         if (shooter && !this.sees(shooter, p)) continue;   // (owner) a ship the shooter can't see: the shot flies through it
-        t = u; hit = p; part = parts[pi].t;
+        t = u; hit = p; part = parts[pi].t; shHit = false;
       }
       if (t <= 1) {
         const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
         if (hit) this.hurt(hit, q.w ? q.w.dmg * falloffAt(q.w, q.went + step * t) : RAIL_DMG, part);   // (owner) full damage out to the optimal range, less past it
-        this.projEv.push({ t: "pend", i: q.id, x, y, h: hit ? hit.id : null, s: 1 }); this.projs.splice(k, 1); continue;
+        this.projEv.push({ t: "pend", i: q.id, x, y, h: hit ? hit.id : null, s: 1, sh: hit && shHit ? 1 : 0 }); this.projs.splice(k, 1); continue;
       }
       q.x = x1; q.y = y1; q.left -= step; q.went += step;
       if (q.left <= 0.01 || !inside(q.x, q.y)) { this.projEv.push({ t: "pend", i: q.id, x: q.x, y: q.y, h: null, s: 0 }); this.projs.splice(k, 1); }
@@ -1017,7 +1050,7 @@ export class World3D {
     for (const p of this.players.values()) {
       const dx = p.x - viewer.x, dy = p.y - viewer.y;
       if (p !== viewer && dx * dx + dy * dy > R2) continue;
-      const row = [p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX), p.ta == null ? null : Math.round(p.ta * 100)];   // + health (owner, 2026-10-14); + turret yaw (owner, 2026-10-15)
+      const row = [p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX), p.ta == null ? null : Math.round(p.ta * 100), Math.ceil(p.sh ?? SH_MAX)];   // + health (owner, 2026-10-14); + turret yaw (owner, 2026-10-15)
       if (spawning(p)) row.push(Math.ceil((p.spawnUntil - Date.now()) / 10));   // (owner, 2026-10-14) still materializing: hundredths of a second left
       out.push(row);
     }
