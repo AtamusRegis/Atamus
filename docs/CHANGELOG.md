@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Node ore and size (owner):** a placed resource node now shows (and can set) the ore it holds right now, and its Scale setting is gone: Size alone sets how big it is.
 - **Object list, smoother placing and draggable numbers (owner):** X now opens a searchable, sortable list of objects with CREATE NEW OBJECT (name, icon, model, type); right-click an object to Edit Item, Edit Object (colliders and resource type) or Delete. Moving or scaling a placed object no longer stutters. Number fields can be dragged sideways to change them.
 - **Object Placer selection (owner):** clicking a placed object now selects it instead of picking it up: north / south / east / west arrows move it, its handles (cloud outline, route, spawn zone) only show while it's selected, and its attributes appear in a panel you can drag anywhere.
 - **Resource node creation and placement (owner):** the Object Creator now has Create Resource Node, with a panel for the name, object icon, model and resource type above the collision editor. Size, scale, rotation and bob speed, bob heights, respawn time, ore range and a spawn zone (an outline you edit on the ground) are now set per placed node in the Object Placer.

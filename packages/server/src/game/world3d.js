@@ -306,9 +306,10 @@ export function cleanType(o) {
   const model = modelRef(o.model);
   return { name, cat: TYPE_CATS.includes(o.cat) ? o.cat : "node", model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item) };
 }
-// a placed resource node's settings (the Object Placer, owner 2026-10-15): its size (m across at scale 1; the footprint w is
-// size x scale), how fast it turns (deg/s) and bobs (bobs a second) between two heights (m), the ore it spawns with
-// (min-max), its respawn time (s) and its spawn zone: an outline of 3-32 points in meters around it (where it respawns)
+// a placed resource node's settings (the Object Placer, owner 2026-10-15): its size (m across: its footprint), how fast it
+// turns (deg/s) and bobs (bobs a second) between two heights (m), the ore it holds now (amount; rolled in the range when it
+// spawns, at most the max), the ore it spawns with (min-max), its respawn time (s) and its spawn zone: an outline of 3-32
+// points in meters around it (where it respawns)
 export function cleanNode(e, w) {
   e = e && typeof e === "object" ? e : {};
   const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v)) * 100) / 100 : d; };
@@ -318,7 +319,8 @@ export function cleanNode(e, w) {
   let zone = null;
   if (Array.isArray(e.zone) && e.zone.length >= 3 && e.zone.length <= 32) { zone = []; for (const q of e.zone) { if (!Array.isArray(q) || q.length !== 2) { zone = null; break; } const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) { zone = null; break; } zone.push([Math.round(Math.max(-3000, Math.min(3000, x)) * 10) / 10, Math.round(Math.max(-3000, Math.min(3000, y)) * 10) / 10]); } }
   if (!zone) zone = [[-size, -size], [size, -size], [size, size], [-size, size]];
-  return { size, spin: num(e.spin, -720, 720, 10), bob: num(e.bob, 0, 5, 0.3), bmin, bmax, min, max, respawn: int(e.respawn, 0, 86400, 300), zone };
+  const amount = e.amount == null || !Number.isFinite(Number(e.amount)) ? null : Math.min(max, int(e.amount, 0, 99999, 0));
+  return { size, spin: num(e.spin, -720, 720, 10), bob: num(e.bob, 0, 5, 0.3), bmin, bmax, amount, min, max, respawn: int(e.respawn, 0, 86400, 300), zone };
 }
 export const buildMsg = (b) => (b.extra ? [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra] : [b.id, b.k, b.x, b.y, b.w, b.d, b.r]);
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
@@ -744,7 +746,7 @@ export class World3D {
       const route = o.extra.route == null ? null : cleanRoute(o.extra.route), atk = o.extra.atk === true;
       if (route || atk) b.extra = { ...(route ? { route } : {}), ...(atk ? { atk: true } : {}) };
     }
-    if (isTypeKey(o.k)) { b.d = b.w; b.extra = cleanNode(o.extra, b.w); }   // (owner, 2026-10-15) a placed object: square footprint (size x scale), a node's settings
+    if (isTypeKey(o.k)) { b.extra = cleanNode(o.extra, b.w); b.w = b.d = b.extra.size; }   // (owner, 2026-10-15) a placed node: its settings; its footprint is its size (no scale)
     if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
       const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
       if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
@@ -753,10 +755,7 @@ export class World3D {
   }
   _put(id, b, keep = false) {
     b.id = id;
-    if (isTypeKey(b.k)) {                     // (owner, 2026-10-15) a resource node rolls how much ore it holds, in its range (kept while the range still covers it)
-      const old = this.builds.get(id), e = b.extra;
-      b.amount = old && old.amount >= e.min && old.amount <= e.max ? old.amount : e.min + Math.floor(Math.random() * (e.max - e.min + 1));
-    }
+    if (isTypeKey(b.k) && b.extra.amount == null) { const e = b.extra; e.amount = e.min + Math.floor(Math.random() * (e.max - e.min + 1)); b.dirty = true; }   // (owner, 2026-10-15) a new node rolls the ore it holds
     this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b, keep); return b;
   }
   // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players

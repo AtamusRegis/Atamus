@@ -612,9 +612,8 @@ export function initBuild(ctx) {
   }
 
   // ---- (owner, 2026-10-15) resource nodes (the Object Placer): each turns and bobs between two heights (its own settings).
-  // The selected one shows its settings over it: Size (m across at scale 1), Scale (its footprint is size x scale; the
-  // wheel scales it too), Rotation Speed (deg/s), Bob Speed (bobs a second), Bob Min / Bob Max (m), Respawn (s), Ore Min /
-  // Ore Max (how much it spawns with); and its spawn zone, an outline drawn on the ground around it: drag a point, drag
+  // The selected one shows its settings: Size (m across; the wheel changes it too), Rotation Speed (deg/s), Bob Speed (bobs a
+  // second), Bob Min / Bob Max (m), Respawn (s), Ore (how much it holds now), Ore Min / Ore Max (how much it spawns with); and its spawn zone, an outline drawn on the ground around it: drag a point, drag
   // the dot in the middle of an edge to add one, right-click a point to remove it (3 stay). Each change is saved. ----
   function spinNodes(now, dt) {
     for (const b of builds.values()) {
@@ -624,16 +623,16 @@ export function initBuild(ctx) {
     }
   }
   const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; aPanel.appendChild(nBox);
-  const NODE_F = [["size", "Size"], ["scale", "Scale"], ["spin", "Rotation Speed"], ["bob", "Bob Speed"], ["bmin", "Bob Min"], ["bmax", "Bob Max"], ["respawn", "Respawn"], ["min", "Ore Min"], ["max", "Ore Max"]], nIn = {};
-  const nVal = (b, k) => (k === "scale" ? Math.round(b.w / (b.extra.size || b.w) * 100) / 100 : b.extra[k]);
+  const NODE_F = [["size", "Size"], ["spin", "Rotation Speed"], ["bob", "Bob Speed"], ["bmin", "Bob Min"], ["bmax", "Bob Max"], ["respawn", "Respawn"], ["amount", "Ore"], ["min", "Ore Min"], ["max", "Ore Max"]], nIn = {};
+  const nVal = (b, k) => (b.extra[k] == null ? "" : b.extra[k]);
   for (const [k, label] of NODE_F) {
-    const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.step = k === "scale" || k === "bob" ? 0.05 : 1;
+    const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.step = k === "bob" ? 0.05 : 1; if (["size", "respawn", "amount", "min", "max", "bob"].includes(k)) i.min = 0;
     l.append(sp, i); nBox.appendChild(l); nIn[k] = i;
     i.addEventListener("change", () => {
       const b = selNode(); if (!b) return; const v = Number(i.value); if (!Number.isFinite(v)) return;
-      const e = b.extra = { ...(b.extra || {}) }, sc = b.w / (e.size || b.w);
-      if (k === "scale") { b.w = b.d = Math.max(MIN, Math.min(MAX, (e.size || b.w) * Math.max(0.01, v))); }
-      else if (k === "size") { e.size = Math.max(MIN, Math.min(MAX, v)); b.w = b.d = Math.max(MIN, Math.min(MAX, e.size * sc)); }
+      const e = b.extra = { ...(b.extra || {}) };
+      if (k === "size") { e.size = b.w = b.d = Math.max(MIN, Math.min(MAX, v)); }
+      else if (k === "amount") { e.amount = Math.max(0, Math.min(e.max, Math.round(v))); }
       else { e[k] = v; if (k === "min" && e.max < v) e.max = v; if (k === "max" && e.min > v) e.min = v; if (k === "bmin" && e.bmax < v) e.bmax = v; if (k === "bmax" && e.bmin > v) e.bmin = v; }
       place(b); push(b, true);
     });
@@ -765,7 +764,7 @@ export function initBuild(ctx) {
     e.preventDefault(); e.stopImmediatePropagation();
     if (t.k === "ship") return;
     const f = Math.max(MIN / Math.min(t.w, t.d), Math.min(Math.pow(1.1, -e.deltaY / 100), MAX / Math.max(t.w, t.d)));   // (a node: its scale; its size stays)
-    t.w *= f; t.d *= f;
+    t.w *= f; t.d *= f; if (isTypeKey(t.k)) t.extra = { ...(t.extra || {}), size: Math.round(t.w * 100) / 100 };   // (a node: its size)
     if (!picking) { place(t); push(t, false); }
   }, { capture: true, passive: false });
 
