@@ -356,8 +356,8 @@
     /* (owner, 2026-10-15) the Importer */
     #imp-btn:hover, #imp-btn.on { background: linear-gradient(135deg, #9df0c0, #2fae6a); color: #03170b; }
     #imp-panel .imp-grid { grid-template-columns: repeat(6, 44px); }
-    #imp-panel .imp-tools { display: flex; gap: 6px; margin-bottom: 8px; }
-    #imp-panel .imp-tools button.imp-filter { flex: none !important; width: 30px; padding: 0 !important; display: grid; place-items: center; color: var(--text-dim); } #imp-panel .imp-tools button.imp-filter.on { color: #38c6ff; }
+    #imp-panel .imp-tools { display: flex; gap: 6px; margin-bottom: 8px; box-sizing: border-box; width: calc(44px * 6 + 6px * 5); }
+    #imp-panel .imp-tools button.imp-filter { flex: none !important; width: 30px; padding: 0 !important; display: grid; place-items: center; color: var(--text-dim); } #imp-panel .imp-tools button.imp-filter.on svg { color: #38c6ff; filter: drop-shadow(0 0 3px rgba(56,198,255,0.85)); }
     #imp-panel .imp-tools button.imp-go { flex: none !important; padding: 4px 14px !important; border: none !important; background: linear-gradient(135deg, #5fe39a, #22a35c) !important; color: #03170b !important; font-weight: 700; }
     #imp-panel .imp-tools button.imp-go:hover { background: linear-gradient(135deg, #85f0b4, #2fbe6e) !important; }
     .imp-fmenu button.on { color: #38c6ff; }
@@ -400,6 +400,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792054521"></script>
+  <script type="module" src="game3d.js?v=1792054650"></script>
 </body>
 </html>
