@@ -4,7 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
-- **Aim camera slides, doesn't zoom (owner):** aiming out past the dead zone now slides the camera toward your aim, keeping your ship on screen, without zooming out.
+- **Aim camera slides, doesn't zoom (owner):** aiming out past the dead zone now slides the camera toward your aim, without zooming out. Zoomed in, it slides far enough that you can still aim out to the distance circle.
 - **Fix: aim camera jitter (owner):** with the camera reached out, moving the aim back in no longer makes it jump between positions; it follows smoothly back toward the ship. Aiming toward any screen edge (including the bottom, or while zoomed in) reaches the camera out fully again, so you can sweep the aim all the way around.
 - **Aim camera dead zone (owner):** while aiming, the camera now stays put until the aim point is more than 300 m from your ship, then reaches out to its full range. Aiming near your ship no longer zooms the camera out (your zoom is kept).
 - **Weapon Origin fires (owner):** the aim line and shots (players' and test ships') now start at the ship's Weapon Origin; line of sight goes back to starting at the pivot.

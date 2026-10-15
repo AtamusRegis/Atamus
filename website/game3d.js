@@ -1202,7 +1202,7 @@ renderer.setAnimationLoop(() => {
       // is solved per direction so the screen edge sits exactly the overflow past the circle, the ship kept 80 m
       // inside the opposite edge. (owner, 2026-10-14) A dead zone of cam.dead (300 m) around the ship: with the aim point
       // inside it the camera stays put; beyond it, the camera eases out to the full reach (the focus and zoom ease too).
-      const R = cam.leash, S = 80, m = 0.85;
+      const R = cam.leash, m = 0.85;
       const r = Math.min(1, Math.hypot(a.sux, a.suy));
       const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
       const ring = [cam.dir.e, cam.dir.ne, cam.dir.n, cam.dir.nw, cam.dir.w, cam.dir.sw, cam.dir.s, cam.dir.se];
@@ -1214,16 +1214,16 @@ renderer.setAnimationLoop(() => {
       const eBot = Math.max(0.05, Math.cos(ph) - Math.sin(ph) * cot(ph + f2));
       const ex = Math.tan(f2) * camera.aspect;
       const uxs = r > 1e-4 ? Math.abs(a.sux) / r : 0, uys = r > 1e-4 ? Math.abs(a.suy) / r : 1;
-      const eF = a.suy >= 0 ? eTop : eBot, eB = a.suy >= 0 ? eBot : eTop;
+      const eF = a.suy >= 0 ? eTop : eBot;
       const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
-      const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
       // 0 inside the dead zone, full a little past it; and (owner, 2026-10-14) always full toward the screen's edge, since in
       // some directions (toward the bottom, or zoomed in) the screen ends before 300 m
       const cl01 = (v) => Math.min(1, Math.max(0, v)), rd = restDist(a.sux, a.suy);
       const rr = Math.max(cl01((rd - cam.dead) / cam.deadRamp), cl01((r - 0.7) / 0.25)), ease = rr * rr * (3 - 2 * rr); aimEase = ease;
       wantDist = camDist;   // (owner, 2026-10-14) aiming out slides the camera along the aim (the leash) but never zooms it
-      let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
-      lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
+      // (owner, 2026-10-14) the focus slides out until the screen's edge ahead sits the overflow past the distance circle, at any
+      // zoom: zoomed in it slides further (the ship may leave the screen), so the reticle always reaches the circle
+      let lam = 1 - (m * wantDist / denF - O) / R;
       lam = Math.min(1, Math.max(0, lam)) * ease;
       fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;
     }
