@@ -13,7 +13,8 @@
     el.style.left = Math.max(0, Math.min(innerWidth - r.width, p.x)) + "px"; el.style.top = Math.max(0, Math.min(innerHeight - r.height, p.y)) + "px";
   }
   function save(el, key) {
-    if (!el || !KEYS.includes(key)) return; const r = el.getBoundingClientRect(), x = Math.round(r.left), y = Math.round(r.top);
+    if (!el || !KEYS.includes(key) || el.hidden || !el.isConnected) return; const r = el.getBoundingClientRect(), x = Math.round(r.left), y = Math.round(r.top);
+    if (!r.width || !r.height) return;           // (closed: nothing to save; its × is on the drag bar)
     const p = pos[key]; if (p && p.x === x && p.y === y) return;
     pos[key] = { x, y }; send({ t: "ui", k: key, x, y });
   }
@@ -21,7 +22,7 @@
   function front(el) { if (!el) return; if (z > 22) { z = 9; for (const w of document.querySelectorAll("[data-winz]")) w.style.zIndex = String(z); } el.dataset.winz = "1"; el.style.zIndex = String(++z); }
   // a drag handle: when a drag on it ends, the window's spot is saved; pressing anywhere on the window brings it forward
   function watch(handle, el, key) {
-    handle.addEventListener("pointerdown", () => { const up = () => { removeEventListener("pointerup", up, true); setTimeout(() => save(el, key), 0); }; addEventListener("pointerup", up, true); });
+    handle.addEventListener("pointerdown", (e) => { if (e.button !== 0 || (e.target.closest && e.target.closest("button"))) return; const up = () => { removeEventListener("pointerup", up, true); setTimeout(() => save(el, key), 0); }; addEventListener("pointerup", up, true); });
     el.addEventListener("pointerdown", () => front(el), true);
   }
   // a pop-up (centered on a dim backdrop): dragged by its title, back where it was last time
