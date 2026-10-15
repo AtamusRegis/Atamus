@@ -355,7 +355,12 @@
     html.touch #obj-list { display: none !important; }
     /* (owner, 2026-10-15) the Importer */
     #imp-btn:hover, #imp-btn.on { background: linear-gradient(135deg, #9df0c0, #2fae6a); color: #03170b; }
-    #imp-panel .imp-search { box-sizing: border-box; width: 100%; margin-bottom: 8px; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
+    #imp-panel .imp-tools { display: flex; gap: 6px; margin-bottom: 8px; }
+    #imp-panel .imp-tools button.imp-filter { flex: none !important; width: 30px; padding: 0 !important; display: grid; place-items: center; color: var(--text-dim); } #imp-panel .imp-tools button.imp-filter.on { color: #38c6ff; }
+    #imp-panel .imp-tools button.imp-go { flex: none !important; padding: 4px 14px !important; border: none !important; background: linear-gradient(135deg, #5fe39a, #22a35c) !important; color: #03170b !important; font-weight: 700; }
+    #imp-panel .imp-tools button.imp-go:hover { background: linear-gradient(135deg, #85f0b4, #2fbe6e) !important; }
+    .imp-fmenu button.on { color: #38c6ff; }
+    #imp-panel .imp-search { box-sizing: border-box; flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
     #imp-panel.drop, .we-modal.drop { box-shadow: 0 0 0 2px #38c6ff, var(--shadow); }
     .imp-slot { display: grid; place-items: center; } .imp-pic { display: block; object-fit: contain; pointer-events: none; }
     .imp-preview { display: grid; place-items: center; min-height: 96px; } .imp-view { width: 192px; height: 192px; border-radius: 6px; cursor: grab; touch-action: none; background: repeating-conic-gradient(rgba(255,255,255,0.05) 0 25%, transparent 0 50%) 0 0 / 16px 16px, rgba(6,10,18,0.9); } .imp-view:active { cursor: grabbing; }
@@ -394,6 +399,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792053780"></script>
+  <script type="module" src="game3d.js?v=1792054404"></script>
 </body>
 </html>

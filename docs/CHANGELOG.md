@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Raw Assets (owner):** the Importer is now titled RAW ASSETS, with one row of a "Search assets" box, a filter button (All, Models, Images, Audio) and a green Import button above the asset grid; the tabs are gone.
 - **Model icon camera (owner):** when importing or editing a model in the Importer, its icon is a live view you can turn, tilt, shift and zoom (with Reset View); the icon is rendered from that view. Rename is now Edit.
 - **The Importer (owner):** I opens a new head-admin panel for importing models, images and sounds, each with a name; a model's icon is a picture rendered from the model. The Object Creator now picks its model from the imported ones (no upload there), and an object without an icon shows its model's picture.
 - **Object categories (owner):** objects now come in five categories: Resource, Region, Object, Structure and Ship, chosen when an object is made in the Object Creator. The Object Placer has one slot per category; with one picked, the left and right arrows cycle through that category's objects. Only Resources hold ore and respawn.

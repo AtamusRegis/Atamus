@@ -1,6 +1,7 @@
-// (owner, 2026-10-15) The Importer (head admin): I (or the [I] button in the staff column) opens it. It holds the game's
+// (owner, 2026-10-15) The Importer, titled RAW ASSETS (head admin): I (or the [I] button in the staff column) opens it. It holds the game's
 // imported assets (models, images and sounds), kept on the server, which the Object Creator uses (its models). Three
-// tabs: Models, Images, Audio; each asset a slot showing its icon (hover: its name). A model's icon is a picture rendered
+// one row: the search ("Search assets"), the filter button (All / Models / Images / Audio) and a green Import; below, the
+// scrolling grid; each asset a slot showing its icon (hover: its name). A model's icon is a picture rendered
 // from the model itself (made when it's imported; older models get theirs the first time the Importer sees them); an
 // image's is the image. IMPORT (or a file dropped on the panel) picks a file: a pop-up shows its icon and a Name (the file's
 // name to start), CANCEL / IMPORT; a model's icon is a live view there to set (owner, 2026-10-15). Right-click an asset:
@@ -105,15 +106,15 @@ async function upload(body) {
 }
 
 // ---- the panel ----
-let api = null, perr = null, win = null, ibtn = null, grid = null, tabs = null, search = null, fileIn = null, tab = "model", menu = null, pop = null;
+let api = null, perr = null, win = null, ibtn = null, grid = null, fbtn = null, search = null, fileIn = null, tab = "all", menu = null, pop = null;
 const pending = new Map(); let seq = 1;          // n -> { done, fail } waiting for the server's answer
 const rendering = new Set();                     // models getting their icon made
 function mount(a) {
   api = a; if (win) return;
-  ibtn = btn("I"); ibtn.id = "imp-btn"; ibtn.title = "Importer"; ibtn.addEventListener("click", () => toggle());
+  ibtn = btn("I"); ibtn.id = "imp-btn"; ibtn.title = "Raw Assets"; ibtn.addEventListener("click", () => toggle());
   (document.getElementById("staff-col") || document.body).appendChild(ibtn);
   win = $("div"); win.id = "imp-panel"; win.hidden = true;
-  const top = $("div", "we-top"); top.append($("span", "we-title", "IMPORTER"), btn("×", "we-x", () => toggle(false)));
+  const top = $("div", "we-top"); top.append($("span", "we-title", "RAW ASSETS"), btn("×", "we-x", () => toggle(false)));
   top.addEventListener("pointerdown", (e) => {   // dragged by its top bar
     if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
     const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
@@ -122,16 +123,17 @@ function mount(a) {
     const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
     addEventListener("pointermove", move); addEventListener("pointerup", up);
   });
-  tabs = $("div", "we-tabs");
-  for (const [k, label] of KINDS) { const b = btn(label, "", () => { tab = k; draw(); }); b.dataset.k = k; tabs.appendChild(b); }
-  search = $("input", "imp-search"); search.maxLength = 32; search.addEventListener("input", () => draw());
+  // (owner, 2026-10-15) one row: the search, the filter (All / Models / Images / Audio) and Import
+  search = $("input", "imp-search"); search.maxLength = 32; search.placeholder = "Search assets"; search.addEventListener("input", () => draw());
+  fbtn = btn("", "imp-filter", (e) => filterMenu(e)); fbtn.title = "Filter";
+  fbtn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 3h12l-4.6 5.4V13l-2.8 1.4V8.4Z" fill="currentColor"/></svg>';
+  const tools = $("div", "imp-tools"); tools.append(search, fbtn, btn("Import", "imp-go", () => fileIn.click()));
   grid = $("div", "we-list imp-grid");
   grid.addEventListener("contextmenu", (e) => { e.preventDefault(); const d = e.target.closest("[data-id]"); if (d) openMenu(d.dataset.id, e.clientX, e.clientY); });
   fileIn = $("input"); fileIn.type = "file"; fileIn.hidden = true; fileIn.accept = ".glb,.png,.jpg,.jpeg,.webp,.mp3,.ogg,.wav";
   fileIn.addEventListener("change", () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) importBox(f); });
-  const make = $("div", "we-make"); make.append(btn("IMPORT", "imp-go", () => fileIn.click()));
   perr = $("p", "we-err"); perr.hidden = true;
-  win.append(top, tabs, search, grid, perr, make, fileIn); document.body.appendChild(win);
+  win.append(top, tools, grid, perr, fileIn); document.body.appendChild(win);
   win.addEventListener("dragover", (e) => { e.preventDefault(); win.classList.add("drop"); });
   win.addEventListener("dragleave", (e) => { if (!win.contains(e.relatedTarget)) win.classList.remove("drop"); });
   win.addEventListener("drop", (e) => { e.preventDefault(); win.classList.remove("drop"); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) importBox(f); });
@@ -149,9 +151,9 @@ function toggle(v) {
 }
 function draw() {
   if (!win || win.hidden) return;
-  for (const b of tabs.children) b.classList.toggle("on", b.dataset.k === tab);
+  fbtn.classList.toggle("on", tab !== "all");
   const q = search.value.trim().toLowerCase();
-  const list = assets.filter((a) => a.kind === tab && (!q || a.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const list = assets.filter((a) => (tab === "all" || a.kind === tab) && (!q || a.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
   const cells = list.map((a) => { const d = $("div", "inv-slot imp-slot"); d.dataset.id = a.id; d.title = a.name; d.appendChild(slotPic(a, 34)); return d; });
   for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
   grid.replaceChildren(...cells);
@@ -176,6 +178,12 @@ function openMenu(id, x, y) {
   menu.append(btn("Edit", "", () => { closeMenu(); renameBox(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
   document.body.appendChild(menu); const r = menu.getBoundingClientRect();
   menu.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; menu.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
+}
+function filterMenu(e) {
+  closeMenu(); menu = $("div", "we-ctx imp-fmenu");
+  for (const [k, label] of [["all", "All"], ...KINDS]) { const b = btn(label, k === tab ? "on" : "", () => { closeMenu(); tab = k; draw(); }); menu.appendChild(b); }
+  document.body.appendChild(menu); const r = fbtn.getBoundingClientRect(), m = menu.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, innerWidth - m.width - 4) + "px"; menu.style.top = Math.min(r.bottom + 4, innerHeight - m.height - 4) + "px";
 }
 function closeMenu() { if (menu) { menu.remove(); menu = null; } }
 
@@ -208,7 +216,7 @@ async function importBox(file) {
     try {
       const j = await upload(file);
       let thumb = null, view = undefined; if (j.kind === "model" && vw) { view = vw.view; thumb = (await upload(await vw.shot())).file; }
-      const n = seq++; pending.set(n, { done: () => { close(); tab = j.kind; draw(); }, fail });
+      const n = seq++; pending.set(n, { done: () => { close(); if (tab !== "all") tab = j.kind; draw(); }, fail });
       api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
