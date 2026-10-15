@@ -76,6 +76,8 @@ export function cleanItem(o) {
 // how solid, 0-1) and outline (son: on, sc: #rrggbb, sw: thickness 0-8). Listed bottom layer first. At most 40 shapes (a save must fit one 16 KB message).
 export const ICON_SHAPES = ["ellipse", "poly", "line"], ICON_MAX = 40, ICON_PTS = 24;
 export function cleanIcon(o) {
+  // (owner, 2026-10-15) or a thumbnail icon: a picture rendered from a RAW ASSETS model (img: its PNG), no shapes
+  if (o && o.img != null) { const img = imageRef(o.img); return img ? { name: safeText(String(o.name || ""), 32).trim(), img, shapes: [] } : null; }
   const v = o && Array.isArray(o.shapes) ? o.shapes : null; if (!v || !v.length || v.length > ICON_MAX) return null;
   const col = (c) => (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : null), r2 = (x) => Math.round(x * 100) / 100;
   const out = [];

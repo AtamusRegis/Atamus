@@ -15,7 +15,18 @@
     el.setAttribute("stroke", s.son && +s.sw > 0 ? col(s.sc, "#000000") : "none"); el.setAttribute("stroke-width", String(+s.sw || 0)); el.setAttribute("stroke-linejoin", "round"); el.setAttribute("stroke-linecap", "round");
     return el;
   }
+  // (owner, 2026-10-15) a thumbnail icon (img: a picture rendered from a model): an <img>, filled in once it's fetched
+  const pics = new Map();
+  function picOf(icon, px) {
+    const im = document.createElement("img"); im.width = im.height = px; im.alt = ""; im.draggable = false; im.className = "icon-img";
+    const base = typeof API_BASE !== "undefined" ? API_BASE : location.origin, f = icon.img, v = pics.get(f);
+    if (typeof v === "string") im.src = v;
+    else { const p = v || fetch(base + "/game/assets/" + f).then((r) => (r.ok ? r.blob() : Promise.reject())).then((b) => { const u = URL.createObjectURL(b); pics.set(f, u); return u; }).catch(() => { pics.delete(f); });
+      pics.set(f, p); p.then((u) => { if (u) im.src = u; }); }
+    return im;
+  }
   function svg(icon, px) {
+    if (icon && typeof icon.img === "string") return picOf(icon, px);
     const e = document.createElementNS(SV, "svg"); e.setAttribute("viewBox", "0 0 64 64"); e.setAttribute("width", px); e.setAttribute("height", px); e.classList.add("icon-svg");
     if (icon && Array.isArray(icon.shapes)) for (const s of icon.shapes) e.appendChild(shapeEl(s));
     return e;

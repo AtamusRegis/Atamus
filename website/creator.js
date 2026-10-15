@@ -100,7 +100,8 @@ function editBox(e) {
   const g = $("div", "we-grid"), name = $("input"); name.maxLength = 32; name.value = e ? e.name : "";
   g.append($("label", "we-label", "Name"), name);
   const iRow = $("div", "we-iconrow"), box = btn("", "we-iconbox", () => IC().pickIcon((id) => { icon = id; drawIcon(); })); box.title = "Icon";
-  iRow.append(btn("Create New Icon", "", () => IC().newIcon((id) => { icon = id; drawIcon(); })), box);
+  const mk = btn("Create New Icon", "", () => newIconMenu(mk, (id) => { icon = id; drawIcon(); }));
+  iRow.append(mk, box);
   const drawIcon = () => box.replaceChildren(iconPic(icon, 30, () => $("span", "we-plus", "+")));
   const type = $("select"); for (const [k, label] of (e ? allowed().filter(([k]) => group(e.k).includes(k)) : allowed())) type.append(new Option(label, k)); type.value = e ? e.k : allowed()[0][0];
   const iLab = $("label", "we-label", "Icon");
@@ -127,6 +128,22 @@ function editBox(e) {
 // (owner, 2026-10-15: the Player Ship slot is gone from here; the server keeps the ship last picked)
 let playerShip = null;
 function setPlayerShip(id) { playerShip = typeof id === "string" ? id : null; draw(); }
+// (owner, 2026-10-15) Create New Icon: an SVG Icon (the Icon Creator) or a thumbnail from a RAW ASSETS model (pick one:
+// its rendered picture becomes the icon)
+function newIconMenu(at, done) {
+  const m = $("div", "we-ctx cr-imenu"), close = () => { m.remove(); removeEventListener("pointerdown", off, true); };
+  const off = (e) => { if (!m.contains(e.target)) close(); };
+  m.append(btn("SVG Icon", "", () => { close(); IC().newIcon(done); }), btn("From Object", "", () => { close(); objectPicker(done); }));
+  document.body.appendChild(m); const r = at.getBoundingClientRect(); place(m, r.left, r.bottom + 4); m.style.zIndex = "40";
+  setTimeout(() => addEventListener("pointerdown", off, true), 0);
+}
+function objectPicker(done) {
+  const o = IC().overlay("we-pick"); o.box.appendChild($("p", "we-title", "FROM OBJECT"));
+  const g = $("div", "we-list"), models = (window.Assets ? window.Assets.models() : []).filter((a) => a.thumb).sort((a, b) => a.name.localeCompare(b.name));
+  const cells = models.map((a) => { const c = btn("", "inv-slot we-pickslot", () => { o.close(); want = { t: "isaved", done: (m) => done(m.id), fail: () => {} }; api.send({ t: "iset", icon: { name: a.name, img: a.thumb } }); }); c.title = a.name; c.appendChild(window.Assets.picture(a.thumb, 34)); return c; });
+  for (let i = cells.length; i < 10; i++) cells.push($("div", "inv-slot"));
+  g.replaceChildren(...cells); o.box.append(g, (() => { const b = $("div", "we-btns"); b.appendChild(btn("CANCEL", "", () => o.close())); return b; })());
+}
 // the server's answers: a list, or the answer to a save this panel is waiting for (true: handled here)
 function onMsg(m) {
   if (m.t === "sounds") { sounds = Array.isArray(m.list) ? m.list : []; draw(); return true; }

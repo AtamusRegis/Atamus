@@ -197,8 +197,8 @@ function openMenu(id, x, y) {
   const a = all().find((o) => o.id === id); if (!a) return; closeMenu();
   menu = $("div", "we-ctx");
   // (owner, 2026-10-15) Create Variation: a copy that's its own asset (same file, name, icon, colors and view until edited)
-  const vary = btn("Create Variation", "", () => { closeMenu(); a.kind === "icon" ? api.send({ t: "iset", icon: { name: a.ic.name || "", shapes: a.ic.shapes } }) : api.send({ t: "aset", asset: { kind: a.kind, name: a.name, file: a.file, thumb: a.thumb, view: a.view, front: a.front || 0, mats: a.mats || {} } }); });
-  if (a.kind === "icon") menu.append(btn("Edit", "", () => { closeMenu(); IC().editIcon(a.ic); }), btn("Rename", "", () => { closeMenu(); iconRename(a); }), vary, btn("Delete", "", () => { closeMenu(); api.send({ t: "icondel", id: a.ic.id }); }));
+  const vary = btn("Create Variation", "", () => { closeMenu(); a.kind === "icon" ? api.send({ t: "iset", icon: a.ic.img ? { name: a.ic.name || "", img: a.ic.img } : { name: a.ic.name || "", shapes: a.ic.shapes } }) : api.send({ t: "aset", asset: { kind: a.kind, name: a.name, file: a.file, thumb: a.thumb, view: a.view, front: a.front || 0, mats: a.mats || {} } }); });
+  if (a.kind === "icon") menu.append(...(a.ic.img ? [] : [btn("Edit", "", () => { closeMenu(); IC().editIcon(a.ic); })]), btn("Rename", "", () => { closeMenu(); iconRename(a); }), vary, btn("Delete", "", () => { closeMenu(); api.send({ t: "icondel", id: a.ic.id }); }));
   else menu.append(btn("Edit", "", () => { closeMenu(); renameBox(a); }), vary, btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
   document.body.appendChild(menu); const r = menu.getBoundingClientRect();
   menu.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; menu.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
@@ -225,7 +225,7 @@ function createBox() {
   p.box.insertBefore(opts, p.err);
 }
 function iconRename(a) {
-  popup("RENAME", "SAVE", CAT().svg(a.ic, 96), a.name, (name, { close, fail }) => { iwant = { done: close, fail }; api.send({ t: "iset", id: a.ic.id, icon: { name, shapes: a.ic.shapes } }); });
+  popup("RENAME", "SAVE", CAT().svg(a.ic, 96), a.name, (name, { close, fail }) => { iwant = { done: close, fail }; api.send({ t: "iset", id: a.ic.id, icon: a.ic.img ? { name, img: a.ic.img } : { name, shapes: a.ic.shapes } }); });
 }
 let iwant = null;                                // an icon Rename waiting for the server
 function closeMenu() { if (menu) { menu.remove(); menu = null; } }
