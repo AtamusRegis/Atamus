@@ -7,8 +7,8 @@
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { Importer } from "./importer.js?v=1792058735";
-import { Creator } from "./creator.js?v=1792058649";
-import { initBuild, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792060116";
+import { Creator } from "./creator.js?v=1792060615";
+import { initBuild, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792060615";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -208,6 +208,33 @@ const me = { x: 0, y: 0 };                     // my ship, predicted locally and
 const corr = { x: 0, y: 0 };                   // the correction still to work off (a little each frame)
 let haveMe = false;
 let shipTemplate = null, shipMid = SPHERE_R;   // shipMid: the hull's center height, for the camera
+// (owner, 2026-10-15) the ship players fly: a Ship object picked in the CREATOR ("t:<id>": its model, fitted by its widest
+// side to the ship's footprint and turned by its Front, and its colliders, pivot and hardpoint); none picked: the built-in
+// cruiser below (kind "ship")
+let SHIPK = "ship", playerShipId = null, shipModelKey = "";
+function setPlayerShip(id) { playerShipId = typeof id === "string" ? id : null; refreshPlayerShip(); }
+function refreshPlayerShip() {
+  const t = playerShipId && objTypes.get(playerShipId), ok = t && t.cat === "ship";
+  SHIPK = ok ? "t:" + t.id : "ship";
+  const key = ok ? (t.model || "") + "|" + (t.front || 0) : "cruiser"; if (key === shipModelKey) { applyShipPivot(); return; } shipModelKey = key;
+  if (!ok || !t.model) { if (!ok) loadCruiser(); else useShipModel(null); return; }
+  new GLTFLoader().load((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + t.model, (g) => {
+    if (shipModelKey !== key) return;
+    const src = g.scene, box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    src.position.set(-c.x, -box.min.y, -c.z);
+    const turn = new THREE.Group(); turn.add(src); turn.rotation.y = (t.front || 0) * Math.PI / 180;
+    const wrap = new THREE.Group(); wrap.add(turn); wrap.scale.setScalar(2 * SHIP_R / Math.max(size.x, size.z, 1e-6));
+    useShipModel(wrap, (size.y * 2 * SHIP_R / Math.max(size.x, size.z, 1e-6)) / 2);
+  }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
+}
+function useShipModel(wrap, mid) {
+  shipTemplate = wrap; shipMid = wrap ? mid : SPHERE_R;
+  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId, p.id === myId)); }
+  try { build.refreshShips(); } catch {}
+  applyShipPivot();
+}
+let cruiser = null;
+function loadCruiser() { if (cruiser) { useShipModel(cruiser.wrap, cruiser.mid); return; }
 new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   const src = g.scene;
   const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
@@ -217,11 +244,10 @@ new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
   src.position.x -= c2.x; src.position.z -= c2.z;   // pivot at the hull's middle, so turns don't swing it
   src.position.y -= b2.min.y;                  // the hull rests on the grid
   const wrap = new THREE.Group(); wrap.add(src);
-  shipTemplate = wrap; shipMid = (b2.max.y - b2.min.y) / 2;
-  for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId, p.id === myId)); }
-  try { build.refreshShips(); } catch {}
-  applyShipPivot();   // the Build menu's test ships
-}, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
+  cruiser = { wrap, mid: (b2.max.y - b2.min.y) / 2 };
+  if (shipModelKey === "cruiser" || !shipModelKey) useShipModel(cruiser.wrap, cruiser.mid);   // (unless a Ship object was picked meanwhile)
+}, undefined, (e) => console.warn("[ship] load failed:", e && e.message)); }
+loadCruiser();
 function makeVisual(remote, own = false) {     // own: my ship (its own materials too, for materializing; always solid otherwise)
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
   if (remote || own) {                          // (owner, 2026-10-14) each other ship has its own material copies: its opacity is its visibility
@@ -662,16 +688,16 @@ function visGizmo(on) {
   visGizGeo.setDrawRange(0, P.length / 3);
 }
 // (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the combat points are separate)
-function shipVisOutline(x, y, h) { return visPtsOf({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
+function shipVisOutline(x, y, h) { return visPtsOf({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
 // (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its aim line and shots start (line of sight stays at the pivot)
-function shipOrigin(x, y, h) { return toWorldPts({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, [origins.ship || [0, 0]], pivots.ship || [0, 0]); }
+function shipOrigin(x, y, h) { return toWorldPts({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, [origins[SHIPK] || [0, 0]], pivots[SHIPK] || [0, 0]); }
 // an object's visibility points in the world, as [x0, y0, x1, y1, ...]
-function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k], pivots[o.k] || [0, 0]); }
+function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k] || VIS_DEFAULT.ship, pivots[o.k] || [0, 0]); }
 // a player ship's combat-points parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
-function shipSight(p) { return buildPolys({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
+function shipSight(p) { return buildPolys({ k: SHIPK, x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
 // (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
 function applyShipPivot() {
-  const pv = pivots.ship || [0, 0], D = 2 * SHIP_R;
+  const pv = pivots[SHIPK] || [0, 0], D = 2 * SHIP_R;
   for (const p of players.values()) { const v = p.holder.children[0]; if (v) { v.position.x = -pv[0] * D; v.position.z = pv[1] * D; } }
 }
 
@@ -755,12 +781,12 @@ function shipGizmos() {
   for (const p of players.values()) {
     if (p.id !== myId && !p.near) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
-    out.push({ x, y, sight: buildPolys({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading), wo: shipOrigin(x, y, p.heading) });
+    out.push({ x, y, sight: buildPolys({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading), wo: shipOrigin(x, y, p.heading) });
   }
   return out;
 }
 // a ship's Movement ellipse in the world (the ship kind's, from the Object Editor)
-function shipMove(x, y, h) { return movePoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, movers, pivots); }
+function shipMove(x, y, h) { return movePoly({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, movers, pivots); }
 // (owner) the first thing the aim line runs into, from my ship toward the reticle: a block (its square) or another ship
 // (its circle). Returns the fraction of the way (0-1) or null.
 function aimBlocked(x0, y0, x1, y1) {
@@ -1022,6 +1048,8 @@ function connect() {
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }
+    if (m.t === "pship") { setPlayerShip(m.id); Creator.setPlayerShip(playerShipId); return; }   // (owner, 2026-10-15) the ship players fly changed
+    if (m.t === "types") setTimeout(refreshPlayerShip, 0);   // (its model or Front may have changed; the Object Placer takes them first)
     if (Importer.onMsg(m)) return;             // (owner, 2026-10-15) RAW ASSETS: its lists and saves (icon renames too)
     if (Creator.onMsg(m)) return;              // (owner, 2026-10-15) the CREATOR's lists and the saves it's waiting for   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
@@ -1038,7 +1066,8 @@ function connect() {
       amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }   // (owner, 2026-10-15) the Importer (I), head admin
-      build.setStaff(!!m.you.builder, !!m.you.creator); build.setClock(m.now); build.setTypes(m.types); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins, m.collExtra);
+      build.setStaff(!!m.you.builder, !!m.you.creator); build.setClock(m.now); build.setTypes(m.types); playerShipId = typeof m.playerShip === "string" ? m.playerShip : null; Creator.setPlayerShip(playerShipId); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins, m.collExtra);
+      refreshPlayerShip();   // (owner, 2026-10-15) the ship players fly
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);

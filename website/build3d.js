@@ -1175,7 +1175,7 @@ export function initBuild(ctx) {
     const ps = asParts(parts); if (!kindOk(k) || !ps) return;
     colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(wo)) origins[k] = wo; if (ex && typeof ex === "object") collExtra[k] = ex; const m = cleanMove(mv); if (m) movers[k] = m;
     for (const b of builds.values()) if (b.k === k) place(b);
-    if (k === "ship" && ctx.onPivot) ctx.onPivot();
+    if (ctx.onPivot) ctx.onPivot();   // (the player ship may be any Ship object, owner 2026-10-15)
     if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; eEx = { ...EXTRA_DEFAULT, ...(collExtra[k] || {}) }; drawSub(); eDraw(); sDraw(); }
   }
   // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----

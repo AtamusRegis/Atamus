@@ -103,7 +103,7 @@ export function attachGameServer(httpServer) {
       items: world.itemList(), icons: world.iconList(), types: world.typeList(), sounds: world.soundList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
       crates: items.crateList(),
       ...(creator ? { assets: world.assetList() } : {}),                // (owner, 2026-10-15) the Importer's assets (head admin)                                       // (owner, 2026-10-14) dropped-item crates
-      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, collExtra: world.collExtra, movers: world.movers, visOutlines: world.visOutlines,
+      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, collExtra: world.collExtra, playerShip: world.playerShip, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
     items.load(pid).then(() => { if (socks.get(pid) === ws) sendInv(pid, ws); }).catch((e) => console.error("inv", e));   // (owner, 2026-10-14) my hotbar and inventory
@@ -202,6 +202,11 @@ export function attachGameServer(httpServer) {
         world.delIcon(id).then((r) => { if (r.ok) broadcast({ t: "icons", list: world.iconList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "isaved", error: r.error })); } catch {} }).catch((e) => console.error("icon del", e));
       }
       else if (m.t === "ui") { if (placer || staff) world.uiSet(pid, m.k, m.x, m.y).catch((e) => console.error("ui", e)); }   // (owner, 2026-10-15) an editor window moved
+      else if (m.t === "pship") {              // (owner, 2026-10-15) the CREATOR: the head admin picks the Ship object players fly (null: the built-in one)
+        if (!creator) return;
+        const id = m.id === null ? null : typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : undefined; if (id === undefined) return;
+        world.setPlayerShip(id).then((ok) => { if (ok) broadcast({ t: "pship", id }); }).catch((e) => console.error("player ship", e));
+      }
       else if (m.t === "sset") {               // (owner, 2026-10-15) the CREATOR: the head admin makes or changes a sound (SFX / Music Track)
         if (!creator) return;
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;

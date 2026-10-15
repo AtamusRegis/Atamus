@@ -418,6 +418,8 @@ export class World3D {
     for (const o of (await pool.query(`SELECT id, data FROM world3d_types ORDER BY id`)).rows) { const t = cleanType(o.data); if (t) this.types.set(String(o.id), { id: String(o.id), ...t }); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_sounds (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the CREATOR's sounds
     for (const o of (await pool.query(`SELECT id, data FROM world3d_sounds ORDER BY id`)).rows) { const a = cleanSound(o.data); if (a) this.sounds.set(String(o.id), { id: String(o.id), ...a }); }
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_settings (k TEXT PRIMARY KEY, v JSONB)`);   // (owner, 2026-10-15) the player ship
+    { const r = (await pool.query(`SELECT v FROM world3d_settings WHERE k = 'playerShip'`)).rows[0]; this.playerShip = r && typeof r.v === "string" ? r.v : null; }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_assets (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the Importer
     for (const o of (await pool.query(`SELECT id, data FROM world3d_assets ORDER BY id`)).rows) { const a = cleanAsset(o.data); if (a) this.assets.set(String(o.id), { id: String(o.id), ...a }); }
     for (const t of this.types.values()) if (t.model && ![...this.assets.values()].some((a) => a.file === t.model)) await this.setAsset(null, { kind: "model", name: t.mname.replace(/\.glb$/i, "") || t.name, file: t.model }, true);   // (models uploaded before the Importer)
@@ -545,7 +547,17 @@ export class World3D {
   // (owner, 2026-10-13) ships against blocks and against each other (two overlapping ships each move half the overlap
   // apart); a push that would leave the hexagon isn't applied
   // (owner, 2026-10-14) each ship by the ship kind's Movement ellipse (Object Editor), turned with its heading
-  shipPoly(p) { return movePoly({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.movers, this.pivots); }
+  // (owner, 2026-10-15) the ship players fly: a Ship object picked in the CREATOR (its colliders, pivot, hardpoint and the
+  // rest are that object's); none picked (or it's gone): the built-in ship
+  get shipK() { const t = this.playerShip && this.types.get(this.playerShip); return t && t.cat === "ship" ? "t:" + t.id : "ship"; }
+  async setPlayerShip(id) {
+    if (id !== null && !(this.types.get(id) && this.types.get(id).cat === "ship")) return false;
+    await this.ready; this.playerShip = id;
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_settings (k TEXT PRIMARY KEY, v JSONB)`);
+    await pool.query(`INSERT INTO world3d_settings (k, v) VALUES ('playerShip', $1) ON CONFLICT (k) DO UPDATE SET v = $1`, [JSON.stringify(id)]);
+    return true;
+  }
+  shipPoly(p) { return movePoly({ k: this.shipK, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.movers, this.pivots); }
   collide() {
     const ps = [...this.players.values()], keep = (p, f) => { const ox = p.x, oy = p.y; f(); if (!inside(p.x, p.y)) { p.x = ox; p.y = oy; } p.dirty = true; };
     const polys = new Map(ps.map((p) => [p, this.shipPoly(p)])), rads = new Map(ps.map((p) => [p, polyRad(p, polys.get(p))]));
@@ -673,10 +685,10 @@ export class World3D {
     return false;
   }
   // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its shots leave from (line of sight stays at the pivot)
-  shipOrigin(p) { return toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, [this.origins.ship || [0, 0]], this.pivots.ship || [0, 0]); }
+  shipOrigin(p) { const K = this.shipK; return toWorldPts({ k: K, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, [this.origins[K] || [0, 0]], this.pivots[K] || [0, 0]); }
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
   sees(a, b) {
-    const pts = (p) => toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines.ship || VIS_DEFAULT.ship, this.pivots.ship || [0, 0]);
+    const K = this.shipK, pts = (p) => toWorldPts({ k: K, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines[K] || VIS_DEFAULT.ship, this.pivots[K] || [0, 0]);
     const A = pts(a), B = pts(b), ax = a.x, ay = a.y, bx = b.x, by = b.y; let clear = 0;   // (owner, 2026-10-14) lines run to each ship's pivot
     const piv = this._sightBlocked(ax, ay, bx, by) ? 0 : PIV_W;
     for (let i = 0; i < A.length; i += 2) if (!this._sightBlocked(A[i], A[i + 1], bx, by)) clear++;
@@ -713,7 +725,7 @@ export class World3D {
       for (const p of this.players.values()) {
         if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6)) continue;
         // (owner, 2026-10-14) each combat-points part separately: the first one the shot meets is the part hit
-        const parts = this.colliders.ship || COLL_DEFAULT.ship, polys = buildPolys({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots);
+        const parts = this.colliders[this.shipK] || COLL_DEFAULT.ship, polys = buildPolys({ k: this.shipK, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots);
         let u = null, pi = 0; polys.forEach((v, i) => { const w = segPoly(x0, y0, x1, y1, v); if (w !== null && (u === null || w < u)) { u = w; pi = i; } });
         if (u === null || u >= t) continue;
         if (shooter && !this.sees(shooter, p)) continue;   // (owner) a ship the shooter can't see: the shot flies through it

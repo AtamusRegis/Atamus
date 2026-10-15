@@ -5,7 +5,7 @@
 // (owner, 2026-10-15: icons are made in RAW ASSETS now); just their name, icon and type for now. Right-click a slot:
 // Edit (the same three; the type only changes within its own kind: Resource / Region / Object / Structure / Ship among
 // themselves, SFX and Music Track between them) and Delete; an Icon: Edit (the Icon Creator), Rename, Delete; objects also
-// keep Edit Object (the Object Editor) and items the Item Editor; the player ship has Edit Object only. Items drag into
+// keep Edit Object (the Object Editor) and items the Item Editor; the Player Ship has Edit: which Ship object players fly (owner, 2026-10-15). Items drag into
 // the hotbar or inventory as before (staff: a copy). Staff (head admin, admins) get Items and Icons; the head admin
 // everything. The server checks it all.
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -69,7 +69,7 @@ function entries() {
     for (const it of C().items) out.push({ key: "item:" + it.id, k: "item", id: it.id, name: it.name, o: it, pic: (px) => { const el = $("div", "inv-item pic"); el.dataset.item = "it:" + it.id; el.title = it.name; const p = C().picture("it:" + it.id, px - 8); if (p) el.appendChild(p); return el; } });
   }
   if (head) {
-    out.push({ key: "player", k: "ship", name: "Player Ship", pic: () => build.shipPic() });
+    { const ps = playerShip && types.get(playerShip); out.push({ key: "player", k: "ship", name: "Player Ship", pic: (px) => (ps && ps.cat === "ship" ? build.typePic(ps, px) : build.shipPic()) }); }   // (owner, 2026-10-15) shows the Ship object players fly
     for (const t of types.values()) out.push({ key: "type:" + t.id, k: t.cat, id: t.id, name: t.name, o: t, pic: (px) => build.typePic(t, px) });
     for (const s of sounds) out.push({ key: "sound:" + s.id, k: s.kind, id: s.id, name: s.name, o: s, pic: (px) => iconPic(s.icon, px, () => letter(s.kind === "music" ? "♫" : "♪")) });
   }
@@ -94,7 +94,7 @@ function closeMenu() { if (menu) { menu.remove(); menu = null; } }
 function openMenu(key, x, y) {
   const e = entries().find((o) => o.key === key); if (!e) return; closeMenu();
   menu = $("div", "we-ctx"); const add = (label, fn) => menu.appendChild(btn(label, "", () => { closeMenu(); fn(); }));
-  if (key === "player") add("Edit Object", () => build.editObject("ship"));
+  if (key === "player") add("Edit", () => playerBox());   // (owner, 2026-10-15) only which Ship object it is: that object's own data does the rest
   else {
     add("Edit", () => editBox(e));
     if (e.k === "item") add("Item Editor", () => IC().itemEditor(C().item("it:" + e.id)));
@@ -137,6 +137,17 @@ function editBox(e) {
   }
 }
 
+// (owner, 2026-10-15) the Player Ship: which Ship object players fly (its model, hitboxes, pivot, movement, visibility,
+// hardpoint and effects level are that object's); None: the built-in ship
+let playerShip = null;
+function playerBox() {
+  const o = IC().overlay("cr-edit"); o.box.appendChild($("p", "we-title", "PLAYER SHIP"));
+  const g = $("div", "we-grid"), sel = $("select"); sel.append(new Option("None", ""), ...[...types.values()].filter((t) => t.cat === "ship").sort((a, b) => a.name.localeCompare(b.name)).map((t) => new Option(t.name, t.id)));
+  sel.value = playerShip && types.get(playerShip) ? playerShip : ""; g.append($("label", "we-label", "Ship"), sel);
+  const ok = btn("SAVE", "we-ok", () => { api.send({ t: "pship", id: sel.value || null }); o.close(); }), btns = $("div", "we-btns"); btns.append(btn("CANCEL", "", () => o.close()), ok);
+  o.box.append(g, btns);
+}
+function setPlayerShip(id) { playerShip = typeof id === "string" ? id : null; draw(); }
 // the server's answers: a list, or the answer to a save this panel is waiting for (true: handled here)
 function onMsg(m) {
   if (m.t === "sounds") { sounds = Array.isArray(m.list) ? m.list : []; draw(); return true; }
@@ -146,4 +157,4 @@ function onMsg(m) {
   return false;
 }
 function setSounds(list) { sounds = Array.isArray(list) ? list : []; draw(); }
-export const Creator = { mount, onMsg, setSounds, toggle };
+export const Creator = { mount, onMsg, setSounds, setPlayerShip, toggle };
