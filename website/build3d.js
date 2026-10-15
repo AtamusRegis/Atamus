@@ -909,7 +909,9 @@ export function initBuild(ctx) {
   function drawProps() {
     const t = curType(); props.hidden = !t; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
     const models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
-    pIn.model.replaceChildren(new Option("None", ""), ...models.map((a) => new Option(a.name, a.file))); if (t.model && !models.some((a) => a.file === t.model)) pIn.model.append(new Option(t.mname || t.model, t.model)); pIn.model.value = t.model || "";
+    // (owner, 2026-10-15) by asset (a model's variations share its file); objects made before point at the file
+    const cur = (t.asset && models.find((a) => a.id === t.asset)) || models.find((a) => a.file === t.model);
+    pIn.model.replaceChildren(new Option("None", ""), ...models.map((a) => new Option(a.name, a.id))); if (t.model && !cur) pIn.model.append(new Option(t.mname || t.model, "f:" + t.model)); pIn.model.value = cur ? cur.id : t.model ? "f:" + t.model : "";
     pIn.item.parentNode.hidden = t.cat !== "node";
     pIn.mod.parentNode.hidden = t.cat !== "ship"; pIn.size.parentNode.hidden = t.cat !== "hardpoint";
     pIn.mod.replaceChildren(new Option("None", ""), ...[...types.values()].filter((x) => x.cat === "hardpoint").sort((a, b) => a.name.localeCompare(b.name)).map((x) => new Option(x.name, x.id))); pIn.mod.value = t.mod && types.get(t.mod) ? t.mod : "";
@@ -917,7 +919,7 @@ export function initBuild(ctx) {
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
   }
   function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
-  pIn.model.addEventListener("change", () => { const a = window.Assets && window.Assets.models().find((x) => x.file === pIn.model.value); saveType({ model: pIn.model.value || null, mname: a ? a.name : "" }); pIn.model.blur(); });
+  pIn.model.addEventListener("change", () => { const v = pIn.model.value, a = window.Assets && window.Assets.models().find((x) => x.id === v); if (v.startsWith("f:")) return; saveType({ model: a ? a.file : null, mname: a ? a.name : "", asset: a ? a.id : null }); pIn.model.blur(); });
   if (window.Assets) window.Assets.on(() => { if (eOpen) drawProps(); });
   pIn.mod.addEventListener("change", () => { saveType({ mod: pIn.mod.value || null }); pIn.mod.blur(); });
   pIn.size.addEventListener("change", () => { const v = Number(pIn.size.value); if (Number.isFinite(v) && v > 0) saveType({ size: Math.max(1, Math.min(500, v)) }); });

@@ -360,6 +360,7 @@ export function cleanType(o) {
   const model = modelRef(o.model);
   const cat = TYPE_CATS.includes(o.cat) ? o.cat : "node", sz = Number(o.size);
   return { name, cat, model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item),
+    asset: model ? iconRef(o.asset) : null,                                                                  // (owner, 2026-10-15) which RAW ASSETS model (variations share a file)
     ...(cat === "ship" ? { mod: iconRef(o.mod) } : {}),                                                       // (owner, 2026-10-15) a ship: the hardpoint module on its socket
     ...(cat === "hardpoint" ? { size: Number.isFinite(sz) ? Math.round(Math.max(1, Math.min(500, sz)) * 10) / 10 : 20 } : {}) };   // a module: its size, m across
 }
@@ -940,17 +941,18 @@ export class World3D {
     if (id) { const old = this.assets.get(id); if (!old || old.kind !== a.kind) return null; await pool.query(`UPDATE world3d_assets SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(a)]); }
     else { if (this.assets.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_assets (data) VALUES ($1) RETURNING id`, [JSON.stringify(a)])).rows[0].id); }
     const out = { id, ...a }; this.assets.set(id, out);
-    if (a.kind === "model") for (const t of this.types.values()) if (t.model === a.file && t.mname !== a.name) { t.mname = a.name; const { id: tid, ...d } = t; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [tid, JSON.stringify(d)]); }   // (its objects show the new name)
+    if (a.kind === "model") for (const t of this.types.values()) if ((t.asset ? t.asset === id : t.model === a.file) && t.mname !== a.name) { t.mname = a.name; const { id: tid, ...d } = t; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [tid, JSON.stringify(d)]); }   // (its objects show the new name)
     return out;
   }
   async delAsset(id) {
     const a = this.assets.get(id); if (!a) return { ok: false };
-    if (a.kind === "model" && [...this.types.values()].some((t) => t.model === a.file)) return { ok: false, error: "Remove it from its objects first." };
+    const twins = [...this.assets.values()].filter((x) => x.file === a.file && x.id !== id);   // (owner, 2026-10-15) its variations
+    if (a.kind === "model" && [...this.types.values()].some((t) => (t.asset ? t.asset === id : t.model === a.file && !twins.length))) return { ok: false, error: "Remove it from its objects first." };
     await this.ready; await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true };
   }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
-  typeList() { const byFile = new Map(); for (const x of this.assets.values()) byFile.set(x.file, x);   // (one pass over the assets)
-    return [...this.types.values()].map((t) => { const a = t.model && byFile.get(t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}), ...(a.mats && Object.keys(a.mats).length ? { mats: a.mats } : {}) } : t; }); }   // mats: its model's material colors   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
+  typeList() { const byFile = new Map(); for (const x of this.assets.values()) if (!byFile.has(x.file)) byFile.set(x.file, x);   // (one pass over the assets)
+    return [...this.types.values()].map((t) => { const a = t.model && ((t.asset && this.assets.get(t.asset)) || byFile.get(t.model)); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}), ...(a.mats && Object.keys(a.mats).length ? { mats: a.mats } : {}) } : t; }); }   // mats: its model's material colors   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
     if (t.mod && !(this.types.get(t.mod) && this.types.get(t.mod).cat === "hardpoint")) t.mod = null;

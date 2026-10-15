@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Variations (owner):** right-click an asset in RAW ASSETS for Create Variation: a copy with its own colors, view and name, without importing again; objects can each use a different variation.
 - **CREATOR (owner):** the Player Ship slot is gone (the ship players fly stays the one last picked).
 - **Model colors (owner):** importing or editing a model in RAW ASSETS shows a square per material color; click one to change that color across the whole model, everywhere it's used.
 - **Creators trimmed (owner):** the CREATOR now only makes Ships and Modules (the head admin's); RAW ASSETS only imports models and sounds and creates SVG icons. Everything else was scrapped from them for now (its data is kept).
