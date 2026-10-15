@@ -902,7 +902,7 @@ export function initBuild(ctx) {
   // free points, each sending a line to the other ship's pivot in the mutual visibility test) share the dragging code
   // (owner, 2026-10-14) Combat Points are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
   let eParts = [{ t: "body", pts: null }], ePart = 0;
-  const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "vis" ? "vis" : "sight");
+  const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "pts" ? "vis" : "sight");
   const PART_NAMES = { body: "Body", main: "Main Engine", left: "Left Engine", right: "Right Engine", hardpoint: "Hardpoint", critical: "Critical" };
   let eEx = { ...EXTRA_DEFAULT }, sideYaw = Math.PI / 2, sdRen = null, sdCam = null, eMeshH = 1;   // (owner, 2026-10-15) the hardpoint / effects level being edited; the side view's angle
   const MOVE_NAMES = { oval: "Oval", box: "Box", capsule: "Capsule" };
@@ -912,9 +912,9 @@ export function initBuild(ctx) {
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
-  // (owner, 2026-10-15) Hitboxes, Movement, Pivot, Visibility (top view); Hardpoint (top and side views; ships only);
-  // Effects Level (the side view)
-  for (const [k, label] of [["sight", "Hitboxes"], ["move", "Movement"], ["pivot", "Pivot"], ["vis", "Visibility"], ["hp", "Hardpoint"], ["fx", "Effects Level"]]) {
+  // (owner, 2026-10-15) Hitboxes and Movement (the top view); Points: the pivot, the visibility points, the hardpoint (ships)
+  // and the effects level, in the top view and the side view stacked under it
+  for (const [k, label] of [["sight", "Hitboxes"], ["move", "Movement"], ["pts", "Points"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   props.after(modes);
@@ -938,14 +938,13 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "hp") { eWo = [0, 0]; eEx = { ...eEx, hz: EXTRA_DEFAULT.hz, arc: 360, dir: 0 }; } else if (eMode === "fx") eEx = { ...eEx, fx: EXTRA_DEFAULT.fx }; else if (eMode === "vis") EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "pts") { EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); ePv = [0, 0]; eWo = [0, 0]; eEx = { ...EXTRA_DEFAULT }; } else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const isShipKind = () => eKind === "ship" || (curType() || {}).cat === "ship";
   const drawModes = () => {
-    if (eMode === "hp" && !isShipKind()) eMode = "sight";
-    for (const b of modes.children) { b.classList.toggle("on", b.dataset.m === eMode); if (b.dataset.m === "hp") b.hidden = !isShipKind(); }
-    ceTop.hidden = eMode === "fx"; ceSide.hidden = eMode !== "hp" && eMode !== "fx"; mirrorBox.parentNode.hidden = eMode === "fx";
+    for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode);
+    ceSide.hidden = eMode !== "pts"; ceTop.parentNode.classList.toggle("stack", eMode === "pts");
     drawSub(); sDraw();
   };
   // the window drags by its header
@@ -1024,11 +1023,11 @@ export function initBuild(ctx) {
     while (sdSvg.firstChild) sdSvg.removeChild(sdSvg.firstChild);
     if (ceSide.hidden) return;
     const fy = sPy(eEx.fx * fp()), hx = sPx(eWo[0], eWo[1]), hy = sPy(eEx.hz * fp());
-    ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (eMode === "fx" ? "" : " dim") });
-    if (eMode === "fx") { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
+    ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (eMode === "pts" ? "" : " dim") });
+    if (eMode === "pts") { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
     if (isShipKind()) {
-      const c = ss("circle", { cx: hx, cy: hy, r: 7, class: eMode === "hp" ? "ce-woh" : "ce-woh dim" });
-      if (eMode === "hp") c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "hz"); });
+      const c = ss("circle", { cx: hx, cy: hy, r: 7, class: eMode === "pts" ? "ce-woh" : "ce-woh dim" });
+      if (eMode === "pts") c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "hz"); });
     }
   }
   let sDrag = null;
@@ -1066,22 +1065,23 @@ export function initBuild(ctx) {
     eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim") }); });
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
-    sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
-    if (isShipKind() && eMode !== "hp") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
+    sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
+    if (isShipKind() && eMode !== "pts") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
       sv("line", { x1, y1, x2, y2, class: "ce-guide" });
       const hit = sv("line", { x1, y1, x2, y2, class: "ce-guide-hit" + (ax === "x" ? " v" : " h") });
       hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); eGrab(e, "g" + ax); });
     }
-    if (eMode !== "vis") for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
-    if (eMode === "vis") {                       // (owner) click empty space to add a point; drag one to move it; right-click removes it
+    if (eMode !== "pts") for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
+    if (eMode === "pts") {                       // visibility points: click empty space to add one; drag one to move it; right-click removes it
       px.forEach((p, i) => handle(p[0], p[1], 6, "ce-vpt", (e) => {
         e.preventDefault(); e.stopPropagation();
         if (e.button === 2) { removeCorner(i); return; }
         if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
-    } else if (eMode === "sight") {
+      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "pv"); } });   // the pivot
+      if (isShipKind()) {
       px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
         const q = px[(i + 1) % px.length];
         handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); snap(); eGrab(e, "pt", addCorner(i)); });
@@ -1091,7 +1091,6 @@ export function initBuild(ctx) {
         if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
         if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
-    } else if (eMode === "hp") {
       // (owner, 2026-10-15) the hardpoint: its spot (drag the dot), its rotation limit (the shaded arc around it: drag an
       // end; all the way round is endless) and its default facing (the arrow: drag its tip)
       const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx - Math.sin(rad(d)) * r, wy + Math.cos(rad(d)) * r];   // (degrees clockwise from the nose, which points down here)
@@ -1103,13 +1102,12 @@ export function initBuild(ctx) {
       for (const end of eEx.arc >= 360 ? [eEx.dir + 180] : [eEx.dir - eEx.arc / 2, eEx.dir + eEx.arc / 2]) { const [x, y] = at(end, R); handle(x, y, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "arc"); } }); }
       handle(tx, ty, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "dir"); } });
       handle(wx, wy, 7, "ce-woh", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "wo"); } });
+      }
     } else if (eMode === "move") {
       handle(mcx, mcy, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "mc"); } });
       // (owner, 2026-10-14) a handle on each side, each moving only its own side
       for (const [hx, hy, side] of [[mx1, mcy, "x1"], [mx0, mcy, "x0"], [mcx, my1, "y1"], [mcx, my0, "y0"]])
         handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "m" + side); } });
-    } else {
-      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "pv"); } });
     }
   }
   function addCorner(i) {                      // a corner in the middle of edge i (and, mirrored, on its mirror edge); returns its index
@@ -1128,7 +1126,7 @@ export function initBuild(ctx) {
   }
   // a click on empty space in the Visibility tab adds a point there (mirrored: a pair, or one on the middle line)
   ceSvg.addEventListener("pointerdown", (e) => {
-    if (eMode !== "vis" || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
+    if (eMode !== "pts" || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
     e.preventDefault(); const r = ceSvg.getBoundingClientRect(); let u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x; if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     snap();

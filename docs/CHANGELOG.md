@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Points tab (owner):** the Object Editor's Pivot, Visibility, Hardpoint and Effects Level tabs are one Points tab with the top and side views stacked; the tabs are now Hitboxes, Movement and Points.
 - **Hardpoint arc in play (owner):** aiming past your ship's hardpoint rotation limit turns the aim line red and you can't fire until it swings back inside. The default facing arrow now counts from the ship's nose.
 - **Player ship from Ship objects (owner):** the CREATOR's Player Ship now just picks which Ship object players fly; its model, hitboxes, pivot, movement, visibility, hardpoint and effects level all come from that object.
 - **Ship editing (owner):** the Object Editor's tabs are now Hitboxes (types Body, Main Engine, Left Engine, Right Engine, Hardpoint, Critical), Movement, Pivot, Visibility, Hardpoint and Effects Level. A new side view (turn it around by dragging) sets the hardpoint's elevation and the dashed red effects level; the hardpoint (one per ship, replacing the Weapon Origin) also gets a rotation limit arc and a default facing arrow.
