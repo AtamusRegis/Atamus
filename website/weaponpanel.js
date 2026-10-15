@@ -89,7 +89,8 @@
   function menu(key, x, y) {
     closeMenu(); const it = C().item(key); if (!it) return;
     ctx = $("div", "we-ctx");
-    ctx.appendChild(btn("Edit", "", () => { closeMenu(); itemBox(it.kind, it); }));
+    ctx.appendChild(btn("Edit Item", "", () => { closeMenu(); itemBox(it.kind, it, "item"); }));   // (owner, 2026-10-14) the item's properties: name and icon
+    if (it.kind === "w") ctx.appendChild(btn("Edit Stats", "", () => { closeMenu(); itemBox(it.kind, it, "stats"); }));   // its numbers (ammo has none yet)
     const first = it.kind === "w" && C().weapons.length && it.id === C().weapons.reduce((m, w) => (+w.id < +m.id ? w : m)).id;   // (the first weapon is everyone's: it stays)
     if (!first) ctx.appendChild(btn("Delete", "", () => { closeMenu(); api.send({ t: it.kind === "w" ? "wdel" : "adel", id: it.id }); }));
     document.body.appendChild(ctx);
@@ -97,9 +98,9 @@
   }
 
   // ---- Create New Weapon / Ammo, and Edit: name, icon, (a weapon being edited: its numbers), Cancel / Create ----
-  function itemBox(kind, edit) {
+  function itemBox(kind, edit, mode) {         // mode (editing): "item" (name, icon) or "stats" (a weapon's numbers)
     const o = overlay("we-item"), base = edit && edit.data; let icon = base ? base.icon || null : null;
-    o.box.appendChild($("p", "we-title", (edit ? "EDIT " : "NEW ") + (kind === "w" ? "WEAPON" : "AMMO")));
+    o.box.appendChild($("p", "we-title", mode === "stats" ? "STATS: " + base.name.toUpperCase() : mode === "item" ? "ITEM PROPERTIES" : "NEW " + (kind === "w" ? "WEAPON" : "AMMO")));
     const name = $("input"); name.maxLength = 32; name.value = base ? base.name : "";
     const grid = $("div", "we-grid"); grid.append($("label", "we-label", "Name"), name);
     const iconRow = $("div", "we-iconrow"), mk = btn("Create New Icon", "", () => creator((id) => { icon = id; drawIcon(); })), box = btn("", "we-iconbox", () => picker((id) => { icon = id; drawIcon(); }));
@@ -107,16 +108,16 @@
     const drawIcon = () => { const ic = icon && C().icons.get(icon); box.replaceChildren(ic ? C().svg(ic, 30) : $("span", "we-plus", "+")); };
     drawIcon(); iconRow.append(mk, box);
     const inputs = {}, stats = $("div", "we-grid");
-    if (kind === "w" && base) for (const [k, label, step] of FIELDS) {
+    if (kind === "w" && mode === "stats") for (const [k, label, step] of FIELDS) {
       const i = $("input"); i.type = "number"; i.step = String(step); i.value = String(base[k]); inputs[k] = i; stats.append($("label", "we-label", label), i);
       i.addEventListener("input", () => { const v = Number(i.value), d = v - base[k]; i.classList.remove("we-up", "we-down"); if (Number.isFinite(v) && Math.abs(d) > 1e-9) i.classList.add(d * BETTER[k] > 0 ? "we-up" : "we-down"); });
     }
     if (base) name.addEventListener("input", () => name.classList.toggle("we-diff", name.value.trim() !== base.name));
     const err = $("p", "we-err"); err.hidden = true;
     const ok = btn(edit ? "SAVE" : "CREATE", "we-ok", save), btns = $("div", "we-btns"); btns.append(btn("CANCEL", "", () => o.close()), ok);
-    o.box.append(grid, iconRow); if (stats.children.length) o.box.appendChild(stats); o.box.append(err, btns);
+    if (mode !== "stats") o.box.append(grid, iconRow); else o.box.appendChild(stats); o.box.append(err, btns);
     o.box.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });   // (owner) ENTER saves
-    setTimeout(() => name.focus(), 0);
+    setTimeout(() => (mode === "stats" ? stats.querySelector("input") : name).focus(), 0);
     function save() {
       if (ok.disabled) return;
       const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }
@@ -183,7 +184,7 @@
     const num = (min, max, step) => { const i = $("input"); i.type = "number"; i.min = min; i.max = max; i.step = step; return i; };
     const rng = () => { const i = $("input"); i.type = "range"; i.min = 0; i.max = 100; i.step = 1; return i; };
     const P = { son: field("Outline", chk()), sc: field("Outline Color", color()), sw: field("Outline Thickness", num(0, 8, 0.5)), fon: field("Fill", chk()), fc: field("Fill Color", color()), fo: field("Fill Thickness", rng()) };
-    const PX_ = field("X", num(-16, 80, 0.5)), PY_ = field("Y", num(-16, 80, 0.5));
+    const PX_ = field("X", num(-16, 80, 1)), PY_ = field("Y", num(-16, 80, 1));
     const flips = $("div", "ic-flips"); flips.append(btn("Flip X", "", () => flip("x")), btn("Flip Y", "", () => flip("y"))); props.appendChild(flips);
     const readProps = () => ({ son: P.son.checked, sc: P.sc.value, sw: Math.max(0, Math.min(8, Number(P.sw.value) || 0)), fon: P.fon.checked, fc: P.fc.value, fo: Math.max(0, Math.min(1, Number(P.fo.value) / 100)) });
     const showProps = (s) => { P.son.checked = s.son; P.sc.value = s.sc; P.sw.value = s.sw; P.fon.checked = s.fon; P.fc.value = s.fc; P.fo.value = Math.round(s.fo * 100); };
@@ -198,7 +199,7 @@
     // X / Y: where the selected corners (their middle) or the shape (its middle) are; typing or the arrows moves them there
     for (const [el, ax] of [[PX_, 0], [PY_, 1]]) {
       el.addEventListener("focus", () => { if (sel >= 0) snap(); });
-      el.addEventListener("input", () => { const v = Number(el.value), c = where(); if (!c || !Number.isFinite(v)) return; moveSel(ax === 0 ? v - c[0] : 0, ax === 1 ? v - c[1] : 0); render(false); });
+      el.addEventListener("input", () => { const v = Math.round(Number(el.value)), c = where(); if (!c || !Number.isFinite(v)) return; moveSel(ax === 0 ? v - c[0] : 0, ax === 1 ? v - c[1] : 0); render(false); });
     }
     body.append(tools, cv, props);
     const err = $("p", "we-err"); err.hidden = true;
@@ -209,7 +210,7 @@
     function select(i) { sel = i; pts = new Set(); if (i >= 0) showProps(shapes[i]); else showProps(style); }
     function addShape(geo) { if (shapes.length >= MAX_SHAPES) return; snap(); shapes.push({ ...geo, ...style }); select(shapes.length - 1); tool = ""; draft = []; }
     const unit = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 64, (e.clientY - r.top) / r.height * 64]; };
-    const sn = (v) => Math.round(Math.max(-16, Math.min(80, v)) * 2) / 2;      // (half-unit steps)
+    const sn = (v) => Math.round(Math.max(-16, Math.min(80, v)));      // (owner, 2026-10-14) whole grid units only
     const isPoly = () => sel >= 0 && shapes[sel] && shapes[sel].t === "poly";
     // the middle of the selection: the selected corners, else the shape (an ellipse's center, a polygon's box)
     function where() {
@@ -277,7 +278,7 @@
         sv("polyline", { points: draft.map((q) => q.join(",")).join(" "), class: "ic-draft" }, cv);
         draft.forEach((q, k) => sv("circle", { cx: q[0], cy: q[1], r: k === 0 ? 1.4 : 1, class: "ic-dpt" + (k === 0 ? " first" : "") }, cv));
       }
-      if (showXY) { const c = where(); PX_.disabled = PY_.disabled = !c; PX_.value = c ? +c[0].toFixed(2) : ""; PY_.value = c ? +c[1].toFixed(2) : ""; }
+      if (showXY) { const c = where(); PX_.disabled = PY_.disabled = !c; PX_.value = c ? Math.round(c[0]) : ""; PY_.value = c ? Math.round(c[1]) : ""; }
     }
     function handle(x, y, cls, onDown) { const c = sv("circle", { cx: x, cy: y, r: cls === "ic-mid" ? 0.9 : 1.3, class: cls }, cv); c.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); onDown(e); }); return c; }
     function handles(s) {
@@ -292,7 +293,7 @@
         const a = k * 2, b = ((k + 1) % n) * 2;
         if (n < MAX_PTS) handle((s.p[a] + s.p[b]) / 2, (s.p[a + 1] + s.p[b + 1]) / 2, "ic-mid", (e) => {
           if (e.button !== 0) return; snap(); const at = b === 0 ? n : k + 1;
-          s.p.splice(at * 2, 0, (s.p[a] + s.p[b]) / 2, (s.p[a + 1] + s.p[b + 1]) / 2);
+          s.p.splice(at * 2, 0, Math.round((s.p[a] + s.p[b]) / 2), Math.round((s.p[a + 1] + s.p[b + 1]) / 2));
           pts = new Set([at]); grabPts(e, at); render();
         });
       }
@@ -348,8 +349,8 @@
         const dx = gx - drag.p0[drag.k * 2], dy = gy - drag.p0[drag.k * 2 + 1];
         for (const k of pts) { s.p[k * 2] = drag.p0[k * 2] + dx; s.p[k * 2 + 1] = drag.p0[k * 2 + 1] + dy; }
       }
-      else if (drag.type === "ex") s.p[2] = Math.max(0.5, Math.abs(sn(x) - s.p[0]));
-      else if (drag.type === "ey") s.p[3] = Math.max(0.5, Math.abs(sn(y) - s.p[1]));
+      else if (drag.type === "ex") s.p[2] = Math.max(1, Math.abs(sn(x) - s.p[0]));
+      else if (drag.type === "ey") s.p[3] = Math.max(1, Math.abs(sn(y) - s.p[1]));
       render();
     });
     const end = (e) => {
@@ -381,7 +382,7 @@
       if (ctl && e.code === "KeyV") { paste(); return true; }
       if (ctl && e.code === "KeyZ") { if (past.length) { shapes = JSON.parse(past.pop()); select(-1); render(); } return true; }
       const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-      if (arrows) { if (sel >= 0) { if (!e.repeat) snap(); const st = e.shiftKey ? 4 : 0.5; moveSel(arrows[0] * st, arrows[1] * st); render(); } return true; }
+      if (arrows) { if (sel >= 0) { if (!e.repeat) snap(); const st = e.shiftKey ? 4 : 1; moveSel(arrows[0] * st, arrows[1] * st); render(); } return true; }
       if (e.key === "Enter" && tool === "poly") { finishPoly(); return true; }
       return false;
     }
@@ -393,7 +394,7 @@
     function save() {
       if (ok.disabled) return;
       if (!shapes.length) { err.textContent = "Add a shape first."; err.hidden = false; return; }
-      const icon = { shapes: shapes.map((s) => ({ t: s.t, p: s.p.map((v) => Math.round(v * 10) / 10), fon: s.fon, fc: s.fc, fo: Math.round(s.fo * 100) / 100, son: s.son, sc: s.sc, sw: s.sw })) };
+      const icon = { shapes: shapes.map((s) => ({ t: s.t, p: s.p.map((v) => Math.round(v)), fon: s.fon, fc: s.fc, fo: Math.round(s.fo * 100) / 100, son: s.son, sc: s.sc, sw: s.sw })) };
       if (JSON.stringify(icon).length > 15000) { err.textContent = "Too many shapes or corners to save."; err.hidden = false; return; }
       ok.disabled = true; err.hidden = true;
       pending = { type: "isaved", done: (m) => { closeIt(); onSaved(m.id); }, fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
