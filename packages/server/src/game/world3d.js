@@ -175,7 +175,9 @@ export const SHIP_R = 45, BLOCK_HALF = 25;
 // (owner, 2026-10-13) the admin Build menu's pieces: a shape (square, cylinder or triangle) with a footprint w (east-west)
 // by d (north-south) in meters, turned r radians (counterclockwise seen from above), BUILD_H tall, kept in the database.
 // Ships collide with them like blocks: the footprint as a convex polygon (the cylinder as a 24-sided ellipse).
-export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "ship", "cloud"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
+// (owner, 2026-10-15) the built-in kinds are now only the test ship and clouds (the square, cylinder and triangle are gone;
+// their pieces stay in the database, unused); everything else is an object type from the Object Creator, keyed "t:<id>"
+export const KINDS = ["ship", "cloud"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000;
 // (owner, 2026-10-14) each kind's collider outline, in the model's own frame as fractions of its footprint (x across
 // its width w, y along its depth d; a test ship's footprint is SHIP_R x 2 square). The Object Editor ([X]) can change
 // them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
@@ -291,6 +293,28 @@ export function cleanCloud(pts) {
   return out;
 }
 export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.sin(b.r), out = []; for (const [lx, ly] of b.extra.pts) { const x = lx * s, y = ly * s; out.push(b.x + x * c - y * n, b.y + x * n + y * c); } return out; }
+// ---- (owner, 2026-10-15) object types (the Object Creator, head admin): a name, a category (for the Object Placer's tabs;
+// "node", resource nodes, for now), its model (an uploaded GLB, by file name), its size (m across, at scale 1), and for
+// a resource node the item it yields, how fast it turns (deg/s) and bobs (bobs a second). Colliders: the Object Editor's,
+// under the type's key. The Object Placer sets each placed one's scale and (nodes) its ore range, respawn time and zone.
+export const TYPE_CATS = ["node"];
+export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
+export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.test(v) ? v : null);
+export function cleanType(o) {
+  if (!o || typeof o !== "object") return null;
+  const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
+  const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v)) * 100) / 100 : d; };
+  const model = modelRef(o.model);
+  return { name, cat: TYPE_CATS.includes(o.cat) ? o.cat : "node", model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item),
+    size: num(o.size, BUILD_MIN, BUILD_MAX, 60), spin: num(o.spin, -720, 720, 10), bob: num(o.bob, 0, 5, 0.3) };
+}
+// a placed resource node's settings (the Object Placer): ore it spawns with (min-max), respawn time (s), respawn zone (m)
+export function cleanNode(e) {
+  e = e && typeof e === "object" ? e : {};
+  const int = (v, lo, hi, d) => { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+  const min = int(e.min, 1, 99999, 50), max = Math.max(min, int(e.max, 1, 99999, 100));
+  return { min, max, respawn: int(e.respawn, 0, 86400, 300), zone: int(e.zone, 0, 2000, 0) };
+}
 export const buildMsg = (b) => (b.extra ? [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra] : [b.id, b.k, b.x, b.y, b.w, b.d, b.r]);
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const A = HEX_FLAT / 2 - SPHERE_R;           // inner apothem: the sphere's edge stops on the line
@@ -308,7 +332,7 @@ export class World3D {
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
-    this.catalog = new Map(); this.icons = new Map();   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
+    this.catalog = new Map(); this.icons = new Map(); this.types = new Map();   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
@@ -343,13 +367,15 @@ export class World3D {
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_icons (id SERIAL PRIMARY KEY, data JSONB NOT NULL, by_user TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     for (const o of (await pool.query(`SELECT id, data FROM world3d_icons ORDER BY id`)).rows) { const ic = cleanIcon(o.data); if (ic) this.icons.set(String(o.id), { id: String(o.id), ...ic }); }
     for (const o of (await pool.query(`SELECT id, data FROM world3d_items ORDER BY id`)).rows) { const a = cleanItem(o.data); if (a) this.catalog.set(String(o.id), { id: String(o.id), ...a }); }
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_types (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) object types
+    for (const o of (await pool.query(`SELECT id, data FROM world3d_types ORDER BY id`)).rows) { const t = cleanType(o.data); if (t) this.types.set(String(o.id), { id: String(o.id), ...t }); }
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS origin JSONB`);  // (owner, 2026-10-14) its Weapon Origin (where line of sight starts)
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS parts JSONB`);   // (owner, 2026-10-14) its combat-points parts (pts keeps the first part's outline)
     for (const o of (await pool.query(`SELECT k, pts, parts, pivot, origin, mover, vis FROM world3d_colliders`)).rows) {
-      if (!KINDS.includes(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), wo = cleanPivot(o.origin), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (wo) this.origins[o.k] = wo; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
+      if (!this.kindOk(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), wo = cleanPivot(o.origin), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (wo) this.origins[o.k] = wo; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-14) a nebula cloud's outline and color theme
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r, extra FROM world3d_builds`);
@@ -701,8 +727,9 @@ export class World3D {
 
   // (owner, 2026-10-13) Build menu pieces. _clean checks a piece from a client as hostile: a known shape, finite numbers,
   // its center inside the map, sizes clamped, the angle wrapped. null if it isn't usable.
+  kindOk(k) { return KINDS.includes(k) || (isTypeKey(k) && this.types.has(k.slice(2))); }
   _clean(o) {
-    if (!o || !KINDS.includes(o.k)) return null;
+    if (!o || !this.kindOk(o.k)) return null;
     const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null), x = n(+o.x), y = n(+o.y), w = n(+o.w), d = n(+o.d), r = n(+o.r);
     if (x === null || y === null || w === null || d === null || r === null || !inside(x, y)) return null;
     const cl = (v) => Math.max(BUILD_MIN, Math.min(BUILD_MAX, v)), rd = (v) => Math.round(v * 100) / 100;
@@ -712,13 +739,21 @@ export class World3D {
       const route = o.extra.route == null ? null : cleanRoute(o.extra.route), atk = o.extra.atk === true;
       if (route || atk) b.extra = { ...(route ? { route } : {}), ...(atk ? { atk: true } : {}) };
     }
+    if (isTypeKey(o.k)) { b.d = b.w; b.extra = cleanNode(o.extra); }   // (owner, 2026-10-15) a placed object: square footprint (its scale), a node's settings
     if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
       const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
       if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
     }
     return b;
   }
-  _put(id, b, keep = false) { b.id = id; this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b, keep); return b; }
+  _put(id, b, keep = false) {
+    b.id = id;
+    if (isTypeKey(b.k)) {                     // (owner, 2026-10-15) a resource node rolls how much ore it holds, in its range (kept while the range still covers it)
+      const old = this.builds.get(id), e = b.extra;
+      b.amount = old && old.amount >= e.min && old.amount <= e.max ? old.amount : e.min + Math.floor(Math.random() * (e.max - e.min + 1));
+    }
+    this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b, keep); return b;
+  }
   // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players
   // map ("b" + its id, side "test") that collides, gets shoved, takes damage, shows in snapshots and the roster. A Build
   // menu edit puts it there (stopped); where shoves take it is written back to the piece.
@@ -736,7 +771,7 @@ export class World3D {
     b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
   async setCollider(k, parts, pivot, mover, vis, origin) {   // (owner) the combat points, the pivot, the movement collider, the visibility points and the weapon origin together
-    const c = KINDS.includes(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], wo = cleanPivot(origin) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
+    const c = this.kindOk(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], wo = cleanPivot(origin) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k] || MOVE_DEFAULT.square, vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k] || VIS_DEFAULT.square; if (!c) return null;
     await this.ready;
     await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, origin, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, origin = $7, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs), JSON.stringify(wo)]);
     this.colliders[k] = c; this.pivots[k] = pv; this.origins[k] = wo; this.movers[k] = mv; this.visOutlines[k] = vs;
@@ -744,6 +779,20 @@ export class World3D {
     return { parts: c, pv, mv, vis: vs, wo };
   }
   buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
+  // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
+  typeList() { return [...this.types.values()]; }
+  async setType(id, o) {
+    const t = cleanType(o); if (!t) return null; await this.ready;
+    if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;
+    if (id) { if (!this.types.has(id)) return null; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(t)]); }
+    else { if (this.types.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_types (data) VALUES ($1) RETURNING id`, [JSON.stringify(t)])).rows[0].id); }
+    const out = { id, ...t }; this.types.set(id, out); return out;
+  }
+  async delType(id) {
+    if (!this.types.has(id)) return { ok: false };
+    if ([...this.builds.values()].some((b) => b.k === "t:" + id)) return { ok: false, error: "Remove its placed objects first." };
+    await this.ready; await pool.query(`DELETE FROM world3d_types WHERE id = $1`, [id]); this.types.delete(id); return { ok: true };
+  }
   async addBuild(o, by) {
     const b = this._clean(o); if (!b || this.builds.size >= BUILD_CAP) return null;
     await this.ready;

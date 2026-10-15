@@ -136,9 +136,9 @@
     if (!state) { try { state = await Api.get("/game/admin/player/" + id); name = state.name || name; } catch { state = {}; } }
     const full = role === "head" || role === "admin";
     const types = state.staff
-      ? [...(full ? TYPES.filter(([k]) => k.startsWith("tp")) : []), ...(role === "head" && state.role === "mod" ? [["unmod", "Remove moderator"]] : [])]   // (staff can't be disciplined)
+      ? [...(full ? TYPES.filter(([k]) => k.startsWith("tp")) : []), ...(role === "head" && state.role === "mod" ? [["unmod", "Remove moderator"]] : []), ...(role === "head" && state.role === "dev" ? [["undev", "Remove developer"]] : [])]   // (staff can't be disciplined)
       : [...(full ? TYPES : TYPES.filter(([k]) => ["kick", "mute", "ban"].includes(k))), ...(full && state.mute ? [["unmute", "Unmute"]] : []), ...(full && state.ban ? [["unban", "Unban"]] : []),
-         ...(role === "head" ? [["mod", "Make moderator"]] : [])];
+         ...(role === "head" ? [["mod", "Make moderator"], ["dev", "Make developer"]] : [])];   // (owner, 2026-10-15) developers: the Object Placer
     if (!types.length) return;
     let type = types[0][0], reason = REASONS[type] ? REASONS[type][0] : null, notch = 0;
     const box = $("div", "dp-box"), title = $("p", "dp-title", name);
@@ -167,7 +167,7 @@
       try {
         let pending = false;
         if (type === "unmute" || type === "unban") await Api.post("/game/admin/" + type, { id });
-        else if (type === "mod" || type === "unmod") await Api.post("/game/admin/role", { id, role: type === "mod" ? "mod" : null });
+        else if (["mod", "unmod", "dev", "undev"].includes(type)) await Api.post("/game/admin/role", { id, role: type === "mod" || type === "dev" ? type : null });
         else {
           const data = { id, type, note: note.hidden ? "" : note.value };
           if (REASONS[type]) { data.reason = reason; data.minutes = NOTCHES[notch][0]; }

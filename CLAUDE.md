@@ -40,7 +40,8 @@ packages/server/src/
   names.js, namefilter.js, textsafe.js   the name filter and banned names (sign-up), text cleaning
   admin.js        the small admin panel's API (players: kick / ban / mute; ban appeals) and the game hooks (gameHook)
   appeals.js      ban appeals (written from the login page, answered in the admin panel)
-  gamehttp.js     the deploy workflows' calls (build-check, update-countdown)
+  gamehttp.js     the deploy workflows' calls (build-check, update-countdown); model uploads / downloads (/game/models, head admin uploads,
+                  stored in uploads/models at the repo root, outside git: index.js wipes packages/server/data at start)
   game/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
                   (4003), admin hooks (kick 4005 / ban 4006 / mute), side pick (remembered), move /
@@ -52,7 +53,8 @@ packages/server/src/
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
-  build3d.js      the staff Build menu ([B]): shapes and test ships, hologram blueprints (pointer / wheel / R), copy / paste; footprint colliders; the [X] Object Editor (collider outlines per kind)
+  build3d.js      the Object Placer ([B], the Build menu: object types, test ships, clouds; hologram blueprints, copy / paste, resource node settings)
+                  and the Object Creator ([X], head admin: object types, model upload, colliders per kind incl. the player ship)
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
   icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
   itemcreator.js  the staff Item Creator ([Z]; was the Weapon panel): item slots, Create New Item / Edit Item, the icon picker and Icon Creator

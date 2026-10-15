@@ -76,12 +76,15 @@ export function attachGameServer(httpServer) {
 
     const old = socks.get(pid);                // (owner) one session per account: the new one replaces the old
     if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
-    socks.set(pid, ws); roles.set(pid, user.role || null); if (["head", "admin"].includes(user.role)) builders.add(pid);
+    socks.set(pid, ws); roles.set(pid, user.role || null); if (["head", "admin", "dev"].includes(user.role)) builders.add(pid);
 
     // (owner, 2026-10-13) a player joins the world only once they've sent {t:"side", s:"red"|"blue"}: the client sends
     // the remembered side (hello.side) by itself, or shows the picker the first time and when they chose Reset faction
     let joined = false;
-    const staff = ["head", "admin"].includes(user.role);   // (owner, 2026-10-13) staff can use the Build menu (2026-10-14: not moderators)
+    const staff = ["head", "admin"].includes(user.role);   // (owner, 2026-10-13) staff: the Item Creator, item commands (2026-10-14: not moderators)
+    // (owner, 2026-10-15) the Object Placer (the Build menu): head admin, admins and developers (a role only the head admin
+    // gives); the Object Creator (object types, models, colliders): the head admin only
+    const placer = ["head", "admin", "dev"].includes(user.role), creator = user.role === "head";
     let cmds = 0, blockAt = 0;                              // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
@@ -90,11 +93,11 @@ export function attachGameServer(httpServer) {
     if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
-      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: staff },   // staff: the Admin button; builder: the Build menu and Object Editor
+      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer, creator, items: staff },   // staff: the Admin button; builder: the Object Placer; creator: the Object Creator; items: the Item Creator
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
-      items: world.itemList(), icons: world.iconList(),                // (owner, 2026-10-15) the Item Creator's items and icons
+      items: world.itemList(), icons: world.iconList(), types: world.typeList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
       crates: items.crateList(),                                       // (owner, 2026-10-14) dropped-item crates
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
@@ -154,7 +157,7 @@ export function attachGameServer(httpServer) {
       }
       // (owner, 2026-10-13) the admin Build menu: staff place, edit and delete pieces; everyone is sent the result
       else if (m.t === "bnew" || m.t === "bset" || m.t === "bdel") {
-        if (!staff) return;
+        if (!placer) return;
         const bid = typeof m.id === "string" && /^[0-9]{1,15}$/.test(m.id) ? m.id : null;
         if (m.t === "bnew") {
           const q = Number.isInteger(m.q) ? m.q : 0;
@@ -210,10 +213,23 @@ export function attachGameServer(httpServer) {
         sendInv(pid, ws);
       }
       // (owner, 2026-10-14) staff delete things in the world by right-click: a crate, a Build piece (bdel above) or a block
-      else if (m.t === "cratedel") { if (!staff) return; const id = String(m.id || ""); if (items.del(id)) broadcast({ t: "crategone", id }); }
-      else if (m.t === "blockdel") { if (!staff) return; const id = Number(m.id); if (Number.isInteger(id) && world.delBlock(id)) objGone("k", [String(id)]); }
+      else if (m.t === "cratedel") { if (!placer) return; const id = String(m.id || ""); if (items.del(id)) broadcast({ t: "crategone", id }); }
+      else if (m.t === "blockdel") { if (!placer) return; const id = Number(m.id); if (Number.isInteger(id) && world.delBlock(id)) objGone("k", [String(id)]); }
+      else if (m.t === "tset") {               // (owner, 2026-10-15) the Object Creator: the head admin changes an object type (id) or makes one
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        world.setType(id, m.type).then((o) => {
+          if (!o) { try { ws.send(JSON.stringify({ t: "tsaved", error: "That object can't be saved." })); } catch {} return; }
+          broadcast({ t: "types", list: world.typeList() }); try { ws.send(JSON.stringify({ t: "tsaved", id: o.id })); } catch {}
+        }).catch((e) => console.error("type", e));
+      }
+      else if (m.t === "tdel") {
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        world.delType(id).then((r) => { if (r.ok) broadcast({ t: "types", list: world.typeList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "tsaved", error: r.error })); } catch {} }).catch((e) => console.error("type del", e));
+      }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
-        if (!staff) return;
+        if (!creator) return;
         world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis, m.wo).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis, wo: c.wo }); }).catch((e) => console.error("collider", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }

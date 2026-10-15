@@ -129,15 +129,17 @@ async function apply(me, t, type, reason, minutes, note) {
   await log(me, t, type, reason, { ...(REASONS[type] ? { length: lengthText(minutes) } : {}), ...(note ? { note } : {}) });
 }
 
-// ---- (owner, 2026-10-14) moderators: Nyssary makes and removes them (players only; not other staff) ----
+// ---- (owner, 2026-10-14) moderators (and, 2026-10-15, developers): Nyssary makes and removes them (players only; not other staff) ----
 admin.post("/role", headOnly(async (req, res, me) => {
   const b = req.body || {}, t = await target(b.id); if (!t) return fail(res, 404, "No such player.");
   if (String(t.id) === me.id) return fail(res, 403, "You can't do that to yourself.");
-  const make = b.role === "mod";
-  if (make ? t.role : t.role !== "mod") return fail(res, 400, make ? "That player is already staff." : "That player isn't a moderator.");
-  await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make ? "mod" : null]);
-  hooks.staffChanged(String(t.id), make ? "mod" : null);
-  await log(me, t, make ? "made moderator" : "removed moderator", ""); res.json({ ok: true });
+  // (owner, 2026-10-15) and developers ("dev": the Object Placer), the same way
+  const make = b.role === "mod" || b.role === "dev" ? b.role : null, label = { mod: "moderator", dev: "developer" };
+  if (make ? t.role : !["mod", "dev"].includes(t.role)) return fail(res, 400, make ? "That player is already staff." : "That player isn't a moderator or developer.");
+  const was = t.role;
+  await pool.query(`UPDATE users SET role = $2 WHERE id = $1`, [t.id, make]);
+  hooks.staffChanged(String(t.id), make);
+  await log(me, t, make ? "made " + label[make] : "removed " + label[was], ""); res.json({ ok: true });
 }));
 // ---- (owner, 2026-10-14) Approvals (Nyssary only): moderators' requests for 7-day / indefinite mutes and bans ----
 admin.get("/approvals", headOnly(async (req, res) => {

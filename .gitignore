@@ -3,3 +3,4 @@ packages/server/BUILD
 *.log
 .DS_Store
 packages/server/data/
+uploads/

@@ -2,14 +2,21 @@
 // Picking a slot gives a blueprint (a shimmering hologram) of that piece: it follows the pointer, the wheel scales it,
 // holding R turns it slowly, and a left click places it (the blueprint stays for more; Escape or the slot again ends it).
 // Clicking a placed piece picks it up the same way (pointer moves it, wheel scales, R turns; click drops it, Escape
-// puts it back). Q cycles the variation (square, cylinder, triangle); Delete removes the held piece; Ctrl+C copies,
+// puts it back). (owner, 2026-10-15: the Object Placer) Its slots: each object type from the Object Creator, the test ship and
+// the nebula cloud (Q: a cloud's color theme). Delete removes the held piece; Ctrl+C copies,
 // Ctrl+X cuts (copies and removes) and Ctrl+V pastes a copy where the pointer is. The ship flies as usual meanwhile.
 // Pieces belong to the server (everyone sees them, ships collide with them); this file only sends the edits.
 import * as THREE from "./vendor/three.module.js";
+import { GLTFLoader } from "./vendor/GLTFLoader.js";
 
-export const SHAPES = ["square", "cylinder", "triangle"];
-const KINDS = [...SHAPES, "ship", "cloud"];
-const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", ship: "Ship", cloud: "Nebula Cloud" };
+// (owner, 2026-10-15) the built-in kinds are the test ship and the nebula cloud (the square, cylinder and triangle are gone);
+// everything else is an object type made in the Object Creator (head admin), keyed "t:<id>"
+const KINDS = ["ship", "cloud"];
+const NAMES = { ship: "Ship", cloud: "Nebula Cloud" };
+export const types = new Map();                // id -> { id, name, cat, model, item, size, spin, bob }
+export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
+const typeOf = (k) => (isTypeKey(k) ? types.get(k.slice(2)) || null : null);
+const kindOk = (k) => KINDS.includes(k) || !!typeOf(k);
 // (owner, 2026-10-14) nebula clouds: their own outline (meters around the pivot, before turning and scaling; w = scale %)
 // and a color theme (Q). Each theme: deep, main and highlight colors.
 export const CLOUD_THEMES = [
@@ -115,17 +122,35 @@ export function segPoly(x0, y0, x1, y1, v) {
   return best;
 }
 
-// ---- meshes: unit footprints, BUILD_H tall, standing on the grid; scaled to w x d and turned r ----
-function geos() {
-  const box = new THREE.BoxGeometry(1, BUILD_H, 1); box.translate(0, BUILD_H / 2, 0);
-  const cyl = new THREE.CylinderGeometry(0.5, 0.5, BUILD_H, 40); cyl.translate(0, BUILD_H / 2, 0);
-  const sh = new THREE.Shape([new THREE.Vector2(-0.5, -0.5), new THREE.Vector2(0.5, -0.5), new THREE.Vector2(0, 0.5)]);
-  const tri = new THREE.ExtrudeGeometry(sh, { depth: BUILD_H, bevelEnabled: false }); tri.rotateX(-Math.PI / 2);   // shape y -> north, depth -> up
-  return { square: box, cylinder: cyl, triangle: tri };
+// ---- (owner, 2026-10-15) object types' models: each uploaded GLB is loaded once and made a unit: its widest side 1 across,
+// its middle over the pivot, standing on the grid; a placed one is that scaled to its size. Until it's loaded (or with no
+// model) a plain rock stands in. ----
+const modelUrl = (f) => (typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + f;
+const units = new Map(), modelWaits = new Set();   // file -> the unit Group (null while loading / failed); listeners for a load
+const gltf = new GLTFLoader();
+function unitOf(file) {
+  if (!file) return null;
+  if (units.has(file)) return units.get(file);
+  units.set(file, null);
+  gltf.load(modelUrl(file), (g) => {
+    const obj = g.scene, bx = new THREE.Box3().setFromObject(obj), sz = bx.getSize(new THREE.Vector3()), c = bx.getCenter(new THREE.Vector3());
+    const wrap = new THREE.Group(); obj.position.set(-c.x, -bx.min.y, -c.z); wrap.add(obj); wrap.scale.setScalar(1 / Math.max(sz.x, sz.z, 1e-6));
+    units.set(file, wrap); for (const f of modelWaits) f(file);
+  }, undefined, (e) => console.error("model", file, e));
+  return null;
 }
-let GEO = geos();
+const rockGeo = new THREE.IcosahedronGeometry(0.5, 1); rockGeo.translate(0, 0.5, 0);
 const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
+// an object type's mesh: an outer group (placed, turned, scaled to the footprint) holding a "spin" group (a node turns and
+// bobs it) holding the model; mat(m): each material's stand-in (null keeps the model's own). userData.mk: what it was made from
+function typeObject(t, mat) {
+  const outer = new THREE.Group(), spin = new THREE.Group(), u = t && unitOf(t.model); outer.add(spin);
+  if (u) { const c = u.clone(true); if (mat) c.traverse((o) => { if (o.isMesh) o.material = mat(o.material); }); spin.add(c); }
+  else spin.add(new THREE.Mesh(rockGeo, mat ? mat(pieceMat) : pieceMat));
+  outer.userData.spin = spin; outer.userData.mk = (t && t.model || "") + (u ? "+" : "-"); return outer;
+}
+const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") : k; };
 export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : v.every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
@@ -162,18 +187,18 @@ export function initBuild(ctx) {
     b.polys = buildPolys(b, colliders, pivots); b.srad = Math.max(...b.polys.map((v) => polyRad(b, v))); b.mpoly = movePoly(b, movers, pivots); b.rad = polyRad(b, b.mpoly); };
   const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
   function place(b) {
-    if (b.mesh && b.mesh.userData.k !== b.k) { scene.remove(b.mesh); b.mesh = null; }
+    if (b.mesh && b.mesh.userData.k !== meshKey(b.k)) { scene.remove(b.mesh); b.mesh = null; }
     // (owner, 2026-10-14) a test ship is drawn by its stand-in ship (it acts as a player); only while held does it get
     // a hologram of its own here
     if (b.k === "ship" && !(held && held.id === b.id)) { if (b.mesh) { scene.remove(b.mesh); b.mesh = null; } hold(b); return; }
     if (b.k === "cloud") { placeCloud(b); hold(b); if (ctx.onChange) ctx.onChange(); return; }
     if (!b.mesh) {
       // (owner) a test ship: the player ship's model (hidden out of sight like any other ship), parked
-      b.mesh = b.k === "ship" ? ctx.makeShip() : new THREE.Mesh(GEO[b.k], ctx.farMat(pieceMat));   // (not drawn past the sight limit)
-      Object.assign(b.mesh.userData, { k: b.k, id: b.id }); scene.add(b.mesh); b.mesh.visible = true;
+      b.mesh = b.k === "ship" ? ctx.makeShip() : typeObject(typeOf(b.k), ctx.farMat);   // (not drawn past the sight limit)
+      Object.assign(b.mesh.userData, { k: meshKey(b.k), id: b.id }); scene.add(b.mesh); b.mesh.visible = true;
       if (held && held.id === b.id) holo(b.mesh, true);
     }
-    const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
+    const [mx, my] = pivotAt(b); b.mesh.position.copy(toWorld(mx, my, 0)); if (b.k !== "ship") b.mesh.scale.setScalar(b.w); b.mesh.rotation.y = b.r;
     hold(b); if (ctx.onChange) ctx.onChange();   // (the line-of-sight shadows need redrawing)
   }
   function setBuild([id, k, x, y, w, d, r, extra]) {
@@ -191,7 +216,7 @@ export function initBuild(ctx) {
   // ---- state ----
   // picking: the blueprint of a new piece ({ k, w, d, r }); held: a placed piece picked up ({ id, ox, oy, b0 })
   let staff = false, open = false, picking = null, held = null, clip = null, rDown = false, lastSend = 0, sel = null;   // sel: (owner, 2026-10-14) the test ship last picked up (its buttons show over it)
-  try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && KINDS.includes(c.k)) clip = c; } catch {}
+  try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && (KINDS.includes(c.k) || isTypeKey(c.k))) clip = c; } catch {}
   const mouse = { x: 0, y: 0 };
   addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { capture: true, passive: true });
 
@@ -199,7 +224,7 @@ export function initBuild(ctx) {
   const btn = document.createElement("button"); btn.id = "build-btn"; btn.type = "button"; btn.textContent = "B"; btn.title = "Build"; btn.hidden = true;
   btn.addEventListener("click", () => toggle());
   const bar = document.createElement("div"); bar.id = "build-bar"; bar.hidden = true;
-  const slot = document.createElement("div"); slot.className = "inv-slot build-slot"; bar.appendChild(slot);
+  const typeSlots = document.createElement("div"); typeSlots.className = "build-types"; bar.appendChild(typeSlots);   // (owner, 2026-10-15) the object types
   const shipSlot = document.createElement("div"); shipSlot.className = "inv-slot build-slot"; shipSlot.title = NAMES.ship; bar.appendChild(shipSlot);   // (owner) the second option: test ships
   const cloudSlot = document.createElement("div"); cloudSlot.className = "inv-slot build-slot"; cloudSlot.title = NAMES.cloud; bar.appendChild(cloudSlot);   // (owner, 2026-10-14) the third: nebula clouds
   let cloudTheme = 0;
@@ -208,17 +233,23 @@ export function initBuild(ctx) {
   drawCloudSlot();
   cloudSlot.addEventListener("click", () => { if (picking && picking.k === "cloud") stopPicking(); else startPicking("cloud"); });
   shipSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>';
-  let slotShape = "square";
-  const ICON = { square: '<rect x="5" y="5" width="20" height="20" rx="1.5"/>', cylinder: '<circle cx="15" cy="15" r="10.5"/>', triangle: '<path d="M15 4 L26 25 L4 25 Z"/>' };
-  const drawSlot = () => { slot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[slotShape] + "</svg>"; slot.title = NAMES[slotShape];
-    slot.classList.toggle("sel", !!picking && SHAPES.includes(picking.k)); shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); if (typeof cloudSlot !== "undefined") cloudSlot.classList.toggle("sel", !!picking && picking.k === "cloud"); };
-  drawSlot();
-  slot.addEventListener("click", () => { if (picking && SHAPES.includes(picking.k)) stopPicking(); else startPicking(slotShape); });
+  // an object type's picture: the icon of the item it yields, else its first letter
+  const typePic = (t, px) => { const it = t.item && window.Catalog && window.Catalog.item("it:" + t.item); if (it && it.icon) return window.Catalog.svg(it.icon, px);
+    const d = document.createElement("span"); d.className = "build-letter"; d.textContent = (t.name || "?").slice(0, 1).toUpperCase(); return d; };
+  function drawTypeSlots() {
+    typeSlots.replaceChildren(...[...types.values()].map((t) => { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28));
+      d.addEventListener("click", () => { if (picking && picking.k === d.dataset.k) stopPicking(); else startPicking(d.dataset.k); }); return d; }));
+    drawSlot();
+  }
+  const drawSlot = () => { for (const d of typeSlots.children) d.classList.toggle("sel", !!picking && picking.k === d.dataset.k);
+    shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); if (typeof cloudSlot !== "undefined") cloudSlot.classList.toggle("sel", !!picking && picking.k === "cloud"); };
   shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
   document.body.append(bar);
   function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); if (!xbtn.parentNode) col.appendChild(xbtn); }   // (owner, 2026-10-14) the staff column on the right edge
 
-  function setStaff(v) { staff = !!v; btn.hidden = !staff; xbtn.hidden = !staff; if (staff) mountBtn(); if (!staff && open) toggle(false); if (!staff && eOpen) eToggle(false); }
+  // (owner, 2026-10-15) v: the Object Placer (head admin, admins, developers); cr: the Object Creator (head admin)
+  let creator = false;
+  function setStaff(v, cr) { staff = !!v; creator = !!cr; btn.hidden = !staff; xbtn.hidden = !creator; if (staff || creator) mountBtn(); if (!staff && open) toggle(false); if (!creator && eOpen) eToggle(false); }
   function toggle(v) {
     if (!staff) return;
     open = v === undefined ? !open : !!v;
@@ -230,9 +261,9 @@ export function initBuild(ctx) {
   let ghost = null;
   function startPicking(k) {
     drop(true); if (ghost) { scene.remove(ghost); ghost = null; }
-    const keep = picking && SHAPES.includes(picking.k) && SHAPES.includes(k) ? picking : null;   // switching shapes keeps the size and turn
+    const t = typeOf(k);
     picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } }
-      : { k, w: keep ? keep.w : 50, d: keep ? keep.d : 50, r: keep ? keep.r : 0 }; drawSlot();
+      : t ? { k, w: t.size, d: t.size, r: 0 } : null; drawSlot();
   }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
 
@@ -564,6 +595,53 @@ export function initBuild(ctx) {
     sBox.hidden = false; sBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; sBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
   }
 
+  // ---- (owner, 2026-10-15) resource nodes: each turns and bobs (its type's speeds); the selected one shows its settings
+  // over it (Ore Min / Ore Max: how much it spawns with, Respawn: seconds, Zone: m around its spot where it respawns) and
+  // its respawn zone as a ring ----
+  function spinNodes(now, dt) {
+    for (const b of builds.values()) {
+      const t = typeOf(b.k), sp = t && b.mesh && b.mesh.userData.spin; if (!sp) continue;
+      sp.rotation.y += (t.spin || 0) * Math.PI / 180 * dt;
+      sp.position.y = Math.sin(now / 1000 * (t.bob || 0) * Math.PI * 2 + (+b.id || 0)) * 0.05;   // (a unit: a twentieth of its size)
+    }
+  }
+  const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; document.body.appendChild(nBox);
+  const NODE_F = [["min", "Ore Min"], ["max", "Ore Max"], ["respawn", "Respawn"], ["zone", "Zone"]], nIn = {};
+  for (const [k, label] of NODE_F) {
+    const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.min = 0; i.step = 1;
+    l.append(sp, i); nBox.appendChild(l); nIn[k] = i;
+    i.addEventListener("change", () => { const b = selNode(); if (!b) return; b.extra = { ...(b.extra || {}), [k]: Math.max(0, Math.floor(Number(i.value)) || 0) };
+      if (k === "min" && b.extra.max < b.extra.min) b.extra.max = b.extra.min; if (k === "max" && b.extra.min > b.extra.max) b.extra.min = b.extra.max; push(b, true); });
+    i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
+  }
+  nBox.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const ringGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 96 }, (_, i) => new THREE.Vector3(Math.cos(i / 96 * Math.PI * 2), 3, Math.sin(i / 96 * Math.PI * 2))));
+  const zoneRing = new THREE.LineLoop(ringGeo, new THREE.LineDashedMaterial({ color: 0x7fe0ff, dashSize: 0.04, gapSize: 0.03, transparent: true, opacity: 0.85, depthTest: false }));
+  zoneRing.computeLineDistances(); zoneRing.visible = false; zoneRing.renderOrder = 9; scene.add(zoneRing);
+  const selNode = () => { const b = sel && builds.get(sel); return b && isTypeKey(b.k) ? b : null; };
+  let nShown = null;
+  function nodePanel() {
+    const b = open && !picking && !held ? selNode() : null;
+    zoneRing.visible = !!(b && b.extra && b.extra.zone > 0);
+    if (zoneRing.visible) { zoneRing.position.set(b.x, 0, -b.y); zoneRing.scale.set(b.extra.zone, 1, b.extra.zone); }
+    if (!b) { nBox.hidden = true; nShown = null; return; }
+    const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(b.x, b.w * 0.9, -b.y).project(camera);
+    if (v.z > 1) { nBox.hidden = true; return; }
+    const key = b.id + JSON.stringify(b.extra || {});   // (the fields refill only when the settings change, not while typed in)
+    if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = b.extra ? b.extra[k] : ""; nShown = key; }
+    nBox.hidden = false; nBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; nBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
+  }
+  // a model finished loading: the pieces, the blueprint and the Object Creator's view take it
+  modelWaits.add(() => { for (const b of builds.values()) if (isTypeKey(b.k)) place(b); if (ghost) { scene.remove(ghost); ghost = null; } eMeshK = null; });
+  // (owner, 2026-10-15) the server's object types
+  function setTypes(list) {
+    types.clear(); for (const t of Array.isArray(list) ? list : []) if (t && typeof t.id === "string") types.set(t.id, t);
+    drawTypeSlots(); for (const b of builds.values()) if (isTypeKey(b.k)) place(b);
+    if (picking && isTypeKey(picking.k) && !typeOf(picking.k)) stopPicking();
+    eMeshK = null; if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else { drawESlots(); drawProps(); } }
+  }
+  if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); if (eOpen) drawESlots(); });
+
   // ---- picking up and dropping placed pieces ----
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now, keep) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b), ...(keep ? { keep: true } : {}) }); }   // keep: (owner) a route / spawn edit: the ship stays where it is
@@ -571,7 +649,7 @@ export function initBuild(ctx) {
   function pickUp(b, g) {
     stopPicking();
     if (b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route)) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now (a route ship: its spawn stays)
-    sel = b.k === "ship" ? b.id : null;
+    sel = b.k === "ship" || isTypeKey(b.k) ? b.id : null;   // (owner, 2026-10-15) a resource node: its settings show over it
     held = { id: b.id, ox: b.x - g.x, oy: b.y - g.y, b0: fields(b) }; place(b); holo(b.mesh, true);
   }
   function drop(commit) {                       // commit: keep where it is now; otherwise put it back where it was
@@ -619,14 +697,9 @@ export function initBuild(ctx) {
     if (e.code === "Delete") { eat(); if (b) { held = null; send({ t: "bdel", id: b.id }); } return; }
     if (e.code === "KeyR") { eat(); rDown = true; return; }
     if (e.code === "KeyQ") { eat(); if (e.repeat) return;
-      if ((picking && picking.k === "ship") || (!picking && b && b.k === "ship")) return;   // a test ship has no variations
       if (picking && picking.k === "cloud") { cloudTheme = picking.extra.v = (picking.extra.v + 1) % CLOUD_THEMES.length; drawCloudSlot(); if (ghost) { scene.remove(ghost); ghost = null; } return; }   // (owner) a cloud's variation: its color theme
       if (!picking && b && b.k === "cloud") { b.extra.v = (b.extra.v + 1) % CLOUD_THEMES.length; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); return; }
-      const next = (k) => SHAPES[(SHAPES.indexOf(k) + 1) % SHAPES.length];
-      if (picking) { picking.k = slotShape = next(picking.k); if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
-      else if (b) { b.k = next(b.k); place(b); push(b, true); }
-      else { slotShape = next(slotShape); drawSlot(); }
-      return; }
+      return; }   // (only a cloud has variations)
     if (e.code === "Escape") { if (picking) stopPicking(); else if (held) drop(false); else if (sel) sel = null; else toggle(false); }
   }, true);
   addEventListener("keyup", (e) => { if (e.code === "KeyR") rDown = false; });
@@ -638,17 +711,17 @@ export function initBuild(ctx) {
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
     eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
-    updateEdges(dt); cloudHandles(); routeHandles(); shipButtons();
+    updateEdges(dt); cloudHandles(); routeHandles(); shipButtons(); nodePanel(); spinNodes(now, dt);
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
       picking.r = Math.atan2(Math.sin(picking.r - turn), Math.cos(picking.r - turn));
-      if (!ghost || ghost.userData.k !== picking.k) {
+      if (!ghost || ghost.userData.k !== meshKey(picking.k)) {
         if (ghost) scene.remove(ghost);
-        ghost = picking.k === "ship" ? ctx.makeShip() : picking.k === "cloud" ? cloudMesh(picking.extra.pts, picking.extra.v, true) : new THREE.Mesh(GEO[picking.k], holoMat);
-        if (picking.k !== "cloud") holo(ghost, true); ghost.userData.k = picking.k; scene.add(ghost);
+        ghost = picking.k === "ship" ? ctx.makeShip() : picking.k === "cloud" ? cloudMesh(picking.extra.pts, picking.extra.v, true) : typeObject(typeOf(picking.k), null);
+        if (picking.k !== "cloud") holo(ghost, true); ghost.userData.k = meshKey(picking.k); scene.add(ghost);
       }
-      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, 0)); if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else if (picking.k !== "ship") ghost.scale.set(picking.w, 1, picking.d); ghost.rotation.y = picking.r; }
+      ghost.visible = !!g; if (g) { const [mx, my] = pivotAt({ ...picking, x: g.x, y: g.y }); ghost.position.copy(toWorld(mx, my, 0)); if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else if (picking.k !== "ship") ghost.scale.setScalar(picking.w); ghost.rotation.y = picking.r; }
     } else if (held) {
       const b = builds.get(held.id); if (!b) { held = null; return; }
       let moved = false;
@@ -663,21 +736,69 @@ export function initBuild(ctx) {
   // menu, drawn top down, with its collider outline over it. Drag a corner to move it; click the dot in the middle of
   // an edge to add a corner there (and drag it); right-click a corner to remove it (3 at least). Every change is saved
   // and goes to everyone: all pieces of that kind take the new outline at once.
-  const xbtn = document.createElement("button"); xbtn.id = "edit-btn"; xbtn.type = "button"; xbtn.textContent = "X"; xbtn.title = "Object Editor"; xbtn.hidden = true;
+  // (owner, 2026-10-15) now the Object Creator (head admin): its slots are the player ship and every object type, then +
+  // (a new resource node type); right-click a type: Delete (not while any are placed). A type's properties show above the
+  // tabs: Name, Model (Upload Model, or drop a GLB on the window; 50 MB at most), Size (m across at scale 1), Item (what the
+  // node yields), Rotation Speed (deg/s) and Bob Speed (bobs a second). Each change is saved at once.
+  const xbtn = document.createElement("button"); xbtn.id = "edit-btn"; xbtn.type = "button"; xbtn.textContent = "X"; xbtn.title = "Object Creator"; xbtn.hidden = true;
   const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
   const VIEW = 400;
-  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
+  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Creator</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
   document.body.appendChild(win);
   const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
-  const ceShape = document.createElement("div"), ceShip = document.createElement("div");
-  ceShape.className = ceShip.className = "inv-slot build-slot"; ceShip.title = NAMES.ship; ceShip.innerHTML = shipSlot.innerHTML; ceSlots.append(ceShape, ceShip);
+  // the properties of the type being edited
+  const props = document.createElement("div"); props.className = "oc-props"; ceSlots.after(props);
+  const pIn = {}, pRow = (label, el) => { const l = document.createElement("label"); l.className = "oc-row"; const sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); props.appendChild(l); return el; };
+  const pNum = (min, max, step) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.step = step; return i; };
+  pIn.name = pRow("Name", Object.assign(document.createElement("input"), { maxLength: 32 }));
+  const mWrap = document.createElement("div"); mWrap.className = "oc-model";
+  const mBtn = document.createElement("button"); mBtn.type = "button"; mBtn.textContent = "Upload Model";
+  const mName = document.createElement("span"); mName.className = "oc-file";
+  const mFile = document.createElement("input"); mFile.type = "file"; mFile.accept = ".glb,model/gltf-binary"; mFile.hidden = true;
+  mWrap.append(mBtn, mName, mFile); pRow("Model", mWrap);
+  pIn.size = pRow("Size", pNum(5, 1000, 1)); pIn.item = pRow("Item", document.createElement("select")); pIn.spin = pRow("Rotation Speed", pNum(-720, 720, 1)); pIn.bob = pRow("Bob Speed", pNum(0, 5, 0.05));
+  const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
+  const curType = () => typeOf(eKind);
+  function drawProps() {
+    const t = curType(); props.hidden = !t; if (!t) return;
+    if (document.activeElement !== pIn.name) pIn.name.value = t.name;
+    pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
+    for (const k of ["size", "spin", "bob"]) if (document.activeElement !== pIn[k]) pIn[k].value = String(t[k]);
+    mName.textContent = t.model ? t.mname || "" : "";   // (the uploaded file's own name)
+  }
+  function saveType(ch) { const t = curType(); if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
+  pIn.name.addEventListener("change", () => { const v = pIn.name.value.trim(); if (v) saveType({ name: v }); });
+  pIn.item.addEventListener("change", () => saveType({ item: pIn.item.value || null }));
+  for (const k of ["size", "spin", "bob"]) pIn[k].addEventListener("change", () => { const v = Number(pIn[k].value); if (Number.isFinite(v)) saveType({ [k]: v }); });
+  for (const el of Object.values(pIn)) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
+  // a model upload: the GLB goes to the server, which answers with its file name
+  async function upload(file) {
+    const t = curType(); if (!t || !file) return; pErr.hidden = true;
+    if (file.size > 50 * 1024 * 1024) { pErr.textContent = "That model is over 50 MB."; pErr.hidden = false; return; }
+    mBtn.disabled = true;
+    try {
+      const r = await fetch((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models", { method: "POST", credentials: "include", headers: { "Content-Type": "application/octet-stream" }, body: file });
+      const j = await r.json().catch(() => ({})); if (!r.ok || !j.file) throw new Error(j.error || "The upload failed.");
+      saveType({ model: j.file, mname: file.name });
+    } catch (e) { pErr.textContent = e.message || "The upload failed."; pErr.hidden = false; }
+    mBtn.disabled = false;
+  }
+  mBtn.addEventListener("click", () => mFile.click());
+  mFile.addEventListener("change", () => { upload(mFile.files[0]); mFile.value = ""; });
+  win.addEventListener("dragover", (e) => { if (curType()) { e.preventDefault(); win.classList.add("drop"); } });
+  win.addEventListener("dragleave", (e) => { if (!win.contains(e.relatedTarget)) win.classList.remove("drop"); });
+  win.addEventListener("drop", (e) => { e.preventDefault(); win.classList.remove("drop"); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) upload(f); });
+  let wantKind = null;                         // a type just made: picked when the server answers
+  function onTypeSaved(m) { if (m.error) { pErr.textContent = m.error; pErr.hidden = false; return; } if (wantKind && m.id) { wantKind = null; eSetKind("t:" + m.id); } }
+  let tMenu = null; const closeTMenu = () => { if (tMenu) { tMenu.remove(); tMenu = null; } };
+  addEventListener("pointerdown", (e) => { if (tMenu && !tMenu.contains(e.target)) closeTMenu(); }, true);
   // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (where line of sight is
   // stopped: drag corners, click an edge's middle dot to add one, right-click to remove), Movement (where ships collide:
   // drag its middle to move it, a side handle to stretch it) and Pivot (where the ship turns around). The wheel zooms the
   // view; the header drags the window; Mirrored (on at first) keeps the left and right halves matching; Reset puts the
   // current one back to its start; Ctrl+Z / Ctrl+U undo and redo. While it's open, every piece's colliders (and every
   // ship's) are drawn in the world.
-  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePv = [0, 0], eWo = [0, 0], eMv = { ...MOVE_DEFAULT.square }, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  let eOpen = false, eKind = "ship", eMode = "sight", ePv = [0, 0], eWo = [0, 0], eMv = { ...MOVE_DEFAULT.square }, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
   // (owner, 2026-10-14) Combat Points ("sight": the outline aim lines stop at, and line-of-sight shadows) and Visibility ("vis":
   // free points, each sending a line to the other ship's pivot in the mutual visibility test) share the dragging code
   // (owner, 2026-10-14) Combat Points are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
@@ -694,7 +815,7 @@ export function initBuild(ctx) {
   for (const [k, label] of [["sight", "Combat Points"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
-  ceSlots.after(modes);
+  props.after(modes);
   // (owner, 2026-10-14) under the tabs: Combat Points' parts (pick one, its type, add / remove), Movement's shape
   const sub = document.createElement("div"); sub.className = "ce-sub"; modes.after(sub);
   const subBtn = (text, on, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; if (on) b.classList.add("on"); if (title) b.title = title; b.addEventListener("click", () => { fn(); b.blur(); }); sub.appendChild(b); return b; };
@@ -715,7 +836,7 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(COLL_DEFAULT[eKind]); ePart = 0; eWo = [0, 0]; } else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = { ...MOVE_DEFAULT[eKind] }; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; eWo = [0, 0]; } else if (eMode === "vis") EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); drawSub(); };
@@ -726,7 +847,8 @@ export function initBuild(ctx) {
     win.style.left = Math.max(0, Math.min(innerWidth - W, e.clientX - wDrag.dx)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - Hh, e.clientY - wDrag.dy)) + "px"; win.style.transform = "none"; });
   const wEnd = (e) => { if (wDrag && e.pointerId === wDrag.id) wDrag = null; }; top.addEventListener("pointerup", wEnd); top.addEventListener("pointercancel", wEnd);
 
-  const fp = () => (eKind === "ship" ? SHIP_D : 100);   // the footprint shown, m
+  const dflt = (o, k) => o[k] || o.square;      // (a type's colliders start as the generic square's)
+  const fp = () => (eKind === "ship" ? SHIP_D : (curType() || {}).size || 100);   // the footprint shown, m
   const H = () => fp() / eZoom;                          // half the view, m
   const S = () => fp() * VIEW / (2 * H());               // px per footprint fraction
   const toPx = ([ux, uy]) => [VIEW / 2 + (ux - ePan[0]) * S(), VIEW / 2 - (uy - ePan[1]) * S()];
@@ -743,19 +865,27 @@ export function initBuild(ctx) {
   const panEnd = (e) => { if (ePanDrag && e.pointerId === ePanDrag.id) { ePanDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} } };
   ceSvg.addEventListener("pointerup", panEnd, true); ceSvg.addEventListener("pointercancel", panEnd, true);
   ceSvg.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });   // no browser autoscroll
-  const drawESlots = () => { ceShape.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico">' + ICON[eShape] + "</svg>"; ceShape.title = NAMES[eShape];
-    ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
-  function eSetKind(k) {
-    eKind = k; if (k !== "ship") eShape = k;
-    eParts = cloneParts(colliders[k] || COLL_DEFAULT[k]); ePart = 0; EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) };
-    eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawModes(); eDraw();
+  function drawESlots() {
+    const mk = (k, title, fill) => { const d = document.createElement("div"); d.className = "inv-slot build-slot" + (k === eKind ? " sel" : ""); d.title = title; fill(d); d.addEventListener("click", () => { if (k) eSetKind(k); }); return d; };
+    const list = [mk("ship", NAMES.ship, (d) => { d.innerHTML = shipSlot.innerHTML; })];
+    for (const t of types.values()) { const d = mk("t:" + t.id, t.name, (x) => x.appendChild(typePic(t, 28)));
+      d.addEventListener("contextmenu", (e) => { e.preventDefault(); closeTMenu(); tMenu = document.createElement("div"); tMenu.className = "we-ctx";
+        const b = document.createElement("button"); b.type = "button"; b.textContent = "Delete"; b.addEventListener("click", () => { closeTMenu(); send({ t: "tdel", id: t.id }); }); tMenu.appendChild(b);
+        document.body.appendChild(tMenu); tMenu.style.left = e.clientX + "px"; tMenu.style.top = e.clientY + "px"; });
+      list.push(d); }
+    const add = mk(null, "New Object", (d) => { d.innerHTML = '<span class="build-letter plus">+</span>'; }); add.addEventListener("click", () => { wantKind = true; send({ t: "tset", type: { name: "New Object", cat: "node" } }); }); list.push(add);
+    ceSlots.replaceChildren(...list);
   }
-  ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
-  ceShip.addEventListener("click", () => eSetKind("ship"));
+  function eSetKind(k) {
+    if (!kindOk(k) || k === "cloud") k = "ship";
+    eKind = k; pErr.hidden = true;
+    eParts = cloneParts(colliders[k] || dflt(COLL_DEFAULT, k)); ePart = 0; EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) };
+    eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawProps(); drawModes(); eDraw();
+  }
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
   xbtn.addEventListener("click", () => eToggle());
   function eToggle(v) {
-    if (!staff) return;
+    if (!creator) return;
     eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", eOpen);
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
     giz.visible = eOpen;
@@ -767,11 +897,11 @@ export function initBuild(ctx) {
   }
   function eRender() {
     if (!eOpen || !eRen) return;
-    const key = eKind + (eKind === "ship" ? ":" + ctx.shipReady() : "");
+    const key = eKind === "ship" ? "ship:" + ctx.shipReady() : meshKey(eKind) + ":" + fp();
     if (eMeshK !== key) {
       if (eMesh) eScene.remove(eMesh);
-      eMesh = eKind === "ship" ? ctx.makeShipPlain() : new THREE.Mesh(GEO[eKind], pieceMat);
-      if (eKind !== "ship") eMesh.scale.set(fp(), 1, fp());
+      eMesh = eKind === "ship" ? ctx.makeShipPlain() : typeObject(curType(), null);
+      if (eKind !== "ship") eMesh.scale.setScalar(fp());
       eScene.add(eMesh); eMeshK = key;
     }
     const h = H(), ox = ePan[0] * fp(), oy = ePan[1] * fp(); eCam.left = ox - h; eCam.right = ox + h; eCam.top = oy + h; eCam.bottom = oy - h; eCam.updateProjectionMatrix();
@@ -895,11 +1025,11 @@ export function initBuild(ctx) {
   const r4 = (x) => Math.round(x * 10000) / 10000;
   function eSave() { send({ t: "coll", k: eKind, parts: eParts.map((p) => ({ t: p.t, pts: p.pts.map(([x, y]) => [r4(x), r4(y)]) })), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), wo: eWo.map(r4), mv: cleanMove(eMv) }); }
   function setColl(k, parts, pv, mv, vis, wo) {
-    const ps = asParts(parts); if (!KINDS.includes(k) || !ps) return;
+    const ps = asParts(parts); if (!kindOk(k) || !ps) return;
     colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(wo)) origins[k] = wo; const m = cleanMove(mv); if (m) movers[k] = m;
     for (const b of builds.values()) if (b.k === k) place(b);
     if (k === "ship" && ctx.onPivot) ctx.onPivot();
-    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) }; drawSub(); eDraw(); }
+    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; drawSub(); eDraw(); }
   }
   // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----
   const gizGeo = new THREE.BufferGeometry(); let gizCap = 0;
@@ -920,11 +1050,10 @@ export function initBuild(ctx) {
     gizGeo.setDrawRange(0, P.length / 3);
   }
   addEventListener("keydown", (e) => {
-    if (ctx.typing() || !staff) return;
-    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) eToggle(); return; }   // (staff: X is the editor, not a block)
+    if (ctx.typing() || !creator) return;
+    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) eToggle(); return; }   // (the head admin: X is the Object Creator, not a block)
     if (eOpen && (e.ctrlKey || e.metaKey) && (e.code === "KeyZ" || e.code === "KeyU")) { e.preventDefault(); e.stopImmediatePropagation(); if (e.code === "KeyZ") undo(); else redo(); return; }   // (owner) Ctrl+Z undo, Ctrl+U redo
     if (eOpen && e.code === "Escape" && !open) { eToggle(false); }
-    if (eOpen && !open && e.code === "KeyQ" && eKind !== "ship") { e.preventDefault(); eSetKind(SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]); }
   }, true);
 
   function onMsg(m) {
@@ -933,20 +1062,23 @@ export function initBuild(ctx) {
     if (m.t === "bnew") return true;
     if (m.t === "botgoals") { botGoals.clear(); for (const g of Array.isArray(m.g) ? m.g : []) if (Array.isArray(g) && g.length === 3) botGoals.set(String(g[0]), [+g[1], +g[2]]); return true; }
     if (m.t === "coll") { setColl(m.k, m.parts, m.pv, m.mv, m.vis, m.wo); return true; }
+    if (m.t === "types") { setTypes(m.list); return true; }   // (owner, 2026-10-15) object types
+    if (m.t === "tsaved") { onTypeSaved(m); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
   function load(list, h, shipD, coll, piv, mov, vis, ori) {
     if (shipD) SHIP_D = shipD;
-    for (const k of Object.keys(colliders)) delete colliders[k]; if (coll && typeof coll === "object") for (const k of KINDS) { const ps = asParts(coll[k]); if (ps) colliders[k] = ps; }
+    const keys = (o) => (o && typeof o === "object" ? Object.keys(o).filter(kindOk) : []);   // (the built-in kinds and the object types; setTypes comes first)
+    for (const k of Object.keys(colliders)) delete colliders[k]; for (const k of keys(coll)) { const ps = asParts(coll[k]); if (ps) colliders[k] = ps; }
     for (const o of [pivots, origins, movers, visOutlines]) for (const k of Object.keys(o)) delete o[k];
-    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (ori && Array.isArray(ori[k])) origins[k] = ori[k]; const m = mov && cleanMove(mov[k]); if (m) movers[k] = m; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
+    for (const k of new Set([...keys(piv), ...keys(ori), ...keys(mov), ...keys(vis)])) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (ori && Array.isArray(ori[k])) origins[k] = ori[k]; const m = mov && cleanMove(mov[k]); if (m) movers[k] = m; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
     if (ctx.onPivot) ctx.onPivot();
-    if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
+    if (h && h !== BUILD_H) BUILD_H = h;
     held = null;
     for (const id of [...builds.keys()]) unBuild(id);
     for (const o of list || []) setBuild(o);
   }
-  return { onMsg, load, frame, setStaff, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
+  return { onMsg, load, frame, setStaff, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
 }
