@@ -20,7 +20,8 @@
     back.addEventListener("pointerdown", (e) => { if (e.target === back) o.close(); });
     back.addEventListener("keydown", (e) => e.stopPropagation());   // typing in a pop-up never reaches the game
     back.addEventListener("contextmenu", (e) => e.preventDefault());
-    overlays.push(o); return o;
+    overlays.push(o); if (window.WinPos) window.WinPos.modal(box, cls.split(" ")[0]);   // (owner, 2026-10-15) dragged by its title, remembered
+    return o;
   }
   const textInput = (el) => el && el.tagName === "INPUT" && !["range", "checkbox", "button", "color"].includes(el.type);
   // while a pop-up is open the game hears no keys (registered before the game's own listeners, so it runs first)

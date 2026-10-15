@@ -340,7 +340,7 @@ export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.t
 // (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /
 // WAV), each a name and its uploaded file; a model's icon (thumb) is a picture rendered from it (a PNG). The Object Creator
 // picks its models from these.
-export const UI_KEYS = ["creator", "assets", "objedit", "attrs", "shipedit"];
+export const UI_KEYS = ["creator", "assets", "objedit", "attrs", "shipedit", "se-attr", "cr-edit", "imp-pop", "we-creator", "we-pick", "we-item"];
 export const ASSET_KINDS = ["model", "image", "audio"];
 export const imageRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(png|jpg|webp)$/.test(v) ? v : null);
 export const audioRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(mp3|ogg|wav)$/.test(v) ? v : null);

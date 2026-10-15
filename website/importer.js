@@ -270,7 +270,8 @@ function popup(title, okText, picEl, name0, onOk) {
       sw.appendChild(pick); cRow.appendChild(sw);
     }
   };
-  const me = pop = { close, pic, ok, fail, reset, front, colors, mats: {}, box, err, name, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
+  const me = pop = { close, pic, ok, fail, reset, front, colors, mats: {}, box, err, name, onClose: null };
+  if (window.WinPos) window.WinPos.modal(box, "imp-pop");   // (owner, 2026-10-15) dragged by its title, remembered setTimeout(() => { name.focus(); name.select(); }, 0);
   return me;
 }
 const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
