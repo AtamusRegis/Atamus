@@ -140,7 +140,7 @@ function newIconMenu(at, done) {
 function objectPicker(done) {
   const o = IC().overlay("we-pick"); o.box.appendChild($("p", "we-title", "FROM OBJECT"));
   const g = $("div", "we-list"), models = (window.Assets ? window.Assets.models() : []).filter((a) => a.thumb).sort((a, b) => a.name.localeCompare(b.name));
-  const cells = models.map((a) => { const c = btn("", "inv-slot we-pickslot", () => { o.close(); want = { t: "isaved", done: (m) => done(m.id), fail: () => {} }; api.send({ t: "iset", icon: { name: a.name, img: a.thumb } }); }); c.title = a.name; c.appendChild(window.Assets.picture(a.thumb, 34)); c.appendChild($("span", "raw-mark", "R")); return c; });
+  const cells = models.map((a) => { const c = btn("", "inv-slot we-pickslot", () => { o.close(); want = { t: "isaved", done: (m) => done(m.id), fail: () => {} }; api.send({ t: "iset", icon: { name: a.name, img: a.thumb } }); }); c.title = a.name; c.appendChild(window.Assets.picture(a.thumb, 34)); c.appendChild($("span", "raw-mark", "m")); return c; });
   for (let i = cells.length; i < 10; i++) cells.push($("div", "inv-slot"));
   g.replaceChildren(...cells); o.box.append(g, (() => { const b = $("div", "we-btns"); b.appendChild(btn("CANCEL", "", () => o.close())); return b; })());
 }
