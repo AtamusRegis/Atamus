@@ -691,7 +691,7 @@ export function initBuild(ctx) {
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
-  for (const [k, label] of [["sight", "Combat Points"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"], ["origin", "Weapon Origin"]]) {
+  for (const [k, label] of [["sight", "Combat Points"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   ceSlots.after(modes);
@@ -715,7 +715,7 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(COLL_DEFAULT[eKind]); ePart = 0; } else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = { ...MOVE_DEFAULT[eKind] }; else if (eMode === "origin") eWo = [0, 0]; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(COLL_DEFAULT[eKind]); ePart = 0; eWo = [0, 0]; } else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = { ...MOVE_DEFAULT[eKind] }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); drawSub(); };
@@ -799,7 +799,7 @@ export function initBuild(ctx) {
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
-    sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo" + (eMode === "origin" ? "" : " dim") });   // (owner, 2026-10-14) the Weapon Origin
+    sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo" + (eMode === "sight" ? "" : " dim") });   // (owner, 2026-10-14) the Weapon Origin (a point in Combat Points)
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
       sv("line", { x1, y1, x2, y2, class: "ce-guide" });
@@ -823,13 +823,12 @@ export function initBuild(ctx) {
         if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
         if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
+      handle(wx, wy, 7, "ce-woh", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "wo"); } }).appendChild(document.createElementNS(SV, "title")).textContent = "Weapon Origin";   // (owner, 2026-10-14) dragged within Combat Points
     } else if (eMode === "move") {
       handle(mcx, mcy, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "mc"); } });
       // (owner, 2026-10-14) a handle on each side, each moving only its own side
       for (const [hx, hy, side] of [[mx1, mcy, "x1"], [mx0, mcy, "x0"], [mcx, my1, "y1"], [mcx, my0, "y0"]])
         handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "m" + side); } });
-    } else if (eMode === "origin") {
-      handle(wx, wy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "wo"); } });
     } else {
       handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "pv"); } });
     }
