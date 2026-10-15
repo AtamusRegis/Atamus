@@ -95,10 +95,10 @@ let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
 // (owner, 2026-10-13) the wheel zooms in from 600 m down to 200 m (never out past 600); starting to aim eases the
 // zoom back to 600 m (owner: not a snap), and the wheel does nothing while aiming
-const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100,
+const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100, dead: 300,
   dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
-let camDist = cam.zmax;
+let camDist = cam.zmax, aimExt = 0;   // aimExt: 0-1, the camera reaching out past the aim dead zone (eased)
 
 
 // (owner, 2026-10-14) the space background (from the owner's reference): a deep blue field with soft cyan glows, very far
@@ -1181,7 +1181,7 @@ renderer.setAnimationLoop(() => {
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     const d = Math.min(ul, cam.leash);
-    return { x: me.x + ux * d, z: -me.y + uz * d, sux: sx, suy: sy, ux, uz };
+    return { x: me.x + ux * d, z: -me.y + uz * d, sux: sx, suy: sy, ux, uz, dist: ul };
   }
   const aimPx = () => aimPin ? aimPin : mouse;
   if (aiming && haveMe && !orbitLock) {
@@ -1190,7 +1190,8 @@ renderer.setAnimationLoop(() => {
       // (owner, 2026-10-13) the camera is driven ONLY by the pointer's screen position and constants, never by the
       // reticle's ground distance (that looped). One uniform full-press zoom; the leash (focus sliding along the aim)
       // is solved per direction so the screen edge sits exactly the overflow past the circle, the ship kept 80 m
-      // inside the opposite edge. A dead zone around the screen's center (30%), full at 80% out.
+      // inside the opposite edge. (owner, 2026-10-14) A dead zone of cam.dead (300 m) around the ship: with the aim point
+      // inside it the camera stays put; beyond it, the camera eases out to the full reach (the focus and zoom ease too).
       const R = cam.leash, S = 80, m = 0.85;
       const r = Math.min(1, Math.hypot(a.sux, a.suy));
       const ang = (Math.atan2(a.suy, a.sux) * 180 / Math.PI + 360) % 360;   // 0 = E, 90 = N (screen directions)
@@ -1207,7 +1208,7 @@ renderer.setAnimationLoop(() => {
       const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
       const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
       const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));
-      const DZ = 0.3, rr = Math.min(1, Math.max(0, (r - DZ) / (0.8 - DZ))), ease = rr * rr * (3 - 2 * rr); aimEase = ease;
+      aimExt += ((a.dist > cam.dead ? 1 : 0) - aimExt) * (1 - Math.exp(-dt * 5)); const ease = aimExt * aimExt * (3 - 2 * aimExt); aimEase = ease;
       wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
       let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
       lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
@@ -1215,6 +1216,7 @@ renderer.setAnimationLoop(() => {
       fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;
     }
   }
+  if (!aiming) aimExt = 0;
   // (owner, 2026-10-13) the trail: moving with the aim not steering the camera (not aiming, or the pointer in the dead zone),
   // the focus sits behind the ship along its motion, 0-80 m with speed; it fades out as the
   // aim takes over beyond the dead zone
