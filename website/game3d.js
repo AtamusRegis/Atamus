@@ -649,18 +649,42 @@ function updateSparks(dt) {
 }
 // ---- (owner, 2026-10-14) health bars over damaged ships (mine too); a ship I can't see shows none ----
 const hpBars = new Map();                      // player id -> element
+// (owner, 2026-10-15) a hit: the bar drops over 0.75 s (fast, easing out), a white ghost of what was lost follows 0.4 s behind,
+// the bar flashes white for 2 frames and is shoved 9 px left, then springs back. Heals snap.
+const HP_DROP_MS = 750, HP_GHOST_LAG = 400, HP_SHOVE = 9, HP_SHOVE_MS = 180;
+const hpAnim = new Map();                      // player id -> { hp, mF, mT, gF, gT, t0, flash, hitT }
+const easeOut = (k) => 1 - Math.pow(1 - k, 3);
+const tween = (from, to, t) => from + (to - from) * easeOut(Math.max(0, Math.min(1, t / HP_DROP_MS)));
+function hpState(p, now) {
+  const f = Math.max(0, Math.min(1, p.hp / HP_MAX));
+  let s = hpAnim.get(p.id);
+  if (!s) { s = { hp: f, mF: f, mT: f, gF: f, gT: f, t0: 0, flash: 0, hitT: -1e9 }; hpAnim.set(p.id, s); }
+  if (f < s.hp - 1e-6) {                        // hit: both bars start from where they are now
+    const m = tween(s.mF, s.mT, now - s.t0), g = tween(s.gF, s.gT, now - s.t0 - HP_GHOST_LAG);
+    s.mF = m; s.gF = Math.max(g, m); s.mT = s.gT = f; s.t0 = now; s.flash = 2; s.hitT = now;
+  } else if (f > s.hp + 1e-6) { s.mF = s.mT = s.gF = s.gT = f; }
+  s.hp = f;
+  return s;
+}
 function drawHpBars() {
-  const r = canvas.getBoundingClientRect(), seen = new Set();
+  const r = canvas.getBoundingClientRect(), seen = new Set(), now = performance.now();
+  for (const id of hpAnim.keys()) if (!players.has(id)) hpAnim.delete(id);
   for (const p of players.values()) {
+    if (p.hp === undefined) continue;
+    const s = hpState(p, now);
     if (p.hp === undefined || p.hp >= HP_MAX || !p.near && p.id !== myId) continue;
     const v = p.holder.children[0], t = p.id === myId ? null : visTargets.get(v), a = p.id === myId ? 1 : t ? t.a : 0;
     if (a <= 0.01) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
     const s3 = new THREE.Vector3(x, shipMid * 2 + 25, -y).project(camera); if (s3.z > 1) continue;
-    let el = hpBars.get(p.id); if (!el) { el = document.createElement("div"); el.className = "hp-bar"; el.innerHTML = "<i></i>"; document.body.appendChild(el); hpBars.set(p.id, el); }
-    const f = Math.max(0, Math.min(1, p.hp / HP_MAX));
-    el.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)"; el.style.opacity = a;
-    el.firstChild.style.width = f * 100 + "%"; el.firstChild.style.background = f > 0.5 ? "#5fd16b" : f > 0.25 ? "#e3b341" : "#e5534b";
+    let el = hpBars.get(p.id); if (!el) { el = document.createElement("div"); el.className = "hp-bar"; el.innerHTML = "<b></b><i></i>"; document.body.appendChild(el); hpBars.set(p.id, el); }
+    const m = tween(s.mF, s.mT, now - s.t0), g = Math.max(m, tween(s.gF, s.gT, now - s.t0 - HP_GHOST_LAG));
+    const sk = (now - s.hitT) / HP_SHOVE_MS, dx = sk < 1 ? -HP_SHOVE * (1 - easeOut(sk)) : 0;
+    el.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width + dx) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)"; el.style.opacity = a;
+    el.firstChild.style.width = g * 100 + "%";
+    el.lastChild.style.width = m * 100 + "%";
+    el.lastChild.style.background = s.flash > 0 ? "#fff" : s.hp > 0.5 ? "#5fd16b" : s.hp > 0.25 ? "#e3b341" : "#e5534b";
+    if (s.flash > 0) s.flash--;
     seen.add(p.id);
   }
   for (const [id, el] of hpBars) if (!seen.has(id)) { el.remove(); hpBars.delete(id); }
