@@ -10,7 +10,7 @@
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
   const C = () => window.Catalog;
-  let api = null, win = null, zbtn = null, list = null, ctx = null, pending = null;
+  let api = null, win = null, zbtn = null, list = null, ctx = null, pending = null, tabs = null, tab = "items", makeRow = null;
   const overlays = [];                          // open pop-ups, top last: { el, close, key }
 
   // ---- pop-up plumbing: a dim backdrop, the box in the middle; Escape closes the top one ----
@@ -51,7 +51,11 @@
     list = $("div", "we-list");
     list.addEventListener("contextmenu", (e) => { e.preventDefault(); const it = e.target.closest(".inv-item"); if (it) menu(it.dataset.item, e.clientX, e.clientY); });
     const make = $("div", "we-make"); make.append(btn("Create New Item", "", () => itemBox(null)));
-    win.append(top, list, make); document.body.appendChild(win);
+    // (owner, 2026-10-15) two tabs: Items, and the Icon Editor (every icon; click one to edit it in the Icon Creator)
+    tabs = $("div", "we-tabs");
+    for (const [k, label] of [["items", "Items"], ["icons", "Icon Editor"]]) { const b = btn(label, "", () => { tab = k; drawList(); }); b.dataset.k = k; tabs.appendChild(b); }
+    win.append(top, tabs, list, make); document.body.appendChild(win);
+    makeRow = make;
     win.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") toggle(false); });
     addEventListener("keydown", (e) => {
       if (e.code !== "KeyZ" || e.ctrlKey || e.metaKey || e.altKey || e.repeat || overlays.length) return;
@@ -62,6 +66,13 @@
     addEventListener("pointerdown", (e) => { if (ctx && !ctx.contains(e.target)) closeMenu(); }, true);
   }
   function drawList() {
+    for (const b of tabs.children) b.classList.toggle("on", b.dataset.k === tab);
+    makeRow.hidden = tab !== "items";
+    if (tab === "icons") {                     // the Icon Editor tab: each icon a slot; click to edit it
+      const cells = [...C().icons.values()].map((ic) => { const c = btn("", "inv-slot we-pickslot", () => creator(() => {}, ic)); c.appendChild(C().svg(ic, 34)); return c; });
+      for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
+      list.replaceChildren(...cells); return;
+    }
     const keys = C().items.map((x) => "it:" + x.id);
     const cells = keys.map((k) => {
       const c = $("div", "inv-slot"), it = C().item(k), el = $("div", "inv-item pic"); el.dataset.item = k; el.title = it ? it.name : "";
@@ -158,9 +169,9 @@
   const BASIC_NAMES = { circle: "Circle", square: "Square", triangle: "Triangle", poly: "Pen" };
   const BASIC_ICONS = { circle: '<circle cx="12" cy="12" r="7"/>', square: '<rect x="5" y="5" width="14" height="14"/>', triangle: '<polygon points="12,4 20,19 4,19"/>', poly: '<path d="M4 20 L5.5 14.5 L15.5 4.5 L19.5 8.5 L9.5 18.5 Z M14 6 L18 10" stroke="#0e131e" stroke-width="1"/>' };   // (the Pen)
   let clip = null;                              // the copied shape (kept while the page is open)
-  function creator(onSaved) {
+  function creator(onSaved, editing) {         // editing: an existing icon (owner, 2026-10-15: the Icon Editor tab), saved over
     const style = { son: true, sc: "#0b1220", sw: 2, fon: true, fc: "#9fb3cf", fo: 1 };
-    let shapes = [], sel = -1, pts = new Set(), tool = "", draft = [], drag = null, past = [], marq = null, guides = [], cmenu = null;
+    let shapes = editing ? JSON.parse(JSON.stringify(editing.shapes)) : [], sel = -1, pts = new Set(), tool = "", draft = [], drag = null, past = [], marq = null, guides = [], cmenu = null;
     const o = overlay("we-creator", keys);
     o.box.appendChild($("p", "we-title", "ICON CREATOR"));
     const body = $("div", "ic-body");
@@ -407,7 +418,7 @@
       if (JSON.stringify(icon).length > 15000) { err.textContent = "Too many shapes or corners to save."; err.hidden = false; return; }
       ok.disabled = true; err.hidden = true;
       pending = { type: "isaved", done: (m) => { closeIt(); onSaved(m.id); }, fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
-      api.send({ t: "iset", icon });
+      api.send({ t: "iset", icon, ...(editing ? { id: editing.id } : {}) });
     }
     render();
   }

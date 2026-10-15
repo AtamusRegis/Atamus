@@ -59,22 +59,40 @@ export class Items {
     else [s[from], s[to]] = [s[to], s[from]];
     this.dirty.add(String(uid)); return true;
   }
-  give(uid, item, to) {                        // (staff) a copy from the Item Creator: one more on the same stackable item, else replaces
+  // (staff) n (1 to its Max Stack; owner, 2026-10-15: picked as it's dropped) of an Item Creator item: onto the same
+  // stackable item it tops that one up, else it replaces what's there
+  give(uid, item, to, n) {
     const s = this.get(uid); if (!s || !isSlot(to) || item === "test" || !this.valid(item)) return false;
-    if (s[to] && s[to].k === item && s[to].n < this.max(item)) s[to].n++; else s[to] = { k: item, n: 1 };
+    n = this.count(item, n);
+    if (s[to] && s[to].k === item && this.max(item) > 1) s[to].n = Math.min(this.max(item), s[to].n + n); else s[to] = { k: item, n };
     this.dirty.add(String(uid)); return true;
   }
+  count(item, n) { n = Math.floor(Number(n)); return Number.isFinite(n) ? Math.max(1, Math.min(this.max(item), n)) : 1; }
+  // (staff, owner 2026-10-15) delete a slot's stack
+  remove(uid, from) { const s = this.get(uid); if (!s || !isSlot(from) || !s[from]) return false; s[from] = null; this.dirty.add(String(uid)); return true; }
   // Drop: the slot's stack leaves for a crate at (x, y); returns the crate (new or grown) or null
   drop(uid, from, x, y) {
-    const s = this.get(uid); if (!s || !isSlot(from) || !s[from] || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    const s = this.get(uid); if (!s || !isSlot(from) || !s[from]) return null;
+    const c = this.toCrate({ ...s[from] }, x, y); if (!c) return null;
+    s[from] = null; this.dirty.add(String(uid)); return c;
+  }
+  // (staff, owner 2026-10-15) an Item Creator item dragged onto the world: n of it into a crate at (x, y)
+  spawn(item, n, x, y) { if (item === "test" || !this.valid(item)) return null; return this.toCrate({ k: item, n: this.count(item, n) }, x, y); }
+  // a stack into the crate within CRATE_MERGE m of (x, y) (onto its stacks of the item first), or a new crate there
+  toCrate(st, x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     let c = null, best = CRATE_MERGE;
     for (const o of this.crates.values()) { const d = Math.hypot(o.x - x, o.y - y); if (d <= best && o.items.length < CRATE_ITEMS) { best = d; c = o; } }
     if (!c) { if (this.crates.size >= CRATE_CAP) return null; c = { id: String(this.seq++), x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, items: [], until: Date.now() + CRATE_LIFE }; this.crates.set(c.id, c); }
-    let st = { ...s[from] };
     if (this.max(st.k) > 1) for (const e of c.items) { if (!st) break; if (e.k === st.k && e.n < this.max(e.k)) st = this.pour(st, e); }   // onto the crate's stacks of it first
     if (st) c.items.push(st);
-    s[from] = null; this.dirty.add(String(uid));
     return c;
+  }
+  // (staff, owner 2026-10-15) delete stack i of a crate; returns { crate, gone } or null
+  unstock(cid, i) {
+    const c = this.crates.get(String(cid)); if (!c) return null; c.items = c.items.filter((e) => this.valid(e.k));
+    if (!Number.isInteger(i) || i < 0 || i >= c.items.length) return null;
+    c.items.splice(i, 1); const gone = !c.items.length; if (gone) this.crates.delete(c.id); return { crate: c, gone };
   }
   // Take: stack i of crate cid into slot `to` (empty, or the same stackable item: merged) or else the first free slot; the
   // ship at (x, y) must be within reach. Returns { crate, gone } or null.

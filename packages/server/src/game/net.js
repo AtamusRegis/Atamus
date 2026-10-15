@@ -181,23 +181,29 @@ export function attachGameServer(httpServer) {
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
         world.delItem(id).then((ok) => { if (ok) broadcast({ t: "items", list: world.itemList() }); }).catch((e) => console.error("item del", e));
       }
-      else if (m.t === "iset") {               // (owner, 2026-10-14) the Icon Creator: staff save a new icon
+      else if (m.t === "iset") {               // (owner, 2026-10-14) the Icon Creator: staff save a new icon (or, with an id, change one)
         if (!staff) return;
-        world.addIcon(m.icon, user.username).then((ic) => {
+        const iid = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;   // (owner, 2026-10-15) an id: the Icon Editor saving over that icon
+        (iid ? world.setIcon(iid, m.icon) : world.addIcon(m.icon, user.username)).then((ic) => {
           if (!ic) { try { ws.send(JSON.stringify({ t: "isaved", error: "That icon can't be saved." })); } catch {} return; }
           broadcast({ t: "icons", list: world.iconList() }); try { ws.send(JSON.stringify({ t: "isaved", id: ic.id })); } catch {}
         }).catch((e) => console.error("icon", e));
       }
       // (owner, 2026-10-14) the hotbar and inventory: move (swap two slots), give (staff: a copy from the Item Creator),
       // drop (into a crate where the ship is), take (out of a crate within reach); the result goes back as the whole inventory
-      else if (m.t === "imove" || m.t === "igive" || m.t === "idrop" || m.t === "itake") {
+      // (owner, 2026-10-15) staff also: icrate (an Item Creator item dragged onto the world: a crate of n), idel (delete a
+      // slot's stack), icdel (delete a crate's stack)
+      else if (["imove", "igive", "idrop", "itake", "icrate", "idel", "icdel"].includes(m.t)) {
+        if (["igive", "icrate", "idel", "icdel"].includes(m.t) && !staff) return;
         if (m.t === "imove") items.move(pid, m.from, m.to);
-        else if (m.t === "igive") { if (staff) items.give(pid, m.item, m.to); }
+        else if (m.t === "igive") items.give(pid, m.item, m.to, m.n);
+        else if (m.t === "idel") items.remove(pid, m.from);
+        else if (m.t === "icdel") { const r = items.unstock(m.c, m.i); if (r) crateCast(r.crate, r.gone); }
         else {
           const p = world.players.get(pid); if (!p) return;
-          if (m.t === "idrop") {                // (just behind the ship, clear of its hull, so it can be seen)
-            const h = p.h || 0; let x = p.x - Math.sin(h) * 70, y = p.y + Math.cos(h) * 70; if (!inside(x, y)) { x = p.x; y = p.y; }
-            const c = items.drop(pid, m.from, x, y); if (c) crateCast(c);
+          const h = p.h || 0; let x = p.x - Math.sin(h) * 70, y = p.y + Math.cos(h) * 70; if (!inside(x, y)) { x = p.x; y = p.y; }   // (just behind the ship, clear of its hull, so it can be seen)
+          if (m.t === "idrop" || m.t === "icrate") {
+            const c = m.t === "idrop" ? items.drop(pid, m.from, x, y) : items.spawn(m.item, m.n, x, y); if (c) crateCast(c);
           }
           else { const r = items.take(pid, m.c, m.i, m.to, p.x, p.y); if (r) crateCast(r.crate, r.gone); }
         }

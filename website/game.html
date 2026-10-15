@@ -174,6 +174,12 @@
     .inv-grid { display: grid; grid-template-columns: repeat(5, 44px); grid-template-rows: repeat(2, 44px); gap: 3px; }
     /* (owner, 2026-10-14) a dropped-item crate's items, above the inventory */
     #crate-panel { position: fixed; left: 50%; bottom: 222px; transform: translateX(-50%); z-index: 7; padding: 6px; background: rgba(14,19,30,0.82); border-radius: 7px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
+    /* (owner, 2026-10-15) how many of an item, when a stackable one is dragged out of the Item Creator */
+    .amt-box { position: fixed; z-index: 31; display: grid; gap: 6px; width: 180px; padding: 8px; background: rgba(14,19,30,0.97); border-radius: 7px; box-shadow: var(--shadow); color: var(--text); font: 12px var(--font); }
+    .amt-label { color: var(--text-dim); font-weight: 600; } .amt-box input[type=number] { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
+    .amt-box input[type=range] { width: 100%; accent-color: #38c6ff; } .amt-row { display: flex; justify-content: flex-end; gap: 6px; }
+    .amt-row button { padding: 4px 12px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); cursor: pointer; } .amt-row button:hover { background: rgba(40,54,78,0.98); color: #fff; }
+    .amt-row .amt-ok { background: linear-gradient(135deg, #5fb4ff, #2f6fe0); border: none; color: #fff; }
     #crate-panel .crate-grid { grid-template-rows: none; grid-auto-rows: 44px; max-height: calc(44px * 4 + 3px * 3); overflow-y: auto; }
     body:has(#build-bar:not([hidden])) #crate-panel { bottom: 278px; }
     html.touch #crate-panel { display: none; }
@@ -203,7 +209,8 @@
     :is(#item-edit, .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
     /* (owner, 2026-10-14) the item slots, 5 a row, scrolling past 4 rows */
     .we-list { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
-    .we-make { display: flex; gap: 8px; margin-top: 12px; }
+    .we-make { display: flex; gap: 8px; margin-top: 12px; } .we-make[hidden] { display: none; }
+    .we-tabs { display: flex; gap: 4px; margin-bottom: 8px; } .we-tabs button { flex: 1; padding: 5px 0 !important; } .we-tabs button.on { background: var(--accent-grad) !important; color: #06121c !important; border-color: transparent !important; }
     :is(#item-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
     :is(#item-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
     .we-modal .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; } .we-modal .we-btns button { flex: none !important; }
@@ -220,7 +227,7 @@
     .we-plus { font-size: 22px; line-height: 1; }
     .we-types { display: flex; gap: 6px; } .we-types button { padding: 5px 8px !important; } .we-types button.on { background: rgba(56,198,255,0.35) !important; border-color: #38c6ff !important; color: #fff !important; }
     .we-modal input[type=checkbox] { justify-self: start; accent-color: #38c6ff; width: 16px; height: 16px; } .we-modal input:disabled { opacity: .4; }
-    .we-pickslot { border: none; padding: 0; cursor: pointer; } .we-pickslot:hover { background: rgba(255,255,255,0.1); }
+    .we-pickslot { border: none; padding: 0; cursor: pointer; display: grid !important; place-items: center; } .we-pickslot .icon-svg { display: block; } .we-pickslot:hover { background: rgba(255,255,255,0.1); }
     .we-ctx { position: fixed; z-index: 30; display: grid; min-width: 100px; padding: 3px; background: rgba(10,14,22,.97); border-radius: 6px; box-shadow: var(--shadow); }
     .we-ctx button { background: none; border: 0; color: #cfe0f4; text-align: left; padding: 5px 10px; border-radius: 4px; font: 12px var(--font); cursor: pointer; } .we-ctx button:hover { background: #16202f; }
     .inv-item.pic { background: none; box-shadow: none; display: grid; place-items: center; } .inv-item .icon-svg { pointer-events: none; display: block; }
@@ -329,9 +336,9 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="icons.js?v=1792045148"></script>
-  <script src="inventory.js?v=1792045975"></script>
-  <script src="itemcreator.js?v=1792045975"></script>
+  <script src="inventory.js?v=1792046428"></script>
+  <script src="itemcreator.js?v=1792046487"></script>
   <script src="adminpanel.js?v=1792041596"></script>
-  <script type="module" src="game3d.js?v=1792045975"></script>
+  <script type="module" src="game3d.js?v=1792046428"></script>
 </body>
 </html>

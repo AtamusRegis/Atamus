@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Item Creator amounts, crates and Icon Editor (owner):** dragging a stackable item out of the Item Creator asks how many (number and slider); dragging one onto the world makes a crate of it. Admins can right-click Delete items in slots and crates. A new Icon Editor tab lists every icon to open and redraw.
 - **Item Editor and stacks (owner):** editing an item now opens the Item Editor: its name and icon, a type (Raw Resource or Component) and whether it stacks, with a max stack size. Stackable items stack in the hotbar, inventory and crates, showing their count.
 - **Icon Creator Pen (owner):** the polygon tool is now the Pen: click points to draw, close the loop for a filled shape, or double-click / Enter to leave it open as an outline-only line.
 - **Item Creator (owner):** the Weapon panel is now the Item Creator, with one Create New Item button (a name and an icon). Right-click an item to Edit Item (its properties) or Delete it. Weapon making was removed for now (it will come back inside the Item Creator); everyone uses the Railgun. Weapons and ammo already in inventories are gone; ammo that had been made became items.

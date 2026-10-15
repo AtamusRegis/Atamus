@@ -10,7 +10,7 @@
   const ITEMS = { test: { name: "Test Item" } };
   // slots: "h0".."h2" (hotbar), "i0".."i9" (inventory) -> item key or null
   let slots = {}; for (let i = 0; i < HOT; i++) slots["h" + i] = null; for (let i = 0; i < INV; i++) slots["i" + i] = null;
-  let send = () => {}, crate = null;            // crate: the open crate { id, items }
+  let send = () => {}, crate = null, staff = false;            // crate: the open crate { id, items }
   const nameOf = (id) => (ITEMS[id] ? ITEMS[id].name : (window.Catalog && window.Catalog.item(id) || {}).name || "");
 
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -80,8 +80,13 @@
         send({ t: "imove", from: d.from, to: k });
       }
       else if (d.ci != null && crate) { send({ t: "itake", c: crate.id, i: d.ci, to: k }); }
-      else if (d.item && d.item !== "test") { const b = slots[k]; slots[k] = b && b.k === d.item && b.n < maxOf(d.item) ? { k: b.k, n: b.n + 1 } : { k: d.item, n: 1 }; send({ t: "igive", item: d.item, to: k }); }   // from the Item Creator: one more of it (a copy)
-    } else if (d.from && at && at.id === "view") drop(d.from);   // (owner, 2026-10-14) dragged out onto the world: dropped
+      else if (d.item && d.item !== "test") {   // from the Item Creator (staff): a copy, how many asked first when it stacks (owner, 2026-10-15)
+        amount(d.item, e.clientX, e.clientY, (n) => { const b = slots[k]; slots[k] = b && b.k === d.item && maxOf(d.item) > 1 ? { k: b.k, n: Math.min(maxOf(d.item), b.n + n) } : { k: d.item, n }; send({ t: "igive", item: d.item, to: k, n }); draw(); });
+      }
+    } else if (at && at.id === "view") {        // (owner, 2026-10-14) dragged out onto the world: dropped (a crate)
+      if (d.from) drop(d.from);
+      else if (d.ci == null && d.item && d.item !== "test") amount(d.item, e.clientX, e.clientY, (n) => send({ t: "icrate", item: d.item, n }));   // (owner, 2026-10-15) from the Item Creator: a new crate of it
+    }
     draw();
   };
   document.addEventListener("pointerup", end, true);
@@ -89,21 +94,49 @@
   function drop(from) { if (!slots[from]) return; slots[from] = null; send({ t: "idrop", from }); draw(); }
 
   // (owner, 2026-10-14) right-click an item in the hotbar or inventory: Drop
+  // (owner, 2026-10-15) staff also get Delete, on these and on a crate's items
   let menu = null;
   function closeMenu() { if (menu) { menu.remove(); menu = null; } }
   document.addEventListener("contextmenu", (e) => {
-    const it = e.target.closest && e.target.closest("#hotbar .inv-item, #inv-panel .inv-item"); if (!it) return;
+    const it = e.target.closest && e.target.closest("#hotbar .inv-item, #inv-panel .inv-item, #crate-panel .inv-item"); if (!it) return;
     e.preventDefault(); closeMenu();
-    const from = it.dataset.slot; menu = $("div", "we-ctx");
-    const b = $("button", "", "Drop"); b.type = "button"; b.addEventListener("click", () => { closeMenu(); drop(from); }); menu.appendChild(b);
+    const from = it.dataset.slot, ci = it.dataset.ci != null ? +it.dataset.ci : null; menu = $("div", "we-ctx");
+    const add = (label, fn) => { const b = $("button", "", label); b.type = "button"; b.addEventListener("click", () => { closeMenu(); fn(); }); menu.appendChild(b); };
+    if (from) add("Drop", () => drop(from));
+    if (staff && from) add("Delete", () => { slots[from] = null; send({ t: "idel", from }); draw(); });
+    if (staff && ci != null && crate) add("Delete", () => send({ t: "icdel", c: crate.id, i: ci }));
+    if (!menu.children.length) { menu = null; return; }
     document.body.appendChild(menu); const r = menu.getBoundingClientRect();
     menu.style.left = Math.min(e.clientX, innerWidth - r.width - 4) + "px"; menu.style.top = Math.min(e.clientY - r.height, innerHeight - r.height - 4) + "px";
   });
   addEventListener("pointerdown", (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
 
+  // (owner, 2026-10-15) how many of a stackable Item Creator item: a box at the pointer with a number and a slider (1 to its
+  // Max Stack); OK / ENTER gives that many, Cancel / Escape nothing. Not stackable: one, no box.
+  let amt = null;
+  function amount(key, x, y, done) {
+    const max = maxOf(key); if (max <= 1) { done(1); return; }
+    if (amt) amt.remove();
+    amt = $("div", "amt-box"); const num = $("input"), rng = $("input"); num.type = "number"; rng.type = "range";
+    for (const i of [num, rng]) { i.min = 1; i.max = max; i.step = 1; i.value = String(max); }
+    num.addEventListener("input", () => { rng.value = num.value; }); rng.addEventListener("input", () => { num.value = rng.value; });
+    const close = () => { if (amt) { amt.remove(); amt = null; } };
+    const ok = () => { const n = Math.max(1, Math.min(max, Math.floor(Number(num.value)) || 1)); close(); done(n); };
+    const row = $("div", "amt-row"), bOk = $("button", "amt-ok", "OK"), bNo = $("button", "", "Cancel"); bOk.type = bNo.type = "button";
+    bOk.addEventListener("click", ok); bNo.addEventListener("click", close);
+    row.append(bNo, bOk); amt.append($("span", "amt-label", nameOf(key)), num, rng, row);
+    amt.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); ok(); } if (e.key === "Escape") close(); });
+    amt.addEventListener("pointerdown", (e) => e.stopPropagation());
+    document.body.appendChild(amt); const r = amt.getBoundingClientRect();
+    amt.style.left = Math.max(4, Math.min(x - r.width / 2, innerWidth - r.width - 4)) + "px"; amt.style.top = Math.max(4, Math.min(y - r.height - 12, innerHeight - r.height - 4)) + "px";
+    setTimeout(() => { num.focus(); num.select(); }, 0);
+  }
+  addEventListener("pointerdown", (e) => { if (amt && !amt.contains(e.target)) { amt.remove(); amt = null; } }, true);
+
   if (window.Catalog) window.Catalog.on(draw);
   window.Inventory = {
     setSend(f) { send = f; },
+    setStaff(v) { staff = !!v; },
     set(s) { if (s && typeof s === "object") { for (const k in slots) { const v = s[k]; slots[k] = v && typeof v.k === "string" ? { k: v.k, n: Math.max(1, Math.floor(+v.n) || 1) } : null; } draw(); } },   // the server's inventory
     toggle(open) { panel.hidden = open === undefined ? !panel.hidden : !open; if (panel.hidden) this.closeCrate(); },
     get open() { return !panel.hidden; },

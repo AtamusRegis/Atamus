@@ -516,6 +516,11 @@ export class World3D {
   }
   // (owner, 2026-10-14) icons: made in the Icon Creator, picked for items
   iconList() { return [...this.icons.values()]; }
+  async setIcon(id, o) {                       // (owner, 2026-10-15) the Icon Editor: an existing icon redrawn
+    const ic = cleanIcon(o); if (!ic || !this.icons.has(id)) return null; await this.ready;
+    await pool.query(`UPDATE world3d_icons SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(ic)]);
+    const out = { id, ...ic }; this.icons.set(id, out); return out;
+  }
   async addIcon(o, by) {
     const ic = cleanIcon(o); if (!ic || this.icons.size >= CATALOG_CAP) return null; await this.ready;
     const id = String((await pool.query(`INSERT INTO world3d_icons (data, by_user) VALUES ($1, $2) RETURNING id`, [JSON.stringify(ic), by || null])).rows[0].id);

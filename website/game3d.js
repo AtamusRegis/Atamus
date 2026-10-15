@@ -1029,7 +1029,7 @@ function connect() {
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       if (m.you.builder && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Creator (Z)
-      amBuilder = !!m.you.builder;
+      amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
       for (const p of [...players.keys()]) dropPlayer(p);
