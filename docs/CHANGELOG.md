@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Fix: sent back to the update screen after entering (owner):** after an update, entering the game no longer bounces you back to the Enter System screen a moment later.
 - **Weapon panel menu and whole-unit icons (owner):** right-clicking an item slot now offers Edit Item (name and icon, under Item Properties), Edit Stats (weapons) and Delete. Icon Creator coordinates are whole numbers only.
 - **Strafing (owner):** Q and E move your ship to its left and right while it keeps facing the same way.
 - **Icon Creator editing (owner):** copy, cut, paste and delete shapes (keys or right-click), flip them on X or Y, select several corners with a box or Shift+click (Ctrl+click removes), move them with the arrow keys or X / Y fields, and dragged corners snap into line with other corners.

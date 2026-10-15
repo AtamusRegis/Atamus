@@ -1036,7 +1036,12 @@ function connect() {
     else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts, m.head);
-    else if (m.t === "update") { if (typeof m.web === "string" && /^[0-9a-f]{7,40}$/.test(m.web)) countHead = m.web; goUpdating(["web"]); }
+    else if (m.t === "update") {               // the website switched: reload, unless this page already is that version
+      // (owner, 2026-10-14) the waiting page can see the new website before the server does; a player who came back in
+      // on it was sent out again when the server caught up
+      if (typeof m.web === "string" && WEB_BUILD && m.web === WEB_BUILD) return;
+      if (typeof m.web === "string" && /^[0-9a-f]{7,40}$/.test(m.web)) countHead = m.web; goUpdating(["web"]);
+    }
   };
   ws.onclose = (ev) => {
     if (closedForGood) return;
