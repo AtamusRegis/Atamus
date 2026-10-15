@@ -160,7 +160,7 @@ export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), oneEach(v)).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
 export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {}, collExtra = {};   // collExtra: (owner, 2026-10-15) each kind's hardpoint elevation / arc / facing and effects level
-export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };
+export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1, m: [0, 0, 0], r: [0, 0, 0.25], e: [0, -0.45, 0.25] };   // m / r / e: (owner, 2026-10-15) a hardpoint module's mount, rotation and barrel-end points
 // (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit (as the server works it out)? dir: degrees
 // clockwise from the nose (the plan's -y: down in the Object Editor), turned with the heading h; 360 is endless
 export function hpInArc(h, ex, dx, dy) {
@@ -944,11 +944,15 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "pts") { EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); ePv = [0, 0]; eWo = [0, 0]; eEx = { ...EXTRA_DEFAULT }; } else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "pts" && isModKind()) eEx = { ...eEx, m: EXTRA_DEFAULT.m.slice(), r: EXTRA_DEFAULT.r.slice(), e: EXTRA_DEFAULT.e.slice() };
+    else if (eMode === "pts") { EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); ePv = [0, 0]; eWo = [0, 0]; eEx = { ...EXTRA_DEFAULT, m: eEx.m, r: eEx.r, e: eEx.e }; } else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const isShipKind = () => eKind === "ship" || (curType() || {}).cat === "ship";
+  const isModKind = () => (curType() || {}).cat === "hardpoint";   // (owner, 2026-10-15) a hardpoint module: only its three points
   const drawModes = () => {
+    if (isModKind()) eMode = "pts";
+    for (const b of modes.children) b.hidden = isModKind() && b.dataset.m !== "pts";
     for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode);
     ceSide.hidden = eMode !== "pts"; ceTop.parentNode.classList.toggle("stack", eMode === "pts");
     drawSub(); sDraw();
@@ -1020,6 +1024,7 @@ export function initBuild(ctx) {
   // ---- (owner, 2026-10-15) the side view: the model from the side (the camera kept level; drag the empty view to go
   // around it). The Effects Level is a dashed red line across it, dragged up and down; in Hardpoint, the hardpoint is a dot
   // dragged up and down (its elevation). Heights are footprint units, like the plan ----
+  const MOD_PTS = [["m", "mount"], ["r", "turn"], ["e", "end"]], MOD_NAMES = { m: "Mount", r: "Rotation", e: "Barrel End" };
   const sMid = () => eMeshH / 2, sH = () => Math.max(H(), eMeshH * 0.75);
   function sAim() {
     const h = sH(), cy = sMid(); sdCam.left = -h; sdCam.right = h; sdCam.top = cy + h; sdCam.bottom = cy - h;
@@ -1032,6 +1037,11 @@ export function initBuild(ctx) {
   function sDraw() {
     while (sdSvg.firstChild) sdSvg.removeChild(sdSvg.firstChild);
     if (ceSide.hidden) return;
+    if (isModKind()) {                          // (owner, 2026-10-15) a hardpoint module: its three points, dragged up and down
+      for (const [k, cls] of MOD_PTS) { const q = eEx[k] || EXTRA_DEFAULT[k], c = ss("circle", { cx: sPx(q[0], q[1]), cy: sPy(q[2] * fp()), r: k === "m" ? 11 : 7, class: "ce-mp " + cls });   // (the mount a size bigger, so it can be caught under the others)
+        c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "z" + k); }); c.appendChild(document.createElementNS(SV, "title")).textContent = MOD_NAMES[k]; }
+      return;
+    }
     const fy = sPy(eEx.fx * fp()), hx = sPx(eWo[0], eWo[1]), hy = sPy(eEx.hz * fp());
     ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (eMode === "pts" ? "" : " dim") });
     if (eMode === "pts") { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
@@ -1049,6 +1059,7 @@ export function initBuild(ctx) {
     if (sDrag.type === "rot") { sideYaw -= (e.clientX - sDrag.x) * 0.012; sDrag.x = e.clientX; }
     else if (sDrag.type === "fx") eEx = { ...eEx, fx: Math.min(3, u) };
     else if (sDrag.type === "hz") eEx = { ...eEx, hz: Math.min(3, u) };
+    else if (sDrag.type[0] === "z") { const k = sDrag.type.slice(1), q = (eEx[k] || EXTRA_DEFAULT[k]).slice(); q[2] = Math.min(3, u); eEx = { ...eEx, [k]: q }; }
     sDraw();
   });
   const sEnd = (e) => { if (!sDrag || e.pointerId !== sDrag.id) return; const t = sDrag.type; sDrag = null; try { sdSvg.releasePointerCapture(e.pointerId); } catch {} if (t !== "rot") eSave(); sDraw(); };
@@ -1078,7 +1089,7 @@ export function initBuild(ctx) {
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim"), style: tint(eParts[ePart].t) });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     }
-    sv("path", { d: `M${vx - 18} ${vy} L${vx + 18} ${vy} M${vx} ${vy - 18} L${vx} ${vy + 18}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
+    if (!isModKind()) sv("path", { d: `M${vx - 18} ${vy} L${vx + 18} ${vy} M${vx} ${vy - 18} L${vx} ${vy + 18}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
     if (isShipKind() && eMode !== "pts") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
@@ -1087,7 +1098,10 @@ export function initBuild(ctx) {
       hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); eGrab(e, "g" + ax); });
     }
     if (eMode !== "pts") for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
-    if (eMode === "pts") {                       // visibility points: click empty space to add one; drag one to move it; right-click removes it
+    if (eMode === "pts" && isModKind()) {      // (owner, 2026-10-15) a hardpoint module: mount (red), rotation (green), barrel end (pink; it fires toward the nose, down here)
+      const [ex, ey] = toPx(eEx.e || EXTRA_DEFAULT.e); sv("path", { d: `M${ex} ${ey} L${ex} ${ey + 34} M${ex - 6} ${ey + 26} L${ex} ${ey + 34} L${ex + 6} ${ey + 26}`, class: "ce-fire" });
+      for (const [k, cls] of MOD_PTS) { const [x, y] = toPx(eEx[k] || EXTRA_DEFAULT[k]); handle(x, y, k === "m" ? 11 : 7, "ce-mp " + cls, (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "mp" + k); } }).appendChild(document.createElementNS(SV, "title")).textContent = MOD_NAMES[k]; }
+    } else if (eMode === "pts") {                       // visibility points: click empty space to add one; drag one to move it; right-click removes it
       px.forEach((p, i) => handle(p[0], p[1], 6, "ce-vpt", (e) => {
         e.preventDefault(); e.stopPropagation();
         if (e.button === 2) { removeCorner(i); return; }
@@ -1140,7 +1154,7 @@ export function initBuild(ctx) {
   }
   // a click on empty space in the Visibility tab adds a point there (mirrored: a pair, or one on the middle line)
   ceSvg.addEventListener("pointerdown", (e) => {
-    if (eMode !== "pts" || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
+    if (eMode !== "pts" || isModKind() || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
     e.preventDefault(); const r = ceSvg.getBoundingClientRect(); let u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x; if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     snap();
@@ -1185,7 +1199,8 @@ export function initBuild(ctx) {
     else if (eDrag.type === "my1") eMv.y1 = Math.max(u[1], eMv.y0 + 0.04);
     else if (eDrag.type === "pv") ePv = [mirror ? 0 : u[0], u[1]];
     else if (eDrag.type === "wo") eWo = [mirror ? 0 : u[0], u[1]];
-    eDraw(); if (eDrag.type === "wo") sDraw();
+    else if (eDrag.type.startsWith("mp")) { const k = eDrag.type[2], q = eEx[k] || EXTRA_DEFAULT[k]; eEx = { ...eEx, [k]: [mirror ? 0 : u[0], u[1], q[2]] }; }
+    eDraw(); if (eDrag.type === "wo" || eDrag.type.startsWith("mp")) sDraw();
   });
   const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; const g = eDrag.type[0] === "g"; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} if (!g) eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);

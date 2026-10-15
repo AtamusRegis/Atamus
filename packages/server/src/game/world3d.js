@@ -245,11 +245,15 @@ export function cleanPivot(pv) {               // a submitted pivot, checked as 
 // effects level (fx), both heights above the grid in footprint units like everything else (so they scale with the
 // piece); the turret's rotation limit (arc, degrees: 360 = endless) and its default facing (dir, degrees clockwise from
 // forward). The hardpoint's spot on the plan is the kind's origin (it replaced the Weapon Origin).
-export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };
+// (owner, 2026-10-15) a hardpoint module's three points, [x, y, height] in footprint units like the plan: m, where it
+// mounts on the ship's socket; r, what it turns around; e, the barrel's end, where its effects leave from (toward its nose)
+export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1, m: [0, 0, 0], r: [0, 0, 0.25], e: [0, -0.45, 0.25] };
 export function cleanCollExtra(o) {
   if (!o || typeof o !== "object") return null;
   const n = (x, lo, hi, d, k = 10000) => (Number.isFinite(Number(x)) ? Math.round(Math.max(lo, Math.min(hi, Number(x))) * k) / k : d);
-  return { hz: n(o.hz, 0, 3, EXTRA_DEFAULT.hz), arc: n(o.arc, 1, 360, 360, 10), dir: ((n(o.dir, -720, 720, 0, 10) % 360) + 360) % 360, fx: n(o.fx, 0, 3, EXTRA_DEFAULT.fx) };
+  const p3 = (v, d) => (Array.isArray(v) && v.length === 3 ? [n(v[0], -1.5, 1.5, d[0]), n(v[1], -1.5, 1.5, d[1]), n(v[2], 0, 3, d[2])] : d.slice());
+  return { hz: n(o.hz, 0, 3, EXTRA_DEFAULT.hz), arc: n(o.arc, 1, 360, 360, 10), dir: ((n(o.dir, -720, 720, 0, 10) % 360) + 360) % 360, fx: n(o.fx, 0, 3, EXTRA_DEFAULT.fx),
+    m: p3(o.m, EXTRA_DEFAULT.m), r: p3(o.r, EXTRA_DEFAULT.r), e: p3(o.e, EXTRA_DEFAULT.e) };
 }
 // (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit? Its center is the default facing (dir, degrees
 // clockwise from the nose, the nose being the plan's -y), turned with the ship's heading h; 360 is endless
@@ -328,7 +332,7 @@ export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.
 // (owner, 2026-10-15) five categories: Resource ("node": asteroids, loot boxes; only these hold ore and respawn), Region
 // (nebulas, ion storms, asteroid fields), Object (derelict stations, unmineable asteroids), Structure (refineries, factories,
 // shipyards) and Ship (for testing, for now)
-export const TYPE_CATS = ["node", "region", "object", "structure", "ship"];
+export const TYPE_CATS = ["node", "region", "object", "structure", "ship", "hardpoint"];   // hardpoint: (owner, 2026-10-15) a module that mounts on a ship's hardpoint
 export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
 export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.test(v) ? v : null);
 // (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /

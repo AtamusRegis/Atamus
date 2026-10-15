@@ -259,6 +259,8 @@
     .ce-slots { display: flex; gap: 3px; margin-bottom: 6px; }
     .ce-view { position: relative; width: 400px; height: 400px; border-radius: 6px; overflow: hidden; background: #18181e; background-image: linear-gradient(#2a2a32 1px, transparent 1px), linear-gradient(90deg, #2a2a32 1px, transparent 1px); background-size: 40px 40px; background-position: center; }
     .ce-view canvas, .ce-view svg { position: absolute; inset: 0; width: 400px; height: 400px; }
+    .ce-mp { stroke: #111; stroke-width: 2; cursor: pointer; } .ce-mp:hover { fill: #fff; } .ce-mp.mount { fill: #ff4d4d; } .ce-mp.turn { fill: #4dff6a; } .ce-mp.end { fill: #ff7fd6; }   /* (owner, 2026-10-15) a hardpoint module's points */
+    .ce-fire { stroke: #ff7fd6; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; opacity: .8; }
     .ce-views { display: flex; gap: 8px; } .ce-view[hidden] { display: none; } .ce-views.stack { flex-direction: column; } .ce-views.stack .ce-view, .ce-views.stack .ce-view canvas, .ce-views.stack .ce-view svg { width: 330px; height: 330px; }   /* (owner, 2026-10-15) top and side views */
     .ce-fx { stroke: #ff4d4d; stroke-width: 2; stroke-dasharray: 8 6; pointer-events: none; } .ce-fx.dim { opacity: .35; }
     .ce-fx-hit { stroke: transparent; stroke-width: 14; cursor: ns-resize; } .ce-woh.dim { opacity: .35; pointer-events: none; }
@@ -397,6 +399,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792055309"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792063648"></script>
+  <script type="module" src="game3d.js?v=1792086272"></script>
 </body>
 </html>

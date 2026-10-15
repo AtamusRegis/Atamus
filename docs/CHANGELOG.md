@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Hardpoint modules (owner):** a new Hardpoint type in the CREATOR for turrets and tools; its Object Editor sets three points (mount, rotation, barrel end) in a top and a side view.
 - **Optimization (owner):** snapshots now carry only what changed (an idle world sends a few bytes), the capacitor and route-goal messages only go out on change, impacts are batched, changed objects are encoded once for everyone, and the Object Editor no longer redraws every frame. Leftover styles from the removed Item Creator and object list are gone.
 - **Hitbox colors (owner):** each hitbox type has its own color in the Object Editor (its outline, fill and tab); only Body and Critical can have several parts, the other types one each. The pivot's crosshair is bigger.
 - **Object Editor fixes (owner):** zooming the top view now updates the side view too; the visibility points in Points are green again, and the hitbox handles that were wrongly showing there (the extra dots) are back in the Hitboxes tab, where editing them works again.

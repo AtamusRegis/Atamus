@@ -11,10 +11,10 @@
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 const C = () => window.Catalog, IC = () => window.ItemCreator;
-const TYPES = [["item", "Item"], ["node", "Resource"], ["region", "Region"], ["object", "Object"], ["structure", "Structure"], ["ship", "Ship"], ["sfx", "SFX"], ["music", "Music Track"]];
+const TYPES = [["item", "Item"], ["node", "Resource"], ["region", "Region"], ["object", "Object"], ["structure", "Structure"], ["ship", "Ship"], ["hardpoint", "Hardpoint"], ["sfx", "SFX"], ["music", "Music Track"]];
 const NAME = Object.fromEntries(TYPES);
-const OBJ = ["node", "region", "object", "structure", "ship"], SND = ["sfx", "music"];
-const group = (k) => (OBJ.includes(k) ? OBJ : SND.includes(k) ? SND : [k]);   // what a thing's type can change to
+const OBJ = ["node", "region", "object", "structure", "ship", "hardpoint"], SND = ["sfx", "music"];   // hardpoint: (owner, 2026-10-15) a module for a ship's hardpoint
+const group = (k) => (k === "hardpoint" ? [k] : OBJ.includes(k) ? OBJ.filter((x) => x !== "hardpoint") : SND.includes(k) ? SND : [k]);   // what a thing's type can change to
 
 let api = null, build = null, types = null, staff = false, head = false, sounds = [];
 let win = null, cbtn = null, grid = null, search = null, fbtn = null, perr = null, tab = "all", menu = null, want = null;
