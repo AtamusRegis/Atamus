@@ -612,8 +612,10 @@ export function initBuild(ctx) {
   const gTheme = gField("Theme", document.createElement("select")); ["Violet", "Teal", "Amber", "Emerald", "Crimson"].forEach((n, i) => gTheme.append(new Option(n, String(i))));
   const cloudRows = [gScale.parentNode, gTheme.parentNode];
   for (const el of [gRot, gScale, gTheme]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
-  gRot.addEventListener("change", () => { const b = selPiece(), v = Number(gRot.value); if (!b || !Number.isFinite(v)) return; const r = -v * Math.PI / 180; b.r = Math.round(Math.atan2(Math.sin(r), Math.cos(r)) * 10000) / 10000; place(b); push(b, true); });
-  gScale.addEventListener("change", () => { const b = selPiece(), v = Number(gScale.value); if (!b || b.k !== "cloud" || !Number.isFinite(v)) return; b.w = b.d = Math.max(MIN, Math.min(MAX, v)); place(b); push(b, true); });
+  const rotSet = (now) => { const b = selPiece(), v = Number(gRot.value); if (!b || gRot.value === "" || !Number.isFinite(v)) return; const r = -v * Math.PI / 180; b.r = Math.round(Math.atan2(Math.sin(r), Math.cos(r)) * 10000) / 10000; place(b); push(b, now); };
+  const scaleSet = (now) => { const b = selPiece(), v = Number(gScale.value); if (!b || b.k !== "cloud" || gScale.value === "" || !Number.isFinite(v)) return; b.w = b.d = Math.max(MIN, Math.min(MAX, v)); place(b); push(b, now); };
+  gRot.addEventListener("input", () => rotSet(false)); gRot.addEventListener("change", () => rotSet(true));   // (owner, 2026-10-15) instant
+  gScale.addEventListener("input", () => scaleSet(false)); gScale.addEventListener("change", () => scaleSet(true));
   gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); gTheme.blur(); });
   let gShown = "";
   function attrPanel() {
@@ -642,14 +644,16 @@ export function initBuild(ctx) {
   for (const [k, label] of NODE_F) {
     const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.step = k === "bob" ? 0.05 : 1; if (["size", "respawn", "amount", "min", "max", "bob"].includes(k)) i.min = 0;
     l.append(sp, i); nBox.appendChild(l); nIn[k] = i;
-    i.addEventListener("change", () => {
-      const b = selNode(); if (!b) return; const v = Number(i.value); if (!Number.isFinite(v)) return;
+    // (owner, 2026-10-15) instant: every keystroke or drag applies (sent at most ~10 times a second; the last always goes)
+    const apply = (now) => {
+      const b = selNode(); if (!b || i.value === "") return; const v = Number(i.value); if (!Number.isFinite(v)) return;
       const e = b.extra = { ...(b.extra || {}) };
       if (k === "size") { e.size = b.w = b.d = Math.max(MIN, Math.min(MAX, v)); }
       else if (k === "amount") { e.amount = Math.max(0, Math.min(e.max, Math.round(v))); }
       else { e[k] = v; if (k === "min" && e.max < v) e.max = v; if (k === "max" && e.min > v) e.min = v; if (k === "bmin" && e.bmax < v) e.bmax = v; if (k === "bmax" && e.bmin > v) e.bmin = v; }
-      place(b); push(b, true);
-    });
+      place(b); push(b, now);
+    };
+    i.addEventListener("input", () => apply(false)); i.addEventListener("change", () => apply(true));
     i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
   }
   nBox.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -667,7 +671,16 @@ export function initBuild(ctx) {
   const zLayer = document.createElementNS(NSv, "svg"); zLayer.id = "zone-handles"; zLayer.setAttribute("width", "100%"); zLayer.setAttribute("height", "100%"); document.body.appendChild(zLayer);
   zLayer.addEventListener("contextmenu", (e) => e.preventDefault());
   let zKey = "", zDrag = null;
+  // (owner, 2026-10-15) and, faintly, the spawn zones of the other placed nodes of the same type (thin grey outlines)
+  const zoLayer = document.createElementNS(NSv, "svg"); zoLayer.id = "zone-others"; zoLayer.setAttribute("width", "100%"); zoLayer.setAttribute("height", "100%"); document.body.appendChild(zoLayer);
+  function otherZones(b) {
+    const list = b ? [...builds.values()].filter((o) => o !== b && o.k === b.k && o.extra && o.extra.zone) : [];
+    while (zoLayer.children.length > list.length) zoLayer.lastChild.remove();
+    while (zoLayer.children.length < list.length) { const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "zn-other"); zoLayer.appendChild(pl); }
+    list.forEach((o, i) => { const pts = o.extra.zone.map(([x, y]) => scr2(o.x + x, o.y + y)); zoLayer.children[i].setAttribute("points", pts.every((p) => p[2]) ? pts.map((p) => p[0] + "," + p[1]).join(" ") : ""); });
+  }
   function zoneHandles(b) {
+    otherZones(b);
     const Z = b && b.extra && b.extra.zone, pts = Z ? Z.map(([x, y]) => scr2(b.x + x, b.y + y)) : [];
     const key = b && Z && pts.every((p) => p[2]) ? b.id + ":" + Z.length : "";
     if (key !== zKey) {
