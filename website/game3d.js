@@ -251,7 +251,7 @@ loadCruiser();
 function makeVisual(remote, own = false) {     // own: my ship (its own materials too, for materializing; always solid otherwise)
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
   if (remote || own) {                          // (owner, 2026-10-14) each other ship has its own material copies: its opacity is its visibility
-    const va = { value: remote ? 0 : 1 }, mats = [], mine = new Map(), sp = { p: { value: new THREE.Vector4() }, k: { value: 1 }, s: { value: 1 } };
+    const va = { value: remote ? 0 : 1 }, mats = [], mine = new Map(), sp = { p: { value: new THREE.Vector4() }, k: { value: 1 }, s: { value: 1 }, f: { value: 0 } };
     v.userData.va = remote ? va : null; v.userData.sp = sp; v.userData.mats = mats; if (remote) v.visible = false;   // (fades in once its visibility is known)
     const one = (m) => { if (!mine.has(m)) { const c = losMat(m, va, sp); mine.set(m, c); mats.push(c); } return mine.get(m); };
     v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
@@ -291,9 +291,9 @@ function losMat(m, va, sp) {                   // a copy of a ship material: not
   const c = m.clone();
   c.onBeforeCompile = (sh) => {
     sh.uniforms.visC = visU.visC; sh.uniforms.visFar = visU.visFar; sh.uniforms.visA = va;
-    sh.uniforms.spP = sp.p; sh.uniforms.spK = sp.k; sh.uniforms.spS = sp.s; sh.uniforms.spT = skyT;
+    sh.uniforms.spP = sp.p; sh.uniforms.spK = sp.k; sh.uniforms.spS = sp.s; sh.uniforms.spF = sp.f; sh.uniforms.spT = skyT;
     sh.vertexShader = "varying vec3 vVisW;\n" + sh.vertexShader.replace("#include <project_vertex>", "#include <project_vertex>\n  vVisW = (modelMatrix * vec4(transformed, 1.0)).xyz;");
-    sh.fragmentShader = "uniform vec2 visC; uniform float visFar; uniform float visA; uniform vec4 spP; uniform float spK; uniform float spS; uniform float spT; varying vec3 vVisW;\n" + sh.fragmentShader
+    sh.fragmentShader = "uniform vec2 visC; uniform float visFar; uniform float visA; uniform vec4 spP; uniform float spK; uniform float spS; uniform float spF; uniform float spT; varying vec3 vVisW;\n" + sh.fragmentShader
       .replace("void main() {", "void main() {\n  if (length(vec2(vVisW.x, -vVisW.z) - visC) > visFar) discard;\n  float spAl = dot(vVisW.xz - spP.xy, spP.zw), spCut = mix(" + SP_HALF + ".0, -" + SP_HALF + ".0, spK);\n  if (spK < 1.0 && spAl < spCut) discard;")
       .replace("#include <dithering_fragment>", `#include <dithering_fragment>
   if (spS < 1.0) {
@@ -302,6 +302,7 @@ function losMat(m, va, sp) {                   // a copy of a ship material: not
     gl_FragColor.rgb = mix(vec3(0.3, 0.82, 1.0) * scan, gl_FragColor.rgb, spS) + vec3(0.7, 0.97, 1.0) * edge * (1.0 - spS);
     gl_FragColor.a *= mix(0.5 + 0.5 * edge, 1.0, spS);
   }
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0), spF);
   gl_FragColor.a *= visA;`);
   };
   c.customProgramCacheKey = () => "losA";
@@ -661,7 +662,7 @@ function hpState(p, now) {
   if (!s) { s = { hp: f, mF: f, mT: f, gF: f, gT: f, t0: 0, flash: 0, hitT: -1e9 }; hpAnim.set(p.id, s); }
   if (f < s.hp - 1e-6) {                        // hit: both bars start from where they are now
     const m = tween(s.mF, s.mT, now - s.t0), g = tween(s.gF, s.gT, now - s.t0 - HP_GHOST_LAG);
-    s.mF = m; s.gF = Math.max(g, m); s.mT = s.gT = f; s.t0 = now; s.flash = 2; s.hitT = now;
+    s.mF = m; s.gF = Math.max(g, m); s.mT = s.gT = f; s.t0 = now; s.flash = 2; s.shipFlash = 2; s.hitT = now;
   } else if (f > s.hp + 1e-6) { s.mF = s.mT = s.gF = s.gT = f; }
   s.hp = f;
   return s;
@@ -672,6 +673,8 @@ function drawHpBars() {
   for (const p of players.values()) {
     if (p.hp === undefined) continue;
     const s = hpState(p, now);
+    { const sp = p.holder.children[0] && p.holder.children[0].userData.sp;   // (owner, 2026-10-15) the ship itself flashes pure white for 2 frames
+      if (sp) sp.f.value = s.shipFlash > 0 ? 1 : 0; if (s.shipFlash > 0) s.shipFlash--; }
     if (p.hp === undefined || p.hp >= HP_MAX || !p.near && p.id !== myId) continue;
     const v = p.holder.children[0], t = p.id === myId ? null : visTargets.get(v), a = p.id === myId ? 1 : t ? t.a : 0;
     if (a <= 0.01) continue;
