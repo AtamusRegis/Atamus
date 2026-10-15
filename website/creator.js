@@ -1,8 +1,8 @@
 // (owner, 2026-10-15) The CREATOR: C (or the [C] button in the staff column) opens it. It replaced the Item Creator (Z)
 // and the Object Creator's list (X). Laid out like RAW ASSETS: one row with a search box ("Search"), a filter button (All
 // and each type) and a green CREATE; below, every made thing as a slot (6 a row, scrolling), sorted by name; hover: its
-// name. CREATE asks for a Name, an Icon and a Type: Item, Resource, Region, Object, Structure, Ship, Icon, SFX, Music Track.
-// An Icon goes straight to the Icon Creator; the rest are just their name, icon and type for now. Right-click a slot:
+// name. CREATE asks for a Name, an Icon and a Type: Item, Resource, Region, Object, Structure, Ship, SFX, Music Track
+// (owner, 2026-10-15: icons are made in RAW ASSETS now); just their name, icon and type for now. Right-click a slot:
 // Edit (the same three; the type only changes within its own kind: Resource / Region / Object / Structure / Ship among
 // themselves, SFX and Music Track between them) and Delete; an Icon: Edit (the Icon Creator), Rename, Delete; objects also
 // keep Edit Object (the Object Editor) and items the Item Editor; the player ship has Edit Object only. Items drag into
@@ -11,14 +11,14 @@
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 const C = () => window.Catalog, IC = () => window.ItemCreator;
-const TYPES = [["item", "Item"], ["node", "Resource"], ["region", "Region"], ["object", "Object"], ["structure", "Structure"], ["ship", "Ship"], ["icon", "Icon"], ["sfx", "SFX"], ["music", "Music Track"]];
+const TYPES = [["item", "Item"], ["node", "Resource"], ["region", "Region"], ["object", "Object"], ["structure", "Structure"], ["ship", "Ship"], ["sfx", "SFX"], ["music", "Music Track"]];
 const NAME = Object.fromEntries(TYPES);
 const OBJ = ["node", "region", "object", "structure", "ship"], SND = ["sfx", "music"];
 const group = (k) => (OBJ.includes(k) ? OBJ : SND.includes(k) ? SND : [k]);   // what a thing's type can change to
 
 let api = null, build = null, types = null, staff = false, head = false, sounds = [];
 let win = null, cbtn = null, grid = null, search = null, fbtn = null, perr = null, tab = "all", menu = null, want = null;
-const allowed = () => TYPES.filter(([k]) => head || k === "item" || k === "icon");
+const allowed = () => TYPES.filter(([k]) => head || k === "item");   // (owner, 2026-10-15: icons moved to RAW ASSETS)
 
 function mount(a) {
   api = a.send ? a : api; build = a.build; types = a.types; staff = !!a.staff; head = !!a.head;
@@ -67,7 +67,6 @@ function entries() {
   const out = [];
   if (C()) {
     for (const it of C().items) out.push({ key: "item:" + it.id, k: "item", id: it.id, name: it.name, o: it, pic: (px) => { const el = $("div", "inv-item pic"); el.dataset.item = "it:" + it.id; el.title = it.name; const p = C().picture("it:" + it.id, px - 8); if (p) el.appendChild(p); return el; } });
-    if (staff) for (const ic of C().icons.values()) out.push({ key: "icon:" + ic.id, k: "icon", id: ic.id, name: ic.name || "", o: ic, pic: (px) => C().svg(ic, px) });
   }
   if (head) {
     out.push({ key: "player", k: "ship", name: "Player Ship", pic: () => build.shipPic() });
@@ -81,7 +80,7 @@ function draw() {
   fbtn.classList.toggle("on", tab !== "all");
   const q = search.value.trim().toLowerCase();
   const list = entries().filter((e) => (tab === "all" || e.k === tab) && (!q || e.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-  const cells = list.map((e) => { const d = $("div", "inv-slot imp-slot"); d.dataset.key = e.key; d.title = e.name; d.appendChild(e.pic(34)); if (e.k === "icon") d.appendChild($("span", "cr-mark", "i")); return d; });   // (owner, 2026-10-15) an icon: a small "i" in its top left
+  const cells = list.map((e) => { const d = $("div", "inv-slot imp-slot"); d.dataset.key = e.key; d.title = e.name; d.appendChild(e.pic(34)); return d; });
   for (let i = cells.length; i < Math.max(12, Math.ceil(cells.length / 6) * 6); i++) cells.push($("div", "inv-slot"));
   grid.replaceChildren(...cells);
 }
@@ -96,7 +95,6 @@ function openMenu(key, x, y) {
   const e = entries().find((o) => o.key === key); if (!e) return; closeMenu();
   menu = $("div", "we-ctx"); const add = (label, fn) => menu.appendChild(btn(label, "", () => { closeMenu(); fn(); }));
   if (key === "player") add("Edit Object", () => build.editObject("ship"));
-  else if (e.k === "icon") { add("Edit", () => IC().editIcon(e.o)); add("Rename", () => editBox(e)); add("Delete", () => api.send({ t: "icondel", id: e.id })); }
   else {
     add("Edit", () => editBox(e));
     if (e.k === "item") add("Item Editor", () => IC().itemEditor(C().item("it:" + e.id)));
@@ -109,7 +107,7 @@ function openMenu(key, x, y) {
 // ---- CREATE / Edit: Name, Icon (Create New Icon, or the [+] box: pick one), Type; CANCEL / CREATE (SAVE). An icon's
 // Rename: the name only ----
 function editBox(e) {
-  const o = IC().overlay("cr-edit"), rename = e && e.k === "icon";
+  const o = IC().overlay("cr-edit"), rename = false;
   let icon = e && !rename ? e.o.icon || null : null;
   o.box.appendChild($("p", "we-title", !e ? "CREATE" : rename ? "RENAME" : "EDIT"));
   const g = $("div", "we-grid"), name = $("input"); name.maxLength = 32; name.value = e ? e.name : "";
@@ -132,7 +130,6 @@ function editBox(e) {
     if (ok.disabled) return;
     const n = name.value.trim(), k = type.value; if (!n) { fail("Give it a name."); return; }
     if (rename) { ok.disabled = true; want = { t: "isaved", done: () => o.close(), fail }; api.send({ t: "iset", id: e.id, icon: { name: n, shapes: e.o.shapes } }); return; }
-    if (k === "icon") { o.close(); IC().newIcon(() => {}, n); return; }   // a new Icon: straight to the Icon Creator
     ok.disabled = true; want = { t: k === "item" ? "itemsaved" : OBJ.includes(k) ? "tsaved" : "ssaved", done: () => { o.close(); draw(); }, fail };
     if (k === "item") api.send({ t: "itemset", ...(e ? { id: e.id } : {}), item: { ...(e ? e.o : {}), name: n, icon } });
     else if (OBJ.includes(k)) { const t = e ? { ...e.o } : {}; delete t.id; delete t.thumb; api.send({ t: "tset", ...(e ? { id: e.id } : {}), type: { ...t, name: n, icon, cat: k } }); }

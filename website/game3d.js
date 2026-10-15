@@ -6,8 +6,8 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { Importer } from "./importer.js?v=1792057164";
-import { Creator } from "./creator.js?v=1792058004";
+import { Importer } from "./importer.js?v=1792058735";
+import { Creator } from "./creator.js?v=1792058649";
 import { initBuild, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792057164";
 
 // (owner) returning players come through the log-in page first (live site only)
@@ -1022,6 +1022,7 @@ function connect() {
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }
+    if (Importer.onMsg(m)) return;             // (owner, 2026-10-15) RAW ASSETS: its lists and saves (icon renames too)
     if (Creator.onMsg(m)) return;              // (owner, 2026-10-15) the CREATOR's lists and the saves it's waiting for   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
       if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
@@ -1097,7 +1098,6 @@ function connect() {
     else if (m.t === "staff") { if (window.AdminPanel) window.AdminPanel.mount(true).then((ok) => { amStaff = ok; }); }   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
     else if (m.t === "chat") addChat(m);
     else if (build.onMsg(m)) { /* Build menu pieces */ }
-    else if (Importer.onMsg(m)) { /* (owner, 2026-10-15) the Importer's assets */ }
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
     else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;

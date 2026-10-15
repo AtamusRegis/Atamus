@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Raw Assets + menu (owner):** RAW ASSETS has a green + (Import or Create) instead of Import, five slots a row, and now holds the SVG icons; Create makes an SVG Icon in the Icon Creator. Icons left the CREATOR.
 - **Icon mark (owner):** icons in the CREATOR show a small "i" in the top left of their slot.
 - **Window positions (owner):** the editor windows (CREATOR, RAW ASSETS, Object Editor, attributes panel) now reopen where each account last put them.
 - **Model Front (owner):** a model's import / edit pop-up in Raw Assets now has a Front setting with an arrow showing the game's forward, for models made facing another way; it turns the model everywhere it's used.

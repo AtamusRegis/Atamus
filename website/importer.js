@@ -11,7 +11,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 
 const BASE = () => (typeof API_BASE !== "undefined" ? API_BASE : location.origin);
-const KINDS = [["model", "Models"], ["image", "Images"], ["audio", "Audio"]];
+const KINDS = [["model", "Models"], ["image", "Images"], ["audio", "Audio"], ["icon", "Icons"]];   // icon: (owner, 2026-10-15) the Icon Creator's SVG icons live here now
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 
@@ -136,7 +136,9 @@ function mount(a) {
   search = $("input", "imp-search"); search.maxLength = 32; search.placeholder = "Search assets"; search.addEventListener("input", () => draw());
   fbtn = btn("", "imp-filter", (e) => filterMenu(e)); fbtn.title = "Filter";
   fbtn.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 3h12l-4.6 5.4V13l-2.8 1.4V8.4Z" fill="currentColor"/></svg>';
-  const tools = $("div", "imp-tools"); tools.append(search, fbtn, btn("Import", "imp-go", () => fileIn.click()));
+  const tools = $("div", "imp-tools"); const plus = btn("", "imp-go imp-plus", () => plusMenu(plus)); plus.title = "Add";
+  plus.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
+  tools.append(search, fbtn, plus);
   grid = $("div", "we-list imp-grid");
   grid.addEventListener("contextmenu", (e) => { e.preventDefault(); const d = e.target.closest("[data-id]"); if (d) openMenu(d.dataset.id, e.clientX, e.clientY); });
   fileIn = $("input"); fileIn.type = "file"; fileIn.hidden = true; fileIn.accept = ".glb,.png,.jpg,.jpeg,.webp,.mp3,.ogg,.wav";
@@ -153,21 +155,26 @@ function mount(a) {
     e.preventDefault(); toggle();
   });
   addEventListener("pointerdown", (e) => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+  if (CAT()) CAT().on(() => draw());
 }
 function toggle(v) {
   if (!win) return; win.hidden = v === undefined ? !win.hidden : !v; ibtn.classList.toggle("on", !win.hidden);
   if (!win.hidden) { draw(); iconsDue(); if (window.WinPos) window.WinPos.place(win, "assets"); } else closeMenu();
 }
+// the assets and (owner, 2026-10-15) the SVG icons (kind "icon", keyed "ic<id>")
+const IC = () => window.ItemCreator, CAT = () => window.Catalog;
+const all = () => [...assets, ...(CAT() ? [...CAT().icons.values()].map((ic) => ({ id: "ic" + ic.id, kind: "icon", name: ic.name || "", ic })) : [])];
 function draw() {
   if (!win || win.hidden) return;
   fbtn.classList.toggle("on", tab !== "all");
   const q = search.value.trim().toLowerCase();
-  const list = assets.filter((a) => (tab === "all" || a.kind === tab) && (!q || a.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+  const list = all().filter((a) => (tab === "all" || a.kind === tab) && (!q || a.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
   const cells = list.map((a) => { const d = $("div", "inv-slot imp-slot"); d.dataset.id = a.id; d.title = a.name; d.appendChild(slotPic(a, 34)); return d; });
-  for (let i = cells.length; i < Math.max(12, Math.ceil(cells.length / 6) * 6); i++) cells.push($("div", "inv-slot"));
+  for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
   grid.replaceChildren(...cells);
 }
 function slotPic(a, px) {
+  if (a.kind === "icon") return CAT().svg(a.ic, px);
   const f = a.kind === "image" ? a.file : a.thumb; if (f) return picture(f, px);
   const s = $("span", "build-letter", a.kind === "audio" ? "♪" : (a.name || "?").slice(0, 1).toUpperCase()); return s;
 }
@@ -182,9 +189,10 @@ async function iconsDue() {
 }
 
 function openMenu(id, x, y) {
-  const a = assets.find((o) => o.id === id); if (!a) return; closeMenu();
+  const a = all().find((o) => o.id === id); if (!a) return; closeMenu();
   menu = $("div", "we-ctx");
-  menu.append(btn("Edit", "", () => { closeMenu(); renameBox(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
+  if (a.kind === "icon") menu.append(btn("Edit", "", () => { closeMenu(); IC().editIcon(a.ic); }), btn("Rename", "", () => { closeMenu(); iconRename(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "icondel", id: a.ic.id }); }));
+  else menu.append(btn("Edit", "", () => { closeMenu(); renameBox(a); }), btn("Delete", "", () => { closeMenu(); api.send({ t: "adel", id: a.id }); }));
   document.body.appendChild(menu); const r = menu.getBoundingClientRect();
   menu.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; menu.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
 }
@@ -194,6 +202,25 @@ function filterMenu(e) {
   document.body.appendChild(menu); const r = fbtn.getBoundingClientRect(), m = menu.getBoundingClientRect();
   menu.style.left = Math.min(r.left, innerWidth - m.width - 4) + "px"; menu.style.top = Math.min(r.bottom + 4, innerHeight - m.height - 4) + "px";
 }
+// (owner, 2026-10-15) the green +: Import (a file) or Create (a pop-up of things to make: for now, SVG Icon, which opens
+// the Icon Creator with the name given)
+function plusMenu(at) {
+  closeMenu(); menu = $("div", "we-ctx");
+  menu.append(btn("Import", "", () => { closeMenu(); fileIn.click(); }), btn("Create", "", () => { closeMenu(); createBox(); }));
+  document.body.appendChild(menu); const r = at.getBoundingClientRect(), m = menu.getBoundingClientRect();
+  menu.style.left = Math.min(r.left, innerWidth - m.width - 4) + "px"; menu.style.top = Math.min(r.bottom + 4, innerHeight - m.height - 4) + "px";
+}
+function createBox() {
+  const p = popup("CREATE", "", null, "", () => {});
+  p.ok.hidden = true; p.pic.hidden = true;
+  const opts = $("div", "imp-opts"), go = (fn) => { const n = p.name.value.trim(); if (!n) { p.fail("Give it a name."); return; } p.close(); fn(n); };
+  opts.append(btn("SVG Icon", "", () => go((n) => IC().newIcon(() => draw(), n))));
+  p.box.insertBefore(opts, p.err);
+}
+function iconRename(a) {
+  popup("RENAME", "SAVE", CAT().svg(a.ic, 96), a.name, (name, { close, fail }) => { iwant = { done: close, fail }; api.send({ t: "iset", id: a.ic.id, icon: { name, shapes: a.ic.shapes } }); });
+}
+let iwant = null;                                // an icon Rename waiting for the server
 function closeMenu() { if (menu) { menu.remove(); menu = null; } }
 
 // a pop-up: the asset's icon, its Name, CANCEL / (ok)
@@ -225,7 +252,7 @@ function popup(title, okText, picEl, name0, onOk) {
     fL.addEventListener("click", () => { vw.setFront(vw.front + 90); fIn.value = String(vw.front); });
     fR.addEventListener("click", () => { vw.setFront(vw.front - 90); fIn.value = String(vw.front); });
   };
-  const me = pop = { close, pic, ok, fail, reset, front, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
+  const me = pop = { close, pic, ok, fail, reset, front, box, err, name, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
   return me;
 }
 const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["png", "jpg", "jpeg", "webp"].includes(x) ? "image" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
@@ -270,6 +297,8 @@ function set(list) {
   draw(); if (win && !win.hidden) iconsDue(); for (const f of subs) f();
 }
 function onMsg(m) {
+  if (m.t === "isaved" && iwant) { const w = iwant; iwant = null; if (m.error) w.fail(m.error); else w.done(); return true; }
+  if (m.t === "isaved" && m.error && win && !win.hidden && !(IC() && IC().busy)) { perr.textContent = m.error; perr.hidden = false; clearTimeout(perr.t); perr.t = setTimeout(() => { perr.hidden = true; }, 4000); return true; }
   if (m.t === "assets") { set(m.list); return true; }
   if (m.t === "asaved") {
     const w = m.n != null ? pending.get(m.n) : null; if (w) pending.delete(m.n);
