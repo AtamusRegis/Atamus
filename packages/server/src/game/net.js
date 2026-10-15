@@ -122,7 +122,7 @@ export function attachGameServer(httpServer) {
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });
         }).catch((e) => { joined = false; console.error("join", e); });
       }
-      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a);
+      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a, m.ta);
       else if (m.t === "fire") world.fire(pid, m.x, m.y);
       else if (m.t === "reload") world.reload(pid);   // (owner, 2026-10-14) R   // (owner, 2026-10-14) the railgun; the world checks it and keeps the cooldown
       else if (m.t === "chat") {               // (owner, 2026-10-13) World (everyone), Faction (your side), Whisper (one player)

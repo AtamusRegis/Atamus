@@ -355,7 +355,22 @@ export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
   const model = modelRef(o.model);
-  return { name, cat: TYPE_CATS.includes(o.cat) ? o.cat : "node", model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item) };
+  const cat = TYPE_CATS.includes(o.cat) ? o.cat : "node", sz = Number(o.size);
+  return { name, cat, model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item),
+    ...(cat === "ship" ? { mod: iconRef(o.mod) } : {}),                                                       // (owner, 2026-10-15) a ship: the hardpoint module on its socket
+    ...(cat === "hardpoint" ? { size: Number.isFinite(sz) ? Math.round(Math.max(1, Math.min(500, sz)) * 10) / 10 : 20 } : {}) };   // a module: its size, m across
+}
+// (owner, 2026-10-15) where a ship's shots leave from, on the plan: the barrel end of the hardpoint module on its socket
+// (the module's mount on the socket, turned ta radians around its rotation point; ta as the client draws it: the turret's
+// yaw against the ship, three.js's rotation.y), else the hardpoint itself. Kept the same as the client's (build3d.js).
+export function muzzleAt(px, py, h, D, wo, pv, mod, ex, ta) {
+  let lx = (wo[0] - pv[0]) * D, lz = (pv[1] - wo[1]) * D;                     // the socket, in the ship's own frame (x, z)
+  if (mod && ex) {
+    const S = mod.size, m = ex.m, r = ex.r, e = ex.e, vx = (e[0] - r[0]) * S, vz = -(e[1] - r[1]) * S, c = Math.cos(ta || 0), s = Math.sin(ta || 0);
+    lx += (r[0] - m[0]) * S + vx * c + vz * s; lz += -(r[1] - m[1]) * S - vx * s + vz * c;
+  }
+  const c = Math.cos(h), s = Math.sin(h);
+  return [px + lx * c + lz * s, py + lx * s - lz * c];
 }
 // a placed resource node's settings (the Object Placer, owner 2026-10-15): its size (m across: its footprint), how fast it
 // turns (deg/s) and bobs (bobs a second) between two heights (m), the ore it holds now (amount; rolled in the range when it
@@ -507,7 +522,7 @@ export class World3D {
 
   // The client only sends a direction (and whether Shift is held); the server moves the sphere.
   // Hostile input: finite numbers, length clamped to 1, the boost only ever a flag.
-  setDir(id, dx, dy, boost, h, aim) {
+  setDir(id, dx, dy, boost, h, aim, ta) {
     const p = this.players.get(String(id));
     if (!p) return false;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return false;
@@ -517,6 +532,7 @@ export class World3D {
     p.dx = dx; p.dy = dy; p.boost = boost === 1 || boost === true;   // (owner) Shift = sprint (30% faster)
     if (typeof h === "number" && Number.isFinite(h)) p.h = Math.atan2(Math.sin(h), Math.cos(h));   // (owner) the ship's heading, for everyone else's screens
     p.aim = typeof aim === "number" && Number.isFinite(aim) ? Math.atan2(Math.sin(aim), Math.cos(aim)) : null;   // (owner) aiming: the reticle's direction; absent = not aiming
+    if (typeof ta === "number" && Number.isFinite(ta)) p.ta = Math.atan2(Math.sin(ta), Math.cos(ta));   // (owner, 2026-10-15) its turret's yaw against the ship (everyone draws it)
     return true;
   }
 
@@ -700,7 +716,8 @@ export class World3D {
     return false;
   }
   // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its shots leave from (line of sight stays at the pivot)
-  shipOrigin(p) { const K = this.shipK; return toWorldPts({ k: K, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, [this.origins[K] || [0, 0]], this.pivots[K] || [0, 0]); }
+  shipOrigin(p) { const K = this.shipK, t = this.types.get(K.slice(2)), mt = t && t.mod && this.types.get(t.mod), mod = mt && mt.cat === "hardpoint" ? mt : null;
+    return muzzleAt(p.x, p.y, p.h || 0, 2 * SHIP_R, this.origins[K] || [0, 0], this.pivots[K] || [0, 0], mod, mod && { ...EXTRA_DEFAULT, ...(this.collExtra["t:" + mod.id] || {}) }, p.ta); }   // (owner, 2026-10-15) its module's barrel end
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
   sees(a, b) {
     const K = this.shipK, pts = (p) => toWorldPts({ k: K, x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines[K] || VIS_DEFAULT.ship, this.pivots[K] || [0, 0]);
@@ -933,6 +950,7 @@ export class World3D {
     return [...this.types.values()].map((t) => { const a = t.model && byFile.get(t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}) } : t; }); }   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
+    if (t.mod && !(this.types.get(t.mod) && this.types.get(t.mod).cat === "hardpoint")) t.mod = null;
     if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;
     if (id) { if (!this.types.has(id)) return null; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(t)]); }
     else { if (this.types.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_types (data) VALUES ($1) RETURNING id`, [JSON.stringify(t)])).rows[0].id); }
@@ -980,7 +998,7 @@ export class World3D {
     for (const p of this.players.values()) {
       const dx = p.x - viewer.x, dy = p.y - viewer.y;
       if (p !== viewer && dx * dx + dy * dy > R2) continue;
-      const row = [p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX)];   // + health (owner, 2026-10-14)
+      const row = [p.id, Math.round(p.x * 100), Math.round(p.y * 100), Math.round((p.h || 0) * 1000), Math.ceil(p.hp ?? HP_MAX), p.ta == null ? null : Math.round(p.ta * 100)];   // + health (owner, 2026-10-14); + turret yaw (owner, 2026-10-15)
       if (spawning(p)) row.push(Math.ceil((p.spawnUntil - Date.now()) / 10));   // (owner, 2026-10-14) still materializing: hundredths of a second left
       out.push(row);
     }

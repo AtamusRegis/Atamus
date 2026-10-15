@@ -161,6 +161,18 @@ export const builds = new Map();
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), oneEach(v)).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
 export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {}, collExtra = {};   // collExtra: (owner, 2026-10-15) each kind's hardpoint elevation / arc / facing and effects level
 export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1, m: [0, 0, 0], r: [0, 0, 0.25], e: [0, -0.45, 0.25] };   // m / r / e: (owner, 2026-10-15) a hardpoint module's mount, rotation and barrel-end points
+// (owner, 2026-10-15) where a ship's shots leave from, on the plan: its hardpoint module's barrel end (the module mounted on
+// the socket, turned ta radians, three.js rotation.y against the ship, around its rotation point), else the hardpoint.
+// The server works it out the same way (world3d.js muzzleAt).
+export function muzzleAt(px, py, h, D, wo, pv, mod, ex, ta) {
+  let lx = (wo[0] - pv[0]) * D, lz = (pv[1] - wo[1]) * D;
+  if (mod && ex) {
+    const S = mod.size, m = ex.m, r = ex.r, e = ex.e, vx = (e[0] - r[0]) * S, vz = -(e[1] - r[1]) * S, c = Math.cos(ta || 0), s = Math.sin(ta || 0);
+    lx += (r[0] - m[0]) * S + vx * c + vz * s; lz += -(r[1] - m[1]) * S - vx * s + vz * c;
+  }
+  const c = Math.cos(h), s = Math.sin(h);
+  return [px + lx * c + lz * s, py + lx * s - lz * c];
+}
 // (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit (as the server works it out)? dir: degrees
 // clockwise from the nose (the plan's -y: down in the Object Editor), turned with the heading h; 360 is endless
 export function hpInArc(h, ex, dx, dy) {
@@ -880,6 +892,8 @@ export function initBuild(ctx) {
   const pIn = {}, pRow = (label, el) => { const l = document.createElement("label"); l.className = "oc-row"; const sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); props.appendChild(l); return el; };
   pIn.model = pRow("Model", document.createElement("select"));   // (owner, 2026-10-15) moved here from the old Object Creator panel: one of the Raw Assets models
   pIn.item = pRow("Resource Type", document.createElement("select"));
+  pIn.mod = pRow("Module", document.createElement("select"));     // (owner, 2026-10-15) a ship: the hardpoint module on its socket
+  pIn.size = pRow("Size", Object.assign(document.createElement("input"), { type: "number", min: 1, max: 500, step: 1 }));   // a module: m across
   const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
   const curType = () => typeOf(eKind);
   function drawProps() {
@@ -887,11 +901,17 @@ export function initBuild(ctx) {
     const models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
     pIn.model.replaceChildren(new Option("None", ""), ...models.map((a) => new Option(a.name, a.file))); if (t.model && !models.some((a) => a.file === t.model)) pIn.model.append(new Option(t.mname || t.model, t.model)); pIn.model.value = t.model || "";
     pIn.item.parentNode.hidden = t.cat !== "node";
+    pIn.mod.parentNode.hidden = t.cat !== "ship"; pIn.size.parentNode.hidden = t.cat !== "hardpoint";
+    pIn.mod.replaceChildren(new Option("None", ""), ...[...types.values()].filter((x) => x.cat === "hardpoint").sort((a, b) => a.name.localeCompare(b.name)).map((x) => new Option(x.name, x.id))); pIn.mod.value = t.mod && types.get(t.mod) ? t.mod : "";
+    if (document.activeElement !== pIn.size) pIn.size.value = String(t.size || 20);
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
   }
   function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
   pIn.model.addEventListener("change", () => { const a = window.Assets && window.Assets.models().find((x) => x.file === pIn.model.value); saveType({ model: pIn.model.value || null, mname: a ? a.name : "" }); pIn.model.blur(); });
   if (window.Assets) window.Assets.on(() => { if (eOpen) drawProps(); });
+  pIn.mod.addEventListener("change", () => { saveType({ mod: pIn.mod.value || null }); pIn.mod.blur(); });
+  pIn.size.addEventListener("change", () => { const v = Number(pIn.size.value); if (Number.isFinite(v) && v > 0) saveType({ size: Math.max(1, Math.min(500, v)) }); });
+  pIn.size.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") pIn.size.blur(); });
   pIn.item.addEventListener("change", () => { saveType({ item: pIn.item.value || null }); pIn.item.blur(); });
 
   function onTypeSaved(m) { if (m.error && eOpen) { pErr.textContent = m.error; pErr.hidden = false; } }   // (the Object Editor's own saves)

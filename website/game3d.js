@@ -8,7 +8,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { Importer } from "./importer.js?v=1792058735";
 import { Creator } from "./creator.js?v=1792086193";
-import { initBuild, hpInArc, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792086272";
+import { initBuild, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792087050";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -690,7 +690,60 @@ function visGizmo(on) {
 // (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the combat points are separate)
 function shipVisOutline(x, y, h) { return visPtsOf({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
 // (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its aim line and shots start (line of sight stays at the pivot)
-function shipOrigin(x, y, h) { return toWorldPts({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, [origins[SHIPK] || [0, 0]], pivots[SHIPK] || [0, 0]); }
+function shipOrigin(x, y, h, ta = myTa) { const mi = modInfo(); return muzzleAt(x, y, h, 2 * SHIP_R, origins[SHIPK] || [0, 0], pivots[SHIPK] || [0, 0], mi && mi.t, mi && mi.ex, ta); }   // (owner, 2026-10-15) its module's barrel end
+// ---- (owner, 2026-10-15) the hardpoint module on each ship's socket (the player ship's Module, a Hardpoint object): its
+// mount on the socket (at the hardpoint's elevation), turning around its rotation point. My turret follows the aim line,
+// held inside the hardpoint's rotation limit (it stops at the edge), and faces its default way when I'm not aiming;
+// everyone else's turns as its owner's does (its yaw comes in the snapshots). ----
+let myTa = null;                               // my turret's yaw against the ship (three.js rotation.y), sent to the server
+const modUnits = new Map();                    // file -> the model as a unit (widest side 1, middle over its center, on the ground), null while loading
+function modUnit(file) {
+  if (!file) return null; if (modUnits.has(file)) return modUnits.get(file); modUnits.set(file, null);
+  new GLTFLoader().load((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + file, (g) => {
+    const src = g.scene, box = new THREE.Box3().setFromObject(src), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    src.position.set(-c.x, -box.min.y, -c.z); const u = new THREE.Group(); u.add(src); u.scale.setScalar(1 / Math.max(sz.x, sz.z, 1e-6));
+    modUnits.set(file, u); modKey = "";       // (everyone's module is rebuilt with it)
+  }, undefined, (e) => console.warn("[module] load failed:", e && e.message));
+  return null;
+}
+function modInfo() {
+  const st = SHIPK.startsWith("t:") && objTypes.get(SHIPK.slice(2)), t = st && st.mod && objTypes.get(st.mod);
+  return t && t.cat === "hardpoint" ? { t, ex: { ...EXTRA_DEFAULT, ...(collExtra["t:" + t.id] || {}) } } : null;
+}
+const modCenter = () => -((collExtra[SHIPK] || EXTRA_DEFAULT).dir || 0) * Math.PI / 180;   // its default facing (degrees clockwise from the nose)
+let modKey = "";
+function modFrame() {
+  const mi = modInfo(), D = 2 * SHIP_R, ce = collExtra[SHIPK] || EXTRA_DEFAULT, wo = origins[SHIPK] || [0, 0];
+  const key = mi ? [mi.t.id, mi.t.model, mi.t.front || 0, mi.t.size, JSON.stringify(mi.ex.m) + JSON.stringify(mi.ex.r), wo, ce.hz, !!modUnits.get(mi.t.model)].join("|") : "";
+  const rebuild = key !== modKey; modKey = key;
+  for (const p of players.values()) {
+    const v = p.holder.children.find((o) => !o.userData.mod);
+    if (rebuild || (p.mod && p.mod.parent !== p.holder)) { if (p.mod) p.holder.remove(p.mod); p.mod = null; }
+    if (!mi || !v) continue;
+    if (!p.mod) {
+      const S = mi.t.size, m = mi.ex.m, r = mi.ex.r, u = modUnit(mi.t.model);
+      const bankG = new THREE.Group(), sock = new THREE.Group(), yaw = new THREE.Group(); bankG.userData.mod = true;
+      sock.position.set(wo[0] * D, (ce.hz || 0) * D, -wo[1] * D);
+      yaw.position.set((r[0] - m[0]) * S, (r[2] - m[2]) * S, -(r[1] - m[1]) * S);
+      const mesh = u ? u.clone(true) : new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0x8c96aa }));
+      const turn = new THREE.Group(); turn.rotation.y = (mi.t.front || 0) * Math.PI / 180; turn.add(mesh);
+      const sc = new THREE.Group(); sc.scale.setScalar(S); sc.add(turn); sc.position.set(-r[0] * S, -r[2] * S, r[1] * S);
+      yaw.add(sc); sock.add(yaw); bankG.add(sock); p.holder.add(bankG); p.mod = bankG; p.modYaw = yaw;
+    }
+    p.mod.position.copy(v.position); p.mod.rotation.z = v.rotation.z;   // (it rolls with the hull)
+    p.mod.visible = v.visible && !(v.userData.va && v.userData.va.value < 0.5);
+    const ta = p.id === myId ? (myTa ?? modCenter()) : (Number.isFinite(p.ta) ? p.ta : modCenter());
+    p.modYaw.rotation.y = ta;
+  }
+}
+// my turret's yaw: toward the aim line (scene angle aimAng), held inside the rotation limit; its default facing otherwise
+function myTurret(heading) {
+  const ce = collExtra[SHIPK] || EXTRA_DEFAULT, c = modCenter();
+  if (!aiming || aimAng === null || !modInfo()) return c;
+  let local = Math.atan2(Math.cos(aimAng), Math.sin(aimAng)) - heading; local = Math.atan2(Math.sin(local - c), Math.cos(local - c));
+  const lim = (ce.arc ?? 360) >= 360 ? Math.PI : (ce.arc * Math.PI / 360);
+  return c + Math.max(-lim, Math.min(lim, local));
+}
 // an object's visibility points in the world, as [x0, y0, x1, y1, ...]
 function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k] || VIS_DEFAULT.ship, pivots[o.k] || [0, 0]); }
 // a player ship's combat-points parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
@@ -1093,7 +1146,8 @@ function connect() {
       { const full = m.same ? [...snapRows.values()] : [...(Array.isArray(m.p) ? m.p : []), ...(Array.isArray(m.u) ? m.u : []).map((id) => snapRows.get(id)).filter(Boolean)];
         snapRows = new Map(full.map((r) => [r[0], r])); m.p = full; }
       const inSnap = new Set();
-      for (const [id, cx, cy, ch, hp, sl] of m.p) {
+      for (const [id, cx, cy, ch, hp, ta, sl] of m.p) {
+        { const pp = players.get(id); if (pp) pp.ta = Number.isFinite(ta) ? ta / 100 : null; }   // (owner, 2026-10-15) its turret's yaw
         const x = cx / 100, y = cy / 100;
         inSnap.add(id);
         { const end = Number.isFinite(sl) && sl > 0 ? performance.now() + sl * 10 : 0, was = spawnEnd.get(id) || 0;   // (owner, 2026-10-14) materializing: when it's done
@@ -1162,7 +1216,7 @@ function connect() {
   };
 }
 connect();
-let lastH = 0, lastAim = null, trailing = 0;
+let lastH = 0, lastAim = null, lastTa = null, trailing = 0;
 // the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
 // (owner, 2026-10-14) "forward" for top speed and sprint is the nose: backing up is at the side / back rate and can't sprint.
 // (The reticle is independent of the ship.)
@@ -1171,7 +1225,8 @@ function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
   const ag = aimAngle(), aq = ag === null ? null : Math.round(ag * 100) / 100;   // (owner) aiming: forward is the reticle
-  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH || aq !== lastAim;
+  const tq = myTa === null ? null : Math.round(myTa * 100) / 100;   // (owner, 2026-10-15) my turret's yaw
+  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH || aq !== lastAim || tq !== lastTa;
   // at most 20 sends a second (the frame loop retries, so the latest state always goes out), a heartbeat while
   // moving, and (owner) after movement or rotation stops, the settled state twice more so the server and
   // everyone else land on the real final position and heading
@@ -1180,8 +1235,9 @@ function sendDir(d, now) {
   else if (trailing > 0) { if (now - lastSent >= 100) { due = true; trailing--; } }
   else if ((d.x || d.y) && now - lastSent >= 500) due = true;
   if (!due) return;
-  lastDir = d; lastH = h; lastAim = aq; lastSent = now;
-  ws.send(JSON.stringify(aq === null ? { t: "move", x: d.x, y: d.y, b: d.b, h } : { t: "move", x: d.x, y: d.y, b: d.b, h, a: aq }));
+  lastDir = d; lastH = h; lastAim = aq; lastTa = tq; lastSent = now;
+  const mv = aq === null ? { t: "move", x: d.x, y: d.y, b: d.b, h } : { t: "move", x: d.x, y: d.y, b: d.b, h, a: aq }; if (tq !== null) mv.ta = tq;
+  ws.send(JSON.stringify(mv));
 }
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
@@ -1381,6 +1437,7 @@ renderer.setAnimationLoop(() => {
     const mine = players.get(myId); [aimOx, aimOy] = shipOrigin(me.x, me.y, mine ? mine.heading : 0);   // (owner, 2026-10-14) the aim line runs from the Weapon Origin
     if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = wpn().rotSpeed * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
   }
+  { const mine = players.get(myId); myTa = haveMe && mine && modInfo() ? myTurret(mine.heading) : null; } modFrame();   // (owner, 2026-10-15) the turrets
   if (aiming && haveMe && aimAng !== null) {
     const L0 = wpn().optimal, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner) the line runs the optimal range
     {
