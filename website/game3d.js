@@ -809,7 +809,7 @@ function setCrate(c) {
   if (!c || typeof c.id !== "string" || !Number.isFinite(c.x) || !Number.isFinite(c.y) || !Array.isArray(c.items)) return;
   let o = crates.get(c.id);
   if (!o) { o = { id: c.id, mesh: new THREE.Mesh(crateGeo, crateMat), spin: Math.random() * 6 }; scene.add(o.mesh); crates.set(c.id, o); }
-  o.x = c.x; o.y = c.y; o.items = c.items.filter((k) => typeof k === "string");
+  o.x = c.x; o.y = c.y; o.items = c.items.filter((e) => e && typeof e.k === "string");   // (owner, 2026-10-15) stacks { k, n }
 }
 function dropCrate(id) { const o = crates.get(id); if (!o) return; scene.remove(o.mesh); crates.delete(id); }
 function updateCrates(now) {

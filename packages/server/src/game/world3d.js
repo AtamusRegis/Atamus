@@ -61,11 +61,14 @@ export function cleanWeapon(o) {               // a weapon from the panel, check
 }
 // (owner, 2026-10-14) a reference to an icon (its id), or null
 export const iconRef = (v) => (typeof v === "string" && /^[0-9]{1,9}$/.test(v) ? v : null);
-// (owner, 2026-10-15) items (the Item Creator's Create New Item): a name and an icon for now
+// (owner, 2026-10-15) items (the Item Creator's Create New Item): a name and an icon; the Item Editor adds its type (one
+// of ITEM_TYPES, or none yet) and whether it stacks (stack) and how many to a slot (max, 2-9,999; 1 when it doesn't)
+export const ITEM_TYPES = ["raw", "component"];   // Raw Resource, Component
 export function cleanItem(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
-  return { name, icon: iconRef(o.icon) };
+  const stack = o.stack === true, mx = Math.floor(Number(o.max));
+  return { name, icon: iconRef(o.icon), type: ITEM_TYPES.includes(o.type) ? o.type : null, stack, max: stack ? (Number.isFinite(mx) ? Math.max(2, Math.min(9999, mx)) : 100) : 1 };
 }
 // (owner, 2026-10-14) icons (the Icon Creator): shapes on a 64 x 64 grid, kept as data (never raw SVG), checked as hostile.
 // Each shape: t "ellipse" p [cx, cy, rx, ry], t "poly" p [x, y, ...] (3-24 points) or (owner, 2026-10-15) t "line", the

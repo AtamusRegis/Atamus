@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Item Editor and stacks (owner):** editing an item now opens the Item Editor: its name and icon, a type (Raw Resource or Component) and whether it stacks, with a max stack size. Stackable items stack in the hotbar, inventory and crates, showing their count.
 - **Icon Creator Pen (owner):** the polygon tool is now the Pen: click points to draw, close the loop for a filled shape, or double-click / Enter to leave it open as an outline-only line.
 - **Item Creator (owner):** the Weapon panel is now the Item Creator, with one Create New Item button (a name and an icon). Right-click an item to Edit Item (its properties) or Delete it. Weapon making was removed for now (it will come back inside the Item Creator); everyone uses the Railgun. Weapons and ammo already in inventories are gone; ammo that had been made became items.
 - **Dropping items and crates (owner):** right-click an item and choose Drop, or drag it out onto the world, to drop it in a glowing crate behind your ship (items dropped close together share a crate). Right-click a crate to open it and drag its items into your hotbar or inventory. Crates disappear after 5 minutes. Admins can right-click Delete crates, Build pieces and blocks. Hotbars and inventories are now kept on the server for each account (browser-only inventories started over), and anyone's first hotbar weapon is the one they fire.

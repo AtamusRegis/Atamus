@@ -2,8 +2,8 @@
 // staff column, opens it. A scrollable grid of item slots (5 a row), every item. A slot drags into the hotbar or the
 // inventory (inventory.js does the dragging: these slots hand out copies). Right-click a slot: Edit Item / Delete.
 // Below: Create New Item, a pop-up with a name, an icon box ([+]: pick one of the existing icons) with Create New Icon on
-// its left (the Icon Creator), then Cancel / Create. Edit Item opens the item's own menu (its properties: the name and
-// icon for now; what an item does will be made there). ENTER saves. Everything is saved on the server and checked again
+// its left (the Icon Creator), then Cancel / Create. Edit Item opens the Item Editor (owner, 2026-10-15): the name and
+// icon, the type (Raw Resource or Component, one at most), Stackable and Max Stack; what an item does will be made there. ENTER saves. Everything is saved on the server and checked again
 // there. (owner, 2026-10-15) Making weapons (and their numbers) was scrapped from here for now: it comes back as part of
 // this. game3d.js hands it a send function; the lists come from the Catalog (icons.js).
 (function () {
@@ -91,16 +91,29 @@
   // ---- Create New Item (and Edit Item: the item's menu): name, icon, Cancel / Create ----
   function itemBox(edit) {
     const o = overlay("we-item"), base = edit && edit.data; let icon = base ? base.icon || null : null;
-    o.box.appendChild($("p", "we-title", edit ? "ITEM PROPERTIES" : "NEW ITEM"));
+    o.box.appendChild($("p", "we-title", edit ? "ITEM EDITOR" : "NEW ITEM"));
     const name = $("input"); name.maxLength = 32; name.value = base ? base.name : "";
     const grid = $("div", "we-grid"); grid.append($("label", "we-label", "Name"), name);
     const iconRow = $("div", "we-iconrow"), mk = btn("Create New Icon", "", () => creator((id) => { icon = id; drawIcon(); })), box = btn("", "we-iconbox", () => picker((id) => { icon = id; drawIcon(); }));
     box.title = "Icon";
     const drawIcon = () => { const ic = icon && C().icons.get(icon); box.replaceChildren(ic ? C().svg(ic, 30) : $("span", "we-plus", "+")); };
     drawIcon(); iconRow.append(mk, box);
+    // (owner, 2026-10-15) the Item Editor (editing an item): its type (Raw Resource or Component, one at most) and whether it
+    // stacks, and how many to a slot
+    let type = base ? base.type || null : null; const attrs = $("div", "we-grid");
+    if (edit) {
+      const types = $("div", "we-types"), drawTypes = () => { for (const b of types.children) b.classList.toggle("on", b.dataset.t === type); };
+      for (const [t, label] of [["raw", "Raw Resource"], ["component", "Component"]]) { const b = btn(label, "", () => { type = t; drawTypes(); }); b.dataset.t = t; types.appendChild(b); }
+      drawTypes();
+      const stack = $("input"); stack.type = "checkbox"; stack.checked = !!base.stack;
+      const max = $("input"); max.type = "number"; max.min = 2; max.max = 9999; max.step = 1; max.value = String(base.stack ? base.max : 100);
+      const drawMax = () => { max.disabled = !stack.checked; }; stack.addEventListener("change", drawMax); drawMax();
+      attrs.append($("label", "we-label", "Type"), types, $("label", "we-label", "Stackable"), stack, $("label", "we-label", "Max Stack"), max);
+      attrs.read = () => ({ type, stack: stack.checked, max: Math.max(2, Math.min(9999, Math.floor(Number(max.value)) || 100)) });
+    }
     const err = $("p", "we-err"); err.hidden = true;
     const ok = btn(edit ? "SAVE" : "CREATE", "we-ok", save), btns = $("div", "we-btns"); btns.append(btn("CANCEL", "", () => o.close()), ok);
-    o.box.append(grid, iconRow, err, btns);
+    o.box.append(grid, iconRow); if (edit) o.box.appendChild(attrs); o.box.append(err, btns);
     o.box.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });   // (owner) ENTER saves
     setTimeout(() => name.focus(), 0);
     function save() {
@@ -108,7 +121,7 @@
       const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }
       ok.disabled = true; err.hidden = true;
       pending = { type: "itemsaved", done: () => o.close(), fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
-      api.send({ t: "itemset", ...(edit ? { id: edit.id } : {}), item: { name: n, icon } });
+      api.send({ t: "itemset", ...(edit ? { id: edit.id } : {}), item: { name: n, icon, ...(edit ? attrs.read() : {}) } });
     }
   }
   // ---- the [+] box: pick one of the existing icons ----

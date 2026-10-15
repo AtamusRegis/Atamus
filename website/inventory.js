@@ -23,23 +23,26 @@
   cpanel.append($("p", "inv-title", "Crate"), cgrid);
   document.body.append(hotbar, panel, cpanel);
 
-  const itemEl = (id) => {
-    const it = $("div", "inv-item"); it.title = nameOf(id); it.dataset.item = id;
+  // (owner, 2026-10-15) a slot holds a stack { k: item key, n: how many }; a count shows when there's more than one
+  const maxOf = (k) => { const it = window.Catalog && window.Catalog.item(k); return it && it.data.stack ? it.data.max : 1; };
+  const itemEl = (st) => {
+    const id = st.k, it = $("div", "inv-item"); it.title = nameOf(id); it.dataset.item = id;
     const pic = !ITEMS[id] && window.Catalog && window.Catalog.picture(id, 26); if (pic) { it.classList.add("pic"); it.appendChild(pic); }
+    if (st.n > 1) it.appendChild($("span", "inv-count", String(st.n)));
     return it;
   };
   const cell = (key) => {
     const c = $("div", "inv-slot"); c.dataset.slot = key;
     if (key[0] === "h") c.appendChild($("span", "inv-num", String(+key.slice(1) + 1)));
-    const id = slots[key];
-    if (id) { const it = itemEl(id); it.dataset.slot = key; c.appendChild(it); }
+    const st = slots[key];
+    if (st) { const it = itemEl(st); it.dataset.slot = key; c.appendChild(it); }
     return c;
   };
   function draw() {
     hotbar.replaceChildren(...Array.from({ length: HOT }, (_, i) => cell("h" + i)));
     grid.replaceChildren(...Array.from({ length: INV }, (_, i) => cell("i" + i)));
     if (crate) {
-      const cells = crate.items.map((id, i) => { const c = $("div", "inv-slot"), it = itemEl(id); it.dataset.ci = String(i); c.appendChild(it); return c; });
+      const cells = crate.items.map((st, i) => { const c = $("div", "inv-slot"), it = itemEl(st); it.dataset.ci = String(i); c.appendChild(it); return c; });
       for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
       cgrid.replaceChildren(...cells);
     }
@@ -70,9 +73,14 @@
     const d = drag; drag.ghost.remove(); drag = null; for (const el of document.querySelectorAll(".inv-lifted")) el.classList.remove("inv-lifted"); if (over) { over.classList.remove("drop"); over = null; }
     const k = to && to.dataset.slot;
     if (k && k !== d.from && (k[0] === "h" || !panel.hidden)) {
-      if (d.from) { [slots[k], slots[d.from]] = [slots[d.from], slots[k]]; send({ t: "imove", from: d.from, to: k }); }
+      if (d.from) {                            // onto the same stackable item: topped up (the rest stays); else swapped
+        const a = slots[d.from], b = slots[k];
+        if (a && b && a.k === b.k && maxOf(b.k) > 1) { const m = Math.min(Math.max(0, maxOf(b.k) - b.n), a.n); slots[k] = { k: b.k, n: b.n + m }; slots[d.from] = a.n - m > 0 ? { k: a.k, n: a.n - m } : null; }
+        else [slots[k], slots[d.from]] = [b, a];
+        send({ t: "imove", from: d.from, to: k });
+      }
       else if (d.ci != null && crate) { send({ t: "itake", c: crate.id, i: d.ci, to: k }); }
-      else if (d.item && d.item !== "test") { slots[k] = d.item; send({ t: "igive", item: d.item, to: k }); }   // from the Item Creator: a copy of it goes in
+      else if (d.item && d.item !== "test") { const b = slots[k]; slots[k] = b && b.k === d.item && b.n < maxOf(d.item) ? { k: b.k, n: b.n + 1 } : { k: d.item, n: 1 }; send({ t: "igive", item: d.item, to: k }); }   // from the Item Creator: one more of it (a copy)
     } else if (d.from && at && at.id === "view") drop(d.from);   // (owner, 2026-10-14) dragged out onto the world: dropped
     draw();
   };
@@ -96,7 +104,7 @@
   if (window.Catalog) window.Catalog.on(draw);
   window.Inventory = {
     setSend(f) { send = f; },
-    set(s) { if (s && typeof s === "object") { for (const k in slots) slots[k] = typeof s[k] === "string" ? s[k] : null; draw(); } },   // the server's inventory
+    set(s) { if (s && typeof s === "object") { for (const k in slots) { const v = s[k]; slots[k] = v && typeof v.k === "string" ? { k: v.k, n: Math.max(1, Math.floor(+v.n) || 1) } : null; } draw(); } },   // the server's inventory
     toggle(open) { panel.hidden = open === undefined ? !panel.hidden : !open; if (panel.hidden) this.closeCrate(); },
     get open() { return !panel.hidden; },
     // the crate panel (with the inventory beside it)

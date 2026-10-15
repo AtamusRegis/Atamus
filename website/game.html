@@ -184,6 +184,7 @@
     .inv-num { position: absolute; left: 2px; top: 0; font: 8px var(--font); color: var(--text-faint); pointer-events: none; }
     .inv-item { width: 30px; height: 30px; border-radius: 5px; background: var(--gold-grad); box-shadow: inset 0 -5px 8px rgba(0,0,0,0.25); cursor: grab; touch-action: none; }
     .inv-item.inv-lifted { opacity: .3; }
+    .inv-item { position: relative; } .inv-count { position: absolute; right: -6px; bottom: -6px; min-width: 12px; padding: 0 2px; border-radius: 3px; background: rgba(6,10,18,0.85); color: #fff; font: 700 10px/13px var(--font); text-align: center; pointer-events: none; }   /* (owner, 2026-10-15) a stack's count */
     .inv-ghost { position: fixed; left: 0; top: 0; z-index: 30; width: 30px; height: 30px; pointer-events: none; opacity: .9; }
     html.touch #inv-panel { display: none; } html.touch #hotbar { bottom: 50px; } html.touch .inv-slot { width: 48px; height: 48px; } html.touch #cap { bottom: 20px !important; }
     /* (owner, 2026-10-13) the admin Build menu: [B] beside [A], its slot row above the capacitor bar (like the hotbar) */
@@ -211,12 +212,14 @@
     .we-modal button:disabled { opacity: .6; cursor: default; }
     .we-back { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(0,0,0,0.45); }
     .we-modal { padding: 12px; background: rgba(14,19,30,0.97); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); display: grid; gap: 10px; }
-    .we-modal .we-grid { display: grid; grid-template-columns: auto 180px; gap: 6px 14px; align-items: center; }
+    .we-modal .we-grid { display: grid; grid-template-columns: auto minmax(180px, max-content); gap: 6px 14px; align-items: center; }
     .we-modal .we-label { color: var(--text-dim); white-space: nowrap; }
     .we-modal input:not([type]), .we-modal input[type=number] { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
     .we-iconrow { display: flex; align-items: center; gap: 8px; } .we-iconrow > button:first-child { flex: 1; }
     .we-iconbox { width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; border: 1px dashed #3c5272; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; } .we-iconbox:hover { border-color: #9fd8ff; color: #fff; }
     .we-plus { font-size: 22px; line-height: 1; }
+    .we-types { display: flex; gap: 6px; } .we-types button { padding: 5px 8px !important; } .we-types button.on { background: rgba(56,198,255,0.35) !important; border-color: #38c6ff !important; color: #fff !important; }
+    .we-modal input[type=checkbox] { justify-self: start; accent-color: #38c6ff; width: 16px; height: 16px; } .we-modal input:disabled { opacity: .4; }
     .we-pickslot { border: none; padding: 0; cursor: pointer; } .we-pickslot:hover { background: rgba(255,255,255,0.1); }
     .we-ctx { position: fixed; z-index: 30; display: grid; min-width: 100px; padding: 3px; background: rgba(10,14,22,.97); border-radius: 6px; box-shadow: var(--shadow); }
     .we-ctx button { background: none; border: 0; color: #cfe0f4; text-align: left; padding: 5px 10px; border-radius: 4px; font: 12px var(--font); cursor: pointer; } .we-ctx button:hover { background: #16202f; }
@@ -326,9 +329,9 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="icons.js?v=1792045148"></script>
-  <script src="inventory.js?v=1792044666"></script>
-  <script src="itemcreator.js?v=1792045211"></script>
+  <script src="inventory.js?v=1792045975"></script>
+  <script src="itemcreator.js?v=1792045975"></script>
   <script src="adminpanel.js?v=1792041596"></script>
-  <script type="module" src="game3d.js?v=1792044666"></script>
+  <script type="module" src="game3d.js?v=1792045975"></script>
 </body>
 </html>
