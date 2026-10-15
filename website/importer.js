@@ -46,6 +46,11 @@ function stage(obj) {
   const sun = new THREE.DirectionalLight(0xffffff, 2.6); scene.add(sun);
   const box = new THREE.Box3().setFromObject(obj), c = box.getCenter(new THREE.Vector3()), r = Math.max(box.getBoundingSphere(new THREE.Sphere()).radius, 1e-6);
   const holder = new THREE.Group(); obj.position.sub(c); holder.add(obj); scene.add(holder);
+  // (owner, 2026-10-15) its Front: the model turned so its nose points the game's way (+Z), shown by an arrow on the
+  // ground under it while editing (never in the icon)
+  const arrow = new THREE.Group(), am = new THREE.MeshBasicMaterial({ color: 0x38c6ff, transparent: true, opacity: 0.85, depthTest: false });
+  { const y = box.min.y - c.y, shaft = new THREE.Mesh(new THREE.BoxGeometry(r * 0.06, r * 0.01, r * 1.1), am), head = new THREE.Mesh(new THREE.ConeGeometry(r * 0.16, r * 0.35, 16), am);
+    shaft.position.set(0, y, r * 0.45); head.rotation.x = Math.PI / 2; head.position.set(0, y, r * 1.15); arrow.add(shaft, head); arrow.renderOrder = 10; arrow.visible = false; scene.add(arrow); }
   const corners = []; for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(c));
   const cam = new THREE.PerspectiveCamera(30, 1, r / 100, r * 100), D = THREE.MathUtils.degToRad;
   function aim(v) {
@@ -54,7 +59,7 @@ function stage(obj) {
     let dist = r / Math.sin(D(15));
     for (let k = 0; k < 4; k++) {                // pulled in until it fills the picture (a little margin)
       cam.position.copy(dir).multiplyScalar(dist); cam.lookAt(0, 0, 0); cam.near = dist / 100; cam.far = dist * 10; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
-      let m = 0; for (const p of corners) { const q = p.clone().project(cam); m = Math.max(m, Math.abs(q.x), Math.abs(q.y)); }
+      let m = 0; for (const p of corners) { const q = p.clone().applyAxisAngle(Y_AXIS, holder.rotation.y).project(cam); m = Math.max(m, Math.abs(q.x), Math.abs(q.y)); }
       dist *= Math.max(0.3, m / 0.9);
     }
     dist /= v.zoom; cam.position.copy(dir).multiplyScalar(dist); cam.lookAt(0, 0, 0); cam.updateMatrixWorld();
@@ -64,17 +69,18 @@ function stage(obj) {
     sun.position.copy(cam.position).add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 1).multiplyScalar(dist * 0.8)).add(new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).multiplyScalar(dist * 0.5));
     return cam;
   }
-  return { scene, aim };
+  return { scene, aim, arrow, setFront(deg) { holder.rotation.y = D(deg || 0); } };
 }
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const toPng = (canvas) => new Promise((ok, no) => canvas.toBlob((b) => (b ? ok(b) : no(new Error("render"))), "image/png"));
 let ren = null;
-function renderIcon(obj, view = VIEW0) {
+function renderIcon(obj, view = VIEW0, front = 0) {
   if (!ren) { ren = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); ren.setSize(256, 256, false); ren.setClearColor(0x000000, 0); }
-  const st = stage(obj); ren.render(st.scene, st.aim(view)); return toPng(ren.domElement);
+  const st = stage(obj); st.setFront(front); ren.render(st.scene, st.aim(view)); return toPng(ren.domElement);
 }
 // the pop-up's live view: drag turns it, right-drag (or Shift-drag) shifts it, the wheel zooms; Reset puts it back
-function viewer(obj, view0, el) {
-  const v = { ...VIEW0, ...(view0 || {}) }, st = stage(obj);
+function viewer(obj, view0, el, front0) {
+  const v = { ...VIEW0, ...(view0 || {}) }, st = stage(obj); let front = front0 || 0; st.setFront(front); st.arrow.visible = true;
   const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); r.setClearColor(0x000000, 0); r.setPixelRatio(1); r.setSize(256, 256, false);
   const cv = r.domElement; cv.className = "imp-view"; el.replaceChildren(cv);
   const draw = () => r.render(st.scene, st.aim(v)); draw();
@@ -93,7 +99,9 @@ function viewer(obj, view0, el) {
   return {
     get view() { return { yaw: round(v.yaw), pitch: round(v.pitch), zoom: round(v.zoom, 1000), px: round(v.px, 1000), py: round(v.py, 1000) }; },
     reset() { Object.assign(v, VIEW0); draw(); },
-    shot() { draw(); return toPng(cv); },
+    shot() { st.arrow.visible = false; draw(); const p = toPng(cv); st.arrow.visible = true; draw(); return p; },
+    get front() { return front; },
+    setFront(deg) { front = ((Math.round(deg) % 360) + 360) % 360; st.setFront(front); draw(); },
     dispose() { r.dispose(); try { r.forceContextLoss(); } catch {} },
   };
 }
@@ -167,7 +175,7 @@ async function iconsDue() {
   for (const a of assets) {
     if (a.kind !== "model" || a.thumb || rendering.has(a.file)) continue;
     rendering.add(a.file);
-    try { const obj = await loadGlb(a.file), j = await upload(await renderIcon(obj, { ...VIEW0, ...(a.view || {}) })); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file } }); }
+    try { const obj = await loadGlb(a.file), j = await upload(await renderIcon(obj, { ...VIEW0, ...(a.view || {}) }, a.front || 0)); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file, view: a.view, front: a.front || 0 } }); }
     catch (e) { console.error("model icon", a.file, e); }
   }
 }
@@ -205,7 +213,18 @@ function popup(title, okText, picEl, name0, onOk) {
   back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); go(); } });
   back.addEventListener("contextmenu", (e) => e.preventDefault());
   const reset = btn("Reset View", "imp-reset"); reset.hidden = true; box.insertBefore(reset, grid);
-  const me = pop = { close, pic, ok, fail, reset, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
+  // (owner, 2026-10-15) a model's Front: degrees it's turned (the arrow shows the nose); the buttons turn it a quarter
+  const fRow = $("div", "imp-front"), fIn = $("input"); fIn.type = "number"; fIn.min = 0; fIn.max = 359; fIn.step = 1; fRow.hidden = true;
+  const fL = btn("\u27f2", "imp-turn"), fR = btn("\u27f3", "imp-turn"); fL.title = "Turn Left"; fR.title = "Turn Right"; fRow.append(fL, fIn, fR);
+  const fLab = $("label", "we-label", "Front"); fLab.hidden = true; grid.prepend(fLab, fRow);
+  const front = (vw) => {
+    fLab.hidden = fRow.hidden = false; fIn.value = String(vw.front);
+    fIn.addEventListener("input", () => { const n = Number(fIn.value); if (Number.isFinite(n)) vw.setFront(n); });
+    fIn.addEventListener("change", () => { fIn.value = String(vw.front); });
+    fL.addEventListener("click", () => { vw.setFront(vw.front + 90); fIn.value = String(vw.front); });
+    fR.addEventListener("click", () => { vw.setFront(vw.front - 90); fIn.value = String(vw.front); });
+  };
+  const me = pop = { close, pic, ok, fail, reset, front, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
   return me;
 }
 const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["png", "jpg", "jpeg", "webp"].includes(x) ? "image" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
@@ -215,9 +234,9 @@ async function importBox(file) {
   const p = popup("IMPORT", "IMPORT", null, file.name.replace(/\.[^.]+$/, "").slice(0, 32), async (name, { close, fail }) => {
     try {
       const j = await upload(file);
-      let thumb = null, view = undefined; if (j.kind === "model" && vw) { view = vw.view; thumb = (await upload(await vw.shot())).file; }
+      let thumb = null, view = undefined, front = 0; if (j.kind === "model" && vw) { view = vw.view; front = vw.front; thumb = (await upload(await vw.shot())).file; }
       const n = seq++; pending.set(n, { done: () => { close(); if (tab !== "all") tab = j.kind; draw(); }, fail });
-      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view } });
+      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view, front } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
   let vw = null;
@@ -227,7 +246,7 @@ async function importBox(file) {
   else if (kind === "audio") p.pic.appendChild($("span", "build-letter imp-big", "♪"));
   else {                                        // a model: its icon's view, set here; rendered and sent with it
     p.ok.disabled = true;
-    try { vw = viewer(await parseGlb(await file.arrayBuffer()), null, p.pic); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); p.ok.disabled = false; }
+    try { vw = viewer(await parseGlb(await file.arrayBuffer()), null, p.pic, 0); p.front(vw); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); p.ok.disabled = false; }
     catch (e) { p.fail("That model couldn't be read."); }
   }
 }
@@ -236,13 +255,13 @@ function renameBox(a) {
   let vw = null;
   const p = popup("EDIT ASSET", "SAVE", slotPic(a, 96), a.name, async (name, { close, fail }) => {
     try {
-      let thumb = a.thumb, view = a.view;
-      if (vw) { const nv = vw.view; if (!a.thumb || JSON.stringify(nv) !== JSON.stringify({ ...VIEW0, ...(a.view || {}) })) { view = nv; thumb = (await upload(await vw.shot())).file; } }
+      let thumb = a.thumb, view = a.view, front = a.front || 0;
+      if (vw) { const nv = vw.view; front = vw.front; if (!a.thumb || front !== (a.front || 0) || JSON.stringify(nv) !== JSON.stringify({ ...VIEW0, ...(a.view || {}) })) { view = nv; thumb = (await upload(await vw.shot())).file; } }
       const n = seq++; pending.set(n, { done: close, fail });
-      api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb, view } });
+      api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb, view, front } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
-  if (a.kind === "model") loadGlb(a.file).then((obj) => { if (pop !== p) return; vw = viewer(obj, a.view, p.pic); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); }).catch(() => {});
+  if (a.kind === "model") loadGlb(a.file).then((obj) => { if (pop !== p) return; vw = viewer(obj, a.view, p.pic, a.front || 0); p.front(vw); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); }).catch(() => {});
 }
 
 function set(list) {

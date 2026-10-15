@@ -322,7 +322,8 @@ export function cleanAsset(o) {
   const name = safeText(String(o.name || ""), 32).trim(), file = assetRef(o.kind, o.file); if (!name || !file) return null;
   const v = o.view, n = (x, lo, hi, d) => (Number.isFinite(Number(x)) ? Math.max(lo, Math.min(hi, Math.round(Number(x) * 1000) / 1000)) : d);
   const view = o.kind === "model" && v && typeof v === "object" ? { yaw: n(v.yaw, 0, 360, 45), pitch: n(v.pitch, -90, 90, 28), zoom: n(v.zoom, 0.2, 8, 1), px: n(v.px, -3, 3, 0), py: n(v.py, -3, 3, 0) } : null;   // (owner, 2026-10-15) its icon's camera
-  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view };
+  const fr = Math.round(Number(o.front)), front = o.kind === "model" && Number.isFinite(fr) ? ((fr % 360) + 360) % 360 : 0;   // (owner, 2026-10-15) its Front: degrees it's turned so its nose faces the game's way
+  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view, front };
 }
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
@@ -874,7 +875,7 @@ export class World3D {
     await this.ready; await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true };
   }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
-  typeList() { return [...this.types.values()].map((t) => { const a = t.model && [...this.assets.values()].find((x) => x.file === t.model); return a && a.thumb ? { ...t, thumb: a.thumb } : t; }); }   // thumb: (owner, 2026-10-15) its model's rendered icon
+  typeList() { return [...this.types.values()].map((t) => { const a = t.model && [...this.assets.values()].find((x) => x.file === t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}) } : t; }); }   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
     if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;

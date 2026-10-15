@@ -146,11 +146,12 @@ const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65,
 // bobs it) holding the model; mat(m): each material's stand-in (null keeps the model's own). userData.mk: what it was made from
 function typeObject(t, mat) {
   const outer = new THREE.Group(), spin = new THREE.Group(), u = t && unitOf(t.model); outer.add(spin);
-  if (u) { const c = u.clone(true); if (mat) c.traverse((o) => { if (o.isMesh) o.material = mat(o.material); }); spin.add(c); }
+  if (u) { const c = u.clone(true); c.rotation.y = (t.front || 0) * Math.PI / 180;   // (owner, 2026-10-15) its model's Front (Raw Assets)
+    if (mat) c.traverse((o) => { if (o.isMesh) o.material = mat(o.material); }); spin.add(c); }
   else spin.add(new THREE.Mesh(rockGeo, mat ? mat(pieceMat) : pieceMat));
-  outer.userData.spin = spin; outer.userData.mk = (t && t.model || "") + (u ? "+" : "-"); return outer;
+  outer.userData.spin = spin; outer.userData.mk = (t && t.model || "") + (u ? "+" : "-") + (t && t.front || 0); return outer;
 }
-const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") : k; };
+const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") + (t.front || 0) : k; };
 export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : v.every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
