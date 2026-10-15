@@ -2,7 +2,7 @@
 import express from "express";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { websiteDeployed, announceUpdate } from "./build.js";
+import { websiteDeployed, announceUpdate, updateStatus } from "./build.js";
 import { readCookie, getSessionUser } from "./sessions.js";
 import { modelRef, imageRef, audioRef } from "./game/world3d.js";
 
@@ -11,7 +11,9 @@ export const game = express.Router();
 // Called by the website deploy workflow right after GitHub Pages publishes; harmless to call any time.
 game.post("/build-check", (_req, res) => { websiteDeployed(); res.json({ ok: true }); });
 // Called by both deploy workflows ~30 s before they switch the live build.
-game.post("/update-countdown", async (req, res) => { res.json(await announceUpdate(req.query.part, 1)); });
+game.post("/update-countdown", async (req, res) => { res.json(await announceUpdate(req.query.part, 1, req.query.also)); });
+// (owner, 2026-10-15) is an update in progress? (the play page and the update page ask; null: no)
+game.get("/update-status", (_req, res) => { res.setHeader("Cache-Control", "no-store"); res.json({ updating: updateStatus() }); });
 
 // (owner, 2026-10-15) the models (the Importer uploads them, below: a GLB, 50 MB at most); they're kept on the server
 // (uploads/models at the repo's root, outside git: index.js clears packages/server/data at every start, and the service

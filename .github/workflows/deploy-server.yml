@@ -18,9 +18,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # (owner, 2026-10-15) a push that also changes the website: the countdown says so, and players wait on the update
+      # page until both halves are live (one trip, not two)
       - name: Warn players (1 s countdown for now) before switching the live build
         run: |
-          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=server" -w "\nHTTP %{http_code}\n" || true
+          ALSO=""
+          BEFORE="${{ github.event.before }}"
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            if git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qE '^(website/|\.github/workflows/deploy-website\.yml)'; then ALSO="web"; fi
+          fi
+          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=server&also=$ALSO" -w "\nHTTP %{http_code}\n" || true
           sleep 1
       - name: Trigger redeploy over SSH
         env:

@@ -34,11 +34,16 @@ async function waitForUpdate() {
   let started = Date.now();
   try { const k = "atamus.updWait:" + location.search, s0 = +sessionStorage.getItem(k); if (s0 && Date.now() - s0 < 600_000) started = s0; else sessionStorage.setItem(k, String(started)); } catch {}
   // live: the target version when we know it; otherwise anything other than what was running before
-  const webLive = async () => { try { const j = await getJson("version.json?t=" + Date.now()); return !!j.v && ((to && j.v === to) || (!!web && j.v !== web) || (!to && !web)); } catch { return false; } };
+  const webLive = async () => { try { const j = await getJson("version.json?t=" + Date.now()); if (!(!!j.v && ((to && j.v === to) || (!!web && j.v !== web) || (!to && !web)))) return false;
+    if (!to) return true;                       // (owner, 2026-10-15) and the game page itself is the new one (the CDN can serve version.json first)
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 4000);
+    try { const h = await (await fetch("game.html?t=" + Date.now(), { cache: "no-store", signal: c.signal })).text(); return h.includes('content="' + to + '"'); } finally { clearTimeout(t); } } catch { return false; } };
+  // (owner, 2026-10-15) and the server agrees nothing is still on its way (it holds everyone until every changed half is live)
+  const srvDone = async () => { try { return !(await getJson(API_BASE + "/game/update-status?t=" + Date.now())).updating; } catch { return false; } };
   // (the server's build is a short commit id; a newer push than the one waited for counts too)
   const srvLive = async () => { try { const b = (await getJson(API_BASE + "/healthz?t=" + Date.now())).build; if (!b) return false; return (to && to.startsWith(b)) || (!!srv && b !== srv) || (!srv && !to); } catch { return false; } };
   for (;;) {
-    const live = (!parts.includes("web") || await webLive()) && (!parts.includes("server") || await srvLive());
+    const live = (!parts.includes("web") || await webLive()) && (!parts.includes("server") || await srvLive()) && await srvDone();
     if (live) { try { await timed(showSteps(), 4000); break; } catch (e) { if (e.status === 401) { location.href = "login.html"; return; } } }   // the server answers: in
     if (Date.now() - started > 300_000) { try { await timed(showSteps(), 4000); break; } catch (e) { location.href = "login.html"; return; } }   // (a deploy that never landed)
     await new Promise((r) => setTimeout(r, 1000));
@@ -49,8 +54,15 @@ async function waitForUpdate() {
 
 // always open the game fresh, never a cached copy of an older build
 document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const rs = document.getElementById("reset-side"), rp = document.getElementById("reset-pos"); location.href = "game.html?cb=" + Date.now() + (rs && rs.checked ? "&reset=1" : "") + (rp && rp.checked ? "&resetpos=1" : ""); }));   // (owner) Reset faction: choose a side again; Reset location: back near the center
+// (owner, 2026-10-15) an update in progress (its countdown started, or it hasn't fully landed yet): straight to the
+// update page instead of Enter System
+async function gate() {
+  let u = null; try { u = (await getJson(API_BASE + "/game/update-status?t=" + Date.now())).updating; } catch {}
+  if (u) { const q = new URLSearchParams({ updating: "1", parts: (u.parts || ["server", "web"]).join(",") }); if (u.to) q.set("to", u.to); location.replace("play.html?" + q.toString()); return; }
+  showSteps().catch(() => { location.href = "login.html"; });
+}
 if (params.get("updating")) waitForUpdate();
-else showSteps().catch(() => { location.href = "login.html"; });
+else gate();
 
 logoutBtn.addEventListener("click", async () => {
   logoutBtn.disabled = true;

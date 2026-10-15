@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Update flow fix (owner):** a push that changes both the server and the website now sends players to the update page once (they wait for both halves), and nobody can sign in or enter the game while an update is in progress: they see the update page instead.
 - **Points tab (owner):** the Object Editor's Pivot, Visibility, Hardpoint and Effects Level tabs are one Points tab with the top and side views stacked; the tabs are now Hitboxes, Movement and Points.
 - **Hardpoint arc in play (owner):** aiming past your ship's hardpoint rotation limit turns the aim line red and you can't fire until it swings back inside. The default facing arrow now counts from the ship's nose.
 - **Player ship from Ship objects (owner):** the CREATOR's Player Ship now just picks which Ship object players fly; its model, hitboxes, pivot, movement, visibility, hardpoint and effects level all come from that object.

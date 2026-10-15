@@ -25,6 +25,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/configure-pages@v5
       - name: Stamp build id (clients compare it to reload onto new versions)
         run: |
@@ -35,7 +37,12 @@ jobs:
           path: website
       - name: Warn players (1 s countdown for now) before switching the live build
         run: |
-          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=web" -w "\nHTTP %{http_code}\n" || true
+          ALSO=""
+          BEFORE="${{ github.event.before }}"
+          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            if git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qE '^(packages/server/|packages/shared/|scripts/deploy\.sh|\.github/workflows/deploy-server\.yml)'; then ALSO="server"; fi
+          fi
+          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=web&also=$ALSO" -w "\nHTTP %{http_code}\n" || true
           sleep 1
       - id: deployment
         uses: actions/deploy-pages@v4
