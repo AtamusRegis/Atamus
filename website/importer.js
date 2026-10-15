@@ -124,10 +124,10 @@ const pending = new Map(); let seq = 1;          // n -> { done, fail } waiting 
 const rendering = new Set();                     // models getting their icon made
 function mount(a) {
   api = a; if (win) return;
-  ibtn = btn("I"); ibtn.id = "imp-btn"; ibtn.title = "Raw Assets"; ibtn.addEventListener("click", () => toggle());
+  ibtn = btn("I"); ibtn.id = "imp-btn"; ibtn.title = "Asset Creator"; ibtn.addEventListener("click", () => toggle());
   (document.getElementById("staff-col") || document.body).appendChild(ibtn);
   win = $("div"); win.id = "imp-panel"; win.hidden = true;
-  const top = $("div", "we-top"); top.append($("span", "we-title", "RAW ASSETS"), btn("×", "we-x", () => toggle(false)));
+  const top = $("div", "we-top"); top.append($("span", "we-title", "ASSET CREATOR"), btn("×", "we-x", () => toggle(false)));
   if (window.WinPos) window.WinPos.watch(top, win, "assets");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => {   // dragged by its top bar
     if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();

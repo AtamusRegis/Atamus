@@ -199,7 +199,7 @@ export function attachGameServer(httpServer) {
       else if (m.t === "icondel") {            // (owner, 2026-10-15) the CREATOR: staff delete an icon nothing uses
         if (!staff) return;
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
-        world.delIcon(id).then((r) => { if (r.ok) broadcast({ t: "icons", list: world.iconList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "isaved", error: r.error })); } catch {} }).catch((e) => console.error("icon del", e));
+        world.delIcon(id).then((r) => { if (r.ok) { broadcast({ t: "icons", list: world.iconList() }); if (r.types) broadcast({ t: "types", list: world.typeList() }); if (r.items) broadcast({ t: "items", list: world.itemList() }); if (r.sounds) broadcast({ t: "sounds", list: world.soundList() }); } else if (r.error) try { ws.send(JSON.stringify({ t: "isaved", error: r.error })); } catch {} }).catch((e) => console.error("icon del", e));
       }
       else if (m.t === "ui") { if (placer || staff) world.uiSet(pid, m.k, m.x, m.y).catch((e) => console.error("ui", e)); }   // (owner, 2026-10-15) an editor window moved
       else if (m.t === "pship") {              // (owner, 2026-10-15) the CREATOR: the head admin picks the Ship object players fly (null: the built-in one)
@@ -267,7 +267,7 @@ export function attachGameServer(httpServer) {
       else if (m.t === "adel") {
         if (!creator) return;
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
-        world.delAsset(id).then((r) => { if (r.ok) toCreators({ t: "assets", list: world.assetList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "asaved", error: r.error })); } catch {} }).catch((e) => console.error("asset del", e));
+        world.delAsset(id).then((r) => { if (r.ok) { toCreators({ t: "assets", list: world.assetList() }); if (r.types) broadcast({ t: "types", list: world.typeList() }); } else if (r.error) try { ws.send(JSON.stringify({ t: "asaved", error: r.error })); } catch {} }).catch((e) => console.error("asset del", e));
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!creator) return;

@@ -58,9 +58,9 @@ website/          GitHub Pages site (atamus.io) and the game client
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
   numdrag.js      every number field drags sideways to change it
   winpos.js       editor windows remember where each account put them (world3d_ui, the "ui" message)
-  importer.js     RAW ASSETS ([I], head admin): imported models / audio and the SVG icons (+: Import / Create) (world3d_assets, POST /game/assets), model icons rendered from the model; window.Assets
+  importer.js     the Asset Creator ([I], head admin; was RAW ASSETS): imported models / audio and the SVG icons (+: Import / Create) (world3d_assets, POST /game/assets), model icons rendered from the model; window.Assets
   icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
-  creator.js      the CREATOR ([C], head admin): ships and modules only (for now) and the Player Ship pick; CREATE (name, icon, type), Edit / Delete
+  creator.js      the Object Creator ([C], head admin; was CREATOR): ships and modules only (for now) and the Player Ship pick; CREATE (name, icon, type), Edit / Delete
   itemcreator.js  pop-ups only now (its Z window is gone): the Item Editor, the icon picker and the Icon Creator
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,

@@ -662,10 +662,16 @@ export class World3D {
     await pool.query(`UPDATE world3d_icons SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(ic)]);
     const out = { id, ...ic }; this.icons.set(id, out); return out;
   }
-  async delIcon(id) {                          // (owner, 2026-10-15) the CREATOR's Delete: not while something shows it
-    if (!this.icons.has(id)) return { ok: false };
-    if ([...this.catalog.values(), ...this.types.values(), ...this.sounds.values()].some((x) => x.icon === id)) return { ok: false, error: "Something still uses that icon." };
-    await this.ready; await pool.query(`DELETE FROM world3d_icons WHERE id = $1`, [id]); this.icons.delete(id); return { ok: true };
+  // (owner, 2026-10-15) Delete in the Asset Creator: anything still showing it loses it (items, objects and sounds fall
+  // back to their letter or picture); { ok, types, items } say which lists changed
+  async delIcon(id) {
+    if (!this.icons.has(id)) return { ok: false }; await this.ready;
+    const save = async (table, x) => { const { id: xid, thumb, front, mats, ...d } = x; await pool.query(`UPDATE ${table} SET data = $2, updated_at = now() WHERE id = $1`, [xid, JSON.stringify(d)]); };
+    let types = false, items = false, sounds = false;
+    for (const t of this.types.values()) if (t.icon === id) { t.icon = null; await save("world3d_types", t); types = true; }
+    for (const it of this.catalog.values()) if (it.icon === id) { it.icon = null; await save("world3d_items", it); items = true; }
+    for (const so of this.sounds.values()) if (so.icon === id) { so.icon = null; await save("world3d_sounds", so); sounds = true; }
+    await pool.query(`DELETE FROM world3d_icons WHERE id = $1`, [id]); this.icons.delete(id); return { ok: true, types, items, sounds };
   }
   soundList() { return [...this.sounds.values()]; }
   async setSound(id, o) {
@@ -948,9 +954,12 @@ export class World3D {
   }
   async delAsset(id) {
     const a = this.assets.get(id); if (!a) return { ok: false };
-    const twins = [...this.assets.values()].filter((x) => x.file === a.file && x.id !== id);   // (owner, 2026-10-15) its variations
-    if (a.kind === "model" && [...this.types.values()].some((t) => (t.asset ? t.asset === id : t.model === a.file && !twins.length))) return { ok: false, error: "Remove it from its objects first." };
-    await this.ready; await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true };
+    // (owner, 2026-10-15) objects still using it lose their model (a plain stand-in until another is picked); a variation
+    // sharing the file takes over for objects that only knew the file
+    const twins = [...this.assets.values()].filter((x) => x.file === a.file && x.id !== id); await this.ready; let types = false;
+    if (a.kind === "model") for (const t of this.types.values()) if (t.asset ? t.asset === id : t.model === a.file && !twins.length) {
+      t.model = null; t.mname = ""; t.asset = null; const { id: tid, thumb, front, mats, ...d } = t; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [tid, JSON.stringify(d)]); types = true; }
+    await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true, types };
   }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
   typeList() { const byFile = new Map(); for (const x of this.assets.values()) if (!byFile.has(x.file)) byFile.set(x.file, x);   // (one pass over the assets)

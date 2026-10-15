@@ -19,10 +19,10 @@ const allowed = () => (head ? TYPES : []);
 function mount(a) {
   api = a.send ? a : api; build = a.build; types = a.types; staff = !!a.staff; head = !!a.head;
   if (win) { cbtn.hidden = !staff; return; }
-  cbtn = btn("C"); cbtn.id = "cr-btn"; cbtn.title = "Creator"; cbtn.addEventListener("click", () => toggle());
+  cbtn = btn("C"); cbtn.id = "cr-btn"; cbtn.title = "Object Creator"; cbtn.addEventListener("click", () => toggle());
   (document.getElementById("staff-col") || document.body).appendChild(cbtn);
   win = $("div"); win.id = "cr-panel"; win.hidden = true;
-  const top = $("div", "we-top"); top.append($("span", "we-title", "CREATOR"), btn("×", "we-x", () => toggle(false)));
+  const top = $("div", "we-top"); top.append($("span", "we-title", "OBJECT CREATOR"), btn("×", "we-x", () => toggle(false)));
   if (window.WinPos) window.WinPos.watch(top, win, "creator");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => {   // dragged by its top bar
     if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
@@ -85,7 +85,7 @@ function closeMenu() { if (menu) { menu.remove(); menu = null; } }
 function openMenu(key, x, y) {
   const e = entries().find((o) => o.key === key); if (!e) return; closeMenu();
   menu = $("div", "we-ctx"); const add = (label, fn) => menu.appendChild(btn(label, "", () => { closeMenu(); fn(); }));
-  add("Edit", () => editBox(e));
+  add("Edit Meta", () => editBox(e));   // (owner, 2026-10-15: was Edit)
   add("Edit Object", () => build.editObject("t:" + e.id));
   add("Delete", () => api.send({ t: "tdel", id: e.id }));
   place(menu, x, y);
@@ -96,7 +96,7 @@ function openMenu(key, x, y) {
 function editBox(e) {
   const o = IC().overlay("cr-edit"), rename = false;
   let icon = e && !rename ? e.o.icon || null : null;
-  o.box.appendChild($("p", "we-title", !e ? "CREATE" : rename ? "RENAME" : "EDIT"));
+  o.box.appendChild($("p", "we-title", !e ? "CREATE" : rename ? "RENAME" : "EDIT META"));
   const g = $("div", "we-grid"), name = $("input"); name.maxLength = 32; name.value = e ? e.name : "";
   g.append($("label", "we-label", "Name"), name);
   const iRow = $("div", "we-iconrow"), box = btn("", "we-iconbox", () => IC().pickIcon((id) => { icon = id; drawIcon(); })); box.title = "Icon";
