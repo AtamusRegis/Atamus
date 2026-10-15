@@ -326,6 +326,14 @@
     .oc-icon { display: flex; align-items: center; gap: 8px; } .oc-icon > button:first-child { padding: 3px 10px; border: none; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text); font: 600 11px var(--font); cursor: pointer; } .oc-icon > button:first-child:hover { background: rgba(255,255,255,0.15); }
     .oc-iconbox { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px dashed #3c5272; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; } .oc-iconbox:hover { border-color: #9fd8ff; } .oc-plus { font-size: 18px; }
     .oc-create { margin-left: 6px; padding: 0 12px; border: none; border-radius: 5px; background: var(--accent-grad); color: #06121c; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; }
+    /* (owner, 2026-10-15) the Object Placer: the selected object's attributes panel (dragged by its title) and its move arrows */
+    #attr-panel { position: fixed; right: 64px; top: 90px; z-index: 6; min-width: 200px; padding: 0 8px 8px; background: rgba(10,14,22,0.92); border-radius: 7px; box-shadow: var(--shadow); color: #cfd9e8; font: 12px var(--font); user-select: none; }
+    #attr-panel .attr-top { margin: 0 -8px 6px; padding: 7px 10px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); cursor: move; touch-action: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
+    #attr-panel #ship-btns, #attr-panel #node-box { position: static; transform: none; box-shadow: none; background: none; padding: 0; }
+    #attr-panel #ship-btns[hidden], #attr-panel #node-box[hidden] { display: none; }
+    #move-arrows { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+    #move-arrows .mv-arrow path { fill: rgba(56,198,255,0.85); stroke: #fff; stroke-width: 1.5; pointer-events: auto; cursor: grab; } #move-arrows .mv-arrow:hover path { fill: #8fdcff; }
+    html.touch #attr-panel, html.touch #move-arrows { display: none !important; }
     #zone-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
     #zone-handles .zn-line { fill: rgba(127,224,255,0.08); stroke: rgba(127,224,255,0.85); stroke-width: 2; stroke-dasharray: 8 6; }
     #zone-handles .zn-pt { fill: #fff; stroke: #2f9bd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #zone-handles .zn-pt:hover { fill: #cdeeff; }
@@ -358,6 +366,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792048305"></script>
+  <script type="module" src="game3d.js?v=1792049390"></script>
 </body>
 </html>

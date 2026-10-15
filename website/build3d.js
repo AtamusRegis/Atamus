@@ -447,7 +447,7 @@ export function initBuild(ctx) {
   function cloudHandles() {
     const list = [];
     if (open && !picking && !held) for (const b of builds.values()) {
-      if (b.k !== "cloud" || !b.poly) continue;
+      if (b.k !== "cloud" || !b.poly || b.id !== sel) continue;   // (owner, 2026-10-15) only the selected cloud's handles
       const pts = []; for (let i = 0; i < b.poly.length; i += 2) pts.push(scr2(b.poly[i], b.poly[i + 1]));
       // (owner, 2026-10-14) its core outline (where ships are hidden and sight is blocked), drawn red
       const cores = (ctx.cloudCores ? ctx.cloudCores(b) : []).map((v) => { const o = []; for (let i = 0; i < v.length; i += 2) o.push(scr2(v[i], v[i + 1])); return o; });
@@ -514,7 +514,7 @@ export function initBuild(ctx) {
   function routeHandles() {
     const list = [];
     if (open && !picking) for (const b of builds.values()) {
-      if (b.k !== "ship" || !b.extra || !b.extra.route || (held && held.id === b.id)) continue;
+      if (b.k !== "ship" || !b.extra || !b.extra.route || (held && held.id === b.id) || b.id !== sel) continue;   // (owner, 2026-10-15) only the selected ship's route
       const pts = [[b.x, b.y], ...b.extra.route.map(([x, y]) => [b.x + x, b.y + y])].map(([x, y]) => scr2(x, y));
       if (pts.some((p) => p[2] && p[0] > -50 && p[0] < innerWidth + 50 && p[1] > -50 && p[1] < innerHeight + 50)) list.push([b, pts]);
     }
@@ -586,13 +586,26 @@ export function initBuild(ctx) {
     if (b.extra.atk) delete b.extra.atk; else b.extra.atk = true;
     if (!b.extra.route && !b.extra.atk) delete b.extra; push(b, true, true); });
   for (const bt of [routeBtn, atkBtn]) bt.addEventListener("pointerdown", (e) => e.stopPropagation());
+  // (owner, 2026-10-15) the selected object's attributes: a panel dragged by its title (it stays where it's put): a test
+  // ship's Add route / Attack player, a resource node's settings
+  const aPanel = document.createElement("div"); aPanel.id = "attr-panel"; aPanel.hidden = true;
+  const aTop = document.createElement("div"); aTop.className = "attr-top"; aPanel.append(aTop, sBox); document.body.appendChild(aPanel);
+  aPanel.addEventListener("pointerdown", (e) => e.stopPropagation());
+  aTop.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return; e.preventDefault(); const r0 = aPanel.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
+    const mv = (ev) => { const r = aPanel.getBoundingClientRect(); aPanel.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; aPanel.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; aPanel.style.right = "auto"; };
+    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); }; addEventListener("pointermove", mv); addEventListener("pointerup", up);
+  });
   function shipButtons() {
     const b = open && !picking && !held ? selShip() : null;
     if (!b) { sBox.hidden = true; return; }
-    const q = ctx.botPos ? ctx.botPos(b.id) : null, x = q ? q.x : b.x, y = q ? q.y : b.y, r = canvas.getBoundingClientRect(), v = new THREE.Vector3(x, 70, -y).project(camera);
-    if (v.z > 1) { sBox.hidden = true; return; }
     routeBtn.textContent = b.extra && b.extra.route ? "Remove route" : "Add route"; atkBtn.classList.toggle("on", !!(b.extra && b.extra.atk));
-    sBox.hidden = false; sBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; sBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
+    sBox.hidden = false;
+  }
+  function attrPanel() {
+    const b = open && !picking && !held ? selShip() || selNode() : null;
+    aPanel.hidden = !b; if (!b) return;
+    aTop.textContent = b.k === "ship" ? "Test Ship" : (typeOf(b.k) || {}).name || "";
   }
 
   // ---- (owner, 2026-10-15) resource nodes (the Object Placer): each turns and bobs between two heights (its own settings).
@@ -607,7 +620,7 @@ export function initBuild(ctx) {
       b.mesh.position.y = e.bmin + (e.bmax - e.bmin) * (0.5 + 0.5 * Math.sin(now / 1000 * (e.bob || 0) * Math.PI * 2 + (+b.id || 0)));
     }
   }
-  const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; document.body.appendChild(nBox);
+  const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; aPanel.appendChild(nBox);
   const NODE_F = [["size", "Size"], ["scale", "Scale"], ["spin", "Rotation Speed"], ["bob", "Bob Speed"], ["bmin", "Bob Min"], ["bmax", "Bob Max"], ["respawn", "Respawn"], ["min", "Ore Min"], ["max", "Ore Max"]], nIn = {};
   const nVal = (b, k) => (k === "scale" ? Math.round(b.w / (b.extra.size || b.w) * 100) / 100 : b.extra[k]);
   for (const [k, label] of NODE_F) {
@@ -630,12 +643,9 @@ export function initBuild(ctx) {
     const b = open && !picking && !held ? selNode() : null;
     zoneHandles(b);
     if (!b || !b.extra) { nBox.hidden = true; nShown = null; return; }
-    const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(b.x, b.w * 0.9 + (b.extra.bmax || 0), -b.y).project(camera);
-    if (v.z > 1) { nBox.hidden = true; return; }
     const key = b.id + b.w + JSON.stringify(b.extra);   // (the fields refill only when the settings change, not while typed in)
     if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = nVal(b, k); nShown = key; }
-    nBox.hidden = false; nBox.style.left = Math.max(nBox.offsetWidth / 2 + 4, Math.min(innerWidth - nBox.offsetWidth / 2 - 4, r.left + (v.x + 1) / 2 * r.width)) + "px";
-    nBox.style.top = Math.max(nBox.offsetHeight + 4, r.top + (1 - v.y) / 2 * r.height) + "px";   // (kept on screen)
+    nBox.hidden = false;
   }
   // the spawn zone's outline and handles (meters around the node: moving the node moves its zone)
   const zLayer = document.createElementNS(NSv, "svg"); zLayer.id = "zone-handles"; zLayer.setAttribute("width", "100%"); zLayer.setAttribute("height", "100%"); document.body.appendChild(zLayer);
@@ -684,12 +694,44 @@ export function initBuild(ctx) {
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
   function push(b, now, keep) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b), ...(keep ? { keep: true } : {}) }); }   // keep: (owner) a route / spawn edit: the ship stays where it is
   function create(o) { send({ t: "bnew", ...o }); }
-  function pickUp(b, g) {
-    stopPicking();
+  // (owner, 2026-10-15) clicking a placed object selects it (it isn't picked up): its attributes panel, its handles (a cloud's
+  // outline, a ship's route, a node's spawn zone) and four arrows (north, south, east, west) to drag it along those; the
+  // wheel scales it and R turns it; Delete removes it, Ctrl+C / Ctrl+X copy / cut it; Escape or a click on nothing deselects
+  function pickUp(b) {
+    stopPicking(); if (!b) return;
     if (b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route)) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now (a route ship: its spawn stays)
-    sel = b.k === "ship" || isTypeKey(b.k) ? b.id : null;   // (owner, 2026-10-15) a resource node: its settings show over it
-    held = { id: b.id, ox: b.x - g.x, oy: b.y - g.y, b0: fields(b) }; place(b); holo(b.mesh, true);
+    sel = b.id;
   }
+  const selPiece = () => (sel && builds.get(sel)) || null;
+  const mLayer = document.createElementNS(NSv, "svg"); mLayer.id = "move-arrows"; mLayer.setAttribute("width", "100%"); mLayer.setAttribute("height", "100%"); document.body.appendChild(mLayer);
+  const ARROWS = [["n", 0, 1], ["s", 0, -1], ["e", 1, 0], ["w", -1, 0]];
+  for (const [d] of ARROWS) { const g = document.createElementNS(NSv, "g"); g.setAttribute("class", "mv-arrow"); g.dataset.d = d;
+    const p = document.createElementNS(NSv, "path"); p.setAttribute("d", "M0 -15 L11 2 L4 2 L4 14 L-4 14 L-4 2 L-11 2 Z"); g.appendChild(p); mLayer.appendChild(g); }
+  let mDrag = null;
+  function moveArrows() {
+    const b = open && !picking && !held && !mDrag ? selPiece() : mDrag ? builds.get(mDrag.id) : null;
+    mLayer.style.display = b ? "" : "none"; if (!b) return;
+    const q = b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route) ? ctx.botPos(b.id) : null, x = q ? q.x : b.x, y = q ? q.y : b.y;
+    const c = scr2(x, y); if (!c[2]) { mLayer.style.display = "none"; return; }
+    const R = Math.max(60, Math.min(160, (b.w || 60) * 0.6 * (innerHeight / 800) * 600 / Math.max(200, camera.position.distanceTo(new THREE.Vector3(x, 0, -y)))));
+    for (const g of mLayer.children) {
+      const [, ax, ay] = ARROWS.find((a) => a[0] === g.dataset.d), p = scr2(x + ax * 10, y + ay * 10), dx = p[0] - c[0], dy = p[1] - c[1], L = Math.hypot(dx, dy) || 1;
+      g.setAttribute("transform", "translate(" + (c[0] + dx / L * R) + "," + (c[1] + dy / L * R) + ") rotate(" + (Math.atan2(dy, dx) * 180 / Math.PI + 90) + ")");
+    }
+  }
+  mLayer.addEventListener("pointerdown", (e) => {
+    const g = e.target.closest && e.target.closest(".mv-arrow"), b = selPiece(); if (!g || !b || e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation(); const p = ground(e.clientX, e.clientY); if (!p) return;
+    mDrag = { id: b.id, ax: g.dataset.d === "n" || g.dataset.d === "s" ? "y" : "x", gx: p.x, gy: p.y, x0: b.x, y0: b.y, pid: e.pointerId };
+    try { mLayer.setPointerCapture(e.pointerId); } catch {}
+  });
+  mLayer.addEventListener("pointermove", (e) => {
+    if (!mDrag || e.pointerId !== mDrag.pid) return; const b = builds.get(mDrag.id), p = ground(e.clientX, e.clientY); if (!b || !p) return;
+    const nx = mDrag.ax === "x" ? mDrag.x0 + p.x - mDrag.gx : mDrag.x0, ny = mDrag.ax === "y" ? mDrag.y0 + p.y - mDrag.gy : mDrag.y0;
+    if (!ctx.inside(nx, ny)) return; b.x = Math.round(nx * 100) / 100; b.y = Math.round(ny * 100) / 100; place(b); push(b, false);
+  });
+  const mEnd = (e) => { if (!mDrag || e.pointerId !== mDrag.pid) return; const b = builds.get(mDrag.id); mDrag = null; try { mLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  mLayer.addEventListener("pointerup", mEnd); mLayer.addEventListener("pointercancel", mEnd);
   function drop(commit) {                       // commit: keep where it is now; otherwise put it back where it was
     if (!held) return; const b = builds.get(held.id), b0 = held.b0; held = null; if (!b) return;
     if (!commit) Object.assign(b, b0);
@@ -704,21 +746,21 @@ export function initBuild(ctx) {
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
     const hits = ray.intersectObjects([...builds.values()].filter((b) => b.k !== "cloud").map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
     let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
-    if (o && g) { pickUp(builds.get(o.userData.id), g); return; }
-    // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline picks it up
-    if (g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { pickUp(b, g); return; }
+    if (o && g) { pickUp(builds.get(o.userData.id)); return; }
+    // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline selects it
+    if (g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { pickUp(b); return; }
     sel = null;                                  // (clicked nothing: no ship selected)
   });
 
   // the wheel scales the blueprint or the held piece (test ships keep their size); it doesn't zoom the camera meanwhile
   addEventListener("wheel", (e) => {
     if (!open || e.target !== canvas) return;
-    const t = picking || (held && builds.get(held.id)); if (!t) return;
+    const t = picking || (held && builds.get(held.id)) || selPiece(); if (!t) return;   // (owner, 2026-10-15) or the selected object
     e.preventDefault(); e.stopImmediatePropagation();
     if (t.k === "ship") return;
     const f = Math.max(MIN / Math.min(t.w, t.d), Math.min(Math.pow(1.1, -e.deltaY / 100), MAX / Math.max(t.w, t.d)));   // (a node: its scale; its size stays)
     t.w *= f; t.d *= f;
-    if (held) { place(t); push(t, false); }
+    if (!picking) { place(t); push(t, false); }
   }, { capture: true, passive: false });
 
   // ---- keys (only while the menu is open, and never while typing) ----
@@ -726,13 +768,13 @@ export function initBuild(ctx) {
     if (ctx.typing()) return;
     if (e.code === "KeyB" && !e.ctrlKey && !e.metaKey && !e.altKey) { if (staff) { e.preventDefault(); if (!e.repeat) toggle(); } return; }
     if (!open) return;
-    const ctrl = e.ctrlKey || e.metaKey, b = held && builds.get(held.id);
+    const ctrl = e.ctrlKey || e.metaKey, b = (held && builds.get(held.id)) || selPiece();
     const eat = () => { e.preventDefault(); e.stopImmediatePropagation(); };
     if (ctrl && e.code === "KeyC") { eat(); if (b) copy(b); return; }
-    if (ctrl && e.code === "KeyX") { eat(); if (b) { copy(b); held = null; send({ t: "bdel", id: b.id }); } return; }
+    if (ctrl && e.code === "KeyX") { eat(); if (b) { copy(b); held = null; sel = null; send({ t: "bdel", id: b.id }); } return; }
     if (ctrl && e.code === "KeyV") { eat(); if (clip) { const g = ground(mouse.x, mouse.y); if (g && ctx.inside(g.x, g.y)) create({ ...clip, x: g.x, y: g.y }); } return; }
     if (ctrl) return;
-    if (e.code === "Delete") { eat(); if (b) { held = null; send({ t: "bdel", id: b.id }); } return; }
+    if (e.code === "Delete") { eat(); if (b) { held = null; sel = null; send({ t: "bdel", id: b.id }); } return; }
     if (e.code === "KeyR") { eat(); rDown = true; return; }
     if (e.code === "KeyQ") { eat(); if (e.repeat) return;
       if (picking && picking.k === "cloud") { cloudTheme = picking.extra.v = (picking.extra.v + 1) % CLOUD_THEMES.length; drawCloudSlot(); if (ghost) { scene.remove(ghost); ghost = null; } return; }   // (owner) a cloud's variation: its color theme
@@ -749,7 +791,7 @@ export function initBuild(ctx) {
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
     eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
-    updateEdges(dt); cloudHandles(); routeHandles(); shipButtons(); nodePanel(); spinNodes(now, dt);
+    updateEdges(dt); cloudHandles(); routeHandles(); attrPanel(); shipButtons(); nodePanel(); moveArrows(); spinNodes(now, dt);
     if (!open) return;
     const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
     if (picking) {
@@ -766,6 +808,8 @@ export function initBuild(ctx) {
       if (g) { const nx = g.x + held.ox, ny = g.y + held.oy; if ((nx !== b.x || ny !== b.y) && ctx.inside(nx, ny)) { b.x = nx; b.y = ny; moved = true; } }
       if (turn) { b.r = Math.atan2(Math.sin(b.r - turn), Math.cos(b.r - turn)); moved = true; }
       if (moved) { place(b); push(b, false); }
+    } else if (turn && selPiece()) {           // (owner, 2026-10-15) R turns the selected object
+      const b = selPiece(); b.r = Math.atan2(Math.sin(b.r - turn), Math.cos(b.r - turn)); place(b); push(b, false);
     }
   }
 
