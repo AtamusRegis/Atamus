@@ -37,7 +37,7 @@ export const LOAD_R = 1300;
 // (m/s), and damage per m/s above it; health
 export const BUMP_E = 0.5, BUMP_SAFE = 15, BUMP_DMG = 0.4, HP_MAX = 100;
 // (owner, 2026-10-14) the railgun (left click): a fast projectile from the ship's pivot toward the pointer, stopped by the
-// first block, Build piece (their Aim Bounds) or ship (the ship's Aim Bounds) it meets; a ship hit takes RAIL_DMG. A ship
+// first block, Build piece (their Combat Points) or ship (the ship's Combat Points) it meets; a ship hit takes RAIL_DMG. A ship
 // the shooter can't see by line of sight (blocks and Build pieces; clouds don't count here) isn't hit: it flies through.
 export const RAIL_RANGE = 1000, RAIL_DMG = 25, RAIL_CD = 0.5, RAIL_SPEED = 700;   // (owner, 2026-10-14: every half second)
 // (owner, 2026-10-14) spread: each shot widens the shooter's cone by SPREAD_ADD degrees each way, and it narrows back by
@@ -149,7 +149,7 @@ export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "s
 // them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
 // shapes' own square, the ship model's 59.4 x 100 m box.
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
-// (owner, 2026-10-14) the aim bounds are parts: each an outline with a type (body, main engine, left engine, right
+// (owner, 2026-10-14) the combat points are parts: each an outline with a type (body, main engine, left engine, right
 // engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
 export const PART_TYPES = ["body", "main", "left", "right", "weapon"];
 export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
@@ -164,7 +164,7 @@ export function toWorldPts(o, loc, pv) {              // fractions of the footpr
   for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
 }
-// the aim-bounds parts in the world, one outline [x0, y0, x1, y1, ...] each (owner, 2026-10-14: they decide line of sight)
+// the combat-points parts in the world, one outline [x0, y0, x1, y1, ...] each (owner, 2026-10-14: they decide line of sight)
 export function buildPolys(o, coll, piv) { const pv = (piv && piv[o.k]) || [0, 0]; return ((coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square).map((p) => toWorldPts(o, p.pts, pv)); }
 // (owner, 2026-10-14) the movement collider (ships bump into it): an oval, a box or a capsule (a stadium along its longer
 // side) filling the box x0..x1 by y0..y1, in the same fractions; each side moves on its own. It starts as the
@@ -239,7 +239,7 @@ export function cleanColl(pts, min = 3, max = 64) {
     out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
   return out;
 }
-// (owner, 2026-10-14) submitted aim-bounds parts, checked as hostile: 1-8 parts, each a known type and an outline (a bare
+// (owner, 2026-10-14) submitted combat-points parts, checked as hostile: 1-8 parts, each a known type and an outline (a bare
 // outline, the old format, is one Body part)
 export function cleanParts(v) {
   if (Array.isArray(v) && Array.isArray(v[0])) { const c = cleanColl(v); return c ? [{ t: "body", pts: c }] : null; }
@@ -278,7 +278,7 @@ export class World3D {
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
-    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -305,9 +305,10 @@ export class World3D {
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
-    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS parts JSONB`);   // (owner, 2026-10-14) its aim-bounds parts (pts keeps the first part's outline)
-    for (const o of (await pool.query(`SELECT k, pts, parts, pivot, mover, vis FROM world3d_colliders`)).rows) {
-      if (!KINDS.includes(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS origin JSONB`);  // (owner, 2026-10-14) its Weapon Origin (where line of sight starts)
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS parts JSONB`);   // (owner, 2026-10-14) its combat-points parts (pts keeps the first part's outline)
+    for (const o of (await pool.query(`SELECT k, pts, parts, pivot, origin, mover, vis FROM world3d_colliders`)).rows) {
+      if (!KINDS.includes(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), wo = cleanPivot(o.origin), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (wo) this.origins[o.k] = wo; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-14) a nebula cloud's outline and color theme
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r, extra FROM world3d_builds`);
@@ -448,7 +449,7 @@ export class World3D {
     }
   }
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
-  // (owner, 2026-10-14) part: the aim-bounds part a shot hit (body / main / left / right / weapon); for now every part is HP
+  // (owner, 2026-10-14) part: the combat-points part a shot hit (body / main / left / right / weapon); for now every part is HP
   hurt(p, d, part) {
     if (spawning(p)) return;                   // (still materializing)
     p.hp = (p.hp ?? HP_MAX) - d;
@@ -508,13 +509,15 @@ export class World3D {
     for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const R = b.far || b.rad; if (b.x + R < X0 || b.x - R > X1 || b.y + R < Y0 || b.y - R > Y1) continue; for (const v of b.polys) if (segPoly(x0, y0, x1, y1, v) !== null) return true; }
     return false;
   }
+  // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its line of sight starts (instead of its pivot)
+  shipOrigin(p) { return toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, [this.origins.ship || [0, 0]], this.pivots.ship || [0, 0]); }
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
   sees(a, b) {
     const pts = (p) => toWorldPts({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.visOutlines.ship || VIS_DEFAULT.ship, this.pivots.ship || [0, 0]);
-    const A = pts(a), B = pts(b); let clear = 0;
-    const piv = this._sightBlocked(a.x, a.y, b.x, b.y) ? 0 : PIV_W;
-    for (let i = 0; i < A.length; i += 2) if (!this._sightBlocked(A[i], A[i + 1], b.x, b.y)) clear++;
-    for (let i = 0; i < B.length; i += 2) if (!this._sightBlocked(B[i], B[i + 1], a.x, a.y)) clear++;
+    const A = pts(a), B = pts(b), [ax, ay] = this.shipOrigin(a), [bx, by] = this.shipOrigin(b); let clear = 0;   // (owner, 2026-10-14) lines run to each ship's Weapon Origin
+    const piv = this._sightBlocked(ax, ay, bx, by) ? 0 : PIV_W;
+    for (let i = 0; i < A.length; i += 2) if (!this._sightBlocked(A[i], A[i + 1], bx, by)) clear++;
+    for (let i = 0; i < B.length; i += 2) if (!this._sightBlocked(B[i], B[i + 1], ax, ay)) clear++;
     return piv + (1 - PIV_W) * clear / Math.max(1, (A.length + B.length) / 2) > VIS_LO;
   }
   // (owner, 2026-10-14) can test ship p make out player q through the clouds (on top of line of sight)?
@@ -546,7 +549,7 @@ export class World3D {
       const shooter = this.players.get(q.a);
       for (const p of this.players.values()) {
         if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6)) continue;
-        // (owner, 2026-10-14) each aim-bounds part separately: the first one the shot meets is the part hit
+        // (owner, 2026-10-14) each combat-points part separately: the first one the shot meets is the part hit
         const parts = this.colliders.ship || COLL_DEFAULT.ship, polys = buildPolys({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots);
         let u = null, pi = 0; polys.forEach((v, i) => { const w = segPoly(x0, y0, x1, y1, v); if (w !== null && (u === null || w < u)) { u = w; pi = i; } });
         if (u === null || u >= t) continue;
@@ -678,13 +681,13 @@ export class World3D {
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
     b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, parts, pivot, mover, vis) {   // (owner) the aim-bounds parts, the pivot, the movement collider and the visibility points together
-    const c = KINDS.includes(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
+  async setCollider(k, parts, pivot, mover, vis, origin) {   // (owner) the combat points, the pivot, the movement collider, the visibility points and the weapon origin together
+    const c = KINDS.includes(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], wo = cleanPivot(origin) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs)]);
-    this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv; this.visOutlines[k] = vs;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, origin, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, origin = $7, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs), JSON.stringify(wo)]);
+    this.colliders[k] = c; this.pivots[k] = pv; this.origins[k] = wo; this.movers[k] = mv; this.visOutlines[k] = vs;
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
-    return { parts: c, pv, mv, vis: vs };
+    return { parts: c, pv, mv, vis: vs, wo };
   }
   buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
   async addBuild(o, by) {

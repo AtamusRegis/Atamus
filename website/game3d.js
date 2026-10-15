@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792038158";
+import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792038919";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -407,8 +407,9 @@ function updateVis() {                         // the shadows from where my ship
   shade.position.x = me.x; shade.position.z = -me.y; shade.visible = visMesh.visible = haveMe; shadeHex.value = HEX_FLAT / 2;
   // (owner, 2026-10-14: speed) the shadows are only worked out again when my ship has moved or an object changed
   // (speed: worked out again after a meter of movement)
-  const key = Math.round(me.x) + "," + Math.round(me.y) + "," + visVer; if (key === visKey) return; visKey = key;
-  const vx = me.x, vy = me.y, F = VIS_S * 4, pos = [];
+  const mine = players.get(myId), [vx, vy] = shipOrigin(me.x, me.y, mine ? mine.heading : 0);   // (owner, 2026-10-14) from my Weapon Origin
+  const key = Math.round(vx) + "," + Math.round(vy) + "," + visVer; if (key === visKey) return; visKey = key;
+  const F = VIS_S * 4, pos = [];
   // (owner, 2026-10-14) shadows start behind the outline, wherever the line of sight can't reach: only the edges facing
   // away from me cast, so the object itself and the ground up to its far side stay clear
   const back = (v, i, sg) => { const ax = v[i], ay = v[i + 1], bx = v[(i + 2) % v.length], by = v[(i + 3) % v.length];
@@ -524,13 +525,13 @@ function updateShipVis(dt, now) {
   const mine = players.get(myId), edit = build.editorOpen;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
-    const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the aim bounds
-    const look = (vis, poly, x, y, spd = 99, id = null) => {
+    const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), MO = shipOrigin(me.x, me.y, mine ? mine.heading : 0), seen = new Set();   // (owner) the Visibility points, not the combat points
+    const look = (vis, poly, x, y, spd = 99, id = null, h = 0) => {
       if (!vis) return; seen.add(vis);
-      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
+      const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, MO, asPts(poly), shipOrigin(x, y, h), W, edit);   // (owner, 2026-10-14) the lines run to each ship's Weapon Origin
       const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
+    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id, p.heading);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
@@ -649,11 +650,13 @@ function visGizmo(on) {
   if (visGizGeo.attributes.position) { visGizGeo.attributes.position.array.set(P); visGizGeo.attributes.color.array.set(C); visGizGeo.attributes.position.needsUpdate = visGizGeo.attributes.color.needsUpdate = true; }
   visGizGeo.setDrawRange(0, P.length / 3);
 }
-// (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the aim bounds are separate)
+// (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the combat points are separate)
 function shipVisOutline(x, y, h) { return visPtsOf({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
+// (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its line of sight starts (instead of its pivot)
+function shipOrigin(x, y, h) { return toWorldPts({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, [origins.ship || [0, 0]], pivots.ship || [0, 0]); }
 // an object's visibility points in the world, as [x0, y0, x1, y1, ...]
 function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k], pivots[o.k] || [0, 0]); }
-// a player ship's aim-bounds parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
+// a player ship's combat-points parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
 function shipSight(p) { return buildPolys({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
 // (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
 function applyShipPivot() {
@@ -741,7 +744,7 @@ function shipGizmos() {
   for (const p of players.values()) {
     if (p.id !== myId && !p.near) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
-    out.push({ x, y, sight: buildPolys({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading) });
+    out.push({ x, y, sight: buildPolys({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading), wo: shipOrigin(x, y, p.heading) });
   }
   return out;
 }
@@ -952,7 +955,7 @@ function connect() {
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       if (m.you.builder && window.WeaponPanel) window.WeaponPanel.mount({ list: () => weapons, current: () => myWeapon, send });   // (owner, 2026-10-14) the Weapon panel (Z)
-      build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines);
+      build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);

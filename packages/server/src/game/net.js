@@ -89,7 +89,7 @@ export function attachGameServer(httpServer) {
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
-      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, movers: world.movers, visOutlines: world.visOutlines,
+      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
     ws.on("message", (data) => {
@@ -175,7 +175,7 @@ export function attachGameServer(httpServer) {
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;
-        world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis }); }).catch((e) => console.error("collider", e));
+        world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis, m.wo).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis, wo: c.wo }); }).catch((e) => console.error("collider", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

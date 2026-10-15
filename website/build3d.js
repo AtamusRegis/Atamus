@@ -31,7 +31,7 @@ const MIN = 5, MAX = 1000;
 // them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
 // shapes' own square, the ship model's 59.4 x 100 m box.
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
-// (owner, 2026-10-14) the aim bounds are parts: each an outline with a type (body, main engine, left engine, right
+// (owner, 2026-10-14) the combat points are parts: each an outline with a type (body, main engine, left engine, right
 // engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
 export const PART_TYPES = ["body", "main", "left", "right", "weapon"];
 export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
@@ -46,7 +46,7 @@ export function toWorldPts(o, loc, pv) {              // fractions of the footpr
   for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
 }
-// the aim-bounds parts in the world, one outline [x0, y0, x1, y1, ...] each (owner, 2026-10-14: they decide line of sight)
+// the combat-points parts in the world, one outline [x0, y0, x1, y1, ...] each (owner, 2026-10-14: they decide line of sight)
 export function buildPolys(o, coll, piv) { const pv = (piv && piv[o.k]) || [0, 0]; return ((coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square).map((p) => toWorldPts(o, p.pts, pv)); }
 // (owner, 2026-10-14) the movement collider (ships bump into it): an oval, a box or a capsule (a stadium along its longer
 // side) filling the box x0..x1 by y0..y1, in the same fractions; each side moves on its own. It starts as the
@@ -127,9 +127,9 @@ let GEO = geos();
 const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
 export const builds = new Map();
-// the server's aim bounds for a kind, as parts (a bare outline, the old format, is one Body part)
+// the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : v.every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
-export const colliders = {}, pivots = {}, movers = {}, visOutlines = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -677,10 +677,10 @@ export function initBuild(ctx) {
   // view; the header drags the window; Mirrored (on at first) keeps the left and right halves matching; Reset puts the
   // current one back to its start; Ctrl+Z / Ctrl+U undo and redo. While it's open, every piece's colliders (and every
   // ship's) are drawn in the world.
-  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePv = [0, 0], eMv = { ...MOVE_DEFAULT.square }, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
-  // (owner, 2026-10-14) Aim Bounds ("sight": the outline aim lines stop at, and line-of-sight shadows) and Visibility ("vis":
+  let eOpen = false, eKind = "square", eShape = "square", eMode = "sight", ePv = [0, 0], eWo = [0, 0], eMv = { ...MOVE_DEFAULT.square }, eDrag = null, eRen = null, eScene = null, eCam = null, eMesh = null, eMeshK = null;
+  // (owner, 2026-10-14) Combat Points ("sight": the outline aim lines stop at, and line-of-sight shadows) and Visibility ("vis":
   // free points, each sending a line to the other ship's pivot in the mutual visibility test) share the dragging code
-  // (owner, 2026-10-14) Aim Bounds are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
+  // (owner, 2026-10-14) Combat Points are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
   let eParts = [{ t: "body", pts: null }], ePart = 0;
   const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "vis" ? "vis" : "sight");
   const PART_NAMES = { body: "Body", main: "Main Engine", left: "Left Engine", right: "Right Engine", weapon: "Weapon Emplacement" };
@@ -691,11 +691,11 @@ export function initBuild(ctx) {
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
-  for (const [k, label] of [["sight", "Aim Bounds"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"]]) {
+  for (const [k, label] of [["sight", "Combat Points"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"], ["origin", "Weapon Origin"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   ceSlots.after(modes);
-  // (owner, 2026-10-14) under the tabs: Aim Bounds' parts (pick one, its type, add / remove), Movement's shape
+  // (owner, 2026-10-14) under the tabs: Combat Points' parts (pick one, its type, add / remove), Movement's shape
   const sub = document.createElement("div"); sub.className = "ce-sub"; modes.after(sub);
   const subBtn = (text, on, title, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = text; if (on) b.classList.add("on"); if (title) b.title = title; b.addEventListener("click", () => { fn(); b.blur(); }); sub.appendChild(b); return b; };
   function drawSub() {
@@ -715,7 +715,7 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(COLL_DEFAULT[eKind]); ePart = 0; } else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = { ...MOVE_DEFAULT[eKind] }; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(COLL_DEFAULT[eKind]); ePart = 0; } else if (eMode === "vis") EP.vis = VIS_DEFAULT[eKind].map((q) => q.slice()); else if (eMode === "move") eMv = { ...MOVE_DEFAULT[eKind] }; else if (eMode === "origin") eWo = [0, 0]; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); drawSub(); };
@@ -747,7 +747,7 @@ export function initBuild(ctx) {
     ceShape.classList.toggle("sel", eKind !== "ship"); ceShip.classList.toggle("sel", eKind === "ship"); };
   function eSetKind(k) {
     eKind = k; if (k !== "ship") eShape = k;
-    eParts = cloneParts(colliders[k] || COLL_DEFAULT[k]); ePart = 0; EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) };
+    eParts = cloneParts(colliders[k] || COLL_DEFAULT[k]); ePart = 0; EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) };
     eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawModes(); eDraw();
   }
   ceShape.addEventListener("click", () => eSetKind(eKind === "ship" ? eShape : SHAPES[(SHAPES.indexOf(eShape) + 1) % SHAPES.length]));
@@ -778,8 +778,8 @@ export function initBuild(ctx) {
     eRen.render(eScene, eCam);
   }
   // ---- undo / redo: the kind's three things before each change ----
-  const state = () => JSON.stringify({ parts: eParts, part: ePart, vis: EP.vis, pv: ePv, mv: eMv });
-  const apply = (j) => { const o = JSON.parse(j); eParts = o.parts; ePart = Math.min(o.part, eParts.length - 1); EP.vis = o.vis; ePv = o.pv; eMv = o.mv; eSave(); drawSub(); eDraw(); };
+  const state = () => JSON.stringify({ parts: eParts, part: ePart, vis: EP.vis, pv: ePv, wo: eWo, mv: eMv });
+  const apply = (j) => { const o = JSON.parse(j); eParts = o.parts; ePart = Math.min(o.part, eParts.length - 1); EP.vis = o.vis; ePv = o.pv; eWo = o.wo || [0, 0]; eMv = o.mv; eSave(); drawSub(); eDraw(); };
   function snap() { past.push(state()); if (past.length > 100) past.shift(); future = []; }
   function undo() { if (!past.length) return; future.push(state()); apply(past.pop()); }
   function redo() { if (!future.length) return; past.push(state()); apply(future.pop()); }
@@ -792,13 +792,14 @@ export function initBuild(ctx) {
   function eDraw() {
     while (ceSvg.firstChild) ceSvg.removeChild(ceSvg.firstChild);
     if (!EP[pk()]) return;
-    const px = EP[pk()].map(toPx), [vx, vy] = toPx(ePv);
+    const px = EP[pk()].map(toPx), [vx, vy] = toPx(ePv), [wx, wy] = toPx(eWo);
     const [mx0, my0] = toPx([eMv.x0, eMv.y0]), [mx1, my1] = toPx([eMv.x1, eMv.y1]), mcx = (mx0 + mx1) / 2, mcy = (my0 + my1) / 2;
-    // all of them always drawn; the one being edited is bright and has handles (the other aim-bounds parts fainter)
+    // all of them always drawn; the one being edited is bright and has handles (the other combat-points parts fainter)
     eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim") }); });
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
+    sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo" + (eMode === "origin" ? "" : " dim") });   // (owner, 2026-10-14) the Weapon Origin
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
       sv("line", { x1, y1, x2, y2, class: "ce-guide" });
@@ -827,6 +828,8 @@ export function initBuild(ctx) {
       // (owner, 2026-10-14) a handle on each side, each moving only its own side
       for (const [hx, hy, side] of [[mx1, mcy, "x1"], [mx0, mcy, "x0"], [mcx, my1, "y1"], [mcx, my0, "y0"]])
         handle(hx, hy, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "m" + side); } });
+    } else if (eMode === "origin") {
+      handle(wx, wy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "wo"); } });
     } else {
       handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "pv"); } });
     }
@@ -885,32 +888,34 @@ export function initBuild(ctx) {
     else if (eDrag.type === "my0") eMv.y0 = Math.min(u[1], eMv.y1 - 0.04);
     else if (eDrag.type === "my1") eMv.y1 = Math.max(u[1], eMv.y0 + 0.04);
     else if (eDrag.type === "pv") ePv = [mirror ? 0 : u[0], u[1]];
+    else if (eDrag.type === "wo") eWo = [mirror ? 0 : u[0], u[1]];
     eDraw();
   });
   const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; const g = eDrag.type[0] === "g"; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} if (!g) eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
   const r4 = (x) => Math.round(x * 10000) / 10000;
-  function eSave() { send({ t: "coll", k: eKind, parts: eParts.map((p) => ({ t: p.t, pts: p.pts.map(([x, y]) => [r4(x), r4(y)]) })), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), mv: cleanMove(eMv) }); }
-  function setColl(k, parts, pv, mv, vis) {
+  function eSave() { send({ t: "coll", k: eKind, parts: eParts.map((p) => ({ t: p.t, pts: p.pts.map(([x, y]) => [r4(x), r4(y)]) })), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), wo: eWo.map(r4), mv: cleanMove(eMv) }); }
+  function setColl(k, parts, pv, mv, vis, wo) {
     const ps = asParts(parts); if (!KINDS.includes(k) || !ps) return;
-    colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; const m = cleanMove(mv); if (m) movers[k] = m;
+    colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(wo)) origins[k] = wo; const m = cleanMove(mv); if (m) movers[k] = m;
     for (const b of builds.values()) if (b.k === k) place(b);
     if (k === "ship" && ctx.onPivot) ctx.onPivot();
-    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) }; drawSub(); eDraw(); }
+    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || VIS_DEFAULT[k]).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || MOVE_DEFAULT[k]) }; drawSub(); eDraw(); }
   }
   // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----
   const gizGeo = new THREE.BufferGeometry(); let gizCap = 0;
   const giz = new THREE.LineSegments(gizGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, depthTest: false }));
   giz.renderOrder = 10; giz.frustumCulled = false; giz.visible = false; scene.add(giz);
-  const C_SIGHT = [0.62, 0.85, 1], C_MOVE = [1, 0.75, 0.35], C_PIV = [0.82, 0.7, 1], C_VIS = [0.45, 1, 0.55];
+  const C_SIGHT = [0.62, 0.85, 1], C_MOVE = [1, 0.75, 0.35], C_PIV = [0.82, 0.7, 1], C_WO = [1, 0.42, 0.42], C_VIS = [0.45, 1, 0.55];
   function gizFrame() {
     if (!eOpen) return;
     const P = [], C = [];
     const loop = (v, col) => { for (let i = 0; i < v.length; i += 2) { P.push(v[i], 2, -v[i + 1], v[(i + 2) % v.length], 2, -v[(i + 3) % v.length]); C.push(...col, ...col); } };
     const dots = (v) => { const a = 4; for (let i = 0; i < v.length; i += 2) { const x = v[i], y = v[i + 1]; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_VIS); } };
     const cross = (x, y) => { const a = 8; P.push(x - a, 2, -y, x + a, 2, -y, x, 2, -(y - a), x, 2, -(y + a)); for (let k = 0; k < 4; k++) C.push(...C_PIV); };
+    const ex = (x, y) => { const a = 6; P.push(x - a, 2, -(y - a), x + a, 2, -(y + a), x - a, 2, -(y + a), x + a, 2, -(y - a)); for (let k = 0; k < 4; k++) C.push(...C_WO); };   // a ship's Weapon Origin: a red x
     for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; for (const v of b.polys) loop(v, C_SIGHT); loop(b.mpoly, C_MOVE); cross(b.x, b.y); }   // (test ships: drawn with the ships below)
-    for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { for (const v of s.sight) loop(v, C_SIGHT); loop(s.move, C_MOVE); if (s.vis) dots(s.vis); cross(s.x, s.y); }
+    for (const s of ctx.shipGizmos ? ctx.shipGizmos() : []) { for (const v of s.sight) loop(v, C_SIGHT); loop(s.move, C_MOVE); if (s.vis) dots(s.vis); cross(s.x, s.y); if (s.wo) ex(s.wo[0], s.wo[1]); }
     if (P.length > gizCap) { gizCap = Math.max(P.length, gizCap * 2, 3000); gizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); gizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(gizCap), 3)); }
     gizGeo.attributes.position.array.set(P); gizGeo.attributes.color.array.set(C); gizGeo.attributes.position.needsUpdate = gizGeo.attributes.color.needsUpdate = true;
     gizGeo.setDrawRange(0, P.length / 3);
@@ -928,16 +933,16 @@ export function initBuild(ctx) {
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
     if (m.t === "botgoals") { botGoals.clear(); for (const g of Array.isArray(m.g) ? m.g : []) if (Array.isArray(g) && g.length === 3) botGoals.set(String(g[0]), [+g[1], +g[2]]); return true; }
-    if (m.t === "coll") { setColl(m.k, m.parts, m.pv, m.mv, m.vis); return true; }
+    if (m.t === "coll") { setColl(m.k, m.parts, m.pv, m.mv, m.vis, m.wo); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
-  function load(list, h, shipD, coll, piv, mov, vis) {
+  function load(list, h, shipD, coll, piv, mov, vis, ori) {
     if (shipD) SHIP_D = shipD;
     for (const k of Object.keys(colliders)) delete colliders[k]; if (coll && typeof coll === "object") for (const k of KINDS) { const ps = asParts(coll[k]); if (ps) colliders[k] = ps; }
-    for (const o of [pivots, movers, visOutlines]) for (const k of Object.keys(o)) delete o[k];
-    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; const m = mov && cleanMove(mov[k]); if (m) movers[k] = m; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
+    for (const o of [pivots, origins, movers, visOutlines]) for (const k of Object.keys(o)) delete o[k];
+    for (const k of KINDS) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (ori && Array.isArray(ori[k])) origins[k] = ori[k]; const m = mov && cleanMove(mov[k]); if (m) movers[k] = m; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
     if (ctx.onPivot) ctx.onPivot();
     if (h && h !== BUILD_H) { BUILD_H = h; GEO = geos(); for (const b of builds.values()) { scene.remove(b.mesh); b.mesh = null; } }
     held = null;
