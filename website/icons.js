@@ -1,9 +1,9 @@
-// (owner, 2026-10-14) The item catalog the server sends: weapons, ammo and icons (made in the Weapon panel). Items are keyed
-// "w:<id>" (a weapon) or "a:<id>" (ammo). Icons are shapes on a 64 x 64 grid (never raw SVG): Catalog.svg(icon, px) draws
+// (owner, 2026-10-14) The item catalog the server sends: items and icons (made in the Item Creator; owner, 2026-10-15: it
+// was weapons and ammo in the Weapon panel). Items are keyed "it:<id>". Icons are shapes on a 64 x 64 grid (never raw SVG): Catalog.svg(icon, px) draws
 // one. game3d.js fills it from the server; the inventory and the Weapon panel listen for changes.
 (function () {
   const SV = "http://www.w3.org/2000/svg";
-  const cat = { weapons: [], ammo: [], icons: new Map() }, subs = new Set(), got = new Set();
+  const cat = { items: [], icons: new Map() }, subs = new Set(), got = new Set();
   const changed = () => { for (const f of subs) try { f(); } catch (e) { console.error(e); } };
   // one shape as an SVG element (the colors were checked on the server, and are checked again here)
   const col = (c, d) => (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c) ? c : d);
@@ -22,18 +22,17 @@
   }
   window.Catalog = {
     shapeEl, svg,
-    get ready() { return got.has("weapons") && got.has("ammo"); },   // (both lists have arrived)
-    get weapons() { return cat.weapons; }, get ammo() { return cat.ammo; }, get icons() { return cat.icons; },
+    get ready() { return got.has("items"); },   // (the list has arrived)
+    get items() { return cat.items; }, get icons() { return cat.icons; },
     set(kind, list) {
       if (!Array.isArray(list)) return;
       if (kind === "icons") { cat.icons = new Map(list.map((i) => [i.id, i])); } else cat[kind] = list;
       got.add(kind); changed();
     },
-    item(key) {                                // "w:3" / "a:2" -> { key, kind, name, icon } or null
-      if (typeof key !== "string") return null;
-      const [k, id] = key.split(":"), list = k === "w" ? cat.weapons : k === "a" ? cat.ammo : null;
-      const o = list && list.find((x) => x.id === id); if (!o) return null;
-      return { key, kind: k, id, name: o.name, icon: o.icon ? cat.icons.get(o.icon) || null : null, data: o };
+    item(key) {                                // "it:3" -> { key, id, name, icon, data } or null
+      const m = typeof key === "string" && /^it:([0-9]{1,9})$/.exec(key); if (!m) return null;
+      const o = cat.items.find((x) => x.id === m[1]); if (!o) return null;
+      return { key, id: o.id, name: o.name, icon: o.icon ? cat.icons.get(o.icon) || null : null, data: o };
     },
     // an item's picture for a slot: its icon, or (none yet) the first letter of its name
     picture(key, px) {

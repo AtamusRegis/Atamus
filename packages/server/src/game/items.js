@@ -1,7 +1,7 @@
 // (owner, 2026-10-14) Items: every account's hotbar and inventory, kept on the server (table world3d_inv), and the crates
-// dropped items make in the world. Item keys: "test" (the placeholder), "w:<id>" (a weapon), "a:<id>" (ammo). Every
+// dropped items make in the world. Item keys: "test" (the placeholder), "it:<id>" (an Item Creator item). Every
 // command is checked as hostile: known slots, items that exist, the crate within reach. Moving an item swaps two slots;
-// staff copy a weapon / ammo in from the Weapon panel; Drop takes an item out of a slot into a crate where the ship is
+// staff copy an item in from the Item Creator; Drop takes an item out of a slot into a crate where the ship is
 // (into a crate already within CRATE_MERGE m, if there is one); anyone within CRATE_REACH m takes items out of a crate.
 // A crate goes CRATE_LIFE after it was made (or when it's emptied, or staff delete it). Crates aren't kept over a restart.
 import { pool } from "../db.js";
@@ -20,8 +20,7 @@ export class Items {
   valid(key) {
     if (key === "test") return true;
     if (typeof key !== "string") return false;
-    const m = /^([wa]):([0-9]{1,9})$/.exec(key); if (!m) return false;
-    return m[1] === "w" ? this.world.weapons.has(m[2]) : this.world.ammo.has(m[2]);
+    const m = /^it:([0-9]{1,9})$/.exec(key); return !!m && this.world.catalog.has(m[1]);
   }
   fresh() { const s = {}; for (const k of SLOT_KEYS) s[k] = null; s.i0 = "test"; return s; }
   clean(v) { const s = {}; for (const k of SLOT_KEYS) s[k] = v && this.valid(v[k]) ? v[k] : null; return s; }
@@ -42,12 +41,11 @@ export class Items {
     for (const uid of ids) { const s = this.invs.get(uid); if (!s) continue;
       await pool.query(`INSERT INTO world3d_inv (user_id, slots, updated_at) VALUES ($1, $2, now()) ON CONFLICT (user_id) DO UPDATE SET slots = $2, updated_at = now()`, [uid, JSON.stringify(s)]).catch((e) => console.error("inv save", e)); }
   }
-  primary(uid) { const s = this.get(uid), k = s && s.h0; return k && k.startsWith("w:") ? k.slice(2) : null; }   // the weapon in the first hotbar slot
   move(uid, from, to) {
     const s = this.get(uid); if (!s || !isSlot(from) || !isSlot(to) || from === to) return false;
     [s[from], s[to]] = [s[to], s[from]]; this.dirty.add(String(uid)); return true;
   }
-  give(uid, item, to) {                        // (staff) a copy from the Weapon panel
+  give(uid, item, to) {                        // (staff) a copy from the Item Creator
     const s = this.get(uid); if (!s || !isSlot(to) || item === "test" || !this.valid(item)) return false;
     s[to] = item; this.dirty.add(String(uid)); return true;
   }

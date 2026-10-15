@@ -61,8 +61,8 @@ export function cleanWeapon(o) {               // a weapon from the panel, check
 }
 // (owner, 2026-10-14) a reference to an icon (its id), or null
 export const iconRef = (v) => (typeof v === "string" && /^[0-9]{1,9}$/.test(v) ? v : null);
-// (owner, 2026-10-14) ammo (the Weapon panel's Create New Ammo): a name and an icon for now
-export function cleanAmmo(o) {
+// (owner, 2026-10-15) items (the Item Creator's Create New Item): a name and an icon for now
+export function cleanItem(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
   return { name, icon: iconRef(o.icon) };
@@ -86,7 +86,7 @@ export function cleanIcon(o) {
   }
   return { shapes: out };
 }
-export const CATALOG_CAP = 500;                // weapons, ammo and icons: at most this many each
+export const CATALOG_CAP = 500;                // items and icons: at most this many each
 export const falloffAt = (w, d) => (d <= w.optimal ? 1 : Math.max(0, 1 - (w.falloff / 100) * (d - w.optimal) / 100));
 export const PIV_W = 0.2, VIS_LO = 0.25;
 // (owner, 2026-10-14) a ship that respawns materializes: a hologram revealed front to back that then solidifies, SPAWN_MS
@@ -304,7 +304,7 @@ export class World3D {
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
-    this.ammo = new Map(); this.icons = new Map();   // (owner, 2026-10-14) id -> ammo, id -> icon
+    this.catalog = new Map(); this.icons = new Map();   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
@@ -331,11 +331,14 @@ export class World3D {
     let wr = (await pool.query(`SELECT id, data FROM world3d_weapons ORDER BY id`)).rows;
     if (!wr.length) { await pool.query(`INSERT INTO world3d_weapons (data) VALUES ($1)`, [JSON.stringify(cleanWeapon({ name: "Railgun" }))]); wr = (await pool.query(`SELECT id, data FROM world3d_weapons ORDER BY id`)).rows; }
     for (const o of wr) { const w = cleanWeapon(o.data); if (w) this.weapons.set(String(o.id), { id: String(o.id), ...w }); }
-    // (owner, 2026-10-14) ammo and icons (the Weapon panel)
-    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_ammo (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    // (owner, 2026-10-15) items and icons (the Item Creator). The first time, the ammo made in the old Weapon panel becomes
+    // items (its table is left as it was)
+    const fresh = !(await pool.query(`SELECT to_regclass('world3d_items') AS t`)).rows[0].t;
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_items (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    if (fresh && (await pool.query(`SELECT to_regclass('world3d_ammo') AS t`)).rows[0].t) await pool.query(`INSERT INTO world3d_items (data) SELECT data FROM world3d_ammo ORDER BY id`);
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_icons (id SERIAL PRIMARY KEY, data JSONB NOT NULL, by_user TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     for (const o of (await pool.query(`SELECT id, data FROM world3d_icons ORDER BY id`)).rows) { const ic = cleanIcon(o.data); if (ic) this.icons.set(String(o.id), { id: String(o.id), ...ic }); }
-    for (const o of (await pool.query(`SELECT id, data FROM world3d_ammo ORDER BY id`)).rows) { const a = cleanAmmo(o.data); if (a) this.ammo.set(String(o.id), { id: String(o.id), ...a }); }
+    for (const o of (await pool.query(`SELECT id, data FROM world3d_items ORDER BY id`)).rows) { const a = cleanItem(o.data); if (a) this.catalog.set(String(o.id), { id: String(o.id), ...a }); }
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
@@ -489,46 +492,31 @@ export class World3D {
     p.hp = (p.hp ?? HP_MAX) - d;
     if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn
   }
-  // (owner, 2026-10-14) weapons: everyone has the first one unless staff equip another (the Weapon panel)
+  // (owner, 2026-10-14) weapons: everyone has the first one (the Railgun). (owner, 2026-10-15) Making and editing weapons
+  // was scrapped with the Weapon panel; it'll come back as part of the Item Creator
   weaponList() { return [...this.weapons.values()]; }
   defaultWeapon() { let best = null; for (const w of this.weapons.values()) if (!best || +w.id < +best.id) best = w; return best || { id: "0", ...cleanWeapon({ name: "Railgun" }) }; }
   weaponOf(p) { return (p.weapon && this.weapons.get(p.weapon)) || this.defaultWeapon(); }
-  async setWeapon(id, o) {                     // id: change that one, or null: a new one; returns it (or null)
-    const w = cleanWeapon(o); if (!w) return null; await this.ready;
-    if (w.icon && !this.icons.has(w.icon)) w.icon = null; if (!id && this.weapons.size >= CATALOG_CAP) return null;
-    if (id) { if (!this.weapons.has(id)) return null; await pool.query(`UPDATE world3d_weapons SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(w)]); }
-    else id = String((await pool.query(`INSERT INTO world3d_weapons (data) VALUES ($1) RETURNING id`, [JSON.stringify(w)])).rows[0].id);
-    const out = { id, ...w }; this.weapons.set(id, out);
-    for (const p of this.players.values()) if (this.weaponOf(p).id === id) { p.ammo = undefined; p.reloadAt = 0; }   // (a fresh magazine with the new numbers)
-    return out;
-  }
-  async delWeapon(id) {                        // (owner, 2026-10-14) the Weapon panel's Delete; never the first (everyone's)
-    if (!this.weapons.has(id) || id === this.defaultWeapon().id) return false; await this.ready;
-    await pool.query(`DELETE FROM world3d_weapons WHERE id = $1`, [id]); this.weapons.delete(id);
-    for (const p of this.players.values()) if (p.weapon === id) { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; }
-    return true;
-  }
-  // (owner, 2026-10-14) ammo: made, changed and deleted in the Weapon panel
-  ammoList() { return [...this.ammo.values()]; }
-  async setAmmo(id, o) {
-    const a = cleanAmmo(o); if (!a) return null; await this.ready;
+  // (owner, 2026-10-15) items: made, changed and deleted in the Item Creator
+  itemList() { return [...this.catalog.values()]; }
+  async setItem(id, o) {
+    const a = cleanItem(o); if (!a) return null; await this.ready;
     if (a.icon && !this.icons.has(a.icon)) a.icon = null;
-    if (id) { if (!this.ammo.has(id)) return null; await pool.query(`UPDATE world3d_ammo SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(a)]); }
-    else { if (this.ammo.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_ammo (data) VALUES ($1) RETURNING id`, [JSON.stringify(a)])).rows[0].id); }
-    const out = { id, ...a }; this.ammo.set(id, out); return out;
+    if (id) { if (!this.catalog.has(id)) return null; await pool.query(`UPDATE world3d_items SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(a)]); }
+    else { if (this.catalog.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_items (data) VALUES ($1) RETURNING id`, [JSON.stringify(a)])).rows[0].id); }
+    const out = { id, ...a }; this.catalog.set(id, out); return out;
   }
-  async delAmmo(id) {
-    if (!this.ammo.has(id)) return false; await this.ready;
-    await pool.query(`DELETE FROM world3d_ammo WHERE id = $1`, [id]); this.ammo.delete(id); return true;
+  async delItem(id) {
+    if (!this.catalog.has(id)) return false; await this.ready;
+    await pool.query(`DELETE FROM world3d_items WHERE id = $1`, [id]); this.catalog.delete(id); return true;
   }
-  // (owner, 2026-10-14) icons: made in the Icon Creator, picked for weapons and ammo
+  // (owner, 2026-10-14) icons: made in the Icon Creator, picked for items
   iconList() { return [...this.icons.values()]; }
   async addIcon(o, by) {
     const ic = cleanIcon(o); if (!ic || this.icons.size >= CATALOG_CAP) return null; await this.ready;
     const id = String((await pool.query(`INSERT INTO world3d_icons (data, by_user) VALUES ($1, $2) RETURNING id`, [JSON.stringify(ic), by || null])).rows[0].id);
     const out = { id, ...ic }; this.icons.set(id, out); return out;
   }
-  equip(pid, wid) { const p = this.players.get(String(pid)); if (!p || !this.weapons.has(wid)) return false; p.weapon = wid; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; return true; }
   // a shot from a player: (dx, dy) the direction, checked as hostile (finite, not zero); their weapon's shot rate, magazine and reload
   fire(id, dx, dy) {
     const p = this.players.get(String(id)); if (!p || p.bot || spawning(p)) return null;

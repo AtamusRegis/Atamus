@@ -53,9 +53,9 @@ website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
   build3d.js      the staff Build menu ([B]): shapes and test ships, hologram blueprints (pointer / wheel / R), copy / paste; footprint colliders; the [X] Object Editor (collider outlines per kind)
-  inventory.js    the hotbar (3 slots; the first is the primary weapon) and the TAB inventory panel (5 x 2), drag and drop (per browser)
-  icons.js        the item catalog from the server (weapons, ammo, icons as shape data) and drawing icons as SVG
-  weaponpanel.js  the staff Weapon panel ([Z]): item slots, Create New Weapon / Ammo pop-ups, the icon picker and Icon Creator
+  inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
+  icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
+  itemcreator.js  the staff Item Creator ([Z]; was the Weapon panel): item slots, Create New Item / Edit Item, the icon picker and Icon Creator
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
                   own-sphere prediction + snapshot interpolation, countdown and reconnect handling

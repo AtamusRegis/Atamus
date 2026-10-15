@@ -1022,13 +1022,13 @@ function connect() {
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
       if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
-      if (window.Catalog) { window.Catalog.set("icons", m.icons || []); window.Catalog.set("ammo", m.ammo || []); window.Catalog.set("weapons", weapons); }   // (owner, 2026-10-14) the item catalog
+      if (window.Catalog) { window.Catalog.set("icons", m.icons || []); window.Catalog.set("items", m.items || []); }   // (owner, 2026-10-15) the Item Creator's items
       srvBuild = m.build || "";
       if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; if (m.cfg.hpMax) HP_MAX = m.cfg.hpMax; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      if (m.you.builder && window.WeaponPanel) window.WeaponPanel.mount({ send });   // (owner, 2026-10-14) the Weapon panel (Z)
+      if (m.you.builder && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Creator (Z)
       amBuilder = !!m.you.builder;
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
@@ -1074,9 +1074,9 @@ function connect() {
     } else if (m.t === "join") { if (m.i !== myId) addPlayer(m.i, m.n).side = m.s; }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
-    else if (m.t === "weapons") { if (Array.isArray(m.list)) { weapons = m.list; ammo = null; reloadAt = 0; if (window.Catalog) window.Catalog.set("weapons", weapons); } }
-    else if (m.t === "ammo" || m.t === "icons") { if (window.Catalog) window.Catalog.set(m.t, m.list); }   // (owner, 2026-10-14) the item catalog
-    else if (m.t === "wsaved" || m.t === "asaved" || m.t === "isaved") { if (window.WeaponPanel) window.WeaponPanel.saved(m); }
+    else if (m.t === "weapons") { if (Array.isArray(m.list)) { weapons = m.list; ammo = null; reloadAt = 0; } }
+    else if (m.t === "items" || m.t === "icons") { if (window.Catalog) window.Catalog.set(m.t, m.list); }   // (owner, 2026-10-15) the item catalog
+    else if (m.t === "itemsaved" || m.t === "isaved") { if (window.ItemCreator) window.ItemCreator.saved(m); }
     else if (m.t === "inv") { if (window.Inventory) window.Inventory.set(m.slots); }   // (owner, 2026-10-14) my hotbar and inventory, from the server
     else if (m.t === "crate") { if (m.c) { setCrate(m.c); if (window.Inventory) window.Inventory.updateCrate(m.c); } }
     else if (m.t === "crategone") { dropCrate(String(m.id)); if (window.Inventory) window.Inventory.crateGone(String(m.id)); }

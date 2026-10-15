@@ -17,12 +17,6 @@ import { Items } from "./items.js";
 export function attachGameServer(httpServer) {
   const world = new World3D();
   const items = new Items(world);                // (owner, 2026-10-14) inventories and dropped-item crates
-  // a player's primary weapon is the one in their first hotbar slot (else the first weapon); tells them which
-  const syncWeapon = (pid, ws) => {
-    const p = world.players.get(pid), wid = items.primary(pid);
-    if (p) { if (wid) world.equip(pid, wid); else if (p.weapon) { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; } }
-    try { ws.send(JSON.stringify({ t: "equipped", id: p ? world.weaponOf(p).id : (wid || world.defaultWeapon().id) })); } catch {}
-  };
   const sendInv = (pid, ws) => { const s = items.get(pid); if (s) try { ws.send(JSON.stringify({ t: "inv", slots: s })); } catch {} };
   const crateCast = (c, gone) => broadcast(gone ? { t: "crategone", id: c.id } : { t: "crate", c: items.crateMsg(c) });
   setInterval(() => { for (const id of items.expire()) broadcast({ t: "crategone", id }); }, 1000);   // (owner) crates go after 5 minutes
@@ -100,7 +94,7 @@ export function attachGameServer(httpServer) {
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
-      ammo: world.ammoList(), icons: world.iconList(),                 // (owner, 2026-10-14) ammo and icons (the Weapon panel; items' pictures)
+      items: world.itemList(), icons: world.iconList(),                // (owner, 2026-10-15) the Item Creator's items and icons
       crates: items.crateList(),                                       // (owner, 2026-10-14) dropped-item crates
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
@@ -118,7 +112,6 @@ export function attachGameServer(httpServer) {
         world.join(pid, user.username, m.s, m.rp === 1).then((me) => {
           if (socks.get(pid) !== ws) return;
           try { ws.send(JSON.stringify({ t: "spawn", x: me.x, y: me.y, s: me.team })); } catch {}
-          items.load(pid).then(() => { if (socks.get(pid) === ws) syncWeapon(pid, ws); }).catch((e) => console.error("inv", e));
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });
         }).catch((e) => { joined = false; console.error("join", e); });
       }
@@ -175,23 +168,18 @@ export function attachGameServer(httpServer) {
           const b = bid && world.setBuild(bid, m); if (b) objCast("b", b);
         } else if (bid) { const wasShip = world.builds.get(bid)?.k === "ship"; world.delBuild(bid).then((ok) => { if (ok) { objGone("b", [bid]); if (wasShip) broadcast({ t: "leave", i: "b" + bid }); } }).catch((e) => console.error("unbuild", e)); }
       }
-      else if (m.t === "wset" || m.t === "aset") {   // (owner, 2026-10-14) the Weapon panel: staff change a weapon / ammo (id) or make one (no id)
+      else if (m.t === "itemset") {            // (owner, 2026-10-15) the Item Creator: staff change an item (id) or make one (no id)
         if (!staff) return;
-        const isW = m.t === "wset", id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null, reply = isW ? "wsaved" : "asaved";
-        (isW ? world.setWeapon(id, m.w) : world.setAmmo(id, m.a)).then((o) => {
-          if (!o) { try { ws.send(JSON.stringify({ t: reply, error: "That can't be saved." })); } catch {} return; }
-          broadcast(isW ? { t: "weapons", list: world.weaponList() } : { t: "ammo", list: world.ammoList() });
-          try { ws.send(JSON.stringify({ t: reply, id: o.id })); } catch {}
-        }).catch((e) => console.error("catalog", e));
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        world.setItem(id, m.item).then((o) => {
+          if (!o) { try { ws.send(JSON.stringify({ t: "itemsaved", error: "That item can't be saved." })); } catch {} return; }
+          broadcast({ t: "items", list: world.itemList() }); try { ws.send(JSON.stringify({ t: "itemsaved", id: o.id })); } catch {}
+        }).catch((e) => console.error("item", e));
       }
-      else if (m.t === "wdel" || m.t === "adel") {   // (owner, 2026-10-14) the Weapon panel's Delete (never the first weapon, everyone's)
+      else if (m.t === "itemdel") {            // (owner, 2026-10-15) the Item Creator's Delete
         if (!staff) return;
-        const isW = m.t === "wdel", id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
-        (isW ? world.delWeapon(id) : world.delAmmo(id)).then((ok) => {
-          if (!ok) return;
-          broadcast(isW ? { t: "weapons", list: world.weaponList() } : { t: "ammo", list: world.ammoList() });
-          if (isW) for (const [qid, sock] of socks) { const p = world.players.get(qid); if (p && !p.weapon) try { sock.send(JSON.stringify({ t: "equipped", id: world.weaponOf(p).id })); } catch {} }   // (anyone who had it is back on the first)
-        }).catch((e) => console.error("catalog del", e));
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        world.delItem(id).then((ok) => { if (ok) broadcast({ t: "items", list: world.itemList() }); }).catch((e) => console.error("item del", e));
       }
       else if (m.t === "iset") {               // (owner, 2026-10-14) the Icon Creator: staff save a new icon
         if (!staff) return;
@@ -200,21 +188,20 @@ export function attachGameServer(httpServer) {
           broadcast({ t: "icons", list: world.iconList() }); try { ws.send(JSON.stringify({ t: "isaved", id: ic.id })); } catch {}
         }).catch((e) => console.error("icon", e));
       }
-      // (owner, 2026-10-14) the hotbar and inventory: move (swap two slots), give (staff: a copy from the Weapon panel),
+      // (owner, 2026-10-14) the hotbar and inventory: move (swap two slots), give (staff: a copy from the Item Creator),
       // drop (into a crate where the ship is), take (out of a crate within reach); the result goes back as the whole inventory
       else if (m.t === "imove" || m.t === "igive" || m.t === "idrop" || m.t === "itake") {
-        let ok = false;
-        if (m.t === "imove") ok = items.move(pid, m.from, m.to);
-        else if (m.t === "igive") ok = staff && items.give(pid, m.item, m.to);
+        if (m.t === "imove") items.move(pid, m.from, m.to);
+        else if (m.t === "igive") { if (staff) items.give(pid, m.item, m.to); }
         else {
           const p = world.players.get(pid); if (!p) return;
           if (m.t === "idrop") {                // (just behind the ship, clear of its hull, so it can be seen)
             const h = p.h || 0; let x = p.x - Math.sin(h) * 70, y = p.y + Math.cos(h) * 70; if (!inside(x, y)) { x = p.x; y = p.y; }
-            const c = items.drop(pid, m.from, x, y); if (c) { ok = true; crateCast(c); }
+            const c = items.drop(pid, m.from, x, y); if (c) crateCast(c);
           }
-          else { const r = items.take(pid, m.c, m.i, m.to, p.x, p.y); if (r) { ok = true; crateCast(r.crate, r.gone); } }
+          else { const r = items.take(pid, m.c, m.i, m.to, p.x, p.y); if (r) crateCast(r.crate, r.gone); }
         }
-        sendInv(pid, ws); if (ok) syncWeapon(pid, ws);
+        sendInv(pid, ws);
       }
       // (owner, 2026-10-14) staff delete things in the world by right-click: a crate, a Build piece (bdel above) or a block
       else if (m.t === "cratedel") { if (!staff) return; const id = String(m.id || ""); if (items.del(id)) broadcast({ t: "crategone", id }); }

@@ -1,19 +1,12 @@
-// (owner, 2026-10-14) The Weapon panel (staff: Nyssary and admins): Z, or the [Z] button in the staff column, opens it.
-// A scrollable grid of item slots (5 a row): every weapon, then every ammo. A slot drags into the hotbar (the first slot
-// is the primary weapon) or the inventory (inventory.js does the dragging: these slots hand out copies). Right-click a
-// slot: Edit / Delete. Below: Create New Weapon / Create New Ammo, each a pop-up with a name, an icon box ([+]: pick one
-// of the existing icons) with Create New Icon on its left (the Icon Creator), then Cancel / Create. Edit opens the same
-// pop-up (a weapon's also has its numbers: outlined green if a change is better, red if worse, white if neither; ENTER
-// saves). Everything is saved on the server and checked again there. game3d.js hands it a send function; the lists come
-// from the Catalog (icons.js).
+// (owner, 2026-10-15) The Item Creator (was the Weapon panel; staff: Nyssary and admins): Z, or the [Z] button in the
+// staff column, opens it. A scrollable grid of item slots (5 a row), every item. A slot drags into the hotbar or the
+// inventory (inventory.js does the dragging: these slots hand out copies). Right-click a slot: Edit Item / Delete.
+// Below: Create New Item, a pop-up with a name, an icon box ([+]: pick one of the existing icons) with Create New Icon on
+// its left (the Icon Creator), then Cancel / Create. Edit Item opens the item's own menu (its properties: the name and
+// icon for now; what an item does will be made there). ENTER saves. Everything is saved on the server and checked again
+// there. (owner, 2026-10-15) Making weapons (and their numbers) was scrapped from here for now: it comes back as part of
+// this. game3d.js hands it a send function; the lists come from the Catalog (icons.js).
 (function () {
-  const FIELDS = [
-    ["optimal", "Optimal Range", 10], ["falloff", "Falloff Rate", 1], ["life", "Lifetime", 0.01], ["speed", "Speed", 10],
-    ["rate", "Shot Rate", 0.01], ["dmg", "Damage", 1], ["spread0", "Default Spread", 0.1], ["spreadAdd", "Spread Per Shot", 0.1],
-    ["aimSpeed", "Aim Speed", 0.1], ["rotSpeed", "Rotation Speed", 1], ["reload", "Reload Speed", 0.1], ["mag", "Magazine", 1],
-  ];
-  // which way is better for each number: +1 more is better, -1 less is better
-  const BETTER = { optimal: 1, falloff: -1, life: 1, speed: 1, rate: -1, dmg: 1, spread0: -1, spreadAdd: -1, aimSpeed: 1, rotSpeed: 1, reload: -1, mag: 1 };
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
   const C = () => window.Catalog;
@@ -41,11 +34,11 @@
   // ---- the main window ----
   function mount(a) {
     api = a; if (win) return;
-    zbtn = btn("Z"); zbtn.id = "weapon-btn"; zbtn.title = "Weapons";
+    zbtn = btn("Z"); zbtn.id = "item-btn"; zbtn.title = "Item Creator";
     (document.getElementById("staff-col") || document.body).appendChild(zbtn);   // (owner, 2026-10-14) the staff column on the right edge
     zbtn.addEventListener("click", () => toggle());
-    win = $("div"); win.id = "weapon-edit"; win.hidden = true;
-    const top = $("div", "we-top"); top.append($("span", "we-title", "WEAPONS"), btn("×", "we-x", () => toggle(false)));
+    win = $("div"); win.id = "item-edit"; win.hidden = true;
+    const top = $("div", "we-top"); top.append($("span", "we-title", "ITEM CREATOR"), btn("\u00d7", "we-x", () => toggle(false)));
     top.addEventListener("pointerdown", (e) => {   // (owner, 2026-10-14) dragged by its top bar
       if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
       const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
@@ -57,7 +50,7 @@
     });
     list = $("div", "we-list");
     list.addEventListener("contextmenu", (e) => { e.preventDefault(); const it = e.target.closest(".inv-item"); if (it) menu(it.dataset.item, e.clientX, e.clientY); });
-    const make = $("div", "we-make"); make.append(btn("Create New Weapon", "", () => itemBox("w")), btn("Create New Ammo", "", () => itemBox("a")));
+    const make = $("div", "we-make"); make.append(btn("Create New Item", "", () => itemBox(null)));
     win.append(top, list, make); document.body.appendChild(win);
     win.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") toggle(false); });
     addEventListener("keydown", (e) => {
@@ -69,7 +62,7 @@
     addEventListener("pointerdown", (e) => { if (ctx && !ctx.contains(e.target)) closeMenu(); }, true);
   }
   function drawList() {
-    const keys = [...C().weapons.map((w) => "w:" + w.id), ...C().ammo.map((a) => "a:" + a.id)];
+    const keys = C().items.map((x) => "it:" + x.id);
     const cells = keys.map((k) => {
       const c = $("div", "inv-slot"), it = C().item(k), el = $("div", "inv-item pic"); el.dataset.item = k; el.title = it ? it.name : "";
       const pic = C().picture(k, 26); if (pic) el.appendChild(pic); c.appendChild(el); return c;
@@ -84,51 +77,39 @@
     if (!show) { closeMenu(); while (overlays.length) overlays[overlays.length - 1].close(); if (document.activeElement && win.contains(document.activeElement)) document.activeElement.blur(); }
     else drawList();
   }
-  // ---- right-click: Edit / Delete ----
+  // ---- right-click: Edit Item / Delete ----
   function closeMenu() { if (ctx) { ctx.remove(); ctx = null; } }
   function menu(key, x, y) {
     closeMenu(); const it = C().item(key); if (!it) return;
     ctx = $("div", "we-ctx");
-    ctx.appendChild(btn("Edit Item", "", () => { closeMenu(); itemBox(it.kind, it, "item"); }));   // (owner, 2026-10-14) the item's properties: name and icon
-    if (it.kind === "w") ctx.appendChild(btn("Edit Stats", "", () => { closeMenu(); itemBox(it.kind, it, "stats"); }));   // its numbers (ammo has none yet)
-    const first = it.kind === "w" && C().weapons.length && it.id === C().weapons.reduce((m, w) => (+w.id < +m.id ? w : m)).id;   // (the first weapon is everyone's: it stays)
-    if (!first) ctx.appendChild(btn("Delete", "", () => { closeMenu(); api.send({ t: it.kind === "w" ? "wdel" : "adel", id: it.id }); }));
+    ctx.appendChild(btn("Edit Item", "", () => { closeMenu(); itemBox(it); }));
+    ctx.appendChild(btn("Delete", "", () => { closeMenu(); api.send({ t: "itemdel", id: it.id }); }));
     document.body.appendChild(ctx);
     const r = ctx.getBoundingClientRect(); ctx.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; ctx.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
   }
 
-  // ---- Create New Weapon / Ammo, and Edit: name, icon, (a weapon being edited: its numbers), Cancel / Create ----
-  function itemBox(kind, edit, mode) {         // mode (editing): "item" (name, icon) or "stats" (a weapon's numbers)
+  // ---- Create New Item (and Edit Item: the item's menu): name, icon, Cancel / Create ----
+  function itemBox(edit) {
     const o = overlay("we-item"), base = edit && edit.data; let icon = base ? base.icon || null : null;
-    o.box.appendChild($("p", "we-title", mode === "stats" ? "STATS: " + base.name.toUpperCase() : mode === "item" ? "ITEM PROPERTIES" : "NEW " + (kind === "w" ? "WEAPON" : "AMMO")));
+    o.box.appendChild($("p", "we-title", edit ? "ITEM PROPERTIES" : "NEW ITEM"));
     const name = $("input"); name.maxLength = 32; name.value = base ? base.name : "";
     const grid = $("div", "we-grid"); grid.append($("label", "we-label", "Name"), name);
     const iconRow = $("div", "we-iconrow"), mk = btn("Create New Icon", "", () => creator((id) => { icon = id; drawIcon(); })), box = btn("", "we-iconbox", () => picker((id) => { icon = id; drawIcon(); }));
     box.title = "Icon";
     const drawIcon = () => { const ic = icon && C().icons.get(icon); box.replaceChildren(ic ? C().svg(ic, 30) : $("span", "we-plus", "+")); };
     drawIcon(); iconRow.append(mk, box);
-    const inputs = {}, stats = $("div", "we-grid");
-    if (kind === "w" && mode === "stats") for (const [k, label, step] of FIELDS) {
-      const i = $("input"); i.type = "number"; i.step = String(step); i.value = String(base[k]); inputs[k] = i; stats.append($("label", "we-label", label), i);
-      i.addEventListener("input", () => { const v = Number(i.value), d = v - base[k]; i.classList.remove("we-up", "we-down"); if (Number.isFinite(v) && Math.abs(d) > 1e-9) i.classList.add(d * BETTER[k] > 0 ? "we-up" : "we-down"); });
-    }
-    if (base) name.addEventListener("input", () => name.classList.toggle("we-diff", name.value.trim() !== base.name));
     const err = $("p", "we-err"); err.hidden = true;
     const ok = btn(edit ? "SAVE" : "CREATE", "we-ok", save), btns = $("div", "we-btns"); btns.append(btn("CANCEL", "", () => o.close()), ok);
-    if (mode !== "stats") o.box.append(grid, iconRow); else o.box.appendChild(stats); o.box.append(err, btns);
+    o.box.append(grid, iconRow, err, btns);
     o.box.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });   // (owner) ENTER saves
-    setTimeout(() => (mode === "stats" ? stats.querySelector("input") : name).focus(), 0);
+    setTimeout(() => name.focus(), 0);
     function save() {
       if (ok.disabled) return;
       const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }
-      let msg;
-      if (kind === "w") { const w = base ? { ...base, name: n, icon } : { name: n, icon }; for (const k in inputs) w[k] = Number(inputs[k].value); delete w.id; msg = { t: "wset", ...(edit ? { id: edit.id } : {}), w }; }
-      else msg = { t: "aset", ...(edit ? { id: edit.id } : {}), a: { name: n, icon } };
       ok.disabled = true; err.hidden = true;
-      pending = { type: kind === "w" ? "wsaved" : "asaved", done: () => o.close(), fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
-      api.send(msg);
+      pending = { type: "itemsaved", done: () => o.close(), fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
+      api.send({ t: "itemset", ...(edit ? { id: edit.id } : {}), item: { name: n, icon } });
     }
-    o.box.dataset.k = kind;
   }
   // ---- the [+] box: pick one of the existing icons ----
   function picker(onPick) {
@@ -409,5 +390,5 @@
     const p = pending; pending = null;
     if (m.error) p.fail(m.error); else p.done(m);
   }
-  window.WeaponPanel = { mount, saved, toggle, refresh() {} };
+  window.ItemCreator = { mount, saved, toggle };
 })();

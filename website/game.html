@@ -98,7 +98,7 @@
     html:not(.touch) #chat { width: auto; } html:not(.touch) #chat-panel { width: 340px; }
     /* (owner, 2026-10-14) the staff buttons (A X B Z) are a column on the right edge of the screen, centered top to bottom */
     #staff-col { position: fixed; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; z-index: 6; }
-    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #edit-btn { order: 2; } #build-btn { order: 3; } #weapon-btn { order: 4; }
+    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #edit-btn { order: 2; } #build-btn { order: 3; } #item-btn { order: 4; }
     html.touch #chat-panel { flex: 1; width: auto; }   /* (owner) [A] floats left of the panel, by the input */
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
@@ -193,18 +193,18 @@
     #edit-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(190,140,255,0.14); border: none; border-radius: 5px; color: #d2b4ff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #edit-btn:hover, #edit-btn.on { background: linear-gradient(135deg, #c9a4ff, #8a5cf0); color: #12061f; }
     html.touch #edit-btn, html.touch #coll-edit { display: none !important; }
-    /* (owner, 2026-10-14) the Weapon panel (weaponpanel.js), staff: [Z] left of [X] */
-    #weapon-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-    #weapon-btn:hover, #weapon-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
-    #weapon-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
-    #weapon-edit .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
+    /* (owner, 2026-10-15) the Item Creator (itemcreator.js; was the Weapon panel), staff: [Z] */
+    #item-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+    #item-btn:hover, #item-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
+    #item-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
+    #item-edit .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
     .we-x { background: none; border: none; color: var(--text-dim); font-size: 16px; line-height: 1; padding: 0 4px; cursor: pointer; } .we-x:hover { color: #fff; }
-    :is(#weapon-edit, .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
+    :is(#item-edit, .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
     /* (owner, 2026-10-14) the item slots, 5 a row, scrolling past 4 rows */
     .we-list { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
     .we-make { display: flex; gap: 8px; margin-top: 12px; }
-    :is(#weapon-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
-    :is(#weapon-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
+    :is(#item-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
+    :is(#item-edit, .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
     .we-modal .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; } .we-modal .we-btns button { flex: none !important; }
     .we-modal .we-btns .we-ok { background: linear-gradient(135deg, #5fb4ff, #2f6fe0) !important; color: #fff !important; border: none !important; }   /* (owner) blue */
     .we-modal .we-btns .we-ok:hover { background: linear-gradient(135deg, #85c6ff, #4a86f0) !important; }
@@ -223,9 +223,6 @@
     .inv-item.pic { background: none; box-shadow: none; display: grid; place-items: center; } .inv-item .icon-svg { pointer-events: none; display: block; }
     .icon-letter { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 5px; background: var(--gold-grad); color: #1a1205; font: 700 14px var(--font); pointer-events: none; }
     .we-err { margin: 0; color: #ff8a80; }
-    /* (owner, 2026-10-14) a field changed from the weapon's numbers: green better, red worse, white neither */
-    .we-modal .we-up { border-color: #4ade80 !important; box-shadow: 0 0 0 2px #4ade80; outline: none; } .we-modal .we-down { border-color: #f87171 !important; box-shadow: 0 0 0 2px #f87171; outline: none; }
-    .we-modal .we-diff { border-color: #ffffff !important; box-shadow: 0 0 0 2px #ffffff; outline: none; }
     /* (owner, 2026-10-14) the Icon Creator */
     .ic-body { display: flex; gap: 10px; align-items: flex-start; }
     .ic-tools { display: grid; gap: 4px; }
@@ -247,7 +244,7 @@
     .ic-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-dim); font-size: 12px; }
     .ic-field input[type=number] { width: 64px !important; } .ic-field input[type=color] { width: 40px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; } .ic-field input[type=range] { width: 90px; }
     .ic-field input[type=checkbox] { accent-color: #38c6ff; }
-    html.touch #weapon-btn, html.touch #weapon-edit, html.touch .we-back { display: none !important; }
+    html.touch #item-btn, html.touch #item-edit, html.touch .we-back { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
     .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
     .ce-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
@@ -328,10 +325,10 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="icons.js?v=1792042260"></script>
-  <script src="inventory.js?v=1792044113"></script>
-  <script src="weaponpanel.js?v=1792044113"></script>
+  <script src="icons.js?v=1792044666"></script>
+  <script src="inventory.js?v=1792044666"></script>
+  <script src="itemcreator.js?v=1792044666"></script>
   <script src="adminpanel.js?v=1792041596"></script>
-  <script type="module" src="game3d.js?v=1792044178"></script>
+  <script type="module" src="game3d.js?v=1792044666"></script>
 </body>
 </html>

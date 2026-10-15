@@ -2,8 +2,7 @@
 // when not typing (Escape closes it too). Drag an item between any of the 13 slots (dropping on a filled slot swaps them).
 // Drag works with a mouse or a finger. Styled like the old game's hotbar slots. Item names show on hover.
 // (owner, 2026-10-14) Kept on the server now (game/items.js): this draws what the server last sent and sends each move
-// (shown at once, then the server's answer replaces it). Weapons and ammo from the Weapon panel can be dragged in (staff:
-// a copy). The first hotbar slot is the primary weapon. Right-click an item: Drop; or drag it out onto the world: the same.
+// (shown at once, then the server's answer replaces it). Items from the Item Creator can be dragged in (staff: a copy). Right-click an item: Drop; or drag it out onto the world: the same.
 // A dropped item lands in a crate where the ship is; right-clicking a crate (game3d.js) opens the crate panel here, whose
 // items drag into the hotbar or inventory.
 (function () {
@@ -54,7 +53,7 @@
     const it = e.target.closest && e.target.closest(".inv-item"); if (!it || e.button !== 0) return;
     e.preventDefault(); e.stopPropagation(); closeMenu();
     const ghost = it.cloneNode(true); ghost.classList.add("inv-ghost"); document.body.appendChild(ghost);
-    drag = { from: it.dataset.slot || null, ci: it.dataset.ci != null ? +it.dataset.ci : null, item: it.dataset.item, ghost, id: e.pointerId };   // (no slot: a copy from the Weapon panel, or ci: out of the crate)
+    drag = { from: it.dataset.slot || null, ci: it.dataset.ci != null ? +it.dataset.ci : null, item: it.dataset.item, ghost, id: e.pointerId };   // (no slot: a copy from the Item Creator, or ci: out of the crate)
     it.classList.add("inv-lifted");
     move(e);
   }, true);
@@ -73,7 +72,7 @@
     if (k && k !== d.from && (k[0] === "h" || !panel.hidden)) {
       if (d.from) { [slots[k], slots[d.from]] = [slots[d.from], slots[k]]; send({ t: "imove", from: d.from, to: k }); }
       else if (d.ci != null && crate) { send({ t: "itake", c: crate.id, i: d.ci, to: k }); }
-      else if (d.item && d.item !== "test") { slots[k] = d.item; send({ t: "igive", item: d.item, to: k }); }   // from the Weapon panel: a copy of it goes in
+      else if (d.item && d.item !== "test") { slots[k] = d.item; send({ t: "igive", item: d.item, to: k }); }   // from the Item Creator: a copy of it goes in
     } else if (d.from && at && at.id === "view") drop(d.from);   // (owner, 2026-10-14) dragged out onto the world: dropped
     draw();
   };
