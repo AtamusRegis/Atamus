@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPoly, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792002843";
+import { initBuild, builds, colliders, pivots, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792038158";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -429,7 +429,7 @@ function updateVis() {                         // the shadows from where my ship
     const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
   }
   // (owner, 2026-10-14) ships cast no shadows (only blocks and Build pieces do)
-  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) edges(b.poly);
+  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) for (const v of b.polys) edges(v);
   for (const c of coresFor(vx, vy)) if (c.x1 >= vx - VIS_S && c.x0 <= vx + VIS_S && c.y1 >= vy - VIS_S && c.y0 <= vy + VIS_S) edges(c.v);   // (owner) nebula cores
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
@@ -444,7 +444,7 @@ const asPts = (v) => { const out = []; for (let i = 0; i < v.length; i += 2) out
 const walls = () => {                          // everything that blocks sight, with a bounding box each
   const out = [], h = BLOCK_HALF;
   for (const b of blocks.values()) out.push({ v: [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h], x0: b.x - h, x1: b.x + h, y0: b.y - h, y1: b.y + h });
-  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud") out.push({ v: b.poly, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
+  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud") for (const v of b.polys) out.push({ v, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
   if (haveMe) for (const c of coresFor(me.x, me.y)) out.push(c);   // (owner) nebula cores
   return out;
 };
@@ -653,8 +653,8 @@ function visGizmo(on) {
 function shipVisOutline(x, y, h) { return visPtsOf({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
 // an object's visibility points in the world, as [x0, y0, x1, y1, ...]
 function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k], pivots[o.k] || [0, 0]); }
-// a player ship's sight outline where it's drawn (the ship kind's outline and pivot, turned with its heading)
-function shipSight(p) { return buildPoly({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
+// a player ship's aim-bounds parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
+function shipSight(p) { return buildPolys({ k: "ship", x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
 // (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
 function applyShipPivot() {
   const pv = pivots.ship || [0, 0], D = 2 * SHIP_R;
@@ -741,7 +741,7 @@ function shipGizmos() {
   for (const p of players.values()) {
     if (p.id !== myId && !p.near) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
-    out.push({ x, y, sight: buildPoly({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading) });
+    out.push({ x, y, sight: buildPolys({ k: "ship", x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading) });
   }
   return out;
 }
@@ -761,11 +761,11 @@ function aimBlocked(x0, y0, x1, y1) {
     }
     if (ok && t0 > 0) hit(t0);
   }
-  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const t = segPoly(x0, y0, x1, y1, b.poly); if (t !== null) hit(t); }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
+  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; for (const v of b.polys) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); } }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
   for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
     if (p.id === myId || !p.near) continue;
     const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
-    const t = segPoly(x0, y0, x1, y1, shipSight(p)); if (t !== null) hit(t);
+    for (const v of shipSight(p)) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); }
   }
   return best;
 }

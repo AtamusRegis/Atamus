@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Object Editor colliders (owner):** the Movement collider can be an Oval, Box or Capsule, and each of its sides is edited on its own. Aim Bounds are now made of separate parts, each typed Body, Main Engine, Left Engine, Right Engine or Weapon Emplacement, and shots hit each part separately (for now every part does plain HP damage).
 - **Fix: the chat box was pushed off the screen (owner).** The staff buttons (A, X, B, Z) are now stacked in a column to the left of the chat, which keeps its full width on screen.
 - **Weapon panel change outlines (owner):** while the panel is open, fields changed from the weapon's stats at opening are outlined green (better), red (worse) or white (neither); REVERT goes back to those, and closing the panel makes the current stats the new baseline. **Fix:** closing the panel no longer leaves the keys stuck in a hidden field.
 - **Weapon panel REVERT and ENTER (owner):** ENTER in a field applies the change; REVERT undoes the last save (a weapon just made is removed again). CHANGE / CREATE is blue, and the buttons light up on hover.

@@ -149,7 +149,10 @@ export const SHAPES = ["square", "cylinder", "triangle"], KINDS = [...SHAPES, "s
 // them (any simple outline, concave allowed). (owner) They start as a 4-corner rectangle around the object: the
 // shapes' own square, the ship model's 59.4 x 100 m box.
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
-export const COLL_DEFAULT = { square: box(0.5, 0.5), triangle: box(0.5, 0.5), cylinder: box(0.5, 0.5), ship: box(0.33, 0.5556) };
+// (owner, 2026-10-14) the aim bounds are parts: each an outline with a type (body, main engine, left engine, right
+// engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
+export const PART_TYPES = ["body", "main", "left", "right", "weapon"];
+export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
 // (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
 // other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
 const boxPts = (hx, hy) => [[-hx, -hy], [0, -hy], [hx, -hy], [hx, 0], [hx, hy], [0, hy], [-hx, hy], [-hx, 0]];
@@ -161,20 +164,36 @@ export function toWorldPts(o, loc, pv) {              // fractions of the footpr
   for (const [ux, uy] of loc) { const lx = (ux - pv[0]) * o.w, ly = (uy - pv[1]) * o.d; out.push(o.x + lx * c - ly * s, o.y + lx * s + ly * c); }
   return out;
 }
-// the sight outline in the world: [x0, y0, x1, y1, ...] (owner, 2026-10-14: it decides line of sight)
-export function buildPoly(o, coll, piv) { return toWorldPts(o, (coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square, (piv && piv[o.k]) || [0, 0]); }
-// (owner, 2026-10-14) the movement collider: an ellipse [cx, cy, rx, ry] in the same fractions (ships bump into it),
-// editable too; it starts as the footprint's own circle / ellipse. In the world, a 24-sided outline.
-export const MOVE_DEFAULT = { square: [0, 0, 0.5, 0.5], triangle: [0, 0, 0.5, 0.5], cylinder: [0, 0, 0.5, 0.5], ship: [0, 0, 0.5, 0.5] };
-export function movePoly(o, mov, piv) {
-  const m = (mov && mov[o.k]) || MOVE_DEFAULT[o.k] || MOVE_DEFAULT.square, loc = [];
-  for (let i = 0; i < 24; i++) loc.push([m[0] + Math.cos(i * Math.PI / 12) * m[2], m[1] + Math.sin(i * Math.PI / 12) * m[3]]);
-  return toWorldPts(o, loc, (piv && piv[o.k]) || [0, 0]);
+// the aim-bounds parts in the world, one outline [x0, y0, x1, y1, ...] each (owner, 2026-10-14: they decide line of sight)
+export function buildPolys(o, coll, piv) { const pv = (piv && piv[o.k]) || [0, 0]; return ((coll && coll[o.k]) || COLL_DEFAULT[o.k] || COLL_DEFAULT.square).map((p) => toWorldPts(o, p.pts, pv)); }
+// (owner, 2026-10-14) the movement collider (ships bump into it): an oval, a box or a capsule (a stadium along its longer
+// side) filling the box x0..x1 by y0..y1, in the same fractions; each side moves on its own. It starts as the
+// footprint's own oval. In the world, its outline (always convex).
+export const MOVE_SHAPES = ["oval", "box", "capsule"];
+const mv0 = () => ({ s: "oval", x0: -0.5, x1: 0.5, y0: -0.5, y1: 0.5 });
+export const MOVE_DEFAULT = { square: mv0(), triangle: mv0(), cylinder: mv0(), ship: mv0() };
+export function moveLoc(m) {                   // its outline in the model's fractions: [[x, y], ...] counterclockwise
+  const cx = (m.x0 + m.x1) / 2, cy = (m.y0 + m.y1) / 2, hx = (m.x1 - m.x0) / 2, hy = (m.y1 - m.y0) / 2, out = [];
+  if (m.s === "box") return [[m.x0, m.y0], [m.x1, m.y0], [m.x1, m.y1], [m.x0, m.y1]];
+  if (m.s === "capsule") {                     // two half circles (radius: half the short side) joined by straight sides
+    const r = Math.min(hx, hy), ax = hx - r, ay = hy - r, a0 = hx > hy ? -Math.PI / 2 : 0;
+    for (const [sx, sy, a] of [[cx + ax, cy + ay, a0], [cx - ax, cy - ay, a0 + Math.PI]]) for (let i = 0; i <= 12; i++) out.push([sx + Math.cos(a + i * Math.PI / 12) * r, sy + Math.sin(a + i * Math.PI / 12) * r]);
+    return out;
+  }
+  for (let i = 0; i < 24; i++) out.push([cx + Math.cos(i * Math.PI / 12) * hx, cy + Math.sin(i * Math.PI / 12) * hy]);
+  return out;
 }
-export function cleanMove(m) {                 // a submitted ellipse, checked as hostile
-  if (!Array.isArray(m) || m.length !== 4) return null; const v = m.map(Number); if (!v.every(Number.isFinite)) return null;
-  const r4 = (x) => Math.round(x * 10000) / 10000, cl = (x, a, b) => Math.max(a, Math.min(b, x));
-  return [r4(cl(v[0], -1.5, 1.5)), r4(cl(v[1], -1.5, 1.5)), r4(cl(v[2], 0.02, 1.5)), r4(cl(v[3], 0.02, 1.5))];
+export function movePoly(o, mov, piv) {
+  return toWorldPts(o, moveLoc((mov && mov[o.k]) || MOVE_DEFAULT[o.k] || MOVE_DEFAULT.square), (piv && piv[o.k]) || [0, 0]);
+}
+export function cleanMove(m) {                 // a submitted movement collider, checked as hostile (the old ellipse [cx, cy, rx, ry] is read as an oval)
+  if (Array.isArray(m)) { if (m.length !== 4) return null; const v = m.map(Number); if (!v.every(Number.isFinite)) return null;
+    m = { s: "oval", x0: v[0] - Math.abs(v[2]), x1: v[0] + Math.abs(v[2]), y0: v[1] - Math.abs(v[3]), y1: v[1] + Math.abs(v[3]) }; }
+  if (!m || typeof m !== "object" || !MOVE_SHAPES.includes(m.s)) return null;
+  const v = [m.x0, m.x1, m.y0, m.y1].map(Number); if (!v.every(Number.isFinite)) return null;
+  const r4 = (x) => Math.round(x * 10000) / 10000, cl = (x) => Math.max(-1.5, Math.min(1.5, x)), side = (a, b) => { a = cl(a); b = cl(b); if (b < a) [a, b] = [b, a]; if (b - a < 0.04) { if (a + 0.04 <= 1.5) b = a + 0.04; else a = b - 0.04; } return [r4(a), r4(b)]; };
+  const [x0, x1] = side(v[0], v[1]), [y0, y1] = side(v[2], v[3]);
+  return { s: m.s, x0, x1, y0, y1 };
 }
 export function cleanPivot(pv) {               // a submitted pivot, checked as hostile: two finite numbers inside +-1.5
   if (!Array.isArray(pv) || pv.length !== 2) return null; const [x, y] = pv.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -218,6 +237,15 @@ export function cleanColl(pts, min = 3, max = 64) {
   const out = [];
   for (const q of pts) { if (!Array.isArray(q) || q.length !== 2) return null; const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     out.push([Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000]); }
+  return out;
+}
+// (owner, 2026-10-14) submitted aim-bounds parts, checked as hostile: 1-8 parts, each a known type and an outline (a bare
+// outline, the old format, is one Body part)
+export function cleanParts(v) {
+  if (Array.isArray(v) && Array.isArray(v[0])) { const c = cleanColl(v); return c ? [{ t: "body", pts: c }] : null; }
+  if (!Array.isArray(v) || v.length < 1 || v.length > 8) return null;
+  const out = [];
+  for (const p of v) { if (!p || typeof p !== "object" || !PART_TYPES.includes(p.t)) return null; const c = cleanColl(p.pts); if (!c) return null; out.push({ t: p.t, pts: c }); }
   return out;
 }
 // (owner, 2026-10-14) nebula clouds: an outline of 3-64 points in meters around the cloud's pivot (|coord| up to 3,000),
@@ -277,8 +305,9 @@ export class World3D {
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
-    for (const o of (await pool.query(`SELECT k, pts, pivot, mover, vis FROM world3d_colliders`)).rows) {
-      if (!KINDS.includes(o.k)) continue; const c = cleanColl(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS parts JSONB`);   // (owner, 2026-10-14) its aim-bounds parts (pts keeps the first part's outline)
+    for (const o of (await pool.query(`SELECT k, pts, parts, pivot, mover, vis FROM world3d_colliders`)).rows) {
+      if (!KINDS.includes(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-14) a nebula cloud's outline and color theme
     const { rows } = await pool.query(`SELECT id, k, x, y, w, d, r, extra FROM world3d_builds`);
@@ -419,7 +448,8 @@ export class World3D {
     }
   }
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
-  hurt(p, d) {
+  // (owner, 2026-10-14) part: the aim-bounds part a shot hit (body / main / left / right / weapon); for now every part is HP
+  hurt(p, d, part) {
     if (spawning(p)) return;                   // (still materializing)
     p.hp = (p.hp ?? HP_MAX) - d;
     if (p.hp <= 0) { p.hp = HP_MAX; if (!p.bot) this.respawn(p.id); else this.respawnBot(p); }   // (owner, 2026-10-14) test ships respawn too, at their spawn
@@ -475,7 +505,7 @@ export class World3D {
   _sightBlocked(x0, y0, x1, y1) {
     const lo = (a, b) => Math.min(a, b), hi = (a, b) => Math.max(a, b), X0 = lo(x0, x1), X1 = hi(x0, x1), Y0 = lo(y0, y1), Y1 = hi(y0, y1);
     for (const b of this.blocks) { if (b.x + BLOCK_HALF < X0 || b.x - BLOCK_HALF > X1 || b.y + BLOCK_HALF < Y0 || b.y - BLOCK_HALF > Y1) continue; if (segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)) !== null) return true; }
-    for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const R = b.far || b.rad; if (b.x + R < X0 || b.x - R > X1 || b.y + R < Y0 || b.y - R > Y1) continue; if (segPoly(x0, y0, x1, y1, b.poly) !== null) return true; }
+    for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const R = b.far || b.rad; if (b.x + R < X0 || b.x - R > X1 || b.y + R < Y0 || b.y - R > Y1) continue; for (const v of b.polys) if (segPoly(x0, y0, x1, y1, v) !== null) return true; }
     return false;
   }
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
@@ -509,21 +539,23 @@ export class World3D {
   stepProjs(dt) {
     for (let k = this.projs.length - 1; k >= 0; k--) {
       const q = this.projs[k], spd = q.sp || RAIL_SPEED, step = Math.min(q.left, spd * dt), x0 = q.x, y0 = q.y, x1 = x0 + q.vx / spd * step, y1 = y0 + q.vy / spd * step;
-      let t = 2, hit = null;
+      let t = 2, hit = null, part = null;
       const near = (x, y, R) => Math.max(Math.abs(x - (x0 + x1) / 2), Math.abs(y - (y0 + y1) / 2)) <= R + step / 2;
       for (const b of this.blocks) if (near(b.x, b.y, BLOCK_HALF * 1.5)) { const u = segPoly(x0, y0, x1, y1, squarePoly(b.x, b.y, BLOCK_HALF)); if (u !== null && u < t) { t = u; hit = null; } }
-      for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; const u = segPoly(x0, y0, x1, y1, b.poly); if (u !== null && u < t) { t = u; hit = null; } }
+      for (const b of this.builds.values()) { if (b.k === "ship" || b.k === "cloud" || !near(b.x, b.y, b.far || b.rad)) continue; for (const v of b.polys) { const u = segPoly(x0, y0, x1, y1, v); if (u !== null && u < t) { t = u; hit = null; } } }
       const shooter = this.players.get(q.a);
       for (const p of this.players.values()) {
         if (p.id === q.a || !near(p.x, p.y, SHIP_R * 1.6)) continue;
-        const u = segPoly(x0, y0, x1, y1, buildPoly({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots));
+        // (owner, 2026-10-14) each aim-bounds part separately: the first one the shot meets is the part hit
+        const parts = this.colliders.ship || COLL_DEFAULT.ship, polys = buildPolys({ k: "ship", x: p.x, y: p.y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.h || 0 }, this.colliders, this.pivots);
+        let u = null, pi = 0; polys.forEach((v, i) => { const w = segPoly(x0, y0, x1, y1, v); if (w !== null && (u === null || w < u)) { u = w; pi = i; } });
         if (u === null || u >= t) continue;
         if (shooter && !this.sees(shooter, p)) continue;   // (owner) a ship the shooter can't see: the shot flies through it
-        t = u; hit = p;
+        t = u; hit = p; part = parts[pi].t;
       }
       if (t <= 1) {
         const x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t;
-        if (hit) this.hurt(hit, q.w ? q.w.dmg * falloffAt(q.w, q.went + step * t) : RAIL_DMG);   // (owner) full damage out to the optimal range, less past it
+        if (hit) this.hurt(hit, q.w ? q.w.dmg * falloffAt(q.w, q.went + step * t) : RAIL_DMG, part);   // (owner) full damage out to the optimal range, less past it
         this.projEv.push({ t: "pend", i: q.id, x, y, h: hit ? hit.id : null, s: 1 }); this.projs.splice(k, 1); continue;
       }
       q.x = x1; q.y = y1; q.left -= step; q.went += step;
@@ -644,15 +676,15 @@ export class World3D {
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) {
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
-    b.poly = buildPoly(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, polyRad(b, b.poly)); }
+    b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, pts, pivot, mover, vis) {   // (owner) the aim bounds, the pivot, the movement ellipse and the visibility points together
-    const c = KINDS.includes(k) && cleanColl(pts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
+  async setCollider(k, parts, pivot, mover, vis) {   // (owner) the aim-bounds parts, the pivot, the movement collider and the visibility points together
+    const c = KINDS.includes(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k], vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k]; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, pivot, mover, vis, updated_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, pivot = $3, mover = $4, vis = $5, updated_at = now()`, [k, JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs)]);
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs)]);
     this.colliders[k] = c; this.pivots[k] = pv; this.movers[k] = mv; this.visOutlines[k] = vs;
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
-    return { pts: c, pv, mv, vis: vs };
+    return { parts: c, pv, mv, vis: vs };
   }
   buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
   async addBuild(o, by) {

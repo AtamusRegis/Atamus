@@ -175,7 +175,7 @@ export function attachGameServer(httpServer) {
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;
-        world.setCollider(m.k, m.pts, m.pv, m.mv, m.vis).then((c) => { if (c) broadcast({ t: "coll", k: m.k, pts: c.pts, pv: c.pv, mv: c.mv, vis: c.vis }); }).catch((e) => console.error("collider", e));
+        world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis }); }).catch((e) => console.error("collider", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

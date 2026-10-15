@@ -231,6 +231,11 @@
     .ce-modes { display: flex; gap: 4px; margin-bottom: 6px; }
     .ce-modes button { flex: 1; padding: 5px 0; border: none; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--text-dim); font: 600 11px var(--font); cursor: pointer; }
     .ce-modes button:hover { background: rgba(255,255,255,0.12); color: #fff; } .ce-modes button.on { background: var(--accent-grad); color: #06121c; }
+    .ce-sub { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; max-width: 400px; } .ce-sub[hidden] { display: none; }
+    .ce-sub button, .ce-sub select { padding: 4px 8px; border: none; border-radius: 5px; background: rgba(255,255,255,0.06); color: var(--text-dim); font: 600 11px var(--font); cursor: pointer; }
+    .ce-sub button:hover, .ce-sub select:hover { background: rgba(255,255,255,0.12); color: #fff; } .ce-sub button.on { background: rgba(56,198,255,0.35); color: #fff; }
+    .ce-sub select { margin-left: auto; } .ce-sub select option { background: #0e131e; color: #fff; }
+    .ce-poly.other { opacity: .55; }
     .ce-ell { fill: rgba(255,190,90,0.12); stroke: #ffbe5a; stroke-width: 2; pointer-events: none; }
     .ce-piv { stroke: #d2b4ff; stroke-width: 2.5; stroke-linecap: round; fill: none; pointer-events: none; }
     .ce-vpt { fill: #73ff8c; stroke: #0b2a12; stroke-width: 2; cursor: pointer; } .ce-vpt:hover { fill: #fff; }
@@ -290,6 +295,6 @@
   <script src="inventory.js?v=1791952773"></script>
   <script src="weaponpanel.js?v=1792005551"></script>
   <script src="adminpanel.js?v=1792000287"></script>
-  <script type="module" src="game3d.js?v=1792005058"></script>
+  <script type="module" src="game3d.js?v=1792038158"></script>
 </body>
 </html>
