@@ -323,6 +323,14 @@
     .oc-model { display: flex; align-items: center; gap: 8px; } .oc-model button { padding: 3px 10px; border: none; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text); font: 600 11px var(--font); cursor: pointer; } .oc-model button:hover { background: rgba(255,255,255,0.15); } .oc-model button:disabled { opacity: .5; }
     .oc-file { color: var(--text-dim); } .oc-err { grid-column: 1 / -1; margin: 0; color: #ff8a80; }
     #coll-edit.drop { outline: 2px dashed #38c6ff; }
+    .oc-icon { display: flex; align-items: center; gap: 8px; } .oc-icon > button:first-child { padding: 3px 10px; border: none; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text); font: 600 11px var(--font); cursor: pointer; } .oc-icon > button:first-child:hover { background: rgba(255,255,255,0.15); }
+    .oc-iconbox { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px dashed #3c5272; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; } .oc-iconbox:hover { border-color: #9fd8ff; } .oc-plus { font-size: 18px; }
+    .oc-create { margin-left: 6px; padding: 0 12px; border: none; border-radius: 5px; background: var(--accent-grad); color: #06121c; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; }
+    #zone-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
+    #zone-handles .zn-line { fill: rgba(127,224,255,0.08); stroke: rgba(127,224,255,0.85); stroke-width: 2; stroke-dasharray: 8 6; }
+    #zone-handles .zn-pt { fill: #fff; stroke: #2f9bd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #zone-handles .zn-pt:hover { fill: #cdeeff; }
+    #zone-handles .zn-mid { fill: rgba(127,224,255,0.7); pointer-events: auto; cursor: pointer; } #zone-handles .zn-mid:hover { fill: #fff; }
+    html.touch #zone-handles { display: none !important; }
     html.touch #node-box { display: none !important; }
     #ship-btns { position: fixed; z-index: 5; transform: translate(-50%, -100%); display: flex; gap: 6px; }
     #ship-btns button { padding: 5px 10px; border: 1px solid #2a3a52; border-radius: 6px; background: rgba(10,14,22,0.88); color: #cfd9e8; font: 12px system-ui, sans-serif; cursor: pointer; white-space: nowrap; }
@@ -348,8 +356,8 @@
   <script src="api.js?v=1791945557"></script>
   <script src="icons.js?v=1792045148"></script>
   <script src="inventory.js?v=1792047695"></script>
-  <script src="itemcreator.js?v=1792047695"></script>
+  <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792047695"></script>
+  <script type="module" src="game3d.js?v=1792048305"></script>
 </body>
 </html>

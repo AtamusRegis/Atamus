@@ -233,8 +233,8 @@ export function initBuild(ctx) {
   drawCloudSlot();
   cloudSlot.addEventListener("click", () => { if (picking && picking.k === "cloud") stopPicking(); else startPicking("cloud"); });
   shipSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>';
-  // an object type's picture: the icon of the item it yields, else its first letter
-  const typePic = (t, px) => { const it = t.item && window.Catalog && window.Catalog.item("it:" + t.item); if (it && it.icon) return window.Catalog.svg(it.icon, px);
+  // an object type's picture: its icon, else its first letter
+  const typePic = (t, px) => { const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); if (ic) return window.Catalog.svg(ic, px);
     const d = document.createElement("span"); d.className = "build-letter"; d.textContent = (t.name || "?").slice(0, 1).toUpperCase(); return d; };
   function drawTypeSlots() {
     typeSlots.replaceChildren(...[...types.values()].map((t) => { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28));
@@ -263,7 +263,7 @@ export function initBuild(ctx) {
     drop(true); if (ghost) { scene.remove(ghost); ghost = null; }
     const t = typeOf(k);
     picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } }
-      : t ? { k, w: t.size, d: t.size, r: 0 } : null; drawSlot();
+      : t ? { k, w: 60, d: 60, r: 0, extra: { size: 60 } } : null; drawSlot();
   }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlot(); }
 
@@ -595,42 +595,80 @@ export function initBuild(ctx) {
     sBox.hidden = false; sBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; sBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
   }
 
-  // ---- (owner, 2026-10-15) resource nodes: each turns and bobs (its type's speeds); the selected one shows its settings
-  // over it (Ore Min / Ore Max: how much it spawns with, Respawn: seconds, Zone: m around its spot where it respawns) and
-  // its respawn zone as a ring ----
+  // ---- (owner, 2026-10-15) resource nodes (the Object Placer): each turns and bobs between two heights (its own settings).
+  // The selected one shows its settings over it: Size (m across at scale 1), Scale (its footprint is size x scale; the
+  // wheel scales it too), Rotation Speed (deg/s), Bob Speed (bobs a second), Bob Min / Bob Max (m), Respawn (s), Ore Min /
+  // Ore Max (how much it spawns with); and its spawn zone, an outline drawn on the ground around it: drag a point, drag
+  // the dot in the middle of an edge to add one, right-click a point to remove it (3 stay). Each change is saved. ----
   function spinNodes(now, dt) {
     for (const b of builds.values()) {
-      const t = typeOf(b.k), sp = t && b.mesh && b.mesh.userData.spin; if (!sp) continue;
-      sp.rotation.y += (t.spin || 0) * Math.PI / 180 * dt;
-      sp.position.y = Math.sin(now / 1000 * (t.bob || 0) * Math.PI * 2 + (+b.id || 0)) * 0.05;   // (a unit: a twentieth of its size)
+      const e = isTypeKey(b.k) && b.extra, sp = e && b.mesh && b.mesh.userData.spin; if (!sp) continue;
+      sp.rotation.y += (e.spin || 0) * Math.PI / 180 * dt;
+      b.mesh.position.y = e.bmin + (e.bmax - e.bmin) * (0.5 + 0.5 * Math.sin(now / 1000 * (e.bob || 0) * Math.PI * 2 + (+b.id || 0)));
     }
   }
   const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; document.body.appendChild(nBox);
-  const NODE_F = [["min", "Ore Min"], ["max", "Ore Max"], ["respawn", "Respawn"], ["zone", "Zone"]], nIn = {};
+  const NODE_F = [["size", "Size"], ["scale", "Scale"], ["spin", "Rotation Speed"], ["bob", "Bob Speed"], ["bmin", "Bob Min"], ["bmax", "Bob Max"], ["respawn", "Respawn"], ["min", "Ore Min"], ["max", "Ore Max"]], nIn = {};
+  const nVal = (b, k) => (k === "scale" ? Math.round(b.w / (b.extra.size || b.w) * 100) / 100 : b.extra[k]);
   for (const [k, label] of NODE_F) {
-    const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.min = 0; i.step = 1;
+    const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.step = k === "scale" || k === "bob" ? 0.05 : 1;
     l.append(sp, i); nBox.appendChild(l); nIn[k] = i;
-    i.addEventListener("change", () => { const b = selNode(); if (!b) return; b.extra = { ...(b.extra || {}), [k]: Math.max(0, Math.floor(Number(i.value)) || 0) };
-      if (k === "min" && b.extra.max < b.extra.min) b.extra.max = b.extra.min; if (k === "max" && b.extra.min > b.extra.max) b.extra.min = b.extra.max; push(b, true); });
+    i.addEventListener("change", () => {
+      const b = selNode(); if (!b) return; const v = Number(i.value); if (!Number.isFinite(v)) return;
+      const e = b.extra = { ...(b.extra || {}) }, sc = b.w / (e.size || b.w);
+      if (k === "scale") { b.w = b.d = Math.max(MIN, Math.min(MAX, (e.size || b.w) * Math.max(0.01, v))); }
+      else if (k === "size") { e.size = Math.max(MIN, Math.min(MAX, v)); b.w = b.d = Math.max(MIN, Math.min(MAX, e.size * sc)); }
+      else { e[k] = v; if (k === "min" && e.max < v) e.max = v; if (k === "max" && e.min > v) e.min = v; if (k === "bmin" && e.bmax < v) e.bmax = v; if (k === "bmax" && e.bmin > v) e.bmin = v; }
+      place(b); push(b, true);
+    });
     i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
   }
   nBox.addEventListener("pointerdown", (e) => e.stopPropagation());
-  const ringGeo = new THREE.BufferGeometry().setFromPoints(Array.from({ length: 96 }, (_, i) => new THREE.Vector3(Math.cos(i / 96 * Math.PI * 2), 3, Math.sin(i / 96 * Math.PI * 2))));
-  const zoneRing = new THREE.LineLoop(ringGeo, new THREE.LineDashedMaterial({ color: 0x7fe0ff, dashSize: 0.04, gapSize: 0.03, transparent: true, opacity: 0.85, depthTest: false }));
-  zoneRing.computeLineDistances(); zoneRing.visible = false; zoneRing.renderOrder = 9; scene.add(zoneRing);
   const selNode = () => { const b = sel && builds.get(sel); return b && isTypeKey(b.k) ? b : null; };
   let nShown = null;
   function nodePanel() {
     const b = open && !picking && !held ? selNode() : null;
-    zoneRing.visible = !!(b && b.extra && b.extra.zone > 0);
-    if (zoneRing.visible) { zoneRing.position.set(b.x, 0, -b.y); zoneRing.scale.set(b.extra.zone, 1, b.extra.zone); }
-    if (!b) { nBox.hidden = true; nShown = null; return; }
-    const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(b.x, b.w * 0.9, -b.y).project(camera);
+    zoneHandles(b);
+    if (!b || !b.extra) { nBox.hidden = true; nShown = null; return; }
+    const r = canvas.getBoundingClientRect(), v = new THREE.Vector3(b.x, b.w * 0.9 + (b.extra.bmax || 0), -b.y).project(camera);
     if (v.z > 1) { nBox.hidden = true; return; }
-    const key = b.id + JSON.stringify(b.extra || {});   // (the fields refill only when the settings change, not while typed in)
-    if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = b.extra ? b.extra[k] : ""; nShown = key; }
-    nBox.hidden = false; nBox.style.left = (r.left + (v.x + 1) / 2 * r.width) + "px"; nBox.style.top = (r.top + (1 - v.y) / 2 * r.height) + "px";
+    const key = b.id + b.w + JSON.stringify(b.extra);   // (the fields refill only when the settings change, not while typed in)
+    if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = nVal(b, k); nShown = key; }
+    nBox.hidden = false; nBox.style.left = Math.max(nBox.offsetWidth / 2 + 4, Math.min(innerWidth - nBox.offsetWidth / 2 - 4, r.left + (v.x + 1) / 2 * r.width)) + "px";
+    nBox.style.top = Math.max(nBox.offsetHeight + 4, r.top + (1 - v.y) / 2 * r.height) + "px";   // (kept on screen)
   }
+  // the spawn zone's outline and handles (meters around the node: moving the node moves its zone)
+  const zLayer = document.createElementNS(NSv, "svg"); zLayer.id = "zone-handles"; zLayer.setAttribute("width", "100%"); zLayer.setAttribute("height", "100%"); document.body.appendChild(zLayer);
+  zLayer.addEventListener("contextmenu", (e) => e.preventDefault());
+  let zKey = "", zDrag = null;
+  function zoneHandles(b) {
+    const Z = b && b.extra && b.extra.zone, pts = Z ? Z.map(([x, y]) => scr2(b.x + x, b.y + y)) : [];
+    const key = b && Z && pts.every((p) => p[2]) ? b.id + ":" + Z.length : "";
+    if (key !== zKey) {
+      zKey = key; while (zLayer.firstChild) zLayer.removeChild(zLayer.firstChild); if (!key) return;
+      const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "zn-line"); zLayer.appendChild(pl);
+      Z.forEach((_, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 4); c.setAttribute("class", "zn-mid"); c.dataset.i = i; zLayer.appendChild(c); });
+      Z.forEach((_, i) => { const c = document.createElementNS(NSv, "circle"); c.setAttribute("r", 6); c.setAttribute("class", "zn-pt"); c.dataset.i = i; zLayer.appendChild(c); });
+    }
+    if (!key) return;
+    let el = zLayer.firstChild; el.setAttribute("points", pts.map((p) => p[0] + "," + p[1]).join(" ")); el = el.nextSibling;
+    pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; el.setAttribute("cx", (p[0] + q[0]) / 2); el.setAttribute("cy", (p[1] + q[1]) / 2); el = el.nextSibling; });
+    pts.forEach((p) => { el.setAttribute("cx", p[0]); el.setAttribute("cy", p[1]); el = el.nextSibling; });
+  }
+  zLayer.addEventListener("pointerdown", (e) => {
+    const t = e.target, b = selNode(); if (!b || !b.extra || !b.extra.zone || !t.dataset || t.dataset.i == null) return;
+    e.preventDefault(); e.stopPropagation(); const Z = b.extra.zone, i = +t.dataset.i;
+    if (t.classList.contains("zn-mid")) { if (e.button !== 0 || Z.length >= 32) return; const a = Z[i], z = Z[(i + 1) % Z.length]; Z.splice(i + 1, 0, [(a[0] + z[0]) / 2, (a[1] + z[1]) / 2]); zDrag = { id: b.id, i: i + 1, pid: e.pointerId }; }
+    else if (e.button === 2) { if (Z.length > 3) { Z.splice(i, 1); push(b, true); } return; }
+    else if (e.button === 0) zDrag = { id: b.id, i, pid: e.pointerId };
+    if (zDrag) try { zLayer.setPointerCapture(e.pointerId); } catch {}
+  });
+  zLayer.addEventListener("pointermove", (e) => {
+    if (!zDrag || e.pointerId !== zDrag.pid) return; const b = builds.get(zDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g || !b.extra || !b.extra.zone) return;
+    b.extra.zone[zDrag.i] = [Math.round((g.x - b.x) * 10) / 10, Math.round((g.y - b.y) * 10) / 10]; push(b, false);
+  });
+  const zEnd = (e) => { if (!zDrag || e.pointerId !== zDrag.pid) return; const b = builds.get(zDrag.id); zDrag = null; try { zLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  zLayer.addEventListener("pointerup", zEnd); zLayer.addEventListener("pointercancel", zEnd);
   // a model finished loading: the pieces, the blueprint and the Object Creator's view take it
   modelWaits.add(() => { for (const b of builds.values()) if (isTypeKey(b.k)) place(b); if (ghost) { scene.remove(ghost); ghost = null; } eMeshK = null; });
   // (owner, 2026-10-15) the server's object types
@@ -678,7 +716,7 @@ export function initBuild(ctx) {
     const t = picking || (held && builds.get(held.id)); if (!t) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (t.k === "ship") return;
-    const f = Math.max(MIN / Math.min(t.w, t.d), Math.min(Math.pow(1.1, -e.deltaY / 100), MAX / Math.max(t.w, t.d)));
+    const f = Math.max(MIN / Math.min(t.w, t.d), Math.min(Math.pow(1.1, -e.deltaY / 100), MAX / Math.max(t.w, t.d)));   // (a node: its scale; its size stays)
     t.w *= f; t.d *= f;
     if (held) { place(t); push(t, false); }
   }, { capture: true, passive: false });
@@ -756,20 +794,26 @@ export function initBuild(ctx) {
   const mName = document.createElement("span"); mName.className = "oc-file";
   const mFile = document.createElement("input"); mFile.type = "file"; mFile.accept = ".glb,model/gltf-binary"; mFile.hidden = true;
   mWrap.append(mBtn, mName, mFile); pRow("Model", mWrap);
-  pIn.size = pRow("Size", pNum(5, 1000, 1)); pIn.item = pRow("Item", document.createElement("select")); pIn.spin = pRow("Rotation Speed", pNum(-720, 720, 1)); pIn.bob = pRow("Bob Speed", pNum(0, 5, 0.05));
+  // (owner, 2026-10-15) Object Icon: Create New Icon (the Icon Creator) beside the icon box ([+]: pick an existing icon)
+  const iWrap = document.createElement("div"); iWrap.className = "oc-icon";
+  const iNew = document.createElement("button"); iNew.type = "button"; iNew.textContent = "Create New Icon";
+  const iBox = document.createElement("button"); iBox.type = "button"; iBox.className = "oc-iconbox"; iBox.title = "Icon";
+  iWrap.append(iNew, iBox); pRow("Object Icon", iWrap); props.insertBefore(iWrap.parentNode, mWrap.parentNode);   // (Name, Object Icon, Model, Resource Type)
+  iNew.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.newIcon) window.ItemCreator.newIcon((id) => saveType({ icon: id })); });
+  iBox.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.pickIcon) window.ItemCreator.pickIcon((id) => saveType({ icon: id })); });
+  pIn.item = pRow("Resource Type", document.createElement("select"));
   const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
   const curType = () => typeOf(eKind);
   function drawProps() {
     const t = curType(); props.hidden = !t; if (!t) return;
     if (document.activeElement !== pIn.name) pIn.name.value = t.name;
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
-    for (const k of ["size", "spin", "bob"]) if (document.activeElement !== pIn[k]) pIn[k].value = String(t[k]);
+    const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); iBox.replaceChildren(ic ? window.Catalog.svg(ic, 26) : Object.assign(document.createElement("span"), { textContent: "+", className: "oc-plus" }));
     mName.textContent = t.model ? t.mname || "" : "";   // (the uploaded file's own name)
   }
   function saveType(ch) { const t = curType(); if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
   pIn.name.addEventListener("change", () => { const v = pIn.name.value.trim(); if (v) saveType({ name: v }); });
   pIn.item.addEventListener("change", () => saveType({ item: pIn.item.value || null }));
-  for (const k of ["size", "spin", "bob"]) pIn[k].addEventListener("change", () => { const v = Number(pIn[k].value); if (Number.isFinite(v)) saveType({ [k]: v }); });
   for (const el of Object.values(pIn)) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
   // a model upload: the GLB goes to the server, which answers with its file name
   async function upload(file) {
@@ -873,7 +917,8 @@ export function initBuild(ctx) {
         const b = document.createElement("button"); b.type = "button"; b.textContent = "Delete"; b.addEventListener("click", () => { closeTMenu(); send({ t: "tdel", id: t.id }); }); tMenu.appendChild(b);
         document.body.appendChild(tMenu); tMenu.style.left = e.clientX + "px"; tMenu.style.top = e.clientY + "px"; });
       list.push(d); }
-    const add = mk(null, "New Object", (d) => { d.innerHTML = '<span class="build-letter plus">+</span>'; }); add.addEventListener("click", () => { wantKind = true; send({ t: "tset", type: { name: "New Object", cat: "node" } }); }); list.push(add);
+    const add = document.createElement("button"); add.type = "button"; add.className = "oc-create"; add.textContent = "Create Resource Node";   // (owner, 2026-10-15)
+    add.addEventListener("click", () => { wantKind = true; send({ t: "tset", type: { name: "Resource Node", cat: "node" } }); }); list.push(add);
     ceSlots.replaceChildren(...list);
   }
   function eSetKind(k) {

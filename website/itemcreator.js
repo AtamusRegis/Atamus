@@ -429,5 +429,6 @@
     const p = pending; pending = null;
     if (m.error) p.fail(m.error); else p.done(m);
   }
-  window.ItemCreator = { mount, saved, toggle };
+  // (owner, 2026-10-15) the icon picker and the Icon Creator, for the Object Creator's Object Icon too
+  window.ItemCreator = { mount, saved, toggle, pickIcon: (cb) => picker(cb), newIcon: (cb) => creator(cb) };
 })();

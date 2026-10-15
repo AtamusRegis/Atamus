@@ -293,27 +293,32 @@ export function cleanCloud(pts) {
   return out;
 }
 export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.sin(b.r), out = []; for (const [lx, ly] of b.extra.pts) { const x = lx * s, y = ly * s; out.push(b.x + x * c - y * n, b.y + x * n + y * c); } return out; }
-// ---- (owner, 2026-10-15) object types (the Object Creator, head admin): a name, a category (for the Object Placer's tabs;
-// "node", resource nodes, for now), its model (an uploaded GLB, by file name), its size (m across, at scale 1), and for
-// a resource node the item it yields, how fast it turns (deg/s) and bobs (bobs a second). Colliders: the Object Editor's,
-// under the type's key. The Object Placer sets each placed one's scale and (nodes) its ore range, respawn time and zone.
+// ---- (owner, 2026-10-15) object types (the Object Creator, head admin): "Create Resource Node" makes one: a name, an icon,
+// its model (an uploaded GLB, by file name) and the resource it yields (an item); its colliders are the Object Editor's,
+// under the type's key ("t:<id>"). Everything about a placed one (size, scale, spin, bob, ore, respawn, its spawn zone)
+// is the Object Placer's.
 export const TYPE_CATS = ["node"];
 export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
 export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.test(v) ? v : null);
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
-  const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v)) * 100) / 100 : d; };
   const model = modelRef(o.model);
-  return { name, cat: TYPE_CATS.includes(o.cat) ? o.cat : "node", model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item),
-    size: num(o.size, BUILD_MIN, BUILD_MAX, 60), spin: num(o.spin, -720, 720, 10), bob: num(o.bob, 0, 5, 0.3) };
+  return { name, cat: TYPE_CATS.includes(o.cat) ? o.cat : "node", model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item) };
 }
-// a placed resource node's settings (the Object Placer): ore it spawns with (min-max), respawn time (s), respawn zone (m)
-export function cleanNode(e) {
+// a placed resource node's settings (the Object Placer, owner 2026-10-15): its size (m across at scale 1; the footprint w is
+// size x scale), how fast it turns (deg/s) and bobs (bobs a second) between two heights (m), the ore it spawns with
+// (min-max), its respawn time (s) and its spawn zone: an outline of 3-32 points in meters around it (where it respawns)
+export function cleanNode(e, w) {
   e = e && typeof e === "object" ? e : {};
-  const int = (v, lo, hi, d) => { v = Math.floor(Number(v)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
-  const min = int(e.min, 1, 99999, 50), max = Math.max(min, int(e.max, 1, 99999, 100));
-  return { min, max, respawn: int(e.respawn, 0, 86400, 300), zone: int(e.zone, 0, 2000, 0) };
+  const num = (v, lo, hi, d) => { v = Number(v); return Number.isFinite(v) ? Math.round(Math.max(lo, Math.min(hi, v)) * 100) / 100 : d; };
+  const int = (v, lo, hi, d) => Math.round(num(v, lo, hi, d));
+  const size = num(e.size, BUILD_MIN, BUILD_MAX, w || 60), min = int(e.min, 1, 99999, 50), max = Math.max(min, int(e.max, 1, 99999, 100));
+  const bmin = num(e.bmin, -500, 500, 0), bmax = Math.max(bmin, num(e.bmax, -500, 500, 10));
+  let zone = null;
+  if (Array.isArray(e.zone) && e.zone.length >= 3 && e.zone.length <= 32) { zone = []; for (const q of e.zone) { if (!Array.isArray(q) || q.length !== 2) { zone = null; break; } const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) { zone = null; break; } zone.push([Math.round(Math.max(-3000, Math.min(3000, x)) * 10) / 10, Math.round(Math.max(-3000, Math.min(3000, y)) * 10) / 10]); } }
+  if (!zone) zone = [[-size, -size], [size, -size], [size, size], [-size, size]];
+  return { size, spin: num(e.spin, -720, 720, 10), bob: num(e.bob, 0, 5, 0.3), bmin, bmax, min, max, respawn: int(e.respawn, 0, 86400, 300), zone };
 }
 export const buildMsg = (b) => (b.extra ? [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra] : [b.id, b.k, b.x, b.y, b.w, b.d, b.r]);
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
@@ -739,7 +744,7 @@ export class World3D {
       const route = o.extra.route == null ? null : cleanRoute(o.extra.route), atk = o.extra.atk === true;
       if (route || atk) b.extra = { ...(route ? { route } : {}), ...(atk ? { atk: true } : {}) };
     }
-    if (isTypeKey(o.k)) { b.d = b.w; b.extra = cleanNode(o.extra); }   // (owner, 2026-10-15) a placed object: square footprint (its scale), a node's settings
+    if (isTypeKey(o.k)) { b.d = b.w; b.extra = cleanNode(o.extra, b.w); }   // (owner, 2026-10-15) a placed object: square footprint (size x scale), a node's settings
     if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
       const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
       if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
