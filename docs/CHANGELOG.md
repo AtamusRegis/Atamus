@@ -4,7 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
-- **Hit flash (owner):** a ship flashes pure white for an instant when it's hit.
+- **Hit flash (owner):** a ship flashes red when it's hit, fading out over a few frames.
 - **Health bar hits (owner):** damage now drains the bar smoothly with a white trail of what was lost, a white flash and a sideways jolt.
 - **Window positions fix (owner):** closing a window with its × no longer saves its spot as the screen's corner, so windows reopen where they were dragged.
 - **Windows (owner):** every editor window and pop-up now remembers where it was last put (pop-ups drag by their title), and clicking a window brings it to the front.

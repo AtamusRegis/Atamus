@@ -302,7 +302,7 @@ function losMat(m, va, sp) {                   // a copy of a ship material: not
     gl_FragColor.rgb = mix(vec3(0.3, 0.82, 1.0) * scan, gl_FragColor.rgb, spS) + vec3(0.7, 0.97, 1.0) * edge * (1.0 - spS);
     gl_FragColor.a *= mix(0.5 + 0.5 * edge, 1.0, spS);
   }
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0), spF);
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(1.0, 0.0, 0.0), spF);
   gl_FragColor.a *= visA;`);
   };
   c.customProgramCacheKey = () => "losA";
@@ -662,7 +662,7 @@ function hpState(p, now) {
   if (!s) { s = { hp: f, mF: f, mT: f, gF: f, gT: f, t0: 0, flash: 0, hitT: -1e9 }; hpAnim.set(p.id, s); }
   if (f < s.hp - 1e-6) {                        // hit: both bars start from where they are now
     const m = tween(s.mF, s.mT, now - s.t0), g = tween(s.gF, s.gT, now - s.t0 - HP_GHOST_LAG);
-    s.mF = m; s.gF = Math.max(g, m); s.mT = s.gT = f; s.t0 = now; s.flash = 2; s.shipFlash = 2; s.hitT = now;
+    s.mF = m; s.gF = Math.max(g, m); s.mT = s.gT = f; s.t0 = now; s.flash = 2; s.shipFlash = 4; s.hitT = now;
   } else if (f > s.hp + 1e-6) { s.mF = s.mT = s.gF = s.gT = f; }
   s.hp = f;
   return s;
@@ -673,8 +673,8 @@ function drawHpBars() {
   for (const p of players.values()) {
     if (p.hp === undefined) continue;
     const s = hpState(p, now);
-    { const sp = p.holder.children[0] && p.holder.children[0].userData.sp;   // (owner, 2026-10-15) the ship itself flashes pure white for 2 frames
-      if (sp) sp.f.value = s.shipFlash > 0 ? 1 : 0; if (s.shipFlash > 0) s.shipFlash--; }
+    { const sp = p.holder.children[0] && p.holder.children[0].userData.sp;   // (owner, 2026-10-15) the ship itself flashes red, fading out over 4 frames
+      if (sp) sp.f.value = s.shipFlash > 0 ? s.shipFlash / 4 : 0; if (s.shipFlash > 0) s.shipFlash--; }
     if (p.hp === undefined || p.hp >= HP_MAX || !p.near && p.id !== myId) continue;
     const v = p.holder.children[0], t = p.id === myId ? null : visTargets.get(v), a = p.id === myId ? 1 : t ? t.a : 0;
     if (a <= 0.01) continue;
