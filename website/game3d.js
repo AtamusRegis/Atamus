@@ -8,7 +8,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { Importer } from "./importer.js?v=1792058735";
 import { Creator } from "./creator.js?v=1792060615";
-import { initBuild, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792060615";
+import { initBuild, hpInArc, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792060921";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -906,6 +906,7 @@ const spreadNow = (now = performance.now()) => Math.min(SPREAD_MAX, wpn().spread
 let aimAng = null, aimOx = 0, aimOy = 0;   // aimOx / aimOy: my Weapon Origin this frame (owner, 2026-10-14: the aim line and shots start there)
 // aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
 const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
+const aimInArc = () => { const d = aimDir(), mine = players.get(myId); return !d || hpInArc(mine ? mine.heading : 0, collExtra[SHIPK], d.x, d.y); };   // (owner, 2026-10-15) inside the hardpoint's rotation limit
 // (owner, 2026-10-14) R reloads the magazine (not while building, where R turns pieces, nor while typing)
 function reloadGun() {
   if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing()) return;
@@ -922,6 +923,7 @@ function fireRail(px, py) {
   if (ammo === null) ammo = w.mag;
   if (ammo <= 0) return;                       // (owner, 2026-10-14) empty: R reloads
   const d = aimDir(); if (!d) return;                                       // along the aim line (it lags the pointer by the rotation speed)
+  if (!aimInArc()) return;                     // (owner, 2026-10-15) past the hardpoint's rotation limit: no shot until it's back inside
   railAt = now; spreadDeg = Math.min(SPREAD_MAX, Math.max(0, spreadDeg - w.aimSpeed * (now - spreadT) / 1000) + w.spreadAdd); spreadT = now;
   ammo--;
   void px; void py;
@@ -1379,7 +1381,7 @@ renderer.setAnimationLoop(() => {
       aimShown = true;
       const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = aimOx, sz = -aimOy;
       const at = (f) => [sx + (a.x - sx) * f, sz + (a.z - sz) * f];
-      const tb = aimBlocked(aimOx, aimOy, a.x, -a.z);
+      const tb = aimInArc() ? aimBlocked(aimOx, aimOy, a.x, -a.z) : 0;   // (owner, 2026-10-15) past the hardpoint's rotation limit: red all the way
       // four points: white from the ship, then (blocked) red from the hit to the reticle, else fading out over the last stretch
       const pts = tb === null ? [[0, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [1, 1, 1, 1, 0]]
         : [[0, 1, 1, 1, 0.85], [tb, 1, 1, 1, 0.85], [tb, 1, 0.25, 0.2, 0.9], [1, 1, 0.25, 0.2, 0.5]];

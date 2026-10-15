@@ -251,6 +251,14 @@ export function cleanCollExtra(o) {
   const n = (x, lo, hi, d, k = 10000) => (Number.isFinite(Number(x)) ? Math.round(Math.max(lo, Math.min(hi, Number(x))) * k) / k : d);
   return { hz: n(o.hz, 0, 3, EXTRA_DEFAULT.hz), arc: n(o.arc, 1, 360, 360, 10), dir: ((n(o.dir, -720, 720, 0, 10) % 360) + 360) % 360, fx: n(o.fx, 0, 3, EXTRA_DEFAULT.fx) };
 }
+// (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit? Its center is the default facing (dir, degrees
+// clockwise from the nose, the nose being the plan's -y), turned with the ship's heading h; 360 is endless
+export function hpInArc(h, ex, dx, dy) {
+  if (!ex || !(ex.arc < 360)) return true;
+  const t = ex.dir * Math.PI / 180, ux = -Math.sin(t), uy = -Math.cos(t), c = Math.cos(h), s = Math.sin(h), cx = ux * c - uy * s, cy = ux * s + uy * c;
+  const L = Math.hypot(dx, dy); if (L < 1e-9) return false;
+  return Math.acos(Math.max(-1, Math.min(1, (cx * dx + cy * dy) / L))) * 180 / Math.PI <= ex.arc / 2 + 1;
+}
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
 // (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
 // outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
@@ -653,6 +661,7 @@ export class World3D {
     const p = this.players.get(String(id)); if (!p || p.bot || spawning(p)) return null;
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy)) return null;
     const L = Math.hypot(dx, dy); if (L < 1e-6) return null;
+    if (!hpInArc(p.h || 0, this.collExtra[this.shipK], dx, dy)) return null;   // (owner, 2026-10-15) outside the hardpoint's rotation limit: no shot
     const w = this.weaponOf(p), now = Date.now(); if (p.lastFire && now - p.lastFire < w.rate * 1000 - 50) return null;
     if (p.reloadAt) { if (now < p.reloadAt - 50) return null; p.reloadAt = 0; p.ammo = w.mag; }   // reloading / just reloaded
     if (p.ammo === undefined) p.ammo = w.mag;

@@ -156,7 +156,15 @@ export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), v).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
 export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {}, collExtra = {};   // collExtra: (owner, 2026-10-15) each kind's hardpoint elevation / arc / facing and effects level
-export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };
+// (owner, 2026-10-15) is (dx, dy) inside a ship's hardpoint rotation limit (as the server works it out)? dir: degrees
+// clockwise from the nose (the plan's -y: down in the Object Editor), turned with the heading h; 360 is endless
+export function hpInArc(h, ex, dx, dy) {
+  if (!ex || !(ex.arc < 360)) return true;
+  const t = ex.dir * Math.PI / 180, ux = -Math.sin(t), uy = -Math.cos(t), c = Math.cos(h), s = Math.sin(h), cx = ux * c - uy * s, cy = ux * s + uy * c;
+  const L = Math.hypot(dx, dy); if (L < 1e-9) return false;
+  return Math.acos(Math.max(-1, Math.min(1, (cx * dx + cy * dy) / L))) * 180 / Math.PI <= ex.arc / 2;
+}                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -1086,7 +1094,7 @@ export function initBuild(ctx) {
     } else if (eMode === "hp") {
       // (owner, 2026-10-15) the hardpoint: its spot (drag the dot), its rotation limit (the shaded arc around it: drag an
       // end; all the way round is endless) and its default facing (the arrow: drag its tip)
-      const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx + Math.sin(rad(d)) * r, wy - Math.cos(rad(d)) * r];
+      const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx - Math.sin(rad(d)) * r, wy + Math.cos(rad(d)) * r];   // (degrees clockwise from the nose, which points down here)
       sv("circle", { cx: wx, cy: wy, r: R, class: "ce-arcring" });
       if (eEx.arc >= 360) sv("circle", { cx: wx, cy: wy, r: R, class: "ce-arc" });
       else { const a0 = eEx.dir - eEx.arc / 2, a1 = eEx.dir + eEx.arc / 2, [x0, y0] = at(a0, R), [x1, y1] = at(a1, R); sv("path", { d: `M${wx} ${wy} L${x0} ${y0} A${R} ${R} 0 ${eEx.arc > 180 ? 1 : 0} 1 ${x1} ${y1} Z`, class: "ce-arc" }); }
@@ -1134,7 +1142,7 @@ export function initBuild(ctx) {
     const r = ceSvg.getBoundingClientRect(), u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
     if (eDrag.type === "gx") { guide.x = u[0]; eDraw(); return; }
     if (eDrag.type === "arc" || eDrag.type === "dir") {      // (owner, 2026-10-15) an angle around the hardpoint, clockwise from forward
-      const [wx, wy] = toPx(eWo), sx = (e.clientX - r.left) * VIEW / r.width, sy = (e.clientY - r.top) * VIEW / r.height, ang = Math.atan2(sx - wx, -(sy - wy)) * 180 / Math.PI;
+      const [wx, wy] = toPx(eWo), sx = (e.clientX - r.left) * VIEW / r.width, sy = (e.clientY - r.top) * VIEW / r.height, ang = Math.atan2(-(sx - wx), sy - wy) * 180 / Math.PI;
       if (eDrag.type === "dir") eEx = { ...eEx, dir: Math.round(((ang % 360) + 360) % 360) };
       else { let d = Math.abs(((ang - eEx.dir) % 360 + 540) % 360 - 180); eEx = { ...eEx, arc: Math.max(1, Math.min(360, Math.round(d * 2))) }; if (eEx.arc >= 354) eEx.arc = 360; }
       eDraw(); return;
