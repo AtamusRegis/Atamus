@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-15
+
+- **Dropping items and crates (owner):** right-click an item and choose Drop, or drag it out onto the world, to drop it in a glowing crate behind your ship (items dropped close together share a crate). Right-click a crate to open it and drag its items into your hotbar or inventory. Crates disappear after 5 minutes. Admins can right-click Delete crates, Build pieces and blocks. Hotbars and inventories are now kept on the server for each account (browser-only inventories started over), and anyone's first hotbar weapon is the one they fire.
+
 ## 2026-10-14
 
 - **Fix: sent back to the update screen after entering (owner):** after an update, entering the game no longer bounces you back to the Enter System screen a moment later.

@@ -6,15 +6,26 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown } from "../build.js";
-import { World3D, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, inside, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
 import { pool } from "../db.js";
 import { safeText } from "../textsafe.js";
+import { Items } from "./items.js";
 
 export function attachGameServer(httpServer) {
   const world = new World3D();
+  const items = new Items(world);                // (owner, 2026-10-14) inventories and dropped-item crates
+  // a player's primary weapon is the one in their first hotbar slot (else the first weapon); tells them which
+  const syncWeapon = (pid, ws) => {
+    const p = world.players.get(pid), wid = items.primary(pid);
+    if (p) { if (wid) world.equip(pid, wid); else if (p.weapon) { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; } }
+    try { ws.send(JSON.stringify({ t: "equipped", id: p ? world.weaponOf(p).id : (wid || world.defaultWeapon().id) })); } catch {}
+  };
+  const sendInv = (pid, ws) => { const s = items.get(pid); if (s) try { ws.send(JSON.stringify({ t: "inv", slots: s })); } catch {} };
+  const crateCast = (c, gone) => broadcast(gone ? { t: "crategone", id: c.id } : { t: "crate", c: items.crateMsg(c) });
+  setInterval(() => { for (const id of items.expire()) broadcast({ t: "crategone", id }); }, 1000);   // (owner) crates go after 5 minutes
   const socks = new Map();                     // account id -> ws
   const devs = new Map();                      // device id -> account id, for the connected sockets
   const mutes = new Map();                     // account id -> { perm, until } (ms), the connected players' chat mutes
@@ -90,8 +101,11 @@ export function attachGameServer(httpServer) {
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
       ammo: world.ammoList(), icons: world.iconList(),                 // (owner, 2026-10-14) ammo and icons (the Weapon panel; items' pictures)
+      crates: items.crateList(),                                       // (owner, 2026-10-14) dropped-item crates
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
+
+    items.load(pid).then(() => { if (socks.get(pid) === ws) sendInv(pid, ws); }).catch((e) => console.error("inv", e));   // (owner, 2026-10-14) my hotbar and inventory
 
     ws.on("message", (data) => {
       if (socks.get(pid) !== ws) return;       // a replaced session: ignore everything it sends
@@ -104,6 +118,7 @@ export function attachGameServer(httpServer) {
         world.join(pid, user.username, m.s, m.rp === 1).then((me) => {
           if (socks.get(pid) !== ws) return;
           try { ws.send(JSON.stringify({ t: "spawn", x: me.x, y: me.y, s: me.team })); } catch {}
+          items.load(pid).then(() => { if (socks.get(pid) === ws) syncWeapon(pid, ws); }).catch((e) => console.error("inv", e));
           broadcast({ t: "join", i: pid, n: user.username, s: me.team });
         }).catch((e) => { joined = false; console.error("join", e); });
       }
@@ -185,13 +200,25 @@ export function attachGameServer(httpServer) {
           broadcast({ t: "icons", list: world.iconList() }); try { ws.send(JSON.stringify({ t: "isaved", id: ic.id })); } catch {}
         }).catch((e) => console.error("icon", e));
       }
-      else if (m.t === "equip") {              // (owner, 2026-10-14) a weapon put in the primary hotbar slot (staff for now; none: the first weapon)
-        if (!staff) return;
-        const p = world.players.get(pid); if (!p) return;
-        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
-        if (id) world.equip(pid, id); else { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; }
-        try { ws.send(JSON.stringify({ t: "equipped", id: world.weaponOf(p).id })); } catch {}
+      // (owner, 2026-10-14) the hotbar and inventory: move (swap two slots), give (staff: a copy from the Weapon panel),
+      // drop (into a crate where the ship is), take (out of a crate within reach); the result goes back as the whole inventory
+      else if (m.t === "imove" || m.t === "igive" || m.t === "idrop" || m.t === "itake") {
+        let ok = false;
+        if (m.t === "imove") ok = items.move(pid, m.from, m.to);
+        else if (m.t === "igive") ok = staff && items.give(pid, m.item, m.to);
+        else {
+          const p = world.players.get(pid); if (!p) return;
+          if (m.t === "idrop") {                // (just behind the ship, clear of its hull, so it can be seen)
+            const h = p.h || 0; let x = p.x - Math.sin(h) * 70, y = p.y + Math.cos(h) * 70; if (!inside(x, y)) { x = p.x; y = p.y; }
+            const c = items.drop(pid, m.from, x, y); if (c) { ok = true; crateCast(c); }
+          }
+          else { const r = items.take(pid, m.c, m.i, m.to, p.x, p.y); if (r) { ok = true; crateCast(r.crate, r.gone); } }
+        }
+        sendInv(pid, ws); if (ok) syncWeapon(pid, ws);
       }
+      // (owner, 2026-10-14) staff delete things in the world by right-click: a crate, a Build piece (bdel above) or a block
+      else if (m.t === "cratedel") { if (!staff) return; const id = String(m.id || ""); if (items.del(id)) broadcast({ t: "crategone", id }); }
+      else if (m.t === "blockdel") { if (!staff) return; const id = Number(m.id); if (Number.isInteger(id) && world.delBlock(id)) objGone("k", [String(id)]); }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;
         world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis, m.wo).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis, wo: c.wo }); }).catch((e) => console.error("collider", e));

@@ -797,6 +797,58 @@ function addBlock(id, x, y) {
 }
 function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); visVer++; } }
 function dropCube() { if (haveMe) send({ t: "block" }); }
+// ---- (owner, 2026-10-14) dropped-item crates: a small glowing cube where items were dropped (the server keeps them 5
+// minutes). Right-click one (a quick click; holding is aiming): Open, within reach, shows its items (inventory.js), and
+// staff get Delete; staff can right-click Delete a Build piece or a block too. ----
+const CRATE_REACH = 250, CRATE_S = 16;
+if (window.Inventory) window.Inventory.setSend((m) => send(m));   // (owner, 2026-10-14) inventory moves, drops and takes go to the server
+const crates = new Map();                      // id -> { id, x, y, items, mesh }
+const crateGeo = new THREE.BoxGeometry(CRATE_S, CRATE_S, CRATE_S), crateMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0x7a4300, emissiveIntensity: 0.8, roughness: 0.4, metalness: 0.2 });
+let amBuilder = false;
+function setCrate(c) {
+  if (!c || typeof c.id !== "string" || !Number.isFinite(c.x) || !Number.isFinite(c.y) || !Array.isArray(c.items)) return;
+  let o = crates.get(c.id);
+  if (!o) { o = { id: c.id, mesh: new THREE.Mesh(crateGeo, crateMat), spin: Math.random() * 6 }; scene.add(o.mesh); crates.set(c.id, o); }
+  o.x = c.x; o.y = c.y; o.items = c.items.filter((k) => typeof k === "string");
+}
+function dropCrate(id) { const o = crates.get(id); if (!o) return; scene.remove(o.mesh); crates.delete(id); }
+function updateCrates(now) {
+  for (const o of crates.values()) { const t = now / 1000 + o.spin; o.mesh.position.set(o.x, CRATE_S * 0.8 + Math.sin(t * 1.6) * 2, -o.y); o.mesh.rotation.set(0.35, t * 0.6, 0.2); }
+  const open = window.Inventory && window.Inventory.crateId, oc = open && crates.get(open);   // (out of reach: the crate panel closes)
+  if (open && (!oc || !haveMe || Math.hypot(oc.x - me.x, oc.y - me.y) > CRATE_REACH + 20)) window.Inventory.closeCrate();
+}
+const groundHit = new THREE.Vector3();
+function groundAt(px, py) {
+  raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
+  return raycaster.ray.intersectPlane(groundPlane, groundHit) ? { x: groundHit.x, y: -groundHit.z } : null;
+}
+// what's under the pointer: a crate, then a block, a Build piece, a cloud (staff only past the crate)
+function pickObject(px, py) {
+  const g = groundAt(px, py); if (!g) return null;
+  let best = null, bd = CRATE_S * 1.3;
+  for (const o of crates.values()) { const d = Math.hypot(o.x - g.x, o.y - g.y); if (d < bd) { bd = d; best = o; } }
+  if (best) return { kind: "crate", o: best };
+  if (!amBuilder) return null;
+  for (const [id, b] of blocks) if (Math.abs(b.x - g.x) <= BLOCK_HALF && Math.abs(b.y - g.y) <= BLOCK_HALF) return { kind: "block", id };
+  for (const b of builds.values()) if (b.k !== "cloud" && b.polys && b.polys.some((v) => inPoly(g.x, g.y, v))) return { kind: "build", id: b.id };
+  for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPoly(g.x, g.y, b.poly)) return { kind: "build", id: b.id };
+  return null;
+}
+let objMenu = null;
+function closeObjMenu() { if (objMenu) { objMenu.remove(); objMenu = null; } }
+addEventListener("pointerdown", (e) => { if (objMenu && !objMenu.contains(e.target)) closeObjMenu(); }, true);
+function objectMenu(px, py) {
+  closeObjMenu(); const hit = pickObject(px, py); if (!hit) return false;
+  const items = [];
+  if (hit.kind === "crate" && haveMe && Math.hypot(hit.o.x - me.x, hit.o.y - me.y) <= CRATE_REACH) items.push(["Open", () => { if (window.Inventory) window.Inventory.openCrate(hit.o); }]);
+  if (amBuilder) items.push(["Delete", () => send(hit.kind === "crate" ? { t: "cratedel", id: hit.o.id } : hit.kind === "block" ? { t: "blockdel", id: Number(hit.id) } : { t: "bdel", id: hit.id })]);
+  if (!items.length) return false;
+  objMenu = document.createElement("div"); objMenu.className = "we-ctx";
+  for (const [label, fn] of items) { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { closeObjMenu(); fn(); }); objMenu.appendChild(b); }
+  document.body.appendChild(objMenu); const r = objMenu.getBoundingClientRect();
+  objMenu.style.left = Math.min(px, innerWidth - r.width - 4) + "px"; objMenu.style.top = Math.min(py, innerHeight - r.height - 4) + "px";
+  return true;
+}
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 addEventListener("keydown", (e) => {
   if (typing()) return;
@@ -879,8 +931,12 @@ let myAim = null;                              // the reticle (three x / z) whil
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
   if (e.button === 0) fireRail(e.clientX, e.clientY);
-  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });   // (owner, 2026-10-14) aiming keeps the wheel zoom until the aim point leaves the 300 m dead zone
-addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) aiming = false; });
+  if (e.button === 2) { aiming = true; rClick = { t: performance.now(), x: e.clientX, y: e.clientY }; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });   // (owner, 2026-10-14) aiming keeps the wheel zoom until the aim point leaves the 300 m dead zone
+addEventListener("mouseup", (e) => { if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false;
+  // (owner, 2026-10-14) a quick right-click (not a hold) on a crate or (staff) an object opens its menu
+  if (rClick && performance.now() - rClick.t < 300 && Math.hypot(e.clientX - rClick.x, e.clientY - rClick.y) < 6 && e.target === canvas) objectMenu(e.clientX, e.clientY);
+  rClick = null; } });
+let rClick = null;
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -973,8 +1029,8 @@ function connect() {
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       if (m.you.builder && window.WeaponPanel) window.WeaponPanel.mount({ send });   // (owner, 2026-10-14) the Weapon panel (Z)
-      // (owner, 2026-10-14) the weapon in the first hotbar slot is my primary (staff for now: the server checks)
-      if (m.you.builder && window.Inventory) window.Inventory.onPrimary((k) => send({ t: "equip", id: typeof k === "string" && k.startsWith("w:") ? k.slice(2) : null }));
+      amBuilder = !!m.you.builder;
+      for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       build.setStaff(!!m.you.builder); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
@@ -1021,6 +1077,9 @@ function connect() {
     else if (m.t === "weapons") { if (Array.isArray(m.list)) { weapons = m.list; ammo = null; reloadAt = 0; if (window.Catalog) window.Catalog.set("weapons", weapons); } }
     else if (m.t === "ammo" || m.t === "icons") { if (window.Catalog) window.Catalog.set(m.t, m.list); }   // (owner, 2026-10-14) the item catalog
     else if (m.t === "wsaved" || m.t === "asaved" || m.t === "isaved") { if (window.WeaponPanel) window.WeaponPanel.saved(m); }
+    else if (m.t === "inv") { if (window.Inventory) window.Inventory.set(m.slots); }   // (owner, 2026-10-14) my hotbar and inventory, from the server
+    else if (m.t === "crate") { if (m.c) { setCrate(m.c); if (window.Inventory) window.Inventory.updateCrate(m.c); } }
+    else if (m.t === "crategone") { dropCrate(String(m.id)); if (window.Inventory) window.Inventory.crateGone(String(m.id)); }
     else if (m.t === "equipped") { if (typeof m.id === "string") { myWeapon = m.id; ammo = null; reloadAt = 0; spreadDeg = 0; } }   // (owner, 2026-10-14) my primary weapon
     else if (m.t === "proj") { addProj(m); const q = projs.get(m.i); if (q) q.a = m.a; }
     else if (m.t === "pend") endProj(m);
@@ -1303,7 +1362,7 @@ renderer.setAnimationLoop(() => {
       coneGeo.attributes.position.array.set([sx, 0.35, sz, lx, 0.35, lz, rx, 0.35, rz]); coneGeo.attributes.position.needsUpdate = true;
       coneEdgeGeo.attributes.position.array.set([sx, 0.38, sz, lx, 0.38, lz, sx, 0.38, sz, rx, 0.38, rz]); coneEdgeGeo.attributes.position.needsUpdate = true;
     } }
-  updateShots(nowP);
+  updateShots(nowP); updateCrates(nowP);
   drawMinimap(nowP);
 
   if (countAt) {
@@ -1521,4 +1580,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}), ...(b.k === "ship" && b.extra ? { route: b.extra.route ? b.extra.route.length : 0, atk: !!b.extra.atk } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { get crates() { return [...crates.values()].map((o) => { const v = o.mesh.position.clone().project(camera); return { id: o.id, x: o.x, y: o.y, n: o.items.length, sx: (v.x + 1) / 2 * innerWidth, sy: (1 - v.y) / 2 * innerHeight }; }); }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}), ...(b.k === "ship" && b.extra ? { route: b.extra.route ? b.extra.route.length : 0, atk: !!b.extra.atk } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

@@ -690,6 +690,7 @@ export class World3D {
     }
   }
   // a block where this player's ship is (it gets pushed out); 30 at most each (the oldest goes), 400 in all
+  delBlock(id) { const n = this.blocks.length; this.blocks = this.blocks.filter((b) => b.id !== id); return this.blocks.length < n; }   // (owner, 2026-10-14) staff: right-click Delete
   addBlock(pid) {
     const p = this.players.get(pid); if (!p) return null;
     const mine = this.blocks.filter((b) => b.owner === pid), gone = [];

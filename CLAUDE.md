@@ -45,6 +45,7 @@ packages/server/src/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
                   (4003), admin hooks (kick 4005 / ban 4006 / mute), side pick (remembered), move /
                   chat in; 20 Hz sim, 15 Hz per-player snapshots (only ships inside that player's load circle)
+    items.js      (owner, 2026-10-14) every account's hotbar / inventory (world3d_inv) and dropped-item crates (5 min, in memory)
     world3d.js    the world: 2.5 km hexagon (for now), momentum ships (accel / brake / turn-scaled thrust), capacitor,
                   LOAD_R (5,000 m load circle, snapshotFor), positions saved. Weapons/combat were removed
                   (owner, 2026-10-13); the last version is commit 956cb73
