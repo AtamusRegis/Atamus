@@ -94,15 +94,11 @@
     #chat-tabs button.on { color: #fff; border-color: #e8902a; }
     #chat-tabs button.new:not(.on) { color: #ffd27a; border-color: #6a5a2a; }
     .chat-x { color: #7f93ad; font-size: 13px; line-height: 1; } .chat-x:hover { color: #fff; }
-    #chat:has(#admin-btn) #chat-tabs { margin-left: 32px; }   /* (owner) the tabs start over the panel, not over [A] */
     #chat-row { display: flex; gap: 4px; align-items: flex-end; } #chat-panel { flex: 1; min-width: 0; display: grid; gap: 4px; }
-    /* (owner, 2026-10-14) the panel keeps its own width and the staff buttons (A X B Z) sit to its left, growing the chat
-       leftward: they used to take their room out of the panel and push it off the right edge */
-    html:not(.touch) #chat { width: auto; }
-    html:not(.touch) #chat-row { display: grid; grid-template-columns: auto auto; grid-template-rows: 1fr repeat(4, auto); gap: 4px; align-items: end; }
-    html:not(.touch) #chat-row > button { grid-column: 1; }   /* stacked in one column at the bottom (A X B Z), so they stay clear of the hotbar */
-    html:not(.touch) #admin-btn { grid-row: 2; } html:not(.touch) #edit-btn { grid-row: 3; } html:not(.touch) #build-btn { grid-row: 4; } html:not(.touch) #weapon-btn { grid-row: 5; }
-    html:not(.touch) #chat-panel { grid-column: 2; grid-row: 1 / 6; width: 340px; }
+    html:not(.touch) #chat { width: auto; } html:not(.touch) #chat-panel { width: 340px; }
+    /* (owner, 2026-10-14) the staff buttons (A X B Z) are a column on the right edge of the screen, centered top to bottom */
+    #staff-col { position: fixed; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; z-index: 6; }
+    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #edit-btn { order: 2; } #build-btn { order: 3; } #weapon-btn { order: 4; }
     html.touch #chat-panel { flex: 1; width: auto; }   /* (owner) [A] floats left of the panel, by the input */
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
@@ -188,16 +184,13 @@
     /* (owner, 2026-10-13) the admin Build menu: [B] beside [A], its slot row above the capacitor bar (like the hotbar) */
     #build-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(120,200,255,0.14); border: none; border-radius: 5px; color: #9fd8ff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #build-btn:hover, #build-btn.on { background: var(--accent-grad); color: #06121c; }
-    #chat:has(#build-btn:not([hidden])) #chat-tabs { margin-left: 32px; }
     /* (owner, 2026-10-14) the Object Editor: [X] beside [B], a window with the object drawn top down and its collider outline */
     #edit-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(190,140,255,0.14); border: none; border-radius: 5px; color: #d2b4ff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #edit-btn:hover, #edit-btn.on { background: linear-gradient(135deg, #c9a4ff, #8a5cf0); color: #12061f; }
-    #chat:has(#edit-btn:not([hidden])) #chat-tabs { margin-left: 32px; }
     html.touch #edit-btn, html.touch #coll-edit { display: none !important; }
     /* (owner, 2026-10-14) the Weapon panel (weaponpanel.js), staff: [Z] left of [X] */
     #weapon-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #weapon-btn:hover, #weapon-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
-    #chat:has(#weapon-btn) #chat-tabs { margin-left: 32px; }
     #weapon-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
     #weapon-edit .we-top { margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
     #weapon-edit .we-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
@@ -286,6 +279,7 @@
   <div id="countdown" class="overlay" hidden></div>
   <label id="helpers-box"><input id="helpers" type="checkbox">Weapon helpers</label>
   <canvas id="minimap"></canvas>
+  <div id="staff-col"></div>
   <div id="chat"><div id="chat-tabs"></div><div id="chat-row"><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" autocorrect="off" enterkeyhint="send"></form></div></div></div>
   <div id="ctx-menu" hidden></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-send">Send</button><button id="report-cancel">Cancel</button></div></div></div>
@@ -295,8 +289,8 @@
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="inventory.js?v=1791952773"></script>
-  <script src="weaponpanel.js?v=1792005551"></script>
-  <script src="adminpanel.js?v=1792000287"></script>
-  <script type="module" src="game3d.js?v=1792041388"></script>
+  <script src="weaponpanel.js?v=1792041596"></script>
+  <script src="adminpanel.js?v=1792041596"></script>
+  <script type="module" src="game3d.js?v=1792041596"></script>
 </body>
 </html>

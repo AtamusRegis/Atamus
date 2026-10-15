@@ -216,7 +216,7 @@ export function initBuild(ctx) {
   slot.addEventListener("click", () => { if (picking && SHAPES.includes(picking.k)) stopPicking(); else startPicking(slotShape); });
   shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
   document.body.append(bar);
-  function mountBtn() { const row = document.getElementById("chat-row") || document.body; if (!btn.parentNode) row.insertBefore(btn, row.firstChild); if (!xbtn.parentNode) row.insertBefore(xbtn, row.firstChild); }
+  function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); if (!xbtn.parentNode) col.appendChild(xbtn); }   // (owner, 2026-10-14) the staff column on the right edge
 
   function setStaff(v) { staff = !!v; btn.hidden = !staff; xbtn.hidden = !staff; if (staff) mountBtn(); if (!staff && open) toggle(false); if (!staff && eOpen) eToggle(false); }
   function toggle(v) {

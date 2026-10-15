@@ -44,7 +44,7 @@
     if (root) { drawRail(); return true; }
     // (owner) the button is an [A] at the left of the chat input
     const btn = $("button", "", "A"); btn.id = "admin-btn"; btn.type = "button"; btn.title = "Admin";
-    const row = document.getElementById("chat-row"); if (row) row.insertBefore(btn, row.firstChild); else document.body.appendChild(btn);   // outside the input bar, on its left
+    (document.getElementById("staff-col") || document.body).appendChild(btn);   // (owner, 2026-10-14) the staff column on the right edge
     root = $("div"); root.id = "admin-panel"; root.hidden = true;
     rail = $("div", "ap-rail"); drawRail();
     const x = $("button", "ap-x", "×"); x.title = "Close"; x.addEventListener("click", () => toggle(false));

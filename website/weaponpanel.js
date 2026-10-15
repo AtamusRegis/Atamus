@@ -23,7 +23,7 @@
   function mount(a) {
     api = a; if (win) return;
     btn = $("button", "", "Z"); btn.id = "weapon-btn"; btn.type = "button"; btn.title = "Weapons";
-    const row = document.getElementById("chat-row"); if (row) row.insertBefore(btn, row.firstChild); else document.body.appendChild(btn);
+    (document.getElementById("staff-col") || document.body).appendChild(btn);   // (owner, 2026-10-14) the staff column on the right edge
     btn.addEventListener("click", () => toggle());
     win = $("div"); win.id = "weapon-edit"; win.hidden = true;
     const grid = $("div", "we-grid");
