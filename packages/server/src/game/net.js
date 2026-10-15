@@ -20,6 +20,7 @@ export function attachGameServer(httpServer) {
   const sendInv = (pid, ws) => { const s = items.get(pid); if (s) try { ws.send(JSON.stringify({ t: "inv", slots: s })); } catch {} };
   const crateCast = (c, gone) => broadcast(gone ? { t: "crategone", id: c.id } : { t: "crate", c: items.crateMsg(c) });
   setInterval(() => { for (const id of items.expire()) broadcast({ t: "crategone", id }); }, 1000);   // (owner) crates go after 5 minutes
+  setInterval(() => { for (const b of world.tickNodes()) objCast("b", b); }, 1000);   // (owner, 2026-10-15) mined-out nodes respawning
   const socks = new Map();                     // account id -> ws
   const devs = new Map();                      // device id -> account id, for the connected sockets
   const mutes = new Map();                     // account id -> { perm, until } (ms), the connected players' chat mutes
@@ -92,7 +93,7 @@ export function attachGameServer(httpServer) {
     try { saved = await world.savedTeam(pid); } catch (e) { console.error("saved side", e); }
     if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
-      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(),
+      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), now: Date.now(),
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer, creator, items: staff },   // staff: the Admin button; builder: the Object Placer; creator: the Object Creator; items: the Item Creator
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world

@@ -182,9 +182,14 @@ export function initBuild(ctx) {
 
   // poly / srad: the sight outline; mpoly / rad: the movement ellipse (what ships bump into)
   const hold = (b) => {
+    if (gone(b)) { b.polys = []; b.mpoly = []; b.srad = b.rad = 0; return; }   // (owner, 2026-10-15) a mined-out node blocks nothing
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.srad = b.rad = polyRad(b, b.poly); return; }
     b.polys = buildPolys(b, colliders, pivots); b.srad = Math.max(...b.polys.map((v) => polyRad(b, v))); b.mpoly = movePoly(b, movers, pivots); b.rad = polyRad(b, b.mpoly); };
   const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
+  // (owner, 2026-10-15) a node at 0 ore waits out its respawn timer (the server's respawnAt); its spawn zone is around its
+  // home (where it was put; it respawns somewhere inside)
+  const gone = (b) => isTypeKey(b.k) && !!(b.extra && b.extra.respawnAt);
+  const homeOf = (b) => (b.extra && Array.isArray(b.extra.home) ? b.extra.home : [b.x, b.y]);
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== meshKey(b.k)) { scene.remove(b.mesh); b.mesh = null; }
     // (owner, 2026-10-14) a test ship is drawn by its stand-in ship (it acts as a player); only while held does it get
@@ -206,7 +211,7 @@ export function initBuild(ctx) {
     if (rDrag && rDrag.id === id) return;      // nor the ship whose route I'm editing
     // (owner, 2026-10-15) nor a piece I've just changed (moved, scaled, turned, its settings): the server's echoes of my
     // earlier, throttled sends would pull it back for a moment (a stutter); my last send settles it
-    { const o = builds.get(id); if (o && o.localAt && performance.now() - o.localAt < 600) return; }
+    { const o = builds.get(id); if (o && o.localAt && performance.now() - o.localAt < 600) { if (o.extra && extra && isTypeKey(k) && o.extra.respawnAt !== extra.respawnAt) { o.extra.respawnAt = extra.respawnAt; place(o); } return; } }   // (but a node's respawn timer is the server's)
     const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); if (extra) b.extra = extra; builds.set(id, b); place(b);
   }
   function unBuild(id) {
@@ -634,6 +639,9 @@ export function initBuild(ctx) {
   function spinNodes(now, dt) {
     for (const b of builds.values()) {
       const e = isTypeKey(b.k) && b.extra, sp = e && b.mesh && b.mesh.userData.spin; if (!sp) continue;
+      // (owner, 2026-10-15) mined out (waiting to respawn): unseen, but a hologram while the Object Placer is open
+      const g = gone(b); b.mesh.visible = !g || open;
+      if (b.mesh.userData.gone !== g) { b.mesh.userData.gone = g; if (g) holo(b.mesh, true); else if (!(held && held.id === b.id)) holo(b.mesh, false); }
       sp.rotation.y += (e.spin || 0) * Math.PI / 180 * dt;
       b.mesh.position.y = e.bmin + (e.bmax - e.bmin) * (0.5 + 0.5 * Math.sin(now / 1000 * (e.bob || 0) * Math.PI * 2 + (+b.id || 0)));
     }
@@ -656,6 +664,9 @@ export function initBuild(ctx) {
     i.addEventListener("input", () => apply(false)); i.addEventListener("change", () => apply(true));
     i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
   }
+  // (owner, 2026-10-15) a mined-out node: how long until it respawns
+  const rLab = document.createElement("label"), rOut = document.createElement("span"); { const sp = document.createElement("span"); sp.textContent = "Respawn In"; rOut.className = "nb-val"; rLab.append(sp, rOut); rLab.hidden = true; nBox.appendChild(rLab); }
+  const clock = () => (gone.skew || 0) + Date.now();
   nBox.addEventListener("pointerdown", (e) => e.stopPropagation());
   const selNode = () => { const b = sel && builds.get(sel); return b && isTypeKey(b.k) ? b : null; };
   let nShown = null;
@@ -665,6 +676,8 @@ export function initBuild(ctx) {
     if (!b || !b.extra) { nBox.hidden = true; nShown = null; return; }
     const key = b.id + b.w + JSON.stringify(b.extra);   // (the fields refill only when the settings change, not while typed in)
     if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = nVal(b, k); nShown = key; }
+    rLab.hidden = !gone(b);
+    if (gone(b)) { const t = Math.max(0, Math.ceil((b.extra.respawnAt - clock()) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = String(t % 60).padStart(2, "0"); rOut.textContent = h ? h + ":" + String(m).padStart(2, "0") + ":" + sec : m + ":" + sec; }
     nBox.hidden = false;
   }
   // the spawn zone's outline and handles (meters around the node: moving the node moves its zone)
@@ -677,11 +690,11 @@ export function initBuild(ctx) {
     const list = b ? [...builds.values()].filter((o) => o !== b && o.k === b.k && o.extra && o.extra.zone) : [];
     while (zoLayer.children.length > list.length) zoLayer.lastChild.remove();
     while (zoLayer.children.length < list.length) { const pl = document.createElementNS(NSv, "polygon"); pl.setAttribute("class", "zn-other"); zoLayer.appendChild(pl); }
-    list.forEach((o, i) => { const pts = o.extra.zone.map(([x, y]) => scr2(o.x + x, o.y + y)); zoLayer.children[i].setAttribute("points", pts.every((p) => p[2]) ? pts.map((p) => p[0] + "," + p[1]).join(" ") : ""); });
+    list.forEach((o, i) => { const [hx, hy] = homeOf(o), pts = o.extra.zone.map(([x, y]) => scr2(hx + x, hy + y)); zoLayer.children[i].setAttribute("points", pts.every((p) => p[2]) ? pts.map((p) => p[0] + "," + p[1]).join(" ") : ""); });
   }
   function zoneHandles(b) {
     otherZones(b);
-    const Z = b && b.extra && b.extra.zone, pts = Z ? Z.map(([x, y]) => scr2(b.x + x, b.y + y)) : [];
+    const Z = b && b.extra && b.extra.zone, H = b && homeOf(b), pts = Z ? Z.map(([x, y]) => scr2(H[0] + x, H[1] + y)) : [];
     const key = b && Z && pts.every((p) => p[2]) ? b.id + ":" + Z.length : "";
     if (key !== zKey) {
       zKey = key; while (zLayer.firstChild) zLayer.removeChild(zLayer.firstChild); if (!key) return;
@@ -704,7 +717,7 @@ export function initBuild(ctx) {
   });
   zLayer.addEventListener("pointermove", (e) => {
     if (!zDrag || e.pointerId !== zDrag.pid) return; const b = builds.get(zDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g || !b.extra || !b.extra.zone) return;
-    b.extra.zone[zDrag.i] = [Math.round((g.x - b.x) * 10) / 10, Math.round((g.y - b.y) * 10) / 10]; push(b, false);
+    const [hx, hy] = homeOf(b); b.extra.zone[zDrag.i] = [Math.round((g.x - hx) * 10) / 10, Math.round((g.y - hy) * 10) / 10]; push(b, false);
   });
   const zEnd = (e) => { if (!zDrag || e.pointerId !== zDrag.pid) return; const b = builds.get(zDrag.id); zDrag = null; try { zLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
   zLayer.addEventListener("pointerup", zEnd); zLayer.addEventListener("pointercancel", zEnd);
@@ -746,7 +759,9 @@ export function initBuild(ctx) {
   canvas.addEventListener("pointermove", (e) => {
     if (!oDrag || e.pointerId !== oDrag.pid) return; const b = builds.get(oDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g) return;
     const nx = g.x + oDrag.ox, ny = g.y + oDrag.oy; if (!ctx.inside(nx, ny)) return;
-    b.x = Math.round(nx * 100) / 100; b.y = Math.round(ny * 100) / 100; place(b); push(b, false);
+    const x = Math.round(nx * 100) / 100, y = Math.round(ny * 100) / 100;
+    if (isTypeKey(b.k) && b.extra) { const [hx, hy] = homeOf(b); b.extra = { ...b.extra, home: [Math.round((hx + x - b.x) * 100) / 100, Math.round((hy + y - b.y) * 100) / 100] }; }   // (its spawn zone comes along)
+    b.x = x; b.y = y; place(b); push(b, false);
   });
   const oEnd = (e) => { if (!oDrag || e.pointerId !== oDrag.pid) return; const b = builds.get(oDrag.id); oDrag = null; try { canvas.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
   canvas.addEventListener("pointerup", oEnd); canvas.addEventListener("pointercancel", oEnd);
@@ -1217,5 +1232,5 @@ export function initBuild(ctx) {
     for (const id of [...builds.keys()]) unBuild(id);
     for (const o of list || []) setBuild(o);
   }
-  return { onMsg, load, frame, setStaff, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
+  return { onMsg, load, frame, setStaff, setClock(t) { if (Number.isFinite(t)) gone.skew = t - Date.now(); }, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
 }

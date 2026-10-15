@@ -320,7 +320,10 @@ export function cleanNode(e, w) {
   if (Array.isArray(e.zone) && e.zone.length >= 3 && e.zone.length <= 32) { zone = []; for (const q of e.zone) { if (!Array.isArray(q) || q.length !== 2) { zone = null; break; } const [x, y] = q.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) { zone = null; break; } zone.push([Math.round(Math.max(-3000, Math.min(3000, x)) * 10) / 10, Math.round(Math.max(-3000, Math.min(3000, y)) * 10) / 10]); } }
   if (!zone) zone = [[-size, -size], [size, -size], [size, size], [-size, size]];
   const amount = e.amount == null || !Number.isFinite(Number(e.amount)) ? null : Math.min(max, int(e.amount, 0, 99999, 0));
-  return { size, spin: num(e.spin, -720, 720, 10), bob: num(e.bob, 0, 5, 0.3), bmin, bmax, amount, min, max, respawn: int(e.respawn, 0, 86400, 300), zone };
+  // (owner, 2026-10-15) home: where it was placed (its spawn zone is around it); respawnAt: when a mined-out node comes back
+  // (the server's own; never taken from a client)
+  const home = Array.isArray(e.home) && e.home.length === 2 && e.home.every((v) => Number.isFinite(Number(v))) ? e.home.map((v) => Math.round(Number(v) * 100) / 100) : null;
+  return { size, spin: num(e.spin, -720, 720, 10), bob: num(e.bob, 0, 5, 0.3), bmin, bmax, amount, min, max, respawn: int(e.respawn, 0, 86400, 300), zone, home, respawnAt: Number.isFinite(Number(e.respawnAt)) && e.respawnAt ? Math.round(Number(e.respawnAt)) : null };
 }
 export const buildMsg = (b) => (b.extra ? [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra] : [b.id, b.k, b.x, b.y, b.w, b.d, b.r]);
 export const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
@@ -494,7 +497,7 @@ export class World3D {
       const n = satPush(polys.get(p), squarePoly(b.x, b.y, BLOCK_HALF)); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
     for (const p of ps) for (const b of this.builds.values()) {
-      if (b.k === "ship" || b.k === "cloud") continue;   // (clouds don't block)           // test ships collide as ships (their stand-in players), below
+      if (b.k === "ship" || b.k === "cloud" || b.gone) continue;   // (clouds don't block; nor a mined-out node)           // test ships collide as ships (their stand-in players), below
       const dx = p.x - b.x, dy = p.y - b.y, R = b.rad + rads.get(p); if (dx * dx + dy * dy > R * R) continue;
       const n = satPush(polys.get(p), b.mpoly); if (n) { keep(p, () => nudge(p, n, n.d)); polys.set(p, this.shipPoly(p)); }
     }
@@ -746,7 +749,7 @@ export class World3D {
       const route = o.extra.route == null ? null : cleanRoute(o.extra.route), atk = o.extra.atk === true;
       if (route || atk) b.extra = { ...(route ? { route } : {}), ...(atk ? { atk: true } : {}) };
     }
-    if (isTypeKey(o.k)) { b.extra = cleanNode(o.extra, b.w); b.w = b.d = b.extra.size; }   // (owner, 2026-10-15) a placed node: its settings; its footprint is its size (no scale)
+    if (isTypeKey(o.k)) { b.extra = cleanNode(o.extra, b.w); b.w = b.d = b.extra.size; if (!b.extra.home) b.extra.home = [b.x, b.y]; }   // (owner, 2026-10-15) a placed node: its settings; its footprint is its size (no scale)
     if (o.k === "cloud") {                   // (owner, 2026-10-14) a nebula cloud: its own outline (meters around its pivot, before
       const e = o.extra || {}, pts = cleanCloud(e.pts);   // turning and scaling; w is the scale in %) and a color theme
       if (!pts) return null; b.extra = { pts, v: Number.isInteger(e.v) && e.v >= 0 && e.v < CLOUD_THEMES ? e.v : 0 }; b.d = b.w;
@@ -755,7 +758,13 @@ export class World3D {
   }
   _put(id, b, keep = false) {
     b.id = id;
-    if (isTypeKey(b.k) && b.extra.amount == null) { const e = b.extra; e.amount = e.min + Math.floor(Math.random() * (e.max - e.min + 1)); b.dirty = true; }   // (owner, 2026-10-15) a new node rolls the ore it holds
+    if (isTypeKey(b.k)) {
+      const e = b.extra, old = this.builds.get(id);
+      if (e.amount == null) { e.amount = e.min + Math.floor(Math.random() * (e.max - e.min + 1)); b.dirty = true; }   // (owner, 2026-10-15) a new node rolls the ore it holds
+      // (owner, 2026-10-15) at 0 ore its respawn timer starts (it's gone meanwhile); any ore again calls it off
+      const was = old ? old.extra && old.extra.respawnAt : e.respawnAt;
+      const at = e.amount > 0 ? null : was || Date.now() + e.respawn * 1000; if (at !== e.respawnAt) b.dirty = true; e.respawnAt = at;
+    }
     this._shape(b); this.builds.set(id, b); if (b.k === "ship") this._bot(b, keep); return b;
   }
   // (owner, 2026-10-14) a test ship acts as a player for hitboxes and the rest (no AI): it has a stand-in in the players
@@ -771,6 +780,8 @@ export class World3D {
   }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) {
+    b.gone = isTypeKey(b.k) && !!(b.extra && b.extra.respawnAt);   // (owner, 2026-10-15) a mined-out node: blocks nothing until it respawns
+    if (b.gone) { b.polys = []; b.mpoly = []; b.rad = b.far = 0; return; }
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
     b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
@@ -783,6 +794,23 @@ export class World3D {
     return { parts: c, pv, mv, vis: vs, wo };
   }
   buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
+  // (owner, 2026-10-15) mined-out nodes whose respawn time has come: back with fresh ore, somewhere in their spawn zone
+  // (around where they were placed); returns them
+  tickNodes(now = Date.now()) {
+    const out = [];
+    for (const b of this.builds.values()) {
+      const e = isTypeKey(b.k) && b.extra; if (!e || !e.respawnAt || e.respawnAt > now) continue;
+      const [hx, hy] = e.home || [b.x, b.y], Z = e.zone; let x = hx, y = hy;
+      if (Z && Z.length >= 3) {
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [zx, zy] of Z) { x0 = Math.min(x0, zx); x1 = Math.max(x1, zx); y0 = Math.min(y0, zy); y1 = Math.max(y1, zy); }
+        const flat = Z.flat();
+        for (let i = 0; i < 40; i++) { const px = x0 + Math.random() * (x1 - x0), py = y0 + Math.random() * (y1 - y0); if (inPoly(px, py, flat) && inside(hx + px, hy + py)) { x = hx + px; y = hy + py; break; } }
+      }
+      b.x = Math.round(x * 100) / 100; b.y = Math.round(y * 100) / 100;
+      e.amount = e.min + Math.floor(Math.random() * (e.max - e.min + 1)); e.respawnAt = null; b.dirty = true; this._shape(b); out.push(b);
+    }
+    return out;
+  }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
   typeList() { return [...this.types.values()]; }
   async setType(id, o) {
@@ -798,6 +826,7 @@ export class World3D {
     await this.ready; await pool.query(`DELETE FROM world3d_types WHERE id = $1`, [id]); this.types.delete(id); return { ok: true };
   }
   async addBuild(o, by) {
+    if (o && o.extra && typeof o.extra === "object") o = { ...o, extra: { ...o.extra, home: null, respawnAt: null } };   // (a new node's zone is around where it's put)
     const b = this._clean(o); if (!b || this.builds.size >= BUILD_CAP) return null;
     await this.ready;
     const { rows } = await pool.query(`INSERT INTO world3d_builds (k, x, y, w, d, r, by_user, extra) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`, [b.k, b.x, b.y, b.w, b.d, b.r, String(by), b.extra ? JSON.stringify(b.extra) : null]);

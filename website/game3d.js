@@ -6,7 +6,7 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792050676";
+import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792051031";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -737,7 +737,7 @@ function collideMe() {                       // (owner, 2026-10-14) by the ship'
   let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
   const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
   for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
-  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
+  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud" || !b.mpoly || !b.mpoly.length) continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
   for (const p of players.values()) {          // (owner, 2026-10-14) other ships: pushed apart, trading momentum like the server does
     if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
     const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
@@ -1031,7 +1031,7 @@ function connect() {
       if (m.you.items && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Creator (Z)
       amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
-      build.setStaff(!!m.you.builder, !!m.you.creator); build.setTypes(m.types); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
+      build.setStaff(!!m.you.builder, !!m.you.creator); build.setClock(m.now); build.setTypes(m.types); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins);
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) addPlayer(r.i, r.n).side = r.s;
       for (const id of [...blocks.keys()]) dropBlock(id);
