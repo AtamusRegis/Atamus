@@ -866,7 +866,7 @@ export function initBuild(ctx) {
   // node yields), Rotation Speed (deg/s) and Bob Speed (bobs a second). Each change is saved at once.
   const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
   const VIEW = 400;
-  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-views"><div class="ce-view ce-topv"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div><div class="ce-view ce-side" hidden><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div></div>';
+  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-views"><div class="ce-view ce-topv"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '" viewBox="0 0 ' + VIEW + ' ' + VIEW + '"></svg></div><div class="ce-view ce-side" hidden><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '" viewBox="0 0 ' + VIEW + ' ' + VIEW + '"></svg></div></div>';
   document.body.appendChild(win);
   const ceSlots = win.querySelector(".ce-slots"), ceTop = win.querySelector(".ce-topv"), ceCanvas = ceTop.querySelector("canvas"), ceSvg = ceTop.querySelector("svg");
   const ceSide = win.querySelector(".ce-side"), sdCanvas = ceSide.querySelector("canvas"), sdSvg = ceSide.querySelector("svg");   // (owner, 2026-10-15) the side view
@@ -1062,9 +1062,11 @@ export function initBuild(ctx) {
     const px = EP[pk()].map(toPx), [vx, vy] = toPx(ePv), [wx, wy] = toPx(eWo);
     const [mx0, my0] = toPx([eMv.x0, eMv.y0]), [mx1, my1] = toPx([eMv.x1, eMv.y1]), mcx = (mx0 + mx1) / 2, mcy = (my0 + my1) / 2;
     // all of them always drawn; the one being edited is bright and has handles (the other combat-points parts fainter)
+    if (eMode !== "pts") {                      // (owner, 2026-10-15) Points shows neither the hitboxes nor the movement collider
     eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim") }); });
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
+    }
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
     if (isShipKind() && eMode !== "pts") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
