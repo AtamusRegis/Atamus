@@ -188,7 +188,8 @@ export function initBuild(ctx) {
   const pivotAt = (o) => { const pv = pivots[o.k] || [0, 0], lx = -pv[0] * o.w, ly = -pv[1] * o.d, c = Math.cos(o.r), s = Math.sin(o.r); return [o.x + lx * c - ly * s, o.y + lx * s + ly * c]; };   // where the model's middle goes
   // (owner, 2026-10-15) a node at 0 ore waits out its respawn timer (the server's respawnAt); its spawn zone is around its
   // home (where it was put; it respawns somewhere inside)
-  const gone = (b) => isTypeKey(b.k) && !!(b.extra && b.extra.respawnAt);
+  const isRes = (k) => { const t = typeOf(k); return !!t && t.cat === "node"; };   // a Resource: holds ore, depletes and respawns
+  const gone = (b) => isRes(b.k) && !!(b.extra && b.extra.respawnAt);
   const homeOf = (b) => (b.extra && Array.isArray(b.extra.home) ? b.extra.home : [b.x, b.y]);
   function place(b) {
     if (b.mesh && b.mesh.userData.k !== meshKey(b.k)) { scene.remove(b.mesh); b.mesh = null; }
@@ -231,26 +232,37 @@ export function initBuild(ctx) {
   const btn = document.createElement("button"); btn.id = "build-btn"; btn.type = "button"; btn.textContent = "B"; btn.title = "Build"; btn.hidden = true;
   btn.addEventListener("click", () => toggle());
   const bar = document.createElement("div"); bar.id = "build-bar"; bar.hidden = true;
-  const typeSlots = document.createElement("div"); typeSlots.className = "build-types"; bar.appendChild(typeSlots);   // (owner, 2026-10-15) the object types
-  const shipSlot = document.createElement("div"); shipSlot.className = "inv-slot build-slot"; shipSlot.title = NAMES.ship; bar.appendChild(shipSlot);   // (owner) the second option: test ships
-  const cloudSlot = document.createElement("div"); cloudSlot.className = "inv-slot build-slot"; cloudSlot.title = NAMES.cloud; bar.appendChild(cloudSlot);   // (owner, 2026-10-14) the third: nebula clouds
+  // (owner, 2026-10-15) one slot per category: Resource, Region, Object, Structure, Ship. Each holds a pool (the objects
+  // made for it in the Object Creator; Region also has the nebula cloud, Ship the test ship) and shows the one chosen
+  // there; while one is picked, the left / right arrows go through its category's pool (up / down: kept for later)
+  const CATS = ["node", "region", "object", "structure", "ship"];
+  const TYPE_NAMES = { node: "Resource", region: "Region", object: "Object", structure: "Structure", ship: "Ship" };
+  const catOf = (k) => (k === "ship" ? "ship" : k === "cloud" ? "region" : (typeOf(k) || {}).cat || null);
+  const poolOf = (cat) => [...(cat === "region" ? ["cloud"] : cat === "ship" ? ["ship"] : []), ...[...types.values()].filter((t) => t.cat === cat).sort((a, b) => +a.id - +b.id).map((t) => "t:" + t.id)];
+  const catAt = {};                              // category -> the chosen pool entry
+  const curOf = (cat) => { const p = poolOf(cat); return p.includes(catAt[cat]) ? catAt[cat] : p[0] || null; };
   let cloudTheme = 0;
-  const drawCloudSlot = () => { const c = CLOUD_THEMES[cloudTheme][1].map((v) => Math.round(v * 255)).join(",");
-    cloudSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30"><path d="M8 21 Q3 21 4 16 Q5 12 9 13 Q10 7 16 8 Q21 8 22 13 Q27 13 26 18 Q25 22 21 21 Z" fill="rgba(' + c + ',0.5)" stroke="rgb(' + c + ')" stroke-width="1.6"/></svg>'; };
-  drawCloudSlot();
-  cloudSlot.addEventListener("click", () => { if (picking && picking.k === "cloud") stopPicking(); else startPicking("cloud"); });
-  shipSlot.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>';
+  const cloudPic = () => { const c = CLOUD_THEMES[cloudTheme][1].map((v) => Math.round(v * 255)).join(","), d = document.createElement("span");
+    d.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30"><path d="M8 21 Q3 21 4 16 Q5 12 9 13 Q10 7 16 8 Q21 8 22 13 Q27 13 26 18 Q25 22 21 21 Z" fill="rgba(' + c + ',0.5)" stroke="rgb(' + c + ')" stroke-width="1.6"/></svg>'; return d.firstChild; };
+  const shipPic = () => { const d = document.createElement("span"); d.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>'; return d.firstChild; };
   // an object type's picture: its icon, else its first letter
-  const typePic = (t, px) => { const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); if (ic) return window.Catalog.svg(ic, px);
-    const d = document.createElement("span"); d.className = "build-letter"; d.textContent = (t.name || "?").slice(0, 1).toUpperCase(); return d; };
+  const letter = (n, cls) => { const d = document.createElement("span"); d.className = "build-letter" + (cls ? " " + cls : ""); d.textContent = (n || "?").slice(0, 1).toUpperCase(); return d; };
+  const typePic = (t, px) => { const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); if (ic) return window.Catalog.svg(ic, px); return letter(t.name); };
+  const catSlots = CATS.map((cat) => { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.dataset.cat = cat; bar.appendChild(d);
+    d.addEventListener("click", () => { if (picking && catOf(picking.k) === cat) stopPicking(); else { const k = curOf(cat); if (k) startPicking(k); } }); return d; });
   function drawTypeSlots() {
-    typeSlots.replaceChildren(...[...types.values()].map((t) => { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28));
-      d.addEventListener("click", () => { if (picking && picking.k === d.dataset.k) stopPicking(); else startPicking(d.dataset.k); }); return d; }));
+    for (const d of catSlots) {
+      const cat = d.dataset.cat, k = curOf(cat), t = typeOf(k);
+      d.title = k === "ship" ? NAMES.ship : k === "cloud" ? NAMES.cloud : t ? t.name : TYPE_NAMES[cat]; d.dataset.k = k || "";
+      d.replaceChildren(k === "ship" ? shipPic() : k === "cloud" ? cloudPic() : t ? typePic(t, 28) : letter(TYPE_NAMES[cat], "none"));
+    }
     drawSlot();
   }
-  const drawSlot = () => { for (const d of typeSlots.children) d.classList.toggle("sel", !!picking && picking.k === d.dataset.k);
-    shipSlot.classList.toggle("sel", !!picking && picking.k === "ship"); if (typeof cloudSlot !== "undefined") cloudSlot.classList.toggle("sel", !!picking && picking.k === "cloud"); };
-  shipSlot.addEventListener("click", () => { if (picking && picking.k === "ship") stopPicking(); else startPicking("ship"); });
+  const drawSlot = () => { const c = picking && catOf(picking.k); for (const d of catSlots) d.classList.toggle("sel", !!c && c === d.dataset.cat); };
+  function cycle(dir) {                          // the next / previous object in the picked one's category
+    const cat = picking && catOf(picking.k); if (!cat) return; const p = poolOf(cat); if (p.length < 2) return;
+    const k = p[(p.indexOf(picking.k) + dir + p.length) % p.length]; startPicking(k);
+  }
   document.body.append(bar);
   function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); if (!xbtn.parentNode) col.appendChild(xbtn); }   // (owner, 2026-10-14) the staff column on the right edge
 
@@ -268,7 +280,7 @@ export function initBuild(ctx) {
   let ghost = null;
   function startPicking(k) {
     drop(true); if (ghost) { scene.remove(ghost); ghost = null; }
-    const t = typeOf(k);
+    const t = typeOf(k), c = catOf(k); if (c) { catAt[c] = k; drawTypeSlots(); }
     picking = k === "ship" ? { k, w: SHIP_D, d: SHIP_D, r: 0 } : k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } }
       : t ? { k, w: 60, d: 60, r: 0, extra: { size: 60 } } : null; drawSlot();
   }
@@ -621,7 +633,7 @@ export function initBuild(ctx) {
   const scaleSet = (now) => { const b = selPiece(), v = Number(gScale.value); if (!b || b.k !== "cloud" || gScale.value === "" || !Number.isFinite(v)) return; b.w = b.d = Math.max(MIN, Math.min(MAX, v)); place(b); push(b, now); };
   gRot.addEventListener("input", () => rotSet(false)); gRot.addEventListener("change", () => rotSet(true));   // (owner, 2026-10-15) instant
   gScale.addEventListener("input", () => scaleSet(false)); gScale.addEventListener("change", () => scaleSet(true));
-  gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); gTheme.blur(); });
+  gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawTypeSlots(); place(b); push(b, true); gTheme.blur(); });
   let gShown = "";
   function attrPanel() {
     const b = open && !picking && !held ? selPiece() : null;
@@ -648,6 +660,7 @@ export function initBuild(ctx) {
   }
   const nBox = document.createElement("div"); nBox.id = "node-box"; nBox.hidden = true; aPanel.appendChild(nBox);
   const NODE_F = [["size", "Size"], ["spin", "Rotation Speed"], ["bob", "Bob Speed"], ["bmin", "Bob Min"], ["bmax", "Bob Max"], ["respawn", "Respawn"], ["amount", "Ore"], ["min", "Ore Min"], ["max", "Ore Max"]], nIn = {};
+  const RES_F = ["respawn", "amount", "min", "max"];
   const nVal = (b, k) => (b.extra[k] == null ? "" : b.extra[k]);
   for (const [k, label] of NODE_F) {
     const l = document.createElement("label"), sp = document.createElement("span"), i = document.createElement("input"); sp.textContent = label; i.type = "number"; i.step = k === "bob" ? 0.05 : 1; if (["size", "respawn", "amount", "min", "max", "bob"].includes(k)) i.min = 0;
@@ -672,10 +685,11 @@ export function initBuild(ctx) {
   let nShown = null;
   function nodePanel() {
     const b = open && !picking && !held ? selNode() : null;
-    zoneHandles(b);
+    zoneHandles(b && isRes(b.k) ? b : null);
     if (!b || !b.extra) { nBox.hidden = true; nShown = null; return; }
     const key = b.id + b.w + JSON.stringify(b.extra);   // (the fields refill only when the settings change, not while typed in)
     if (nShown !== key && !nBox.contains(document.activeElement)) { for (const [k] of NODE_F) nIn[k].value = nVal(b, k); nShown = key; }
+    for (const [k] of NODE_F) nIn[k].parentNode.hidden = !isRes(b.k) && RES_F.includes(k);   // (ore and respawn: Resources only)
     rLab.hidden = !gone(b);
     if (gone(b)) { const t = Math.max(0, Math.ceil((b.extra.respawnAt - clock()) / 1000)), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, sec = String(t % 60).padStart(2, "0"); rOut.textContent = h ? h + ":" + String(m).padStart(2, "0") + ":" + sec : m + ":" + sec; }
     nBox.hidden = false;
@@ -798,6 +812,7 @@ export function initBuild(ctx) {
     if (ctrl) return;
     if (e.code === "Delete") { eat(); if (b) { held = null; sel = null; send({ t: "bdel", id: b.id }); } return; }
     if (e.code === "Escape") { if (picking) stopPicking(); else if (held) drop(false); else if (sel) sel = null; else toggle(false); }
+    if ((e.code === "ArrowLeft" || e.code === "ArrowRight") && picking) { eat(); cycle(e.code === "ArrowLeft" ? -1 : 1); }
   }, true);
   function copy(b) { clip = b.extra ? { k: b.k, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, w: b.w, d: b.d, r: b.r }; try { localStorage.setItem("atamus.buildclip", JSON.stringify(clip)); } catch {} }
 
@@ -849,7 +864,7 @@ export function initBuild(ctx) {
   const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
   const curType = () => typeOf(eKind);
   function drawProps() {
-    const t = curType(); props.hidden = !t; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
+    const t = curType(); props.hidden = !t || t.cat !== "node"; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
   }
   function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
@@ -871,7 +886,6 @@ export function initBuild(ctx) {
   oList.innerHTML = '<div class="ol-top"><span class="ce-title">OBJECT CREATOR</span><button type="button" class="ce-x" title="Close">\u00d7</button></div><div class="ol-tools"><input class="ol-search" maxlength="32"><select class="ol-sort"><option value="name">Name</option><option value="type">Type</option><option value="new">Newest</option></select></div><div class="ol-grid"></div><button type="button" class="ol-create">CREATE NEW OBJECT</button>';
   document.body.appendChild(oList);
   const olSearch = oList.querySelector(".ol-search"), olSort = oList.querySelector(".ol-sort"), olGrid = oList.querySelector(".ol-grid");
-  const TYPE_NAMES = { node: "Resource" };
   let olOpen = false;
   function olToggle(v) {
     if (!creator) return; olOpen = v === undefined ? !olOpen : !!v; oList.hidden = !olOpen; xbtn.classList.toggle("on", olOpen || eOpen);
@@ -891,7 +905,7 @@ export function initBuild(ctx) {
     let list = [...types.values()].filter((t) => !q || t.name.toLowerCase().includes(q));
     list.sort(sort === "new" ? (a, b) => +b.id - +a.id : sort === "type" ? (a, b) => (TYPE_NAMES[a.cat] || "").localeCompare(TYPE_NAMES[b.cat] || "") || a.name.localeCompare(b.name) : (a, b) => a.name.localeCompare(b.name));
     const cells = [];
-    if (!q || NAMES.ship.toLowerCase().includes(q)) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = "Player Ship"; d.innerHTML = shipSlot.innerHTML; d.dataset.k = "ship"; cells.push(d); }
+    if (!q || NAMES.ship.toLowerCase().includes(q)) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = "Player Ship"; d.replaceChildren(shipPic()); d.dataset.k = "ship"; cells.push(d); }
     for (const t of list) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28)); cells.push(d); }
     for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) { const d = document.createElement("div"); d.className = "inv-slot"; cells.push(d); }
     olGrid.replaceChildren(...cells);

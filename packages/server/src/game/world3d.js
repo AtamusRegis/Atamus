@@ -297,7 +297,10 @@ export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.
 // its model (an uploaded GLB, by file name) and the resource it yields (an item); its colliders are the Object Editor's,
 // under the type's key ("t:<id>"). Everything about a placed one (size, scale, spin, bob, ore, respawn, its spawn zone)
 // is the Object Placer's.
-export const TYPE_CATS = ["node"];
+// (owner, 2026-10-15) five categories: Resource ("node": asteroids, loot boxes; only these hold ore and respawn), Region
+// (nebulas, ion storms, asteroid fields), Object (derelict stations, unmineable asteroids), Structure (refineries, factories,
+// shipyards) and Ship (for testing, for now)
+export const TYPE_CATS = ["node", "region", "object", "structure", "ship"];
 export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
 export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.test(v) ? v : null);
 export function cleanType(o) {
@@ -737,6 +740,7 @@ export class World3D {
 
   // (owner, 2026-10-13) Build menu pieces. _clean checks a piece from a client as hostile: a known shape, finite numbers,
   // its center inside the map, sizes clamped, the angle wrapped. null if it isn't usable.
+  isRes(k) { const t = isTypeKey(k) && this.types.get(k.slice(2)); return !!t && t.cat === "node"; }   // a Resource (ore, depletion, respawn)
   kindOk(k) { return KINDS.includes(k) || (isTypeKey(k) && this.types.has(k.slice(2))); }
   _clean(o) {
     if (!o || !this.kindOk(o.k)) return null;
@@ -758,7 +762,7 @@ export class World3D {
   }
   _put(id, b, keep = false) {
     b.id = id;
-    if (isTypeKey(b.k)) {
+    if (this.isRes(b.k)) {
       const e = b.extra, old = this.builds.get(id);
       if (e.amount == null) { e.amount = e.min + Math.floor(Math.random() * (e.max - e.min + 1)); b.dirty = true; }   // (owner, 2026-10-15) a new node rolls the ore it holds
       // (owner, 2026-10-15) at 0 ore its respawn timer starts (it's gone meanwhile); any ore again calls it off
@@ -780,7 +784,7 @@ export class World3D {
   }
   // poly: the sight outline (line of sight is the client's); mpoly / rad: the movement ellipse, what ships bump into
   _shape(b) {
-    b.gone = isTypeKey(b.k) && !!(b.extra && b.extra.respawnAt);   // (owner, 2026-10-15) a mined-out node: blocks nothing until it respawns
+    b.gone = this.isRes(b.k) && !!(b.extra && b.extra.respawnAt);   // (owner, 2026-10-15) a mined-out node: blocks nothing until it respawns
     if (b.gone) { b.polys = []; b.mpoly = []; b.rad = b.far = 0; return; }
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
     b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
@@ -799,7 +803,7 @@ export class World3D {
   tickNodes(now = Date.now()) {
     const out = [];
     for (const b of this.builds.values()) {
-      const e = isTypeKey(b.k) && b.extra; if (!e || !e.respawnAt || e.respawnAt > now) continue;
+      const e = this.isRes(b.k) && b.extra; if (!e || !e.respawnAt || e.respawnAt > now) continue;
       const [hx, hy] = e.home || [b.x, b.y], Z = e.zone; let x = hx, y = hy;
       if (Z && Z.length >= 3) {
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [zx, zy] of Z) { x0 = Math.min(x0, zx); x1 = Math.max(x1, zx); y0 = Math.min(y0, zy); y1 = Math.max(y1, zy); }
@@ -818,7 +822,9 @@ export class World3D {
     if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;
     if (id) { if (!this.types.has(id)) return null; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(t)]); }
     else { if (this.types.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_types (data) VALUES ($1) RETURNING id`, [JSON.stringify(t)])).rows[0].id); }
-    const out = { id, ...t }; this.types.set(id, out); return out;
+    const out = { id, ...t }; this.types.set(id, out);
+    for (const b of this.builds.values()) if (b.k === "t:" + id) this._shape(b);   // (its category may have changed: a Resource's depletion counts only for Resources)
+    return out;
   }
   async delType(id) {
     if (!this.types.has(id)) return { ok: false };
