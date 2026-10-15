@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Raw mark (owner):** raw assets (models, sounds, icons) show a small circled R in the corner of their slots.
 - **Icons from objects (owner):** Create New Icon now offers SVG Icon or From Object, which turns a RAW ASSETS model's rendered picture into the icon.
 - **Variations (owner):** right-click an asset in RAW ASSETS for Create Variation: a copy with its own colors, view and name, without importing again; objects can each use a different variation.
 - **CREATOR (owner):** the Player Ship slot is gone (the ship players fly stays the one last picked).

@@ -174,7 +174,7 @@ function draw() {
   fbtn.classList.toggle("on", tab !== "all");
   const q = search.value.trim().toLowerCase();
   const list = all().filter((a) => (tab === "all" || a.kind === tab) && (!q || a.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-  const cells = list.map((a) => { const d = $("div", "inv-slot imp-slot"); d.dataset.id = a.id; d.title = a.name; d.appendChild(slotPic(a, 34)); return d; });
+  const cells = list.map((a) => { const d = $("div", "inv-slot imp-slot"); d.dataset.id = a.id; d.title = a.name; d.appendChild(slotPic(a, 34)); d.appendChild($("span", "raw-mark", "R")); return d; });
   for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
   grid.replaceChildren(...cells);
 }

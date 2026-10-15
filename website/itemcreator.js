@@ -74,7 +74,7 @@
     const o = overlay("we-pick"); o.box.appendChild($("p", "we-title", "ICONS"));
     const g = $("div", "we-list");
     const draw = () => {
-      const cells = [...C().icons.values()].map((ic) => { const c = btn("", "inv-slot we-pickslot", () => { onPick(ic.id); o.close(); }); c.appendChild(C().svg(ic, 34)); return c; });
+      const cells = [...C().icons.values()].map((ic) => { const c = btn("", "inv-slot we-pickslot", () => { onPick(ic.id); o.close(); }); c.appendChild(C().svg(ic, 34)); c.appendChild($("span", "raw-mark", "R")); return c; });   // (owner, 2026-10-15) raw
       for (let i = cells.length; i < 10; i++) cells.push($("div", "inv-slot"));
       g.replaceChildren(...cells);
     };
