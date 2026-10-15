@@ -3,7 +3,7 @@
 // holding R turns it slowly, and a left click places it (the blueprint stays for more; Escape or the slot again ends it).
 // Clicking a placed piece picks it up the same way (pointer moves it, wheel scales, R turns; click drops it, Escape
 // puts it back). (owner, 2026-10-15: the Object Placer) Its slots: each object type from the Object Creator, the test ship and
-// the nebula cloud (Q: a cloud's color theme). Delete removes the held piece; Ctrl+C copies,
+// the nebula cloud. Delete removes the selected piece; Ctrl+C copies,
 // Ctrl+X cuts (copies and removes) and Ctrl+V pastes a copy where the pointer is. The ship flies as usual meanwhile.
 // Pieces belong to the server (everyone sees them, ships collide with them); this file only sends the edits.
 import * as THREE from "./vendor/three.module.js";
@@ -158,7 +158,6 @@ export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
-  const ROT_SPEED = Math.PI / 2;               // (owner) R turns a piece slowly: a quarter turn a second
 
   // ---- the blueprint look (owner): a shimmering hologram ----
   const holoT = { value: 0 };
@@ -218,7 +217,7 @@ export function initBuild(ctx) {
 
   // ---- state ----
   // picking: the blueprint of a new piece ({ k, w, d, r }); held: a placed piece picked up ({ id, ox, oy, b0 })
-  let staff = false, open = false, picking = null, held = null, clip = null, rDown = false, lastSend = 0, sel = null;   // sel: (owner, 2026-10-14) the test ship last picked up (its buttons show over it)
+  let staff = false, open = false, picking = null, held = null, clip = null, lastSend = 0, sel = null;   // sel: (owner, 2026-10-14) the test ship last picked up (its buttons show over it)
   try { const c = JSON.parse(localStorage.getItem("atamus.buildclip") || "null"); if (c && (KINDS.includes(c.k) || isTypeKey(c.k))) clip = c; } catch {}
   const mouse = { x: 0, y: 0 };
   addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; }, { capture: true, passive: true });
@@ -605,10 +604,25 @@ export function initBuild(ctx) {
     routeBtn.textContent = b.extra && b.extra.route ? "Remove route" : "Add route"; atkBtn.classList.toggle("on", !!(b.extra && b.extra.atk));
     sBox.hidden = false;
   }
+  // every object: Rotation (degrees); a cloud also: Scale (%) and Theme
+  const gBox = document.createElement("div"); gBox.id = "gen-box"; aPanel.appendChild(gBox);
+  const gField = (label, el) => { const l = document.createElement("label"), sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); gBox.appendChild(l); return el; };
+  const gRot = gField("Rotation", Object.assign(document.createElement("input"), { type: "number", step: 1 }));
+  const gScale = gField("Scale", Object.assign(document.createElement("input"), { type: "number", step: 1, min: 5, max: 1000 }));
+  const gTheme = gField("Theme", document.createElement("select")); ["Violet", "Teal", "Amber", "Emerald", "Crimson"].forEach((n, i) => gTheme.append(new Option(n, String(i))));
+  const cloudRows = [gScale.parentNode, gTheme.parentNode];
+  for (const el of [gRot, gScale, gTheme]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
+  gRot.addEventListener("change", () => { const b = selPiece(), v = Number(gRot.value); if (!b || !Number.isFinite(v)) return; const r = -v * Math.PI / 180; b.r = Math.round(Math.atan2(Math.sin(r), Math.cos(r)) * 10000) / 10000; place(b); push(b, true); });
+  gScale.addEventListener("change", () => { const b = selPiece(), v = Number(gScale.value); if (!b || b.k !== "cloud" || !Number.isFinite(v)) return; b.w = b.d = Math.max(MIN, Math.min(MAX, v)); place(b); push(b, true); });
+  gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); gTheme.blur(); });
+  let gShown = "";
   function attrPanel() {
-    const b = open && !picking && !held ? selShip() || selNode() : null;
-    aPanel.hidden = !b; if (!b) return;
-    aTop.textContent = b.k === "ship" ? "Test Ship" : (typeOf(b.k) || {}).name || "";
+    const b = open && !picking && !held ? selPiece() : null;
+    aPanel.hidden = !b; if (!b) { gShown = ""; return; }
+    aTop.textContent = b.k === "ship" ? "Test Ship" : b.k === "cloud" ? NAMES.cloud : (typeOf(b.k) || {}).name || "";
+    for (const r of cloudRows) r.hidden = b.k !== "cloud";
+    const key = b.id + ":" + b.r + ":" + b.w + ":" + (b.extra && b.extra.v);
+    if (key !== gShown && !gBox.contains(document.activeElement)) { gRot.value = String(Math.round(-b.r * 180 / Math.PI * 10) / 10); gScale.value = String(Math.round(b.w)); if (b.k === "cloud") gTheme.value = String(b.extra.v || 0); gShown = key; }
   }
 
   // ---- (owner, 2026-10-15) resource nodes (the Object Placer): each turns and bobs between two heights (its own settings).
@@ -699,50 +713,30 @@ export function initBuild(ctx) {
   let pend = null;
   function pendSend(b, keep) { if (pend) { pend.b = b; pend.keep = keep; return; } pend = { b, keep }; setTimeout(() => { const p = pend; pend = null; if (p && builds.get(p.b.id) === p.b) push(p.b, true, p.keep); }, 100); }
   function create(o) { send({ t: "bnew", ...o }); }
-  // (owner, 2026-10-15) clicking a placed object selects it (it isn't picked up): its attributes panel, its handles (a cloud's
-  // outline, a ship's route, a node's spawn zone) and four arrows (north, south, east, west) to drag it along those; the
-  // wheel scales it and R turns it; Delete removes it, Ctrl+C / Ctrl+X copy / cut it; Escape or a click on nothing deselects
+  // (owner, 2026-10-15) clicking a placed object selects it: its attributes panel (where it's turned, sized and the rest; no
+  // keys or wheel for those) and its handles (a cloud's outline, a ship's route, a node's spawn zone). Pressing on the
+  // selected object again and dragging moves it (no hologram). Delete removes it, Ctrl+C / Ctrl+X copy / cut it; Escape or
+  // a click on nothing deselects
   function pickUp(b) {
     stopPicking(); if (!b) return;
     if (b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route)) { const q = ctx.botPos(b.id); if (q) { b.x = q.x; b.y = q.y; b.r = q.h; } }   // where its stand-in is now (a route ship: its spawn stays)
     sel = b.id;
   }
   const selPiece = () => (sel && builds.get(sel)) || null;
-  const mLayer = document.createElementNS(NSv, "svg"); mLayer.id = "move-arrows"; mLayer.setAttribute("width", "100%"); mLayer.setAttribute("height", "100%"); document.body.appendChild(mLayer);
-  const ARROWS = [["n", 0, 1], ["s", 0, -1], ["e", 1, 0], ["w", -1, 0]];
-  for (const [d] of ARROWS) { const g = document.createElementNS(NSv, "g"); g.setAttribute("class", "mv-arrow"); g.dataset.d = d;
-    const p = document.createElementNS(NSv, "path"); p.setAttribute("d", "M0 -15 L11 2 L4 2 L4 14 L-4 14 L-4 2 L-11 2 Z"); g.appendChild(p); mLayer.appendChild(g); }
-  let mDrag = null;
-  function moveArrows() {
-    const b = open && !picking && !held && !mDrag ? selPiece() : mDrag ? builds.get(mDrag.id) : null;
-    mLayer.style.display = b ? "" : "none"; if (!b) return;
-    const q = b.k === "ship" && ctx.botPos && !(b.extra && b.extra.route) ? ctx.botPos(b.id) : null, x = q ? q.x : b.x, y = q ? q.y : b.y;
-    const c = scr2(x, y); if (!c[2]) { mLayer.style.display = "none"; return; }
-    const R = Math.max(60, Math.min(160, (b.w || 60) * 0.6 * (innerHeight / 800) * 600 / Math.max(200, camera.position.distanceTo(new THREE.Vector3(x, 0, -y)))));
-    for (const g of mLayer.children) {
-      const [, ax, ay] = ARROWS.find((a) => a[0] === g.dataset.d), p = scr2(x + ax * 10, y + ay * 10), dx = p[0] - c[0], dy = p[1] - c[1], L = Math.hypot(dx, dy) || 1;
-      g.setAttribute("transform", "translate(" + (c[0] + dx / L * R) + "," + (c[1] + dy / L * R) + ") rotate(" + (Math.atan2(dy, dx) * 180 / Math.PI + 90) + ")");
-    }
-  }
-  mLayer.addEventListener("pointerdown", (e) => {
-    const g = e.target.closest && e.target.closest(".mv-arrow"), b = selPiece(); if (!g || !b || e.button !== 0) return;
-    e.preventDefault(); e.stopPropagation(); const p = ground(e.clientX, e.clientY); if (!p) return;
-    mDrag = { id: b.id, ax: g.dataset.d === "n" || g.dataset.d === "s" ? "y" : "x", gx: p.x, gy: p.y, x0: b.x, y0: b.y, pid: e.pointerId };
-    try { mLayer.setPointerCapture(e.pointerId); } catch {}
-  });
-  mLayer.addEventListener("pointermove", (e) => {
-    if (!mDrag || e.pointerId !== mDrag.pid) return; const b = builds.get(mDrag.id), p = ground(e.clientX, e.clientY); if (!b || !p) return;
-    const nx = mDrag.ax === "x" ? mDrag.x0 + p.x - mDrag.gx : mDrag.x0, ny = mDrag.ax === "y" ? mDrag.y0 + p.y - mDrag.gy : mDrag.y0;
-    if (!ctx.inside(nx, ny)) return; b.x = Math.round(nx * 100) / 100; b.y = Math.round(ny * 100) / 100; place(b); push(b, false);
-  });
-  const mEnd = (e) => { if (!mDrag || e.pointerId !== mDrag.pid) return; const b = builds.get(mDrag.id); mDrag = null; try { mLayer.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
-  mLayer.addEventListener("pointerup", mEnd); mLayer.addEventListener("pointercancel", mEnd);
   function drop(commit) {                       // commit: keep where it is now; otherwise put it back where it was
     if (!held) return; const b = builds.get(held.id), b0 = held.b0; held = null; if (!b) return;
     if (!commit) Object.assign(b, b0);
     if (b.mesh) holo(b.mesh, false); place(b); push(b, true);
   }
 
+  let oDrag = null;                             // (owner, 2026-10-15) the selected object being dragged
+  canvas.addEventListener("pointermove", (e) => {
+    if (!oDrag || e.pointerId !== oDrag.pid) return; const b = builds.get(oDrag.id), g = ground(e.clientX, e.clientY); if (!b || !g) return;
+    const nx = g.x + oDrag.ox, ny = g.y + oDrag.oy; if (!ctx.inside(nx, ny)) return;
+    b.x = Math.round(nx * 100) / 100; b.y = Math.round(ny * 100) / 100; place(b); push(b, false);
+  });
+  const oEnd = (e) => { if (!oDrag || e.pointerId !== oDrag.pid) return; const b = builds.get(oDrag.id); oDrag = null; try { canvas.releasePointerCapture(e.pointerId); } catch {} if (b) push(b, true); };
+  canvas.addEventListener("pointerup", oEnd); canvas.addEventListener("pointercancel", oEnd);
   canvas.addEventListener("pointerdown", (e) => {
     if (!open || e.button !== 0) return;
     const g = ground(e.clientX, e.clientY);
@@ -751,22 +745,17 @@ export function initBuild(ctx) {
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
     const hits = ray.intersectObjects([...builds.values()].filter((b) => b.k !== "cloud").map((b) => b.mesh).filter(Boolean).concat(ctx.botObjects ? ctx.botObjects() : []), true);   // (test ships: their stand-ins)
     let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
-    if (o && g) { pickUp(builds.get(o.userData.id)); return; }
-    // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline selects it
-    if (g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { pickUp(b); return; }
+    let hitB = o && g ? builds.get(o.userData.id) : null;
+    // (owner, 2026-10-14) a cloud (puffs, nothing solid to hit): a click on the ground inside its outline
+    if (!hitB && g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { hitB = b; break; }
+    if (hitB) {
+      if (sel !== hitB.id) { pickUp(hitB); return; }   // the first click selects it; pressing on it again drags it
+      const sx = hitB.k === "ship" && ctx.botPos && !(hitB.extra && hitB.extra.route) ? ctx.botPos(hitB.id) : null;
+      if (sx) { hitB.x = sx.x; hitB.y = sx.y; }
+      oDrag = { id: hitB.id, ox: hitB.x - g.x, oy: hitB.y - g.y, pid: e.pointerId }; try { canvas.setPointerCapture(e.pointerId); } catch {} return;
+    }
     sel = null;                                  // (clicked nothing: no ship selected)
   });
-
-  // the wheel scales the blueprint or the held piece (test ships keep their size); it doesn't zoom the camera meanwhile
-  addEventListener("wheel", (e) => {
-    if (!open || e.target !== canvas) return;
-    const t = picking || (held && builds.get(held.id)) || selPiece(); if (!t) return;   // (owner, 2026-10-15) or the selected object
-    e.preventDefault(); e.stopImmediatePropagation();
-    if (t.k === "ship") return;
-    const f = Math.max(MIN / Math.min(t.w, t.d), Math.min(Math.pow(1.1, -e.deltaY / 100), MAX / Math.max(t.w, t.d)));   // (a node: its scale; its size stays)
-    t.w *= f; t.d *= f; if (isTypeKey(t.k)) t.extra = { ...(t.extra || {}), size: Math.round(t.w * 100) / 100 };   // (a node: its size)
-    if (!picking) { place(t); push(t, false); }
-  }, { capture: true, passive: false });
 
   // ---- keys (only while the menu is open, and never while typing) ----
   addEventListener("keydown", (e) => {
@@ -780,15 +769,8 @@ export function initBuild(ctx) {
     if (ctrl && e.code === "KeyV") { eat(); if (clip) { const g = ground(mouse.x, mouse.y); if (g && ctx.inside(g.x, g.y)) create({ ...clip, x: g.x, y: g.y }); } return; }
     if (ctrl) return;
     if (e.code === "Delete") { eat(); if (b) { held = null; sel = null; send({ t: "bdel", id: b.id }); } return; }
-    if (e.code === "KeyR") { eat(); rDown = true; return; }
-    if (e.code === "KeyQ") { eat(); if (e.repeat) return;
-      if (picking && picking.k === "cloud") { cloudTheme = picking.extra.v = (picking.extra.v + 1) % CLOUD_THEMES.length; drawCloudSlot(); if (ghost) { scene.remove(ghost); ghost = null; } return; }   // (owner) a cloud's variation: its color theme
-      if (!picking && b && b.k === "cloud") { b.extra.v = (b.extra.v + 1) % CLOUD_THEMES.length; cloudTheme = b.extra.v; drawCloudSlot(); place(b); push(b, true); return; }
-      return; }   // (only a cloud has variations)
     if (e.code === "Escape") { if (picking) stopPicking(); else if (held) drop(false); else if (sel) sel = null; else toggle(false); }
   }, true);
-  addEventListener("keyup", (e) => { if (e.code === "KeyR") rDown = false; });
-  addEventListener("blur", () => { rDown = false; });
   function copy(b) { clip = b.extra ? { k: b.k, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, w: b.w, d: b.d, r: b.r }; try { localStorage.setItem("atamus.buildclip", JSON.stringify(clip)); } catch {} }
 
   // ---- every frame: the blueprint and the held piece follow the pointer; R turns them ----
@@ -796,9 +778,9 @@ export function initBuild(ctx) {
   function frame() {
     const now = performance.now(), dt = Math.min(0.1, (now - lastF) / 1000); lastF = now; holoT.value = now / 1000;
     eRender(); gizFrame(); cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
-    updateEdges(dt); cloudHandles(); routeHandles(); attrPanel(); shipButtons(); nodePanel(); moveArrows(); spinNodes(now, dt);
+    updateEdges(dt); cloudHandles(); routeHandles(); attrPanel(); shipButtons(); nodePanel(); spinNodes(now, dt);
     if (!open) return;
-    const g = ground(mouse.x, mouse.y), turn = rDown ? ROT_SPEED * dt : 0;
+    const g = ground(mouse.x, mouse.y), turn = 0;   // (owner, 2026-10-15: turning is the attributes panel's)
     if (picking) {
       picking.r = Math.atan2(Math.sin(picking.r - turn), Math.cos(picking.r - turn));
       if (!ghost || ghost.userData.k !== meshKey(picking.k)) {
@@ -813,8 +795,6 @@ export function initBuild(ctx) {
       if (g) { const nx = g.x + held.ox, ny = g.y + held.oy; if ((nx !== b.x || ny !== b.y) && ctx.inside(nx, ny)) { b.x = nx; b.y = ny; moved = true; } }
       if (turn) { b.r = Math.atan2(Math.sin(b.r - turn), Math.cos(b.r - turn)); moved = true; }
       if (moved) { place(b); push(b, false); }
-    } else if (turn && selPiece()) {           // (owner, 2026-10-15) R turns the selected object
-      const b = selPiece(); b.r = Math.atan2(Math.sin(b.r - turn), Math.cos(b.r - turn)); place(b); push(b, false);
     }
   }
 
