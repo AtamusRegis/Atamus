@@ -1,5 +1,5 @@
-// (owner, 2026-10-15) The Item Creator (was the Weapon panel; staff: Nyssary and admins): Z, or the [Z] button in the
-// staff column, opens it. A scrollable grid of item slots (5 a row), every item. A slot drags into the hotbar or the
+// (owner, 2026-10-15) The Item Creator's window is gone (the CREATOR, creator.js, took over its list); what's left here
+// are its pop-ups: the Item Editor, the icon picker and the Icon Creator. Formerly: Z opened it. A scrollable grid of item slots (5 a row), every item. A slot drags into the hotbar or the
 // inventory (inventory.js does the dragging: these slots hand out copies). Right-click a slot: Edit Item / Delete.
 // Below: Create New Item, a pop-up with a name, an icon box ([+]: pick one of the existing icons) with Create New Icon on
 // its left (the Icon Creator), then Cancel / Create. Edit Item opens the Item Editor (owner, 2026-10-15): the name and
@@ -10,7 +10,7 @@
   const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
   const C = () => window.Catalog;
-  let api = null, win = null, zbtn = null, list = null, ctx = null, pending = null, tabs = null, tab = "items", makeRow = null;
+  let api = null, pending = null;
   const overlays = [];                          // open pop-ups, top last: { el, close, key }
 
   // ---- pop-up plumbing: a dim backdrop, the box in the middle; Escape closes the top one ----
@@ -31,74 +31,8 @@
     if (!textInput(e.target)) e.stopImmediatePropagation();
   }, true);
 
-  // ---- the main window ----
-  function mount(a) {
-    api = a; if (win) return;
-    zbtn = btn("Z"); zbtn.id = "item-btn"; zbtn.title = "Item Creator";
-    (document.getElementById("staff-col") || document.body).appendChild(zbtn);   // (owner, 2026-10-14) the staff column on the right edge
-    zbtn.addEventListener("click", () => toggle());
-    win = $("div"); win.id = "item-edit"; win.hidden = true;
-    const top = $("div", "we-top"); top.append($("span", "we-title", "ITEM CREATOR"), btn("\u00d7", "we-x", () => toggle(false)));
-    top.addEventListener("pointerdown", (e) => {   // (owner, 2026-10-14) dragged by its top bar
-      if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
-      const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
-      win.style.transform = "none"; win.style.left = r0.left + "px"; win.style.top = r0.top + "px";
-      const move = (ev) => { const r = win.getBoundingClientRect();
-        win.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; };
-      const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
-      addEventListener("pointermove", move); addEventListener("pointerup", up);
-    });
-    list = $("div", "we-list");
-    list.addEventListener("contextmenu", (e) => { e.preventDefault(); const it = e.target.closest(".inv-item"); if (it) menu(it.dataset.item, e.clientX, e.clientY); });
-    const make = $("div", "we-make"); make.append(btn("Create New Item", "", () => itemBox(null)));
-    // (owner, 2026-10-15) two tabs: Items, and the Icon Editor (every icon; click one to edit it in the Icon Creator)
-    tabs = $("div", "we-tabs");
-    for (const [k, label] of [["items", "Items"], ["icons", "Icon Editor"]]) { const b = btn(label, "", () => { tab = k; drawList(); }); b.dataset.k = k; tabs.appendChild(b); }
-    win.append(top, tabs, list, make); document.body.appendChild(win);
-    makeRow = make;
-    win.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") toggle(false); });
-    addEventListener("keydown", (e) => {
-      if (e.code !== "KeyZ" || e.ctrlKey || e.metaKey || e.altKey || e.repeat || overlays.length) return;
-      const t = document.activeElement; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
-      e.preventDefault(); toggle();
-    });
-    C().on(() => { if (!win.hidden) drawList(); });
-    addEventListener("pointerdown", (e) => { if (ctx && !ctx.contains(e.target)) closeMenu(); }, true);
-  }
-  function drawList() {
-    for (const b of tabs.children) b.classList.toggle("on", b.dataset.k === tab);
-    makeRow.hidden = tab !== "items";
-    if (tab === "icons") {                     // the Icon Editor tab: each icon a slot; click to edit it
-      const cells = [...C().icons.values()].map((ic) => { const c = btn("", "inv-slot we-pickslot", () => creator(() => {}, ic)); c.appendChild(C().svg(ic, 34)); return c; });
-      for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) cells.push($("div", "inv-slot"));
-      list.replaceChildren(...cells); return;
-    }
-    const keys = C().items.map((x) => "it:" + x.id);
-    const cells = keys.map((k) => {
-      const c = $("div", "inv-slot"), it = C().item(k), el = $("div", "inv-item pic"); el.dataset.item = k; el.title = it ? it.name : "";
-      const pic = C().picture(k, 26); if (pic) el.appendChild(pic); c.appendChild(el); return c;
-    });
-    for (let i = keys.length; i < Math.max(10, Math.ceil(keys.length / 5) * 5); i++) cells.push($("div", "inv-slot"));   // the row filled out with empty slots
-    list.replaceChildren(...cells);
-  }
-  function toggle(open) {
-    if (!win) return;
-    const show = open === undefined ? win.hidden : !!open;
-    win.hidden = !show; zbtn.classList.toggle("on", show);
-    if (!show) { closeMenu(); while (overlays.length) overlays[overlays.length - 1].close(); if (document.activeElement && win.contains(document.activeElement)) document.activeElement.blur(); }
-    else drawList();
-  }
-  // ---- right-click: Edit Item / Delete ----
-  function closeMenu() { if (ctx) { ctx.remove(); ctx = null; } }
-  function menu(key, x, y) {
-    closeMenu(); const it = C().item(key); if (!it) return;
-    ctx = $("div", "we-ctx");
-    ctx.appendChild(btn("Edit Item", "", () => { closeMenu(); itemBox(it); }));
-    ctx.appendChild(btn("Delete", "", () => { closeMenu(); api.send({ t: "itemdel", id: it.id }); }));
-    document.body.appendChild(ctx);
-    const r = ctx.getBoundingClientRect(); ctx.style.left = Math.min(x, innerWidth - r.width - 4) + "px"; ctx.style.top = Math.min(y, innerHeight - r.height - 4) + "px";
-  }
-
+  // (owner, 2026-10-15) the window itself is gone: the CREATOR (creator.js) lists everything and opens these pop-ups
+  function mount(a) { api = a; }
   // ---- Create New Item (and Edit Item: the item's menu): name, icon, Cancel / Create ----
   function itemBox(edit) {
     const o = overlay("we-item"), base = edit && edit.data; let icon = base ? base.icon || null : null;
@@ -169,11 +103,11 @@
   const BASIC_NAMES = { circle: "Circle", square: "Square", triangle: "Triangle", poly: "Pen" };
   const BASIC_ICONS = { circle: '<circle cx="12" cy="12" r="7"/>', square: '<rect x="5" y="5" width="14" height="14"/>', triangle: '<polygon points="12,4 20,19 4,19"/>', poly: '<path d="M4 20 L5.5 14.5 L15.5 4.5 L19.5 8.5 L9.5 18.5 Z M14 6 L18 10" stroke="#0e131e" stroke-width="1"/>' };   // (the Pen)
   let clip = null;                              // the copied shape (kept while the page is open)
-  function creator(onSaved, editing) {         // editing: an existing icon (owner, 2026-10-15: the Icon Editor tab), saved over
+  function creator(onSaved, editing, name0) {  // editing: an existing icon, saved over; name0: (owner, 2026-10-15) a new icon's name (the CREATOR's)
     const style = { son: true, sc: "#0b1220", sw: 2, fon: true, fc: "#9fb3cf", fo: 1 };
     let shapes = editing ? JSON.parse(JSON.stringify(editing.shapes)) : [], sel = -1, pts = new Set(), tool = "", draft = [], drag = null, past = [], marq = null, guides = [], cmenu = null;
     const o = overlay("we-creator", keys);
-    o.box.appendChild($("p", "we-title", "ICON CREATOR"));
+    o.box.appendChild($("p", "we-title", "ICON CREATOR" + ((editing ? editing.name : name0) ? " \u2014 " + (editing ? editing.name : name0).toUpperCase() : "")));
     const body = $("div", "ic-body");
     // the shapes to add
     const tools = $("div", "ic-tools");
@@ -418,6 +352,7 @@
       if (JSON.stringify(icon).length > 15000) { err.textContent = "Too many shapes or corners to save."; err.hidden = false; return; }
       ok.disabled = true; err.hidden = true;
       pending = { type: "isaved", done: (m) => { closeIt(); onSaved(m.id); }, fail: (t) => { ok.disabled = false; err.textContent = t; err.hidden = false; } };
+      icon.name = editing ? editing.name || "" : name0 || "";
       api.send({ t: "iset", icon, ...(editing ? { id: editing.id } : {}) });
     }
     render();
@@ -430,5 +365,5 @@
     if (m.error) p.fail(m.error); else p.done(m);
   }
   // (owner, 2026-10-15) the icon picker and the Icon Creator, for the Object Creator's Object Icon too
-  window.ItemCreator = { mount, saved, toggle, pickIcon: (cb) => picker(cb), newIcon: (cb) => creator(cb) };
+  window.ItemCreator = { get busy() { return !!pending; }, mount, saved, pickIcon: (cb) => picker(cb), newIcon: (cb, name) => creator(cb, null, name), editIcon: (ic, cb) => creator(cb || (() => {}), ic), itemEditor: (it) => itemBox(it), overlay };
 })();

@@ -54,12 +54,13 @@ website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
   build3d.js      the Object Placer ([B], the Build menu: object types, test ships, clouds; hologram blueprints, copy / paste, resource node settings)
-                  and the Object Creator ([X], head admin: object types, model upload, colliders per kind incl. the player ship)
+                  and the Object Editor (head admin, from the CREATOR: an object's model and colliders, incl. the player ship)
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
   numdrag.js      every number field drags sideways to change it
   importer.js     the Importer ([I], head admin): imported models / images / audio (world3d_assets, POST /game/assets), model icons rendered from the model; window.Assets
   icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
-  itemcreator.js  the staff Item Creator ([Z]; was the Weapon panel): item slots, Create New Item / Edit Item, the icon picker and Icon Creator
+  creator.js      the CREATOR ([C]): every item, object type, icon and sound as slots; CREATE (name, icon, type), Edit / Delete
+  itemcreator.js  pop-ups only now (its Z window is gone): the Item Editor, the icon picker and the Icon Creator
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
                   orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
                   own-sphere prediction + snapshot interpolation, countdown and reconnect handling

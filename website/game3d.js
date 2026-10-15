@@ -6,8 +6,9 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { Importer } from "./importer.js?v=1792054521";
-import { initBuild, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792052471";
+import { Importer } from "./importer.js?v=1792055309";
+import { Creator } from "./creator.js?v=1792055309";
+import { initBuild, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792055309";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -1020,7 +1021,8 @@ function connect() {
   };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }   // (owner, 2026-10-14) objects entering / leaving the load circle
+    if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }
+    if (Creator.onMsg(m)) return;              // (owner, 2026-10-15) the CREATOR's lists and the saves it's waiting for   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
       if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
       if (window.Catalog) { window.Catalog.set("icons", m.icons || []); window.Catalog.set("items", m.items || []); }   // (owner, 2026-10-15) the Item Creator's items
@@ -1029,7 +1031,8 @@ function connect() {
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
       amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      if (m.you.items && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Creator (Z)
+      if (m.you.items && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Editor, icon picker and Icon Creator pop-ups
+      if (m.you.items) Creator.mount({ send, build, types: objTypes, staff: true, head: !!m.you.creator }); Creator.setSounds(m.sounds);   // (owner, 2026-10-15) the CREATOR (C)
       amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }   // (owner, 2026-10-15) the Importer (I), head admin

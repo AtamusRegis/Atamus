@@ -99,7 +99,7 @@ export function attachGameServer(httpServer) {
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
-      items: world.itemList(), icons: world.iconList(), types: world.typeList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
+      items: world.itemList(), icons: world.iconList(), types: world.typeList(), sounds: world.soundList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
       crates: items.crateList(),
       ...(creator ? { assets: world.assetList() } : {}),                // (owner, 2026-10-15) the Importer's assets (head admin)                                       // (owner, 2026-10-14) dropped-item crates
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
@@ -194,6 +194,24 @@ export function attachGameServer(httpServer) {
           if (!ic) { try { ws.send(JSON.stringify({ t: "isaved", error: "That icon can't be saved." })); } catch {} return; }
           broadcast({ t: "icons", list: world.iconList() }); try { ws.send(JSON.stringify({ t: "isaved", id: ic.id })); } catch {}
         }).catch((e) => console.error("icon", e));
+      }
+      else if (m.t === "icondel") {            // (owner, 2026-10-15) the CREATOR: staff delete an icon nothing uses
+        if (!staff) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        world.delIcon(id).then((r) => { if (r.ok) broadcast({ t: "icons", list: world.iconList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "isaved", error: r.error })); } catch {} }).catch((e) => console.error("icon del", e));
+      }
+      else if (m.t === "sset") {               // (owner, 2026-10-15) the CREATOR: the head admin makes or changes a sound (SFX / Music Track)
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        world.setSound(id, m.sound).then((o) => {
+          try { ws.send(JSON.stringify(o ? { t: "ssaved", id: o.id } : { t: "ssaved", error: "That sound can't be saved." })); } catch {}
+          if (o) broadcast({ t: "sounds", list: world.soundList() });
+        }).catch((e) => console.error("sound", e));
+      }
+      else if (m.t === "sdel") {
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        world.delSound(id).then((ok) => { if (ok) broadcast({ t: "sounds", list: world.soundList() }); }).catch((e) => console.error("sound del", e));
       }
       // (owner, 2026-10-14) the hotbar and inventory: move (swap two slots), give (staff: a copy from the Item Creator),
       // drop (into a crate where the ship is), take (out of a crate within reach); the result goes back as the whole inventory

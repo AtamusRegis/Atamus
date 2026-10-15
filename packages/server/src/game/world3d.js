@@ -88,7 +88,14 @@ export function cleanIcon(o) {
     if (s.t === "ellipse") q = [q[0], q[1], Math.max(0.5, q[2]), Math.max(0.5, q[3])];
     out.push({ t: s.t, p: q, fon: !!s.fon, fc, fo: r2(Math.max(0, Math.min(1, fo))), son: !!s.son, sc, sw: r2(Math.max(0, Math.min(8, sw))) });
   }
-  return { shapes: out };
+  return { name: safeText(String(o.name || ""), 32).trim(), shapes: out };   // name: (owner, 2026-10-15) the CREATOR's
+}
+// (owner, 2026-10-15) sounds (the CREATOR's SFX and Music Track): a name, an icon and the kind; nothing more yet
+export const SOUND_KINDS = ["sfx", "music"];
+export function cleanSound(o) {
+  if (!o || typeof o !== "object") return null;
+  const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
+  return { name, icon: iconRef(o.icon), kind: SOUND_KINDS.includes(o.kind) ? o.kind : "sfx" };
 }
 export const CATALOG_CAP = 500;                // items and icons: at most this many each
 export const falloffAt = (w, d) => (d <= w.optimal ? 1 : Math.max(0, 1 - (w.falloff / 100) * (d - w.optimal) / 100));
@@ -359,7 +366,7 @@ export class World3D {
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
-    this.catalog = new Map(); this.icons = new Map(); this.types = new Map(); this.assets = new Map();   // assets: (owner, 2026-10-15) the Importer's   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
+    this.catalog = new Map(); this.icons = new Map(); this.types = new Map(); this.assets = new Map(); this.sounds = new Map();   // assets: (owner, 2026-10-15) the Importer's   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
@@ -396,6 +403,8 @@ export class World3D {
     for (const o of (await pool.query(`SELECT id, data FROM world3d_items ORDER BY id`)).rows) { const a = cleanItem(o.data); if (a) this.catalog.set(String(o.id), { id: String(o.id), ...a }); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_types (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) object types
     for (const o of (await pool.query(`SELECT id, data FROM world3d_types ORDER BY id`)).rows) { const t = cleanType(o.data); if (t) this.types.set(String(o.id), { id: String(o.id), ...t }); }
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_sounds (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the CREATOR's sounds
+    for (const o of (await pool.query(`SELECT id, data FROM world3d_sounds ORDER BY id`)).rows) { const a = cleanSound(o.data); if (a) this.sounds.set(String(o.id), { id: String(o.id), ...a }); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_assets (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the Importer
     for (const o of (await pool.query(`SELECT id, data FROM world3d_assets ORDER BY id`)).rows) { const a = cleanAsset(o.data); if (a) this.assets.set(String(o.id), { id: String(o.id), ...a }); }
     for (const t of this.types.values()) if (t.model && ![...this.assets.values()].some((a) => a.file === t.model)) await this.setAsset(null, { kind: "model", name: t.mname.replace(/\.glb$/i, "") || t.name, file: t.model }, true);   // (models uploaded before the Importer)
@@ -576,6 +585,23 @@ export class World3D {
     const ic = cleanIcon(o); if (!ic || !this.icons.has(id)) return null; await this.ready;
     await pool.query(`UPDATE world3d_icons SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(ic)]);
     const out = { id, ...ic }; this.icons.set(id, out); return out;
+  }
+  async delIcon(id) {                          // (owner, 2026-10-15) the CREATOR's Delete: not while something shows it
+    if (!this.icons.has(id)) return { ok: false };
+    if ([...this.catalog.values(), ...this.types.values(), ...this.sounds.values()].some((x) => x.icon === id)) return { ok: false, error: "Something still uses that icon." };
+    await this.ready; await pool.query(`DELETE FROM world3d_icons WHERE id = $1`, [id]); this.icons.delete(id); return { ok: true };
+  }
+  soundList() { return [...this.sounds.values()]; }
+  async setSound(id, o) {
+    const a = cleanSound(o); if (!a) return null; await this.ready;
+    if (a.icon && !this.icons.has(a.icon)) a.icon = null;
+    if (id) { if (!this.sounds.has(id)) return null; await pool.query(`UPDATE world3d_sounds SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(a)]); }
+    else { if (this.sounds.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_sounds (data) VALUES ($1) RETURNING id`, [JSON.stringify(a)])).rows[0].id); }
+    const out = { id, ...a }; this.sounds.set(id, out); return out;
+  }
+  async delSound(id) {
+    if (!this.sounds.has(id)) return false; await this.ready;
+    await pool.query(`DELETE FROM world3d_sounds WHERE id = $1`, [id]); this.sounds.delete(id); return true;
   }
   async addIcon(o, by) {
     const ic = cleanIcon(o); if (!ic || this.icons.size >= CATALOG_CAP) return null; await this.ready;

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **The CREATOR (owner):** C opens one CREATOR panel for everything made (items, the object types, the player ship, icons, SFX and Music Tracks), with a search, a filter and a green CREATE (name, icon, type). It replaces the Item Creator (Z) and the Object Creator list (X). Icons go to the Icon Creator; the other types are just a name, icon and type for now. An object's model is now picked in its Object Editor.
 - **Raw Assets grid (owner):** six slots a row; the search row matches their width, and the filter icon glows blue while a filter is on.
 - **Raw Assets (owner):** the Importer is now titled RAW ASSETS, with one row of a "Search assets" box, a filter button (All, Models, Images, Audio) and a green Import button above the asset grid; the tabs are gone.
 - **Model icon camera (owner):** when importing or editing a model in the Importer, its icon is a live view you can turn, tilt, shift and zoom (with Reset View); the icon is rendered from that view. Rename is now Edit.

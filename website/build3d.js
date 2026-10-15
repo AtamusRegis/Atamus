@@ -266,11 +266,11 @@ export function initBuild(ctx) {
     const k = p[(p.indexOf(picking.k) + dir + p.length) % p.length]; startPicking(k);
   }
   document.body.append(bar);
-  function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); if (!xbtn.parentNode) col.appendChild(xbtn); }   // (owner, 2026-10-14) the staff column on the right edge
+  function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); }   // (owner, 2026-10-14) the staff column on the right edge
 
   // (owner, 2026-10-15) v: the Object Placer (head admin, admins, developers); cr: the Object Creator (head admin)
   let creator = false;
-  function setStaff(v, cr) { staff = !!v; creator = !!cr; btn.hidden = !staff; xbtn.hidden = !creator; if (staff || creator) mountBtn(); if (!staff && open) toggle(false); if (!creator && eOpen) eToggle(false); if (!creator && olOpen) olToggle(false); }
+  function setStaff(v, cr) { staff = !!v; creator = !!cr; btn.hidden = !staff; if (staff || creator) mountBtn(); if (!staff && open) toggle(false); if (!creator && eOpen) eToggle(false); }
   function toggle(v) {
     if (!staff) return;
     open = v === undefined ? !open : !!v;
@@ -744,9 +744,9 @@ export function initBuild(ctx) {
     types.clear(); for (const t of Array.isArray(list) ? list : []) if (t && typeof t.id === "string") types.set(t.id, t);
     drawTypeSlots(); for (const b of builds.values()) if (isTypeKey(b.k)) place(b);
     if (picking && isTypeKey(picking.k) && !typeOf(picking.k)) stopPicking();
-    eMeshK = null; drawList(); if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else drawProps(); }
+    eMeshK = null; if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else drawProps(); }
   }
-  if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); drawList(); if (eOpen) drawProps(); });
+  if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); if (eOpen) drawProps(); });
 
   // ---- picking up and dropping placed pieces ----
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
@@ -852,7 +852,6 @@ export function initBuild(ctx) {
   // (a new resource node type); right-click a type: Delete (not while any are placed). A type's properties show above the
   // tabs: Name, Model (Upload Model, or drop a GLB on the window; 50 MB at most), Size (m across at scale 1), Item (what the
   // node yields), Rotation Speed (deg/s) and Bob Speed (bobs a second). Each change is saved at once.
-  const xbtn = document.createElement("button"); xbtn.id = "edit-btn"; xbtn.type = "button"; xbtn.textContent = "X"; xbtn.title = "Object Creator"; xbtn.hidden = true;
   const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
   const VIEW = 400;
   win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
@@ -862,105 +861,23 @@ export function initBuild(ctx) {
   // (the item it yields)
   const props = document.createElement("div"); props.className = "oc-props"; ceSlots.after(props); ceSlots.hidden = true;
   const pIn = {}, pRow = (label, el) => { const l = document.createElement("label"); l.className = "oc-row"; const sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); props.appendChild(l); return el; };
+  pIn.model = pRow("Model", document.createElement("select"));   // (owner, 2026-10-15) moved here from the old Object Creator panel: one of the Raw Assets models
   pIn.item = pRow("Resource Type", document.createElement("select"));
   const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
   const curType = () => typeOf(eKind);
   function drawProps() {
-    const t = curType(); props.hidden = !t || t.cat !== "node"; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
+    const t = curType(); props.hidden = !t; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
+    const models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    pIn.model.replaceChildren(new Option("None", ""), ...models.map((a) => new Option(a.name, a.file))); if (t.model && !models.some((a) => a.file === t.model)) pIn.model.append(new Option(t.mname || t.model, t.model)); pIn.model.value = t.model || "";
+    pIn.item.parentNode.hidden = t.cat !== "node";
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
   }
   function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
+  pIn.model.addEventListener("change", () => { const a = window.Assets && window.Assets.models().find((x) => x.file === pIn.model.value); saveType({ model: pIn.model.value || null, mname: a ? a.name : "" }); pIn.model.blur(); });
+  if (window.Assets) window.Assets.on(() => { if (eOpen) drawProps(); });
   pIn.item.addEventListener("change", () => { saveType({ item: pIn.item.value || null }); pIn.item.blur(); });
 
-  // ---- (owner, 2026-10-15) the Object Creator: X opens a list of every object (the player ship first), searchable by name
-  // and sortable (Name, Type, Newest), scrolling, with CREATE NEW OBJECT under it. Right-click an object: Edit Item (its
-  // name, icon, model and type), Edit Object (the Object Editor: its colliders, and a node's resource type) and Delete (not
-  // while any are placed; the ship: Edit Object only). ----
-  const oList = document.createElement("div"); oList.id = "obj-list"; oList.hidden = true;
-  oList.innerHTML = '<div class="ol-top"><span class="ce-title">OBJECT CREATOR</span><button type="button" class="ce-x" title="Close">\u00d7</button></div><div class="ol-tools"><input class="ol-search" maxlength="32"><select class="ol-sort"><option value="name">Name</option><option value="type">Type</option><option value="new">Newest</option></select></div><div class="ol-grid"></div><button type="button" class="ol-create">CREATE NEW OBJECT</button>';
-  document.body.appendChild(oList);
-  const olSearch = oList.querySelector(".ol-search"), olSort = oList.querySelector(".ol-sort"), olGrid = oList.querySelector(".ol-grid");
-  let olOpen = false;
-  function olToggle(v) {
-    if (!creator) return; olOpen = v === undefined ? !olOpen : !!v; oList.hidden = !olOpen; xbtn.classList.toggle("on", olOpen || eOpen);
-    if (olOpen) drawList(); else { closeTMenu(); if (document.activeElement && oList.contains(document.activeElement)) document.activeElement.blur(); }
-  }
-  oList.querySelector(".ce-x").addEventListener("click", () => olToggle(false));
-  olSearch.addEventListener("input", () => drawList()); olSort.addEventListener("change", () => { drawList(); olSort.blur(); });
-  for (const el of [olSearch, olSort]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") { el.blur(); olToggle(false); } });
-  oList.querySelector(".ol-create").addEventListener("click", () => itemPanel(null));
-  { const top = oList.querySelector(".ol-top"); top.addEventListener("pointerdown", (e) => {   // dragged by its header
-    if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault(); const r0 = oList.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
-    const mv = (ev) => { const r = oList.getBoundingClientRect(); oList.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; oList.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; oList.style.transform = "none"; };
-    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); }); }
-  function drawList() {
-    if (!olOpen) return;
-    const q = olSearch.value.trim().toLowerCase(), sort = olSort.value;
-    let list = [...types.values()].filter((t) => !q || t.name.toLowerCase().includes(q));
-    list.sort(sort === "new" ? (a, b) => +b.id - +a.id : sort === "type" ? (a, b) => (TYPE_NAMES[a.cat] || "").localeCompare(TYPE_NAMES[b.cat] || "") || a.name.localeCompare(b.name) : (a, b) => a.name.localeCompare(b.name));
-    const cells = [];
-    if (!q || NAMES.ship.toLowerCase().includes(q)) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = "Player Ship"; d.replaceChildren(shipPic()); d.dataset.k = "ship"; cells.push(d); }
-    for (const t of list) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28)); cells.push(d); }
-    for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) { const d = document.createElement("div"); d.className = "inv-slot"; cells.push(d); }
-    olGrid.replaceChildren(...cells);
-  }
-  olGrid.addEventListener("contextmenu", (e) => {
-    e.preventDefault(); const d = e.target.closest("[data-k]"); if (!d) return; const k = d.dataset.k, t = typeOf(k);
-    closeTMenu(); tMenu = document.createElement("div"); tMenu.className = "we-ctx";
-    const add = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { closeTMenu(); fn(); }); tMenu.appendChild(b); };
-    if (t) add("Edit Item", () => itemPanel(t));
-    add("Edit Object", () => { eToggle(true); eSetKind(k); });
-    if (t) add("Delete", () => send({ t: "tdel", id: t.id }));
-    document.body.appendChild(tMenu); const r = tMenu.getBoundingClientRect(); tMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 4) + "px"; tMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 4) + "px";
-  });
-  // CREATE NEW OBJECT / Edit Item: Name, Icon (Create New Icon beside the icon box [+], which picks an existing icon), Model
-  // (one of the Importer's models), Type (Resource, Region, Object, Structure, Ship); Cancel / Create (Save)
-  let iPanel = null;
-  function itemPanel(t) {
-    if (iPanel) iPanel.close();
-    const back = document.createElement("div"); back.className = "we-back"; const box = document.createElement("div"); box.className = "we-modal oc-item"; back.appendChild(box); document.body.appendChild(back);
-    const st = { name: t ? t.name : "", icon: t ? t.icon : null, model: t ? t.model : null, mname: t ? t.mname : "", cat: t ? t.cat : "node" };
-    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-    const title = el("p", "we-title", t ? "EDIT ITEM" : "NEW OBJECT"), grid = el("div", "we-grid");
-    const name = el("input"); name.maxLength = 32; name.value = st.name;
-    const iRow = el("div", "oc-icon"), iNew = el("button", "", "Create New Icon"), iBox = el("button", "oc-iconbox"); iNew.type = iBox.type = "button"; iBox.title = "Icon"; iRow.append(iNew, iBox);
-    // (owner, 2026-10-15) the model: one of the Importer's
-    const mRow = el("select");
-    const models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
-    mRow.append(new Option("None", ""), ...models.map((a) => new Option(a.name, a.file)));
-    if (st.model && !models.some((a) => a.file === st.model)) mRow.append(new Option(st.mname || st.model, st.model));
-    mRow.value = st.model || "";
-    mRow.addEventListener("change", () => { st.model = mRow.value || null; const a = models.find((x) => x.file === st.model); st.mname = a ? a.name : ""; });
-    const type = el("select"); for (const [k, v] of Object.entries(TYPE_NAMES)) type.append(new Option(v, k)); type.value = st.cat;
-    grid.append(el("label", "we-label", "Name"), name, el("label", "we-label", "Icon"), iRow, el("label", "we-label", "Model"), mRow, el("label", "we-label", "Type"), type);
-    const err = el("p", "we-err"); err.hidden = true;
-    const btns = el("div", "we-btns"), cancel = el("button", "", "CANCEL"), ok = el("button", "we-ok", t ? "SAVE" : "CREATE"); cancel.type = ok.type = "button"; btns.append(cancel, ok);
-    box.append(title, grid, err, btns);
-    const drawIcon = () => { const ic = st.icon && window.Catalog && window.Catalog.icons.get(st.icon); iBox.replaceChildren(ic ? window.Catalog.svg(ic, 26) : el("span", "oc-plus", "+")); };
-    drawIcon();
-    iNew.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.newIcon) window.ItemCreator.newIcon((id) => { st.icon = id; drawIcon(); }); });
-    iBox.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.pickIcon) window.ItemCreator.pickIcon((id) => { st.icon = id; drawIcon(); }); });
-    const close = () => { back.remove(); if (iPanel === p) iPanel = null; };
-    const save = () => {
-      const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }
-      ok.disabled = true; err.hidden = true; st.name = n; st.cat = type.value;
-      wantKind = { done: close, fail: (m) => { ok.disabled = false; err.textContent = m; err.hidden = false; } };
-      if (t) saveType(st, t); else send({ t: "tset", type: st });
-    };
-    cancel.addEventListener("click", close); ok.addEventListener("click", save);
-    back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
-    back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });
-    back.addEventListener("contextmenu", (e) => e.preventDefault());
-    const p = iPanel = { close }; setTimeout(() => name.focus(), 0);
-  }
-  let wantKind = null;                         // the Create / Edit Item panel waiting for the server's answer
-  function onTypeSaved(m) {
-    const w = wantKind; wantKind = null;
-    if (m.error) { if (w) w.fail(m.error); else { pErr.textContent = m.error; pErr.hidden = false; } return; }
-    if (w) w.done();
-  }
-  let tMenu = null; const closeTMenu = () => { if (tMenu) { tMenu.remove(); tMenu = null; } };
-  addEventListener("pointerdown", (e) => { if (tMenu && !tMenu.contains(e.target)) closeTMenu(); }, true);
+  function onTypeSaved(m) { if (m.error && eOpen) { pErr.textContent = m.error; pErr.hidden = false; } }   // (the Object Editor's own saves)
   // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (where line of sight is
   // stopped: drag corners, click an edge's middle dot to add one, right-click to remove), Movement (where ships collide:
   // drag its middle to move it, a side handle to stretch it) and Pivot (where the ship turns around). The wheel zooms the
@@ -1034,7 +951,7 @@ export function initBuild(ctx) {
   const panEnd = (e) => { if (ePanDrag && e.pointerId === ePanDrag.id) { ePanDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} } };
   ceSvg.addEventListener("pointerup", panEnd, true); ceSvg.addEventListener("pointercancel", panEnd, true);
   ceSvg.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });   // no browser autoscroll
-  function drawESlots() { drawList(); }        // (the Object Creator's list)
+  function drawESlots() {}
   function eSetKind(k) {
     if (!kindOk(k) || k === "cloud") k = "ship";
     eKind = k; pErr.hidden = true;
@@ -1042,10 +959,9 @@ export function initBuild(ctx) {
     eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawProps(); drawModes(); eDraw();
   }
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
-  xbtn.addEventListener("click", () => olToggle());
   function eToggle(v) {
     if (!creator) return;
-    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", olOpen || eOpen);
+    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen;
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
     giz.visible = eOpen;
   }
@@ -1210,9 +1126,8 @@ export function initBuild(ctx) {
   }
   addEventListener("keydown", (e) => {
     if (ctx.typing() || !creator) return;
-    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) olToggle(); return; }   // (the head admin: X is the Object Creator, not a block)
     if (eOpen && (e.ctrlKey || e.metaKey) && (e.code === "KeyZ" || e.code === "KeyU")) { e.preventDefault(); e.stopImmediatePropagation(); if (e.code === "KeyZ") undo(); else redo(); return; }   // (owner) Ctrl+Z undo, Ctrl+U redo
-    if (e.code === "Escape" && !open && !iPanel) { if (eOpen) eToggle(false); else if (olOpen) olToggle(false); }
+    if (e.code === "Escape" && !open && eOpen) eToggle(false);
   }, true);
 
   function onMsg(m) {
@@ -1239,5 +1154,7 @@ export function initBuild(ctx) {
     for (const id of [...builds.keys()]) unBuild(id);
     for (const o of list || []) setBuild(o);
   }
-  return { onMsg, load, frame, setStaff, setClock(t) { if (Number.isFinite(t)) gone.skew = t - Date.now(); }, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
+  // (owner, 2026-10-15) for the CREATOR (creator.js): an object's picture, and its Object Editor
+  const editObject = (k) => { eToggle(true); eSetKind(k); };
+  return { typePic: (t, px) => typePic(t, px), shipPic: () => shipPic(), editObject, onMsg, load, frame, setStaff, setClock(t) { if (Number.isFinite(t)) gone.skew = t - Date.now(); }, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
 }
