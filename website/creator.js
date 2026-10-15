@@ -81,7 +81,7 @@ function draw() {
   fbtn.classList.toggle("on", tab !== "all");
   const q = search.value.trim().toLowerCase();
   const list = entries().filter((e) => (tab === "all" || e.k === tab) && (!q || e.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
-  const cells = list.map((e) => { const d = $("div", "inv-slot imp-slot"); d.dataset.key = e.key; d.title = e.name; d.appendChild(e.pic(34)); return d; });
+  const cells = list.map((e) => { const d = $("div", "inv-slot imp-slot"); d.dataset.key = e.key; d.title = e.name; d.appendChild(e.pic(34)); if (e.k === "icon") d.appendChild($("span", "cr-mark", "i")); return d; });   // (owner, 2026-10-15) an icon: a small "i" in its top left
   for (let i = cells.length; i < Math.max(12, Math.ceil(cells.length / 6) * 6); i++) cells.push($("div", "inv-slot"));
   grid.replaceChildren(...cells);
 }
