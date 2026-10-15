@@ -804,7 +804,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Tab" || e.key === "Tab") { e.preventDefault(); if (!e.repeat && window.Inventory) window.Inventory.toggle(); return; }   // (owner) TAB opens / closes the inventory (in the chat input it switches channel)
   if (e.code === "Escape") { hideMenu(); if (window.Inventory && window.Inventory.open) window.Inventory.toggle(false); }
 });
-addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });
+addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
@@ -927,15 +927,22 @@ if (TOUCH) {
 
 // (owner, 2026-10-14) ship-relative controls: W thrusts the way the ship faces, S flies it backward, A and D turn it.
 // The push sent to the server is along the nose (or against it), so the physics is the same as before.
+// (owner, 2026-10-14) Q / E push the ship to its left / right without turning it (sideways: the side top speed and a part
+// of the thrust, like any push off the nose); with W or S the pushes add up (no faster than one).
 function inputDir() {
-  let f = 0, r = 0;
+  let f = 0, r = 0, st = 0;
+  if (keys.has("KeyE")) st += 1; if (keys.has("KeyQ")) st -= 1;
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
   if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: up / down thrust, left / right turn
   const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
   if (amSpawning()) return { x: 0, y: 0, b: 0, turn: 0 };   // (owner) materializing: no moving or turning yet
-  if (!f) return { x: 0, y: 0, b, turn };
+  if (!f && !st) return { x: 0, y: 0, b, turn };
   f = Math.max(-1, Math.min(1, f));
+  if (st) {                                     // the ship's right on the game plane: (-cos h, -sin h)
+    let x = Math.sin(h) * f - Math.cos(h) * st, y = -Math.cos(h) * f - Math.sin(h) * st; const L = Math.hypot(x, y); if (L > 1) { x /= L; y /= L; }
+    return { x, y, b, turn: f < 0 ? -turn : turn };
+  }
   // (owner, 2026-10-14) reversing, left and right swap: backing up with A swings the ship's tail to the left, the way it
   // goes, like a car in reverse
   return { x: Math.sin(h) * f, y: -Math.cos(h) * f, b, turn: f < 0 ? -turn : turn };   // the nose on the game plane: (sin h, -cos h)
