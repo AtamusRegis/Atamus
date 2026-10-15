@@ -95,10 +95,10 @@ let camYaw = 0;                                // around the player
 // camera settings: pitch, min / max zoom, rotation speed
 // (owner, 2026-10-13) the wheel zooms in from 600 m down to 200 m (never out past 600); the wheel does nothing while
 // aiming, and aiming keeps the wheel zoom inside the dead zone (owner, 2026-10-14)
-const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100, dead: 300,
+const cam = { pitch: 60, zmin: 200, zmax: 600, rot: 0.6, leash: 700, over: 100, dead: 300, deadRamp: 150,
   dir: { n: 200, ne: 0, e: 200, se: 0, s: 200, sw: 0, w: 200, nw: 0 } };   // (owner) leash: the reticle's max distance (the blue circle);
 // over: the base overflow; dir: the per-direction overflow delta (m). Fixed values (the sliders are gone).
-let camDist = cam.zmax, aimExt = 0;   // aimExt: 0-1, the camera reaching out past the aim dead zone (eased)
+let camDist = cam.zmax;
 
 
 // (owner, 2026-10-14) the space background (from the owner's reference): a deep blue field with soft cyan glows, very far
@@ -184,6 +184,16 @@ const coneEdgeGeo = new THREE.BufferGeometry(); coneEdgeGeo.setAttribute("positi
 const coneEdges = new THREE.LineSegments(coneEdgeGeo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45, depthWrite: false }));
 cone.frustumCulled = coneEdges.frustumCulled = false; cone.visible = coneEdges.visible = false; cone.renderOrder = coneEdges.renderOrder = 2; scene.add(cone, coneEdges);
 const raycaster = new THREE.Raycaster(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), aimHit = new THREE.Vector3();
+// (owner, 2026-10-14) the aim dead zone is measured as if the camera sat at rest (on my ship, at the wheel zoom), so the
+// camera reaching out never changes the reading (it jittered between in and out when measured from the moving camera)
+const restCam = new THREE.PerspectiveCamera(60, 1, 5, 30000), restRay = new THREE.Raycaster(), restHit = new THREE.Vector3();
+function restDist(sx, sy) {
+  const pr = THREE.MathUtils.degToRad(cam.pitch), t = new THREE.Vector3(me.x, shipMid, -me.y);
+  restCam.fov = camera.fov; restCam.aspect = camera.aspect; restCam.updateProjectionMatrix();
+  restCam.position.set(-Math.sin(camYaw) * Math.cos(pr) * camDist, Math.sin(pr) * camDist, Math.cos(camYaw) * Math.cos(pr) * camDist).add(t); restCam.lookAt(t); restCam.updateMatrixWorld();
+  restRay.setFromCamera({ x: sx, y: sy }, restCam);
+  return restRay.ray.intersectPlane(groundPlane, restHit) ? Math.hypot(restHit.x - me.x, restHit.z + me.y) : Infinity;
+}
 
 // ---- players: the ship (owner, 2026-10-12: Combat_Cruiser.glb, Y up, +Z forward) ----
 // Scaled to 100 m long, resting on the grid, facing the way it travels. Until the
@@ -1181,7 +1191,7 @@ renderer.setAnimationLoop(() => {
     let ux = aimHit.x - me.x, uz = aimHit.z + me.y;                      // world; game y is -z
     const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
     const d = Math.min(ul, cam.leash);
-    return { x: me.x + ux * d, z: -me.y + uz * d, sux: sx, suy: sy, ux, uz, dist: ul };
+    return { x: me.x + ux * d, z: -me.y + uz * d, sux: sx, suy: sy, ux, uz };
   }
   const aimPx = () => aimPin ? aimPin : mouse;
   if (aiming && haveMe && !orbitLock) {
@@ -1208,7 +1218,7 @@ renderer.setAnimationLoop(() => {
       const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
       const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
       const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));
-      aimExt += ((a.dist > cam.dead ? 1 : 0) - aimExt) * (1 - Math.exp(-dt * 5)); const ease = aimExt * aimExt * (3 - 2 * aimExt); aimEase = ease;
+      const rd = restDist(a.sux, a.suy), rr = Math.min(1, Math.max(0, (rd - cam.dead) / cam.deadRamp)), ease = rr * rr * (3 - 2 * rr); aimEase = ease;   // 0 inside the dead zone, full a little past it
       wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
       let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
       lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
@@ -1216,7 +1226,6 @@ renderer.setAnimationLoop(() => {
       fx = me.x + a.ux * lam * R; fy = me.y + -a.uz * lam * R;
     }
   }
-  if (!aiming) aimExt = 0;
   // (owner, 2026-10-13) the trail: moving with the aim not steering the camera (not aiming, or the pointer in the dead zone),
   // the focus sits behind the ship along its motion, 0-80 m with speed; it fades out as the
   // aim takes over beyond the dead zone
