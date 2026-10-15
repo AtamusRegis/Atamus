@@ -782,7 +782,7 @@ export function initBuild(ctx) {
     types.clear(); for (const t of Array.isArray(list) ? list : []) if (t && typeof t.id === "string") types.set(t.id, t);
     drawTypeSlots(); for (const b of builds.values()) if (isTypeKey(b.k)) place(b);
     if (picking && isTypeKey(picking.k) && !typeOf(picking.k)) stopPicking();
-    eMeshK = null; if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else drawProps(); }
+    eMeshK = null; if (smKind && !sm.hidden) shipMenu(smKind); if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else drawProps(); }
   }
   if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); if (eOpen) drawProps(); });
 
@@ -938,7 +938,10 @@ export function initBuild(ctx) {
   // free points, each sending a line to the other ship's pivot in the mutual visibility test) share the dragging code
   // (owner, 2026-10-14) Combat Points are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
   let eParts = [{ t: "body", pts: null }], ePart = 0;
-  const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "pts" ? "vis" : "sight");
+  const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "pts" || eMode === "vis" ? "vis" : "sight");
+  // (owner, 2026-10-15) the ship editor opens one editor at a time: pivot / vis / hp / fx are the Points tab's parts alone
+  const PTS = ["pts", "pivot", "vis", "hp", "fx"], isPts = () => PTS.includes(eMode), show = (part) => eMode === "pts" || eMode === part;
+  let eSolo = false;                               // a single editor (from the ship editor): no tabs, no type settings
   const PART_NAMES = { body: "Body", main: "Main Engine", left: "Left Engine", right: "Right Engine", hardpoint: "Hardpoint", critical: "Critical" };
   let eEx = { ...EXTRA_DEFAULT }, sideYaw = Math.PI / 2, sdRen = null, sdCam = null, eMeshH = 1;   // (owner, 2026-10-15) the hardpoint / effects level being edited; the side view's angle
   const MOVE_NAMES = { oval: "Oval", box: "Box", capsule: "Capsule" };
@@ -977,7 +980,11 @@ export function initBuild(ctx) {
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
     if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "pts" && isModKind()) eEx = { ...eEx, m: EXTRA_DEFAULT.m.slice(), r: EXTRA_DEFAULT.r.slice(), e: EXTRA_DEFAULT.e.slice() };
-    else if (eMode === "pts") { EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); ePv = [0, 0]; eWo = [0, 0]; eEx = { ...EXTRA_DEFAULT, m: eEx.m, r: eEx.r, e: eEx.e }; } else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
+    else if (eMode === "pts") { EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); ePv = [0, 0]; eWo = [0, 0]; eEx = { ...EXTRA_DEFAULT, m: eEx.m, r: eEx.r, e: eEx.e }; }
+    else if (eMode === "pivot") ePv = [0, 0];
+    else if (eMode === "vis") EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice());
+    else if (eMode === "hp") { eWo = [0, 0]; eEx = { ...eEx, hz: EXTRA_DEFAULT.hz, arc: 360, dir: 0 }; }
+    else if (eMode === "fx") eEx = { ...eEx, fx: EXTRA_DEFAULT.fx }; else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
   const isShipKind = () => eKind === "ship" || (curType() || {}).cat === "ship";
@@ -986,7 +993,9 @@ export function initBuild(ctx) {
     if (isModKind()) eMode = "pts";
     for (const b of modes.children) b.hidden = isModKind() && b.dataset.m !== "pts";
     for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode);
-    ceSide.hidden = eMode !== "pts"; ceTop.parentNode.classList.toggle("stack", eMode === "pts");
+    modes.hidden = eSolo; if (eSolo) props.hidden = true;
+    ceSide.hidden = !["pts", "hp", "fx"].includes(eMode); ceTop.hidden = eMode === "fx"; ceTop.parentNode.classList.toggle("stack", eMode === "pts");
+    mirrorBox.parentNode.hidden = eMode === "fx";
     drawSub(); sDraw();
   };
   // the window drags by its header
@@ -1023,7 +1032,7 @@ export function initBuild(ctx) {
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
   function eToggle(v) {
     if (!creator) return;
-    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; eSig = "";
+    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; eSig = ""; if (!eOpen) eSolo = false;
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); if (window.WinPos) window.WinPos.place(win, "objedit"); }
     giz.visible = eOpen;
   }
@@ -1075,11 +1084,11 @@ export function initBuild(ctx) {
       return;
     }
     const fy = sPy(eEx.fx * fp()), hx = sPx(eWo[0], eWo[1]), hy = sPy(eEx.hz * fp());
-    ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (eMode === "pts" ? "" : " dim") });
-    if (eMode === "pts") { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
+    ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (show("fx") ? "" : " dim") });
+    if (show("fx")) { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
     if (isShipKind()) {
-      const c = ss("circle", { cx: hx, cy: hy, r: 7, class: eMode === "pts" ? "ce-woh" : "ce-woh dim" });
-      if (eMode === "pts") c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "hz"); });
+      const c = ss("circle", { cx: hx, cy: hy, r: 7, class: show("hp") ? "ce-woh" : "ce-woh dim" });
+      if (show("hp")) c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "hz"); });
     }
   }
   let sDrag = null;
@@ -1115,32 +1124,32 @@ export function initBuild(ctx) {
     const px = EP[pk()].map(toPx), [vx, vy] = toPx(ePv), [wx, wy] = toPx(eWo);
     const [mx0, my0] = toPx([eMv.x0, eMv.y0]), [mx1, my1] = toPx([eMv.x1, eMv.y1]), mcx = (mx0 + mx1) / 2, mcy = (my0 + my1) / 2;
     // all of them always drawn; the one being edited is bright and has handles (the other combat-points parts fainter)
-    if (eMode !== "pts") {                      // (owner, 2026-10-15) Points shows neither the hitboxes nor the movement collider
+    if (!isPts()) {                             // (owner, 2026-10-15) Points shows neither the hitboxes nor the movement collider
     const tint = (t) => { const c = PART_COLORS[t] || "#9fd8ff"; return "fill:" + c + ";fill-opacity:0.22;stroke:" + c; };   // (owner, 2026-10-15) each type its own color
     eParts.forEach((p, i) => { if (i !== ePart) sv("polygon", { points: p.pts.map(toPx).map((q) => q.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? " other" : " dim"), style: tint(p.t) }); });
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim"), style: tint(eParts[ePart].t) });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     }
-    if (!isModKind()) sv("path", { d: `M${vx - 18} ${vy} L${vx + 18} ${vy} M${vx} ${vy - 18} L${vx} ${vy + 18}`, class: "ce-piv" + (eMode === "pts" ? "" : " dim") });
-    if (isShipKind() && eMode !== "pts") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
+    if (!isModKind()) sv("path", { d: `M${vx - 18} ${vy} L${vx + 18} ${vy} M${vx} ${vy - 18} L${vx} ${vy + 18}`, class: "ce-piv" + (show("pivot") ? "" : " dim") });
+    if (isShipKind() && !show("hp")) sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
       sv("line", { x1, y1, x2, y2, class: "ce-guide" });
       const hit = sv("line", { x1, y1, x2, y2, class: "ce-guide-hit" + (ax === "x" ? " v" : " h") });
       hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); eGrab(e, "g" + ax); });
     }
-    if (eMode !== "pts") for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
-    if (eMode === "pts" && isModKind()) {      // (owner, 2026-10-15) a hardpoint module: mount (red), rotation (green), barrel end (pink; it fires toward the nose, down here)
+    if (!show("vis")) for (const [x, y] of EP.vis.map(toPx)) sv("circle", { cx: x, cy: y, r: 3, class: "ce-vdot dim" });   // the visibility points, faint
+    if (isPts() && isModKind()) {      // (owner, 2026-10-15) a hardpoint module: mount (red), rotation (green), barrel end (pink; it fires toward the nose, down here)
       const [ex, ey] = toPx(eEx.e || EXTRA_DEFAULT.e); sv("path", { d: `M${ex} ${ey} L${ex} ${ey + 34} M${ex - 6} ${ey + 26} L${ex} ${ey + 34} L${ex + 6} ${ey + 26}`, class: "ce-fire" });
       for (const [k, cls] of MOD_PTS) { const [x, y] = toPx(eEx[k] || EXTRA_DEFAULT[k]); handle(x, y, k === "m" ? 11 : 7, "ce-mp " + cls, (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "mp" + k); } }).appendChild(document.createElementNS(SV, "title")).textContent = MOD_NAMES[k]; }
-    } else if (eMode === "pts") {                       // visibility points: click empty space to add one; drag one to move it; right-click removes it
-      px.forEach((p, i) => handle(p[0], p[1], 6, "ce-vpt", (e) => {
+    } else if (isPts()) {                       // visibility points: click empty space to add one; drag one to move it; right-click removes it
+      if (show("vis")) px.forEach((p, i) => handle(p[0], p[1], 6, "ce-vpt", (e) => {
         e.preventDefault(); e.stopPropagation();
         if (e.button === 2) { removeCorner(i); return; }
         if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
-      handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "pv"); } });   // the pivot
-      if (isShipKind()) {
+      if (show("pivot")) handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "pv"); } });   // the pivot
+      if (isShipKind() && show("hp")) {
       // (owner, 2026-10-15) the hardpoint: its spot (drag the dot), its rotation limit (the shaded arc around it: drag an
       // end; all the way round is endless) and its default facing (the arrow: drag its tip)
       const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx - Math.sin(rad(d)) * r, wy + Math.cos(rad(d)) * r];   // (degrees clockwise from the nose, which points down here)
@@ -1186,7 +1195,7 @@ export function initBuild(ctx) {
   }
   // a click on empty space in the Visibility tab adds a point there (mirrored: a pair, or one on the middle line)
   ceSvg.addEventListener("pointerdown", (e) => {
-    if (eMode !== "pts" || isModKind() || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
+    if (!isPts() || !show("vis") || isModKind() || e.button !== 0 || e.target !== ceSvg || EP.vis.length >= 32) return;
     e.preventDefault(); const r = ceSvg.getBoundingClientRect(); let u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x; if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
     snap();
@@ -1295,6 +1304,51 @@ export function initBuild(ctx) {
     for (const o of list || []) setBuild(o);
   }
   // (owner, 2026-10-15) for the CREATOR (creator.js): an object's picture, and its Object Editor
-  const editObject = (k) => { eToggle(true); eSetKind(k); };
+  const editObject = (k) => { const t = typeOf(k); if (t && t.cat === "ship") { shipMenu(k); return; } eSolo = false; eToggle(true); eSetKind(k); };
+  // ---- (owner, 2026-10-15) the ship editor: a window of editors (Attributes, Hitboxes, Movement Collider, Pivot Point,
+  // Visibility Points, Hardpoint, Effect Sources); each opens on its own. Only Attributes until the ship has a model. ----
+  const SHIP_EDITORS = [["attr", "Attributes"], ["sight", "Hitboxes"], ["move", "Movement Collider"], ["pivot", "Pivot Point"], ["vis", "Visibility Points"], ["hp", "Hardpoint"], ["fx", "Effect Sources"]];
+  const sm = document.createElement("div"); sm.id = "ship-edit"; sm.hidden = true;
+  sm.innerHTML = '<div class="ce-top"><span class="ce-title"></span><button type="button" class="ce-x" title="Close">\u00d7</button></div><div class="se-list"></div>';
+  document.body.appendChild(sm); let smKind = null;
+  sm.querySelector(".ce-x").addEventListener("click", () => { sm.hidden = true; smKind = null; });
+  { const top = sm.querySelector(".ce-top"); if (window.WinPos) window.WinPos.watch(top, sm, "shipedit");
+    top.addEventListener("pointerdown", (e) => { if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault(); const r0 = sm.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
+      const mv = (ev) => { const r = sm.getBoundingClientRect(); sm.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; sm.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; sm.style.transform = "none"; };
+      const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); }); }
+  function shipMenu(k) {
+    smKind = k; const t = typeOf(k); if (!t) { sm.hidden = true; return; }
+    sm.querySelector(".ce-title").textContent = t.name;
+    const list = sm.querySelector(".se-list"); list.replaceChildren();
+    for (const [m, label] of SHIP_EDITORS) {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.disabled = m !== "attr" && !t.model;
+      b.addEventListener("click", () => { if (m === "attr") attrBox(k); else { eSolo = true; eToggle(true); eSetKind(k); eMode = m; drawModes(); eDraw(); win.querySelector(".ce-title").textContent = t.name + " \u2014 " + label; } });
+      list.appendChild(b);
+    }
+    const was = sm.hidden; sm.hidden = false; if (was && window.WinPos) window.WinPos.place(sm, "shipedit");
+  }
+  // Attributes: its model (one of the Asset Creator's) and the ship's numbers
+  const SHIP_ATTRS = [["speed", "Max Speed", 1, 2000], ["accel", "Acceleration", 1, 2000], ["turn", "Turn Speed", 1, 720], ["hp", "Hull", 1, 100000], ["cap", "Capacitor", 1, 100000]];
+  function attrBox(k) {
+    const t = typeOf(k); if (!t || !window.ItemCreator) return;
+    const o = window.ItemCreator.overlay("se-attr"), el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    o.box.appendChild(el("p", "we-title", "ATTRIBUTES \u2014 " + t.name.toUpperCase()));
+    const g = el("div", "we-grid"), model = el("select"), models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    const cur = (t.asset && models.find((a) => a.id === t.asset)) || models.find((a) => a.file === t.model);
+    model.append(new Option("None", ""), ...models.map((a) => new Option(a.name, a.id))); model.value = cur ? cur.id : "";
+    g.append(el("label", "we-label", "Model"), model);
+    const nums = {}, at = t.attrs || {};
+    for (const [key, label, lo, hi] of SHIP_ATTRS) { const i = el("input"); i.type = "number"; i.min = lo; i.max = hi; i.step = 1; i.value = at[key] != null ? String(at[key]) : ""; nums[key] = i; g.append(el("label", "we-label", label), i); }
+    const err = el("p", "we-err"); err.hidden = true;
+    const btns = el("div", "we-btns"), cancel = el("button", "", "CANCEL"), ok = el("button", "we-ok", "SAVE"); cancel.type = ok.type = "button"; btns.append(cancel, ok);
+    o.box.append(g, err, btns);
+    cancel.addEventListener("click", () => o.close());
+    ok.addEventListener("click", () => {
+      const a = models.find((x) => x.id === model.value), attrs = {};
+      for (const [key, , lo, hi] of SHIP_ATTRS) { const v = Number(nums[key].value); if (nums[key].value !== "" && Number.isFinite(v)) attrs[key] = Math.max(lo, Math.min(hi, v)); }
+      saveType({ model: a ? a.file : null, mname: a ? a.name : "", asset: a ? a.id : null, attrs, mod: null }, t); o.close();
+    });
+    o.box.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); ok.click(); } });
+  }
   return { typePic: (t, px) => typePic(t, px), shipPic: () => shipPic(), editObject, onMsg, load, frame, setStaff, setClock(t) { if (Number.isFinite(t)) gone.skew = t - Date.now(); }, setTypes, onTypeSaved, refreshShips, get open() { return open; }, get editorOpen() { return eOpen; } };
 }

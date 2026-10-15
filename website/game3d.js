@@ -8,7 +8,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { Importer } from "./importer.js?v=1792104410";
 import { Creator } from "./creator.js?v=1792104410";
-import { initBuild, tintObject, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792103070";
+import { initBuild, tintObject, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792104833";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -707,7 +707,8 @@ function modUnit(file) {
   return null;
 }
 function modInfo() {
-  const st = SHIPK.startsWith("t:") && objTypes.get(SHIPK.slice(2)), t = st && st.mod && objTypes.get(st.mod);
+  return null;   // (owner, 2026-10-15: a ship isn't tied to one module; fitting modules comes later)
+  const st = SHIPK.startsWith("t:") && objTypes.get(SHIPK.slice(2)), t = st && st.mod && objTypes.get(st.mod);   // eslint-disable-line no-unreachable
   return t && t.cat === "hardpoint" ? { t, ex: { ...EXTRA_DEFAULT, ...(collExtra["t:" + t.id] || {}) } } : null;
 }
 const modCenter = () => -((collExtra[SHIPK] || EXTRA_DEFAULT).dir || 0) * Math.PI / 180;   // its default facing (degrees clockwise from the nose)

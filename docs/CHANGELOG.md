@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Ship editor (owner):** Edit Object on a Ship opens a list of editors (Attributes, Hitboxes, Movement Collider, Pivot Point, Visibility Points, Hardpoint, Effect Sources), each in its own window; Attributes (model and the ship's numbers) comes first. Ships no longer have a single module setting.
 - **Renames and deletes (owner):** RAW ASSETS is now the Asset Creator and the CREATOR the Object Creator; an object's Edit is now Edit Meta. Models and icons can be deleted even while in use: whatever used them falls back to a stand-in.
 - **Raw mark (owner):** raw assets show a small circled letter in the corner of their slots: m for models, s for sounds, i for icons.
 - **Icons from objects (owner):** Create New Icon now offers SVG Icon or From Object, which turns a RAW ASSETS model's rendered picture into the icon.

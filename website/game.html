@@ -261,6 +261,11 @@
     .ce-view canvas, .ce-view svg { position: absolute; inset: 0; width: 400px; height: 400px; }
     .ce-mp { stroke: #111; stroke-width: 2; cursor: pointer; } .ce-mp:hover { fill: #fff; } .ce-mp.mount { fill: #ff4d4d; } .ce-mp.turn { fill: #4dff6a; } .ce-mp.end { fill: #ff7fd6; }   /* (owner, 2026-10-15) a hardpoint module's points */
     .ce-fire { stroke: #ff7fd6; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; pointer-events: none; opacity: .8; }
+    #ship-edit { position: fixed; left: 20px; top: 50%; transform: translateY(-50%); z-index: 8; width: 220px; padding: 8px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }   /* (owner, 2026-10-15) the ship editor */
+    #ship-edit[hidden] { display: none; } #ship-edit .se-list { display: grid; gap: 4px; }
+    #ship-edit .se-list button { padding: 7px 10px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); text-align: left; cursor: pointer; }
+    #ship-edit .se-list button:hover:not(:disabled) { background: rgba(40,54,78,0.98); color: #fff; } #ship-edit .se-list button:disabled { opacity: .4; cursor: default; }
+    html.touch #ship-edit { display: none !important; }
     .ce-views { display: flex; gap: 8px; } .ce-view[hidden] { display: none; } .ce-views.stack { flex-direction: column; } .ce-views.stack .ce-view, .ce-views.stack .ce-view canvas, .ce-views.stack .ce-view svg { width: 330px; height: 330px; }   /* (owner, 2026-10-15) top and side views */
     .ce-fx { stroke: #ff4d4d; stroke-width: 2; stroke-dasharray: 8 6; pointer-events: none; } .ce-fx.dim { opacity: .35; }
     .ce-fx-hit { stroke: transparent; stroke-width: 14; cursor: ns-resize; } .ce-woh.dim { opacity: .35; pointer-events: none; }
@@ -397,12 +402,12 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="winpos.js?v=1792057164"></script>
+  <script src="winpos.js?v=1792104833"></script>
   <script src="numdrag.js?v=1792049714"></script>
   <script src="icons.js?v=1792103206"></script>
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792104215"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792104410"></script>
+  <script type="module" src="game3d.js?v=1792104872"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 // it again puts it back there (pulled inside the screen if the window is smaller now).
 (function () {
   let pos = {}, send = () => {};
-  const KEYS = ["creator", "assets", "objedit", "attrs"];
+  const KEYS = ["creator", "assets", "objedit", "attrs", "shipedit"];
   function place(el, key) {
     const p = pos[key]; if (!p || !el || el.hidden) return;
     const r = el.getBoundingClientRect();

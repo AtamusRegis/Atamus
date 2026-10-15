@@ -340,7 +340,7 @@ export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.t
 // (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /
 // WAV), each a name and its uploaded file; a model's icon (thumb) is a picture rendered from it (a PNG). The Object Creator
 // picks its models from these.
-export const UI_KEYS = ["creator", "assets", "objedit", "attrs"];
+export const UI_KEYS = ["creator", "assets", "objedit", "attrs", "shipedit"];
 export const ASSET_KINDS = ["model", "image", "audio"];
 export const imageRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(png|jpg|webp)$/.test(v) ? v : null);
 export const audioRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(mp3|ogg|wav)$/.test(v) ? v : null);
@@ -356,6 +356,9 @@ export function cleanAsset(o) {
   const mats = {}; if (o.kind === "model" && o.mats && typeof o.mats === "object") for (const [k, v] of Object.entries(o.mats).slice(0, 48)) { const n = safeText(String(k), 64); if (n && typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) mats[n] = v.toLowerCase(); }
   return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view, front, mats };
 }
+// (owner, 2026-10-15) a ship's Attributes (the ship editor): its numbers, each optional (unset: the game's default)
+export const SHIP_ATTRS = { speed: [1, 2000], accel: [1, 2000], turn: [1, 720], hp: [1, 100000], cap: [1, 100000] };
+function shipAttrs(v) { const out = {}; if (v && typeof v === "object") for (const [k, [lo, hi]] of Object.entries(SHIP_ATTRS)) { const n = Number(v[k]); if (v[k] != null && v[k] !== "" && Number.isFinite(n)) out[k] = Math.round(Math.max(lo, Math.min(hi, n)) * 100) / 100; } return out; }
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
@@ -363,7 +366,7 @@ export function cleanType(o) {
   const cat = TYPE_CATS.includes(o.cat) ? o.cat : "node", sz = Number(o.size);
   return { name, cat, model, mname: model ? safeText(String(o.mname || ""), 64).trim() : "", icon: iconRef(o.icon), item: iconRef(o.item),
     asset: model ? iconRef(o.asset) : null,                                                                  // (owner, 2026-10-15) which RAW ASSETS model (variations share a file)
-    ...(cat === "ship" ? { mod: iconRef(o.mod) } : {}),                                                       // (owner, 2026-10-15) a ship: the hardpoint module on its socket
+    ...(cat === "ship" ? { mod: iconRef(o.mod), attrs: shipAttrs(o.attrs) } : {}),                             // (owner, 2026-10-15) a ship: its Attributes (mod: no longer set)
     ...(cat === "hardpoint" ? { size: Number.isFinite(sz) ? Math.round(Math.max(1, Math.min(500, sz)) * 10) / 10 : 20 } : {}) };   // a module: its size, m across
 }
 // (owner, 2026-10-15) where a ship's shots leave from, on the plan: the barrel end of the hardpoint module on its socket
@@ -728,7 +731,7 @@ export class World3D {
     return false;
   }
   // (owner, 2026-10-14) a ship's Weapon Origin in the world: where its shots leave from (line of sight stays at the pivot)
-  shipOrigin(p) { const K = this.shipK, t = this.types.get(K.slice(2)), mt = t && t.mod && this.types.get(t.mod), mod = mt && mt.cat === "hardpoint" ? mt : null;
+  shipOrigin(p) { const K = this.shipK, mod = null;   // (owner, 2026-10-15: a ship isn't tied to one module; modules will be fitted, not set on the ship)
     return muzzleAt(p.x, p.y, p.h || 0, 2 * SHIP_R, this.origins[K] || [0, 0], this.pivots[K] || [0, 0], mod, mod && { ...EXTRA_DEFAULT, ...(this.collExtra["t:" + mod.id] || {}) }, p.ta); }   // (owner, 2026-10-15) its module's barrel end
   // can a and b see each other (mutual visibility from the Visibility points, as on the clients; clouds left out)?
   sees(a, b) {
