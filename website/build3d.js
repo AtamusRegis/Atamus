@@ -148,14 +148,24 @@ const COLOR = 0x8c96aa;
 const pieceMat = new THREE.MeshStandardMaterial({ color: COLOR, roughness: 0.65, metalness: 0.1 });
 // an object type's mesh: an outer group (placed, turned, scaled to the footprint) holding a "spin" group (a node turns and
 // bobs it) holding the model; mat(m): each material's stand-in (null keeps the model's own). userData.mk: what it was made from
+// (owner, 2026-10-15) a model's material colors (RAW ASSETS: material name -> #rrggbb): each mesh's material of that name
+// swapped for a recolored copy (one copy per material and color, shared)
+const tintCache = new Map();
+export const matName = (m) => String((m && m.name) || "").replace(/\s+/g, " ").trim().slice(0, 64);
+export function tintObject(obj, mats) {
+  if (!mats || !Object.keys(mats).length) return obj;
+  const one = (m) => { const hex = m && mats[matName(m)]; if (!hex) return m; const k = m.uuid + hex; let c = tintCache.get(k); if (!c) { c = m.clone(); c.color.set(hex); tintCache.set(k, c); } return c; };
+  obj.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
+  return obj;
+}
 function typeObject(t, mat) {
   const outer = new THREE.Group(), spin = new THREE.Group(), u = t && unitOf(t.model); outer.add(spin);
-  if (u) { const c = u.clone(true); c.rotation.y = (t.front || 0) * Math.PI / 180;   // (owner, 2026-10-15) its model's Front (Raw Assets)
+  if (u) { const c = tintObject(u.clone(true), t.mats); c.rotation.y = (t.front || 0) * Math.PI / 180;   // (owner, 2026-10-15) its model's Front (Raw Assets)
     if (mat) c.traverse((o) => { if (o.isMesh) o.material = mat(o.material); }); spin.add(c); }
   else spin.add(new THREE.Mesh(rockGeo, mat ? mat(pieceMat) : pieceMat));
-  outer.userData.spin = spin; outer.userData.mk = (t && t.model || "") + (u ? "+" : "-") + (t && t.front || 0); return outer;
+  outer.userData.spin = spin; outer.userData.mk = (t && t.model || "") + (u ? "+" : "-") + (t && t.front || 0) + JSON.stringify(t && t.mats || ""); return outer;
 }
-const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") + (t.front || 0) : k; };
+const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") + (t.front || 0) + JSON.stringify(t.mats || "") : k; };
 export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
 const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), oneEach(v)).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);

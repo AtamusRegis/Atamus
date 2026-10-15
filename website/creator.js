@@ -1,24 +1,20 @@
-// (owner, 2026-10-15) The CREATOR: C (or the [C] button in the staff column) opens it. It replaced the Item Creator (Z)
-// and the Object Creator's list (X). Laid out like RAW ASSETS: one row with a search box ("Search"), a filter button (All
-// and each type) and a green CREATE; below, every made thing as a slot (6 a row, scrolling), sorted by name; hover: its
-// name. CREATE asks for a Name, an Icon and a Type: Item, Resource, Region, Object, Structure, Ship, SFX, Music Track
-// (owner, 2026-10-15: icons are made in RAW ASSETS now); just their name, icon and type for now. Right-click a slot:
-// Edit (the same three; the type only changes within its own kind: Resource / Region / Object / Structure / Ship among
-// themselves, SFX and Music Track between them) and Delete; an Icon: Edit (the Icon Creator), Rename, Delete; objects also
-// keep Edit Object (the Object Editor) and items the Item Editor; the Player Ship has Edit: which Ship object players fly (owner, 2026-10-15). Items drag into
-// the hotbar or inventory as before (staff: a copy). Staff (head admin, admins) get Items and Icons; the head admin
-// everything. The server checks it all.
+// (owner, 2026-10-15) The CREATOR (head admin): C (or the [C] button in the staff column) opens it. For now only the ship
+// and module creators (owner, 2026-10-15: everything else scrapped): one row with a search box, a filter button (All,
+// Ship, Module) and a green CREATE; below, the Player Ship and every Ship and Module object as slots (6 a row), sorted by
+// name. CREATE asks for a Name, an Icon and a Type (Ship or Module). Right-click a slot: Edit (name, icon; a type stays its
+// own), Edit Object (the Object Editor: a ship's model, module, hitboxes, movement and points; a module's model, size and
+// points) and Delete; the Player Ship: Edit (which Ship object players fly). The server checks it all.
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 const C = () => window.Catalog, IC = () => window.ItemCreator;
-const TYPES = [["item", "Item"], ["node", "Resource"], ["region", "Region"], ["object", "Object"], ["structure", "Structure"], ["ship", "Ship"], ["hardpoint", "Hardpoint"], ["sfx", "SFX"], ["music", "Music Track"]];
+const TYPES = [["ship", "Ship"], ["hardpoint", "Module"]];   // (owner, 2026-10-15: only the ship and module creators for now; the rest scrapped)
 const NAME = Object.fromEntries(TYPES);
 const OBJ = ["node", "region", "object", "structure", "ship", "hardpoint"], SND = ["sfx", "music"];   // hardpoint: (owner, 2026-10-15) a module for a ship's hardpoint
 const group = (k) => (k === "hardpoint" ? [k] : OBJ.includes(k) ? OBJ.filter((x) => x !== "hardpoint") : SND.includes(k) ? SND : [k]);   // what a thing's type can change to
 
 let api = null, build = null, types = null, staff = false, head = false, sounds = [];
 let win = null, cbtn = null, grid = null, search = null, fbtn = null, perr = null, tab = "all", menu = null, want = null;
-const allowed = () => TYPES.filter(([k]) => head || k === "item");   // (owner, 2026-10-15: icons moved to RAW ASSETS)
+const allowed = () => (head ? TYPES : []);
 
 function mount(a) {
   api = a.send ? a : api; build = a.build; types = a.types; staff = !!a.staff; head = !!a.head;
@@ -65,13 +61,9 @@ const letter = (t, cls) => $("span", "build-letter" + (cls ? " " + cls : ""), t)
 const iconPic = (id, px, fallback) => { const ic = id && C() && C().icons.get(id); return ic ? C().svg(ic, px) : fallback(); };
 function entries() {
   const out = [];
-  if (C()) {
-    for (const it of C().items) out.push({ key: "item:" + it.id, k: "item", id: it.id, name: it.name, o: it, pic: (px) => { const el = $("div", "inv-item pic"); el.dataset.item = "it:" + it.id; el.title = it.name; const p = C().picture("it:" + it.id, px - 8); if (p) el.appendChild(p); return el; } });
-  }
   if (head) {
     { const ps = playerShip && types.get(playerShip); out.push({ key: "player", k: "ship", name: "Player Ship", pic: (px) => (ps && ps.cat === "ship" ? build.typePic(ps, px) : build.shipPic()) }); }   // (owner, 2026-10-15) shows the Ship object players fly
-    for (const t of types.values()) out.push({ key: "type:" + t.id, k: t.cat, id: t.id, name: t.name, o: t, pic: (px) => build.typePic(t, px) });
-    for (const s of sounds) out.push({ key: "sound:" + s.id, k: s.kind, id: s.id, name: s.name, o: s, pic: (px) => iconPic(s.icon, px, () => letter(s.kind === "music" ? "♫" : "♪")) });
+    for (const t of types.values()) if (t.cat === "ship" || t.cat === "hardpoint") out.push({ key: "type:" + t.id, k: t.cat, id: t.id, name: t.name, o: t, pic: (px) => build.typePic(t, px) });
   }
   return out;
 }
@@ -97,7 +89,6 @@ function openMenu(key, x, y) {
   if (key === "player") add("Edit", () => playerBox());   // (owner, 2026-10-15) only which Ship object it is: that object's own data does the rest
   else {
     add("Edit", () => editBox(e));
-    if (e.k === "item") add("Item Editor", () => IC().itemEditor(C().item("it:" + e.id)));
     if (OBJ.includes(e.k)) add("Edit Object", () => build.editObject("t:" + e.id));
     add("Delete", () => api.send(e.k === "item" ? { t: "itemdel", id: e.id } : OBJ.includes(e.k) ? { t: "tdel", id: e.id } : { t: "sdel", id: e.id }));
   }

@@ -349,7 +349,10 @@ export function cleanAsset(o) {
   const v = o.view, n = (x, lo, hi, d) => (Number.isFinite(Number(x)) ? Math.max(lo, Math.min(hi, Math.round(Number(x) * 1000) / 1000)) : d);
   const view = o.kind === "model" && v && typeof v === "object" ? { yaw: n(v.yaw, 0, 360, 45), pitch: n(v.pitch, -90, 90, 28), zoom: n(v.zoom, 0.2, 8, 1), px: n(v.px, -3, 3, 0), py: n(v.py, -3, 3, 0) } : null;   // (owner, 2026-10-15) its icon's camera
   const fr = Math.round(Number(o.front)), front = o.kind === "model" && Number.isFinite(fr) ? ((fr % 360) + 360) % 360 : 0;   // (owner, 2026-10-15) its Front: degrees it's turned so its nose faces the game's way
-  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view, front };
+  // (owner, 2026-10-15) a model's material colors, changed in the import / edit pop-up: material name -> #rrggbb (the whole
+  // model's material of that name takes it, wherever the model is used)
+  const mats = {}; if (o.kind === "model" && o.mats && typeof o.mats === "object") for (const [k, v] of Object.entries(o.mats).slice(0, 48)) { const n = safeText(String(k), 64); if (n && typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v)) mats[n] = v.toLowerCase(); }
+  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null, view, front, mats };
 }
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
@@ -947,7 +950,7 @@ export class World3D {
   }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
   typeList() { const byFile = new Map(); for (const x of this.assets.values()) byFile.set(x.file, x);   // (one pass over the assets)
-    return [...this.types.values()].map((t) => { const a = t.model && byFile.get(t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}) } : t; }); }   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
+    return [...this.types.values()].map((t) => { const a = t.model && byFile.get(t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}), ...(a.mats && Object.keys(a.mats).length ? { mats: a.mats } : {}) } : t; }); }   // mats: its model's material colors   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
     if (t.mod && !(this.types.get(t.mod) && this.types.get(t.mod).cat === "hardpoint")) t.mod = null;

@@ -6,9 +6,9 @@
 // angle looking down toward the player. Each player is sent everything within their load circle.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { Importer } from "./importer.js?v=1792058735";
-import { Creator } from "./creator.js?v=1792086193";
-import { initBuild, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792087050";
+import { Importer } from "./importer.js?v=1792101964";
+import { Creator } from "./creator.js?v=1792101964";
+import { initBuild, tintObject, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792101964";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -216,11 +216,11 @@ function setPlayerShip(id) { playerShipId = typeof id === "string" ? id : null; 
 function refreshPlayerShip() {
   const t = playerShipId && objTypes.get(playerShipId), ok = t && t.cat === "ship";
   SHIPK = ok ? "t:" + t.id : "ship";
-  const key = ok ? (t.model || "") + "|" + (t.front || 0) : "cruiser"; if (key === shipModelKey) { applyShipPivot(); return; } shipModelKey = key;
+  const key = ok ? (t.model || "") + "|" + (t.front || 0) + "|" + JSON.stringify(t.mats || "") : "cruiser"; if (key === shipModelKey) { applyShipPivot(); return; } shipModelKey = key;
   if (!ok || !t.model) { if (!ok) loadCruiser(); else useShipModel(null); return; }
   new GLTFLoader().load((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + t.model, (g) => {
     if (shipModelKey !== key) return;
-    const src = g.scene, box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const src = tintObject(g.scene, t.mats), box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());   // (owner, 2026-10-15) its material colors
     src.position.set(-c.x, -box.min.y, -c.z);
     const turn = new THREE.Group(); turn.add(src); turn.rotation.y = (t.front || 0) * Math.PI / 180;
     const wrap = new THREE.Group(); wrap.add(turn); wrap.scale.setScalar(2 * SHIP_R / Math.max(size.x, size.z, 1e-6));
@@ -714,7 +714,7 @@ const modCenter = () => -((collExtra[SHIPK] || EXTRA_DEFAULT).dir || 0) * Math.P
 let modKey = "";
 function modFrame() {
   const mi = modInfo(), D = 2 * SHIP_R, ce = collExtra[SHIPK] || EXTRA_DEFAULT, wo = origins[SHIPK] || [0, 0];
-  const key = mi ? [mi.t.id, mi.t.model, mi.t.front || 0, mi.t.size, JSON.stringify(mi.ex.m) + JSON.stringify(mi.ex.r), wo, ce.hz, !!modUnits.get(mi.t.model)].join("|") : "";
+  const key = mi ? [mi.t.id, mi.t.model, mi.t.front || 0, JSON.stringify(mi.t.mats || ""), mi.t.size, JSON.stringify(mi.ex.m) + JSON.stringify(mi.ex.r), wo, ce.hz, !!modUnits.get(mi.t.model)].join("|") : "";
   const rebuild = key !== modKey; modKey = key;
   for (const p of players.values()) {
     const v = p.holder.children.find((o) => !o.userData.mod);
@@ -725,7 +725,7 @@ function modFrame() {
       const bankG = new THREE.Group(), sock = new THREE.Group(), yaw = new THREE.Group(); bankG.userData.mod = true;
       sock.position.set(wo[0] * D, (ce.hz || 0) * D, -wo[1] * D);
       yaw.position.set((r[0] - m[0]) * S, (r[2] - m[2]) * S, -(r[1] - m[1]) * S);
-      const mesh = u ? u.clone(true) : new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0x8c96aa }));
+      const mesh = u ? tintObject(u.clone(true), mi.t.mats) : new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0x8c96aa }));
       const turn = new THREE.Group(); turn.rotation.y = (mi.t.front || 0) * Math.PI / 180; turn.add(mesh);
       const sc = new THREE.Group(); sc.scale.setScalar(S); sc.add(turn); sc.position.set(-r[0] * S, -r[2] * S, r[1] * S);
       yaw.add(sc); sock.add(yaw); bankG.add(sock); p.holder.add(bankG); p.mod = bankG; p.modYaw = yaw;
@@ -1119,7 +1119,7 @@ function connect() {
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       if (window.WinPos) { window.WinPos.set(m.ui); window.WinPos.setSend(send); }   // (owner, 2026-10-15) where my editor windows were
       if (m.you.items && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Editor, icon picker and Icon Creator pop-ups
-      if (m.you.items) Creator.mount({ send, build, types: objTypes, staff: true, head: !!m.you.creator }); Creator.setSounds(m.sounds);   // (owner, 2026-10-15) the CREATOR (C)
+      if (m.you.creator) Creator.mount({ send, build, types: objTypes, staff: true, head: true });   // (owner, 2026-10-15: ships and modules only, the head admin's) Creator.setSounds(m.sounds);   // (owner, 2026-10-15) the CREATOR (C)
       amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
       if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }   // (owner, 2026-10-15) the Importer (I), head admin

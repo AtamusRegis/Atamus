@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Model colors (owner):** importing or editing a model in RAW ASSETS shows a square per material color; click one to change that color across the whole model, everywhere it's used.
+- **Creators trimmed (owner):** the CREATOR now only makes Ships and Modules (the head admin's); RAW ASSETS only imports models and sounds and creates SVG icons. Everything else was scrapped from them for now (its data is kept).
 - **Turrets on ships (owner):** a Ship object can carry a Hardpoint module (picked in its Object Editor, with the module's size set on the module). The module sits on the ship's hardpoint, turns with your aim inside the rotation limit, and shots leave from its barrel end; other players see your turret turn too.
 - **Hardpoint modules (owner):** a new Hardpoint type in the CREATOR for turrets and tools; its Object Editor sets three points (mount, rotation, barrel end) in a top and a side view.
 - **Optimization (owner):** snapshots now carry only what changed (an idle world sends a few bytes), the capacitor and route-goal messages only go out on change, impacts are batched, changed objects are encoded once for everyone, and the Object Editor no longer redraws every frame. Leftover styles from the removed Item Creator and object list are gone.

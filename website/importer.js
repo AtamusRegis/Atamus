@@ -11,7 +11,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 
 const BASE = () => (typeof API_BASE !== "undefined" ? API_BASE : location.origin);
-const KINDS = [["model", "Models"], ["image", "Images"], ["audio", "Audio"], ["icon", "Icons"]];   // icon: (owner, 2026-10-15) the Icon Creator's SVG icons live here now
+const KINDS = [["model", "Models"], ["audio", "Audio"], ["icon", "Icons"]];   // (owner, 2026-10-15: image imports scrapped; only models, sounds and SVG icons)   // icon: (owner, 2026-10-15) the Icon Creator's SVG icons live here now
 const $ = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const btn = (text, cls, fn) => { const b = $("button", cls, text); b.type = "button"; if (fn) b.addEventListener("click", fn); return b; };
 
@@ -102,9 +102,14 @@ function viewer(obj, view0, el, front0) {
     shot() { st.arrow.visible = false; draw(); const p = toPng(cv); st.arrow.visible = true; draw(); return p; },
     get front() { return front; },
     setFront(deg) { front = ((Math.round(deg) % 360) + 360) % 360; st.setFront(front); draw(); },
+    // (owner, 2026-10-15) its materials by name (the model's own colors), and recoloring one across the whole model
+    materials() { const out = new Map(); obj.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) { const n = matName(m); if (n && m.color) { if (!out.has(n)) out.set(n, []); if (!out.get(n).includes(m)) out.get(n).push(m); } } }); return out; },
+    setColor(n, hex) { const list = this.materials().get(n) || []; for (const m of list) m.color.set(hex); draw(); },
     dispose() { r.dispose(); try { r.forceContextLoss(); } catch {} },
   };
 }
+const matName = (m) => String((m && m.name) || "").replace(/\s+/g, " ").trim().slice(0, 64);   // (as the server keeps it)
+const applyMats = (obj, mats) => { if (mats) obj.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) { const h = mats[matName(m)]; if (h && m.color) m.color.set(h); } }); return obj; };
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x)), round = (x, k = 10) => Math.round(x * k) / k;
 const parseGlb = (buf) => new Promise((ok, no) => gltf.parse(buf, "", (g) => ok(g.scene), no));
 const loadGlb = (file) => new Promise((ok, no) => gltf.load(BASE() + "/game/models/" + file, (g) => ok(g.scene), undefined, no));
@@ -141,7 +146,7 @@ function mount(a) {
   tools.append(search, fbtn, plus);
   grid = $("div", "we-list imp-grid");
   grid.addEventListener("contextmenu", (e) => { e.preventDefault(); const d = e.target.closest("[data-id]"); if (d) openMenu(d.dataset.id, e.clientX, e.clientY); });
-  fileIn = $("input"); fileIn.type = "file"; fileIn.hidden = true; fileIn.accept = ".glb,.png,.jpg,.jpeg,.webp,.mp3,.ogg,.wav";
+  fileIn = $("input"); fileIn.type = "file"; fileIn.hidden = true; fileIn.accept = ".glb,.mp3,.ogg,.wav";
   fileIn.addEventListener("change", () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) importBox(f); });
   perr = $("p", "we-err"); perr.hidden = true;
   win.append(top, tools, grid, perr, fileIn); document.body.appendChild(win);
@@ -163,7 +168,7 @@ function toggle(v) {
 }
 // the assets and (owner, 2026-10-15) the SVG icons (kind "icon", keyed "ic<id>")
 const IC = () => window.ItemCreator, CAT = () => window.Catalog;
-const all = () => [...assets, ...(CAT() ? [...CAT().icons.values()].map((ic) => ({ id: "ic" + ic.id, kind: "icon", name: ic.name || "", ic })) : [])];
+const all = () => [...assets.filter((a) => a.kind !== "image"), ...(CAT() ? [...CAT().icons.values()].map((ic) => ({ id: "ic" + ic.id, kind: "icon", name: ic.name || "", ic })) : [])];
 function draw() {
   if (!win || win.hidden) return;
   fbtn.classList.toggle("on", tab !== "all");
@@ -183,7 +188,7 @@ async function iconsDue() {
   for (const a of assets) {
     if (a.kind !== "model" || a.thumb || rendering.has(a.file)) continue;
     rendering.add(a.file);
-    try { const obj = await loadGlb(a.file), j = await upload(await renderIcon(obj, { ...VIEW0, ...(a.view || {}) }, a.front || 0)); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file, view: a.view, front: a.front || 0 } }); }
+    try { const obj = applyMats(await loadGlb(a.file), a.mats), j = await upload(await renderIcon(obj, { ...VIEW0, ...(a.view || {}) }, a.front || 0)); api.send({ t: "aset", id: a.id, asset: { kind: a.kind, name: a.name, file: a.file, thumb: j.file, view: a.view, front: a.front || 0, mats: a.mats } }); }
     catch (e) { console.error("model icon", a.file, e); }
   }
 }
@@ -252,29 +257,40 @@ function popup(title, okText, picEl, name0, onOk) {
     fL.addEventListener("click", () => { vw.setFront(vw.front + 90); fIn.value = String(vw.front); });
     fR.addEventListener("click", () => { vw.setFront(vw.front - 90); fIn.value = String(vw.front); });
   };
-  const me = pop = { close, pic, ok, fail, reset, front, box, err, name, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
+  // (owner, 2026-10-15) a model's colors: a square per material; click one to pick its color (the whole model's material changes)
+  const cLab = $("label", "we-label", "Colors"), cRow = $("div", "imp-colors"); cLab.hidden = cRow.hidden = true; grid.append(cLab, cRow);
+  const colors = (vw, mats) => {
+    const list = vw.materials(); if (!list.size) return; cLab.hidden = cRow.hidden = false;
+    for (const [n, ms] of list) {
+      const sw = $("label", "imp-sw"), pick = $("input"); pick.type = "color"; sw.title = n.replace(/\(Clone\)$/, "");
+      const hex = (mats && mats[n]) || "#" + ms[0].color.getHexString(); pick.value = hex; sw.style.background = hex;
+      pick.addEventListener("input", () => { sw.style.background = pick.value; vw.setColor(n, pick.value); me.mats[n] = pick.value; });
+      sw.appendChild(pick); cRow.appendChild(sw);
+    }
+  };
+  const me = pop = { close, pic, ok, fail, reset, front, colors, mats: {}, box, err, name, onClose: null }; setTimeout(() => { name.focus(); name.select(); }, 0);
   return me;
 }
-const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["png", "jpg", "jpeg", "webp"].includes(x) ? "image" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
+const kindOf = (f) => { const x = (f.name.split(".").pop() || "").toLowerCase(); return x === "glb" ? "model" : ["mp3", "ogg", "wav"].includes(x) ? "audio" : null; };
 const MAX = { model: 50, image: 10, audio: 25 };
 async function importBox(file) {
   const kind = kindOf(file);
   const p = popup("IMPORT", "IMPORT", null, file.name.replace(/\.[^.]+$/, "").slice(0, 32), async (name, { close, fail }) => {
     try {
       const j = await upload(file);
-      let thumb = null, view = undefined, front = 0; if (j.kind === "model" && vw) { view = vw.view; front = vw.front; thumb = (await upload(await vw.shot())).file; }
+      let thumb = null, view = undefined, front = 0, mats = undefined; if (j.kind === "model" && vw) { view = vw.view; front = vw.front; mats = { ...p.mats }; thumb = (await upload(await vw.shot())).file; }
       const n = seq++; pending.set(n, { done: () => { close(); if (tab !== "all") tab = j.kind; draw(); }, fail });
-      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view, front } });
+      api.send({ t: "aset", n, asset: { kind: j.kind, name, file: j.file, thumb, view, front, mats } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
   let vw = null;
-  if (!kind) { p.fail("That isn't a model, image or sound the game can use."); p.ok.disabled = true; return; }
+  if (!kind) { p.fail("That isn't a model or sound the game can use."); p.ok.disabled = true; return; }
   if (file.size > MAX[kind] * 1024 * 1024) { p.fail("That file is over " + MAX[kind] + " MB."); p.ok.disabled = true; return; }
   if (kind === "image") { const im = $("img", "imp-pic"); im.width = im.height = 96; im.src = URL.createObjectURL(file); p.pic.appendChild(im); }
   else if (kind === "audio") p.pic.appendChild($("span", "build-letter imp-big", "♪"));
   else {                                        // a model: its icon's view, set here; rendered and sent with it
     p.ok.disabled = true;
-    try { vw = viewer(await parseGlb(await file.arrayBuffer()), null, p.pic, 0); p.front(vw); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); p.ok.disabled = false; }
+    try { vw = viewer(await parseGlb(await file.arrayBuffer()), null, p.pic, 0); p.front(vw); p.colors(vw, null); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); p.ok.disabled = false; }
     catch (e) { p.fail("That model couldn't be read."); }
   }
 }
@@ -283,13 +299,14 @@ function renameBox(a) {
   let vw = null;
   const p = popup("EDIT ASSET", "SAVE", slotPic(a, 96), a.name, async (name, { close, fail }) => {
     try {
-      let thumb = a.thumb, view = a.view, front = a.front || 0;
-      if (vw) { const nv = vw.view; front = vw.front; if (!a.thumb || front !== (a.front || 0) || JSON.stringify(nv) !== JSON.stringify({ ...VIEW0, ...(a.view || {}) })) { view = nv; thumb = (await upload(await vw.shot())).file; } }
+      let thumb = a.thumb, view = a.view, front = a.front || 0, mats = a.mats || {};
+      if (vw) { const nv = vw.view; front = vw.front; const nm = { ...mats, ...p.mats }, recolored = JSON.stringify(nm) !== JSON.stringify(mats); mats = nm;
+        if (!a.thumb || recolored || front !== (a.front || 0) || JSON.stringify(nv) !== JSON.stringify({ ...VIEW0, ...(a.view || {}) })) { view = nv; thumb = (await upload(await vw.shot())).file; } }
       const n = seq++; pending.set(n, { done: close, fail });
-      api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb, view, front } });
+      api.send({ t: "aset", id: a.id, n, asset: { kind: a.kind, name, file: a.file, thumb, view, front, mats } });
     } catch (e) { fail(e.message || "The upload failed."); }
   });
-  if (a.kind === "model") loadGlb(a.file).then((obj) => { if (pop !== p) return; vw = viewer(obj, a.view, p.pic, a.front || 0); p.front(vw); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); }).catch(() => {});
+  if (a.kind === "model") loadGlb(a.file).then((obj) => { if (pop !== p) return; vw = viewer(applyMats(obj, a.mats), a.view, p.pic, a.front || 0); p.front(vw); p.colors(vw, a.mats); p.onClose = () => vw.dispose(); p.reset.hidden = false; p.reset.addEventListener("click", () => vw.reset()); }).catch(() => {});
 }
 
 function set(list) {
