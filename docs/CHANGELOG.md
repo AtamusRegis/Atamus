@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Object Editor fixes (owner):** zooming the top view now updates the side view too; the visibility points in Points are green again, and the hitbox handles that were wrongly showing there (the extra dots) are back in the Hitboxes tab, where editing them works again.
 - **Points tab fixes (owner):** the handles and lines line up with the model again in the stacked views, and the Points tab no longer shows the hitboxes or movement collider.
 - **Update flow fix (owner):** a push that changes both the server and the website now sends players to the update page once (they wait for both halves), and nobody can sign in or enter the game while an update is in progress: they see the update page instead.
 - **Points tab (owner):** the Object Editor's Pivot, Visibility, Hardpoint and Effects Level tabs are one Points tab with the top and side views stacked; the tabs are now Hitboxes, Movement and Points.

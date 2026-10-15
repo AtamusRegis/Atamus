@@ -960,7 +960,7 @@ export function initBuild(ctx) {
   const S = () => fp() * VIEW / (2 * H());               // px per footprint fraction
   const toPx = ([ux, uy]) => [VIEW / 2 + (ux - ePan[0]) * S(), VIEW / 2 - (uy - ePan[1]) * S()];
   const fromPx = (px, py) => { const cl = (v) => Math.max(-1.5, Math.min(1.5, v)); return [cl((px - VIEW / 2) / S() + ePan[0]), cl(-(py - VIEW / 2) / S() + ePan[1])]; };
-  ceSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); if (eZoom <= 1) ePan = [0, 0]; eDraw(); }, { passive: false });
+  ceSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); if (eZoom <= 1) ePan = [0, 0]; eDraw(); sDraw(); }, { passive: false });
   // (owner) zoomed in, the middle mouse drags the view around
   let ePanDrag = null;
   ceSvg.addEventListener("pointerdown", (e) => { if (e.button !== 1) return; e.preventDefault(); e.stopPropagation(); ePanDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, p0: ePan.slice() }; try { ceSvg.setPointerCapture(e.pointerId); } catch {} }, true);
@@ -1084,15 +1084,6 @@ export function initBuild(ctx) {
       }));
       handle(vx, vy, 7, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "pv"); } });   // the pivot
       if (isShipKind()) {
-      px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
-        const q = px[(i + 1) % px.length];
-        handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); snap(); eGrab(e, "pt", addCorner(i)); });
-      });
-      px.forEach((p, i) => handle(p[0], p[1], 6, "ce-pt", (e) => {
-        e.preventDefault();
-        if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
-        if (e.button === 0) { snap(); eGrab(e, "pt", i); }
-      }));
       // (owner, 2026-10-15) the hardpoint: its spot (drag the dot), its rotation limit (the shaded arc around it: drag an
       // end; all the way round is endless) and its default facing (the arrow: drag its tip)
       const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx - Math.sin(rad(d)) * r, wy + Math.cos(rad(d)) * r];   // (degrees clockwise from the nose, which points down here)
@@ -1105,6 +1096,16 @@ export function initBuild(ctx) {
       handle(tx, ty, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "dir"); } });
       handle(wx, wy, 7, "ce-woh", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "wo"); } });
       }
+    } else if (eMode === "sight") {
+      px.forEach((p, i) => {                     // the middle of each edge: click to add a corner there
+        const q = px[(i + 1) % px.length];
+        handle((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, 4, "ce-mid", (e) => { if (e.button !== 0) return; e.preventDefault(); snap(); eGrab(e, "pt", addCorner(i)); });
+      });
+      px.forEach((p, i) => handle(p[0], p[1], 6, "ce-pt", (e) => {
+        e.preventDefault();
+        if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
+        if (e.button === 0) { snap(); eGrab(e, "pt", i); }
+      }));
     } else if (eMode === "move") {
       handle(mcx, mcy, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "mc"); } });
       // (owner, 2026-10-14) a handle on each side, each moving only its own side
