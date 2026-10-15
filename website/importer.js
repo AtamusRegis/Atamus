@@ -123,6 +123,7 @@ function mount(a) {
   (document.getElementById("staff-col") || document.body).appendChild(ibtn);
   win = $("div"); win.id = "imp-panel"; win.hidden = true;
   const top = $("div", "we-top"); top.append($("span", "we-title", "RAW ASSETS"), btn("×", "we-x", () => toggle(false)));
+  if (window.WinPos) window.WinPos.watch(top, win, "assets");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => {   // dragged by its top bar
     if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
     const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
@@ -155,7 +156,7 @@ function mount(a) {
 }
 function toggle(v) {
   if (!win) return; win.hidden = v === undefined ? !win.hidden : !v; ibtn.classList.toggle("on", !win.hidden);
-  if (!win.hidden) { draw(); iconsDue(); } else closeMenu();
+  if (!win.hidden) { draw(); iconsDue(); if (window.WinPos) window.WinPos.place(win, "assets"); } else closeMenu();
 }
 function draw() {
   if (!win || win.hidden) return;

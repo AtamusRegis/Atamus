@@ -57,6 +57,7 @@ website/          GitHub Pages site (atamus.io) and the game client
                   and the Object Editor (head admin, from the CREATOR: an object's model and colliders, incl. the player ship)
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
   numdrag.js      every number field drags sideways to change it
+  winpos.js       editor windows remember where each account put them (world3d_ui, the "ui" message)
   importer.js     the Importer ([I], head admin): imported models / images / audio (world3d_assets, POST /game/assets), model icons rendered from the model; window.Assets
   icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
   creator.js      the CREATOR ([C]): every item, object type, icon and sound as slots; CREATE (name, icon, type), Edit / Delete

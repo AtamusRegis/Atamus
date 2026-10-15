@@ -92,9 +92,10 @@ export function attachGameServer(httpServer) {
 
     let saved = null;                          // (owner, 2026-10-13) the side this account chose last time: the client re-joins it unless resetting
     try { saved = await world.savedTeam(pid); } catch (e) { console.error("saved side", e); }
+    let ui = {}; if (placer || staff) try { ui = await world.uiGet(pid); } catch (e) { console.error("ui", e); }   // (owner, 2026-10-15) where my editor windows were
     if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }   // closed or replaced meanwhile
     ws.send(JSON.stringify({
-      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), now: Date.now(),
+      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), now: Date.now(), ui,
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer, creator, items: staff },   // staff: the Admin button; builder: the Object Placer; creator: the Object Creator; items: the Item Creator
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
@@ -200,6 +201,7 @@ export function attachGameServer(httpServer) {
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
         world.delIcon(id).then((r) => { if (r.ok) broadcast({ t: "icons", list: world.iconList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "isaved", error: r.error })); } catch {} }).catch((e) => console.error("icon del", e));
       }
+      else if (m.t === "ui") { if (placer || staff) world.uiSet(pid, m.k, m.x, m.y).catch((e) => console.error("ui", e)); }   // (owner, 2026-10-15) an editor window moved
       else if (m.t === "sset") {               // (owner, 2026-10-15) the CREATOR: the head admin makes or changes a sound (SFX / Music Track)
         if (!creator) return;
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;

@@ -27,6 +27,7 @@ function mount(a) {
   (document.getElementById("staff-col") || document.body).appendChild(cbtn);
   win = $("div"); win.id = "cr-panel"; win.hidden = true;
   const top = $("div", "we-top"); top.append($("span", "we-title", "CREATOR"), btn("×", "we-x", () => toggle(false)));
+  if (window.WinPos) window.WinPos.watch(top, win, "creator");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => {   // dragged by its top bar
     if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
     const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
@@ -55,7 +56,7 @@ function mount(a) {
 }
 function toggle(v) {
   if (!win) return; win.hidden = v === undefined ? !win.hidden : !v; cbtn.classList.toggle("on", !win.hidden);
-  if (!win.hidden) draw(); else { closeMenu(); if (document.activeElement && win.contains(document.activeElement)) document.activeElement.blur(); }
+  if (!win.hidden) { draw(); if (window.WinPos) window.WinPos.place(win, "creator"); } else { closeMenu(); if (document.activeElement && win.contains(document.activeElement)) document.activeElement.blur(); }
 }
 function showErr(m) { perr.textContent = m; perr.hidden = false; clearTimeout(perr.t); perr.t = setTimeout(() => { perr.hidden = true; }, 4000); }
 

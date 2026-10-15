@@ -613,6 +613,7 @@ export function initBuild(ctx) {
   const aPanel = document.createElement("div"); aPanel.id = "attr-panel"; aPanel.hidden = true;
   const aTop = document.createElement("div"); aTop.className = "attr-top"; aPanel.append(aTop, sBox); document.body.appendChild(aPanel);
   aPanel.addEventListener("pointerdown", (e) => e.stopPropagation());
+  if (window.WinPos) window.WinPos.watch(aTop, aPanel, "attrs");   // (owner, 2026-10-15) remembered per account
   aTop.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return; e.preventDefault(); const r0 = aPanel.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
     const mv = (ev) => { const r = aPanel.getBoundingClientRect(); aPanel.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; aPanel.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; aPanel.style.right = "auto"; };
@@ -640,7 +641,8 @@ export function initBuild(ctx) {
   let gShown = "";
   function attrPanel() {
     const b = open && !picking && !held ? selPiece() : null;
-    aPanel.hidden = !b; if (!b) { gShown = ""; return; }
+    const was = aPanel.hidden; aPanel.hidden = !b; if (!b) { gShown = ""; return; }
+    if (was && window.WinPos) window.WinPos.place(aPanel, "attrs");
     aTop.textContent = b.k === "ship" ? "Test Ship" : b.k === "cloud" ? NAMES.cloud : (typeOf(b.k) || {}).name || "";
     for (const r of cloudRows) r.hidden = b.k !== "cloud";
     const key = b.id + ":" + b.r + ":" + b.w + ":" + (b.extra && b.extra.v);
@@ -928,7 +930,7 @@ export function initBuild(ctx) {
   });
   const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); drawSub(); };
   // the window drags by its header
-  const top = win.querySelector(".ce-top"); let wDrag = null;
+  const top = win.querySelector(".ce-top"); let wDrag = null; if (window.WinPos) window.WinPos.watch(top, win, "objedit");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => { if (e.button !== 0 || e.target.closest("button")) return; const r = win.getBoundingClientRect(); wDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top }; top.setPointerCapture(e.pointerId); e.preventDefault(); });
   top.addEventListener("pointermove", (e) => { if (!wDrag || e.pointerId !== wDrag.id) return; const W = win.offsetWidth, Hh = win.offsetHeight;
     win.style.left = Math.max(0, Math.min(innerWidth - W, e.clientX - wDrag.dx)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - Hh, e.clientY - wDrag.dy)) + "px"; win.style.transform = "none"; });
@@ -963,7 +965,7 @@ export function initBuild(ctx) {
   function eToggle(v) {
     if (!creator) return;
     eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen;
-    if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
+    if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); if (window.WinPos) window.WinPos.place(win, "objedit"); }
     giz.visible = eOpen;
   }
   function eInit() {

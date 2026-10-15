@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Window positions (owner):** the editor windows (CREATOR, RAW ASSETS, Object Editor, attributes panel) now reopen where each account last put them.
 - **Model Front (owner):** a model's import / edit pop-up in Raw Assets now has a Front setting with an arrow showing the game's forward, for models made facing another way; it turns the model everywhere it's used.
 - **The CREATOR (owner):** C opens one CREATOR panel for everything made (items, the object types, the player ship, icons, SFX and Music Tracks), with a search, a filter and a green CREATE (name, icon, type). It replaces the Item Creator (Z) and the Object Creator list (X). Icons go to the Icon Creator; the other types are just a name, icon and type for now. An object's model is now picked in its Object Editor.
 - **Raw Assets grid (owner):** six slots a row; the search row matches their width, and the filter icon glows blue while a filter is on.

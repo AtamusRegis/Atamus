@@ -313,6 +313,7 @@ export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.t
 // (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /
 // WAV), each a name and its uploaded file; a model's icon (thumb) is a picture rendered from it (a PNG). The Object Creator
 // picks its models from these.
+export const UI_KEYS = ["creator", "assets", "objedit", "attrs"];
 export const ASSET_KINDS = ["model", "image", "audio"];
 export const imageRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(png|jpg|webp)$/.test(v) ? v : null);
 export const audioRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(mp3|ogg|wav)$/.test(v) ? v : null);
@@ -423,6 +424,19 @@ export class World3D {
   }
 
   // (owner, 2026-10-13) the side this account last chose, or null
+  // (owner, 2026-10-15) where an account's editor windows were (CREATOR, RAW ASSETS, the Object Editor, the attributes
+  // panel): { key: { x, y } } in screen pixels, from their last drags
+  async uiGet(uid) {
+    await this.ready; await this._uiTable;
+    const { rows } = await pool.query(`SELECT data FROM world3d_ui WHERE user_id = $1`, [String(uid)]); return rows[0] ? rows[0].data : {};
+  }
+  async uiSet(uid, k, x, y) {
+    if (!UI_KEYS.includes(k) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const v = { x: Math.max(0, Math.min(20000, Math.round(x))), y: Math.max(0, Math.min(20000, Math.round(y))) };
+    await this.ready; await this._uiTable;
+    await pool.query(`INSERT INTO world3d_ui (user_id, data) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data = world3d_ui.data || $2`, [String(uid), JSON.stringify({ [k]: v })]);
+  }
+  get _uiTable() { return this.__ui || (this.__ui = pool.query(`CREATE TABLE IF NOT EXISTS world3d_ui (user_id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}'::jsonb)`)); }
   async savedTeam(id) {
     await this.ready;
     const { rows } = await pool.query(`SELECT team FROM world3d WHERE user_id = $1`, [String(id)]);
