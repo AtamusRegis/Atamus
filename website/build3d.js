@@ -978,17 +978,16 @@ export function initBuild(ctx) {
   const panEnd = (e) => { if (ePanDrag && e.pointerId === ePanDrag.id) { ePanDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} } };
   ceSvg.addEventListener("pointerup", panEnd, true); ceSvg.addEventListener("pointercancel", panEnd, true);
   ceSvg.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });   // no browser autoscroll
-  function drawESlots() {}
   function eSetKind(k) {
     if (!kindOk(k) || k === "cloud") k = "ship";
     eKind = k; pErr.hidden = true;
     eParts = cloneParts(colliders[k] || dflt(COLL_DEFAULT, k)); ePart = 0; EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; eEx = { ...EXTRA_DEFAULT, ...(collExtra[k] || {}) };
-    eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawProps(); drawModes(); eDraw();
+    eDrag = null; past = []; future = []; ePan = [0, 0]; drawProps(); drawModes(); eDraw();
   }
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
   function eToggle(v) {
     if (!creator) return;
-    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen;
+    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; eSig = "";
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); if (window.WinPos) window.WinPos.place(win, "objedit"); }
     giz.visible = eOpen;
   }
@@ -999,6 +998,7 @@ export function initBuild(ctx) {
     eScene = new THREE.Scene(); eScene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 1.0)); const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(300, 500, 200); eScene.add(sun);
     eCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000); eCam.up.set(0, 0, -1); eCam.position.set(0, 800, 0); eCam.lookAt(0, 0, 0);
   }
+  let eSig = "";
   function eRender() {
     if (!eOpen || !eRen) return;
     const key = eKind === "ship" ? "ship:" + ctx.shipReady() : meshKey(eKind) + ":" + fp();
@@ -1009,6 +1009,10 @@ export function initBuild(ctx) {
       eScene.add(eMesh); eMeshK = key;
       { const bb = new THREE.Box3().setFromObject(eMesh); eMeshH = Math.max(1, bb.isEmpty() ? fp() * 0.3 : bb.max.y); } sDraw();
     }
+    // (owner, 2026-10-15: speed) drawn only when something it shows changed (the model, zoom, pan, the side view's angle,
+    // which views are open), not every frame
+    const sig = eMeshK + "|" + eZoom + "|" + ePan + "|" + sideYaw + "|" + ceTop.hidden + ceSide.hidden + "|" + eMeshH;
+    if (sig === eSig) return; eSig = sig;
     const h = H(), ox = ePan[0] * fp(), oy = ePan[1] * fp(); eCam.left = ox - h; eCam.right = ox + h; eCam.top = oy + h; eCam.bottom = oy - h; eCam.updateProjectionMatrix();
     if (!ceTop.hidden) eRen.render(eScene, eCam);
     if (!ceSide.hidden) { sAim(); sdRen.render(eScene, sdCam); }

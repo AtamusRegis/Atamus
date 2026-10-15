@@ -294,11 +294,11 @@ export function attachGameServer(httpServer) {
   const reach = (p, kind, o) => Math.hypot(o.x - p.x, o.y - p.y) - (kind === "b" ? o.far : BLOCK_HALF * 1.5) <= LOAD_R;
   const sockOf = (ws) => { if (!ws.known) ws.known = { b: new Set(), k: new Set() }; return ws.known; };
   function objCast(kind, o) {                  // a new or changed object: to whoever has it or can now see it
-    const id = String(o.id);
+    const id = String(o.id); let msg = null;
     for (const [qid, qws] of socks) {
       const p = world.players.get(qid); if (!p || qws.readyState !== qws.OPEN) continue;
       const k = sockOf(qws)[kind];
-      if (k.has(id) || reach(p, kind, o)) { k.add(id); qws.send(JSON.stringify(msgOf(kind, o))); }
+      if (k.has(id) || reach(p, kind, o)) { k.add(id); qws.send(msg || (msg = JSON.stringify(msgOf(kind, o)))); }   // (written once, sent to each)
     }
   }
   function objGone(kind, ids) {                // removed objects: to whoever had them
@@ -327,8 +327,9 @@ export function attachGameServer(httpServer) {
     if (world.hits.length) {                   // (owner, 2026-10-14) impacts: to the players whose load circle has them
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-        const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R);
-        for (const h of near) ws.send(JSON.stringify({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100 }));
+        const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R)
+          .map((h) => ({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100 }));
+        if (near.length) ws.send(JSON.stringify(near.length === 1 ? near[0] : { t: "batch", m: near }));   // (one message a tick, owner 2026-10-15)
       }
       world.hits.length = 0;
     }
@@ -347,18 +348,26 @@ export function attachGameServer(httpServer) {
   setInterval(() => {
     const g = []; for (const p of world.players.values()) if (p.bot && p.ai && p.ai.goal) g.push([p.id, Math.round(p.ai.goal.x), Math.round(p.ai.goal.y)]);
     for (const [pid, ws] of socks) { if (ws.readyState !== ws.OPEN || !builders.has(pid)) continue; const me = world.players.get(pid); if (!me) continue;
-      ws.send(JSON.stringify({ t: "botgoals", g: g.filter(([id]) => { const q = world.players.get(id); return q && Math.hypot(q.x - me.x, q.y - me.y) <= LOAD_R; }) })); }
+      const msg = JSON.stringify({ t: "botgoals", g: g.filter(([id]) => { const q = world.players.get(id); return q && Math.hypot(q.x - me.x, q.y - me.y) <= LOAD_R; }) });
+      if (msg !== ws.lastGoals) { ws.lastGoals = msg; ws.send(msg); } }   // (owner, 2026-10-15) only when they change
   }, 333);
   // 15 Hz snapshots, each player's own: only what's inside their load circle (owner, 2026-10-13)
+  // (owner, 2026-10-15: less traffic) as changes since the last one this socket got: p, the ships whose row changed (or
+  // that just came into range); u, the ids of the ones exactly as before; nothing changed at all: { same: 1 }. A ship in
+  // neither has left the load circle. The client rebuilds the full list from what it had.
   setInterval(() => {
     const ts = Date.now();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      ws.send(JSON.stringify({ t: "snap", ts, p: world.snapshotFor(p) }));
+      const rows = world.snapshotFor(p), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
+      for (const r of rows) { const id = r[0], key = r.join(","); now.set(id, key); if (last.get(id) === key) un.push(id); else ch.push(r); }
+      ws.lastSnap = now;
+      ws.send(JSON.stringify(!ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un }));
     }
   }, 66);
   setInterval(() => {                                                           // each player's own capacitor, 4 Hz, to them only
-    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (p && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "cap", c: Math.round((p.cap ?? CAP_MAX) * 10) / 10, o: p.capOut ? 1 : 0 })); }
+    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      const msg = JSON.stringify({ t: "cap", c: Math.round((p.cap ?? CAP_MAX) * 10) / 10, o: p.capOut ? 1 : 0 }); if (msg !== ws.lastCap) { ws.lastCap = msg; ws.send(msg); } }   // (owner, 2026-10-15) only when it changes
   }, 250);
 
   console.log("3D world attached at /ws (hex " + Math.round(HEX_FLAT) + " m flat to flat)");

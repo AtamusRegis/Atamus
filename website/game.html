@@ -98,7 +98,7 @@
     html:not(.touch) #chat { width: auto; } html:not(.touch) #chat-panel { width: 340px; }
     /* (owner, 2026-10-14) the staff buttons (A X B Z) are a column on the right edge of the screen, centered top to bottom */
     #staff-col { position: fixed; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; z-index: 6; }
-    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #edit-btn { order: 2; } #build-btn { order: 3; } #cr-btn { order: 4; } #imp-btn { order: 5; }
+    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #build-btn { order: 3; } #cr-btn { order: 4; } #imp-btn { order: 5; }
     html.touch #chat-panel { flex: 1; width: auto; }   /* (owner) [A] floats left of the panel, by the input */
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
@@ -197,25 +197,19 @@
     #build-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(120,200,255,0.14); border: none; border-radius: 5px; color: #9fd8ff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #build-btn:hover, #build-btn.on { background: var(--accent-grad); color: #06121c; }
     /* (owner, 2026-10-14) the Object Editor: [X] beside [B], a window with the object drawn top down and its collider outline */
-    #edit-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(190,140,255,0.14); border: none; border-radius: 5px; color: #d2b4ff; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-    #edit-btn:hover, #edit-btn.on { background: linear-gradient(135deg, #c9a4ff, #8a5cf0); color: #12061f; }
-    html.touch #edit-btn, html.touch #coll-edit { display: none !important; }
+    html.touch #coll-edit { display: none !important; }
     /* (owner, 2026-10-15) the Item Creator (itemcreator.js; was the Weapon panel), staff: [Z] */
-    #item-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #imp-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(110,230,160,0.14); border: none; border-radius: 5px; color: #a8f0c6; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #cr-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #cr-btn:hover, #cr-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
-    #item-btn:hover, #item-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
-    :is(#item-edit, #imp-panel, #cr-panel) { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
-    :is(#item-edit, #imp-panel, #cr-panel) .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
+    :is(#imp-panel, #cr-panel) { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
+    :is(#imp-panel, #cr-panel) .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
     .we-x { background: none; border: none; color: var(--text-dim); font-size: 16px; line-height: 1; padding: 0 4px; cursor: pointer; } .we-x:hover { color: #fff; }
-    :is(:is(#item-edit, #imp-panel, #cr-panel), .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
+    :is(:is(#imp-panel, #cr-panel), .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
     /* (owner, 2026-10-14) the item slots, 5 a row, scrolling past 4 rows */
     .we-list { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
-    .we-make { display: flex; gap: 8px; margin-top: 12px; } .we-make[hidden] { display: none; }
-    .we-tabs { display: flex; gap: 4px; margin-bottom: 8px; } .we-tabs button { flex: 1; padding: 5px 0 !important; } .we-tabs button.on { background: var(--accent-grad) !important; color: #06121c !important; border-color: transparent !important; }
-    :is(:is(#item-edit, #imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
-    :is(:is(#item-edit, #imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
+    :is(:is(#imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
+    :is(:is(#imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
     .we-modal .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; } .we-modal .we-btns button { flex: none !important; }
     .we-modal .we-btns .we-ok { background: linear-gradient(135deg, #5fb4ff, #2f6fe0) !important; color: #fff !important; border: none !important; }   /* (owner) blue */
     .we-modal .we-btns .we-ok:hover { background: linear-gradient(135deg, #85c6ff, #4a86f0) !important; }
@@ -257,7 +251,7 @@
     .ic-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-dim); font-size: 12px; }
     .ic-field input[type=number] { width: 64px !important; } .ic-field input[type=color] { width: 40px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; } .ic-field input[type=range] { width: 90px; }
     .ic-field input[type=checkbox] { accent-color: #38c6ff; }
-    html.touch #item-btn, html.touch :is(#item-edit, #imp-panel, #cr-panel), html.touch .we-back { display: none !important; }
+    html.touch :is(#imp-panel, #cr-panel), html.touch .we-back { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
     .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
     .ce-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
@@ -325,17 +319,14 @@
     #route-handles .rt-mid { fill: rgba(255,200,140,0.7); pointer-events: auto; cursor: pointer; } #route-handles .rt-mid:hover { fill: #fff; }
     #route-handles .rt-spawn circle { fill: #e07a1f; stroke: #fff; stroke-width: 2; } #route-handles .rt-spawn text { fill: #fff; font: 700 12px system-ui, sans-serif; }
     /* (owner, 2026-10-15) the Object Placer's type slots, a resource node's settings, the Object Creator's properties */
-    .build-types { display: contents; } .build-letter { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 5px; background: rgba(140,150,170,0.35); color: #fff; font: 700 13px var(--font); pointer-events: none; } .build-letter.plus { background: none; color: var(--text-dim); font-size: 20px; } .build-letter.none { background: rgba(140,150,170,0.12); color: var(--text-dim); }
+    .build-letter { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 5px; background: rgba(140,150,170,0.35); color: #fff; font: 700 13px var(--font); pointer-events: none; } .build-letter.plus { background: none; color: var(--text-dim); font-size: 20px; } .build-letter.none { background: rgba(140,150,170,0.12); color: var(--text-dim); }
     #node-box { position: fixed; z-index: 5; transform: translate(-50%, -100%); display: grid; grid-template-columns: auto auto; gap: 4px 8px; padding: 6px 8px; background: rgba(10,14,22,0.9); border-radius: 6px; box-shadow: var(--shadow); color: #cfd9e8; font: 12px var(--font); }
     #node-box label { display: contents; } #node-box span { align-self: center; color: var(--text-dim); } #node-box input { width: 70px; padding: 3px 5px; border: 1px solid #2a3a52; border-radius: 4px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
     .oc-props { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin-bottom: 8px; font-size: 12px; } .oc-props[hidden] { display: none; }
     .oc-row { display: contents; } .oc-row > span { align-self: center; color: var(--text-dim); }
     .oc-props input, .oc-props select { box-sizing: border-box; width: 100%; padding: 3px 6px; border: 1px solid #2a3a52; border-radius: 4px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
-    .oc-model { display: flex; align-items: center; gap: 8px; } .oc-model button { padding: 3px 10px; border: none; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text); font: 600 11px var(--font); cursor: pointer; } .oc-model button:hover { background: rgba(255,255,255,0.15); } .oc-model button:disabled { opacity: .5; }
-    .oc-file { color: var(--text-dim); } .oc-err { grid-column: 1 / -1; margin: 0; color: #ff8a80; }
+    .oc-err { grid-column: 1 / -1; margin: 0; color: #ff8a80; }
     #coll-edit.drop { outline: 2px dashed #38c6ff; }
-    .oc-icon { display: flex; align-items: center; gap: 8px; } .oc-icon > button:first-child { padding: 3px 10px; border: none; border-radius: 4px; background: rgba(255,255,255,0.08); color: var(--text); font: 600 11px var(--font); cursor: pointer; } .oc-icon > button:first-child:hover { background: rgba(255,255,255,0.15); }
-    .oc-iconbox { width: 34px; height: 34px; display: grid; place-items: center; padding: 0; border: 1px dashed #3c5272; border-radius: 5px; background: rgba(0,0,0,0.35); color: var(--text-dim); cursor: pointer; } .oc-iconbox:hover { border-color: #9fd8ff; } .oc-plus { font-size: 18px; }
     .oc-create { margin-left: 6px; padding: 0 12px; border: none; border-radius: 5px; background: var(--accent-grad); color: #06121c; font: 600 12px var(--font); cursor: pointer; white-space: nowrap; }
     /* (owner, 2026-10-15) the Object Placer: the selected object's attributes panel (dragged by its title) and its move arrows */
     #attr-panel { position: fixed; right: 64px; top: 90px; z-index: 6; min-width: 200px; padding: 0 8px 8px; background: rgba(10,14,22,0.92); border-radius: 7px; box-shadow: var(--shadow); color: #cfd9e8; font: 12px var(--font); user-select: none; }
@@ -350,19 +341,9 @@
     #attr-panel #ship-btns[hidden], #attr-panel #node-box[hidden] { display: none; } #node-box label[hidden] { display: none; } #node-box .nb-val { color: var(--text); align-self: center; }
     html.touch #attr-panel { display: none !important; }
     /* (owner, 2026-10-15) the Object Creator's list of objects */
-    #obj-list { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 10px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); user-select: none; }
-    #obj-list .ol-top { display: flex; align-items: center; justify-content: space-between; margin: -2px 0 8px; cursor: move; touch-action: none; }
-    #obj-list .ol-tools { display: flex; gap: 6px; margin-bottom: 8px; } #obj-list .ol-search { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
-    #obj-list .ol-sort { padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
-    #obj-list .ol-grid { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
-    #obj-list .ol-create { width: 100%; margin-top: 10px; padding: 7px 0; border: none; border-radius: 5px; background: var(--accent-grad); color: #06121c; font: 700 12px var(--font); letter-spacing: .05em; cursor: pointer; } #obj-list .ol-create:hover { filter: brightness(1.12); }
-    .we-modal.oc-item.drop { outline: 2px dashed #38c6ff; }
-    .we-modal.oc-item .oc-iconbox { flex: none !important; width: 38px !important; height: 34px; padding: 0 !important; display: grid; place-items: center; }
     .we-modal select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
-    .we-modal .oc-model button, .we-modal .oc-icon > button:first-child { flex: none !important; padding: 4px 10px !important; }
     /* (owner, 2026-10-15) number fields drag sideways (numdrag.js) */
     input[type=number]:not(:focus) { cursor: ew-resize; } body.num-dragging, body.num-dragging * { cursor: ew-resize !important; user-select: none !important; }
-    html.touch #obj-list { display: none !important; }
     /* (owner, 2026-10-15) the Importer */
     #imp-btn:hover, #imp-btn.on { background: linear-gradient(135deg, #9df0c0, #2fae6a); color: #03170b; }
     :is(#imp-panel, #cr-panel) .imp-grid { grid-template-columns: repeat(6, 44px); }
@@ -416,6 +397,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792055309"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792062357"></script>
+  <script type="module" src="game3d.js?v=1792063648"></script>
 </body>
 </html>

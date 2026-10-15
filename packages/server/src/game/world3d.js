@@ -925,7 +925,8 @@ export class World3D {
     await this.ready; await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true };
   }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
-  typeList() { return [...this.types.values()].map((t) => { const a = t.model && [...this.assets.values()].find((x) => x.file === t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}) } : t; }); }   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
+  typeList() { const byFile = new Map(); for (const x of this.assets.values()) byFile.set(x.file, x);   // (one pass over the assets)
+    return [...this.types.values()].map((t) => { const a = t.model && byFile.get(t.model); return a ? { ...t, ...(a.thumb ? { thumb: a.thumb } : {}), ...(a.front ? { front: a.front } : {}) } : t; }); }   // front: its model's   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
     if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;

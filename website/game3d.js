@@ -8,7 +8,7 @@ import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { Importer } from "./importer.js?v=1792058735";
 import { Creator } from "./creator.js?v=1792060615";
-import { initBuild, hpInArc, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792062357";
+import { initBuild, hpInArc, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792063648";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -1035,6 +1035,7 @@ function inputDir() {
 }
 
 // ---- socket ----
+let snapRows = new Map();                      // (owner, 2026-10-15) the last full snapshot, id -> row (snapshots come as changes)
 let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
 let rtt = 80, pingTimer = 0, srvOff = null;   // srvOff: local clock minus the server's, from snapshots                   // measured round trip, for latency-compensated correction
 const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);   // ?as: the PTR's second-account test hook (ignored live)
@@ -1057,7 +1058,7 @@ function connect() {
     if (m.t === "hello") {
       if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
       if (window.Catalog) { window.Catalog.set("icons", m.icons || []); window.Catalog.set("items", m.items || []); }   // (owner, 2026-10-15) the Item Creator's items
-      srvBuild = m.build || "";
+      srvBuild = m.build || ""; snapRows = new Map();
       if (m.updating && m.updating.parts) { if (typeof m.updating.to === "string" && /^[0-9a-f]{7,40}$/.test(m.updating.to)) countHead = m.updating.to; goUpdating(m.updating.parts); return; }   // (owner, 2026-10-15) an update in progress: nobody plays until it's done
       if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; if (m.cfg.hpMax) HP_MAX = m.cfg.hpMax; }
       myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
@@ -1087,6 +1088,10 @@ function connect() {
       drawPrefix();
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
+      // (owner, 2026-10-15: less traffic) the server sends only what changed: p (changed rows), u (ids exactly as before),
+      // or same (nothing changed); the full list is rebuilt from the last one
+      { const full = m.same ? [...snapRows.values()] : [...(Array.isArray(m.p) ? m.p : []), ...(Array.isArray(m.u) ? m.u : []).map((id) => snapRows.get(id)).filter(Boolean)];
+        snapRows = new Map(full.map((r) => [r[0], r])); m.p = full; }
       const inSnap = new Set();
       for (const [id, cx, cy, ch, hp, sl] of m.p) {
         const x = cx / 100, y = cy / 100;
