@@ -192,7 +192,8 @@ export const KINDS = ["ship", "cloud"], BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX =
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
 // (owner, 2026-10-14) the combat points are parts: each an outline with a type (body, main engine, left engine, right
 // engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
-export const PART_TYPES = ["body", "main", "left", "right", "weapon"];
+// (owner, 2026-10-15) hitbox parts: Body, Main Engine, Left Engine, Right Engine, Hardpoint (was Weapon Emplacement), Critical
+export const PART_TYPES = ["body", "main", "left", "right", "hardpoint", "critical"];
 export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
 // (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
 // other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
@@ -240,6 +241,16 @@ export function cleanPivot(pv) {               // a submitted pivot, checked as 
   if (!Array.isArray(pv) || pv.length !== 2) return null; const [x, y] = pv.map(Number); if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return [Math.round(Math.max(-1.5, Math.min(1.5, x)) * 10000) / 10000, Math.round(Math.max(-1.5, Math.min(1.5, y)) * 10000) / 10000];
 }
+// (owner, 2026-10-15) a kind's hardpoint and effects level (the Object Editor): the hardpoint's elevation (hz) and the
+// effects level (fx), both heights above the grid in footprint units like everything else (so they scale with the
+// piece); the turret's rotation limit (arc, degrees: 360 = endless) and its default facing (dir, degrees clockwise from
+// forward). The hardpoint's spot on the plan is the kind's origin (it replaced the Weapon Origin).
+export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };
+export function cleanCollExtra(o) {
+  if (!o || typeof o !== "object") return null;
+  const n = (x, lo, hi, d, k = 10000) => (Number.isFinite(Number(x)) ? Math.round(Math.max(lo, Math.min(hi, Number(x))) * k) / k : d);
+  return { hz: n(o.hz, 0, 3, EXTRA_DEFAULT.hz), arc: n(o.arc, 1, 360, 360, 10), dir: ((n(o.dir, -720, 720, 0, 10) % 360) + 360) % 360, fx: n(o.fx, 0, 3, EXTRA_DEFAULT.fx) };
+}
 export function polyRad(o, v) { let r = 0; for (let i = 0; i < v.length; i += 2) r = Math.max(r, Math.hypot(v[i] - o.x, v[i + 1] - o.y)); return r; }
 // (owner, 2026-10-14) ships collide by their Movement ellipse (as a 24-sided outline, turned with the heading): convex
 // outline against convex outline by separating axes. Returns how to push A out of B ({ nx, ny, d }) or null.
@@ -286,7 +297,7 @@ export function cleanParts(v) {
   if (Array.isArray(v) && Array.isArray(v[0])) { const c = cleanColl(v); return c ? [{ t: "body", pts: c }] : null; }
   if (!Array.isArray(v) || v.length < 1 || v.length > 8) return null;
   const out = [];
-  for (const p of v) { if (!p || typeof p !== "object" || !PART_TYPES.includes(p.t)) return null; const c = cleanColl(p.pts); if (!c) return null; out.push({ t: p.t, pts: c }); }
+  for (const p of v) { if (p && p.t === "weapon") p.t = "hardpoint"; if (!p || typeof p !== "object" || !PART_TYPES.includes(p.t)) return null; const c = cleanColl(p.pts); if (!c) return null; out.push({ t: p.t, pts: c }); }
   return out;
 }
 // (owner, 2026-10-14) nebula clouds: an outline of 3-64 points in meters around the cloud's pivot (|coord| up to 3,000),
@@ -371,7 +382,7 @@ export class World3D {
     this.catalog = new Map(); this.icons = new Map(); this.types = new Map(); this.assets = new Map(); this.sounds = new Map();   // assets: (owner, 2026-10-15) the Importer's   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
-    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
+    this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {}; this.collExtra = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
     this._saver = setInterval(() => this.saveDirty().catch((e) => console.error("world3d save", e)), 10_000);
     this._saver.unref && this._saver.unref();
@@ -415,7 +426,9 @@ export class World3D {
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS origin JSONB`);  // (owner, 2026-10-14) its Weapon Origin (where line of sight starts)
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS parts JSONB`);   // (owner, 2026-10-14) its combat-points parts (pts keeps the first part's outline)
-    for (const o of (await pool.query(`SELECT k, pts, parts, pivot, origin, mover, vis FROM world3d_colliders`)).rows) {
+    await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-15) its hardpoint and effects level
+    for (const o of (await pool.query(`SELECT k, pts, parts, pivot, origin, mover, vis, extra FROM world3d_colliders`)).rows) {
+      { const ex = cleanCollExtra(o.extra); if (ex && this.kindOk(o.k)) this.collExtra[o.k] = ex; }
       if (!this.kindOk(o.k)) continue; const c = cleanParts(o.parts) || cleanParts(o.pts), pv = cleanPivot(o.pivot), wo = cleanPivot(o.origin), mv = cleanMove(o.mover), vs = cleanColl(o.vis, 1, 32); if (c) this.colliders[o.k] = c; if (pv) this.pivots[o.k] = pv; if (wo) this.origins[o.k] = wo; if (mv) this.movers[o.k] = mv; if (vs) this.visOutlines[o.k] = vs;
     }
     await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);   // (owner, 2026-10-14) a nebula cloud's outline and color theme
@@ -847,13 +860,13 @@ export class World3D {
     if (b.k === "cloud") { b.poly = b.mpoly = cloudPoly(b); b.rad = b.far = polyRad(b, b.poly); return; }   // (clouds don't block anything)
     b.polys = buildPolys(b, this.colliders, this.pivots); b.mpoly = movePoly(b, this.movers, this.pivots); b.rad = polyRad(b, b.mpoly); b.far = Math.max(b.rad, ...b.polys.map((v) => polyRad(b, v))); }
   // (owner, 2026-10-14) the Object Editor: a kind's new collider outline; every piece of that kind takes it at once
-  async setCollider(k, parts, pivot, mover, vis, origin) {   // (owner) the combat points, the pivot, the movement collider, the visibility points and the weapon origin together
-    const c = this.kindOk(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], wo = cleanPivot(origin) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k] || MOVE_DEFAULT.square, vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k] || VIS_DEFAULT.square; if (!c) return null;
+  async setCollider(k, parts, pivot, mover, vis, origin, extra) {   // (owner) the combat points, the pivot, the movement collider, the visibility points and the weapon origin together
+    const c = this.kindOk(k) && cleanParts(parts), pv = cleanPivot(pivot) || [0, 0], wo = cleanPivot(origin) || [0, 0], mv = cleanMove(mover) || MOVE_DEFAULT[k] || MOVE_DEFAULT.square, vs = cleanColl(vis, 1, 32) || VIS_DEFAULT[k] || VIS_DEFAULT.square, ex = cleanCollExtra(extra) || this.collExtra[k] || { ...EXTRA_DEFAULT }; if (!c) return null;
     await this.ready;
-    await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, origin, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, origin = $7, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs), JSON.stringify(wo)]);
-    this.colliders[k] = c; this.pivots[k] = pv; this.origins[k] = wo; this.movers[k] = mv; this.visOutlines[k] = vs;
+    await pool.query(`INSERT INTO world3d_colliders (k, pts, parts, pivot, mover, vis, origin, extra, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now()) ON CONFLICT (k) DO UPDATE SET pts = $2, parts = $3, pivot = $4, mover = $5, vis = $6, origin = $7, extra = $8, updated_at = now()`, [k, JSON.stringify(c[0].pts), JSON.stringify(c), JSON.stringify(pv), JSON.stringify(mv), JSON.stringify(vs), JSON.stringify(wo), JSON.stringify(ex)]);
+    this.colliders[k] = c; this.pivots[k] = pv; this.origins[k] = wo; this.movers[k] = mv; this.visOutlines[k] = vs; this.collExtra[k] = ex;
     for (const b of this.builds.values()) if (b.k === k) this._shape(b);
-    return { parts: c, pv, mv, vis: vs, wo };
+    return { parts: c, pv, mv, vis: vs, wo, ex };
   }
   buildList() { return [...this.builds.values()].map((b) => buildMsg(b)); }
   // (owner, 2026-10-15) mined-out nodes whose respawn time has come: back with fresh ore, somewhere in their spawn zone

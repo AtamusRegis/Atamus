@@ -103,7 +103,7 @@ export function attachGameServer(httpServer) {
       items: world.itemList(), icons: world.iconList(), types: world.typeList(), sounds: world.soundList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
       crates: items.crateList(),
       ...(creator ? { assets: world.assetList() } : {}),                // (owner, 2026-10-15) the Importer's assets (head admin)                                       // (owner, 2026-10-14) dropped-item crates
-      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
+      roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, collExtra: world.collExtra, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
     items.load(pid).then(() => { if (socks.get(pid) === ws) sendInv(pid, ws); }).catch((e) => console.error("inv", e));   // (owner, 2026-10-14) my hotbar and inventory
@@ -266,7 +266,7 @@ export function attachGameServer(httpServer) {
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!creator) return;
-        world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis, m.wo).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis, wo: c.wo }); }).catch((e) => console.error("collider", e));
+        world.setCollider(m.k, m.parts, m.pv, m.mv, m.vis, m.wo, m.ex).then((c) => { if (c) broadcast({ t: "coll", k: m.k, parts: c.parts, pv: c.pv, mv: c.mv, vis: c.vis, wo: c.wo, ex: c.ex }); }).catch((e) => console.error("collider", e));
       }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });

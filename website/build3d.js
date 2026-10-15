@@ -40,7 +40,7 @@ const MIN = 5, MAX = 1000;
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
 // (owner, 2026-10-14) the combat points are parts: each an outline with a type (body, main engine, left engine, right
 // engine, weapon emplacement), hit separately. For now every part's hit is plain HP damage.
-export const PART_TYPES = ["body", "main", "left", "right", "weapon"];
+export const PART_TYPES = ["body", "main", "left", "right", "hardpoint", "critical"];   // (owner, 2026-10-15) Weapon Emplacement became Hardpoint; Critical added
 export const COLL_DEFAULT = { square: [{ t: "body", pts: box(0.5, 0.5) }], triangle: [{ t: "body", pts: box(0.5, 0.5) }], cylinder: [{ t: "body", pts: box(0.5, 0.5) }], ship: [{ t: "body", pts: box(0.33, 0.5556) }] };
 // (owner, 2026-10-14) each kind's visibility points (Object Editor, Visibility tab): placed freely; each sends a line to the
 // other ship's pivot in the mutual visibility test. They start at the box's corners and side middles.
@@ -154,8 +154,9 @@ function typeObject(t, mat) {
 const meshKey = (k) => { const t = typeOf(k); return t ? k + "|" + (t.model || "") + (unitOf(t.model) ? "+" : "-") + (t.front || 0) : k; };
 export const builds = new Map();
 // the server's combat points for a kind, as parts (a bare outline, the old format, is one Body part)
-const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : v.every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
-export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {};                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
+const asParts = (v) => (!Array.isArray(v) || !v.length ? null : Array.isArray(v[0]) ? [{ t: "body", pts: v }] : (v.forEach((p) => { if (p && p.t === "weapon") p.t = "hardpoint"; }), v).every((p) => p && PART_TYPES.includes(p.t) && Array.isArray(p.pts)) ? v : null);
+export const colliders = {}, pivots = {}, origins = {}, movers = {}, visOutlines = {}, collExtra = {};   // collExtra: (owner, 2026-10-15) each kind's hardpoint elevation / arc / facing and effects level
+export const EXTRA_DEFAULT = { hz: 0.12, arc: 360, dir: 0, fx: 0.1 };                 // (owner, 2026-10-14) the Object Editor's outlines by kind (the server's)               // id -> { id, k, x, y, w, d, r, poly, rad, mesh }
 
 export function initBuild(ctx) {
   const { scene, camera, canvas, toWorld, send } = ctx;
@@ -857,9 +858,10 @@ export function initBuild(ctx) {
   // node yields), Rotation Speed (deg/s) and Bob Speed (bobs a second). Each change is saved at once.
   const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
   const VIEW = 400;
-  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
+  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-views"><div class="ce-view ce-topv"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div><div class="ce-view ce-side" hidden><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div></div>';
   document.body.appendChild(win);
-  const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
+  const ceSlots = win.querySelector(".ce-slots"), ceTop = win.querySelector(".ce-topv"), ceCanvas = ceTop.querySelector("canvas"), ceSvg = ceTop.querySelector("svg");
+  const ceSide = win.querySelector(".ce-side"), sdCanvas = ceSide.querySelector("canvas"), sdSvg = ceSide.querySelector("svg");   // (owner, 2026-10-15) the side view
   // (owner, 2026-10-15) the Object Editor window (Edit Object): above the collision tabs, a resource node's Resource Type
   // (the item it yields)
   const props = document.createElement("div"); props.className = "oc-props"; ceSlots.after(props); ceSlots.hidden = true;
@@ -893,7 +895,8 @@ export function initBuild(ctx) {
   // (owner, 2026-10-14) Combat Points are parts (eParts, each { t: type, pts }); "sight" is the part being edited (ePart)
   let eParts = [{ t: "body", pts: null }], ePart = 0;
   const EP = { get sight() { return eParts[ePart].pts; }, set sight(v) { eParts[ePart].pts = v; }, vis: null }, pk = () => (eMode === "vis" ? "vis" : "sight");
-  const PART_NAMES = { body: "Body", main: "Main Engine", left: "Left Engine", right: "Right Engine", weapon: "Weapon Emplacement" };
+  const PART_NAMES = { body: "Body", main: "Main Engine", left: "Left Engine", right: "Right Engine", hardpoint: "Hardpoint", critical: "Critical" };
+  let eEx = { ...EXTRA_DEFAULT }, sideYaw = Math.PI / 2, sdRen = null, sdCam = null, eMeshH = 1;   // (owner, 2026-10-15) the hardpoint / effects level being edited; the side view's angle
   const MOVE_NAMES = { oval: "Oval", box: "Box", capsule: "Capsule" };
   const cloneParts = (ps) => ps.map((p) => ({ t: p.t, pts: p.pts.map((q) => q.slice()) }));
   let eZoom = 1, mirror = true, past = [], future = [], ePan = [0, 0];   // ePan: (owner) the view's middle, in footprint fractions (middle mouse pans)
@@ -901,7 +904,9 @@ export function initBuild(ctx) {
   // ellipse's handles and the pivot snap to them when dragged close (in footprint fractions)
   const guide = { x: 0.25, y: 0.25 }, SNAP = 8;
   const modes = document.createElement("div"); modes.className = "ce-modes";
-  for (const [k, label] of [["sight", "Combat Points"], ["vis", "Visibility"], ["move", "Movement"], ["pivot", "Pivot"]]) {
+  // (owner, 2026-10-15) Hitboxes, Movement, Pivot, Visibility (top view); Hardpoint (top and side views; ships only);
+  // Effects Level (the side view)
+  for (const [k, label] of [["sight", "Hitboxes"], ["move", "Movement"], ["pivot", "Pivot"], ["vis", "Visibility"], ["hp", "Hardpoint"], ["fx", "Effects Level"]]) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.dataset.m = k; b.addEventListener("click", () => { eMode = k; eDrag = null; drawModes(); eDraw(); }); modes.appendChild(b);
   }
   props.after(modes);
@@ -925,10 +930,16 @@ export function initBuild(ctx) {
   const mirrorBox = foot.querySelector("input"); mirrorBox.addEventListener("change", () => { mirror = mirrorBox.checked; mirrorBox.blur(); });
   foot.querySelector(".ce-reset").addEventListener("click", () => {
     snap();
-    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; eWo = [0, 0]; } else if (eMode === "vis") EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
+    if (eMode === "sight") { eParts = cloneParts(dflt(COLL_DEFAULT, eKind)); ePart = 0; } else if (eMode === "hp") { eWo = [0, 0]; eEx = { ...eEx, hz: EXTRA_DEFAULT.hz, arc: 360, dir: 0 }; } else if (eMode === "fx") eEx = { ...eEx, fx: EXTRA_DEFAULT.fx }; else if (eMode === "vis") EP.vis = dflt(VIS_DEFAULT, eKind).map((q) => q.slice()); else if (eMode === "move") eMv = { ...dflt(MOVE_DEFAULT, eKind) }; else ePv = [0, 0];
     eSave(); drawSub(); eDraw();
   });
-  const drawModes = () => { for (const b of modes.children) b.classList.toggle("on", b.dataset.m === eMode); drawSub(); };
+  const isShipKind = () => eKind === "ship" || (curType() || {}).cat === "ship";
+  const drawModes = () => {
+    if (eMode === "hp" && !isShipKind()) eMode = "sight";
+    for (const b of modes.children) { b.classList.toggle("on", b.dataset.m === eMode); if (b.dataset.m === "hp") b.hidden = !isShipKind(); }
+    ceTop.hidden = eMode === "fx"; ceSide.hidden = eMode !== "hp" && eMode !== "fx"; mirrorBox.parentNode.hidden = eMode === "fx";
+    drawSub(); sDraw();
+  };
   // the window drags by its header
   const top = win.querySelector(".ce-top"); let wDrag = null; if (window.WinPos) window.WinPos.watch(top, win, "objedit");   // (owner, 2026-10-15) remembered per account
   top.addEventListener("pointerdown", (e) => { if (e.button !== 0 || e.target.closest("button")) return; const r = win.getBoundingClientRect(); wDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top }; top.setPointerCapture(e.pointerId); e.preventDefault(); });
@@ -958,7 +969,7 @@ export function initBuild(ctx) {
   function eSetKind(k) {
     if (!kindOk(k) || k === "cloud") k = "ship";
     eKind = k; pErr.hidden = true;
-    eParts = cloneParts(colliders[k] || dflt(COLL_DEFAULT, k)); ePart = 0; EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) };
+    eParts = cloneParts(colliders[k] || dflt(COLL_DEFAULT, k)); ePart = 0; EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; eEx = { ...EXTRA_DEFAULT, ...(collExtra[k] || {}) };
     eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawProps(); drawModes(); eDraw();
   }
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
@@ -970,6 +981,8 @@ export function initBuild(ctx) {
   }
   function eInit() {
     eRen = new THREE.WebGLRenderer({ canvas: ceCanvas, antialias: true, alpha: true }); eRen.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); eRen.setSize(VIEW, VIEW, false);
+    sdRen = new THREE.WebGLRenderer({ canvas: sdCanvas, antialias: true, alpha: true }); sdRen.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); sdRen.setSize(VIEW, VIEW, false);
+    sdCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 4000);
     eScene = new THREE.Scene(); eScene.add(new THREE.HemisphereLight(0x8fa7c8, 0x10141c, 1.0)); const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(300, 500, 200); eScene.add(sun);
     eCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000); eCam.up.set(0, 0, -1); eCam.position.set(0, 800, 0); eCam.lookAt(0, 0, 0);
   }
@@ -981,13 +994,52 @@ export function initBuild(ctx) {
       eMesh = eKind === "ship" ? ctx.makeShipPlain() : typeObject(curType(), null);
       if (eKind !== "ship") eMesh.scale.setScalar(fp());
       eScene.add(eMesh); eMeshK = key;
+      { const bb = new THREE.Box3().setFromObject(eMesh); eMeshH = Math.max(1, bb.isEmpty() ? fp() * 0.3 : bb.max.y); } sDraw();
     }
     const h = H(), ox = ePan[0] * fp(), oy = ePan[1] * fp(); eCam.left = ox - h; eCam.right = ox + h; eCam.top = oy + h; eCam.bottom = oy - h; eCam.updateProjectionMatrix();
-    eRen.render(eScene, eCam);
+    if (!ceTop.hidden) eRen.render(eScene, eCam);
+    if (!ceSide.hidden) { sAim(); sdRen.render(eScene, sdCam); }
   }
+  // ---- (owner, 2026-10-15) the side view: the model from the side (the camera kept level; drag the empty view to go
+  // around it). The Effects Level is a dashed red line across it, dragged up and down; in Hardpoint, the hardpoint is a dot
+  // dragged up and down (its elevation). Heights are footprint units, like the plan ----
+  const sMid = () => eMeshH / 2, sH = () => Math.max(H(), eMeshH * 0.75);
+  function sAim() {
+    const h = sH(), cy = sMid(); sdCam.left = -h; sdCam.right = h; sdCam.top = cy + h; sdCam.bottom = cy - h;
+    sdCam.position.set(Math.sin(sideYaw) * 1500, 0, Math.cos(sideYaw) * 1500); sdCam.up.set(0, 1, 0); sdCam.lookAt(0, 0, 0); sdCam.updateProjectionMatrix(); sdCam.updateMatrixWorld();
+  }
+  const sK = () => VIEW / (2 * sH());                        // px per m
+  const sPy = (m) => VIEW / 2 - (m - sMid()) * sK();
+  const sPx = (ux, uy) => { const rx = Math.cos(sideYaw), rz = -Math.sin(sideYaw); return VIEW / 2 + (ux * fp() * rx + -uy * fp() * rz) * sK(); };   // a plan spot, across the side view
+  const ss = (tag, attrs) => { const n = document.createElementNS(SV, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); sdSvg.appendChild(n); return n; };
+  function sDraw() {
+    while (sdSvg.firstChild) sdSvg.removeChild(sdSvg.firstChild);
+    if (ceSide.hidden) return;
+    const fy = sPy(eEx.fx * fp()), hx = sPx(eWo[0], eWo[1]), hy = sPy(eEx.hz * fp());
+    ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx" + (eMode === "fx" ? "" : " dim") });
+    if (eMode === "fx") { const hit = ss("line", { x1: 0, y1: fy, x2: VIEW, y2: fy, class: "ce-fx-hit" }); hit.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "fx"); }); }
+    if (isShipKind()) {
+      const c = ss("circle", { cx: hx, cy: hy, r: 7, class: eMode === "hp" ? "ce-woh" : "ce-woh dim" });
+      if (eMode === "hp") c.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); e.stopPropagation(); snap(); sGrab(e, "hz"); });
+    }
+  }
+  let sDrag = null;
+  function sGrab(e, type) { sDrag = { type, id: e.pointerId, x: e.clientX }; try { sdSvg.setPointerCapture(e.pointerId); } catch {} }
+  sdSvg.addEventListener("pointerdown", (e) => { if (e.button !== 0 || e.target !== sdSvg) return; e.preventDefault(); sGrab(e, "rot"); });   // the empty view: go around the model
+  sdSvg.addEventListener("pointermove", (e) => {
+    if (!sDrag || e.pointerId !== sDrag.id) return;
+    const r = sdSvg.getBoundingClientRect(), py = (e.clientY - r.top) * VIEW / r.height, m = Math.max(0, (VIEW / 2 - py) / sK() + sMid()), u = Math.round(m / fp() * 10000) / 10000;
+    if (sDrag.type === "rot") { sideYaw -= (e.clientX - sDrag.x) * 0.012; sDrag.x = e.clientX; }
+    else if (sDrag.type === "fx") eEx = { ...eEx, fx: Math.min(3, u) };
+    else if (sDrag.type === "hz") eEx = { ...eEx, hz: Math.min(3, u) };
+    sDraw();
+  });
+  const sEnd = (e) => { if (!sDrag || e.pointerId !== sDrag.id) return; const t = sDrag.type; sDrag = null; try { sdSvg.releasePointerCapture(e.pointerId); } catch {} if (t !== "rot") eSave(); sDraw(); };
+  sdSvg.addEventListener("pointerup", sEnd); sdSvg.addEventListener("pointercancel", sEnd);
+  sdSvg.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); eZoom = Math.max(0.5, Math.min(8, eZoom * Math.pow(1.1, -e.deltaY / 100))); eDraw(); sDraw(); }, { passive: false });
   // ---- undo / redo: the kind's three things before each change ----
-  const state = () => JSON.stringify({ parts: eParts, part: ePart, vis: EP.vis, pv: ePv, wo: eWo, mv: eMv });
-  const apply = (j) => { const o = JSON.parse(j); eParts = o.parts; ePart = Math.min(o.part, eParts.length - 1); EP.vis = o.vis; ePv = o.pv; eWo = o.wo || [0, 0]; eMv = o.mv; eSave(); drawSub(); eDraw(); };
+  const state = () => JSON.stringify({ parts: eParts, part: ePart, vis: EP.vis, pv: ePv, wo: eWo, mv: eMv, ex: eEx });
+  const apply = (j) => { const o = JSON.parse(j); eParts = o.parts; ePart = Math.min(o.part, eParts.length - 1); EP.vis = o.vis; ePv = o.pv; eWo = o.wo || [0, 0]; eMv = o.mv; eEx = o.ex || { ...EXTRA_DEFAULT }; eSave(); drawSub(); eDraw(); sDraw(); };
   function snap() { past.push(state()); if (past.length > 100) past.shift(); future = []; }
   function undo() { if (!past.length) return; future.push(state()); apply(past.pop()); }
   function redo() { if (!future.length) return; past.push(state()); apply(future.pop()); }
@@ -1007,7 +1059,7 @@ export function initBuild(ctx) {
     sv("polygon", { points: EP.sight.map(toPx).map((p) => p.join(",")).join(" "), class: "ce-poly" + (eMode === "sight" ? "" : " dim") });
     sv("polygon", { points: moveLoc(eMv).map(toPx).map((p) => p.join(",")).join(" "), class: "ce-ell" + (eMode === "move" ? "" : " dim") });
     sv("path", { d: `M${vx - 9} ${vy} L${vx + 9} ${vy} M${vx} ${vy - 9} L${vx} ${vy + 9}`, class: "ce-piv" + (eMode === "pivot" ? "" : " dim") });
-    sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo" + (eMode === "sight" ? "" : " dim") });   // (owner, 2026-10-14) the Weapon Origin (a point in Combat Points)
+    if (isShipKind() && eMode !== "hp") sv("path", { d: `M${wx - 7} ${wy - 7} L${wx + 7} ${wy + 7} M${wx - 7} ${wy + 7} L${wx + 7} ${wy - 7}`, class: "ce-wo dim" });   // (owner, 2026-10-15) the hardpoint (was the Weapon Origin), faint outside its tab
     const [gx, gy] = toPx([guide.x, guide.y]);   // the rulers
     for (const [x1, y1, x2, y2, ax] of [[0, gy, VIEW, gy, "y"], [gx, 0, gx, VIEW, "x"]]) {
       sv("line", { x1, y1, x2, y2, class: "ce-guide" });
@@ -1031,7 +1083,18 @@ export function initBuild(ctx) {
         if (e.button === 2) { removeCorner(i); return; }   // right-click removes it
         if (e.button === 0) { snap(); eGrab(e, "pt", i); }
       }));
-      handle(wx, wy, 7, "ce-woh", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "wo"); } }).appendChild(document.createElementNS(SV, "title")).textContent = "Weapon Origin";   // (owner, 2026-10-14) dragged within Combat Points
+    } else if (eMode === "hp") {
+      // (owner, 2026-10-15) the hardpoint: its spot (drag the dot), its rotation limit (the shaded arc around it: drag an
+      // end; all the way round is endless) and its default facing (the arrow: drag its tip)
+      const R = 70, rad = (d) => d * Math.PI / 180, at = (d, r) => [wx + Math.sin(rad(d)) * r, wy - Math.cos(rad(d)) * r];
+      sv("circle", { cx: wx, cy: wy, r: R, class: "ce-arcring" });
+      if (eEx.arc >= 360) sv("circle", { cx: wx, cy: wy, r: R, class: "ce-arc" });
+      else { const a0 = eEx.dir - eEx.arc / 2, a1 = eEx.dir + eEx.arc / 2, [x0, y0] = at(a0, R), [x1, y1] = at(a1, R); sv("path", { d: `M${wx} ${wy} L${x0} ${y0} A${R} ${R} 0 ${eEx.arc > 180 ? 1 : 0} 1 ${x1} ${y1} Z`, class: "ce-arc" }); }
+      const [tx, ty] = at(eEx.dir, R * 0.82), [ha, hb] = [at(eEx.dir - 160, 12), at(eEx.dir + 160, 12)].map(([x, y]) => [x - wx + tx, y - wy + ty]);
+      sv("path", { d: `M${wx} ${wy} L${tx} ${ty} M${ha[0]} ${ha[1]} L${tx} ${ty} L${hb[0]} ${hb[1]}`, class: "ce-dir" });
+      for (const end of eEx.arc >= 360 ? [eEx.dir + 180] : [eEx.dir - eEx.arc / 2, eEx.dir + eEx.arc / 2]) { const [x, y] = at(end, R); handle(x, y, 6, "ce-sq", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "arc"); } }); }
+      handle(tx, ty, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "dir"); } });
+      handle(wx, wy, 7, "ce-woh", (e) => { if (e.button === 0) { e.preventDefault(); e.stopPropagation(); snap(); eGrab(e, "wo"); } });
     } else if (eMode === "move") {
       handle(mcx, mcy, 6, "ce-pt", (e) => { if (e.button === 0) { e.preventDefault(); snap(); eGrab(e, "mc"); } });
       // (owner, 2026-10-14) a handle on each side, each moving only its own side
@@ -1070,6 +1133,12 @@ export function initBuild(ctx) {
     if (!eDrag || e.pointerId !== eDrag.id) return;
     const r = ceSvg.getBoundingClientRect(), u = fromPx((e.clientX - r.left) * VIEW / r.width, (e.clientY - r.top) * VIEW / r.height);
     if (eDrag.type === "gx") { guide.x = u[0]; eDraw(); return; }
+    if (eDrag.type === "arc" || eDrag.type === "dir") {      // (owner, 2026-10-15) an angle around the hardpoint, clockwise from forward
+      const [wx, wy] = toPx(eWo), sx = (e.clientX - r.left) * VIEW / r.width, sy = (e.clientY - r.top) * VIEW / r.height, ang = Math.atan2(sx - wx, -(sy - wy)) * 180 / Math.PI;
+      if (eDrag.type === "dir") eEx = { ...eEx, dir: Math.round(((ang % 360) + 360) % 360) };
+      else { let d = Math.abs(((ang - eEx.dir) % 360 + 540) % 360 - 180); eEx = { ...eEx, arc: Math.max(1, Math.min(360, Math.round(d * 2))) }; if (eEx.arc >= 354) eEx.arc = 360; }
+      eDraw(); return;
+    }
     if (eDrag.type === "gy") { guide.y = u[1]; eDraw(); return; }
     if (Math.abs(u[0] - guide.x) * S() < SNAP) u[0] = guide.x;                 // snap to the rulers
     if (Math.abs(u[1] - guide.y) * S() < SNAP) u[1] = guide.y;
@@ -1096,18 +1165,18 @@ export function initBuild(ctx) {
     else if (eDrag.type === "my1") eMv.y1 = Math.max(u[1], eMv.y0 + 0.04);
     else if (eDrag.type === "pv") ePv = [mirror ? 0 : u[0], u[1]];
     else if (eDrag.type === "wo") eWo = [mirror ? 0 : u[0], u[1]];
-    eDraw();
+    eDraw(); if (eDrag.type === "wo") sDraw();
   });
   const eEnd = (e) => { if (!eDrag || e.pointerId !== eDrag.id) return; const g = eDrag.type[0] === "g"; eDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} if (!g) eSave(); eDraw(); };
   ceSvg.addEventListener("pointerup", eEnd); ceSvg.addEventListener("pointercancel", eEnd);
   const r4 = (x) => Math.round(x * 10000) / 10000;
-  function eSave() { send({ t: "coll", k: eKind, parts: eParts.map((p) => ({ t: p.t, pts: p.pts.map(([x, y]) => [r4(x), r4(y)]) })), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), wo: eWo.map(r4), mv: cleanMove(eMv) }); }
-  function setColl(k, parts, pv, mv, vis, wo) {
+  function eSave() { send({ t: "coll", k: eKind, parts: eParts.map((p) => ({ t: p.t, pts: p.pts.map(([x, y]) => [r4(x), r4(y)]) })), vis: EP.vis.map(([x, y]) => [r4(x), r4(y)]), pv: ePv.map(r4), wo: eWo.map(r4), mv: cleanMove(eMv), ex: eEx }); }
+  function setColl(k, parts, pv, mv, vis, wo, ex) {
     const ps = asParts(parts); if (!kindOk(k) || !ps) return;
-    colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(wo)) origins[k] = wo; const m = cleanMove(mv); if (m) movers[k] = m;
+    colliders[k] = ps; if (Array.isArray(vis)) visOutlines[k] = vis; if (Array.isArray(pv)) pivots[k] = pv; if (Array.isArray(wo)) origins[k] = wo; if (ex && typeof ex === "object") collExtra[k] = ex; const m = cleanMove(mv); if (m) movers[k] = m;
     for (const b of builds.values()) if (b.k === k) place(b);
     if (k === "ship" && ctx.onPivot) ctx.onPivot();
-    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; drawSub(); eDraw(); }
+    if (eOpen && eKind === k && !eDrag) { eParts = cloneParts(ps); ePart = Math.min(ePart, eParts.length - 1); EP.vis = (visOutlines[k] || dflt(VIS_DEFAULT, k)).map((q) => q.slice()); ePv = (pivots[k] || [0, 0]).slice(); eWo = (origins[k] || [0, 0]).slice(); eMv = { ...(movers[k] || dflt(MOVE_DEFAULT, k)) }; eEx = { ...EXTRA_DEFAULT, ...(collExtra[k] || {}) }; drawSub(); eDraw(); sDraw(); }
   }
   // ---- the colliders in the world while the editor is open: Sight outlines cyan, Movement orange, pivots purple ----
   const gizGeo = new THREE.BufferGeometry(); let gizCap = 0;
@@ -1138,18 +1207,19 @@ export function initBuild(ctx) {
     if (m.t === "unbuild") { unBuild(m.id); return true; }
     if (m.t === "bnew") return true;
     if (m.t === "botgoals") { botGoals.clear(); for (const g of Array.isArray(m.g) ? m.g : []) if (Array.isArray(g) && g.length === 3) botGoals.set(String(g[0]), [+g[1], +g[2]]); return true; }
-    if (m.t === "coll") { setColl(m.k, m.parts, m.pv, m.mv, m.vis, m.wo); return true; }
+    if (m.t === "coll") { setColl(m.k, m.parts, m.pv, m.mv, m.vis, m.wo, m.ex); return true; }
     if (m.t === "types") { setTypes(m.list); return true; }   // (owner, 2026-10-15) object types
     if (m.t === "tsaved") { onTypeSaved(m); return true; }
     return false;
   }
   // the ship model arrived (or changed): rebuild the test ships with it
   function refreshShips() { for (const b of builds.values()) if (b.k === "ship" && b.mesh) { scene.remove(b.mesh); b.mesh = null; place(b); } }
-  function load(list, h, shipD, coll, piv, mov, vis, ori) {
+  function load(list, h, shipD, coll, piv, mov, vis, ori, ext) {
     if (shipD) SHIP_D = shipD;
     const keys = (o) => (o && typeof o === "object" ? Object.keys(o).filter(kindOk) : []);   // (the built-in kinds and the object types; setTypes comes first)
     for (const k of Object.keys(colliders)) delete colliders[k]; for (const k of keys(coll)) { const ps = asParts(coll[k]); if (ps) colliders[k] = ps; }
-    for (const o of [pivots, origins, movers, visOutlines]) for (const k of Object.keys(o)) delete o[k];
+    for (const o of [pivots, origins, movers, visOutlines, collExtra]) for (const k of Object.keys(o)) delete o[k];
+    for (const k of keys(ext)) if (ext[k] && typeof ext[k] === "object") collExtra[k] = ext[k];
     for (const k of new Set([...keys(piv), ...keys(ori), ...keys(mov), ...keys(vis)])) { if (piv && Array.isArray(piv[k])) pivots[k] = piv[k]; if (ori && Array.isArray(ori[k])) origins[k] = ori[k]; const m = mov && cleanMove(mov[k]); if (m) movers[k] = m; if (vis && Array.isArray(vis[k])) visOutlines[k] = vis[k]; }
     if (ctx.onPivot) ctx.onPivot();
     if (h && h !== BUILD_H) BUILD_H = h;
