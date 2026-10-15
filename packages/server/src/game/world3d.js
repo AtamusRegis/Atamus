@@ -68,16 +68,17 @@ export function cleanItem(o) {
   return { name, icon: iconRef(o.icon) };
 }
 // (owner, 2026-10-14) icons (the Icon Creator): shapes on a 64 x 64 grid, kept as data (never raw SVG), checked as hostile.
-// Each shape: t "ellipse" p [cx, cy, rx, ry] or t "poly" p [x, y, ...] (3-24 points); its fill (fon: on, fc: #rrggbb, fo:
+// Each shape: t "ellipse" p [cx, cy, rx, ry], t "poly" p [x, y, ...] (3-24 points) or (owner, 2026-10-15) t "line", the
+// Pen's open outline-only line, p [x, y, ...] (2-24 points); its fill (fon: on, fc: #rrggbb, fo:
 // how solid, 0-1) and outline (son: on, sc: #rrggbb, sw: thickness 0-8). Listed bottom layer first. At most 40 shapes (a save must fit one 16 KB message).
-export const ICON_SHAPES = ["ellipse", "poly"], ICON_MAX = 40, ICON_PTS = 24;
+export const ICON_SHAPES = ["ellipse", "poly", "line"], ICON_MAX = 40, ICON_PTS = 24;
 export function cleanIcon(o) {
   const v = o && Array.isArray(o.shapes) ? o.shapes : null; if (!v || !v.length || v.length > ICON_MAX) return null;
   const col = (c) => (typeof c === "string" && /^#[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : null), r2 = (x) => Math.round(x * 100) / 100;
   const out = [];
   for (const s of v) {
     if (!s || typeof s !== "object" || !ICON_SHAPES.includes(s.t) || !Array.isArray(s.p)) return null;
-    if (s.t === "poly" ? s.p.length < 6 || s.p.length > ICON_PTS * 2 || s.p.length % 2 : s.p.length !== 4) return null;
+    if (s.t === "ellipse" ? s.p.length !== 4 : s.p.length < (s.t === "line" ? 4 : 6) || s.p.length > ICON_PTS * 2 || s.p.length % 2) return null;
     const p = s.p.map(Number), fo = Number(s.fo), sw = Number(s.sw); if (!p.every(Number.isFinite) || !Number.isFinite(fo) || !Number.isFinite(sw)) return null;
     const fc = col(s.fc), sc = col(s.sc); if (!fc || !sc) return null;
     let q = p.map((x) => Math.round(Math.max(-16, Math.min(80, x)) * 10) / 10);

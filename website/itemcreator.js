@@ -124,7 +124,9 @@
   }
 
   // ---- the Icon Creator: an SVG editor on a 64 x 64 grid ----
-  // (owner, 2026-10-14) basic shapes to add (circle, square, triangle) and a polygon tool to draw new ones; click a shape to
+  // (owner, 2026-10-14) basic shapes to add (circle, square, triangle) and the Pen to draw new ones (owner, 2026-10-15:
+  // click corners; back on the first one closes it into a shape, a double-click or Enter leaves it an open, outline-only
+  // line); click a shape to
   // select it, drag it to move it, drag its corner handles to reshape it (a dot in the middle of an edge adds a corner there,
   // right-click a corner removes it), an ellipse's side handles stretch it. Each shape has an outline (on / off, color,
   // thickness) and a fill (on / off, color, thickness = how solid). [ moves the selected shape a layer up, ] a layer down.
@@ -140,8 +142,8 @@
     square: () => ({ t: "poly", p: [18, 18, 46, 18, 46, 46, 18, 46] }),
     triangle: () => ({ t: "poly", p: [32, 16, 48, 46, 16, 46] }),
   };
-  const BASIC_NAMES = { circle: "Circle", square: "Square", triangle: "Triangle", poly: "Polygon" };
-  const BASIC_ICONS = { circle: '<circle cx="12" cy="12" r="7"/>', square: '<rect x="5" y="5" width="14" height="14"/>', triangle: '<polygon points="12,4 20,19 4,19"/>', poly: '<polygon points="5,9 12,4 19,8 17,19 7,18"/>' };
+  const BASIC_NAMES = { circle: "Circle", square: "Square", triangle: "Triangle", poly: "Pen" };
+  const BASIC_ICONS = { circle: '<circle cx="12" cy="12" r="7"/>', square: '<rect x="5" y="5" width="14" height="14"/>', triangle: '<polygon points="12,4 20,19 4,19"/>', poly: '<path d="M4 20 L5.5 14.5 L15.5 4.5 L19.5 8.5 L9.5 18.5 Z M14 6 L18 10" stroke="#0e131e" stroke-width="1"/>' };   // (the Pen)
   let clip = null;                              // the copied shape (kept while the page is open)
   function creator(onSaved) {
     const style = { son: true, sc: "#0b1220", sw: 2, fon: true, fc: "#9fb3cf", fo: 1 };
@@ -192,11 +194,12 @@
     function addShape(geo) { if (shapes.length >= MAX_SHAPES) return; snap(); shapes.push({ ...geo, ...style }); select(shapes.length - 1); tool = ""; draft = []; }
     const unit = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 64, (e.clientY - r.top) / r.height * 64]; };
     const sn = (v) => Math.round(Math.max(-16, Math.min(80, v)));      // (owner, 2026-10-14) whole grid units only
-    const isPoly = () => sel >= 0 && shapes[sel] && shapes[sel].t === "poly";
+    const isPoly = () => sel >= 0 && shapes[sel] && shapes[sel].t !== "ellipse";   // (a polygon or an open line: it has corners)
+    const minPts = (s) => (s.t === "line" ? 2 : 3);
     // the middle of the selection: the selected corners, else the shape (an ellipse's center, a polygon's box)
     function where() {
       if (sel < 0) return null; const s = shapes[sel];
-      if (pts.size && s.t === "poly") { let x = 0, y = 0; for (const k of pts) { x += s.p[k * 2]; y += s.p[k * 2 + 1]; } return [x / pts.size, y / pts.size]; }
+      if (pts.size && s.t !== "ellipse") { let x = 0, y = 0; for (const k of pts) { x += s.p[k * 2]; y += s.p[k * 2 + 1]; } return [x / pts.size, y / pts.size]; }
       if (s.t === "ellipse") return [s.p[0], s.p[1]];
       const b = bbox(s); return [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
     }
@@ -217,7 +220,7 @@
     const copy = () => { if (sel >= 0) clip = JSON.parse(JSON.stringify(shapes[sel])); };
     function del() {
       if (sel < 0) return; const s = shapes[sel]; snap();
-      if (s.t === "poly" && pts.size && s.p.length / 2 - pts.size >= 3) { s.p = s.p.filter((_, i) => !pts.has(i >> 1)); pts = new Set(); }   // selected corners (3 stay)
+      if (s.t !== "ellipse" && pts.size && s.p.length / 2 - pts.size >= minPts(s)) { s.p = s.p.filter((_, i) => !pts.has(i >> 1)); pts = new Set(); }   // selected corners (3 stay)
       else { shapes.splice(sel, 1); select(-1); }
       render();
     }
@@ -270,7 +273,7 @@
         return;
       }
       const n = s.p.length / 2;
-      for (let k = 0; k < n; k++) {   // the middle of each edge: drag to add a corner there
+      for (let k = 0; k < (s.t === "line" ? n - 1 : n); k++) {   // the middle of each edge: drag to add a corner there (an open line has no closing edge)
         const a = k * 2, b = ((k + 1) % n) * 2;
         if (n < MAX_PTS) handle((s.p[a] + s.p[b]) / 2, (s.p[a + 1] + s.p[b + 1]) / 2, "ic-mid", (e) => {
           if (e.button !== 0) return; snap(); const at = b === 0 ? n : k + 1;
@@ -279,7 +282,7 @@
         });
       }
       for (let k = 0; k < n; k++) handle(s.p[k * 2], s.p[k * 2 + 1], "ic-h" + (pts.has(k) ? " on" : ""), (e) => {
-        if (e.button === 2) { if (n > 3) { snap(); s.p.splice(k * 2, 2); pts = new Set(); render(); } return; }   // right-click removes a corner (3 stay)
+        if (e.button === 2) { if (n > minPts(s)) { snap(); s.p.splice(k * 2, 2); pts = new Set(); render(); } return; }   // right-click removes a corner (3 stay; 2 on an open line)
         if (e.button !== 0) return;
         if (e.ctrlKey || e.metaKey) { pts.delete(k); render(); return; }   // (owner) Ctrl+click takes a corner out of the selection
         if (e.shiftKey) pts.add(k); else if (!pts.has(k)) pts = new Set([k]);   // Shift+click adds it
@@ -298,20 +301,32 @@
       return [xs, ys];
     }
     cv.addEventListener("pointerdown", (e) => {     // empty canvas: (polygon tool) a new corner; (a polygon selected) a selection box; else deselect
-      if (e.target.closest && e.target.closest(".ic-shape, .ic-h, .ic-mid")) return;
+      if (tool !== "poly" && e.target.closest && e.target.closest(".ic-shape, .ic-h, .ic-mid")) return;
       if (e.button === 2) { e.preventDefault(); menu(e.clientX, e.clientY, false); return; }
       if (e.button !== 0) return; e.preventDefault();
       const u = unit(e), q = [sn(u[0]), sn(u[1])];
       if (tool === "poly") {
-        if (draft.length >= 3 && Math.hypot(q[0] - draft[0][0], q[1] - draft[0][1]) < 2) { finishPoly(); return; }
+        if (draft.length >= 3 && Math.hypot(q[0] - draft[0][0], q[1] - draft[0][1]) < 2) { finishPoly(true); return; }   // back on the first corner: closed
+        // a double-click (the canvas is redrawn under the pointer, so the browser's own dblclick never comes): left open
+        const now = performance.now(), last = draft[draft.length - 1];
+        if (last && now - penAt < 400 && Math.hypot(q[0] - last[0], q[1] - last[1]) < 2) { penAt = 0; finishPoly(false); return; }
+        penAt = now;
         if (draft.length < MAX_PTS) draft.push(q); render(); return;
       }
       if (isPoly()) { marq = [u, u]; grab(e, { type: "marq", shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }); render(); return; }
       select(-1); render();
     });
-    cv.addEventListener("dblclick", () => { if (tool === "poly") finishPoly(); });
+    let penAt = 0;
     cv.addEventListener("contextmenu", (e) => e.preventDefault());
-    function finishPoly() { if (draft.length >= 3) { const p = []; for (const q of draft) p.push(q[0], q[1]); addShape({ t: "poly", p }); } draft = []; tool = ""; drawTools(); render(); }
+    // (owner, 2026-10-15) the Pen: closed (back on the first corner) it's a shape; left open (double-click or Enter) it's an
+    // outline-only line
+    function finishPoly(closed) {
+      const q0 = draft.filter((q, k) => k === 0 || q[0] !== draft[k - 1][0] || q[1] !== draft[k - 1][1]), p = [];   // (a double-click's repeated corner dropped)
+      for (const q of q0) p.push(q[0], q[1]);
+      if (closed && q0.length >= 3) addShape({ t: "poly", p });
+      else if (!closed && q0.length >= 2) { addShape({ t: "line", p }); const s = shapes[shapes.length - 1]; s.son = true; s.fon = false; if (!(s.sw > 0)) s.sw = 2; showProps(s); }
+      draft = []; tool = ""; drawTools(); render();
+    }
     cv.addEventListener("pointermove", (e) => {
       if (!drag || e.pointerId !== drag.id) return;
       const u = unit(e), [x, y] = u;
@@ -364,7 +379,7 @@
       if (ctl && e.code === "KeyZ") { if (past.length) { shapes = JSON.parse(past.pop()); select(-1); render(); } return true; }
       const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
       if (arrows) { if (sel >= 0) { if (!e.repeat) snap(); const st = e.shiftKey ? 4 : 1; moveSel(arrows[0] * st, arrows[1] * st); render(); } return true; }
-      if (e.key === "Enter" && tool === "poly") { finishPoly(); return true; }
+      if (e.key === "Enter" && tool === "poly") { finishPoly(false); return true; }
       return false;
     }
     const closeIt = o.close; o.close = () => {

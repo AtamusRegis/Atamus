@@ -10,9 +10,9 @@
   function shapeEl(s) {
     let el;
     if (s.t === "ellipse") { el = document.createElementNS(SV, "ellipse"); el.setAttribute("cx", s.p[0]); el.setAttribute("cy", s.p[1]); el.setAttribute("rx", s.p[2]); el.setAttribute("ry", s.p[3]); }
-    else { el = document.createElementNS(SV, "polygon"); const q = []; for (let i = 0; i + 1 < s.p.length; i += 2) q.push(s.p[i] + "," + s.p[i + 1]); el.setAttribute("points", q.join(" ")); }
-    el.setAttribute("fill", s.fon ? col(s.fc, "#ffffff") : "none"); el.setAttribute("fill-opacity", String(Math.max(0, Math.min(1, +s.fo || 0))));
-    el.setAttribute("stroke", s.son && +s.sw > 0 ? col(s.sc, "#000000") : "none"); el.setAttribute("stroke-width", String(+s.sw || 0)); el.setAttribute("stroke-linejoin", "round");
+    else { el = document.createElementNS(SV, s.t === "line" ? "polyline" : "polygon"); const q = []; for (let i = 0; i + 1 < s.p.length; i += 2) q.push(s.p[i] + "," + s.p[i + 1]); el.setAttribute("points", q.join(" ")); }   // (owner, 2026-10-15) "line": the Pen's open, outline-only shape
+    el.setAttribute("fill", s.fon && s.t !== "line" ? col(s.fc, "#ffffff") : "none"); el.setAttribute("fill-opacity", String(Math.max(0, Math.min(1, +s.fo || 0))));
+    el.setAttribute("stroke", s.son && +s.sw > 0 ? col(s.sc, "#000000") : "none"); el.setAttribute("stroke-width", String(+s.sw || 0)); el.setAttribute("stroke-linejoin", "round"); el.setAttribute("stroke-linecap", "round");
     return el;
   }
   function svg(icon, px) {
