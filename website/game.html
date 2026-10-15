@@ -334,6 +334,20 @@
     #move-arrows { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
     #move-arrows .mv-arrow path { fill: rgba(56,198,255,0.85); stroke: #fff; stroke-width: 1.5; pointer-events: auto; cursor: grab; } #move-arrows .mv-arrow:hover path { fill: #8fdcff; }
     html.touch #attr-panel, html.touch #move-arrows { display: none !important; }
+    /* (owner, 2026-10-15) the Object Creator's list of objects */
+    #obj-list { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 10px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); user-select: none; }
+    #obj-list .ol-top { display: flex; align-items: center; justify-content: space-between; margin: -2px 0 8px; cursor: move; touch-action: none; }
+    #obj-list .ol-tools { display: flex; gap: 6px; margin-bottom: 8px; } #obj-list .ol-search { flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
+    #obj-list .ol-sort { padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
+    #obj-list .ol-grid { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
+    #obj-list .ol-create { width: 100%; margin-top: 10px; padding: 7px 0; border: none; border-radius: 5px; background: var(--accent-grad); color: #06121c; font: 700 12px var(--font); letter-spacing: .05em; cursor: pointer; } #obj-list .ol-create:hover { filter: brightness(1.12); }
+    .we-modal.oc-item.drop { outline: 2px dashed #38c6ff; }
+    .we-modal.oc-item .oc-iconbox { flex: none !important; width: 38px !important; height: 34px; padding: 0 !important; display: grid; place-items: center; }
+    .we-modal select { box-sizing: border-box; width: 100%; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 13px var(--font); }
+    .we-modal .oc-model button, .we-modal .oc-icon > button:first-child { flex: none !important; padding: 4px 10px !important; }
+    /* (owner, 2026-10-15) number fields drag sideways (numdrag.js) */
+    input[type=number]:not(:focus) { cursor: ew-resize; } body.num-dragging, body.num-dragging * { cursor: ew-resize !important; user-select: none !important; }
+    html.touch #obj-list { display: none !important; }
     #zone-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
     #zone-handles .zn-line { fill: rgba(127,224,255,0.08); stroke: rgba(127,224,255,0.85); stroke-width: 2; stroke-dasharray: 8 6; }
     #zone-handles .zn-pt { fill: #fff; stroke: #2f9bd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #zone-handles .zn-pt:hover { fill: #cdeeff; }
@@ -362,10 +376,11 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
+  <script src="numdrag.js?v=1792049714"></script>
   <script src="icons.js?v=1792045148"></script>
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792048233"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792049390"></script>
+  <script type="module" src="game3d.js?v=1792049657"></script>
 </body>
 </html>

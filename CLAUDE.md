@@ -56,6 +56,7 @@ website/          GitHub Pages site (atamus.io) and the game client
   build3d.js      the Object Placer ([B], the Build menu: object types, test ships, clouds; hologram blueprints, copy / paste, resource node settings)
                   and the Object Creator ([X], head admin: object types, model upload, colliders per kind incl. the player ship)
   inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
+  numdrag.js      every number field drags sideways to change it
   icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
   itemcreator.js  the staff Item Creator ([Z]; was the Weapon panel): item slots, Create New Item / Edit Item, the icon picker and Icon Creator
   game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),

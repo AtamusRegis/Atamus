@@ -205,6 +205,9 @@ export function initBuild(ctx) {
     if (held && held.id === id) return;        // the piece I'm holding is ahead of the server's echo
     if (dragPt && dragPt.id === id) return;    // nor the cloud whose point I'm dragging
     if (rDrag && rDrag.id === id) return;      // nor the ship whose route I'm editing
+    // (owner, 2026-10-15) nor a piece I've just changed (moved, scaled, turned, its settings): the server's echoes of my
+    // earlier, throttled sends would pull it back for a moment (a stutter); my last send settles it
+    { const o = builds.get(id); if (o && o.localAt && performance.now() - o.localAt < 600) return; }
     const b = builds.get(id) || { id }; Object.assign(b, { k, x, y, w, d, r }); if (extra) b.extra = extra; builds.set(id, b); place(b);
   }
   function unBuild(id) {
@@ -249,7 +252,7 @@ export function initBuild(ctx) {
 
   // (owner, 2026-10-15) v: the Object Placer (head admin, admins, developers); cr: the Object Creator (head admin)
   let creator = false;
-  function setStaff(v, cr) { staff = !!v; creator = !!cr; btn.hidden = !staff; xbtn.hidden = !creator; if (staff || creator) mountBtn(); if (!staff && open) toggle(false); if (!creator && eOpen) eToggle(false); }
+  function setStaff(v, cr) { staff = !!v; creator = !!cr; btn.hidden = !staff; xbtn.hidden = !creator; if (staff || creator) mountBtn(); if (!staff && open) toggle(false); if (!creator && eOpen) eToggle(false); if (!creator && olOpen) olToggle(false); }
   function toggle(v) {
     if (!staff) return;
     open = v === undefined ? !open : !!v;
@@ -686,13 +689,16 @@ export function initBuild(ctx) {
     types.clear(); for (const t of Array.isArray(list) ? list : []) if (t && typeof t.id === "string") types.set(t.id, t);
     drawTypeSlots(); for (const b of builds.values()) if (isTypeKey(b.k)) place(b);
     if (picking && isTypeKey(picking.k) && !typeOf(picking.k)) stopPicking();
-    eMeshK = null; if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else { drawESlots(); drawProps(); } }
+    eMeshK = null; drawList(); if (eOpen) { if (isTypeKey(eKind) && !typeOf(eKind)) eSetKind("ship"); else drawProps(); }
   }
-  if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); if (eOpen) drawESlots(); });
+  if (window.Catalog) window.Catalog.on(() => { drawTypeSlots(); drawList(); if (eOpen) drawProps(); });
 
   // ---- picking up and dropping placed pieces ----
   const fields = (b) => (b.extra ? { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r, extra: JSON.parse(JSON.stringify(b.extra)) } : { k: b.k, x: b.x, y: b.y, w: b.w, d: b.d, r: b.r });
-  function push(b, now, keep) { const t = performance.now(); if (!now && t - lastSend < 90) return; lastSend = t; send({ t: "bset", id: b.id, ...fields(b), ...(keep ? { keep: true } : {}) }); }   // keep: (owner) a route / spawn edit: the ship stays where it is
+  function push(b, now, keep) { const t = performance.now(); b.localAt = t; if (!now && t - lastSend < 90) { pendSend(b, keep); return; } lastSend = t; send({ t: "bset", id: b.id, ...fields(b), ...(keep ? { keep: true } : {}) }); }   // keep: (owner) a route / spawn edit: the ship stays where it is
+  // a throttled change still owed: sent when the throttle allows, so the last change always goes out
+  let pend = null;
+  function pendSend(b, keep) { if (pend) { pend.b = b; pend.keep = keep; return; } pend = { b, keep }; setTimeout(() => { const p = pend; pend = null; if (p && builds.get(p.b.id) === p.b) push(p.b, true, p.keep); }, 100); }
   function create(o) { send({ t: "bnew", ...o }); }
   // (owner, 2026-10-15) clicking a placed object selects it (it isn't picked up): its attributes panel, its handles (a cloud's
   // outline, a ship's route, a node's spawn zone) and four arrows (north, south, east, west) to drag it along those; the
@@ -825,59 +831,120 @@ export function initBuild(ctx) {
   const xbtn = document.createElement("button"); xbtn.id = "edit-btn"; xbtn.type = "button"; xbtn.textContent = "X"; xbtn.title = "Object Creator"; xbtn.hidden = true;
   const win = document.createElement("div"); win.id = "coll-edit"; win.hidden = true;
   const VIEW = 400;
-  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Creator</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
+  win.innerHTML = '<div class="ce-top"><span class="ce-title">Object Editor</span><button type="button" class="ce-x" title="Close">×</button></div><div class="ce-slots"></div><div class="ce-view"><canvas width="' + VIEW + '" height="' + VIEW + '"></canvas><svg width="' + VIEW + '" height="' + VIEW + '"></svg></div>';
   document.body.appendChild(win);
   const ceSlots = win.querySelector(".ce-slots"), ceCanvas = win.querySelector("canvas"), ceSvg = win.querySelector("svg");
-  // the properties of the type being edited
-  const props = document.createElement("div"); props.className = "oc-props"; ceSlots.after(props);
+  // (owner, 2026-10-15) the Object Editor window (Edit Object): above the collision tabs, a resource node's Resource Type
+  // (the item it yields)
+  const props = document.createElement("div"); props.className = "oc-props"; ceSlots.after(props); ceSlots.hidden = true;
   const pIn = {}, pRow = (label, el) => { const l = document.createElement("label"); l.className = "oc-row"; const sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); props.appendChild(l); return el; };
-  const pNum = (min, max, step) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.step = step; return i; };
-  pIn.name = pRow("Name", Object.assign(document.createElement("input"), { maxLength: 32 }));
-  const mWrap = document.createElement("div"); mWrap.className = "oc-model";
-  const mBtn = document.createElement("button"); mBtn.type = "button"; mBtn.textContent = "Upload Model";
-  const mName = document.createElement("span"); mName.className = "oc-file";
-  const mFile = document.createElement("input"); mFile.type = "file"; mFile.accept = ".glb,model/gltf-binary"; mFile.hidden = true;
-  mWrap.append(mBtn, mName, mFile); pRow("Model", mWrap);
-  // (owner, 2026-10-15) Object Icon: Create New Icon (the Icon Creator) beside the icon box ([+]: pick an existing icon)
-  const iWrap = document.createElement("div"); iWrap.className = "oc-icon";
-  const iNew = document.createElement("button"); iNew.type = "button"; iNew.textContent = "Create New Icon";
-  const iBox = document.createElement("button"); iBox.type = "button"; iBox.className = "oc-iconbox"; iBox.title = "Icon";
-  iWrap.append(iNew, iBox); pRow("Object Icon", iWrap); props.insertBefore(iWrap.parentNode, mWrap.parentNode);   // (Name, Object Icon, Model, Resource Type)
-  iNew.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.newIcon) window.ItemCreator.newIcon((id) => saveType({ icon: id })); });
-  iBox.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.pickIcon) window.ItemCreator.pickIcon((id) => saveType({ icon: id })); });
   pIn.item = pRow("Resource Type", document.createElement("select"));
   const pErr = document.createElement("p"); pErr.className = "oc-err"; pErr.hidden = true; props.appendChild(pErr);
   const curType = () => typeOf(eKind);
   function drawProps() {
-    const t = curType(); props.hidden = !t; if (!t) return;
-    if (document.activeElement !== pIn.name) pIn.name.value = t.name;
+    const t = curType(); props.hidden = !t; win.querySelector(".ce-title").textContent = t ? t.name : NAMES.ship; if (!t) return;
     pIn.item.replaceChildren(new Option("None", ""), ...((window.Catalog && window.Catalog.items) || []).map((x) => new Option(x.name, x.id))); pIn.item.value = t.item || "";
-    const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); iBox.replaceChildren(ic ? window.Catalog.svg(ic, 26) : Object.assign(document.createElement("span"), { textContent: "+", className: "oc-plus" }));
-    mName.textContent = t.model ? t.mname || "" : "";   // (the uploaded file's own name)
   }
-  function saveType(ch) { const t = curType(); if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
-  pIn.name.addEventListener("change", () => { const v = pIn.name.value.trim(); if (v) saveType({ name: v }); });
-  pIn.item.addEventListener("change", () => saveType({ item: pIn.item.value || null }));
-  for (const el of Object.values(pIn)) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
+  function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
+  pIn.item.addEventListener("change", () => { saveType({ item: pIn.item.value || null }); pIn.item.blur(); });
   // a model upload: the GLB goes to the server, which answers with its file name
-  async function upload(file) {
-    const t = curType(); if (!t || !file) return; pErr.hidden = true;
-    if (file.size > 50 * 1024 * 1024) { pErr.textContent = "That model is over 50 MB."; pErr.hidden = false; return; }
-    mBtn.disabled = true;
-    try {
-      const r = await fetch((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models", { method: "POST", credentials: "include", headers: { "Content-Type": "application/octet-stream" }, body: file });
-      const j = await r.json().catch(() => ({})); if (!r.ok || !j.file) throw new Error(j.error || "The upload failed.");
-      saveType({ model: j.file, mname: file.name });
-    } catch (e) { pErr.textContent = e.message || "The upload failed."; pErr.hidden = false; }
-    mBtn.disabled = false;
+  async function uploadModel(file) {
+    if (!file) throw new Error("");
+    if (file.size > 50 * 1024 * 1024) throw new Error("That model is over 50 MB.");
+    const r = await fetch((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models", { method: "POST", credentials: "include", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    const j = await r.json().catch(() => ({})); if (!r.ok || !j.file) throw new Error(j.error || "The upload failed.");
+    return j.file;
   }
-  mBtn.addEventListener("click", () => mFile.click());
-  mFile.addEventListener("change", () => { upload(mFile.files[0]); mFile.value = ""; });
-  win.addEventListener("dragover", (e) => { if (curType()) { e.preventDefault(); win.classList.add("drop"); } });
-  win.addEventListener("dragleave", (e) => { if (!win.contains(e.relatedTarget)) win.classList.remove("drop"); });
-  win.addEventListener("drop", (e) => { e.preventDefault(); win.classList.remove("drop"); const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) upload(f); });
-  let wantKind = null;                         // a type just made: picked when the server answers
-  function onTypeSaved(m) { if (m.error) { pErr.textContent = m.error; pErr.hidden = false; return; } if (wantKind && m.id) { wantKind = null; eSetKind("t:" + m.id); } }
+
+  // ---- (owner, 2026-10-15) the Object Creator: X opens a list of every object (the player ship first), searchable by name
+  // and sortable (Name, Type, Newest), scrolling, with CREATE NEW OBJECT under it. Right-click an object: Edit Item (its
+  // name, icon, model and type), Edit Object (the Object Editor: its colliders, and a node's resource type) and Delete (not
+  // while any are placed; the ship: Edit Object only). ----
+  const oList = document.createElement("div"); oList.id = "obj-list"; oList.hidden = true;
+  oList.innerHTML = '<div class="ol-top"><span class="ce-title">OBJECT CREATOR</span><button type="button" class="ce-x" title="Close">\u00d7</button></div><div class="ol-tools"><input class="ol-search" maxlength="32"><select class="ol-sort"><option value="name">Name</option><option value="type">Type</option><option value="new">Newest</option></select></div><div class="ol-grid"></div><button type="button" class="ol-create">CREATE NEW OBJECT</button>';
+  document.body.appendChild(oList);
+  const olSearch = oList.querySelector(".ol-search"), olSort = oList.querySelector(".ol-sort"), olGrid = oList.querySelector(".ol-grid");
+  const TYPE_NAMES = { node: "Resource" };
+  let olOpen = false;
+  function olToggle(v) {
+    if (!creator) return; olOpen = v === undefined ? !olOpen : !!v; oList.hidden = !olOpen; xbtn.classList.toggle("on", olOpen || eOpen);
+    if (olOpen) drawList(); else { closeTMenu(); if (document.activeElement && oList.contains(document.activeElement)) document.activeElement.blur(); }
+  }
+  oList.querySelector(".ce-x").addEventListener("click", () => olToggle(false));
+  olSearch.addEventListener("input", () => drawList()); olSort.addEventListener("change", () => { drawList(); olSort.blur(); });
+  for (const el of [olSearch, olSort]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") { el.blur(); olToggle(false); } });
+  oList.querySelector(".ol-create").addEventListener("click", () => itemPanel(null));
+  { const top = oList.querySelector(".ol-top"); top.addEventListener("pointerdown", (e) => {   // dragged by its header
+    if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault(); const r0 = oList.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
+    const mv = (ev) => { const r = oList.getBoundingClientRect(); oList.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; oList.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; oList.style.transform = "none"; };
+    const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); }; addEventListener("pointermove", mv); addEventListener("pointerup", up); }); }
+  function drawList() {
+    if (!olOpen) return;
+    const q = olSearch.value.trim().toLowerCase(), sort = olSort.value;
+    let list = [...types.values()].filter((t) => !q || t.name.toLowerCase().includes(q));
+    list.sort(sort === "new" ? (a, b) => +b.id - +a.id : sort === "type" ? (a, b) => (TYPE_NAMES[a.cat] || "").localeCompare(TYPE_NAMES[b.cat] || "") || a.name.localeCompare(b.name) : (a, b) => a.name.localeCompare(b.name));
+    const cells = [];
+    if (!q || NAMES.ship.toLowerCase().includes(q)) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = "Player Ship"; d.innerHTML = shipSlot.innerHTML; d.dataset.k = "ship"; cells.push(d); }
+    for (const t of list) { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.title = t.name; d.dataset.k = "t:" + t.id; d.appendChild(typePic(t, 28)); cells.push(d); }
+    for (let i = cells.length; i < Math.max(10, Math.ceil(cells.length / 5) * 5); i++) { const d = document.createElement("div"); d.className = "inv-slot"; cells.push(d); }
+    olGrid.replaceChildren(...cells);
+  }
+  olGrid.addEventListener("contextmenu", (e) => {
+    e.preventDefault(); const d = e.target.closest("[data-k]"); if (!d) return; const k = d.dataset.k, t = typeOf(k);
+    closeTMenu(); tMenu = document.createElement("div"); tMenu.className = "we-ctx";
+    const add = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { closeTMenu(); fn(); }); tMenu.appendChild(b); };
+    if (t) add("Edit Item", () => itemPanel(t));
+    add("Edit Object", () => { eToggle(true); eSetKind(k); });
+    if (t) add("Delete", () => send({ t: "tdel", id: t.id }));
+    document.body.appendChild(tMenu); const r = tMenu.getBoundingClientRect(); tMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 4) + "px"; tMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 4) + "px";
+  });
+  // CREATE NEW OBJECT / Edit Item: Name, Icon (Create New Icon beside the icon box [+], which picks an existing icon), Model
+  // (Upload Model, or drop a GLB on the panel; 50 MB at most), Type (Resource, for now); Cancel / Create (Save)
+  let iPanel = null;
+  function itemPanel(t) {
+    if (iPanel) iPanel.close();
+    const back = document.createElement("div"); back.className = "we-back"; const box = document.createElement("div"); box.className = "we-modal oc-item"; back.appendChild(box); document.body.appendChild(back);
+    const st = { name: t ? t.name : "", icon: t ? t.icon : null, model: t ? t.model : null, mname: t ? t.mname : "", cat: t ? t.cat : "node" };
+    const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    const title = el("p", "we-title", t ? "EDIT ITEM" : "NEW OBJECT"), grid = el("div", "we-grid");
+    const name = el("input"); name.maxLength = 32; name.value = st.name;
+    const iRow = el("div", "oc-icon"), iNew = el("button", "", "Create New Icon"), iBox = el("button", "oc-iconbox"); iNew.type = iBox.type = "button"; iBox.title = "Icon"; iRow.append(iNew, iBox);
+    const mRow = el("div", "oc-model"), mBtn = el("button", "", "Upload Model"), mName = el("span", "oc-file"), mFile = el("input"); mBtn.type = "button"; mFile.type = "file"; mFile.accept = ".glb,model/gltf-binary"; mFile.hidden = true; mRow.append(mBtn, mName, mFile);
+    const type = el("select"); for (const [k, v] of Object.entries(TYPE_NAMES)) type.append(new Option(v, k)); type.value = st.cat;
+    grid.append(el("label", "we-label", "Name"), name, el("label", "we-label", "Icon"), iRow, el("label", "we-label", "Model"), mRow, el("label", "we-label", "Type"), type);
+    const err = el("p", "we-err"); err.hidden = true;
+    const btns = el("div", "we-btns"), cancel = el("button", "", "CANCEL"), ok = el("button", "we-ok", t ? "SAVE" : "CREATE"); cancel.type = ok.type = "button"; btns.append(cancel, ok);
+    box.append(title, grid, err, btns);
+    const drawIcon = () => { const ic = st.icon && window.Catalog && window.Catalog.icons.get(st.icon); iBox.replaceChildren(ic ? window.Catalog.svg(ic, 26) : el("span", "oc-plus", "+")); };
+    const drawModel = () => { mName.textContent = st.model ? st.mname || "" : ""; };
+    drawIcon(); drawModel();
+    iNew.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.newIcon) window.ItemCreator.newIcon((id) => { st.icon = id; drawIcon(); }); });
+    iBox.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.pickIcon) window.ItemCreator.pickIcon((id) => { st.icon = id; drawIcon(); }); });
+    const up = async (file) => { if (!file) return; err.hidden = true; mBtn.disabled = ok.disabled = true;
+      try { st.model = await uploadModel(file); st.mname = file.name; drawModel(); } catch (e) { if (e.message) { err.textContent = e.message; err.hidden = false; } }
+      mBtn.disabled = ok.disabled = false; };
+    mBtn.addEventListener("click", () => mFile.click()); mFile.addEventListener("change", () => { up(mFile.files[0]); mFile.value = ""; });
+    box.addEventListener("dragover", (e) => { e.preventDefault(); box.classList.add("drop"); }); box.addEventListener("dragleave", (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop"); });
+    box.addEventListener("drop", (e) => { e.preventDefault(); box.classList.remove("drop"); up(e.dataTransfer && e.dataTransfer.files[0]); });
+    const close = () => { back.remove(); if (iPanel === p) iPanel = null; };
+    const save = () => {
+      const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }
+      ok.disabled = true; err.hidden = true; st.name = n; st.cat = type.value;
+      wantKind = { done: close, fail: (m) => { ok.disabled = false; err.textContent = m; err.hidden = false; } };
+      if (t) saveType(st, t); else send({ t: "tset", type: st });
+    };
+    cancel.addEventListener("click", close); ok.addEventListener("click", save);
+    back.addEventListener("pointerdown", (e) => { if (e.target === back) close(); });
+    back.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(); if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); save(); } });
+    back.addEventListener("contextmenu", (e) => e.preventDefault());
+    const p = iPanel = { close }; setTimeout(() => name.focus(), 0);
+  }
+  let wantKind = null;                         // the Create / Edit Item panel waiting for the server's answer
+  function onTypeSaved(m) {
+    const w = wantKind; wantKind = null;
+    if (m.error) { if (w) w.fail(m.error); else { pErr.textContent = m.error; pErr.hidden = false; } return; }
+    if (w) w.done();
+  }
   let tMenu = null; const closeTMenu = () => { if (tMenu) { tMenu.remove(); tMenu = null; } };
   addEventListener("pointerdown", (e) => { if (tMenu && !tMenu.contains(e.target)) closeTMenu(); }, true);
   // three things per kind, picked with the buttons over the view (owner, 2026-10-14): Sight (where line of sight is
@@ -953,18 +1020,7 @@ export function initBuild(ctx) {
   const panEnd = (e) => { if (ePanDrag && e.pointerId === ePanDrag.id) { ePanDrag = null; try { ceSvg.releasePointerCapture(e.pointerId); } catch {} } };
   ceSvg.addEventListener("pointerup", panEnd, true); ceSvg.addEventListener("pointercancel", panEnd, true);
   ceSvg.addEventListener("mousedown", (e) => { if (e.button === 1) e.preventDefault(); });   // no browser autoscroll
-  function drawESlots() {
-    const mk = (k, title, fill) => { const d = document.createElement("div"); d.className = "inv-slot build-slot" + (k === eKind ? " sel" : ""); d.title = title; fill(d); d.addEventListener("click", () => { if (k) eSetKind(k); }); return d; };
-    const list = [mk("ship", NAMES.ship, (d) => { d.innerHTML = shipSlot.innerHTML; })];
-    for (const t of types.values()) { const d = mk("t:" + t.id, t.name, (x) => x.appendChild(typePic(t, 28)));
-      d.addEventListener("contextmenu", (e) => { e.preventDefault(); closeTMenu(); tMenu = document.createElement("div"); tMenu.className = "we-ctx";
-        const b = document.createElement("button"); b.type = "button"; b.textContent = "Delete"; b.addEventListener("click", () => { closeTMenu(); send({ t: "tdel", id: t.id }); }); tMenu.appendChild(b);
-        document.body.appendChild(tMenu); tMenu.style.left = e.clientX + "px"; tMenu.style.top = e.clientY + "px"; });
-      list.push(d); }
-    const add = document.createElement("button"); add.type = "button"; add.className = "oc-create"; add.textContent = "Create Resource Node";   // (owner, 2026-10-15)
-    add.addEventListener("click", () => { wantKind = true; send({ t: "tset", type: { name: "Resource Node", cat: "node" } }); }); list.push(add);
-    ceSlots.replaceChildren(...list);
-  }
+  function drawESlots() { drawList(); }        // (the Object Creator's list)
   function eSetKind(k) {
     if (!kindOk(k) || k === "cloud") k = "ship";
     eKind = k; pErr.hidden = true;
@@ -972,10 +1028,10 @@ export function initBuild(ctx) {
     eDrag = null; past = []; future = []; ePan = [0, 0]; drawESlots(); drawProps(); drawModes(); eDraw();
   }
   win.querySelector(".ce-x").addEventListener("click", () => eToggle(false));
-  xbtn.addEventListener("click", () => eToggle());
+  xbtn.addEventListener("click", () => olToggle());
   function eToggle(v) {
     if (!creator) return;
-    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", eOpen);
+    eOpen = v === undefined ? !eOpen : !!v; win.hidden = !eOpen; xbtn.classList.toggle("on", olOpen || eOpen);
     if (eOpen) { if (!eRen) eInit(); eSetKind(eKind); }
     giz.visible = eOpen;
   }
@@ -1140,9 +1196,9 @@ export function initBuild(ctx) {
   }
   addEventListener("keydown", (e) => {
     if (ctx.typing() || !creator) return;
-    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) eToggle(); return; }   // (the head admin: X is the Object Creator, not a block)
+    if (e.code === "KeyX" && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) olToggle(); return; }   // (the head admin: X is the Object Creator, not a block)
     if (eOpen && (e.ctrlKey || e.metaKey) && (e.code === "KeyZ" || e.code === "KeyU")) { e.preventDefault(); e.stopImmediatePropagation(); if (e.code === "KeyZ") undo(); else redo(); return; }   // (owner) Ctrl+Z undo, Ctrl+U redo
-    if (eOpen && e.code === "Escape" && !open) { eToggle(false); }
+    if (e.code === "Escape" && !open && !iPanel) { if (eOpen) eToggle(false); else if (olOpen) olToggle(false); }
   }, true);
 
   function onMsg(m) {
