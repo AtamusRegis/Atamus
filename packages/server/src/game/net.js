@@ -89,6 +89,7 @@ export function attachGameServer(httpServer) {
       cfg: { hpMax: HP_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
+      ammo: world.ammoList(), icons: world.iconList(),                 // (owner, 2026-10-14) ammo and icons (the Weapon panel; items' pictures)
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
@@ -159,19 +160,37 @@ export function attachGameServer(httpServer) {
           const b = bid && world.setBuild(bid, m); if (b) objCast("b", b);
         } else if (bid) { const wasShip = world.builds.get(bid)?.k === "ship"; world.delBuild(bid).then((ok) => { if (ok) { objGone("b", [bid]); if (wasShip) broadcast({ t: "leave", i: "b" + bid }); } }).catch((e) => console.error("unbuild", e)); }
       }
-      else if (m.t === "wset") {               // (owner, 2026-10-14) the Weapon panel: staff change a weapon (id) or make one (no id), and equip it
+      else if (m.t === "wset" || m.t === "aset") {   // (owner, 2026-10-14) the Weapon panel: staff change a weapon / ammo (id) or make one (no id)
         if (!staff) return;
-        const wid = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
-        world.setWeapon(wid, m.w).then((w) => {
-          if (!w) { try { ws.send(JSON.stringify({ t: "wsaved", error: "That weapon can't be saved." })); } catch {} return; }
-          broadcast({ t: "weapons", list: world.weaponList() });
-          world.equip(pid, w.id); try { ws.send(JSON.stringify({ t: "wsaved", id: w.id })); } catch {}
-        }).catch((e) => console.error("weapon", e));
+        const isW = m.t === "wset", id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null, reply = isW ? "wsaved" : "asaved";
+        (isW ? world.setWeapon(id, m.w) : world.setAmmo(id, m.a)).then((o) => {
+          if (!o) { try { ws.send(JSON.stringify({ t: reply, error: "That can't be saved." })); } catch {} return; }
+          broadcast(isW ? { t: "weapons", list: world.weaponList() } : { t: "ammo", list: world.ammoList() });
+          try { ws.send(JSON.stringify({ t: reply, id: o.id })); } catch {}
+        }).catch((e) => console.error("catalog", e));
       }
-      else if (m.t === "wdel") {               // (owner, 2026-10-14) the Weapon panel's REVERT on a weapon it just made
+      else if (m.t === "wdel" || m.t === "adel") {   // (owner, 2026-10-14) the Weapon panel's Delete (never the first weapon, everyone's)
         if (!staff) return;
-        const wid = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!wid) return;
-        world.delWeapon(wid).then((ok) => { if (!ok) return; broadcast({ t: "weapons", list: world.weaponList() }); try { ws.send(JSON.stringify({ t: "wsaved", id: world.weaponOf(world.players.get(pid) || {}).id, deleted: wid })); } catch {} }).catch((e) => console.error("weapon del", e));
+        const isW = m.t === "wdel", id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        (isW ? world.delWeapon(id) : world.delAmmo(id)).then((ok) => {
+          if (!ok) return;
+          broadcast(isW ? { t: "weapons", list: world.weaponList() } : { t: "ammo", list: world.ammoList() });
+          if (isW) for (const [qid, sock] of socks) { const p = world.players.get(qid); if (p && !p.weapon) try { sock.send(JSON.stringify({ t: "equipped", id: world.weaponOf(p).id })); } catch {} }   // (anyone who had it is back on the first)
+        }).catch((e) => console.error("catalog del", e));
+      }
+      else if (m.t === "iset") {               // (owner, 2026-10-14) the Icon Creator: staff save a new icon
+        if (!staff) return;
+        world.addIcon(m.icon, user.username).then((ic) => {
+          if (!ic) { try { ws.send(JSON.stringify({ t: "isaved", error: "That icon can't be saved." })); } catch {} return; }
+          broadcast({ t: "icons", list: world.iconList() }); try { ws.send(JSON.stringify({ t: "isaved", id: ic.id })); } catch {}
+        }).catch((e) => console.error("icon", e));
+      }
+      else if (m.t === "equip") {              // (owner, 2026-10-14) a weapon put in the primary hotbar slot (staff for now; none: the first weapon)
+        if (!staff) return;
+        const p = world.players.get(pid); if (!p) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        if (id) world.equip(pid, id); else { p.weapon = null; p.ammo = undefined; p.reloadAt = 0; p.spread = 0; }
+        try { ws.send(JSON.stringify({ t: "equipped", id: world.weaponOf(p).id })); } catch {}
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!staff) return;

@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-14
 
+- **Weapon panel rebuilt (owner):** the Weapon panel (Z) is now a scrolling grid of weapon and ammo slots you can drag into your hotbar or inventory; right-click a slot to Edit or Delete it. Create New Weapon and Create New Ammo open pop-ups with a name and an icon, picked from existing icons or drawn in the new Icon Creator (basic shapes and polygons with outline and fill settings, [ and ] for layers). The weapon in your first hotbar slot is your primary (staff for now).
 - **Staff buttons moved (owner):** A, X, B and Z are now a column on the right edge of the screen, centered top to bottom, instead of next to the chat.
 - **Aim camera slides, doesn't zoom (owner):** aiming out past the dead zone now slides the camera toward your aim, without zooming out. Zoomed in, it slides far enough that you can still aim out to the distance circle.
 - **Fix: aim camera jitter (owner):** with the camera reached out, moving the aim back in no longer makes it jump between positions; it follows smoothly back toward the ship. Aiming toward any screen edge (including the bottom, or while zoomed in) reaches the camera out fully again, so you can sweep the aim all the way around.
