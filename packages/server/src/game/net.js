@@ -57,6 +57,7 @@ export function attachGameServer(httpServer) {
     perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 },
   });
 
+  const toCreators = (obj) => { const msg = JSON.stringify(obj); for (const [pid, c] of socks) if (roles.get(pid) === "head" && c.readyState === c.OPEN) c.send(msg); };   // (owner, 2026-10-15) the head admin's sessions
   const broadcast = (obj) => { const msg = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); };
 
   // ---- deploys: the 30 s countdown, and "the website switched: reload" ----
@@ -99,7 +100,8 @@ export function attachGameServer(httpServer) {
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
       items: world.itemList(), icons: world.iconList(), types: world.typeList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
-      crates: items.crateList(),                                       // (owner, 2026-10-14) dropped-item crates
+      crates: items.crateList(),
+      ...(creator ? { assets: world.assetList() } : {}),                // (owner, 2026-10-15) the Importer's assets (head admin)                                       // (owner, 2026-10-14) dropped-item crates
       roster: world.roster(), blocks: [], builds: [], colliders: world.colliders, pivots: world.pivots, origins: world.origins, movers: world.movers, visOutlines: world.visOutlines,
     }));
 
@@ -228,6 +230,19 @@ export function attachGameServer(httpServer) {
         if (!creator) return;
         const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
         world.delType(id).then((r) => { if (r.ok) broadcast({ t: "types", list: world.typeList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "tsaved", error: r.error })); } catch {} }).catch((e) => console.error("type del", e));
+      }
+      else if (m.t === "aset") {               // (owner, 2026-10-15) the Importer: the head admin adds an asset (an uploaded file) or changes one (id)
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null;
+        world.setAsset(id, m.asset).then((o) => {
+          try { ws.send(JSON.stringify(o ? { t: "asaved", id: o.id, n: m.n } : { t: "asaved", error: "That asset can't be saved.", n: m.n })); } catch {}
+          if (o) { toCreators({ t: "assets", list: world.assetList() }); if (o.kind === "model") broadcast({ t: "types", list: world.typeList() }); }
+        }).catch((e) => console.error("asset", e));
+      }
+      else if (m.t === "adel") {
+        if (!creator) return;
+        const id = typeof m.id === "string" && /^[0-9]{1,9}$/.test(m.id) ? m.id : null; if (!id) return;
+        world.delAsset(id).then((r) => { if (r.ok) toCreators({ t: "assets", list: world.assetList() }); else if (r.error) try { ws.send(JSON.stringify({ t: "asaved", error: r.error })); } catch {} }).catch((e) => console.error("asset del", e));
       }
       else if (m.t === "coll") {               // (owner, 2026-10-14) the Object Editor: staff change a kind's collider outline
         if (!creator) return;

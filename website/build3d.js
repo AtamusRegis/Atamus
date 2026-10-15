@@ -247,7 +247,9 @@ export function initBuild(ctx) {
   const shipPic = () => { const d = document.createElement("span"); d.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30" class="build-ico"><path d="M15 3 L23 25 L15 20 L7 25 Z"/></svg>'; return d.firstChild; };
   // an object type's picture: its icon, else its first letter
   const letter = (n, cls) => { const d = document.createElement("span"); d.className = "build-letter" + (cls ? " " + cls : ""); d.textContent = (n || "?").slice(0, 1).toUpperCase(); return d; };
-  const typePic = (t, px) => { const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); if (ic) return window.Catalog.svg(ic, px); return letter(t.name); };
+  const typePic = (t, px) => { const ic = t.icon && window.Catalog && window.Catalog.icons.get(t.icon); if (ic) return window.Catalog.svg(ic, px);
+    if (t.thumb && window.Assets) return window.Assets.picture(t.thumb, px + 4);   // (owner, 2026-10-15) no icon: its model's rendered icon
+    return letter(t.name); };
   const catSlots = CATS.map((cat) => { const d = document.createElement("div"); d.className = "inv-slot build-slot"; d.dataset.cat = cat; bar.appendChild(d);
     d.addEventListener("click", () => { if (picking && catOf(picking.k) === cat) stopPicking(); else { const k = curOf(cat); if (k) startPicking(k); } }); return d; });
   function drawTypeSlots() {
@@ -869,14 +871,6 @@ export function initBuild(ctx) {
   }
   function saveType(ch, t = curType()) { if (!t) return; const o = { ...t, ...ch }; delete o.id; send({ t: "tset", id: t.id, type: o }); }
   pIn.item.addEventListener("change", () => { saveType({ item: pIn.item.value || null }); pIn.item.blur(); });
-  // a model upload: the GLB goes to the server, which answers with its file name
-  async function uploadModel(file) {
-    if (!file) throw new Error("");
-    if (file.size > 50 * 1024 * 1024) throw new Error("That model is over 50 MB.");
-    const r = await fetch((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models", { method: "POST", credentials: "include", headers: { "Content-Type": "application/octet-stream" }, body: file });
-    const j = await r.json().catch(() => ({})); if (!r.ok || !j.file) throw new Error(j.error || "The upload failed.");
-    return j.file;
-  }
 
   // ---- (owner, 2026-10-15) the Object Creator: X opens a list of every object (the player ship first), searchable by name
   // and sortable (Name, Type, Newest), scrolling, with CREATE NEW OBJECT under it. Right-click an object: Edit Item (its
@@ -920,7 +914,7 @@ export function initBuild(ctx) {
     document.body.appendChild(tMenu); const r = tMenu.getBoundingClientRect(); tMenu.style.left = Math.min(e.clientX, innerWidth - r.width - 4) + "px"; tMenu.style.top = Math.min(e.clientY, innerHeight - r.height - 4) + "px";
   });
   // CREATE NEW OBJECT / Edit Item: Name, Icon (Create New Icon beside the icon box [+], which picks an existing icon), Model
-  // (Upload Model, or drop a GLB on the panel; 50 MB at most), Type (Resource, for now); Cancel / Create (Save)
+  // (one of the Importer's models), Type (Resource, Region, Object, Structure, Ship); Cancel / Create (Save)
   let iPanel = null;
   function itemPanel(t) {
     if (iPanel) iPanel.close();
@@ -930,23 +924,22 @@ export function initBuild(ctx) {
     const title = el("p", "we-title", t ? "EDIT ITEM" : "NEW OBJECT"), grid = el("div", "we-grid");
     const name = el("input"); name.maxLength = 32; name.value = st.name;
     const iRow = el("div", "oc-icon"), iNew = el("button", "", "Create New Icon"), iBox = el("button", "oc-iconbox"); iNew.type = iBox.type = "button"; iBox.title = "Icon"; iRow.append(iNew, iBox);
-    const mRow = el("div", "oc-model"), mBtn = el("button", "", "Upload Model"), mName = el("span", "oc-file"), mFile = el("input"); mBtn.type = "button"; mFile.type = "file"; mFile.accept = ".glb,model/gltf-binary"; mFile.hidden = true; mRow.append(mBtn, mName, mFile);
+    // (owner, 2026-10-15) the model: one of the Importer's
+    const mRow = el("select");
+    const models = (window.Assets ? window.Assets.models() : []).slice().sort((a, b) => a.name.localeCompare(b.name));
+    mRow.append(new Option("None", ""), ...models.map((a) => new Option(a.name, a.file)));
+    if (st.model && !models.some((a) => a.file === st.model)) mRow.append(new Option(st.mname || st.model, st.model));
+    mRow.value = st.model || "";
+    mRow.addEventListener("change", () => { st.model = mRow.value || null; const a = models.find((x) => x.file === st.model); st.mname = a ? a.name : ""; });
     const type = el("select"); for (const [k, v] of Object.entries(TYPE_NAMES)) type.append(new Option(v, k)); type.value = st.cat;
     grid.append(el("label", "we-label", "Name"), name, el("label", "we-label", "Icon"), iRow, el("label", "we-label", "Model"), mRow, el("label", "we-label", "Type"), type);
     const err = el("p", "we-err"); err.hidden = true;
     const btns = el("div", "we-btns"), cancel = el("button", "", "CANCEL"), ok = el("button", "we-ok", t ? "SAVE" : "CREATE"); cancel.type = ok.type = "button"; btns.append(cancel, ok);
     box.append(title, grid, err, btns);
     const drawIcon = () => { const ic = st.icon && window.Catalog && window.Catalog.icons.get(st.icon); iBox.replaceChildren(ic ? window.Catalog.svg(ic, 26) : el("span", "oc-plus", "+")); };
-    const drawModel = () => { mName.textContent = st.model ? st.mname || "" : ""; };
-    drawIcon(); drawModel();
+    drawIcon();
     iNew.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.newIcon) window.ItemCreator.newIcon((id) => { st.icon = id; drawIcon(); }); });
     iBox.addEventListener("click", () => { if (window.ItemCreator && window.ItemCreator.pickIcon) window.ItemCreator.pickIcon((id) => { st.icon = id; drawIcon(); }); });
-    const up = async (file) => { if (!file) return; err.hidden = true; mBtn.disabled = ok.disabled = true;
-      try { st.model = await uploadModel(file); st.mname = file.name; drawModel(); } catch (e) { if (e.message) { err.textContent = e.message; err.hidden = false; } }
-      mBtn.disabled = ok.disabled = false; };
-    mBtn.addEventListener("click", () => mFile.click()); mFile.addEventListener("change", () => { up(mFile.files[0]); mFile.value = ""; });
-    box.addEventListener("dragover", (e) => { e.preventDefault(); box.classList.add("drop"); }); box.addEventListener("dragleave", (e) => { if (!box.contains(e.relatedTarget)) box.classList.remove("drop"); });
-    box.addEventListener("drop", (e) => { e.preventDefault(); box.classList.remove("drop"); up(e.dataTransfer && e.dataTransfer.files[0]); });
     const close = () => { back.remove(); if (iPanel === p) iPanel = null; };
     const save = () => {
       const n = name.value.trim(); if (!n) { err.textContent = "Give it a name."; err.hidden = false; return; }

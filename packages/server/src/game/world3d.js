@@ -303,6 +303,18 @@ export function cloudPoly(b) { const s = b.w / 100, c = Math.cos(b.r), n = Math.
 export const TYPE_CATS = ["node", "region", "object", "structure", "ship"];
 export const isTypeKey = (k) => typeof k === "string" && /^t:[0-9]{1,9}$/.test(k);
 export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.test(v) ? v : null);
+// (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /
+// WAV), each a name and its uploaded file; a model's icon (thumb) is a picture rendered from it (a PNG). The Object Creator
+// picks its models from these.
+export const ASSET_KINDS = ["model", "image", "audio"];
+export const imageRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(png|jpg|webp)$/.test(v) ? v : null);
+export const audioRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(mp3|ogg|wav)$/.test(v) ? v : null);
+export const assetRef = (kind, v) => (kind === "model" ? modelRef(v) : kind === "image" ? imageRef(v) : kind === "audio" ? audioRef(v) : null);
+export function cleanAsset(o) {
+  if (!o || typeof o !== "object" || !ASSET_KINDS.includes(o.kind)) return null;
+  const name = safeText(String(o.name || ""), 32).trim(), file = assetRef(o.kind, o.file); if (!name || !file) return null;
+  return { kind: o.kind, name, file, thumb: o.kind === "model" ? imageRef(o.thumb) : null };
+}
 export function cleanType(o) {
   if (!o || typeof o !== "object") return null;
   const name = safeText(String(o.name || ""), 32).trim(); if (!name) return null;
@@ -345,7 +357,7 @@ export class World3D {
     this.blocks = [];                        // (owner, 2026-10-13) blocks dropped with X: { id, x, y, owner }, everyone's, kept until a restart
     this.blockSeq = 1;
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
-    this.catalog = new Map(); this.icons = new Map(); this.types = new Map();   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
+    this.catalog = new Map(); this.icons = new Map(); this.types = new Map(); this.assets = new Map();   // assets: (owner, 2026-10-15) the Importer's   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
     this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = [];   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
@@ -382,6 +394,9 @@ export class World3D {
     for (const o of (await pool.query(`SELECT id, data FROM world3d_items ORDER BY id`)).rows) { const a = cleanItem(o.data); if (a) this.catalog.set(String(o.id), { id: String(o.id), ...a }); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_types (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) object types
     for (const o of (await pool.query(`SELECT id, data FROM world3d_types ORDER BY id`)).rows) { const t = cleanType(o.data); if (t) this.types.set(String(o.id), { id: String(o.id), ...t }); }
+    await pool.query(`CREATE TABLE IF NOT EXISTS world3d_assets (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the Importer
+    for (const o of (await pool.query(`SELECT id, data FROM world3d_assets ORDER BY id`)).rows) { const a = cleanAsset(o.data); if (a) this.assets.set(String(o.id), { id: String(o.id), ...a }); }
+    for (const t of this.types.values()) if (t.model && ![...this.assets.values()].some((a) => a.file === t.model)) await this.setAsset(null, { kind: "model", name: t.mname.replace(/\.glb$/i, "") || t.name, file: t.model }, true);   // (models uploaded before the Importer)
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS pivot JSONB`);   // (owner, 2026-10-14) the kind's pivot
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS mover JSONB`);   // (owner, 2026-10-14) its movement ellipse
     await pool.query(`ALTER TABLE world3d_colliders ADD COLUMN IF NOT EXISTS vis JSONB`);     // (owner, 2026-10-14) its visibility points
@@ -815,8 +830,23 @@ export class World3D {
     }
     return out;
   }
+  // (owner, 2026-10-15) the Importer's assets
+  assetList() { return [...this.assets.values()]; }
+  async setAsset(id, o, loading) {
+    const a = cleanAsset(o); if (!a) return null; if (!loading) await this.ready;
+    if (id) { const old = this.assets.get(id); if (!old || old.kind !== a.kind) return null; await pool.query(`UPDATE world3d_assets SET data = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(a)]); }
+    else { if (this.assets.size >= CATALOG_CAP) return null; id = String((await pool.query(`INSERT INTO world3d_assets (data) VALUES ($1) RETURNING id`, [JSON.stringify(a)])).rows[0].id); }
+    const out = { id, ...a }; this.assets.set(id, out);
+    if (a.kind === "model") for (const t of this.types.values()) if (t.model === a.file && t.mname !== a.name) { t.mname = a.name; const { id: tid, ...d } = t; await pool.query(`UPDATE world3d_types SET data = $2, updated_at = now() WHERE id = $1`, [tid, JSON.stringify(d)]); }   // (its objects show the new name)
+    return out;
+  }
+  async delAsset(id) {
+    const a = this.assets.get(id); if (!a) return { ok: false };
+    if (a.kind === "model" && [...this.types.values()].some((t) => t.model === a.file)) return { ok: false, error: "Remove it from its objects first." };
+    await this.ready; await pool.query(`DELETE FROM world3d_assets WHERE id = $1`, [id]); this.assets.delete(id); return { ok: true };
+  }
   // (owner, 2026-10-15) object types: made, changed and deleted in the Object Creator (a type can't go while it's placed)
-  typeList() { return [...this.types.values()]; }
+  typeList() { return [...this.types.values()].map((t) => { const a = t.model && [...this.assets.values()].find((x) => x.file === t.model); return a && a.thumb ? { ...t, thumb: a.thumb } : t; }); }   // thumb: (owner, 2026-10-15) its model's rendered icon
   async setType(id, o) {
     const t = cleanType(o); if (!t) return null; await this.ready;
     if (t.icon && !this.icons.has(t.icon)) t.icon = null; if (t.item && !this.catalog.has(t.item)) t.item = null;
