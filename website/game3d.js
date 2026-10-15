@@ -1218,7 +1218,10 @@ renderer.setAnimationLoop(() => {
       const denF = Math.max(1e-4, Math.hypot(uxs / ex, uys / eF));       // ellipse boundary ahead, per unit of zoom
       const denB = Math.max(1e-4, Math.hypot(uxs / ex, uys / eB));       // and behind
       const Ddir = (R + O + S) / (m * (1 / denF + 1 / denB));
-      const rd = restDist(a.sux, a.suy), rr = Math.min(1, Math.max(0, (rd - cam.dead) / cam.deadRamp)), ease = rr * rr * (3 - 2 * rr); aimEase = ease;   // 0 inside the dead zone, full a little past it
+      // 0 inside the dead zone, full a little past it; and (owner, 2026-10-14) always full toward the screen's edge, since in
+      // some directions (toward the bottom, or zoomed in) the screen ends before 300 m
+      const cl01 = (v) => Math.min(1, Math.max(0, v)), rd = restDist(a.sux, a.suy);
+      const rr = Math.max(cl01((rd - cam.dead) / cam.deadRamp), cl01((r - 0.7) / 0.25)), ease = rr * rr * (3 - 2 * rr); aimEase = ease;
       wantDist = Math.max(camDist, Math.min(6000, ease * Ddir));
       let lam = 1 - (m * wantDist / denF - O) / R;                       // ahead of the focus: the circle + exactly the gap
       lam = Math.min(lam, (m * wantDist / denB - S) / R);                // behind it: the ship + its margin
