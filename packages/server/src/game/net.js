@@ -87,7 +87,7 @@ export function attachGameServer(httpServer) {
     // (owner, 2026-10-15) the Object Placer (the Build menu): head admin, admins and developers (a role only the head admin
     // gives); the Object Creator (object types, models, colliders): the head admin only
     const placer = ["head", "admin", "dev"].includes(user.role), creator = user.role === "head";
-    let cmds = 0, blockAt = 0;                              // rough flood cap: ~40 commands a second
+    let cmds = 0, blockAt = 0, teamAt = 0;                           // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
     let saved = null;                          // (owner, 2026-10-13) the side this account chose last time: the client re-joins it unless resetting
@@ -155,6 +155,10 @@ export function attachGameServer(httpServer) {
         const chat = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
         pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
+      }
+      else if (m.t === "team") {              // (owner, 2026-10-15) switching faction in the game (at most every 2 s)
+        const now = Date.now(); if (!joined || (m.s !== "red" && m.s !== "blue") || now - teamAt < 2000) return; teamAt = now;
+        const p = world.setTeam(pid, m.s); if (p) broadcast({ t: "side", i: pid, s: p.team });
       }
       else if (m.t === "enemy") {             // (owner, 2026-10-15) X spawns an enemy ship (at most one a second)
         const now = Date.now(); if (now - blockAt < 1000) return; blockAt = now;

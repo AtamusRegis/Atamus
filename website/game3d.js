@@ -1215,7 +1215,9 @@ function addProj(m) {
   if (![m.x, m.y, m.vx, m.vy].every(Number.isFinite) || projs.has(m.i)) return;
   const yl = sideOf(players.get(m.a)) === "red";   // (owner, 2026-10-15) Yellow's bullets are yellow
   const g = new THREE.Group(), core = new THREE.Mesh(projGeo, yl ? projYellow.core : projCore), glow = new THREE.Mesh(projGeo, yl ? projYellow.glow : projGlow), trail = new THREE.Mesh(projGeo, yl ? projYellow.trail : projTrail);
-  core.scale.set(18, 1, 1); glow.scale.set(26, 3, 3); trail.scale.set(70, 1.6, 1.6); g.add(trail, glow, core);
+  if (yl) { core.scale.set(9, 0.9, 0.9); glow.scale.set(13, 2.4, 2.4); trail.scale.set(26, 1.1, 1.1); }   // (Yellow's: short tracers, so a stream reads as bullets)
+  else { core.scale.set(18, 1, 1); glow.scale.set(26, 3, 3); trail.scale.set(70, 1.6, 1.6); }
+  g.add(trail, glow, core);
   g.rotation.y = Math.atan2(m.vy, m.vx); g.renderOrder = 3; scene.add(g);
   projs.set(m.i, { g, x: m.x, y: m.y, vx: m.vx, vy: m.vy, k: Number.isFinite(m.k) && m.k > 0 ? m.k : 0, t0: performance.now() });   // k: (owner, 2026-10-15) drag, it slows down
 }
@@ -1365,7 +1367,7 @@ function connect() {
     } else if (m.t === "spawn") {
       me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
       focus.x = me.x; focus.y = me.y;
-      { const mp = addPlayer(myId, myName, me.x, me.y); setSide(mp, m.s); mp.near = true; mp.holder.visible = true; } applyFaction();
+      { const mp = addPlayer(myId, myName, me.x, me.y); setSide(mp, m.s); mp.near = true; mp.holder.visible = true; } applyFaction(); teamBox();
       drawPrefix();
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
@@ -1397,6 +1399,10 @@ function connect() {
         p.to = { x, y };
       }
       for (const p of players.values()) if (p.id !== myId && p.near && !inSnap.has(p.id)) { p.near = false; p.buf = []; p.holder.visible = false; }   // left the load circle
+    } else if (m.t === "side") {               // (owner, 2026-10-15) a ship switched faction (mine too)
+      if (m.s !== "red" && m.s !== "blue") return;
+      if (m.i === myId) { mySide = m.s; const mp = players.get(myId); if (mp) { mp.side = null; setSide(mp, m.s); } applyFaction(); teamBox(); }
+      else { const p = players.get(m.i); if (p) setSide(p, m.s); }
     } else if (m.t === "join") { if (m.i !== myId) setSide(addPlayer(m.i, m.n), m.s); }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
     else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
@@ -1711,6 +1717,10 @@ renderer.setAnimationLoop(() => {
   renderClouds();
 });
 
+// (owner, 2026-10-15) switching faction at the top left (for now)
+const teamEl = document.getElementById("team-box");
+function teamBox() { teamEl.hidden = !mySide; for (const b of teamEl.querySelectorAll("button")) b.classList.toggle("on", b.dataset.side === mySide); }
+teamEl.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { if (b.dataset.side !== mySide) send({ t: "team", s: b.dataset.side }); }));
 // (owner, 2026-10-13) choosing a side: Red or Blue, every time the game is entered
 const sidePick = document.getElementById("side-pick");
 // joining with a side; (owner) "Reset location" on the Welcome back page (game.html?resetpos=1) puts the ship back near the

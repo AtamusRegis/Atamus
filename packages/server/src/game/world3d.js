@@ -990,6 +990,12 @@ export class World3D {
     const e = { id, name: "Enemy", team, enemy: true, owner: p.id, x, y, h: wrapA(h + Math.PI), dx: 0, dy: 0, vx: 0, vy: 0, hp: F.hp, sh: F.shield, spawnUntil: Date.now() + SPAWN_MS };
     this.players.set(id, e); this.joined.push(e); return e;
   }
+  // (owner, 2026-10-15) a player switches faction: its numbers and weapon change, and it materializes again where it is
+  setTeam(id, team) {
+    const p = this.players.get(String(id)); if (!p || p.bot || p.enemy || (team !== "red" && team !== "blue") || p.team === team) return null;
+    const F = FACTIONS[team]; p.team = team; p.hp = F.hp; p.sh = F.shield; p.shBroken = false; p.beamOn = false; p.beamOut = null;
+    p.ammo = undefined; p.reloadAt = 0; p.lastFire = 0; p.lastLaunch = 0; p.spawnUntil = Date.now() + SPAWN_MS; p.dirty = true; return p;
+  }
   dropEnemy(e) { if (this.players.get(e.id) !== e) return; this.players.delete(e.id); this.left.push(e.id); for (const o of this.ords) if (o.a === e.id) o.a = null; }
   thinkEnemy(p, dt, now) {
     const F = fac(p), w = F.weapon; p.dx = p.dy = 0; p.beamOn = false;
