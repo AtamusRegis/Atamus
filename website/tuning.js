@@ -5,7 +5,7 @@
   const LABEL = {
     ship: { hp: "Health", speed: "Speed", shield: "Shield", regen: "Shield Regen", resist: "Armor", load: "Load Radius", farIn: "Sight Fade Start", farOut: "Sight Range", visLo: "Visible From", visHi: "Solid At", cloudDeep: "Nebula Depth", cloudIn: "Nebula Floor" },
     weapon: { optimal: "Range", dps: "Damage / s", fall: "Falloff", falloff: "Falloff %", rotSpeed: "Turn Speed", life: "Lifetime", speed: "Speed", drag: "Drag", rate: "Fire Interval", dmg: "Damage", spread0: "Spread", spreadAdd: "Spread / Shot", aimSpeed: "Aim Recovery", reload: "Reload", mag: "Magazine" },
-    second: { n: "Count", gap: "Gap", cd: "Cooldown", speed: "Speed", life: "Lifetime", turn: "Turn", pull: "Pull Range", seek: "Seek Range", pick: "Pick Range", aim: "Max Range", zig: "Zigzag", zigHz: "Zigzag Rate", blast: "Blast Radius", dmg: "Damage", dps: "Damage / s", decay: "Decay / s", orbit: "Orbit Gap", spin: "Orbit Speed", zap: "Zap Interval", hp: "Health", r: "Hitbox" },
+    second: { n: "Count", max: "Max Alive", gap: "Gap", cd: "Cooldown", speed: "Speed", life: "Lifetime", turn: "Turn", pull: "Pull Range", seek: "Seek Range", pick: "Pick Range", aim: "Max Range", zig: "Zigzag", zigHz: "Zigzag Rate", blast: "Blast Radius", dmg: "Damage", dps: "Damage / s", decay: "Decay / s", orbit: "Orbit Gap", spin: "Orbit Speed", zap: "Zap Interval", hp: "Health", r: "Hitbox" },
   };
   const TITLE = { ship: "SHIP", weapon: "WEAPON", second: "SECONDARY" }, SIDE = { blue: "BLUE", red: "YELLOW" };
   let send = () => {}, win = null, btn = null, body = null, head = null, facs = {}, side = null, open = false;

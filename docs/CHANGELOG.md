@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Drone limit (owner):** a ship can have at most 3 drones out at once.
 - **Tuning panel (owner):** staff (head admin, admins, developers) can tune every faction number live from a new panel; changes reach everyone at once and are kept.
 - **Staff access (owner):** developers and admins now get the Asset Creator and Object Creator too; being made or removed as staff reloads the game so the menus follow.
 - **Combat fixes (owner):** Yellow is faster (160%) with more armor (50%); missiles leave one at a time; a shield stops missile blasts; missiles and drones are easier to hit; the laser turns faster and a new beam starts where you aim (hits no longer show late); bullets slow down much more; respawning ships no longer show in nebulae while materializing.

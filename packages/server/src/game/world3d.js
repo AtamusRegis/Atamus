@@ -68,7 +68,7 @@ export const AUTOCANNON = { name: "Autocannon", type: "bullet", optimal: 500, fa
 // secondaries (F): r: hit radius (m); hp: what shooting it down takes; zig / zigHz: the zigzag's swing (rad) and rate
 export const MISSILE = { kind: "missile", speed: 230, life: 7, turn: 3, pull: 450, zig: 0.55, zigHz: 1.4, blast: 90, dmg: 70, hp: 10, cd: 4, r: 14, n: 3, gap: 0.3, aim: 1600 };   // gap: s between a salvo's missiles
 // a drone that reaches its enemy circles it (orbit m outside the shield oval, spin rad/s), doing dps while its own hp drains (decay a second)
-export const DRONE = { kind: "drone", speed: 170, life: 10, turn: 4.5, seek: 300, zig: 0.8, zigHz: 2.4, dps: 4, decay: 1, orbit: 25, spin: 1.6, zap: 0.5, hp: 10, cd: 3, r: 12, n: 3, pick: 250, aim: 1200 };
+export const DRONE = { kind: "drone", speed: 170, life: 10, turn: 4.5, seek: 300, zig: 0.8, zigHz: 2.4, dps: 4, decay: 1, orbit: 25, spin: 1.6, zap: 0.5, hp: 10, cd: 3, r: 12, n: 3, max: 3, pick: 250, aim: 1200 };   // max: (owner, 2026-10-15) drones alive per ship at once
 export const FACTIONS = {
   blue: { hp: 100, speed: 0.8, shield: 100, regen: 8, resist: 0, load: 1500, farIn: 1100, farOut: 1500, visLo: 0.25, visHi: 0.75, cloudDeep: 150, cloudIn: 0.25, weapon: LASER, second: DRONE, color: "#4f8fe8" },
   red: { hp: 150, speed: 1.6, shield: 0, regen: 0, resist: 0.5, load: 1100, farIn: 700, farOut: 1100, visLo: 0.45, visHi: 0.9, cloudDeep: 90, cloudIn: 0.12, weapon: AUTOCANNON, second: MISSILE, color: "#e8c14f" },
@@ -77,7 +77,7 @@ export const FAC_DEFAULT = { hp: HP_MAX, speed: 1, shield: SH_MAX, regen: SH_REG
 export const fac = (p) => FACTIONS[p && p.team] || FAC_DEFAULT;
 // (owner, 2026-10-15) the Tuning panel's limits per number (anything else: 0-5,000)
 export const TUNE_RANGE = { hp: [1, 5000], speed: [0.1, 5], resist: [0, 0.95], load: [300, 1500], farIn: [100, 1500], farOut: [200, 1500], visLo: [0, 1], visHi: [0.01, 1], cloudIn: [0, 1],
-  fall: [0, 1], rotSpeed: [1, 1440], life: [0.05, 30], drag: [0, 20], rate: [0.03, 10], spread0: [0, 45], spreadAdd: [0, 20], aimSpeed: [0, 90], mag: [1, 500], n: [1, 10], gap: [0, 5], zig: [0, 3], zigHz: [0, 10], zap: [0.05, 5], spin: [0, 10], turn: [0, 20] };
+  max: [1, 20], fall: [0, 1], rotSpeed: [1, 1440], life: [0.05, 30], drag: [0, 20], rate: [0.03, 10], spread0: [0, 45], spreadAdd: [0, 20], aimSpeed: [0, 90], mag: [1, 500], n: [1, 10], gap: [0, 5], zig: [0, 3], zigHz: [0, 10], zap: [0.05, 5], spin: [0, 10], turn: [0, 20] };
 const numsOf = (o) => { const out = {}; if (o) for (const [k, v] of Object.entries(o)) if (typeof v === "number") out[k] = v; return out; };
 const segCircle = (x0, y0, x1, y1, cx, cy, R) => {   // where along a segment (0..1) it first comes within R of a point
   const dx = x1 - x0, dy = y1 - y0, fx = x0 - cx, fy = y0 - cy, A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), C = fx * fx + fy * fy - R * R;
@@ -907,12 +907,13 @@ export class World3D {
     const S = fac(p).second; if (!S) return false;
     if (typeof ax !== "number" || typeof ay !== "number" || !Number.isFinite(ax) || !Number.isFinite(ay)) return false;
     const now = Date.now(); if (p.lastLaunch && now - p.lastLaunch < S.cd * 1000 - 50) return false;
+    let n = S.n; if (S.max) { let alive = 0; for (const o of this.ords) if (o.a === p.id && o.k === S.kind) alive++; n = Math.min(n, S.max - alive); if (n <= 0) return false; }   // (owner, 2026-10-15) only so many alive at once
     { const dx = ax - p.x, dy = ay - p.y, L = Math.hypot(dx, dy); if (L < 1) return false; if (L > S.aim) { ax = p.x + dx / L * S.aim; ay = p.y + dy / L * S.aim; } }
     p.lastLaunch = now;
     let tgt = null;
     if (S.kind === "drone") { let best = S.pick; for (const q of this.players.values()) { if (q.team === p.team || spawning(q)) continue; const d = Math.hypot(q.x - ax, q.y - ay); if (d < best && this.sees(p, q)) { best = d; tgt = q.id; } } }
     if (S.gap) { for (let i = 0; i < S.n; i++) this.salvos.push({ pid: p.id, S, ax, ay, tgt, i, at: now + i * S.gap * 1000 }); return true; }   // (owner, 2026-10-15) missiles leave one at a time
-    for (let i = 0; i < S.n; i++) this.launchOne(p, S, ax, ay, tgt, S.n > 1 ? (i / (S.n - 1) - 0.5) * 0.8 : 0);
+    for (let i = 0; i < n; i++) this.launchOne(p, S, ax, ay, tgt, n > 1 ? (i / (n - 1) - 0.5) * 0.8 : 0);
     return true;
   }
   launchOne(p, S, ax, ay, tgt, off) {
