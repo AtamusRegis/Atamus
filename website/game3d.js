@@ -648,6 +648,23 @@ function drawHpBars() {
   }
   for (const [id, el] of hpBars) if (!seen.has(id)) { el.remove(); hpBars.delete(id); }
 }
+// (owner, 2026-10-15) every other ship's player name over it, in its team's color, above where its health bar goes; it
+// fades with the ship's visibility, and a ship I can't see (or a destroyed one) shows none
+const nameTags = new Map();                    // player id -> element
+function drawNames() {
+  const r = canvas.getBoundingClientRect(), seen = new Set();
+  for (const p of players.values()) {
+    if (p.id === myId || !p.near || p.dead || !p.name) continue;
+    const t = visTargets.get(p.holder.children[0]), a = t ? t.a : 0; if (a <= 0.01) continue;
+    const s3 = new THREE.Vector3(p.holder.position.x, shipMid * 2 + 25, p.holder.position.z).project(camera); if (s3.z > 1) continue;
+    let el = nameTags.get(p.id); if (!el) { el = document.createElement("div"); el.className = "name-tag"; document.body.appendChild(el); nameTags.set(p.id, el); }
+    if (el.textContent !== p.name) el.textContent = p.name;
+    const c = TEAM_COLOR[sideOf(p)] || "#cfd8e6"; if (el.dataset.c !== c) { el.dataset.c = c; el.style.color = c; }
+    el.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)"; el.style.opacity = a;
+    seen.add(p.id);
+  }
+  for (const [id, el] of nameTags) if (!seen.has(id)) { el.remove(); nameTags.delete(id); }
+}
 // ---- (owner, 2026-10-15) shields: an oval around the ship (the combat points' box grown, as on the server) that only
 // shows when hit: white where the hit landed, spreading and fading back to its color (blue; yellow under half, red under a
 // quarter) with a brighter hexagon pattern, then fading out. Broken, it's gone until the ship respawns ----
@@ -1339,7 +1356,7 @@ renderer.setAnimationLoop(() => {
 
   updateShipVis(Math.min(0.1, dt || 0.016), performance.now());
   weaponFrame(performance.now()); drawBeams(performance.now());
-  drawHpBars(); updateShields(performance.now()); updateSparks(Math.min(0.1, dt || 0.016));
+  drawHpBars(); drawNames(); updateShields(performance.now()); updateSparks(Math.min(0.1, dt || 0.016));
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderSky();
