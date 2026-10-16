@@ -1,63 +1,60 @@
-// (owner, 2026-10-15) The two teams' ships: every number the Ship Editor changes, with its limits and each team's
-// starting value. Kept in world3d_settings ("ships") and sent to every client (they predict their own ship with them).
-// Units: m, m/s, m/s^2, degrees, seconds, percent (0-100) unless said.
+// (owner, 2026-10-15, "rebuild a bit") Every number of the game, fixed here (the Ship Editor is gone): one ship for
+// everyone, the five weapons a player picks two of (primary, secondary), the seven charged abilities, the upgrade levels
+// bought with credits, the capture-point buffs, the team stations, asteroids and credit rewards. Sent to every client in
+// the hello. Units: m, m/s, m/s^2, degrees, seconds, percent unless said.
 export const TEAMS = ["blue", "red"];              // "red" is shown as Yellow (the key saved in player data)
-// [key, min, max, blue, yellow]
-export const SHIP_FIELDS = [
-  // health
-  ["hp", 1, 5000, 100, 150],          // max health
-  ["hpRegen", 0, 500, 0, 0],          // health a second, once hpDelay has passed since the last damage
-  ["hpDelay", 0, 60, 5, 5],           // s after damage before health regenerates
-  ["respawn", 0, 60, 5, 5],           // s dead before the ship comes back
-  // movement
-  ["speed", 1, 500, 40, 64],          // max speed, m/s (forward)
-  ["accel", 1, 1000, 50, 70],         // m/s^2
-  ["brake", 1, 1000, 100, 100],       // m/s^2 when no thrust is held
-  ["turn", 1, 720, 29, 34],           // degrees a second
-  ["turnAccel", 1, 5000, 143, 170],   // degrees a second^2 (how fast turning spins up)
-  ["strafe", 0, 200, 60, 60],         // % of max speed pushing sideways
-  ["reverse", 0, 200, 60, 60],        // % of max speed backing up
-  ["boost", 0, 500, 30, 30],          // % extra speed while boosting (Shift, forward only)
-  ["boostCap", 0, 1000, 8, 8],        // capacitor a second while boosting
-  ["boostMin", 0, 5000, 15, 15],      // capacitor needed to boost again after running dry
-  // defense
-  ["armor", 0, 95, 0, 50],            // % of hull damage taken off
-  ["shield", 0, 5000, 100, 0],        // max shield (0: none)
-  ["shRegen", 0, 500, 8, 0],          // shield a second, once shDelay has passed since the last damage
-  ["shDelay", 0, 60, 3, 3],           // s after damage before the shield regenerates
-  ["shRestoreCap", 0, 100, 1, 1],     // capacitor per point a broken shield costs to restore (only the capacitor restores it)
-  // capacitor
-  ["cap", 1, 5000, 100, 100],         // max capacitor
-  ["capRegen", 0, 500, 8, 8],         // capacitor a second
-  // weapon
-  ["wtype", 0, 1, 1, 0],              // 0: bullets, 1: beam
-  ["dmg", 0, 5000, 60, 9],            // per bullet; a beam: per second
-  ["optimal", 10, 5000, 900, 500],    // full damage out to this
-  ["falloff", 0, 5000, 300, 150],     // past optimal: damage drops off over this much more; max range = optimal + falloff
-  ["dmgEnd", 0, 100, 35, 40],         // % of the damage left at max range
-  ["dmgCurve", 0.1, 10, 1, 1],        // the drop's shape: 1 straight, above 1 holds then drops late, below 1 drops early
-  ["mag", 1, 10000, 100, 40],         // ammo per reload
-  ["rate", 0.1, 100, 10, 5],          // ammo used a second (bullets: shots a second; a beam: drained while firing)
-  ["reload", 0, 60, 3, 2],            // s to reload
-  ["bspeed", 10, 10000, 1300, 1300],  // bullet speed, m/s, out to optimal
-  ["spdEnd", 0, 100, 10, 10],         // % of the bullet's speed left at max range
-  ["spdCurve", 0.1, 10, 1, 1],        // that slowdown's shape (as the damage curve)
-  ["spread0", 0, 45, 0, 0],           // degrees each way at rest
-  ["spreadMax", 0, 90, 10, 10],       // degrees each way at most
-  ["spreadAdd", 0, 45, 0.8, 0.8],     // degrees more each way per bullet
-  ["spreadBack", 0, 180, 6, 6],       // degrees a second the spread closes back in
-  ["rot", 1, 1440, 100, 540],         // degrees a second the aim turns toward the pointer
-  ["capUse", 0, 1000, 0, 0],          // capacitor per bullet; a beam: per second
-];
-export const FIELD = Object.fromEntries(SHIP_FIELDS.map(([k, lo, hi]) => [k, [lo, hi]]));
-export const defaults = () => ({ blue: Object.fromEntries(SHIP_FIELDS.map((f) => [f[0], f[3]])), red: Object.fromEntries(SHIP_FIELDS.map((f) => [f[0], f[4]])) });
-// a value from the editor, checked as hostile: a known key, a finite number, clamped; null if not usable
-export function cleanField(k, v) {
-  const f = FIELD[k]; if (!f) return null; v = Number(v); if (!Number.isFinite(v)) return null;
-  v = Math.max(f[0], Math.min(f[1], v)); if (k === "wtype" || k === "mag") v = Math.round(v);
-  return Math.round(v * 10000) / 10000;
-}
-// the shape both damage and bullet speed follow past optimal: 1 out to it, falling to end% at optimal + falloff
+
+// the ship, at level 1 of every upgrade
+export const SHIP = {
+  hp: 150, hpRegen: 1, hpDelay: 5, respawn: 6,
+  speed: 55, accel: 60, brake: 100, turn: 32, turnAccel: 155, strafe: 60, reverse: 60,
+  armor: 10, cap: 100, capRegen: 8,
+};
+
+// the weapons: left click fires the primary, F the secondary (both held). Each has its own magazine and reload.
+export const WEAPON_KINDS = ["bullets", "beam", "railgun", "missiles", "drones"];
+export const WEAPONS = {
+  bullets: { name: "Bullets", dmg: 9, rate: 6, mag: 40, reload: 2, optimal: 450, falloff: 200, dmgEnd: 40, dmgCurve: 1,
+    bspeed: 1300, spdEnd: 10, spdCurve: 1, spread0: 0, spreadMax: 8, spreadAdd: 0.8, spreadBack: 6, capUse: 0 },
+  beam: { name: "Beam", dmg: 40, rate: 12, mag: 100, reload: 3, optimal: 600, falloff: 250, dmgEnd: 35, dmgCurve: 1, rot: 110, capUse: 4 },   // dmg / rate / capUse: a second
+  railgun: { name: "Railgun", dmg: 65, rate: 0.8, mag: 4, reload: 3, optimal: 1000, falloff: 250, dmgEnd: 60, dmgCurve: 1, capUse: 12 },   // hits at once
+  // a missile zigzags out, homing on the enemy nearest its nose, and bursts (area damage, less toward the edge); it can be shot down
+  missiles: { name: "Missiles", dmg: 45, radius: 70, rate: 1.2, mag: 4, reload: 4, speed: 260, life: 4, turn: 150, seek: 700, hp: 15, capUse: 0 },
+  // a drone flies to the enemy nearest the aim, circles it shooting, and wears out; at most `max` out at once
+  drones: { name: "Drones", dmg: 7, every: 0.5, reach: 170, orbit: 80, rate: 2, mag: 3, reload: 6, speed: 170, hp: 25, decay: 2.5, max: 3, seek: 700, capUse: 0 },
+};
+export const AIM_ROT = 540;                        // degrees a second the aim line turns toward the pointer
+
+// the abilities (Shift): each charges up over `charge` s, then lasts `dur` s
+export const ABILITY_KINDS = ["shield", "armor", "speed", "damage", "blink", "cloak", "chain"];
+export const ABILITIES = {
+  shield: { name: "Shield", charge: 18, dur: 6, hp: 120 },
+  armor: { name: "Damage Reduction", charge: 18, dur: 5, cut: 50 },       // % of the damage still taken off after armor
+  speed: { name: "Speed Boost", charge: 12, dur: 4, mul: 60 },            // % more speed and acceleration
+  damage: { name: "Damage Boost", charge: 20, dur: 5, mul: 40 },          // % more damage
+  blink: { name: "Teleport", charge: 10, dur: 0, dist: 250 },             // straight ahead along the nose
+  cloak: { name: "Invisibility", charge: 22, dur: 6 },                    // firing ends it
+  chain: { name: "Chain", charge: 18, dur: 4, reach: 450, arc: 35, pull: 90, slack: 110 },   // the enemy nearest the aim (within arc degrees), pulled in past slack m
+};
+
+// upgrades: levels 1-10 bought with credits; going from level L to L + 1 costs upCost(L)
+export const UPGRADES = [["hp", "Health"], ["speed", "Speed"], ["armor", "Armor"], ["dmg", "Damage"], ["regen", "Health Regen"], ["energy", "Energy Regen"]];
+export const LV_MAX = 10;
+export const upCost = (lv) => 40 * lv;
+export const UP_STEP = { hp: 10, speed: 4, armor: 4, dmg: 6, regen: 1.5, energy: 12 };   // per level above 1: % health, % speed, armor points, % damage, health a second, % energy regen
+
+// a capture point's buff (the Build menu sets it): the team holding it gets it while it holds it
+export const BUFFS = ["Health", "Speed", "Range", "Damage", "Armor", "Regen"];
+export const BUFF = { hp: 20, speed: 15, range: 20, dmg: 15, armor: 10, regen: 3, energy: 25 };
+export const CAPTURE_TIME = 8;                     // s for one team alone in it to take it from neutral
+
+export const CREDITS = { kill: 100, rock: 0.8 };   // a kill; an asteroid: per m of its radius
+// each team's station: being near it repairs; destroying the enemy's wins the match (a new one starts MATCH_WAIT s later)
+export const STATION = { hp: 6000, r: 90, x: 950, reach: 350, heal: 20, healCap: 10 };
+export const MATCH_WAIT = 10;
+export const ASTEROIDS = { n: 28, rMin: 18, rMax: 42, hpPerR: 4, respawn: 10 };
+
+// the shape damage and bullet speed follow past optimal: 1 out to it, falling to end% at optimal + falloff
 export function curveAt(s, S, end, shape) {
   if (s <= S.optimal) return 1;
   const u = S.falloff > 0 ? Math.min(1, (s - S.optimal) / S.falloff) : 1;

@@ -32,20 +32,6 @@
     #team-box { position: fixed; top: 12px; left: 12px; display: flex; gap: 6px; z-index: 5; user-select: none; }
     #team-box[hidden] { display: none; }
     /* (owner, 2026-10-15) the Ship Editor: hover a name for what it does; no spinner arrows (type or drag) */
-    #ship-panel { width: 300px; max-height: 82vh; overflow-y: auto; }
-    #ship-panel .se-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-    #ship-panel .se-tab { flex: 1; padding: 5px 0 !important; border: none !important; border-radius: 5px; color: #fff !important; font: 600 12px var(--font) !important; cursor: pointer; opacity: .5; }
-    #ship-panel .se-tab[data-s="blue"] { background: linear-gradient(135deg, #4f8fe8 0%, #1f4d9b 100%) !important; } #ship-panel .se-tab[data-s="red"] { background: linear-gradient(135deg, #f0c84a 0%, #a8780e 100%) !important; }
-    #ship-panel .se-tab.on { opacity: 1; box-shadow: 0 0 0 2px rgba(255, 255, 255, .75); }
-    #ship-panel .se-head { margin: 10px 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--text-dim); }
-    #ship-panel .se-sec:first-child .se-head { margin-top: 0; }
-    #ship-panel .se-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
-    #ship-panel .se-lab { font-size: 12px; }
-    #ship-tip { position: fixed; z-index: 9; width: 240px; padding: 9px 11px; background: rgba(14,19,30,0.96); border-radius: 7px; box-shadow: var(--shadow); color: var(--text); font: 12px/1.45 var(--font); pointer-events: none; }
-    #ship-tip[hidden] { display: none; } #ship-tip b { display: block; margin-bottom: 3px; color: #fff; font-weight: 600; }
-    #ship-panel input, #ship-panel select { width: 90px; box-sizing: border-box; padding: 3px 6px; border: 1px solid #2a3a52; border-radius: 4px; background: rgba(8,12,20,.9); color: var(--text); font: 12px var(--font); }
-    #ship-panel input { cursor: ew-resize; appearance: textfield; -moz-appearance: textfield; }
-    #ship-panel input::-webkit-inner-spin-button, #ship-panel input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     #team-box button { height: 30px; padding: 0 14px; border-radius: 6px; border: none; font: 600 13px system-ui, sans-serif; color: #fff; cursor: pointer; opacity: .5; }
     #team-box button[data-side="blue"] { background: linear-gradient(135deg, #4f8fe8 0%, #1f4d9b 100%); }
     #team-box button[data-side="red"] { background: linear-gradient(135deg, #f0c84a 0%, #a8780e 100%); }
@@ -331,6 +317,36 @@
     /* (owner, 2026-10-14) a health bar over a damaged ship */
     .hp-bar { position: fixed; left: 0; top: 0; z-index: 4; width: 56px; height: 5px; margin: -3px 0 0 -28px; border-radius: 3px; background: rgba(0,0,0,0.6); overflow: hidden; pointer-events: none; }
     .name-tag { position: fixed; left: 0; top: 0; z-index: 4; margin: -40px 0 0; white-space: nowrap; pointer-events: none; font: 600 12px var(--font, system-ui); text-shadow: 0 0 3px #000, 0 1px 2px #000; translate: -50% 0; }   /* (owner, 2026-10-15) above the health bar */
+    .hp-bar.st-bar { width: 130px; height: 7px; margin: -4px 0 0 -65px; } .hp-bar.rock-bar { width: 40px; height: 4px; margin: -2px 0 0 -20px; }
+    .cap-tag { position: fixed; left: 0; top: 0; z-index: 3; white-space: nowrap; pointer-events: none; font: 700 12px var(--font, system-ui); letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 0 3px #000, 0 1px 2px #000; translate: -50% -50%; opacity: .85; }
+    .cap-tag[hidden] { display: none; }
+    /* (owner, 2026-10-15) under the capacitor: each weapon's magazine (amber while it reloads) and the ability's charge */
+    #hud-w { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); display: flex; gap: 4px; z-index: 5; pointer-events: none; }
+    .wb { position: relative; width: 100px; height: 16px; border-radius: 4px; background: rgba(0,0,0,0.45); overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+    .wb i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(135deg, #6fb6ff, #2f6fe0); }
+    .wb.reload i { background: linear-gradient(135deg, #ffd766, #e08a1a); }
+    #wb2 i { background: linear-gradient(135deg, #8a95a8, #56607a); } #wb2.ready i { background: linear-gradient(135deg, #7ff0b0, #22a35c); } #wb2.active i { background: linear-gradient(135deg, #f6fff9, #7ff0b0); }
+    .wb span, .wb em { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; font: 600 10px var(--font, system-ui); color: #fff; text-shadow: 0 0 2px #000; font-style: normal; white-space: nowrap; }
+    .wb span { left: 6px; } .wb em { right: 6px; }
+    #credits { position: fixed; left: calc(50% + 112px); bottom: 64px; height: 14px; display: flex; align-items: center; gap: 4px; font: 700 12px var(--font, system-ui); color: #ffd766; text-shadow: 0 0 3px #000; pointer-events: none; }
+    #credits:not(:empty)::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gold-grad); }
+    #hangar-btn { position: fixed; top: 50px; left: 12px; height: 28px; padding: 0 12px; border: none; border-radius: 6px; background: rgba(14,19,30,0.88); color: var(--text, #e4ecf6); font: 600 12px var(--font, system-ui); cursor: pointer; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
+    #hangar-btn[hidden] { display: none; } #hangar-btn:hover, #hangar-btn.on { background: var(--accent-grad); color: #06121c; }
+    #hangar { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: 420px; max-height: 86vh; overflow-y: auto; padding: 12px 14px; background: rgba(14,19,30,0.95); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); user-select: none; }
+    #hangar[hidden] { display: none; }
+    .hg-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .hg-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); text-transform: uppercase; }
+    .hg-cr { margin-left: auto; display: flex; align-items: center; gap: 5px; color: #ffd766; font-weight: 700; } .hg-cr::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--gold-grad); }
+    .hg-x { width: 24px; height: 24px; padding: 0; border: none; border-radius: 5px; background: transparent; color: var(--text-dim); font-size: 18px; line-height: 1; cursor: pointer; } .hg-x:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .hg-head { margin: 10px 0 5px; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--text-dim); text-transform: uppercase; }
+    .hg-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .hg-pick { padding: 6px 10px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); cursor: pointer; }
+    .hg-pick:hover { background: rgba(40,54,78,0.98); color: #fff; } .hg-pick.on { background: var(--accent-grad); border-color: transparent; color: #06121c; cursor: default; }
+    .hg-up { display: grid; grid-template-columns: 96px 18px 1fr 60px; align-items: center; gap: 8px; padding: 3px 0; }
+    .hg-lv { color: var(--text-dim); font-weight: 700; text-align: right; } .hg-pips { display: flex; gap: 3px; } .hg-pips i { flex: 1; height: 8px; border-radius: 2px; background: rgba(255,255,255,0.1); } .hg-pips i.on { background: var(--accent-grad); }
+    .hg-buy { padding: 4px 0; border: none; border-radius: 5px; background: linear-gradient(135deg, #ffd766, #e08a1a); color: #1f1102; font: 700 11px var(--font); cursor: pointer; } .hg-buy:disabled { background: rgba(255,255,255,0.08); color: var(--text-faint); cursor: default; }
+    #win { position: fixed; left: 50%; top: 32%; transform: translate(-50%, -50%); z-index: 9; font: 800 54px var(--font, system-ui); letter-spacing: .04em; text-shadow: 0 0 24px rgba(0,0,0,0.9), 0 2px 6px #000; pointer-events: none; }
+    #win[hidden] { display: none; }
+    html.touch #hud-w { bottom: 40px; } html.touch #hangar-btn { top: 50px; }
     .hp-bar i, .hp-bar b { position: absolute; left: 0; top: 0; height: 100%; }
     .hp-bar b { background: rgba(255,255,255,0.85); }
     /* (owner, 2026-10-14) a nebula cloud's outline handles in the Build menu */
@@ -425,12 +441,15 @@
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Yellow</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
+  <div id="hud-w"><div class="wb" id="wb0"><i></i><span></span><em></em></div><div class="wb" id="wb1"><i></i><span></span><em></em></div><div class="wb" id="wb2"><i></i><span></span><em></em></div></div>
+  <div id="credits"></div>
+  <button id="hangar-btn" type="button" hidden>Hangar</button>
+  <div id="win" hidden></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="winpos.js?v=1792105302"></script>
   <script src="numdrag.js?v=1792049714"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script src="shipeditor.js?v=1792200002"></script>
-  <script type="module" src="game3d.js?v=1792200005"></script>
+  <script type="module" src="game3d.js?v=1792200006"></script>
 </body>
 </html>

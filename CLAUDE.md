@@ -8,7 +8,7 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. `docs/DESIGN.md` holds the agreed direction (short right now: the 3D rebuild has just begun).
 4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. The live game is one shared 3D world: a ship per account on a gridded plane inside a hexagon (2.5 km flat to flat for now). **Old database data stays untouched for reference.**
-5. **Rebuilt from scratch (owner, 2026-10-15):** the first 3D version (Object / Asset Creators, Object Editor, items, inventory, crates, nodes, test ships, factions with missiles and drones, the Tuning panel) is on the **`legacy-3d-v1` branch** (tip `c2088a7`). Now: two teams (Blue, Yellow) whose ship numbers live in `ships.js` and are tuned in the Ship Editor; the Build menu places shapes and nebulae.
+5. **Rebuilt from scratch (owner, 2026-10-15):** the first 3D version (Object / Asset Creators, Object Editor, items, inventory, crates, nodes, test ships, factions with missiles and drones, the Tuning panel) is on the **`legacy-3d-v1` branch** (tip `c2088a7`). Now (same day, "rebuild a bit"): two teams (Blue, Yellow) flying the same ship; each player picks two weapons and an ability and buys upgrades in the Hangar; asteroids and kills pay credits; team stations (destroying the enemy's wins the match); capture points give team buffs. Every number is fixed in `ships.js` (no Ship Editor). The Build menu places shapes, nebulae and capture points.
 
 **In the same commit as any change to behavior:**
 
@@ -20,7 +20,7 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 ## Owner's standing rules
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
-- **No helper or hint text**, anywhere. Tooltips show names only. **Exception (owner, 2026-10-15): the Ship Editor's fields show a description in a popup beside the window** (what each does and how its number changes it).
+- **No helper or hint text**, anywhere. Tooltips show names only.
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag. **Exception (owner, 2026-10-13): Atamus 3D is a PC game; phones are only for testing a second account, so aiming has no touch version** (touch gets a movement joystick and camera drag).
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
 - **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
@@ -45,21 +45,24 @@ packages/server/src/
   game/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
                   (4003), admin hooks (kick 4005 / ban 4006 / mute), team pick (remembered) and switching, move / fire /
-                  beam / reload / chat in, the Ship Editor's changes, the Build menu; 20 Hz sim, 15 Hz per-player snapshots
-    ships.js      every Ship Editor number: its limits and each team's start (SHIP_FIELDS), the damage / speed curve
-    world3d.js    the world: hexagon, ships moving by their team's numbers, health / shield / capacitor, bullets and
-                  beams, death and respawn, mutual visibility, Build pieces (shapes, nebulae), positions saved
+                  beam / reload / ability / Hangar (gear, upgrades) / chat in, the Build menu; 20 Hz sim, 15 Hz
+                  per-player snapshots (+ missiles / drones), effects, asteroids / stations / capture points at 5 Hz
+    ships.js      every fixed number: the ship, weapons, abilities, upgrades, buffs, stations, asteroids, credits
+    world3d.js    the world: hexagon, ships (stats from upgrades, buffs, abilities), weapons (bullets, beam, railgun,
+                  missiles, drones), abilities, asteroids, stations and the match, capture points, death and respawn,
+                  mutual visibility, Build pieces (shapes, nebulae, capture points), credits / levels / loadout saved
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
-  build3d.js      the Build menu ([B]: Shape and Nebula; blueprints, selecting, the attributes panel, nebula outlines),
-                  nebula rendering (puffs, edge puffs), the outline helpers
-  shipeditor.js   the Ship Editor (S; head admin, developers): every team ship number, a description on each
+  build3d.js      the Build menu ([B]: Shape, Nebula, Capture Point; blueprints, selecting, the attributes panel, nebula
+                  outlines), nebula rendering (puffs, edge puffs), the outline helpers
+  hangar.js       the Hangar (H): weapons, ability, upgrades
   numdrag.js      every number field drags sideways to change it
   winpos.js       editor windows remember where each account put them (world3d_ui, the "ui" message)
   game3d.js       Three.js client: grid plane, hexagon band, stars, ships painted by team, orbit camera, ship-relative
-                  controls predicted with the team's numbers, aiming, bullets and beams, shields, health bars, sparks,
-                  visibility and nebulae, minimap, chat, team buttons, countdown and reconnect handling
+                  controls predicted with my ship's numbers, aiming, the weapons and abilities, shields, health bars,
+                  sparks and explosions, stations, asteroids, missiles / drones, capture overlays, the weapon / ability
+                  bars, visibility and nebulae, minimap, chat, team buttons, countdown and reconnect handling
   vendor/         three.module.js + three.core.js (vendored; CSP allows only our own scripts)
   index/login/signup/recover/eula/play.html (+ their .js), api.js, style.css, front-updates.js
                   the website, as before; play.html goes straight to Enter System (no pilots)

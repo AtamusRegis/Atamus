@@ -1,11 +1,14 @@
-// Atamus 3D (owner, 2026-10-12; rebuilt 2026-10-15). One shared world inside a flat-top hexagon: a ship per account on two
-// teams, Blue and Yellow, each team's ship with its own numbers (the server's Ship Editor). W / S thrust along the nose,
-// A / D turn it, Q / E strafe; right-click aims (the camera reaches toward the reticle); left click fires (held). The
-// middle mouse (touch: a one-finger drag) turns the camera around the ship. The server decides everything; this page
-// predicts my own ship with the same numbers and draws the rest.
+// Atamus 3D (owner, 2026-10-12; rebuilt 2026-10-15; "rebuild a bit" 2026-10-15). One shared world inside a flat-top
+// hexagon: a ship per account on two teams, Blue and Yellow, every ship the same. W / S thrust along the nose, A / D turn
+// it, Q / E strafe; right-click aims (the camera reaches toward the reticle); left click fires the primary weapon, F the
+// secondary (both held), Shift uses the ability, R reloads, H opens the Hangar (weapons, ability, upgrades). The middle
+// mouse (touch: a one-finger drag) turns the camera around the ship. Each team has a station; asteroids pay credits;
+// capture points buff the team holding them. The server decides everything; this page predicts my own ship with the
+// numbers it's sent and draws the rest.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, toWorldPts, polyRad, satPush, nudge, segPoly } from "./build3d.js?v=1792200005";
+import { initBuild, builds, toWorldPts, polyRad, satPush, nudge, segPoly } from "./build3d.js?v=1792200006";
+import { initHangar } from "./hangar.js?v=1792200006";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -16,10 +19,12 @@ const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).co
 
 // ---- world constants (the server's hello sends them) ----
 let HEX_FLAT = 2_500, SPHERE_R = 50, SHIP_R = 45, TURN_ACCEL = 0.3, VEL_TURN = 0.875, FWD_ARC = Math.PI / 4, LOAD_R = 1300;
-// (owner, 2026-10-15) each team's ship numbers (ships.js on the server; the Ship Editor changes them live)
-let SHIPS = { blue: {}, red: {} }, FIELDS = [];
-const statsOf = (side) => SHIPS[side] || SHIPS.blue || {};
-const myStats = () => statsOf(mySide);
+// (owner, 2026-10-15) the game's fixed numbers (ships.js on the server, sent in the hello) and my ship's numbers now (its
+// upgrades, its team's buffs and its ability in: {t:"stats"})
+let DEF = { weapons: {}, abilities: {}, wk: [], ak: [], upgrades: [], buffs: [], costs: [], lvMax: 10, aimRot: 540 }, ST = { hp: 150, speed: 55, accel: 60, brake: 100, turn: 32, turnAccel: 155, strafe: 60, reverse: 60, cap: 100, capRegen: 8, range: 1 };
+const myStats = () => ST;
+const WD = (k) => DEF.weapons[k] || {};
+let gear = { w: ["bullets", "missiles"], a: "shield", lv: {} };   // my weapons (primary, secondary), ability and upgrade levels
 const TEAM_COLOR = { blue: "#4f8fe8", red: "#e8c14f" }, TEAM_HUE = { blue: 0.6, red: 0.13 };
 const wrapA = (a) => { a %= Math.PI * 2; return a > Math.PI ? a - Math.PI * 2 : a < -Math.PI ? a + Math.PI * 2 : a; };
 // movement, exactly as the server integrates it (world3d.js)
@@ -43,7 +48,8 @@ function steer(vx, vy, tx, ty, a, brake, dt) {
   const el = Math.hypot(ex, ey), s = a * dt; if (el > s) { ex *= s / el; ey *= s / el; } return [vx + ex, vy + ey];
 }
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
-let cap = 100, capOut = false, ammo = 0, reloadLeft = 0, deadLeft = 0, credits = 0;   // mine, from the server ({t:"me"}, 5 a second)
+let cap = 100, deadLeft = 0, credits = 0, abCharge = 0, abLeft = 0;   // mine, from the server ({t:"me"}, 5 a second)
+const slots = [{ ammo: 0, rl: 0 }, { ammo: 0, rl: 0 }];   // my two weapons: ammo, reload ms left (counted down here between updates)
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 // Game plane: x east, y north. Three: x = x, z = -y, y (three) = up.
@@ -146,7 +152,6 @@ function drawCap() {
   if (!capFill) return; const v = Math.round(cap);
   if (v === capShown) return; capShown = v;
   capFill.style.width = (cap / (myStats().cap || 100)) * 100 + "%"; capNum.textContent = v;
-  capFill.classList.toggle("out", capOut);
 }
 aimLine.visible = false; scene.add(aimLine);
 // (owner, 2026-10-14) the aim cone: from my ship toward the reticle, as wide as the spread now (a line when it's 0)
@@ -209,7 +214,7 @@ function makeVisual(remote, own = false, side = null) {     // own: my ship (its
   const v = shipTemplate ? shipTemplate.clone(true) : (() => { const m = new THREE.Mesh(sphereGeo, fallbackMat); m.position.y = SPHERE_R; return m; })();
   if (remote || own) {                          // (owner, 2026-10-14) each other ship has its own material copies: its opacity is its visibility
     const va = { value: remote ? 0 : 1 }, mats = [], mine = new Map(), sp = { p: { value: new THREE.Vector4() }, k: { value: 1 }, s: { value: 1 }, f: { value: 0 } };
-    v.userData.va = remote ? va : null; v.userData.sp = sp; v.userData.mats = mats; if (remote) v.visible = false;   // (fades in once its visibility is known)
+    v.userData.va = remote ? va : null; v.userData.vaOwn = remote ? null : va; v.userData.sp = sp; v.userData.mats = mats; if (remote) v.visible = false;   // (fades in once its visibility is known)
     const one = (m) => { if (!mine.has(m)) { const c = paintSide(losMat(m, va, sp), side); mine.set(m, c); mats.push(c); } return mine.get(m); };
     v.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(one) : one(o.material); });
   }
@@ -508,7 +513,7 @@ function updateSpawns(now) {
     if (sp.s.value < 1 || sp.k.value < 1) {
       const h = p.heading || 0; sp.p.value.set(p.holder.position.x, p.holder.position.z, Math.sin(h), Math.cos(h));   // the nose, in the scene (game (sin h, -cos h))
     }
-    if (!v.userData.va) for (const m of v.userData.mats) m.transparent = sp.s.value < 1;   // (my ship: see-through only while materializing)
+    if (!v.userData.va) for (const m of v.userData.mats) m.transparent = sp.s.value < 1 || (!!v.userData.vaOwn && v.userData.vaOwn.value < 1);   // (my ship: see-through only while materializing or invisible)
   }
 }
 function updateShipVis(dt, now) {
@@ -530,7 +535,7 @@ function updateShipVis(dt, now) {
   for (const [v, t] of visTargets) {
     // (owner, 2026-10-14) opacity rises smoothly from 0 at 25% visible to solid at 75% (no steps); it fades in fast
     // (about 0.15 s) and out slowly (about 0.6 s), so ships show promptly but don't flicker at corners
-    const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
+    const cp = t.pid && players.get(t.pid), x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1) * (cp && cp.ab === cloakCode() ? 0.35 : 1);   // (and the nebula clouds; a teammate gone invisible shows faintly)
     const k = t.pid && spawnEnd.has(t.pid) ? 1 : Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));   // (owner, 2026-10-15) materializing: its visibility at once, no fade (the hologram was seen in nebulae)
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; const sp = v.userData.sp; for (const m of v.userData.mats) m.transparent = t.a < 0.999 || (sp && sp.s.value < 1); }
@@ -611,7 +616,7 @@ const HP_DROP_MS = 750, HP_GHOST_LAG = 400, HP_SHOVE = 9, HP_SHOVE_MS = 180;
 const hpAnim = new Map();                      // player id -> { hp, mF, mT, gF, gT, t0, flash, hitT }
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
 const tween = (from, to, t) => from + (to - from) * easeOut(Math.max(0, Math.min(1, t / HP_DROP_MS)));
-const hpMaxOf = (p) => statsOf(sideOf(p)).hp || 100;   // (owner, 2026-10-15) its team's
+const hpMaxOf = (p) => p.hpMax || 150;   // (each ship's own, from the snapshots)
 function hpState(p, now) {
   const f = Math.max(0, Math.min(1, p.hp / hpMaxOf(p)));
   let s = hpAnim.get(p.id);
@@ -718,7 +723,7 @@ function updateShields(now) {
     const ex = px + o.cx * c - o.cy * sn, ey = py + o.cx * sn + o.cy * c, az = shipMid * 1.5 + 6;
     s.mesh.matrix.set(c * o.ax, 0, sn * o.ay, ex, 0, az, 0, shipMid, -sn * o.ax, 0, c * o.ay, -ey, 0, 0, 0, 1);
     s.mesh.matrixWorldNeedsUpdate = true; s.mesh.visible = true;
-    const u = s.mesh.material.uniforms, f = sh / (statsOf(sideOf(p)).shield || 1);
+    const u = s.mesh.material.uniforms, f = sh / ((DEF.abilities.shield || {}).hp || 120);
     // the hit, moved out onto the oval (straight out from its middle)
     const dx = s.gx - ex, dy = s.gy - ey, lx = (dx * c + dy * sn) / o.ax, ly = (-dx * sn + dy * c) / o.ay, L = Math.hypot(lx, ly) || 1, ux = lx / L * o.ax, uy = ly / L * o.ay;
     u.uHit.value.set(ex + ux * c - uy * sn, shipMid, -(ey + ux * sn + uy * c));
@@ -727,28 +732,50 @@ function updateShields(now) {
     u.uCol.value.copy(f >= 0.5 ? SH_BLUE : f >= 0.25 ? SH_YEL : SH_RED);
   }
 }
-// ---- (owner, 2026-10-15) weapons: each team's from its ship numbers. Left click held: bullets fire at the weapon's rate
-// (the server checks the rate, ammo, capacitor and spread and flies them), or the beam stays on (its direction sent ~10
-// times a second; the server turns it at the weapon's rotation speed). R reloads; an empty magazine reloads by itself. ----
-const maxRange = (S) => (S.optimal || 0) + (S.falloff || 0);
-function curveAt(s, opt, fall, end, shape) { if (s <= opt) return 1; const u = fall > 0 ? Math.min(1, (s - opt) / fall) : 1; return 1 - (1 - end / 100) * Math.pow(u, shape); }
-let fireHeld = false, beamSent = 0, beamWas = false, railAt = 0, spreadDeg = 0, spreadT = 0;
-let aimAng = null, aimOx = 0, aimOy = 0;       // aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
-const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
-const spreadNow = (now = performance.now()) => { const S = myStats(); return Math.min(S.spreadMax || 0, (S.spread0 || 0) + Math.max(0, spreadDeg - (S.spreadBack || 0) * (now - spreadT) / 1000)); };
-const canShoot = () => haveMe && !deadLeft && ws && ws.readyState === 1 && !build.open && !typing() && !amSpawning() && ammo > 0 && !reloadLeft;
-function weaponFrame(now) {
-  const S = myStats(), on = fireHeld && S.wtype === 1 && canShoot() && aimAng !== null && cap >= (S.capUse || 0) * 0.05;
-  if (on && now - beamSent > 100) { const d = aimDir(); beamSent = now; send({ t: "beam", on: 1, x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }); }
-  else if (!on && beamWas) send({ t: "beam", on: 0 });
-  beamWas = on;
-  if (fireHeld && S.wtype === 0 && canShoot() && aimAng !== null && now - railAt >= 1000 / Math.max(0.1, S.rate) && cap >= (S.capUse || 0)) {
-    const d = aimDir(); railAt = now;
-    spreadDeg = Math.min(Math.max(0, S.spreadMax - S.spread0), Math.max(0, spreadDeg - S.spreadBack * (now - spreadT) / 1000) + S.spreadAdd); spreadT = now;
-    ammo--; send({ t: "fire", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 });
-  }
+// ---- (owner, 2026-10-15) weapons: two per player (primary: left click, secondary: F; both held), each with its own
+// magazine and reload. Bullets fire at the weapon's rate (the server checks the rate, ammo, capacitor and spread and flies
+// them); the beam stays on (its direction sent ~10 times a second; the server turns it at the beam's rotation speed); the
+// railgun hits at once; missiles and drones fly on the server. R reloads; an empty magazine reloads by itself. ----
+const maxRange = (S) => ((S.optimal || 0) + (S.falloff || 0)) * (ST.range || 1);
+const reachOf = (k) => { const W = WD(k); return W.optimal !== undefined ? maxRange(W) : W.speed && W.life ? W.speed * W.life * (ST.range || 1) : (W.seek || 500) * (ST.range || 1); };
+const cloakCode = () => DEF.ak.indexOf("cloak") + 1;
+function cloakLook() {                         // (owner, 2026-10-15) invisible: my ship shows see-through to me
+  const mp = players.get(myId), v = mp && mp.holder.children[0], va = v && v.userData.vaOwn; if (!va) return;
+  const want = mp.ab === cloakCode() ? 0.35 : 1; if (va.value === want) return; va.value = want;
+  const sp = v.userData.sp; for (const m of v.userData.mats) m.transparent = want < 1 || (sp && sp.s.value < 1);
 }
-addEventListener("keydown", (e) => { if (e.code === "KeyR" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !typing() && !build.open && haveMe) send({ t: "reload" }); });
+function curveAt(s, opt, fall, end, shape) { if (s <= opt) return 1; const u = fall > 0 ? Math.min(1, (s - opt) / fall) : 1; return 1 - (1 - end / 100) * Math.pow(u, shape); }
+const held = [false, false];                   // left click, F
+let beamSent = 0, beamWas = false, beamLocal = null, spreadDeg = 0, spreadT = 0;
+const shotAt = [0, 0];
+let aimAng = null, aimOx = 0, aimOy = 0;       // aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer
+const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
+const spreadNow = (now = performance.now()) => { const S = WD("bullets"); return Math.min(S.spreadMax || 0, (S.spread0 || 0) + Math.max(0, spreadDeg - (S.spreadBack || 0) * (now - spreadT) / 1000)); };
+const canAct = () => haveMe && !deadLeft && ws && ws.readyState === 1 && !build.open && !typing() && !amSpawning() && !hangar.open;
+function weaponFrame(now) {
+  let beamOn = false;
+  for (let s = 0; s < 2; s++) {
+    const kind = gear.w[s], S = WD(kind), sl = slots[s], ok = held[s] && canAct() && aimAng !== null && sl.ammo > 0 && !sl.rl;
+    if (kind === "beam") { if (ok && cap >= (S.capUse || 0) * 0.05) { beamOn = true; if (now - beamSent > 100) { const d = aimDir(); beamSent = now; send({ t: "beam", s, on: 1, x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }); } } continue; }
+    if (!ok || now - shotAt[s] < 1000 / Math.max(0.1, S.rate || 1) || cap < (S.capUse || 0)) continue;
+    const d = aimDir(); shotAt[s] = now;
+    if (kind === "bullets") { spreadDeg = Math.min(Math.max(0, S.spreadMax - S.spread0), Math.max(0, spreadDeg - S.spreadBack * (now - spreadT) / 1000) + S.spreadAdd); spreadT = now; }
+    sl.ammo--; cap -= S.capUse || 0; if (sl.ammo <= 0) { sl.ammo = 0; sl.rl = (S.reload || 1) * 1000; }
+    send({ t: "fire", s, x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 });
+  }
+  if (!beamOn && beamWas) send({ t: "beam", s: gear.w[1] === "beam" ? 1 : 0, on: 0 });
+  if (beamOn && !beamWas) beamLocal = aimAng;   // (my beam drawn turning at its own speed toward the aim, as the server turns it)
+  if (beamOn && beamLocal !== null && aimAng !== null) { const st = (WD("beam").rot || 110) * 1.15 * Math.PI / 180 * Math.min(0.1, (now - (weaponFrame.t || now)) / 1000), dd = Math.atan2(Math.sin(aimAng - beamLocal), Math.cos(aimAng - beamLocal)); beamLocal += Math.max(-st, Math.min(st, dd)); }
+  weaponFrame.t = now; beamWas = beamOn;
+}
+addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || typing() || build.open) return;
+  if (e.code === "KeyR" && !e.repeat && haveMe) send({ t: "reload" });
+  if (e.code === "KeyF") { held[1] = true; e.preventDefault(); }
+  if (e.key === "Shift" && !e.repeat && canAct()) { const d = aimDir(); send(d ? { t: "ab", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 } : { t: "ab" }); }   // (owner, 2026-10-15) the ability
+  if (e.code === "KeyH" && !e.repeat && haveMe) { e.preventDefault(); hangar.toggle(); }
+});
+addEventListener("keyup", (e) => { if (e.code === "KeyF") held[1] = false; });
 // bullets: drawn from where they left, slowing down past optimal as the server flies them (s: [speed, optimal, falloff, end %, shape])
 const projs = new Map();                       // id -> { g, x, y, ux, uy, s, went }
 const addMat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -787,10 +814,10 @@ const beams = new Map();                       // player id -> { g, core, glow, 
 function drawBeams(now) {
   const live = new Set();
   for (const p of players.values()) {
-    let a, len, x, y, hit = 0; const S = statsOf(sideOf(p));
+    let a, len, x, y, hit = 0; const S = WD("beam");
     if (p.id === myId) {
-      if (!beamWas || !p.bm) continue;
-      a = -aimAng; len = p.bm[1]; hit = p.bm[2]; x = me.x; y = me.y;
+      if (!beamWas || !p.bm || beamLocal === null) continue;
+      a = -beamLocal; len = p.bm[1]; hit = p.bm[2]; x = me.x; y = me.y;
     } else {
       if (!p.bm || !p.near || !p.holder.visible) continue;
       a = p.bm[0] / 1000; len = p.bm[1]; hit = p.bm[2]; x = p.holder.position.x; y = -p.holder.position.z;
@@ -880,6 +907,7 @@ function collideMe() {
   const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y }, mine = players.get(myId), h = mine ? mine.heading : 0;
   let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
   for (const b of builds.values()) { if (b.k === "cloud" || !b.polys) continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy > RR * RR) continue; for (const v of b.polys) { const n = satPush(P, v); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } } }
+  for (const b of arenaSolids()) { const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy > RR * RR) continue; for (const v of b.polys) { const n = satPush(P, v); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } } }   // (asteroids, stations)
   for (const p of players.values()) {          // other ships: pushed apart, trading momentum like the server does
     if (p.id === myId || !p.near || p.dead) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
     const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
@@ -894,26 +922,273 @@ function collideMe() {
 function aimBlocked(x0, y0, x1, y1) {
   let best = null; const hit = (t) => { if (t > 1e-4 && t < 1 && (best === null || t < best)) best = t; };
   for (const b of builds.values()) { if (b.k === "cloud" || !b.polys) continue; for (const v of b.polys) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); } }
+  for (const k of rocks.values()) { const t = segPoly(x0, y0, x1, y1, k.poly); if (t !== null) hit(t); }
+  for (const st of Object.values(stationsC)) if (st.s !== mySide && st.hp > 0 && st.poly) { const t = segPoly(x0, y0, x1, y1, st.poly); if (t !== null) hit(t); }
   for (const p of players.values()) {
-    if (p.id === myId || !p.near || p.dead) continue;
+    if (p.id === myId || !p.near || p.dead || sideOf(p) === mySide) continue;   // (shots pass through teammates)
     const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
     for (const v of shipSight(p)) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); }
   }
   return best;
 }
 
+// ---- (owner, 2026-10-15) the arena: each team's station (near it repairs; destroying the enemy's wins the match),
+// asteroids (destroying one pays credits), missiles and drones, capture points held (a buff for the holding team), and
+// the effects: explosions (a ship dying, a missile bursting, an asteroid breaking), railgun shots, teleports, chains ----
+const stationsC = {};                          // team -> { s, x, y, r, reach, hp, max, g }
+const rocks = new Map();                       // id -> { id, x, y, r, hp, max, mesh, poly }
+const mobs = new Map();                        // id -> { id, k, team, x, y, h, tx, ty, vx, vy, at, mesh, zap }
+const capsC = new Map();                       // capture point id -> { own, prog }
+let matchWin = null, matchAt = 0;
+const circlePts = (x, y, r, n) => { const out = []; for (let i = 0; i < n; i++) { const a = i * Math.PI * 2 / n; out.push(x + Math.cos(a) * r, y + Math.sin(a) * r); } return out; };
+// the station: a six-sided hub with a spire, and a turning ring of lights in its team's color; its repair circle on the ground
+const stationMat = new THREE.MeshStandardMaterial({ color: 0x8e98ac, roughness: 0.55, metalness: 0.35 });
+function stationMesh(team, reach) {
+  const g = new THREE.Group(), col = new THREE.Color(TEAM_COLOR[team] || "#888"), lit = farMat(new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 1.1, roughness: 0.4 })), fm = farMat(stationMat);
+  const add = (geo, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.y = ry; return o; };
+  g.add(add(new THREE.CylinderGeometry(36, 48, 64, 6), fm, 0, 32, 0), add(new THREE.CylinderGeometry(12, 30, 34, 6), fm, 0, 81, 0), add(new THREE.CylinderGeometry(2, 4, 56, 6), lit, 0, 126, 0));
+  const spin = new THREE.Group(); spin.position.y = 40;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(82, 7, 8, 48), fm); ring.rotation.x = Math.PI / 2; spin.add(ring);
+  const band = new THREE.Mesh(new THREE.TorusGeometry(82, 2.4, 6, 48), lit); band.rotation.x = Math.PI / 2; band.position.y = 7; spin.add(band);
+  for (let i = 0; i < 3; i++) spin.add(add(new THREE.BoxGeometry(164, 5, 9), fm, 0, 0, 0, i * Math.PI / 3));
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; spin.add(add(new THREE.BoxGeometry(10, 10, 10), lit, Math.cos(a) * 82, 0, Math.sin(a) * 82)); }
+  g.add(spin); g.userData.spin = spin;
+  const zone = new THREE.Mesh(new THREE.RingGeometry(reach - 4, reach, 128).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.3, depthWrite: false }));
+  const fill = new THREE.Mesh(new THREE.CircleGeometry(reach, 96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.035, depthWrite: false }));
+  zone.position.y = fill.position.y = 0.7; zone.renderOrder = fill.renderOrder = -1; g.add(zone, fill);
+  return g;
+}
+// an asteroid: a lumpy rock (its shape from its id, the same for everyone), turning slowly
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x77706a, roughness: 0.95, metalness: 0.05, flatShading: true });
+function rockMesh(id, r) {
+  let seed = 0; for (const c of String(id)) seed = (seed * 31 + c.charCodeAt(0)) >>> 0; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const geo = new THREE.IcosahedronGeometry(1, 1), pos = geo.attributes.position, bumps = Array.from({ length: 5 }, () => [rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1, 0.15 + rnd() * 0.25]);
+  const v = new THREE.Vector3(), seen = new Map();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i); const key = v.toArray().map((q) => q.toFixed(3)).join(",");
+    let k = seen.get(key); if (k === undefined) { k = 0.82 + rnd() * 0.3; for (const [bx, by, bz, s] of bumps) k -= s * Math.max(0, v.dot(new THREE.Vector3(bx, by, bz).normalize()) - 0.6); seen.set(key, k); }
+    pos.setXYZ(i, v.x * k, v.y * k * 0.75, v.z * k);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, farMat(rockMat)); m.scale.setScalar(r); m.rotation.set(rnd() * 6, rnd() * 6, rnd() * 6); m.userData.spin = (rnd() - 0.5) * 0.3; return m;
+}
+function setRock(row) {
+  if (!Array.isArray(row) || row.length < 6 || !row.slice(1).every(Number.isFinite)) return;
+  const [id, x, y, r, hp, max] = row; let k = rocks.get(id);
+  if (!k) { k = { id, x, y, r, hp, max, mesh: rockMesh(id, r), poly: circlePts(x, y, r * 0.92, 14) }; k.mesh.position.set(x, r * 0.75, -y); scene.add(k.mesh); rocks.set(id, k); }
+  k.hp = hp; k.max = max;
+}
+function dropRock(id) { const k = rocks.get(id); if (!k) return; scene.remove(k.mesh); k.mesh.geometry.dispose(); rocks.delete(id); }
+// missiles and drones: positions from each snapshot, carried on along their motion in between
+const mobGeo = { missile: new THREE.ConeGeometry(3.2, 15, 6).rotateZ(-Math.PI / 2), drone: new THREE.OctahedronGeometry(7, 0), glow: new THREE.SphereGeometry(1, 10, 8) };
+const MOB_COL = [0x4f8fe8, 0xe8c14f];
+function mobMesh(k, team) {
+  const g = new THREE.Group(), c = MOB_COL[team] || 0xffffff;
+  const body = new THREE.Mesh(k === 0 ? mobGeo.missile : mobGeo.drone, new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.6, roughness: 0.4 }));
+  const glow = new THREE.Mesh(mobGeo.glow, addMat(c, 0.35)); glow.scale.setScalar(k === 0 ? 7 : 12);
+  if (k === 0) { const tail = new THREE.Mesh(projGeo, addMat(0xffa040, 0.5)); tail.scale.set(28, 2, 2); tail.position.x = -7; g.add(tail); glow.position.x = -8; }
+  g.add(body, glow); g.userData.body = body; g.renderOrder = 3; return g;
+}
+const zapMat = new THREE.LineBasicMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
+function setMobs(rows, ts) {
+  const seen = new Set(), now = performance.now();
+  for (const r of rows) {
+    if (!Array.isArray(r) || r.length < 6) continue; const [id, k, cx, cy, ch, tm, zx, zy] = r; if (![cx, cy, ch].every(Number.isFinite)) continue;
+    seen.add(id); const x = cx / 10, y = cy / 10; let m = mobs.get(id);
+    if (!m) { m = { id, k, team: tm, x, y, tx: x, ty: y, vx: 0, vy: 0, at: now, h: ch / 1000, mesh: mobMesh(k, tm) }; scene.add(m.mesh); mobs.set(id, m); }
+    else { const dt2 = Math.max(0.03, (now - m.at) / 1000); m.vx = (x - m.tx) / dt2; m.vy = (y - m.ty) / dt2; m.tx = x; m.ty = y; m.at = now; }
+    m.h = ch / 1000;
+    if (Number.isFinite(zx) && Number.isFinite(zy)) m.zap = { x: zx, y: zy, t: now };
+  }
+  for (const [id, m] of mobs) if (!seen.has(id)) { scene.remove(m.mesh); if (m.zl) scene.remove(m.zl); mobs.delete(id); }
+  void ts;
+}
+function updateMobs(dt, now) {
+  for (const m of mobs.values()) {
+    const lead = Math.min(0.1, (now - m.at) / 1000), gx = m.tx + m.vx * lead, gy = m.ty + m.vy * lead, k = Math.min(1, dt * 18);
+    m.x += (gx - m.x) * k; m.y += (gy - m.y) * k;
+    m.mesh.position.set(m.x, shipMid, -m.y); m.mesh.rotation.y = m.h;
+    if (m.k === 1) { m.mesh.userData.body.rotation.y += dt * 4; m.mesh.userData.body.rotation.x += dt * 2; }
+    const zapOn = m.zap && now - m.zap.t < 140;
+    if (zapOn) {                              // a drone's shot: a flickering line to what it's shooting
+      if (!m.zl) { m.zl = new THREE.Line(new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)), zapMat); m.zl.frustumCulled = false; scene.add(m.zl); }
+      const a = m.zl.geometry.attributes.position; a.setXYZ(0, m.x, shipMid, -m.y); a.setXYZ(1, m.zap.x, shipMid, -m.zap.y); a.needsUpdate = true; m.zl.visible = true;
+    } else if (m.zl) m.zl.visible = false;
+  }
+}
+// capture points: the holding team's color filling the circle, an arc for the capture underway, and its buff's name
+const capOver = new Map();                     // capture point id -> { fill, arc, arcKey, tag }
+function updateCaps() {
+  const r = canvas.getBoundingClientRect(), seen = new Set();
+  for (const b of builds.values()) {
+    if (b.k !== "capture") continue; seen.add(b.id);
+    let o = capOver.get(b.id);
+    if (!o) {
+      const fill = new THREE.Mesh(new THREE.CircleGeometry(0.5, 64).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.16, depthWrite: false }));
+      const arc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+      fill.renderOrder = arc.renderOrder = -1; scene.add(fill, arc);
+      const tag = document.createElement("div"); tag.className = "cap-tag"; document.body.appendChild(tag);
+      o = { fill, arc, arcKey: "", tag }; capOver.set(b.id, o);
+    }
+    const c = capsC.get(b.id) || { own: null, prog: 0 };
+    o.fill.visible = !!c.own; if (c.own) { o.fill.material.color.set(TEAM_COLOR[c.own]); }
+    o.fill.position.set(b.x, 0.8, -b.y); o.fill.scale.set(b.w, 1, b.w);
+    const key = b.w + ":" + Math.round(c.prog * 100);
+    if (key !== o.arcKey) { o.arcKey = key; o.arc.geometry.dispose(); const f = Math.abs(c.prog); o.arc.geometry = f > 0.005 ? new THREE.RingGeometry(b.w / 2 - 9, b.w / 2 - 2, 96, 1, Math.PI / 2, -f * Math.PI * 2 * Math.sign(c.prog || 1)).rotateX(-Math.PI / 2) : new THREE.BufferGeometry(); }
+    o.arc.material.color.set(c.prog >= 0 ? TEAM_COLOR.blue : TEAM_COLOR.red); o.arc.position.set(b.x, 0.9, -b.y); o.arc.visible = Math.abs(c.prog) > 0.005 && Math.abs(c.prog) < 0.999;
+    const name = DEF.buffs[(b.extra && b.extra.b) || 0] || "", s3 = new THREE.Vector3(b.x, 1, -b.y).project(camera), far = !haveMe || Math.hypot(b.x - me.x, b.y - me.y) > FAR_OUT;
+    o.tag.hidden = s3.z > 1 || far; if (!o.tag.hidden) {
+      if (o.tag.textContent !== name) o.tag.textContent = name; const col = c.own ? TEAM_COLOR[c.own] : "#cfd8e6"; if (o.tag.dataset.c !== col) { o.tag.dataset.c = col; o.tag.style.color = col; }
+      o.tag.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)";
+    }
+  }
+  for (const [id, o] of capOver) if (!seen.has(id)) { scene.remove(o.fill, o.arc); o.tag.remove(); capOver.delete(id); }
+}
+// health bars over the stations and damaged asteroids (the same bar as the ships')
+const worldBars = new Map();
+function worldBar(key, x, y, h, f, cls, col) {
+  const s3 = new THREE.Vector3(x, h, -y).project(camera); if (s3.z > 1) return; const r = canvas.getBoundingClientRect();
+  let el = worldBars.get(key); if (!el) { el = document.createElement("div"); el.className = "hp-bar " + cls; el.innerHTML = "<b></b><i></i>"; document.body.appendChild(el); worldBars.set(key, el); }
+  el.style.transform = "translate(" + (r.left + (s3.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s3.y) / 2 * r.height) + "px)";
+  el.lastChild.style.width = el.firstChild.style.width = Math.max(0, Math.min(1, f)) * 100 + "%"; el.lastChild.style.background = col; el.dataset.seen = "1";
+}
+function drawArena(dt) {
+  for (const s of Object.values(stationsC)) {
+    if (s.g) { s.g.userData.spin.rotation.y += dt * 0.15; s.g.visible = s.hp > 0; }
+    if (haveMe && s.hp > 0 && Math.hypot(s.x - me.x, s.y - me.y) < FAR_OUT + 200) worldBar("st" + s.s, s.x, s.y, 175, s.hp / s.max, "st-bar", TEAM_COLOR[s.s]);
+  }
+  for (const k of rocks.values()) {
+    k.mesh.rotation.y += k.mesh.userData.spin * dt;
+    if (haveMe && k.hp < k.max && Math.hypot(k.x - me.x, k.y - me.y) < FAR_OUT) { const f = k.hp / k.max; worldBar("r" + k.id, k.x, k.y, k.r * 1.6 + 10, f, "rock-bar", f > 0.5 ? "#5fd16b" : f > 0.25 ? "#e3b341" : "#e5534b"); }
+  }
+  for (const [key, el] of worldBars) { if (el.dataset.seen) el.dataset.seen = ""; else { el.remove(); worldBars.delete(key); } }
+}
+// ---- effects ----
+const booms = [];                              // { parts, x, y, r, t0, dur }
+const fireGeo = new THREE.SphereGeometry(1, 20, 14), waveGeo = new THREE.RingGeometry(0.86, 1, 72).rotateX(-Math.PI / 2);
+const PAL = { fire: [0xfff1c0, 0xff7a1a, 0xffb060], rock: [0xe8e0d0, 0x8a7d6c, 0xb8ab98], cyan: [0xeaffff, 0x3fd8ff, 0x9fe8ff] };
+function boom(x, y, r, dur = 900, pal = PAL.fire, h = shipMid) {
+  const core = new THREE.Mesh(fireGeo, addMat(pal[0], 1)), fire = new THREE.Mesh(fireGeo, addMat(pal[1], 0.85)), wave = new THREE.Mesh(waveGeo, addMat(pal[2], 0.7));
+  core.position.set(x, h, -y); fire.position.set(x, h, -y); wave.position.set(x, 1.2, -y); core.renderOrder = fire.renderOrder = wave.renderOrder = 7;
+  scene.add(core, fire, wave); booms.push({ core, fire, wave, r, t0: performance.now(), dur });
+}
+function updateBooms(now) {
+  for (let i = booms.length - 1; i >= 0; i--) {
+    const b = booms[i], t = (now - b.t0) / b.dur;
+    if (t >= 1) { for (const o of [b.core, b.fire, b.wave]) { scene.remove(o); o.material.dispose(); } booms.splice(i, 1); continue; }
+    const e = easeOut(t);
+    b.fire.scale.setScalar(b.r * (0.25 + 0.75 * e)); b.fire.material.opacity = 0.85 * Math.pow(1 - t, 1.6);
+    b.core.scale.setScalar(b.r * 0.6 * Math.max(0, 1 - t * 1.8) + 0.01); b.core.material.opacity = Math.max(0, 1 - t * 1.8);
+    b.wave.scale.setScalar(b.r * (0.3 + 2.1 * e)); b.wave.material.opacity = 0.7 * (1 - t);
+  }
+}
+const rails = [];                              // a railgun shot: a bright line that fades
+function rail(x0, y0, x1, y1, team) {
+  const L = Math.hypot(x1 - x0, y1 - y0); if (L < 1) return;
+  const g = new THREE.Group(), core = new THREE.Mesh(beamGeo, addMat(0xffffff, 1)), glow = new THREE.Mesh(beamGeo, addMat(team === "red" ? 0xffb830 : 0x3f8fff, 0.6));
+  core.scale.set(L, 1.2, 1.2); glow.scale.set(L, 4.5, 4.5); g.add(glow, core); g.position.set(x0, shipMid, -y0); g.rotation.y = -Math.atan2(y1 - y0, x1 - x0); g.renderOrder = 4; scene.add(g);
+  rails.push({ g, core, glow, t0: performance.now() });
+}
+function updateRails(now) {
+  for (let i = rails.length - 1; i >= 0; i--) {
+    const q = rails[i], t = (now - q.t0) / 380;
+    if (t >= 1) { scene.remove(q.g); q.core.material.dispose(); q.glow.material.dispose(); rails.splice(i, 1); continue; }
+    q.core.material.opacity = 1 - t; q.glow.material.opacity = 0.6 * (1 - t); const w = 1 - 0.6 * t; q.core.scale.y = q.core.scale.z = 1.2 * w; q.glow.scale.y = q.glow.scale.z = 4.5 * w;
+  }
+}
+function onFx(m) {
+  if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
+  if (haveMe && Math.hypot(m.x - me.x, m.y - me.y) > FAR_OUT + 300) return;
+  if (m.k === "die") {                        // a ship (or a station) blown up
+    const big = !!m.big, r = big ? 230 : 75;
+    boom(m.x, m.y, r, big ? 1600 : 1000); setTimeout(() => boom(m.x + (Math.random() - 0.5) * r * 0.4, m.y + (Math.random() - 0.5) * r * 0.4, r * 0.6, 700), 120);
+    for (let i = 0; i < (big ? 5 : 3); i++) { const a = Math.random() * Math.PI * 2; burst(m.x, m.y, 600, Math.cos(a), Math.sin(a)); }
+    burst(m.x, m.y, 600);
+  }
+  else if (m.k === "boom") { boom(m.x, m.y, (+m.r || 70) * 0.85, 650); burst(m.x, m.y, 300); }
+  else if (m.k === "rock") { boom(m.x, m.y, (+m.r || 30) * 1.6, 800, PAL.rock); burst(m.x, m.y, 220); burst(m.x, m.y, 160); }
+  else if (m.k === "pop") burst(m.x, m.y, 90);
+  else if (m.k === "rail" && Number.isFinite(m.x2) && Number.isFinite(m.y2)) {
+    rail(m.x, m.y, m.x2, m.y2, m.s); const bx = m.x - m.x2, by = m.y - m.y2, L = Math.hypot(bx, by) || 1;
+    if (m.h === 2) { let best = 150, id = null; for (const q of players.values()) { const qx = q.id === myId ? me.x : q.holder.position.x, qy = q.id === myId ? me.y : -q.holder.position.z, d = Math.hypot(qx - m.x2, qy - m.y2); if (d < best) { best = d; id = q.id; } } if (id) shieldHit(id, m.x2, m.y2); }
+    else if (m.h === 1) burst(m.x2, m.y2, 320, bx / L, by / L); else if (m.h === 3) burst(m.x2, m.y2, 90, bx / L, by / L);
+  }
+  else if (m.k === "blink" && Number.isFinite(m.x2)) { boom(m.x, m.y, 45, 500, PAL.cyan); boom(m.x2, m.y2, 55, 600, PAL.cyan); }
+}
+// chains: a glowing line from the ship that threw it to the ship it holds
+const chains = new Map();                      // holder id -> mesh
+const chainGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0);
+const posOf = (id) => { if (id === myId) return haveMe ? { x: me.x, y: me.y } : null; const p = players.get(id); return p && p.near && p.holder.visible ? { x: p.holder.position.x, y: -p.holder.position.z } : null; };
+function drawChains(now) {
+  const live = new Set();
+  for (const p of players.values()) {
+    if (!p.chain || p.dead) continue; const a = posOf(p.id), b = posOf(p.chain); if (!a || !b) continue;
+    live.add(p.id); let m = chains.get(p.id);
+    if (!m) { m = new THREE.Mesh(chainGeo, addMat(sideOf(p) === "red" ? 0xffd060 : 0x7fb8ff, 0.8)); m.renderOrder = 4; scene.add(m); chains.set(p.id, m); }
+    const L = Math.hypot(b.x - a.x, b.y - a.y), w = 1.6 + 0.6 * Math.sin(now * 0.03);
+    m.position.set(a.x, shipMid, -a.y); m.rotation.y = -Math.atan2(b.y - a.y, b.x - a.x); m.scale.set(L, w, w);
+  }
+  for (const [id, m] of chains) if (!live.has(id)) { scene.remove(m); m.material.dispose(); chains.delete(id); }
+}
+// the match won: who won, over everything, until the next match starts
+const winEl = document.getElementById("win");
+function drawWin() {
+  if (!winEl) return; const on = !!matchWin && Date.now() < matchAt + 1500; winEl.hidden = !on;
+  if (on) { const t = (matchWin === "red" ? "Yellow" : "Blue") + " wins"; if (winEl.textContent !== t) { winEl.textContent = t; winEl.style.color = TEAM_COLOR[matchWin]; } }
+}
+// everything the hello brings (and a new match resets)
+function loadArena(m) {
+  for (const s of Object.values(stationsC)) if (s.g) scene.remove(s.g);
+  for (const k of Object.keys(stationsC)) delete stationsC[k];
+  for (const s of Array.isArray(m.stations) ? m.stations : []) { if (!TEAM_COLOR[s.s]) continue; const g = stationMesh(s.s, s.reach); g.position.set(s.x, 0, -s.y); scene.add(g); stationsC[s.s] = { ...s, g, poly: circlePts(s.x, s.y, s.r, 24) }; }
+  for (const id of [...rocks.keys()]) dropRock(id); for (const r of Array.isArray(m.rocks) ? m.rocks : []) setRock(r);
+  capsC.clear(); for (const c of Array.isArray(m.caps) ? m.caps : []) if (Array.isArray(c)) capsC.set(c[0], { own: c[1], prog: +c[2] || 0 });
+  matchWin = m.match && m.match.win ? m.match.win : null; matchAt = matchWin ? Date.now() + (+m.match.in || 0) : 0;
+}
+function arenaMsg(m) {
+  if (m.t === "rocks") { for (const r of Array.isArray(m.a) ? m.a : []) setRock(r); for (const id of Array.isArray(m.x) ? m.x : []) dropRock(id); return true; }
+  if (m.t === "st") { for (const [s, hp] of Array.isArray(m.s) ? m.s : []) if (stationsC[s] && Number.isFinite(hp)) stationsC[s].hp = hp; return true; }
+  if (m.t === "caps") { capsC.clear(); for (const c of Array.isArray(m.c) ? m.c : []) if (Array.isArray(c)) capsC.set(c[0], { own: c[1], prog: +c[2] || 0 }); return true; }
+  if (m.t === "fx") { onFx(m); return true; }
+  if (m.t === "win") { if (TEAM_COLOR[m.s]) { matchWin = m.s; matchAt = Date.now() + (+m.in || 0); } return true; }
+  if (m.t === "match") { matchWin = null; matchAt = 0; for (const [id, mm] of mobs) { scene.remove(mm.mesh); if (mm.zl) scene.remove(mm.zl); mobs.delete(id); } return true; }
+  return false;
+}
+// solid things my ship bumps into besides Build shapes: asteroids and the stations (as the server)
+function* arenaSolids() { for (const k of rocks.values()) yield { x: k.x, y: k.y, rad: k.r, polys: [k.poly] }; for (const s of Object.values(stationsC)) if (s.poly) yield { x: s.x, y: s.y, rad: s.r, polys: [s.poly] }; }
+// ---- the bars under the capacitor: each weapon's magazine (filling back up while it reloads) and the ability's charge ----
+const hudEls = [0, 1, 2].map((i) => document.getElementById("wb" + i)), creditsEl = document.getElementById("credits");
+let hudKey = "";
+function drawHud() {
+  if (!hudEls[0]) return;
+  const parts = [];
+  for (let s = 0; s < 2; s++) {
+    const W = WD(gear.w[s]), sl = slots[s], rl = sl.rl > 0;
+    const f = rl ? 1 - sl.rl / ((W.reload || 1) * 1000) : sl.ammo / (W.mag || 1);
+    parts.push([W.name || "", rl ? "" : String(Math.ceil(gear.w[s] === "beam" ? sl.ammo / (W.mag || 1) * 100 : sl.ammo)) + (gear.w[s] === "beam" ? "%" : ""), f, rl ? "reload" : ""]);
+  }
+  { const A = DEF.abilities[gear.a] || {}, on = abLeft > 0, f = on ? abLeft / ((A.dur || 1) * 1000) : abCharge; parts.push([A.name || "", "", f, on ? "active" : abCharge >= 1 ? "ready" : ""]); }
+  const key = JSON.stringify(parts.map((p) => [p[0], p[1], Math.round(p[2] * 200), p[3]])) + credits; if (key === hudKey) return; hudKey = key;
+  parts.forEach(([name, num, f, cls], i) => {
+    const el = hudEls[i]; el.className = "wb" + (cls ? " " + cls : "");
+    el.children[0].style.width = Math.max(0, Math.min(1, f)) * 100 + "%"; el.children[1].textContent = name; el.children[2].textContent = num;
+  });
+  if (creditsEl) creditsEl.textContent = credits.toLocaleString("en-US");
+}
+// the Hangar (H): weapons, ability, upgrades
+const hangar = initHangar({ send, def: () => DEF, gear: () => gear, credits: () => credits });
+
 // ---- input ----
 const keys = new Set();
-let sprint = false;                            // Shift: boost
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
   if (e.code === "Escape") hideMenu();
 });
-addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
-addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
-addEventListener("blur", () => { keys.clear(); sprint = false; fireHeld = false; });
+addEventListener("keydown", (e) => { if (typing()) return; if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
+addEventListener("keyup", (e) => { keys.delete(e.code); });
+addEventListener("blur", () => { keys.clear(); held[0] = held[1] = false; });
 // (owner, 2026-10-13) the Build menu (build3d.js): [B] / B for staff
 const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, inside: (x, y) => inside(x, y, 0) });
 
@@ -923,9 +1198,9 @@ const mouse = { x: 0, y: 0 };
 let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
-  if (e.button === 0) fireHeld = true;
+  if (e.button === 0) held[0] = true;
   if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });   // (owner, 2026-10-14) aiming keeps the wheel zoom until the aim point leaves the 300 m dead zone
-addEventListener("mouseup", (e) => { if (e.button === 0) fireHeld = false; if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false;
+addEventListener("mouseup", (e) => { if (e.button === 0) held[0] = false; if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false;
   } });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
@@ -984,7 +1259,7 @@ function inputDir() {
   if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1;
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
   if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: up / down thrust, left / right turn
-  const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
+  const b = 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
   if (amSpawning() || deadLeft || (players.get(myId) || {}).dead) return { x: 0, y: 0, b: 0, turn: 0 };   // (owner) materializing or dead: no moving or turning
   if (!f && !st) return { x: 0, y: 0, b, turn };
   f = Math.max(-1, Math.min(1, f));
@@ -999,11 +1274,10 @@ function inputDir() {
 
 // ---- socket ----
 let snapRows = new Map();                      // the last full snapshot, id -> row (snapshots come as changes)
-let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false, amEditor = false;
+let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
 let rtt = 80, pingTimer = 0, srvOff = null;    // srvOff: local clock minus the server's, from snapshots
 const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);   // ?as: the PTR's second-account test hook (ignored live)
   return (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws?" + q.toString(); };
-function setShips(s) { if (!s || typeof s !== "object") return; SHIPS = s; if (window.ShipEditor) window.ShipEditor.set(SHIPS, mySide); }
 function connect() {
   statusEl.hidden = false; statusEl.textContent = "Connecting…";
   ws = new WebSocket(wsUrl());
@@ -1017,13 +1291,12 @@ function connect() {
       const c = m.cfg || {};
       if (c.shipR) SHIP_R = c.shipR; if (c.sphereR) SPHERE_R = c.sphereR; if (c.loadR) LOAD_R = c.loadR; if (c.turnAccel) TURN_ACCEL = c.turnAccel; if (c.velTurn) VEL_TURN = c.velTurn; if (c.fwdArc) FWD_ARC = c.fwdArc;
       if (c.hexFlat && c.hexFlat !== HEX_FLAT) { HEX_FLAT = c.hexFlat; rebuildBorder(); }
-      if (Array.isArray(m.fields)) FIELDS = m.fields;
+      if (m.game && typeof m.game === "object") DEF = m.game;
+      loadArena(m);
       if (m.coll && Array.isArray(m.coll.ship)) shipParts = m.coll.ship; if (Array.isArray(m.shipVis)) shipVis = m.shipVis; if (Array.isArray(m.shipPivot)) shipPivot = m.shipPivot; if (m.oval) OVAL = m.oval;
-      myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null; amStaff = !!m.you.staff; amEditor = !!m.you.editor;
-      setShips(m.ships);
+      myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null; amStaff = !!m.you.staff;
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
       if (window.WinPos) { window.WinPos.set(m.ui); window.WinPos.setSend(send); }   // where my editor windows were
-      if (amEditor && window.ShipEditor) window.ShipEditor.mount({ send, fields: FIELDS });   // (owner, 2026-10-15) the Ship Editor (head admin, developers)
       build.setStaff(!!m.you.builder); build.load([], c.buildH, m.coll);
       applyShipPivot();
       for (const p of [...players.keys()]) dropPlayer(p);
@@ -1035,21 +1308,25 @@ function connect() {
       if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts, m.countdown.head);
     } else if (m.t === "spawn") {
       me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true; focus.x = me.x; focus.y = me.y;
-      { const mp = addPlayer(myId, myName, me.x, me.y); mp.side = null; setSide(mp, m.s); mp.near = true; mp.holder.visible = true; }
-      teamBox(); setShips(SHIPS); drawPrefix();
+      { const mp = addPlayer(myId, myName, me.x, me.y); mp.side = null; setSide(mp, m.s); mp.near = true; mp.holder.visible = true; if (Number.isFinite(m.h)) { mp.heading = m.h; mp.holder.rotation.y = m.h; mp.omega = 0; } }
+      teamBox(); drawPrefix(); hangar.draw();
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
       { const full = m.same ? [...snapRows.values()] : [...(Array.isArray(m.p) ? m.p : []), ...(Array.isArray(m.u) ? m.u : []).map((id) => snapRows.get(id)).filter(Boolean)];
         snapRows = new Map(full.map((r) => [r[0], r])); m.p = full; }
       const inSnap = new Set();
-      for (const [id, cx, cy, ch, hp, shv, bm, sl, dead] of m.p) {
+      for (const [id, cx, cy, ch, hp, shv, bm, sl, dead, hmax, ab, chain] of m.p) {
         const x = cx / 100, y = cy / 100; inSnap.add(id);
         { const end = Number.isFinite(sl) && sl > 0 ? performance.now() + sl * 10 : 0, was = spawnEnd.get(id) || 0;   // materializing: when it's done
           if (!end) spawnEnd.delete(id); else if (!was || Math.abs(was - end) > 200) spawnEnd.set(id, end); }
         const pp = players.get(id) || (id !== myId ? addPlayer(id, "") : null);
-        if (pp) { if (Number.isFinite(hp)) pp.hp = hp; if (Number.isFinite(shv)) pp.sh = shv; pp.bm = Array.isArray(bm) && bm.every(Number.isFinite) ? bm : null; pp.dead = dead === 1; }
+        if (pp) {
+          if (dead === 1 && !pp.dead && pp.hp !== undefined) pp.boomed = performance.now();   // (the explosion comes as an effect)
+          if (Number.isFinite(hp)) pp.hp = hp; if (Number.isFinite(shv)) pp.sh = shv; pp.bm = Array.isArray(bm) && bm.every(Number.isFinite) ? bm : null; pp.dead = dead === 1;
+          if (Number.isFinite(hmax) && hmax > 0) pp.hpMax = hmax; pp.ab = Number.isInteger(ab) ? ab : 0; pp.chain = typeof chain === "string" ? chain : null;
+        }
         if (id === myId) {                     // soft-correct my prediction toward where the server will be once it has heard my latest input
-          if (dead === 1 || (pp && pp.wasDead)) { me.x = x; me.y = y; vel.x = vel.y = 0; corr.x = corr.y = 0; if (pp) pp.wasDead = dead === 1; continue; }
+          if (dead === 1 || (pp && pp.wasDead)) { me.x = x; me.y = y; vel.x = vel.y = 0; corr.x = corr.y = 0; if (pp) { if (pp.wasDead && dead !== 1) { pp.heading = (ch || 0) / 1000; pp.omega = 0; } pp.wasDead = dead === 1; } continue; }
           const lead = (rtt / 2 + 50) / 1000, lspd = Math.max(myStats().speed || 50, Math.hypot(vel.x, vel.y));
           let tx = x + vel.x * lead, ty = y + vel.y * lead; if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
@@ -1062,15 +1339,22 @@ function connect() {
         if (p.buf.length > 1) { const q = p.buf[p.buf.length - 2], dt2 = Math.max(0.001, (m.ts - q.t) / 1000); p.vx = (x - q.x) / dt2; p.vy = (y - q.y) / dt2; }
         p.to = { x, y };
       }
-      for (const p of players.values()) if (p.id !== myId && p.near && !inSnap.has(p.id)) { p.near = false; p.buf = []; p.holder.visible = false; }   // left the load circle
+      for (const p of players.values()) if (p.id !== myId && p.near && !inSnap.has(p.id)) { p.near = false; p.buf = []; p.holder.visible = false; }   // left the load circle (or went invisible)
+      if (Array.isArray(m.m)) setMobs(m.m, m.ts);
     } else if (m.t === "side") {               // a ship switched team (mine too)
       if (m.s !== "red" && m.s !== "blue") return;
-      if (m.i === myId) { mySide = m.s; const mp = players.get(myId); if (mp) { mp.side = null; setSide(mp, m.s); } teamBox(); setShips(SHIPS); spreadDeg = 0; }
+      if (m.i === myId) { mySide = m.s; const mp = players.get(myId); if (mp) { mp.side = null; setSide(mp, m.s); } teamBox(); spreadDeg = 0; }
       else { const p = players.get(m.i); if (p) setSide(p, m.s); }
     } else if (m.t === "join") { if (m.i !== myId) setSide(addPlayer(m.i, m.n), m.s); }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
-    else if (m.t === "me") { cap = +m.c || 0; capOut = !!m.o; ammo = +m.a || 0; reloadLeft = +m.r || 0; deadLeft = +m.d || 0; credits = +m.k || 0; }
-    else if (m.t === "ships") setShips(m.ships);   // (owner, 2026-10-15) the Ship Editor changed a number
+    else if (m.t === "me") {
+      cap = +m.c || 0; deadLeft = +m.d || 0; abCharge = (+m.g || 0) / 1000; abLeft = +m.ga || 0;
+      if (Array.isArray(m.w)) m.w.forEach((w, i) => { if (slots[i] && Array.isArray(w)) { slots[i].ammo = +w[0] || 0; slots[i].rl = +w[1] || 0; } });
+      if ((+m.k || 0) !== credits) { credits = +m.k || 0; hangar.draw(); }
+    }
+    else if (m.t === "stats") { if (m.s && typeof m.s === "object") ST = { ...ST, ...m.s }; }   // my ship's numbers now
+    else if (m.t === "gear") { if (Array.isArray(m.w)) gear = { w: m.w, a: m.a, lv: m.lv || {} }; hangar.draw(); }
+    else if (arenaMsg(m)) { /* stations, asteroids, capture points, effects, the match */ }
     else if (m.t === "proj") addProj(m);
     else if (m.t === "pend") endProj(m);
     else if (m.t === "hit") {                  // an impact: sparks, if I can see either ship (or it's mine)
@@ -1082,7 +1366,10 @@ function connect() {
     else if (m.t === "staff") location.reload();   // made (or removed as) staff: reload so every menu follows
     else if (m.t === "chat") addChat(m);
     else if (build.onMsg(m)) { /* Build pieces */ }
-    else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; focus.x = me.x; focus.y = me.y; }   // an admin moved this ship
+    else if (m.t === "teleport") {             // an admin moved this ship, a teleport, a new match
+      me.x = m.x; me.y = m.y; corr.x = corr.y = 0; if (!m.keep) { vel.x = vel.y = 0; focus.x = me.x; focus.y = me.y; }
+      const mp = players.get(myId); if (mp && Number.isFinite(m.h)) { mp.heading = m.h; mp.holder.rotation.y = m.h; mp.omega = 0; }
+    }
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts, m.head);
     else if (m.t === "update") {               // the website switched: reload, unless this page already is that version
@@ -1107,7 +1394,7 @@ connect();
 
 let lastH = 0, lastAim = null, trailing = 0;
 // the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
-// (owner, 2026-10-14) "forward" for top speed and sprint is the nose: backing up is at the side / back rate and can't sprint.
+// (owner, 2026-10-14) "forward" for top speed is the nose: backing up is at the side / back rate.
 // (The reticle is independent of the ship.)
 const aimAngle = () => { const mine = players.get(myId); return haveMe && mine ? Math.atan2(Math.sin(mine.heading), -(-Math.cos(mine.heading))) : null; };                   // trailing: settled-state resends still owed after the last change
 function sendDir(d, now) {
@@ -1194,18 +1481,26 @@ renderer.setAnimationLoop(() => {
   const mineP = players.get(myId), S = myStats();
   const wrap = (q) => { q %= Math.PI * 2; return q > Math.PI ? q - Math.PI * 2 : q < -Math.PI ? q + Math.PI * 2 : q; };
   const want = Math.atan2(d.x, -d.y), dh = movingIn ? wrap(want - (mineP ? mineP.heading : 0)) : 0;   // the push off the nose (as the server)
-  if (haveMe) { if (cap <= 0.001) capOut = true; else if (capOut && cap >= (S.boostMin || 0)) capOut = false; }
-  const sprintOn = !!d.b && movingIn && Math.abs(dh) <= FWD_ARC && !capOut && S.boost > 0;   // boost: forward only
-  if (haveMe) cap = Math.min(S.cap || 100, Math.max(0, cap + ((S.capRegen || 0) - (sprintOn ? S.boostCap || 0 : 0)) * dt));
+  if (haveMe) cap = Math.min(S.cap || 100, Math.max(0, cap + (S.capRegen || 0) * dt));
+  for (const sl of slots) if (sl.rl > 0) sl.rl = Math.max(0, sl.rl - dt * 1000);   // (reloads count down here between updates)
+  if (abLeft > 0) abLeft = Math.max(0, abLeft - dt * 1000);
+  else { const A = DEF.abilities[gear.a]; if (A && abCharge < 1) abCharge = Math.min(1, abCharge + dt / A.charge); }
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = S.speed * dirSpeed(dh, S) * (sprintOn ? 1 + S.boost / 100 : 1);   // (owner, 2026-10-15) my team's numbers
+    const spd = S.speed * dirSpeed(dh, S);       // (my ship's numbers now)
     [vel.x, vel.y] = movingIn ? carry(vel.x, vel.y, d.x, d.y, spd * Math.min(1, Math.hypot(d.x, d.y)), S.accel * accelShare(dh), S.brake, dt) : steer(vel.x, vel.y, 0, 0, S.brake, S.brake, dt);   // as on the server
     if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; }
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }
     collideMe();
+  }
+  if (haveMe) {                                // (owner, 2026-10-15) chained: pulled in toward the ship holding me, as the server does it
+    const C = DEF.abilities.chain || {};
+    for (const p of players.values()) if (p.chain === myId && p.id !== myId && p.near && !p.dead) {
+      const ex = p.holder.position.x - me.x, ey = -p.holder.position.z - me.y, dd = Math.hypot(ex, ey);
+      if (dd > (C.slack || 110)) { const mv = Math.min(dd - (C.slack || 110), (C.pull || 90) * dt), nx = me.x + ex / dd * mv, ny = me.y + ey / dd * mv; if (inside(nx, ny)) { me.x = nx; me.y = ny; } }
+    }
   }
   if (haveMe && (corr.x || corr.y)) {           // (owner, 2026-10-14) the server's correction, eased in over about 0.1 s
     const k = 1 - Math.exp(-dt * 10), cx = corr.x * k, cy = corr.y * k;
@@ -1319,10 +1614,10 @@ renderer.setAnimationLoop(() => {
   let aimShown = false; myAim = null;
   if (haveMe) {                                // (owner, 2026-10-14) the aim direction turns toward the pointer at the weapon's rotation speed
     const r0 = aimAt(aimPx().x, aimPx().y); aimOx = me.x; aimOy = me.y;   // the aim line runs from the ship's pivot
-    if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = (S.rot || 360) * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
+    if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = (DEF.aimRot || 540) * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
   }
   if (aiming && haveMe && aimAng !== null) {
-    const L0 = maxRange(S) || 500, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner, 2026-10-15) the line runs the weapon's max range
+    const L0 = reachOf(gear.w[0]) || 500, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner, 2026-10-15) the line runs the weapon's max range
     {
       aimShown = true;
       const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = aimOx, sz = -aimOy;
@@ -1338,7 +1633,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimShown;
-  { const sp = (S.wtype === 0 ? spreadNow() : 0) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line; bullets only)
+  { const sp = (gear.w[0] === "bullets" ? spreadNow() : 0) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line; bullets only)
     cone.visible = coneEdges.visible = !!on;
     if (on) {
       const sx = aimOx, sz = -aimOy, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
@@ -1357,6 +1652,7 @@ renderer.setAnimationLoop(() => {
   updateShipVis(Math.min(0.1, dt || 0.016), performance.now());
   weaponFrame(performance.now()); drawBeams(performance.now());
   drawHpBars(); drawNames(); updateShields(performance.now()); updateSparks(Math.min(0.1, dt || 0.016));
+  { const t = performance.now(), d2 = Math.min(0.1, dt || 0.016); drawArena(d2); updateMobs(d2, t); updateCaps(); updateBooms(t); updateRails(t); drawChains(t); drawWin(); drawHud(); cloakLook(); }
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
   renderSky();
@@ -1423,6 +1719,11 @@ function drawMinimap(now) {
     const [X, Y] = P(me.x, me.y);
     mmx.strokeStyle = "rgba(111,143,184,0.8)"; mmx.lineWidth = 1; mmx.beginPath(); mmx.arc(X, Y, LOAD_R * k, 0, Math.PI * 2); mmx.stroke();
   }
+  // (owner, 2026-10-15) capture points (filled with the holder's color), asteroids, the stations
+  for (const b of builds.values()) { if (b.k !== "capture") continue; const c = capsC.get(b.id), [X, Y] = P(b.x, b.y); mmx.beginPath(); mmx.arc(X, Y, Math.max(2.5, b.w / 2 * k), 0, Math.PI * 2);
+    mmx.fillStyle = c && c.own ? (c.own === "red" ? "rgba(232,193,79,0.45)" : "rgba(79,143,232,0.45)") : "rgba(207,216,230,0.15)"; mmx.fill(); mmx.strokeStyle = c && c.own ? TEAM_COLOR[c.own] : "#9aa6b8"; mmx.lineWidth = 1; mmx.stroke(); }
+  mmx.fillStyle = "#7d766e"; for (const r of rocks.values()) { const [X, Y] = P(r.x, r.y); mmx.beginPath(); mmx.arc(X, Y, Math.max(1.2, r.r * k), 0, Math.PI * 2); mmx.fill(); }
+  for (const st of Object.values(stationsC)) { if (st.hp <= 0) continue; const [X, Y] = P(st.x, st.y), q = Math.max(4, st.r * k); mmx.fillStyle = TEAM_COLOR[st.s]; mmx.fillRect(X - q, Y - q, q * 2, q * 2); mmx.strokeStyle = "#fff"; mmx.lineWidth = 1; mmx.strokeRect(X - q, Y - q, q * 2, q * 2); }
   for (const p of players.values()) {
     if (p.id === myId || !p.side || !p.near) continue;
     const t = visTargets.get(p.holder.children[0]); if (haveMe && (!t || t.a <= 0.01)) continue;   // (owner) as see-through as the ship itself
@@ -1504,7 +1805,7 @@ function cycleChannel() {
   const chans = ["global", "side", ...(lastWhisper ? ["whisper"] : [])];
   chatCh = chans[(chans.indexOf(chatCh) + 1) % chans.length]; drawPrefix();
 }
-function openChat() { if (!chatIn) return; keys.clear(); sprint = false; chatIn.focus(); drawPrefix(); }
+function openChat() { if (!chatIn) return; keys.clear(); held[0] = held[1] = false; chatIn.focus(); drawPrefix(); }
 // sending: the form's submit, so a phone keyboard's Go / Send key works as well as Enter (owner)
 function sendChat() {
   const raw = chatIn.value; chatIn.value = ""; chatIn.blur();
@@ -1569,4 +1870,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { shieldHit: (id, x, y) => shieldHit(id, x, y), screenOf: (id) => { const p = players.get(id); if (!p) return null; const v = p.holder.position.clone(); v.y = shipMid; v.project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, hp: p.hp, dead: !!p.dead, vis: p.holder.visible }; }, get stats() { return { cap, ammo, reloadLeft, deadLeft, credits, side: mySide }; }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { fx: (m) => onFx(m), screenAt: (x, y) => { const v = new THREE.Vector3(x, shipMid, -y).project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight }; }, shieldHit: (id, x, y) => shieldHit(id, x, y), screenOf: (id) => { const p = players.get(id); if (!p) return null; const v = p.holder.position.clone(); v.y = shipMid; v.project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, hp: p.hp, dead: !!p.dead, vis: p.holder.visible }; }, get stats() { return { cap, slots: slots.map((s) => ({ ...s })), deadLeft, credits, abCharge, abLeft, side: mySide, gear, ST }; }, get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, r: r.r, hp: r.hp })); }, get stations() { return Object.values(stationsC).map((s) => ({ s: s.s, hp: s.hp })); }, get mobs() { return [...mobs.values()].map((m) => ({ id: m.id, k: m.k, x: Math.round(m.x), y: Math.round(m.y) })); }, get caps() { return [...capsC.entries()]; }, send: (o) => send(o), burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

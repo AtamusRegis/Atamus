@@ -375,7 +375,7 @@ export function initBuild(ctx) {
   let ghost = null;
   function startPicking(k) {
     if (ghost) { scene.remove(ghost); ghost = null; } if (SHAPES.includes(k)) shapeAt = k; sel = null;
-    picking = k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } } : k === "capture" ? { k, w: 200, d: 200, r: 0 } : { k, w: 60, d: 60, r: 0 }; drawSlots();
+    picking = k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } } : k === "capture" ? { k, w: 200, d: 200, r: 0, extra: { b: 0 } } : { k, w: 60, d: 60, r: 0 }; drawSlots();
   }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlots(); }
   function cycle(dir) { if (!picking || !SHAPES.includes(picking.k)) return; startPicking(SHAPES[(SHAPES.indexOf(picking.k) + dir + SHAPES.length) % SHAPES.length]); }
@@ -395,7 +395,9 @@ export function initBuild(ctx) {
   const num = (min, max) => Object.assign(document.createElement("input"), { type: "number", step: 1, ...(min != null ? { min } : {}), ...(max != null ? { max } : {}) });
   const gRot = gField("Rotation", num()), gW = gField("Width", num(MIN, MAX)), gD = gField("Depth", num(MIN, MAX)), gScale = gField("Scale", num(MIN, MAX)), gSize = gField("Size", num(MIN, MAX));
   const gTheme = gField("Theme", document.createElement("select")); ["Violet", "Teal", "Amber", "Emerald", "Crimson"].forEach((n, i) => gTheme.append(new Option(n, String(i))));
-  for (const el of [gRot, gW, gD, gScale, gSize, gTheme]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
+  // (owner, 2026-10-15) a capture point's buff, for the team holding it
+  const gBuff = gField("Buff", document.createElement("select")); ["Health", "Speed", "Range", "Damage", "Armor", "Regen"].forEach((n, i) => gBuff.append(new Option(n, String(i))));
+  for (const el of [gRot, gW, gD, gScale, gSize, gTheme, gBuff]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
   const selPiece = () => (sel && builds.get(sel)) || null;
   const setNum = (el, f) => { const go = (now) => { const b = selPiece(), v = Number(el.value); if (!b || el.value === "" || !Number.isFinite(v)) return; f(b, v); place(b); push(b, now); }; el.addEventListener("input", () => go(false)); el.addEventListener("change", () => go(true)); };
   setNum(gRot, (b, v) => { const r = -v * Math.PI / 180; b.r = Math.round(Math.atan2(Math.sin(r), Math.cos(r)) * 10000) / 10000; });
@@ -403,6 +405,7 @@ export function initBuild(ctx) {
   setNum(gD, (b, v) => { if (b.k !== "cloud") b.d = Math.max(MIN, Math.min(MAX, v)); });
   setNum(gScale, (b, v) => { if (b.k === "cloud") b.w = b.d = Math.max(MIN, Math.min(MAX, v)); });
   setNum(gSize, (b, v) => { if (b.k === "capture") b.w = b.d = Math.max(MIN, Math.min(MAX, v)); });   // (a capture point: m across)
+  gBuff.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "capture") return; b.extra = { b: +gBuff.value }; place(b); push(b, true); gBuff.blur(); });
   gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawSlots(); place(b); push(b, true); gTheme.blur(); });
   let gShown = "";
   function attrPanel() {
@@ -410,10 +413,10 @@ export function initBuild(ctx) {
     const was = aPanel.hidden; aPanel.hidden = !b; if (!b) { gShown = ""; return; }
     if (was && window.WinPos) window.WinPos.place(aPanel, "attrs");
     aTop.textContent = NAMES[b.k] || "";
-    const cap = b.k === "capture"; gRot.parentNode.hidden = cap; gSize.parentNode.hidden = !cap;
+    const cap = b.k === "capture"; gRot.parentNode.hidden = cap; gSize.parentNode.hidden = gBuff.parentNode.hidden = !cap;
     gW.parentNode.hidden = gD.parentNode.hidden = b.k === "cloud" || cap; gScale.parentNode.hidden = gTheme.parentNode.hidden = b.k !== "cloud";
-    const key = b.id + ":" + b.r + ":" + b.w + ":" + b.d + ":" + (b.extra && b.extra.v);
-    if (key !== gShown && !gBox.contains(document.activeElement)) { gRot.value = String(Math.round(-b.r * 180 / Math.PI * 10) / 10); gW.value = String(Math.round(b.w)); gD.value = String(Math.round(b.d)); gScale.value = String(Math.round(b.w)); gSize.value = String(Math.round(b.w)); if (b.k === "cloud") gTheme.value = String(b.extra.v || 0); gShown = key; }
+    const key = b.id + ":" + b.r + ":" + b.w + ":" + b.d + ":" + (b.extra && b.extra.v) + ":" + (b.extra && b.extra.b);
+    if (key !== gShown && !gBox.contains(document.activeElement)) { gRot.value = String(Math.round(-b.r * 180 / Math.PI * 10) / 10); gW.value = String(Math.round(b.w)); gD.value = String(Math.round(b.d)); gScale.value = String(Math.round(b.w)); gSize.value = String(Math.round(b.w)); if (b.k === "cloud") gTheme.value = String(b.extra.v || 0); if (cap) gBuff.value = String((b.extra && b.extra.b) || 0); gShown = key; }
   }
 
   // ---- sending edits (throttled; the last always goes) ----
