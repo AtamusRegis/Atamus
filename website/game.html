@@ -19,7 +19,7 @@
     #side-pick .box { display: grid; gap: 14px; justify-items: center; padding: 20px 26px; background: rgba(10, 14, 22, .95); border: 1px solid #2a3a52; border-radius: 8px; color: #cfe0f4; font: 16px system-ui, sans-serif; }
     #side-pick .row { display: flex; gap: 12px; }
     #side-pick button { width: 110px; height: 44px; border-radius: 6px; border: 1px solid; font: 600 15px system-ui, sans-serif; cursor: pointer; color: #fff; }
-    #side-pick button[data-side="red"] { background: #7a2020; border-color: #e04848; }
+    #side-pick button[data-side="red"] { background: #7a5c10; border-color: #e8c14f; }   /* (owner, 2026-10-15) "red" is the Yellow faction */
     #side-pick button[data-side="blue"] { background: #1f3f78; border-color: #4f8fe8; }
     #joy { display: none; position: fixed; left: 28px; bottom: 28px; width: 130px; height: 130px; border-radius: 50%; background: rgba(79, 143, 232, .12); border: 1px solid rgba(79, 143, 232, .5); touch-action: none; }
     #joy-knob { position: absolute; left: 40px; top: 40px; width: 50px; height: 50px; border-radius: 50%; background: rgba(79, 143, 232, .55); pointer-events: none; }
@@ -44,7 +44,7 @@
     .ap-scroll { min-height: 0; overflow-y: auto; }   /* fills the rest of the window and scrolls (the tabs and search stay) */
     .ap-table { width: 100%; border-collapse: separate; border-spacing: 0 2px; }
     .ap-table td { padding: 3px 8px; background: #0f1724; white-space: nowrap; height: 22px; } .ap-table td:first-child { border-radius: 4px 0 0 4px; } .ap-table td:last-child { border-radius: 0 4px 4px 0; }
-    .ap-mono { font-family: ui-monospace, Menlo, Consolas, monospace; width: 20ch; min-width: 20ch; font-weight: 600; } .ap-mono.red { color: #ff6a50; } .ap-mono.blue { color: #6fa8ff; }
+    .ap-mono { font-family: ui-monospace, Menlo, Consolas, monospace; width: 20ch; min-width: 20ch; font-weight: 600; } .ap-mono.red { color: #ffd25a; } .ap-mono.blue { color: #6fa8ff; }
     .ap-tag { display: inline-grid; justify-items: center; min-width: 44px; padding: 1px 6px; border: 1px solid #c9a24a; border-radius: 3px; color: #ffd27a; font-size: 11px; line-height: 1.2; font-variant-numeric: tabular-nums; } .ap-tag b { font-weight: 600; } .ap-tag i { font-style: normal; font-size: 10px; opacity: .9; } .ap-tag.ban { border-color: #e04848; color: #ff8a8a; } .ap-tag.off { border-color: #3a4658; color: #66768c; }
     .ap-list { display: grid; gap: 4px; }
     .ap-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 4px; background: #0f1724; }
@@ -83,7 +83,7 @@
     #chat #chat-size { flex: none; width: 24px; margin-left: auto; display: grid; place-items: center; padding: 0 !important; background: none !important; color: #cfd8e6 !important; font: 800 20px/1 var(--font) !important; text-shadow: 0 0 3px #000; }   /* (owner) far right of the tab row: no background, thick, centered */
     #chat #chat-size:hover { color: #fff !important; background: none !important; }
     .chat-line.sys { color: #7f93ad; font-style: italic; }
-    .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ff6a50; } .chat-who[data-id] { cursor: pointer; }
+    .chat-who.blue { color: #6fa8ff; } .chat-who.red { color: #ffd25a; } .chat-who[data-id] { cursor: pointer; }
     /* (owner, 2026-10-14) staff badges: a circle centered on the text's middle, the letter centered in it (a lowercase m
        sits low in its line, so it's lifted to look centered) */
     .chat-badge { display: inline-block; box-sizing: border-box; width: 15px; height: 15px; border-radius: 50%; margin-right: 4px; vertical-align: middle; position: relative; top: -1px;
@@ -103,7 +103,7 @@
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
     #chat-pre { flex: none; white-space: nowrap; font: 12px system-ui, sans-serif; }
-    .chat-ch.world { color: #93a0b4; } .chat-ch.side.red { color: #ff6a50; } .chat-ch.side.blue { color: #6fa8ff; } .chat-ch.whisper { color: #c58cff; }   /* (owner) world gray, faction its color, whisper purple */
+    .chat-ch.world { color: #93a0b4; } .chat-ch.side.red { color: #ffd25a; } .chat-ch.side.blue { color: #6fa8ff; } .chat-ch.whisper { color: #c58cff; }   /* (owner) world gray, faction its color, whisper purple */
     #chat-in { flex: 1; min-width: 0; background: transparent; color: #e8f0fb; border: 0; padding: 2px 0; font: 12px system-ui, sans-serif; outline: none; }   /* (owner) not white: dark, inside the dark bar */
     html.touch #chat { left: 12px; right: auto; top: 140px; bottom: auto; width: 240px; }
     #ctx-menu { position: fixed; z-index: 20; display: grid; min-width: 100px; padding: 3px; background: rgba(10, 14, 22, .97); border: 1px solid #2a3a52; border-radius: 6px; }
@@ -145,7 +145,7 @@
     .ap-lines { background: rgba(0,0,0,0.3) !important; }
     /* the side picker */
     #side-pick button { border: none !important; border-radius: var(--radius) !important; font-family: var(--font); box-shadow: 0 8px 22px rgba(0,0,0,0.4); }
-    #side-pick button[data-side="red"] { background: linear-gradient(135deg, #e0574a 0%, #9b2420 100%) !important; }
+    #side-pick button[data-side="red"] { background: linear-gradient(135deg, #f0c84a 0%, #a8780e 100%) !important; }
     #side-pick button[data-side="blue"] { background: var(--accent-grad) !important; color: #06131f !important; }
     #side-pick button:hover { filter: brightness(1.08); }
     /* the capacitor bar */
@@ -399,7 +399,7 @@
   <div id="ctx-menu" hidden></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-send">Send</button><button id="report-cancel">Cancel</button></div></div></div>
   <div id="joy"><div id="joy-knob"></div></div>
-  <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Red</button><button data-side="blue">Blue</button></div></div></div>
+  <div id="side-pick" hidden><div class="box"><span>Choose a side</span><div class="row"><button data-side="red">Yellow</button><button data-side="blue">Blue</button></div></div></div>
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
@@ -409,6 +409,6 @@
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792105050"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792105054"></script>
+  <script type="module" src="game3d.js?v=1792105055"></script>
 </body>
 </html>

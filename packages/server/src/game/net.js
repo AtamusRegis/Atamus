@@ -6,7 +6,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
-import { World3D, inside, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, SH_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R } from "./world3d.js";
+import { World3D, inside, RAIL_RANGE, HEX_FLAT, SPHERE_R, SPEED, ACCEL, BRAKE, STOP_D, SPRINT, VEL_TURN, SHIP_R, BLOCK_HALF, BUILD_H, HP_MAX, SH_MAX, buildMsg, SIDE_SPEED, FWD_ARC, TURN_ACCEL, CAP_MAX, CAP_DRAIN, CAP_WALK, CAP_IDLE, CAP_RESUME, LOAD_R, FACTIONS, FAC_DEFAULT } from "./world3d.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
@@ -97,7 +97,7 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), ui,
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer, creator, items: staff },   // staff: the Admin button; builder: the Object Placer; creator: the Object Creator; items: the Item Creator
-      cfg: { hpMax: HP_MAX, shMax: SH_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
+      cfg: { factions: FACTIONS, facDefault: FAC_DEFAULT, hpMax: HP_MAX, shMax: SH_MAX, shipR: SHIP_R, blockHalf: BLOCK_HALF, buildH: BUILD_H, loadR: LOAD_R, hexFlat: HEX_FLAT, sphereR: SPHERE_R, speed: SPEED, accel: ACCEL, brake: BRAKE, stopD: STOP_D, sprint: SPRINT, velTurn: VEL_TURN, sideSpeed: SIDE_SPEED, fwdArc: FWD_ARC, turnAccel: TURN_ACCEL, cap: { max: CAP_MAX, drain: CAP_DRAIN, walk: CAP_WALK, idle: CAP_IDLE, resume: CAP_RESUME } },
       // (owner, 2026-10-14) objects come with the load circle (syncObjects), once in the world
       weapons: world.weaponList(), weapon: world.defaultWeapon().id,   // (owner, 2026-10-14) the weapons, and the one this player has
       items: world.itemList(), icons: world.iconList(), types: world.typeList(), sounds: world.soundList(),   // types: (owner, 2026-10-15) the Object Creator's                // (owner, 2026-10-15) the Item Creator's items and icons
@@ -124,6 +124,8 @@ export function attachGameServer(httpServer) {
       }
       else if (m.t === "move") world.setDir(pid, m.x, m.y, m.b, m.h, m.a, m.ta);
       else if (m.t === "fire") world.fire(pid, m.x, m.y);
+      else if (m.t === "beam") world.setBeam(pid, m.on === 1, m.x, m.y);   // (owner, 2026-10-15) Blue's laser, held
+      else if (m.t === "launch") world.launch(pid, m.x, m.y);              // (owner, 2026-10-15) F: missiles / drones
       else if (m.t === "reload") world.reload(pid);   // (owner, 2026-10-14) R   // (owner, 2026-10-14) the railgun; the world checks it and keeps the cooldown
       else if (m.t === "chat") {               // (owner, 2026-10-13) World (everyone), Faction (your side), Whisper (one player)
         const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;   // (owner) a muted player's lines go nowhere
@@ -322,8 +324,21 @@ export function attachGameServer(httpServer) {
   }
   setInterval(syncObjects, 500);
 
+  const hadOrd = new Set();                    // sockets last sent a non-empty ordnance list
   setInterval(() => {                                                           // 20 Hz simulation
     world.step();
+    if (world.ords.length || world.booms.length || hadOrd.size) {   // (owner, 2026-10-15) missiles / drones near each player, and blasts
+      for (const [pid, ws] of socks) {
+        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+        const R = LOAD_R, o = world.ords.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) <= R).map((q) => [q.id, q.k === "drone" ? 1 : 0, Math.round(q.x * 10), Math.round(q.y * 10), Math.round(q.h * 100)]);
+        const b = world.booms.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) <= R).map((q) => [Math.round(q.x), Math.round(q.y), Math.round(q.r), q.k === "drone" ? 1 : 0, q.h ?? null]);
+        if (!o.length && !b.length && !hadOrd.has(pid)) continue;
+        ws.send(JSON.stringify({ t: "ord", o, ...(b.length ? { b } : {}) }));
+        if (o.length) hadOrd.add(pid); else hadOrd.delete(pid);
+      }
+      for (const pid of hadOrd) if (!socks.has(pid)) hadOrd.delete(pid);
+      world.booms.length = 0;
+    }
     if (world.hits.length) {                   // (owner, 2026-10-14) impacts: to the players whose load circle has them
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
