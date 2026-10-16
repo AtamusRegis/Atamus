@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Ship Editor descriptions (owner):** a field's description now shows in a popup beside the window and stays until another field is hovered or the window is left.
 - **Rebuilt from scratch (owner):** the hexagon world, background, stars, grid, movement, camera and aiming stay; everything else was cleared (kept on the `legacy-3d-v1` branch) and rebuilt around two teams, Blue and Yellow, each flying the cruiser in its color. Every number of each team's ship (health and regen, speed, acceleration, braking, turning, strafe / reverse, boost, armor, shield and its regen, capacitor, and the weapon: bullets or beam, damage, optimal / falloff range and drop-off curves, ammo, fire rate, reload, bullet speed and slowdown, spread, rotation speed, capacitor use) is set live in the new **Ship Editor** (head admin and developers), with a description on each field. Destroyed ships respawn after their team's respawn time; a broken shield only comes back by spending capacitor. The Build menu now places shapes (square, cylinder, triangle) and nebulae. Removed: the Object / Asset Creators, Object Editor, items, inventory, crates, resource nodes, test ships, X enemies, missiles, drones and the Tuning panel.
 - **Drone limit (owner):** a ship can have at most 3 drones out at once.
 - **Tuning panel (owner):** staff (head admin, admins, developers) can tune every faction number live from a new panel; changes reach everyone at once and are kept.

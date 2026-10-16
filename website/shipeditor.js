@@ -1,7 +1,9 @@
 // (owner, 2026-10-15) The Ship Editor (head admin and developers; S in the staff column): every number of the Blue and
 // Yellow ships, changed live for everyone. Pick the team at the top (it opens on yours). Each field: type a number or drag
-// sideways on it (numdrag.js); hovering a field's name says what it does and how its number changes it (the owner asked
-// for these; everywhere else tooltips stay names only). The server clamps each value, keeps it and sends it to everyone.
+// sideways on it (numdrag.js). (owner, 2026-10-15) Hovering a field (or editing it) shows what it does and how its number
+// changes it in a popup beside the window (left or right, wherever there's room); it stays until another field is hovered
+// or the window is left (pointer out, nothing in it being edited). (The owner asked for these; everywhere else tooltips
+// stay names only.) The server clamps each value, keeps it and sends it to everyone.
 (function () {
   // [key, label, group, description]
   const F = [
@@ -56,7 +58,8 @@
       const sec = $("div", "se-sec"); sec.append($("div", "se-head", g.toUpperCase()));
       for (const [k, label, grp, desc] of F) {
         if (grp !== g) continue;
-        const row = $("label", "se-row"), lab = $("span", "se-lab", label); lab.title = desc; row.title = desc;
+        const row = $("label", "se-row"), lab = $("span", "se-lab", label);
+        row.addEventListener("pointerenter", () => showTip(row, label, desc));
         let el;
         if (k === "wtype") { el = $("select"); el.append(new Option("Bullets", "0"), new Option("Beam", "1")); el.addEventListener("change", () => { sendNow(k, Number(el.value)); el.blur(); }); }
         else {
@@ -64,11 +67,26 @@
           el.addEventListener("input", () => { const v = Number(el.value); if (el.value === "" || !Number.isFinite(v)) return; clearTimeout(timers.get(k)); timers.set(k, setTimeout(() => sendNow(k, v), 120)); });
           el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
         }
+        el.addEventListener("focus", () => showTip(row, label, desc));
         el.dataset.k = k; inputs.set(k, el); row.append(lab, el); sec.append(row);
       }
       body.append(sec);
     }
   }
+  // the description popup beside the window
+  let tip = null, tipRow = null;
+  function showTip(row, label, desc) {
+    if (!tip) { tip = $("div"); tip.id = "ship-tip"; tip.hidden = true; document.body.appendChild(tip); }
+    tip.replaceChildren($("b", null, label), $("span", null, desc)); tipRow = row; tip.hidden = false; placeTip();
+  }
+  function placeTip() {
+    if (!tip || tip.hidden || !tipRow) return;
+    const w = win.getBoundingClientRect(), r = tipRow.getBoundingClientRect(), t = tip.getBoundingClientRect(), gap = 8;
+    const left = innerWidth - w.right - gap >= t.width + 4 ? w.right + gap : Math.max(4, w.left - gap - t.width);
+    tip.style.left = left + "px"; tip.style.top = Math.max(4, Math.min(innerHeight - t.height - 4, r.top + r.height / 2 - t.height / 2)) + "px";
+  }
+  function hideTip() { if (tip) tip.hidden = true; tipRow = null; }
+  const leftWin = () => setTimeout(() => { if (win && !win.matches(":hover") && !win.contains(document.activeElement)) hideTip(); }, 0);
   const sendNow = (k, v) => send({ t: "ship", s: team, k, v });
   function fill() {
     const S = ships[team] || {};
@@ -76,7 +94,7 @@
     for (const b of tabs.children) b.classList.toggle("on", b.dataset.s === team);
   }
   function toggle(v) {
-    open = v === undefined ? !open : !!v; win.hidden = !open; btn.classList.toggle("on", open);
+    open = v === undefined ? !open : !!v; win.hidden = !open; btn.classList.toggle("on", open); if (!open) hideTip();
     if (open) { if (!team) team = mine || "blue"; fill(); if (window.WinPos) window.WinPos.place(win, "shipedit"); }
   }
   window.ShipEditor = {
@@ -92,7 +110,7 @@
         if (e.button !== 0 || e.target.closest("button")) return; e.preventDefault();
         const r0 = win.getBoundingClientRect(), ox = e.clientX - r0.left, oy = e.clientY - r0.top;
         win.style.transform = "none"; win.style.left = r0.left + "px"; win.style.top = r0.top + "px";
-        const mv = (ev) => { const r = win.getBoundingClientRect(); win.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; };
+        const mv = (ev) => { const r = win.getBoundingClientRect(); win.style.left = Math.max(0, Math.min(innerWidth - r.width, ev.clientX - ox)) + "px"; win.style.top = Math.max(0, Math.min(innerHeight - r.height, ev.clientY - oy)) + "px"; placeTip(); };
         const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); };
         addEventListener("pointermove", mv); addEventListener("pointerup", up);
       });
@@ -100,6 +118,8 @@
       tabs = $("div", "se-tabs"); for (const [s, n] of TEAMS) { const b = $("button", "se-tab", n); b.type = "button"; b.dataset.s = s; b.addEventListener("click", () => { team = s; fill(); }); tabs.append(b); }
       body = $("div", "se-body"); win.append(top, tabs, body); document.body.appendChild(win);
       win.addEventListener("pointerdown", (e) => e.stopPropagation());
+      win.addEventListener("pointerleave", leftWin); win.addEventListener("focusout", leftWin);
+      body.addEventListener("scroll", placeTip, { passive: true }); win.addEventListener("scroll", placeTip, { passive: true });
       build();
     },
     set(s, side) { if (s && typeof s === "object") ships = s; if (side !== undefined && side !== mine) { mine = side; if (!open) team = side; } if (win && open) fill(); },

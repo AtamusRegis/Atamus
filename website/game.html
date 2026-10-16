@@ -40,7 +40,9 @@
     #ship-panel .se-head { margin: 10px 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--text-dim); }
     #ship-panel .se-sec:first-child .se-head { margin-top: 0; }
     #ship-panel .se-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
-    #ship-panel .se-lab { font-size: 12px; cursor: help; }
+    #ship-panel .se-lab { font-size: 12px; }
+    #ship-tip { position: fixed; z-index: 9; width: 240px; padding: 9px 11px; background: rgba(14,19,30,0.96); border-radius: 7px; box-shadow: var(--shadow); color: var(--text); font: 12px/1.45 var(--font); pointer-events: none; }
+    #ship-tip[hidden] { display: none; } #ship-tip b { display: block; margin-bottom: 3px; color: #fff; font-weight: 600; }
     #ship-panel input, #ship-panel select { width: 90px; box-sizing: border-box; padding: 3px 6px; border: 1px solid #2a3a52; border-radius: 4px; background: rgba(8,12,20,.9); color: var(--text); font: 12px var(--font); }
     #ship-panel input { cursor: ew-resize; appearance: textfield; -moz-appearance: textfield; }
     #ship-panel input::-webkit-inner-spin-button, #ship-panel input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -427,7 +429,7 @@
   <script src="winpos.js?v=1792105302"></script>
   <script src="numdrag.js?v=1792049714"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script src="shipeditor.js?v=1792200001"></script>
+  <script src="shipeditor.js?v=1792200002"></script>
   <script type="module" src="game3d.js?v=1792200001"></script>
 </body>
 </html>

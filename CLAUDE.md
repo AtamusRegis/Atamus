@@ -20,7 +20,7 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 ## Owner's standing rules
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
-- **No helper or hint text**, anywhere. Tooltips show names only. **Exception (owner, 2026-10-15): the Ship Editor's fields show a description on hover** (what each does and how its number changes it).
+- **No helper or hint text**, anywhere. Tooltips show names only. **Exception (owner, 2026-10-15): the Ship Editor's fields show a description in a popup beside the window** (what each does and how its number changes it).
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag. **Exception (owner, 2026-10-13): Atamus 3D is a PC game; phones are only for testing a second account, so aiming has no touch version** (touch gets a movement joystick and camera drag).
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
 - **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
