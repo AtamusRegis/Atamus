@@ -673,8 +673,9 @@ const HP_DROP_MS = 750, HP_GHOST_LAG = 400, HP_SHOVE = 9, HP_SHOVE_MS = 180;
 const hpAnim = new Map();                      // player id -> { hp, mF, mT, gF, gT, t0, flash, hitT }
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
 const tween = (from, to, t) => from + (to - from) * easeOut(Math.max(0, Math.min(1, t / HP_DROP_MS)));
+const hpMaxOf = (p) => facOf(sideOf(p)).hp || HP_MAX;   // (owner, 2026-10-15) by faction (Yellow 150)
 function hpState(p, now) {
-  const f = Math.max(0, Math.min(1, p.hp / HP_MAX));
+  const f = Math.max(0, Math.min(1, p.hp / hpMaxOf(p)));
   let s = hpAnim.get(p.id);
   if (!s) { s = { hp: f, mF: f, mT: f, gF: f, gT: f, t0: 0, flash: 0, hitT: -1e9 }; hpAnim.set(p.id, s); }
   if (f < s.hp - 1e-6) {                        // hit: both bars start from where they are now
@@ -692,7 +693,7 @@ function drawHpBars() {
     const s = hpState(p, now);
     { const sp = p.holder.children[0] && p.holder.children[0].userData.sp;   // (owner, 2026-10-15) the ship itself flashes red, fading out over 4 frames
       if (sp) sp.f.value = s.shipFlash > 0 ? s.shipFlash / 4 : 0; if (s.shipFlash > 0) s.shipFlash--; }
-    if (p.hp === undefined || p.hp >= HP_MAX || !p.near && p.id !== myId) continue;
+    if (p.hp === undefined || p.hp >= hpMaxOf(p) || !p.near && p.id !== myId) continue;
     const v = p.holder.children[0], t = p.id === myId ? null : visTargets.get(v), a = p.id === myId ? 1 : t ? t.a : 0;
     if (a <= 0.01) continue;
     const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
@@ -793,9 +794,13 @@ function weaponFrame(now) {
   beamWas = on;
   if (fireHeld && w.type !== "beam") fireRail();
 }
-const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0);   // along x, 0 to 1
-const beamCoreM = new THREE.MeshBasicMaterial({ color: 0xe2f2ff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
-const beamGlowM = new THREE.MeshBasicMaterial({ color: 0x3f8fff, transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending });
+const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 12, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0);   // along x, 0 to 1
+// (owner, 2026-10-15) a beam thins and dims the further it reaches (uEnd: how much of the full reach this one covers)
+const beamMat = (col, a) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uCol: { value: new THREE.Color(col) }, uA: { value: a }, uEnd: { value: 1 } },
+  vertexShader: `uniform float uEnd; varying float vF; void main() { vF = position.x * uEnd; float w = 1.0 - 0.7 * vF;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position.x, position.y * w, position.z * w, 1.0); }`,
+  fragmentShader: `uniform vec3 uCol; uniform float uA; varying float vF; void main() { gl_FragColor = vec4(uCol * (1.0 - 0.8 * vF), uA); }` });
 const beams = new Map();                       // player id -> { g, core, glow, fxAt }
 function drawBeams(now) {
   const live = new Set();
@@ -811,15 +816,16 @@ function drawBeams(now) {
     }
     live.add(p.id);
     let b = beams.get(p.id);
-    if (!b) { const g = new THREE.Group(), core = new THREE.Mesh(beamGeo, beamCoreM), glow = new THREE.Mesh(beamGeo, beamGlowM); g.add(glow, core); g.renderOrder = 4; scene.add(g); b = { g, core, glow, fxAt: 0 }; beams.set(p.id, b); }
+    if (!b) { const g = new THREE.Group(), core = new THREE.Mesh(beamGeo, beamMat(0xe2f2ff, 1)), glow = new THREE.Mesh(beamGeo, beamMat(0x3f8fff, 0.45)); g.add(glow, core); g.renderOrder = 4; scene.add(g); b = { g, core, glow, fxAt: 0 }; beams.set(p.id, b); }
     const fl = 1 + 0.25 * Math.sin(now * 0.05 + x);   // a little flicker
     b.g.position.set(x, shipMid, -y); b.g.rotation.y = a;
-    b.core.scale.set(Math.max(1, len), 1.1 * fl, 1.1 * fl); b.glow.scale.set(Math.max(1, len), 4 * fl, 4 * fl);
+    b.core.scale.set(Math.max(1, len), 1.3 * fl, 1.3 * fl); b.glow.scale.set(Math.max(1, len), 5 * fl, 5 * fl);
+    { const reach = (facOf(sideOf(p)).weapon || {}).optimal || 900, e = Math.min(1, len / reach); b.core.material.uniforms.uEnd.value = e; b.glow.material.uniforms.uEnd.value = e; }
     const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
     if (hit === 2) { let best = 140, id = null; for (const q of players.values()) { if (q === p) continue; const qx = q.id === myId ? me.x : q.holder.position.x, qy = q.id === myId ? me.y : -q.holder.position.z, d = Math.hypot(qx - ex, qy - ey); if (d < best) { best = d; id = q.id; } } if (id) shieldHit(id, ex, ey); }
     else if (hit === 1 && now - b.fxAt > 110) { b.fxAt = now; burst(ex, ey, 45); }
   }
-  for (const [id, b] of beams) if (!live.has(id)) { scene.remove(b.g); beams.delete(id); }
+  for (const [id, b] of beams) if (!live.has(id)) { scene.remove(b.g); b.core.material.dispose(); b.glow.material.dispose(); beams.delete(id); }
 }
 // (owner, 2026-10-15) F: my faction's secondary toward the ground point under the pointer
 addEventListener("keydown", (e) => {
@@ -852,13 +858,23 @@ function onOrd(m) {
   for (const b of Array.isArray(m.b) ? m.b : []) {
     const [x, y, R, k, hid] = b; if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (hid != null) { const q = players.get(hid); if (q && (q.sh ?? 0) > 0) shieldHit(hid, x, y); }
+    if (Array.isArray(b[5]) && b[5].every(Number.isFinite)) { zap(x, y, b[5][0], b[5][1]); continue; }   // (owner, 2026-10-15) a circling drone's zap
     if (k === 0 && R > 30) {                   // a missile's blast: a fireball out to its reach, and sparks
       const mesh = new THREE.Mesh(glowBall, blastMat()); mesh.position.set(x, shipMid, -y); mesh.renderOrder = 4; scene.add(mesh);
       blasts.push({ mesh, t0: performance.now(), r: R }); burst(x, y, 420);
     } else burst(x, y, k === 0 ? 120 : 90);
   }
 }
+// a circling drone's zap: a jagged blue spark from it toward its target, out to the target's shield, fading in 0.15 s
+const zaps = [], zapMat = () => new THREE.LineBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
+function zap(x, y, tx, ty) {
+  const o = shieldOval(), R = Math.max(o.ax, o.ay) * 0.85, dx = tx - x, dy = ty - y, L = Math.hypot(dx, dy) || 1, len = Math.max(10, L - R);
+  const pts = []; for (let i = 0; i <= 5; i++) { const f = i / 5, j = i && i < 5 ? (Math.random() * 2 - 1) * 5 : 0; pts.push(new THREE.Vector3(x + dx / L * len * f - dy / L * j, shipMid, -(y + dy / L * len * f + dx / L * j))); }
+  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), zapMat()); line.renderOrder = 4; scene.add(line);
+  zaps.push({ line, t0: performance.now() }); burst(x + dx / L * len, y + dy / L * len, 18);
+}
 function updateOrds(dt, now) {
+  for (let i = zaps.length - 1; i >= 0; i--) { const z = zaps[i], t = (now - z.t0) / 150; if (t >= 1) { scene.remove(z.line); z.line.geometry.dispose(); z.line.material.dispose(); zaps.splice(i, 1); } else z.line.material.opacity = 1 - t; }
   const k = Math.min(1, dt * 14);
   for (const o of ords.values()) {
     o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k; o.h += Math.atan2(Math.sin(o.th - o.h), Math.cos(o.th - o.h)) * k;
@@ -1084,7 +1100,7 @@ function addBlock(id, x, y) {
   blocks.set(id, { x, y, mesh }); visVer++;
 }
 function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); visVer++; } }
-function dropCube() { if (haveMe) send({ t: "block" }); }
+function dropCube() { if (haveMe) send({ t: "enemy" }); }   // (owner, 2026-10-15) X spawns an enemy ship (was: drops a block)
 // ---- (owner, 2026-10-14) dropped-item crates: a small glowing cube where items were dropped (the server keeps them 5
 // minutes). Right-click one (a quick click; holding is aiming): Open, within reach, shows its items (inventory.js), and
 // staff get Delete; staff can right-click Delete a Build piece or a block too. ----
@@ -1144,7 +1160,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "Tab" || e.key === "Tab") { e.preventDefault(); if (!e.repeat && window.Inventory) window.Inventory.toggle(); return; }   // (owner) TAB opens / closes the inventory (in the chat input it switches channel)
   if (e.code === "Escape") { hideMenu(); if (window.Inventory && window.Inventory.open) window.Inventory.toggle(false); }
 });
-addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX") dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
+addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX" && !e.repeat && !e.ctrlKey && !e.metaKey && !build.open && !build.editorOpen) dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
 addEventListener("blur", () => { keys.clear(); sprint = false; });
 // (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
@@ -1201,7 +1217,7 @@ function addProj(m) {
   const g = new THREE.Group(), core = new THREE.Mesh(projGeo, yl ? projYellow.core : projCore), glow = new THREE.Mesh(projGeo, yl ? projYellow.glow : projGlow), trail = new THREE.Mesh(projGeo, yl ? projYellow.trail : projTrail);
   core.scale.set(18, 1, 1); glow.scale.set(26, 3, 3); trail.scale.set(70, 1.6, 1.6); g.add(trail, glow, core);
   g.rotation.y = Math.atan2(m.vy, m.vx); g.renderOrder = 3; scene.add(g);
-  projs.set(m.i, { g, x: m.x, y: m.y, vx: m.vx, vy: m.vy, t0: performance.now() });
+  projs.set(m.i, { g, x: m.x, y: m.y, vx: m.vx, vy: m.vy, k: Number.isFinite(m.k) && m.k > 0 ? m.k : 0, t0: performance.now() });   // k: (owner, 2026-10-15) drag, it slows down
 }
 function endProj(m) {
   const q = projs.get(m.i); if (q) { scene.remove(q.g); projs.delete(m.i); }
@@ -1214,7 +1230,8 @@ function endProj(m) {
 function updateShots(now) {
   for (const [id, q] of projs) {
     const t = (now - q.t0) / 1000; if (t > 3) { scene.remove(q.g); projs.delete(id); continue; }   // (never told it ended)
-    q.g.position.set(q.x + q.vx * t, shipMid, -(q.y + q.vy * t));
+    const f = q.k ? (1 - Math.exp(-q.k * t)) / q.k : t;   // (how far it's gone, slowing down with drag)
+    q.g.position.set(q.x + q.vx * f, shipMid, -(q.y + q.vy * f));
   }
 }
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)

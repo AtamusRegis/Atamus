@@ -156,10 +156,9 @@ export function attachGameServer(httpServer) {
         pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
       }
-      else if (m.t === "block") {             // (owner) X drops a block where the ship is (at most ~2 a second)
-        const now = Date.now(); if (now - blockAt < 450) return; blockAt = now;
-        const r = world.addBlock(pid); if (!r) return;
-        if (r.gone.length) objGone("k", r.gone.map(String)); objCast("k", r.b);
+      else if (m.t === "enemy") {             // (owner, 2026-10-15) X spawns an enemy ship (at most one a second)
+        const now = Date.now(); if (now - blockAt < 1000) return; blockAt = now;
+        world.spawnEnemy(pid);
       }
       // (owner, 2026-10-13) the admin Build menu: staff place, edit and delete pieces; everyone is sent the result
       else if (m.t === "bnew" || m.t === "bset" || m.t === "bdel") {
@@ -327,11 +326,13 @@ export function attachGameServer(httpServer) {
   const hadOrd = new Set();                    // sockets last sent a non-empty ordnance list
   setInterval(() => {                                                           // 20 Hz simulation
     world.step();
+    for (const e of world.joined) broadcast({ t: "join", i: e.id, n: e.name, s: e.team }); world.joined.length = 0;   // (owner, 2026-10-15) X's enemies
+    for (const id of world.left) broadcast({ t: "leave", i: id }); world.left.length = 0;
     if (world.ords.length || world.booms.length || hadOrd.size) {   // (owner, 2026-10-15) missiles / drones near each player, and blasts
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
         const R = LOAD_R, o = world.ords.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) <= R).map((q) => [q.id, q.k === "drone" ? 1 : 0, Math.round(q.x * 10), Math.round(q.y * 10), Math.round(q.h * 100)]);
-        const b = world.booms.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) <= R).map((q) => [Math.round(q.x), Math.round(q.y), Math.round(q.r), q.k === "drone" ? 1 : 0, q.h ?? null]);
+        const b = world.booms.filter((q) => Math.hypot(q.x - p.x, q.y - p.y) <= R).map((q) => [Math.round(q.x), Math.round(q.y), Math.round(q.r), q.k === "drone" ? 1 : 0, q.h ?? null, q.z || null]);   // z: a drone's zap, to its target
         if (!o.length && !b.length && !hadOrd.has(pid)) continue;
         ws.send(JSON.stringify({ t: "ord", o, ...(b.length ? { b } : {}) }));
         if (o.length) hadOrd.add(pid); else hadOrd.delete(pid);
@@ -353,7 +354,7 @@ export function attachGameServer(httpServer) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
         const out = world.projEv.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) <= LOAD_R + (e.t === "proj" ? RAIL_RANGE : 0))
-          .map((e) => (e.t === "proj" ? { t: "proj", i: e.i, a: e.a, x: r1(e.x), y: r1(e.y), vx: r1(e.vx), vy: r1(e.vy) } : { t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s, ...(e.sh ? { sh: 1 } : {}) }));
+          .map((e) => (e.t === "proj" ? { t: "proj", i: e.i, a: e.a, x: r1(e.x), y: r1(e.y), vx: r1(e.vx), vy: r1(e.vy), ...(e.k ? { k: e.k } : {}) } : { t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s, ...(e.sh ? { sh: 1 } : {}) }));
         if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
       }
       world.projEv.length = 0;

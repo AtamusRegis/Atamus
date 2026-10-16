@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Combat tuning (owner):** drones now circle their target zapping it while their own health runs down, and come 3 at a time; Yellow fires 3 missiles at once; Blue's laser weakens and thins with distance; Yellow's bullets slow down as they fly; Yellow ships have more health (150).
+- **X spawns an enemy ship (owner):** an AI ship of the other faction appears ahead and fights you with its faction's weapons (no longer drops a block).
 - **Factions (owner):** Red is now Yellow, and the two sides play differently. Blue: constant laser beams (slow to turn, strong damage over time, long range), strong shields, slower, sees further, and F launches drones that zigzag into the chosen enemy. Yellow: rapid bullets (less damage, quick to aim, shorter range), no shields but hull damage resistance, faster, harder to spot in shadows and nebulae, and F fires zigzagging missiles that home on nearby enemies for heavy area damage. Missiles and drones can be shot down. Ships are painted their faction's color.
 - **Shields (owner):** every ship has a 50-point shield that takes damage before the hull and recharges 5 a second; broken, it's gone until you respawn. It shows only when hit: a blue hexagon-patterned oval, white where it was struck, yellow under half and red under a quarter.
 - **Hit flash (owner):** a ship flashes red when it's hit, fading out over a few frames.
