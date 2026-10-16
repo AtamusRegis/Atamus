@@ -8,6 +8,7 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. `docs/DESIGN.md` holds the agreed direction (short right now: the 3D rebuild has just begun).
 4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. The live game is one shared 3D world: a ship per account on a gridded plane inside a hexagon (2.5 km flat to flat for now). **Old database data stays untouched for reference.**
+5. **Rebuilt from scratch (owner, 2026-10-15):** the first 3D version (Object / Asset Creators, Object Editor, items, inventory, crates, nodes, test ships, factions with missiles and drones, the Tuning panel) is on the **`legacy-3d-v1` branch** (tip `c2088a7`). Now: two teams (Blue, Yellow) whose ship numbers live in `ships.js` and are tuned in the Ship Editor; the Build menu places shapes and nebulae.
 
 **In the same commit as any change to behavior:**
 
@@ -19,7 +20,7 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 ## Owner's standing rules
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
-- **No helper or hint text**, anywhere. Tooltips show names only.
+- **No helper or hint text**, anywhere. Tooltips show names only. **Exception (owner, 2026-10-15): the Ship Editor's fields show a description on hover** (what each does and how its number changes it).
 - **Mobile parity.** Every mouse action needs a touch equivalent: hold = right-click, drag = drag. **Exception (owner, 2026-10-13): Atamus 3D is a PC game; phones are only for testing a second account, so aiming has no touch version** (touch gets a movement joystick and camera drag).
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
 - **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a 30 s countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
@@ -40,31 +41,25 @@ packages/server/src/
   names.js, namefilter.js, textsafe.js   the name filter and banned names (sign-up), text cleaning
   admin.js        the small admin panel's API (players: kick / ban / mute; ban appeals) and the game hooks (gameHook)
   appeals.js      ban appeals (written from the login page, answered in the admin panel)
-  gamehttp.js     the deploy workflows' calls (build-check, update-countdown); model uploads / downloads (/game/models, head admin uploads,
-                  stored in uploads/models at the repo root, outside git: index.js wipes packages/server/data at start)
+  gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
   game/
     net.js        the 3D game socket at /ws: cookie auth, one session per account (4002), one account per device
-                  (4003), admin hooks (kick 4005 / ban 4006 / mute), side pick (remembered), move /
-                  chat in; 20 Hz sim, 15 Hz per-player snapshots (only ships inside that player's load circle)
-    items.js      (owner, 2026-10-14) every account's hotbar / inventory (world3d_inv) and dropped-item crates (5 min, in memory)
-    world3d.js    the world: 2.5 km hexagon (for now), momentum ships (accel / brake / turn-scaled thrust), capacitor,
-                  LOAD_R (5,000 m load circle, snapshotFor), positions saved. Weapons/combat were removed
-                  (owner, 2026-10-13); the last version is commit 956cb73
+                  (4003), admin hooks (kick 4005 / ban 4006 / mute), team pick (remembered) and switching, move / fire /
+                  beam / reload / chat in, the Ship Editor's changes, the Build menu; 20 Hz sim, 15 Hz per-player snapshots
+    ships.js      every Ship Editor number: its limits and each team's start (SHIP_FIELDS), the damage / speed curve
+    world3d.js    the world: hexagon, ships moving by their team's numbers, health / shield / capacitor, bullets and
+                  beams, death and respawn, mutual visibility, Build pieces (shapes, nebulae), positions saved
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the 3D game page (canvas, status + countdown overlays, __BUILD__ marker)
   adminpanel.js   the Admin button and panel (staff accounts only)
-  build3d.js      the Object Placer ([B], the Build menu: object types, test ships, clouds; hologram blueprints, copy / paste, resource node settings)
-                  and the Object Editor (head admin, from the CREATOR: an object's model and colliders, incl. the player ship)
-  inventory.js    the hotbar (3 slots) and the TAB inventory panel (5 x 2), drag and drop, Drop, the crate panel (kept on the server)
+  build3d.js      the Build menu ([B]: Shape and Nebula; blueprints, selecting, the attributes panel, nebula outlines),
+                  nebula rendering (puffs, edge puffs), the outline helpers
+  shipeditor.js   the Ship Editor (S; head admin, developers): every team ship number, a description on each
   numdrag.js      every number field drags sideways to change it
   winpos.js       editor windows remember where each account put them (world3d_ui, the "ui" message)
-  importer.js     the Asset Creator ([I], head admin; was RAW ASSETS): imported models / audio and the SVG icons (+: Import / Create) (world3d_assets, POST /game/assets), model icons rendered from the model; window.Assets
-  icons.js        the item catalog from the server (items, icons as shape data) and drawing icons as SVG
-  creator.js      the Object Creator ([C], head admin; was CREATOR): ships and modules only (for now) and the Player Ship pick; CREATE (name, icon, type), Edit / Delete
-  itemcreator.js  pop-ups only now (its Z window is gone): the Item Editor, the icon picker and the Icon Creator
-  game3d.js       Three.js client: grid plane, hexagon band, spheres (own blue, others red, rolling),
-                  orbit camera (75°, middle-mouse / touch-drag yaw, wheel / pinch zoom), WASD relative to it,
-                  own-sphere prediction + snapshot interpolation, countdown and reconnect handling
+  game3d.js       Three.js client: grid plane, hexagon band, stars, ships painted by team, orbit camera, ship-relative
+                  controls predicted with the team's numbers, aiming, bullets and beams, shields, health bars, sparks,
+                  visibility and nebulae, minimap, chat, team buttons, countdown and reconnect handling
   vendor/         three.module.js + three.core.js (vendored; CSP allows only our own scripts)
   index/login/signup/recover/eula/play.html (+ their .js), api.js, style.css, front-updates.js
                   the website, as before; play.html goes straight to Enter System (no pilots)

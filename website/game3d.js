@@ -1,14 +1,11 @@
-// Atamus 3D (owner, 2026-10-12): the game rebuilt in 3D. One flat world with a 2D
-// grid; the border is the same flat-top hexagon, 5 miles flat to flat. Each player is
-// a 100 m sphere (yours blue, others red) that travels on the ground plane only — no
-// up or down. WASD moves it; wherever the camera faces is forward. The middle mouse
-// (touch: a one-finger drag) rotates the camera around the player; it sits at a 75°
-// angle looking down toward the player. Each player is sent everything within their load circle.
+// Atamus 3D (owner, 2026-10-12; rebuilt 2026-10-15). One shared world inside a flat-top hexagon: a ship per account on two
+// teams, Blue and Yellow, each team's ship with its own numbers (the server's Ship Editor). W / S thrust along the nose,
+// A / D turn it, Q / E strafe; right-click aims (the camera reaches toward the reticle); left click fires (held). The
+// middle mouse (touch: a one-finger drag) turns the camera around the ship. The server decides everything; this page
+// predicts my own ship with the same numbers and draws the rest.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { Importer } from "./importer.js?v=1792105050";
-import { Creator } from "./creator.js?v=1792104410";
-import { initBuild, tintObject, hpInArc, muzzleAt, EXTRA_DEFAULT, collExtra, types as objTypes, builds, colliders, pivots, origins, movers, visOutlines, VIS_DEFAULT, toWorldPts, buildPolys, movePoly, polyRad, satPush, nudge, squarePoly, segPoly } from "./build3d.js?v=1792104833";
+import { initBuild, builds, toWorldPts, polyRad, satPush, nudge, segPoly } from "./build3d.js?v=1792200001";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -17,67 +14,41 @@ const statusEl = document.getElementById("status");
 const countEl = document.getElementById("countdown");
 const WEB_BUILD = (document.querySelector('meta[name="atamus-build"]') || {}).content || "";
 
-// ---- world constants (the server's hello can override them) ----
-let HEX_FLAT = 2_500;                          // 2.5 km flat to flat for now (owner; the server sends it in the hello)
-let SPHERE_R = 50;                             // 100 m diameter
-let SPEED = 50;                               // m/s (owner, 2026-10-13; the server sends it in the hello)
-let ACCEL = 50, BRAKE = 100, TURN_ACCEL = 0.3;   // (owner) weight: as on the server (world3d.js)
-let SIDE_SPEED = 0.6, FWD_ARC = Math.PI / 4;   // (owner) forward 100%, sideways / backward 60% (blended); sprint only within FWD_ARC of the nose
-const dirSpeed = (d) => SIDE_SPEED + (1 - SIDE_SPEED) * Math.max(0, Math.cos(d));
-let STOP_D = 25, brakeA = 0, SPRINT = 1.3;   // SPRINT: (owner) sprint is 30% faster                  // (owner) a stop always ends within STOP_D: the rate is fixed when WASD is let go (as on the server)
-const stopRate = (v) => brakeA || Math.max(BRAKE, (v * v) / (2 * STOP_D));
-// (owner, 2026-10-13: reversing while moving was far slower than stopping and then going) one step of the velocity
-// toward the target (tx, ty): the part of the change that SLOWS the current motion (against the velocity) brakes at
-// up to `brake`; the rest (the new direction) thrusts at up to `a`. Reversing then works like letting go and pushing.
-let VEL_TURN = 0.875;                             // (owner) as on the server (world3d.js); the hello sends it
-// (owner, 2026-10-13: "keep momentum in the new direction with a quick rotation") while WASD is held the velocity keeps
-// its speed and swings toward the input's direction at VEL_TURN (the nose's own turn rate), instead of braking the old
-// motion and building up again. Its speed meanwhile eases toward the target: up at `up`, down at `down`. From rest it
-// starts straight along the input. A near-reversal (over 150 degrees) swings round the side the nose is turning to
-// (`nose`: the ship's heading, same convention), so the ship and its motion turn together.
-function carry(vx, vy, dx, dy, target, up, down, dt, nose) {
+// ---- world constants (the server's hello sends them) ----
+let HEX_FLAT = 2_500, SPHERE_R = 50, SHIP_R = 45, TURN_ACCEL = 0.3, VEL_TURN = 0.875, FWD_ARC = Math.PI / 4, LOAD_R = 1300;
+// (owner, 2026-10-15) each team's ship numbers (ships.js on the server; the Ship Editor changes them live)
+let SHIPS = { blue: {}, red: {} }, FIELDS = [];
+const statsOf = (side) => SHIPS[side] || SHIPS.blue || {};
+const myStats = () => statsOf(mySide);
+const TEAM_COLOR = { blue: "#4f8fe8", red: "#e8c14f" }, TEAM_HUE = { blue: 0.6, red: 0.13 };
+const wrapA = (a) => { a %= Math.PI * 2; return a > Math.PI ? a - Math.PI * 2 : a < -Math.PI ? a + Math.PI * 2 : a; };
+// movement, exactly as the server integrates it (world3d.js)
+const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
+function dirSpeed(d, S) { const c = Math.cos(d), st = S.strafe / 100; return c >= 0 ? st + (1 - st) * c : st + (S.reverse / 100 - st) * -c; }
+function carry(vx, vy, dx, dy, target, up, down, dt) {
   let v = Math.hypot(vx, vy);
-  const want = Math.atan2(dx, -dy), T2 = Math.PI * 2, wrap = (q) => { q %= T2; return q > Math.PI ? q - T2 : q < -Math.PI ? q + T2 : q; };
-  let va = v > 1 ? Math.atan2(vx, -vy) : want;
-  const d = wrap(want - va);
-  let sign = Math.sign(d), left = Math.abs(d);
-  // (owner, 2026-10-14) with ship-relative controls, pushing more than 120 degrees against the motion (S while flying
-  // forward) brakes it and then builds up the other way, instead of swinging the motion round in a long U-turn
-  if (left > Math.PI * 2 / 3 && v > 1) return steer(vx, vy, Math.sin(want) * target, -Math.cos(want) * target, up, down, dt);
-  va += sign * Math.min(left, VEL_TURN * dt);
+  const want = Math.atan2(dx, -dy), va0 = v > 1 ? Math.atan2(vx, -vy) : want, d = wrapA(want - va0);
+  if (Math.abs(d) > Math.PI * 2 / 3 && v > 1) return steer(vx, vy, Math.sin(want) * target, -Math.cos(want) * target, up, down, dt);
+  const va = va0 + Math.sign(d) * Math.min(Math.abs(d), VEL_TURN * dt);
   v = v < target ? Math.min(target, v + up * dt) : Math.max(target, v - down * dt);
   return [Math.sin(va) * v, -Math.cos(va) * v];
 }
 function steer(vx, vy, tx, ty, a, brake, dt) {
-  let ex = tx - vx, ey = ty - vy;
-  const v = Math.hypot(vx, vy);
+  let ex = tx - vx, ey = ty - vy; const v = Math.hypot(vx, vy);
   if (v > 1e-6) {
     const ux = vx / v, uy = vy / v, par = ex * ux + ey * uy;
-    if (par < 0) {                             // slowing down along the current motion
-      const bx = ux * par, by = uy * par, px = ex - bx, py = ey - by;
-      const bl = -par, bs = Math.max(a, brake) * dt, pl = Math.hypot(px, py), ps = a * dt;
-      const kb = bl > bs ? bs / bl : 1, kp = pl > ps ? ps / pl : 1;
-      return [vx + bx * kb + px * kp, vy + by * kb + py * kp];
-    }
+    if (par < 0) { const bx = ux * par, by = uy * par, px = ex - bx, py = ey - by, bl = -par, bs = Math.max(a, brake) * dt, pl = Math.hypot(px, py), ps = a * dt;
+      const kb = bl > bs ? bs / bl : 1, kp = pl > ps ? ps / pl : 1; return [vx + bx * kb + px * kp, vy + by * kb + py * kp]; }
   }
-  const el = Math.hypot(ex, ey), s = a * dt;
-  if (el > s) { ex *= s / el; ey *= s / el; }
-  return [vx + ex, vy + ey];
+  const el = Math.hypot(ex, ey), s = a * dt; if (el > s) { ex *= s / el; ey *= s / el; } return [vx + ex, vy + ey];
 }
-// (owner, 2026-10-13) colliders, on the ground plane only (x / y; height is ignored). A ship's footprint is SHIP_R x 2
-// square (its Movement ellipse is a fraction of that, Object Editor); each block a square BLOCK_HALF from its center.
-// Overlaps are pushed apart along the shortest way (satPush) and the velocity going in is dropped. Mirrored in the client.
-let SHIP_R = 45, BLOCK_HALF = 25;   // (the server sends both in the hello)
-const accelShare = (d) => TURN_ACCEL + (1 - TURN_ACCEL) * ((1 + Math.cos(d)) / 2) ** 2;
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
-// (owner, 2026-10-13) the capacitor: predicted like the server's, corrected by its 4 Hz private updates
-let CAPC = { max: 100, drain: 1,   // drain: per 100 m sprinted (owner)
-  walk: 4, idle: 12, resume: 15 }, cap = 100, capOut = false;
+let cap = 100, capOut = false, ammo = 0, reloadLeft = 0, deadLeft = 0;   // mine, from the server ({t:"me"}, 5 a second)
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
-
 // Game plane: x east, y north. Three: x = x, z = -y, y (three) = up.
 const toWorld = (x, y, h = 0) => new THREE.Vector3(x, h, -y);
+
 
 // ---- scene ----
 const canvas = document.getElementById("view");
@@ -151,7 +122,6 @@ function rebuildBorder() { scene.remove(border); border.geometry.dispose(); bord
 
 // (owner, 2026-10-13) the load circle: the server sends only the players and objects within LOAD_R of this ship
 // (2026-10-14: where the distance haze turns solid). Shown on the minimap; no ring on the ground (it'd sit under the haze).
-let LOAD_R = 1300;
 // (owner) the camera leash circle around the player: everywhere the reticle can be aimed (blue)
 const rangeRing = new THREE.Mesh(new THREE.RingGeometry(cam.leash - 4, cam.leash, 160), new THREE.MeshBasicMaterial({ color: 0x4f8fe8, transparent: true, opacity: 0.35, side: THREE.DoubleSide }));
 rangeRing.rotation.x = -Math.PI / 2; rangeRing.visible = false; scene.add(rangeRing);
@@ -175,7 +145,7 @@ let capShown = -1;
 function drawCap() {
   if (!capFill) return; const v = Math.round(cap);
   if (v === capShown) return; capShown = v;
-  capFill.style.width = (cap / CAPC.max) * 100 + "%"; capNum.textContent = v;
+  capFill.style.width = (cap / (myStats().cap || 100)) * 100 + "%"; capNum.textContent = v;
   capFill.classList.toggle("out", capOut);
 }
 aimLine.visible = false; scene.add(aimLine);
@@ -197,65 +167,36 @@ function restDist(sx, sy) {
   return restRay.ray.intersectPlane(groundPlane, restHit) ? Math.hypot(restHit.x - me.x, restHit.z + me.y) : Infinity;
 }
 
-// ---- players: the ship (owner, 2026-10-12: Combat_Cruiser.glb, Y up, +Z forward) ----
-// Scaled to 100 m long, resting on the grid, facing the way it travels. Until the
-// model arrives, a sphere stands in and is swapped the moment it loads.
+
+// ---- players: the ship (owner, 2026-10-12: Combat_Cruiser.glb), painted its team's color (owner, 2026-10-15) ----
+// Scaled to 100 m long, resting on the grid. Until the model arrives, a sphere stands in.
 const sphereGeo = new THREE.SphereGeometry(SPHERE_R, 48, 32);
 const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x4f8fe8, roughness: 0.35, metalness: 0.15 });
-const players = new Map();                     // id -> { holder, heading, name, from:{x,y,ts}, to:{x,y,ts} }
+const players = new Map();                     // id -> { holder, heading, name, side, buf, to, near, hp, sh, bm, dead }
 let myId = null, myName = "", mySide = null;
-// (owner, 2026-10-15) the factions (from the server's hello): Blue and Yellow (Yellow's key is "red"); test ships use the default
-let FACS = {}, FACD = { speed: 1, shield: 50, regen: 5, resist: 0, load: 1300, farIn: 900, farOut: 1300, visLo: 0.25, visHi: 0.75, cloudDeep: 150, cloudIn: 0.25, weapon: null, second: null, color: "#e04848" };
-const facOf = (side) => FACS[side] || FACD;
 const sideOf = (p) => (p && p.id === myId ? mySide : p && p.side);
-const FAC_HUE = { blue: 0.6, red: 0.13 };       // the hue a faction's ships are painted
 const me = { x: 0, y: 0 };                     // my ship, predicted locally and corrected by snapshots
 const corr = { x: 0, y: 0 };                   // the correction still to work off (a little each frame)
 let haveMe = false;
 let shipTemplate = null, shipMid = SPHERE_R;   // shipMid: the hull's center height, for the camera
-// (owner, 2026-10-15) the ship players fly: a Ship object picked in the CREATOR ("t:<id>": its model, fitted by its widest
-// side to the ship's footprint and turned by its Front, and its colliders, pivot and hardpoint); none picked: the built-in
-// cruiser below (kind "ship")
-let SHIPK = "ship", playerShipId = null, shipModelKey = "";
-function setPlayerShip(id) { playerShipId = typeof id === "string" ? id : null; refreshPlayerShip(); }
-function refreshPlayerShip() {
-  const t = playerShipId && objTypes.get(playerShipId), ok = t && t.cat === "ship";
-  SHIPK = ok ? "t:" + t.id : "ship";
-  const key = ok ? (t.model || "") + "|" + (t.front || 0) + "|" + JSON.stringify(t.mats || "") : "cruiser"; if (key === shipModelKey) { applyShipPivot(); return; } shipModelKey = key;
-  if (!ok || !t.model) { if (!ok) loadCruiser(); else useShipModel(null); return; }
-  new GLTFLoader().load((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + t.model, (g) => {
-    if (shipModelKey !== key) return;
-    const src = tintObject(g.scene, t.mats), box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());   // (owner, 2026-10-15) its material colors
-    src.position.set(-c.x, -box.min.y, -c.z);
-    const turn = new THREE.Group(); turn.add(src); turn.rotation.y = (t.front || 0) * Math.PI / 180;
-    const wrap = new THREE.Group(); wrap.add(turn); wrap.scale.setScalar(2 * SHIP_R / Math.max(size.x, size.z, 1e-6));
-    useShipModel(wrap, (size.y * 2 * SHIP_R / Math.max(size.x, size.z, 1e-6)) / 2);
-  }, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
-}
+let shipPivot = [0, 0], shipVis = null, OVAL = { cx: 0, cy: 0, ax: 60, ay: 75 };   // the ship's pivot (fractions), visibility points, shield oval (the server's)
 function useShipModel(wrap, mid) {
   shipTemplate = wrap; shipMid = wrap ? mid : SPHERE_R;
   for (const p of players.values()) { p.holder.clear(); p.holder.add(makeVisual(p.id !== myId, p.id === myId, sideOf(p))); }
-  try { build.refreshShips(); } catch {}
   applyShipPivot();
 }
-let cruiser = null;
-function loadCruiser() { if (cruiser) { useShipModel(cruiser.wrap, cruiser.mid); return; }
 new GLTFLoader().load("models/combat_cruiser.glb", (g) => {
-  const src = g.scene;
-  const box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
+  const src = g.scene, box = new THREE.Box3().setFromObject(src), size = box.getSize(new THREE.Vector3());
   src.scale.setScalar(100 / Math.max(size.x, size.y, size.z));
   src.rotation.y = Math.PI;                    // (owner) the model's nose is -Z: flip it to our +Z forward
   const b2 = new THREE.Box3().setFromObject(src), c2 = b2.getCenter(new THREE.Vector3());
-  src.position.x -= c2.x; src.position.z -= c2.z;   // pivot at the hull's middle, so turns don't swing it
-  src.position.y -= b2.min.y;                  // the hull rests on the grid
-  const wrap = new THREE.Group(); wrap.add(src);
-  cruiser = { wrap, mid: (b2.max.y - b2.min.y) / 2 };
-  if (shipModelKey === "cruiser" || !shipModelKey) useShipModel(cruiser.wrap, cruiser.mid);   // (unless a Ship object was picked meanwhile)
-}, undefined, (e) => console.warn("[ship] load failed:", e && e.message)); }
-loadCruiser();
+  src.position.x -= c2.x; src.position.z -= c2.z; src.position.y -= b2.min.y;   // the hull's middle over the pivot, resting on the grid
+  const wrap = new THREE.Group(); wrap.add(src); useShipModel(wrap, (b2.max.y - b2.min.y) / 2);
+}, undefined, (e) => console.warn("[ship] load failed:", e && e.message));
+
 // (owner, 2026-10-15) a faction's ships are painted its color: every colored (not gray) material turns to its hue
 function paintSide(m, side) {
-  const hue = FAC_HUE[side]; if (hue === undefined || !m.color) return m;
+  const hue = TEAM_HUE[side]; if (hue === undefined || !m.color) return m;
   const hsl = {}; m.color.getHSL(hsl); if (hsl.s < 0.2) return m;
   m.color.setHSL(hue, Math.max(hsl.s, 0.6), hsl.l); return m;
 }
@@ -286,7 +227,7 @@ const visMesh = new THREE.Mesh(visGeo, new THREE.MeshBasicMaterial({ color: 0x00
 visMesh.frustumCulled = false; visMesh.position.y = 0.3; visMesh.renderOrder = -1; scene.add(visMesh);
 // (owner, 2026-10-14) sight fades out past the leash circle: the haze ramps from clear at FAR_IN to solid at FAR_OUT
 // (400 m further), and nothing past FAR_OUT is drawn (ships, blocks, Build pieces)
-let FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;   // (owner, 2026-10-15) then each faction's own (applyFaction)
+const FAR_IN = cam.leash + 200, FAR_OUT = FAR_IN + 400;
 const farInU = { value: FAR_IN };   // (owner, 2026-10-14) the fade starts 200 m (two grid squares) past the leash circle
 const visU = { visC: { value: new THREE.Vector2() }, visFar: { value: FAR_OUT } };
 const farCache = new Map();
@@ -480,12 +421,8 @@ function updateVis() {                         // the shadows from where my ship
       pos.push(ax, 0, -ay, bx, 0, -by, fbx, 0, -fby, ax, 0, -ay, fbx, 0, -fby, fax, 0, -fay);
     }
   };
-  for (const b of blocks.values()) {
-    if (Math.abs(b.x - vx) > VIS_S + BLOCK_HALF || Math.abs(b.y - vy) > VIS_S + BLOCK_HALF) continue;
-    const h = BLOCK_HALF; edges([b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h]);
-  }
   // (owner, 2026-10-14) ships cast no shadows (only blocks and Build pieces do)
-  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud" && Math.abs(b.x - vx) <= VIS_S + b.srad && Math.abs(b.y - vy) <= VIS_S + b.srad) for (const v of b.polys) edges(v);
+  for (const b of builds.values()) if (b.k !== "cloud" && b.polys && Math.abs(b.x - vx) <= VIS_S + b.rad && Math.abs(b.y - vy) <= VIS_S + b.rad) for (const v of b.polys) edges(v);
   for (const c of coresFor(vx, vy)) if (c.x1 >= vx - VIS_S && c.x0 <= vx + VIS_S && c.y1 >= vy - VIS_S && c.y0 <= vy + VIS_S) edges(c.v);   // (owner) nebula cores
   if (pos.length > visCap) { visCap = Math.max(pos.length, visCap * 2, 1800); visGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visCap), 3)); }
   const pa = visGeo.attributes.position; if (pa) { pa.array.set(pos); pa.needsUpdate = true; } visGeo.setDrawRange(0, pos.length / 3);
@@ -498,9 +435,8 @@ function updateVis() {                         // the shadows from where my ship
 // opacity (fading over about 0.2 s), and on the minimap the same; at 0 it's hidden. Worked out ten times a second. ----
 const asPts = (v) => { const out = []; for (let i = 0; i < v.length; i += 2) out.push([v[i], v[i + 1]]); return out; };
 const walls = () => {                          // everything that blocks sight, with a bounding box each
-  const out = [], h = BLOCK_HALF;
-  for (const b of blocks.values()) out.push({ v: [b.x - h, b.y - h, b.x + h, b.y - h, b.x + h, b.y + h, b.x - h, b.y + h], x0: b.x - h, x1: b.x + h, y0: b.y - h, y1: b.y + h });
-  for (const b of builds.values()) if (b.k !== "ship" && b.k !== "cloud") for (const v of b.polys) out.push({ v, x0: b.x - b.srad, x1: b.x + b.srad, y0: b.y - b.srad, y1: b.y + b.srad });
+  const out = [];
+  for (const b of builds.values()) if (b.k !== "cloud" && b.polys) for (const v of b.polys) out.push({ v, x0: b.x - b.rad, x1: b.x + b.rad, y0: b.y - b.rad, y1: b.y + b.rad });
   if (haveMe) for (const c of coresFor(me.x, me.y)) out.push(c);   // (owner) nebula cores
   return out;
 };
@@ -529,7 +465,7 @@ function mutual(A, pa, B, pb, W, keepLines) {  // A, B: point lists; pa, pb: the
 const CLOUD_DEEP = 150, CLOUD_IN = 0.25, CLOUD_NEAR = 200, STILL = 3, REVEAL_MS = 3000;
 const revealed = new Map();                    // ship id -> when I last hit it
 function cloudFactor(x, y, spd, id) {
-  let f = 1; const F = facOf(id && players.get(id) ? players.get(id).side : null), DEEP = F.cloudDeep, IN = F.cloudIn;   // (owner, 2026-10-15) a Yellow ship hides deeper
+  let f = 1; const DEEP = CLOUD_DEEP, IN = CLOUD_IN;
   for (const b of builds.values()) {
     if (b.k !== "cloud" || !b.poly || Math.hypot(x - b.x, y - b.y) > b.rad + 1 || !inPoly(x, y, b.poly)) continue;
     const d = Math.min(1, edgeDist(x, y, b.poly) / DEEP); let c = 1 - d * d * (3 - 2 * d);   // the edge fade, for everyone
@@ -577,7 +513,7 @@ function updateSpawns(now) {
 }
 function updateShipVis(dt, now) {
   updateSpawns(now);
-  const mine = players.get(myId), edit = build.editorOpen;
+  const mine = players.get(myId), edit = false;
   if (haveMe && now - visAt > 33) {             // (owner) 30 times a second
     visAt = now;
     const W = walls(), M = asPts(shipVisOutline(me.x, me.y, mine ? mine.heading : 0)), seen = new Set();   // (owner) the Visibility points, not the combat points
@@ -586,21 +522,21 @@ function updateShipVis(dt, now) {
       const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
       const t = visTargets.get(vis) || { a: 0 };
       if (t.x !== undefined && Math.hypot(x - t.x, y - t.y) > 150) t.a = 0;   // (owner, 2026-10-15) jumped (a respawn): it doesn't carry its old visibility to the new spot
-      t.pid = id; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); t.side = id && players.get(id) ? players.get(id).side : null; visTargets.set(vis, t);
+      t.pid = id; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); visTargets.set(vis, t);
     };
-    for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
+    for (const p of players.values()) if (p.id !== myId && p.near && !p.dead) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
   }
   for (const [v, t] of visTargets) {
     // (owner, 2026-10-14) opacity rises smoothly from 0 at 25% visible to solid at 75% (no steps); it fades in fast
     // (about 0.15 s) and out slowly (about 0.6 s), so ships show promptly but don't flicker at corners
-    const F = facOf(t.side), x = Math.max(0, Math.min(1, (t.f - F.visLo) / (F.visHi - F.visLo))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
+    const x = Math.max(0, Math.min(1, (t.f - VIS_LO) / (VIS_HI - VIS_LO))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
     const k = t.pid && spawnEnd.has(t.pid) ? 1 : Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));   // (owner, 2026-10-15) materializing: its visibility at once, no fade (the hologram was seen in nebulae)
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; const sp = v.userData.sp; for (const m of v.userData.mats) m.transparent = t.a < 0.999 || (sp && sp.s.value < 1); }
     v.visible = t.a > 0.01;
   }
-  visGizmo(edit); cloudFx(now);
+  cloudFx(now);
 }
 // ---- (owner, 2026-10-14) impacts throw out debris and fire sparks where two ships met, more the harder the hit:
 // gray-white debris that tumbles out and fades, and bright orange-yellow sparks that fly fast, arc and burn out ----
@@ -675,7 +611,7 @@ const HP_DROP_MS = 750, HP_GHOST_LAG = 400, HP_SHOVE = 9, HP_SHOVE_MS = 180;
 const hpAnim = new Map();                      // player id -> { hp, mF, mT, gF, gT, t0, flash, hitT }
 const easeOut = (k) => 1 - Math.pow(1 - k, 3);
 const tween = (from, to, t) => from + (to - from) * easeOut(Math.max(0, Math.min(1, t / HP_DROP_MS)));
-const hpMaxOf = (p) => facOf(sideOf(p)).hp || HP_MAX;   // (owner, 2026-10-15) by faction (Yellow 150)
+const hpMaxOf = (p) => statsOf(sideOf(p)).hp || 100;   // (owner, 2026-10-15) its team's
 function hpState(p, now) {
   const f = Math.max(0, Math.min(1, p.hp / hpMaxOf(p)));
   let s = hpAnim.get(p.id);
@@ -691,7 +627,7 @@ function drawHpBars() {
   const r = canvas.getBoundingClientRect(), seen = new Set(), now = performance.now();
   for (const id of hpAnim.keys()) if (!players.has(id)) hpAnim.delete(id);
   for (const p of players.values()) {
-    if (p.hp === undefined) continue;
+    if (p.hp === undefined || p.dead) continue;
     const s = hpState(p, now);
     { const sp = p.holder.children[0] && p.holder.children[0].userData.sp;   // (owner, 2026-10-15) the ship itself flashes red, fading out over 4 frames
       if (sp) sp.f.value = s.shipFlash > 0 ? s.shipFlash / 4 : 0; if (s.shipFlash > 0) s.shipFlash--; }
@@ -715,15 +651,8 @@ function drawHpBars() {
 // ---- (owner, 2026-10-15) shields: an oval around the ship (the combat points' box grown, as on the server) that only
 // shows when hit: white where the hit landed, spreading and fading back to its color (blue; yellow under half, red under a
 // quarter) with a brighter hexagon pattern, then fading out. Broken, it's gone until the ship respawns ----
-let SH_MAX = 50;                               // (the server sends it)
-const SH_GROW = 1.42, SH_PAD = 4, SH_SHOW = 1.5, SH_CELL = 12;
-function shieldOval() {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const v of buildPolys({ k: SHIPK, x: 0, y: 0, w: 2 * SHIP_R, d: 2 * SHIP_R, r: 0 }, colliders, pivots)) for (let i = 0; i < v.length; i += 2) {
-    x0 = Math.min(x0, v[i]); x1 = Math.max(x1, v[i]); y0 = Math.min(y0, v[i + 1]); y1 = Math.max(y1, v[i + 1]); }
-  if (!Number.isFinite(x0)) { x0 = y0 = -SHIP_R; x1 = y1 = SHIP_R; }
-  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, ax: (x1 - x0) / 2 * SH_GROW + SH_PAD, ay: (y1 - y0) / 2 * SH_GROW + SH_PAD };
-}
+const SH_SHOW = 1.5, SH_CELL = 12;
+const shieldOval = () => OVAL;                 // (the server's: the hitbox's box grown)
 const shieldGeo = new THREE.SphereGeometry(1, 48, 24);
 const SHIELD_VS = `uniform vec3 uAx; varying vec3 vLoc; varying vec3 vW; varying vec3 vN;
 void main() { vLoc = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
@@ -763,7 +692,7 @@ function updateShields(now) {
     const p = players.get(id), t = (now - s.t0) / 1000;
     if (!p || t > SH_SHOW) { s.mesh.visible = false; if (!p) { scene.remove(s.mesh); s.mesh.material.dispose(); shields.delete(id); } continue; }
     const v = p.holder.children[0], vt = id === myId ? null : visTargets.get(v), vis = id === myId ? 1 : vt ? vt.a : 0;
-    const sh = p.sh ?? SH_MAX;
+    const sh = p.sh ?? 0;
     if (sh <= 0) { if (!s.broke) s.broke = now; } else s.broke = 0;
     const gone = s.broke ? Math.max(0, 1 - (now - s.broke) / 250) : 1;
     const a = (1 - Math.min(1, Math.max(0, (t - 0.35) / (SH_SHOW - 0.35)))) * vis * gone * (p.holder.visible ? 1 : 0);
@@ -772,7 +701,7 @@ function updateShields(now) {
     const ex = px + o.cx * c - o.cy * sn, ey = py + o.cx * sn + o.cy * c, az = shipMid * 1.5 + 6;
     s.mesh.matrix.set(c * o.ax, 0, sn * o.ay, ex, 0, az, 0, shipMid, -sn * o.ax, 0, c * o.ay, -ey, 0, 0, 0, 1);
     s.mesh.matrixWorldNeedsUpdate = true; s.mesh.visible = true;
-    const u = s.mesh.material.uniforms, f = sh / (facOf(sideOf(p)).shield || SH_MAX);
+    const u = s.mesh.material.uniforms, f = sh / (statsOf(sideOf(p)).shield || 1);
     // the hit, moved out onto the oval (straight out from its middle)
     const dx = s.gx - ex, dy = s.gy - ey, lx = (dx * c + dy * sn) / o.ax, ly = (-dx * sn + dy * c) / o.ay, L = Math.hypot(lx, ly) || 1, ux = lx / L * o.ax, uy = ly / L * o.ay;
     u.uHit.value.set(ex + ux * c - uy * sn, shipMid, -(ey + ux * sn + uy * c));
@@ -781,23 +710,57 @@ function updateShields(now) {
     u.uCol.value.copy(f >= 0.5 ? SH_BLUE : f >= 0.25 ? SH_YEL : SH_RED);
   }
 }
-// ---- (owner, 2026-10-15) factions in play: my faction's sight, load circle and weapon; held fire (bullets repeat at the
-// weapon's rate; Blue's laser stays on while held, its direction sent ~10 times a second); beams drawn for everyone ----
-function applyFaction() {
-  const F = facOf(mySide); if (window.Tuning) window.Tuning.set(FACS, mySide);
-  FAR_IN = F.farIn; FAR_OUT = F.farOut; farInU.value = FAR_IN; visU.visFar.value = FAR_OUT; LOAD_R = F.load;
-  ammo = null; reloadAt = 0;
-}
-let fireHeld = false, beamSent = 0, beamWas = false, lastPtr = null;
+// ---- (owner, 2026-10-15) weapons: each team's from its ship numbers. Left click held: bullets fire at the weapon's rate
+// (the server checks the rate, ammo, capacitor and spread and flies them), or the beam stays on (its direction sent ~10
+// times a second; the server turns it at the weapon's rotation speed). R reloads; an empty magazine reloads by itself. ----
+const maxRange = (S) => (S.optimal || 0) + (S.falloff || 0);
+function curveAt(s, opt, fall, end, shape) { if (s <= opt) return 1; const u = fall > 0 ? Math.min(1, (s - opt) / fall) : 1; return 1 - (1 - end / 100) * Math.pow(u, shape); }
+let fireHeld = false, beamSent = 0, beamWas = false, railAt = 0, spreadDeg = 0, spreadT = 0;
+let aimAng = null, aimOx = 0, aimOy = 0;       // aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
+const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
+const spreadNow = (now = performance.now()) => { const S = myStats(); return Math.min(S.spreadMax || 0, (S.spread0 || 0) + Math.max(0, spreadDeg - (S.spreadBack || 0) * (now - spreadT) / 1000)); };
+const canShoot = () => haveMe && !deadLeft && ws && ws.readyState === 1 && !build.open && !typing() && !amSpawning() && ammo > 0 && !reloadLeft;
 function weaponFrame(now) {
-  const w = wpn(), on = fireHeld && w.type === "beam" && haveMe && !amSpawning() && !build.open && !build.editorOpen && !typing() && aimAng !== null;
+  const S = myStats(), on = fireHeld && S.wtype === 1 && canShoot() && aimAng !== null && cap >= (S.capUse || 0) * 0.05;
   if (on && now - beamSent > 100) { const d = aimDir(); beamSent = now; send({ t: "beam", on: 1, x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }); }
   else if (!on && beamWas) send({ t: "beam", on: 0 });
   beamWas = on;
-  if (fireHeld && w.type !== "beam") fireRail();
+  if (fireHeld && S.wtype === 0 && canShoot() && aimAng !== null && now - railAt >= 1000 / Math.max(0.1, S.rate) && cap >= (S.capUse || 0)) {
+    const d = aimDir(); railAt = now;
+    spreadDeg = Math.min(Math.max(0, S.spreadMax - S.spread0), Math.max(0, spreadDeg - S.spreadBack * (now - spreadT) / 1000) + S.spreadAdd); spreadT = now;
+    ammo--; send({ t: "fire", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 });
+  }
 }
+addEventListener("keydown", (e) => { if (e.code === "KeyR" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !typing() && !build.open && haveMe) send({ t: "reload" }); });
+// bullets: drawn from where they left, slowing down past optimal as the server flies them (s: [speed, optimal, falloff, end %, shape])
+const projs = new Map();                       // id -> { g, x, y, ux, uy, s, went }
+const addMat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending });
+const PROJ = { blue: { core: addMat(0xeafcff, 1), glow: addMat(0x3fb8ff, 0.5), trail: addMat(0x3fb8ff, 0.22) }, red: { core: addMat(0xfff6d8, 1), glow: addMat(0xffb830, 0.5), trail: addMat(0xffb830, 0.22) } };
+const projGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false).rotateZ(Math.PI / 2).translate(-0.5, 0, 0);   // along x, from -1 to 0 (the tip at its origin)
+function addProj(m) {
+  if (![m.x, m.y, m.ux, m.uy].every(Number.isFinite) || !Array.isArray(m.s) || !m.s.every(Number.isFinite) || projs.has(m.i)) return;
+  const M = PROJ[sideOf(players.get(m.a))] || PROJ.blue, g = new THREE.Group(), core = new THREE.Mesh(projGeo, M.core), glow = new THREE.Mesh(projGeo, M.glow), trail = new THREE.Mesh(projGeo, M.trail);
+  core.scale.set(9, 0.9, 0.9); glow.scale.set(13, 2.4, 2.4); trail.scale.set(26, 1.1, 1.1); g.add(trail, glow, core);
+  g.rotation.y = Math.atan2(m.uy, m.ux); g.renderOrder = 3; scene.add(g);
+  projs.set(m.i, { g, x: m.x, y: m.y, ux: m.ux, uy: m.uy, s: m.s, went: 0, a: m.a, t0: performance.now() });
+}
+function endProj(m) {
+  const q = projs.get(m.i); if (q) { scene.remove(q.g); projs.delete(m.i); }
+  if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
+  const bx = q ? -q.ux : undefined, by = q ? -q.uy : undefined;   // sparks fly back the way it came
+  if (m.h != null && m.sh) { shieldHit(m.h, m.x, m.y); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // it stopped on a shield
+  else if (m.h != null) { burst(m.x, m.y, 260, bx, by); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // a ship I hit shows in a cloud
+  else if (m.s) burst(m.x, m.y, 60, bx, by);   // a small puff on a wall
+}
+function updateShots(now, dt) {
+  for (const [id, q] of projs) {
+    const [v0, opt, fall, end, shape] = q.s, v = v0 * curveAt(q.went, opt, fall, end, shape); q.went = Math.min(opt + fall, q.went + Math.max(0, v) * dt);
+    if (now - q.t0 > 20000 || (q.went >= opt + fall && now - q.t0 > 3000)) { scene.remove(q.g); projs.delete(id); continue; }   // (never told it ended)
+    q.g.position.set(q.x + q.ux * q.went, shipMid, -(q.y + q.uy * q.went));
+  }
+}
+// beams: a white core in a glow of the team's color, thinning and dimming toward its full reach
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 12, true).rotateZ(Math.PI / 2).translate(0.5, 0, 0);   // along x, 0 to 1
-// (owner, 2026-10-15) a beam thins and dims the further it reaches (uEnd: how much of the full reach this one covers)
 const beamMat = (col, a) => new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   uniforms: { uCol: { value: new THREE.Color(col) }, uA: { value: a }, uEnd: { value: 1 } },
   vertexShader: `uniform float uEnd; varying float vF; void main() { vF = position.x * uEnd; float w = 1.0 - 0.7 * vF;
@@ -807,193 +770,49 @@ const beams = new Map();                       // player id -> { g, core, glow, 
 function drawBeams(now) {
   const live = new Set();
   for (const p of players.values()) {
-    let a, len, x, y, hit = 0;
+    let a, len, x, y, hit = 0; const S = statsOf(sideOf(p));
     if (p.id === myId) {
-      if (!beamWas || !aimInArc()) continue;
-      a = -aimAng; len = p.bm ? p.bm[1] : wpn().optimal; hit = p.bm ? p.bm[2] : 0; x = aimOx; y = aimOy;
+      if (!beamWas || !p.bm) continue;
+      a = -aimAng; len = p.bm[1]; hit = p.bm[2]; x = me.x; y = me.y;
     } else {
       if (!p.bm || !p.near || !p.holder.visible) continue;
-      a = p.bm[0] / 1000; len = p.bm[1]; hit = p.bm[2];
-      [x, y] = shipOrigin(p.holder.position.x, -p.holder.position.z, p.heading || 0, p.ta);
+      a = p.bm[0] / 1000; len = p.bm[1]; hit = p.bm[2]; x = p.holder.position.x; y = -p.holder.position.z;
     }
     live.add(p.id);
     let b = beams.get(p.id);
-    if (!b) { const g = new THREE.Group(), core = new THREE.Mesh(beamGeo, beamMat(0xe2f2ff, 1)), glow = new THREE.Mesh(beamGeo, beamMat(0x3f8fff, 0.45)); g.add(glow, core); g.renderOrder = 4; scene.add(g); b = { g, core, glow, fxAt: 0 }; beams.set(p.id, b); }
+    if (!b) { const g = new THREE.Group(), glowC = sideOf(p) === "red" ? 0xffb830 : 0x3f8fff, core = new THREE.Mesh(beamGeo, beamMat(0xeef6ff, 1)), glow = new THREE.Mesh(beamGeo, beamMat(glowC, 0.45)); g.add(glow, core); g.renderOrder = 4; scene.add(g); b = { g, core, glow, fxAt: 0 }; beams.set(p.id, b); }
     const fl = 1 + 0.25 * Math.sin(now * 0.05 + x);   // a little flicker
     b.g.position.set(x, shipMid, -y); b.g.rotation.y = a;
     b.core.scale.set(Math.max(1, len), 1.3 * fl, 1.3 * fl); b.glow.scale.set(Math.max(1, len), 5 * fl, 5 * fl);
-    { const reach = (facOf(sideOf(p)).weapon || {}).optimal || 900, e = Math.min(1, len / reach); b.core.material.uniforms.uEnd.value = e; b.glow.material.uniforms.uEnd.value = e; }
+    { const e = Math.min(1, len / Math.max(1, maxRange(S))); b.core.material.uniforms.uEnd.value = e; b.glow.material.uniforms.uEnd.value = e; }
     const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len;
     if (hit === 2) { let best = 140, id = null; for (const q of players.values()) { if (q === p) continue; const qx = q.id === myId ? me.x : q.holder.position.x, qy = q.id === myId ? me.y : -q.holder.position.z, d = Math.hypot(qx - ex, qy - ey); if (d < best) { best = d; id = q.id; } } if (id) shieldHit(id, ex, ey); }
     else if (hit === 1 && now - b.fxAt > 110) { b.fxAt = now; burst(ex, ey, 45); }
   }
   for (const [id, b] of beams) if (!live.has(id)) { scene.remove(b.g); b.core.material.dispose(); b.glow.material.dispose(); beams.delete(id); }
 }
-// (owner, 2026-10-15) F: my faction's secondary toward the ground point under the pointer
-addEventListener("keydown", (e) => {
-  if (e.code !== "KeyF" || e.repeat || e.ctrlKey || e.metaKey || e.altKey || typing() || build.open || build.editorOpen || !haveMe || amSpawning()) return;
-  if (!facOf(mySide).second || !lastPtr) return;
-  send({ t: "launch", x: Math.round(lastPtr.x * 10) / 10, y: Math.round(lastPtr.y * 10) / 10 });
-});
-// ---- (owner, 2026-10-15) missiles (Yellow) and drones (Blue) from the server, and their blasts ----
-const ords = new Map();                        // id -> { g, x, y, h, tx, ty, th }
-const ordAdd = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending });
-const missileBody = new THREE.ConeGeometry(1.6, 9, 8).rotateZ(-Math.PI / 2), missileTrail = new THREE.CylinderGeometry(0.4, 2.2, 1, 8, 1, true).rotateZ(Math.PI / 2).translate(-0.5, 0, 0);
-const droneBody = new THREE.OctahedronGeometry(3.2), glowBall = new THREE.SphereGeometry(1, 12, 8);
-const ordMats = { mBody: new THREE.MeshBasicMaterial({ color: 0xffe9a0 }), mTrail: ordAdd(0xffa630, 0.55), mGlow: ordAdd(0xffc040, 0.5), dBody: new THREE.MeshBasicMaterial({ color: 0xbfe0ff }), dGlow: ordAdd(0x3f8fff, 0.55) };
-function makeOrd(kind) {
-  const g = new THREE.Group();
-  if (kind === 0) { const b = new THREE.Mesh(missileBody, ordMats.mBody), t = new THREE.Mesh(missileTrail, ordMats.mTrail), gl = new THREE.Mesh(glowBall, ordMats.mGlow); t.scale.set(34, 1, 1); t.position.x = -4; gl.scale.setScalar(5); gl.position.x = -4; g.add(t, gl, b); }
-  else { const b = new THREE.Mesh(droneBody, ordMats.dBody), gl = new THREE.Mesh(glowBall, ordMats.dGlow); gl.scale.setScalar(7); g.add(gl, b); g.userData.spin = b; }
-  g.renderOrder = 3; scene.add(g); return g;
-}
-const blasts = [];                             // { mesh, t0, r }
-const blastMat = () => ordAdd(0xffa640, 0.7);
-function onOrd(m) {
-  const live = new Set();
-  for (const row of Array.isArray(m.o) ? m.o : []) {
-    const [id, k, x, y, h] = row; if (![x, y, h].every(Number.isFinite)) continue; live.add(id);
-    let o = ords.get(id); if (!o) { o = { g: makeOrd(k === 1 ? 1 : 0), x: x / 10, y: y / 10, h: h / 100 }; ords.set(id, o); }
-    o.tx = x / 10; o.ty = y / 10; o.th = h / 100;
-  }
-  for (const [id, o] of ords) if (!live.has(id)) { scene.remove(o.g); ords.delete(id); }
-  for (const b of Array.isArray(m.b) ? m.b : []) {
-    const [x, y, R, k, hid] = b; if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    if (hid != null) { const q = players.get(hid); if (q && (q.sh ?? 0) > 0) shieldHit(hid, x, y); }
-    if (Array.isArray(b[5]) && b[5].every(Number.isFinite)) { zap(x, y, b[5][0], b[5][1]); continue; }   // (owner, 2026-10-15) a circling drone's zap
-    if (k === 0 && R > 30) {                   // a missile's blast: a fireball out to its reach, and sparks
-      const mesh = new THREE.Mesh(glowBall, blastMat()); mesh.position.set(x, shipMid, -y); mesh.renderOrder = 4; scene.add(mesh);
-      blasts.push({ mesh, t0: performance.now(), r: R }); burst(x, y, 420);
-    } else burst(x, y, k === 0 ? 120 : 90);
-  }
-}
-// a circling drone's zap: a jagged blue spark from it toward its target, out to the target's shield, fading in 0.15 s
-const zaps = [], zapMat = () => new THREE.LineBasicMaterial({ color: 0x8fd0ff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
-function zap(x, y, tx, ty) {
-  const o = shieldOval(), R = Math.max(o.ax, o.ay) * 0.85, dx = tx - x, dy = ty - y, L = Math.hypot(dx, dy) || 1, len = Math.max(10, L - R);
-  const pts = []; for (let i = 0; i <= 5; i++) { const f = i / 5, j = i && i < 5 ? (Math.random() * 2 - 1) * 5 : 0; pts.push(new THREE.Vector3(x + dx / L * len * f - dy / L * j, shipMid, -(y + dy / L * len * f + dx / L * j))); }
-  const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), zapMat()); line.renderOrder = 4; scene.add(line);
-  zaps.push({ line, t0: performance.now() }); burst(x + dx / L * len, y + dy / L * len, 18);
-}
-function updateOrds(dt, now) {
-  for (let i = zaps.length - 1; i >= 0; i--) { const z = zaps[i], t = (now - z.t0) / 150; if (t >= 1) { scene.remove(z.line); z.line.geometry.dispose(); z.line.material.dispose(); zaps.splice(i, 1); } else z.line.material.opacity = 1 - t; }
-  const k = Math.min(1, dt * 14);
-  for (const o of ords.values()) {
-    o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k; o.h += Math.atan2(Math.sin(o.th - o.h), Math.cos(o.th - o.h)) * k;
-    o.g.position.set(o.x, shipMid, -o.y); o.g.rotation.y = o.h - Math.PI / 2;
-    if (o.g.userData.spin) o.g.userData.spin.rotation.x += dt * 6;
-  }
-  for (let i = blasts.length - 1; i >= 0; i--) {
-    const b = blasts[i], t = (now - b.t0) / 550;
-    if (t >= 1) { scene.remove(b.mesh); b.mesh.material.dispose(); blasts.splice(i, 1); continue; }
-    b.mesh.scale.setScalar(b.r * (0.3 + 0.7 * Math.sqrt(t))); b.mesh.scale.y *= 0.45; b.mesh.material.opacity = 0.7 * (1 - t);
-  }
-}
-// (owner) with the Object Editor open, the lines behind each number are drawn (clear green, blocked red) with the
-// percentage over each ship, for testing
-const visGizGeo = new THREE.BufferGeometry(); let visGizCap = 0;
-const visGiz = new THREE.LineSegments(visGizGeo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.35, depthTest: false }));
-visGiz.renderOrder = 9; visGiz.frustumCulled = false; visGiz.visible = false; scene.add(visGiz);
-const visLabels = new Map();                   // ship visual -> label element
-function visGizmo(on) {
-  visGiz.visible = on;
-  for (const [v, el] of visLabels) if (!on || !visTargets.has(v)) { el.remove(); visLabels.delete(v); }
-  if (!on) return;
-  const P = [], C = [];
-  for (const [v, t] of visTargets) {
-    for (const [ax, ay, bx, by, ok] of t.lines || []) { P.push(ax, 3, -ay, bx, 3, -by); const c = ok ? [0.3, 1, 0.45] : [1, 0.3, 0.3]; C.push(...c, ...c); }
-    let el = visLabels.get(v); if (!el) { el = document.createElement("div"); el.className = "vis-label"; document.body.appendChild(el); visLabels.set(v, el); }
-    const s = new THREE.Vector3(t.x, 60, -t.y).project(camera), r = canvas.getBoundingClientRect();
-    el.style.transform = "translate(" + (r.left + (s.x + 1) / 2 * r.width) + "px," + (r.top + (1 - s.y) / 2 * r.height) + "px)";
-    el.textContent = Math.round(t.f * 100) + "%"; el.hidden = s.z > 1;
-  }
-  if (P.length > visGizCap) { visGizCap = Math.max(P.length, visGizCap * 2, 6000); visGizGeo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(visGizCap), 3)); visGizGeo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(visGizCap), 3)); }
-  if (visGizGeo.attributes.position) { visGizGeo.attributes.position.array.set(P); visGizGeo.attributes.color.array.set(C); visGizGeo.attributes.position.needsUpdate = visGizGeo.attributes.color.needsUpdate = true; }
-  visGizGeo.setDrawRange(0, P.length / 3);
-}
-// (owner, 2026-10-14) a ship's Visibility outline in the world (what the mutual visibility test uses; the combat points are separate)
-function shipVisOutline(x, y, h) { return visPtsOf({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }); }
-// (owner, 2026-10-14) a ship's Weapon Origin in the world, [x, y]: where its aim line and shots start (line of sight stays at the pivot)
-function shipOrigin(x, y, h, ta = myTa) { const mi = modInfo(); return muzzleAt(x, y, h, 2 * SHIP_R, origins[SHIPK] || [0, 0], pivots[SHIPK] || [0, 0], mi && mi.t, mi && mi.ex, ta); }   // (owner, 2026-10-15) its module's barrel end
-// ---- (owner, 2026-10-15) the hardpoint module on each ship's socket (the player ship's Module, a Hardpoint object): its
-// mount on the socket (at the hardpoint's elevation), turning around its rotation point. My turret follows the aim line,
-// held inside the hardpoint's rotation limit (it stops at the edge), and faces its default way when I'm not aiming;
-// everyone else's turns as its owner's does (its yaw comes in the snapshots). ----
-let myTa = null;                               // my turret's yaw against the ship (three.js rotation.y), sent to the server
-const modUnits = new Map();                    // file -> the model as a unit (widest side 1, middle over its center, on the ground), null while loading
-function modUnit(file) {
-  if (!file) return null; if (modUnits.has(file)) return modUnits.get(file); modUnits.set(file, null);
-  new GLTFLoader().load((typeof API_BASE !== "undefined" ? API_BASE : location.origin) + "/game/models/" + file, (g) => {
-    const src = g.scene, box = new THREE.Box3().setFromObject(src), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
-    src.position.set(-c.x, -box.min.y, -c.z); const u = new THREE.Group(); u.add(src); u.scale.setScalar(1 / Math.max(sz.x, sz.z, 1e-6));
-    modUnits.set(file, u); modKey = "";       // (everyone's module is rebuilt with it)
-  }, undefined, (e) => console.warn("[module] load failed:", e && e.message));
-  return null;
-}
-function modInfo() {
-  return null;   // (owner, 2026-10-15: a ship isn't tied to one module; fitting modules comes later)
-  const st = SHIPK.startsWith("t:") && objTypes.get(SHIPK.slice(2)), t = st && st.mod && objTypes.get(st.mod);   // eslint-disable-line no-unreachable
-  return t && t.cat === "hardpoint" ? { t, ex: { ...EXTRA_DEFAULT, ...(collExtra["t:" + t.id] || {}) } } : null;
-}
-const modCenter = () => -((collExtra[SHIPK] || EXTRA_DEFAULT).dir || 0) * Math.PI / 180;   // its default facing (degrees clockwise from the nose)
-let modKey = "";
-function modFrame() {
-  const mi = modInfo(), D = 2 * SHIP_R, ce = collExtra[SHIPK] || EXTRA_DEFAULT, wo = origins[SHIPK] || [0, 0];
-  const key = mi ? [mi.t.id, mi.t.model, mi.t.front || 0, JSON.stringify(mi.t.mats || ""), mi.t.size, JSON.stringify(mi.ex.m) + JSON.stringify(mi.ex.r), wo, ce.hz, !!modUnits.get(mi.t.model)].join("|") : "";
-  const rebuild = key !== modKey; modKey = key;
-  for (const p of players.values()) {
-    const v = p.holder.children.find((o) => !o.userData.mod);
-    if (rebuild || (p.mod && p.mod.parent !== p.holder)) { if (p.mod) p.holder.remove(p.mod); p.mod = null; }
-    if (!mi || !v) continue;
-    if (!p.mod) {
-      const S = mi.t.size, m = mi.ex.m, r = mi.ex.r, u = modUnit(mi.t.model);
-      const bankG = new THREE.Group(), sock = new THREE.Group(), yaw = new THREE.Group(); bankG.userData.mod = true;
-      sock.position.set(wo[0] * D, (ce.hz || 0) * D, -wo[1] * D);
-      yaw.position.set((r[0] - m[0]) * S, (r[2] - m[2]) * S, -(r[1] - m[1]) * S);
-      const mesh = u ? tintObject(u.clone(true), mi.t.mats) : new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1).translate(0, 0.25, 0), new THREE.MeshStandardMaterial({ color: 0x8c96aa }));
-      const turn = new THREE.Group(); turn.rotation.y = (mi.t.front || 0) * Math.PI / 180; turn.add(mesh);
-      const sc = new THREE.Group(); sc.scale.setScalar(S); sc.add(turn); sc.position.set(-r[0] * S, -r[2] * S, r[1] * S);
-      yaw.add(sc); sock.add(yaw); bankG.add(sock); p.holder.add(bankG); p.mod = bankG; p.modYaw = yaw;
-    }
-    p.mod.position.copy(v.position); p.mod.rotation.z = v.rotation.z;   // (it rolls with the hull)
-    p.mod.visible = v.visible && !(v.userData.va && v.userData.va.value < 0.5);
-    const ta = p.id === myId ? (myTa ?? modCenter()) : (Number.isFinite(p.ta) ? p.ta : modCenter());
-    p.modYaw.rotation.y = ta;
-  }
-}
-// my turret's yaw: toward the aim line (scene angle aimAng), held inside the rotation limit; its default facing otherwise
-function myTurret(heading) {
-  const ce = collExtra[SHIPK] || EXTRA_DEFAULT, c = modCenter();
-  if (!aiming || aimAng === null || !modInfo()) return c;
-  let local = Math.atan2(Math.cos(aimAng), Math.sin(aimAng)) - heading; local = Math.atan2(Math.sin(local - c), Math.cos(local - c));
-  const lim = (ce.arc ?? 360) >= 360 ? Math.PI : (ce.arc * Math.PI / 360);
-  return c + Math.max(-lim, Math.min(lim, local));
-}
-// an object's visibility points in the world, as [x0, y0, x1, y1, ...]
-function visPtsOf(o) { return toWorldPts(o, visOutlines[o.k] || VIS_DEFAULT[o.k] || VIS_DEFAULT.ship, pivots[o.k] || [0, 0]); }
-// a player ship's combat-points parts where it's drawn (the ship kind's outlines and pivot, turned with its heading)
-function shipSight(p) { return buildPolys({ k: SHIPK, x: p.holder.position.x, y: -p.holder.position.z, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots); }
-// (owner, 2026-10-14) the ship kind's pivot: the point of the model a ship turns around (its position is that point)
-function applyShipPivot() {
-  const pv = pivots[SHIPK] || [0, 0], D = 2 * SHIP_R;
-  for (const p of players.values()) { const v = p.holder.children[0]; if (v) { v.position.x = -pv[0] * D; v.position.z = pv[1] * D; } }
-}
+// a ship's visibility points and hitbox where it is (the server's outlines, turned with its heading)
+const BOX_PTS = [[-0.33, -0.5556], [0, -0.5556], [0.33, -0.5556], [0.33, 0], [0.33, 0.5556], [0, 0.5556], [-0.33, 0.5556], [-0.33, 0]];
+let shipParts = [[[-0.33, -0.5556], [0.33, -0.5556], [0.33, 0.5556], [-0.33, 0.5556]]];
+const foot = (x, y, h) => ({ x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h });
+function shipVisOutline(x, y, h) { return toWorldPts(foot(x, y, h), shipVis || BOX_PTS); }
+function shipSight(p) { return shipParts.map((v) => toWorldPts(foot(p.holder.position.x, -p.holder.position.z, p.heading), v)); }
+// (owner, 2026-10-14) the ship's pivot: the point of the model a ship turns around (its position is that point)
+function applyShipPivot() { const D = 2 * SHIP_R; for (const p of players.values()) { const v = p.holder.children[0]; if (v) { v.position.x = -shipPivot[0] * D; v.position.z = shipPivot[1] * D; } } }
 
 function addPlayer(id, name, x = 0, y = 0) {
   if (players.has(id)) { players.get(id).name = name; return players.get(id); }
   const holder = new THREE.Group();
   holder.position.copy(toWorld(x, y, 0)); holder.add(makeVisual(id !== myId, id === myId, id === myId ? mySide : null)); scene.add(holder);
-  if (/^b[0-9]+$/.test(id)) holder.userData.id = id.slice(1);   // (owner, 2026-10-14) a test ship's stand-in: clicking it in the Build menu picks up the piece
   holder.visible = id === myId;                // others show once a snapshot has them inside the load circle
   const p = { id, name, holder, heading: 0, buf: [], to: { x, y }, near: false };   // buf: recent snapshot positions on the server's clock; near: inside my load circle
   players.set(id, p); applyShipPivot(); return p;
 }
 function dropPlayer(id) { const p = players.get(id); if (!p) return; scene.remove(p.holder); players.delete(id); }
 const TRAIL_MAX = 80, TRAIL_S = 0.4;           // (owner) the camera trail: up to 80 m behind (was 200), 0.4 m per m/s of speed
-const TURN = 0.5;                              // rad/s (owner: first 12, then 4, 8, 4, 2, and on 2026-10-14 cut by another 75% to 0.5)
-const TURN_A = 2.5, TURN_K = 4, BANK_MAX = 0.32;
-const BUMP_E = 0.5;                             // (owner, 2026-10-14) ship bump bounce, as on the server
-let HP_MAX = 100;                               // (the server sends it)   // (owner, 2026-10-14) turn spin-up (rad/s^2), easing into the target, the most a ship leans (rad)
+// (owner, 2026-10-15) the turn speed and its spin-up are the ship's (turn, turnAccel: degrees); the rest stays
+const TURN_K = 4, BANK_MAX = 0.32;
+const TURN = () => (myStats().turn || 29) * Math.PI / 180, TURN_A = () => (myStats().turnAccel || 143) * Math.PI / 180;
 // (owner) with no WASD, the ship keeps its last heading: for my own ship only held
 // input re-aims it (correction nudges never do); for others, only a sustained real speed does.
 function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced turn direction (+1 / -1), 0 = the short way
@@ -1009,14 +828,14 @@ function placeShip(p, x, y, dt, face, moving, sign = 0) {   // sign: a forced tu
   // into the target instead of starting and stopping dead. A reversal keeps turning the chosen way round.
   const T2 = Math.PI * 2;
   let want = 0;
-  if (target !== null && sign) { const r = ((sign * (target - p.heading)) % T2 + T2) % T2; want = r > 1e-3 && r < T2 - 1e-3 ? sign * Math.min(TURN, r * TURN_K, Math.sqrt(2 * TURN_A * r)) : 0; }
+  if (target !== null && sign) { const r = ((sign * (target - p.heading)) % T2 + T2) % T2; want = r > 1e-3 && r < T2 - 1e-3 ? sign * Math.min(TURN(), r * TURN_K, Math.sqrt(2 * TURN_A() * r)) : 0; }
   else if (target !== null) {
     let diff = (target - p.heading) % T2;                             // shortest arc, valid however far the
     if (diff > Math.PI) diff -= T2; else if (diff < -Math.PI) diff += T2;   // heading has accumulated
-    want = Math.sign(diff) * Math.min(TURN, Math.abs(diff) * TURN_K, Math.sqrt(2 * TURN_A * Math.abs(diff)));   // never faster than it can stop in (no overshoot)
+    want = Math.sign(diff) * Math.min(TURN(), Math.abs(diff) * TURN_K, Math.sqrt(2 * TURN_A() * Math.abs(diff)));   // never faster than it can stop in (no overshoot)
   }
   if (target !== null || p.omega) {
-    const dw = want - (p.omega || 0), lim = TURN_A * dt;
+    const dw = want - (p.omega || 0), lim = TURN_A() * dt;
     p.omega = (p.omega || 0) + Math.max(-lim, Math.min(lim, dw));
     if (target === null && Math.abs(p.omega) < 0.05) p.omega = 0;
     let step = p.omega * dt;
@@ -1037,221 +856,60 @@ function bank(p, dt) {
   v.rotation.z += (roll - v.rotation.z) * Math.min(1, dt * 8);
 }
 
-// (owner, 2026-10-13) my ship against the blocks and the other ships (as drawn), as the server does it
-function collideMe() {                       // (owner, 2026-10-14) by the ship's Movement ellipse, turned with its heading, like the server
+// a ship's movement outline (an oval in its footprint, turned with its heading), as the server's
+function shipMove(x, y, h) { const c = Math.cos(h), s = Math.sin(h), out = []; for (let i = 0; i < 16; i++) { const lx = Math.cos(i * Math.PI / 8) * SHIP_R * 0.62, ly = Math.sin(i * Math.PI / 8) * SHIP_R; out.push(x + lx * c - ly * s, y + lx * s + ly * c); } return out; }
+// (owner, 2026-10-13) my ship against the Build shapes and the other ships (as drawn), as the server does it
+function collideMe() {
   const q = { x: me.x, y: me.y, vx: vel.x, vy: vel.y }, mine = players.get(myId), h = mine ? mine.heading : 0;
   let P = shipMove(q.x, q.y, h); const R = polyRad(q, P);
-  const hitBy = (B) => { const n = satPush(P, B); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } };
-  for (const b of blocks.values()) if (Math.abs(q.x - b.x) <= BLOCK_HALF * 1.5 + R && Math.abs(q.y - b.y) <= BLOCK_HALF * 1.5 + R) hitBy(squarePoly(b.x, b.y, BLOCK_HALF));
-  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud" || !b.mpoly || !b.mpoly.length) continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy <= RR * RR) hitBy(b.mpoly); }   // (test ships: as ships, below)   // Build menu pieces (their movement ellipses)
-  for (const p of players.values()) {          // (owner, 2026-10-14) other ships: pushed apart, trading momentum like the server does
-    if (p.id === myId || !p.near) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
+  for (const b of builds.values()) { if (b.k === "cloud" || !b.polys) continue; const dx = q.x - b.x, dy = q.y - b.y, RR = b.rad + R; if (dx * dx + dy * dy > RR * RR) continue; for (const v of b.polys) { const n = satPush(P, v); if (n) { nudge(q, n, n.d); P = shipMove(q.x, q.y, h); } } }
+  for (const p of players.values()) {          // other ships: pushed apart, trading momentum like the server does
+    if (p.id === myId || !p.near || p.dead) continue; const x = p.holder.position.x, y = -p.holder.position.z; if (Math.hypot(x - q.x, y - q.y) > 2 * R + 10) continue;
     const n = satPush(P, shipMove(x, y, p.heading)); if (!n) continue;
     q.x += n.nx * n.d / 2; q.y += n.ny * n.d / 2; P = shipMove(q.x, q.y, h);
     const vn = (q.vx - (p.vx || 0)) * n.nx + (q.vy - (p.vy || 0)) * n.ny;
-    if (vn < 0) { const j = -(1 + BUMP_E) * vn / 2; q.vx += j * n.nx; q.vy += j * n.ny; if (!(keys.size)) brakeA = 0; }
+    if (vn < 0) { const j = -1.5 * vn / 2; q.vx += j * n.nx; q.vy += j * n.ny; }
   }
   if (inside(q.x, q.y)) { me.x = q.x; me.y = q.y; vel.x = q.vx; vel.y = q.vy; }
 }
-// (owner, 2026-10-14) every ship's colliders and pivot, for the Object Editor's drawing in the world
-function shipGizmos() {
-  const out = [];
-  for (const p of players.values()) {
-    if (p.id !== myId && !p.near) continue;
-    const x = p.id === myId ? me.x : p.holder.position.x, y = p.id === myId ? me.y : -p.holder.position.z;
-    out.push({ x, y, sight: buildPolys({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: p.heading }, colliders, pivots), move: shipMove(x, y, p.heading), vis: shipVisOutline(x, y, p.heading), wo: shipOrigin(x, y, p.heading) });
-  }
-  return out;
-}
-// a ship's Movement ellipse in the world (the ship kind's, from the Object Editor)
-function shipMove(x, y, h) { return movePoly({ k: SHIPK, x, y, w: 2 * SHIP_R, d: 2 * SHIP_R, r: h }, movers, pivots); }
-// (owner) the first thing the aim line runs into, from my ship toward the reticle: a block (its square) or another ship
-// (its circle). Returns the fraction of the way (0-1) or null.
+// (owner) the first thing the aim line runs into, from my ship toward the reticle: a Build shape or another ship I can see.
+// Returns the fraction of the way (0-1) or null.
 function aimBlocked(x0, y0, x1, y1) {
-  const dx = x1 - x0, dy = y1 - y0; let best = null;
-  const hit = (t) => { if (t > 1e-4 && t < 1 && (best === null || t < best)) best = t; };
-  for (const b of blocks.values()) {               // segment vs square (slabs)
-    let t0 = 0, t1 = 1, ok = true;
-    for (const [o, d, lo, hi] of [[x0, dx, b.x - BLOCK_HALF, b.x + BLOCK_HALF], [y0, dy, b.y - BLOCK_HALF, b.y + BLOCK_HALF]]) {
-      if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { ok = false; break; } continue; }
-      let a = (lo - o) / d, c = (hi - o) / d; if (a > c) [a, c] = [c, a];
-      t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) { ok = false; break; }
-    }
-    if (ok && t0 > 0) hit(t0);
-  }
-  for (const b of builds.values()) { if (b.k === "ship" || b.k === "cloud") continue; for (const v of b.polys) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); } }   // (test ships: as ships, below)   // Build menu pieces, by their Sight outlines (owner, 2026-10-14); hidden test ships don't count
-  for (const p of players.values()) {              // other ships, by their Sight outlines (owner, 2026-10-14)
-    if (p.id === myId || !p.near) continue;
+  let best = null; const hit = (t) => { if (t > 1e-4 && t < 1 && (best === null || t < best)) best = t; };
+  for (const b of builds.values()) { if (b.k === "cloud" || !b.polys) continue; for (const v of b.polys) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); } }
+  for (const p of players.values()) {
+    if (p.id === myId || !p.near || p.dead) continue;
     const vt = visTargets.get(p.holder.children[0]); if (!vt || vt.a <= 0.01) continue;   // (owner) a ship I can't see doesn't stop my aim line (it'd give it away)
     for (const v of shipSight(p)) { const t = segPoly(x0, y0, x1, y1, v); if (t !== null) hit(t); }
   }
   return best;
 }
 
-// ---- input: WASD relative to the camera; middle-mouse drag (touch: one-finger drag) orbits it ----
+// ---- input ----
 const keys = new Set();
-let sprint = false;                            // (owner) Shift = sprint (30% faster)
-// (owner) X drops a block where the ship is. (owner, 2026-10-13) Blocks are the server's now: everyone sees them and
-// ships collide with them (the ship that dropped one is pushed out of it)
-const cubeGeo = new THREE.BoxGeometry(50, 50, 50);
-const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.6, metalness: 0.1 });
-const blocks = new Map();                      // id -> { x, y, mesh }
-function addBlock(id, x, y) {
-  if (blocks.has(id)) return;
-  const mesh = new THREE.Mesh(cubeGeo, farMat(cubeMat)); mesh.scale.setScalar(BLOCK_HALF / 25); mesh.position.copy(toWorld(x, y, BLOCK_HALF)); scene.add(mesh);
-  blocks.set(id, { x, y, mesh }); visVer++;
-}
-function dropBlock(id) { const b = blocks.get(id); if (b) { scene.remove(b.mesh); blocks.delete(id); visVer++; } }
-function dropCube() { if (haveMe) send({ t: "enemy" }); }   // (owner, 2026-10-15) X spawns an enemy ship (was: drops a block)
-// ---- (owner, 2026-10-14) dropped-item crates: a small glowing cube where items were dropped (the server keeps them 5
-// minutes). Right-click one (a quick click; holding is aiming): Open, within reach, shows its items (inventory.js), and
-// staff get Delete; staff can right-click Delete a Build piece or a block too. ----
-const CRATE_REACH = 250, CRATE_S = 16;
-if (window.Inventory) window.Inventory.setSend((m) => send(m));   // (owner, 2026-10-14) inventory moves, drops and takes go to the server
-const crates = new Map();                      // id -> { id, x, y, items, mesh }
-const crateGeo = new THREE.BoxGeometry(CRATE_S, CRATE_S, CRATE_S), crateMat = new THREE.MeshStandardMaterial({ color: 0xffb347, emissive: 0x7a4300, emissiveIntensity: 0.8, roughness: 0.4, metalness: 0.2 });
-let amBuilder = false;
-function setCrate(c) {
-  if (!c || typeof c.id !== "string" || !Number.isFinite(c.x) || !Number.isFinite(c.y) || !Array.isArray(c.items)) return;
-  let o = crates.get(c.id);
-  if (!o) { o = { id: c.id, mesh: new THREE.Mesh(crateGeo, crateMat), spin: Math.random() * 6 }; scene.add(o.mesh); crates.set(c.id, o); }
-  o.x = c.x; o.y = c.y; o.items = c.items.filter((e) => e && typeof e.k === "string");   // (owner, 2026-10-15) stacks { k, n }
-}
-function dropCrate(id) { const o = crates.get(id); if (!o) return; scene.remove(o.mesh); crates.delete(id); }
-function updateCrates(now) {
-  for (const o of crates.values()) { const t = now / 1000 + o.spin; o.mesh.position.set(o.x, CRATE_S * 0.8 + Math.sin(t * 1.6) * 2, -o.y); o.mesh.rotation.set(0.35, t * 0.6, 0.2); }
-  const open = window.Inventory && window.Inventory.crateId, oc = open && crates.get(open);   // (out of reach: the crate panel closes)
-  if (open && (!oc || !haveMe || Math.hypot(oc.x - me.x, oc.y - me.y) > CRATE_REACH + 20)) window.Inventory.closeCrate();
-}
-const groundHit = new THREE.Vector3();
-function groundAt(px, py) {
-  raycaster.setFromCamera({ x: (px / innerWidth) * 2 - 1, y: -(py / innerHeight) * 2 + 1 }, camera);
-  return raycaster.ray.intersectPlane(groundPlane, groundHit) ? { x: groundHit.x, y: -groundHit.z } : null;
-}
-// what's under the pointer: a crate, then a block, a Build piece, a cloud (staff only past the crate)
-function pickObject(px, py) {
-  const g = groundAt(px, py); if (!g) return null;
-  let best = null, bd = CRATE_S * 1.3;
-  for (const o of crates.values()) { const d = Math.hypot(o.x - g.x, o.y - g.y); if (d < bd) { bd = d; best = o; } }
-  if (best) return { kind: "crate", o: best };
-  if (!amBuilder) return null;
-  for (const [id, b] of blocks) if (Math.abs(b.x - g.x) <= BLOCK_HALF && Math.abs(b.y - g.y) <= BLOCK_HALF) return { kind: "block", id };
-  for (const b of builds.values()) if (b.k !== "cloud" && b.polys && b.polys.some((v) => inPoly(g.x, g.y, v))) return { kind: "build", id: b.id };
-  for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPoly(g.x, g.y, b.poly)) return { kind: "build", id: b.id };
-  return null;
-}
-let objMenu = null;
-function closeObjMenu() { if (objMenu) { objMenu.remove(); objMenu = null; } }
-addEventListener("pointerdown", (e) => { if (objMenu && !objMenu.contains(e.target)) closeObjMenu(); }, true);
-function objectMenu(px, py) {
-  closeObjMenu(); const hit = pickObject(px, py); if (!hit) return false;
-  const items = [];
-  if (hit.kind === "crate" && haveMe && Math.hypot(hit.o.x - me.x, hit.o.y - me.y) <= CRATE_REACH) items.push(["Open", () => { if (window.Inventory) window.Inventory.openCrate(hit.o); }]);
-  if (amBuilder) items.push(["Delete", () => send(hit.kind === "crate" ? { t: "cratedel", id: hit.o.id } : hit.kind === "block" ? { t: "blockdel", id: Number(hit.id) } : { t: "bdel", id: hit.id })]);
-  if (!items.length) return false;
-  objMenu = document.createElement("div"); objMenu.className = "we-ctx";
-  for (const [label, fn] of items) { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { closeObjMenu(); fn(); }); objMenu.appendChild(b); }
-  document.body.appendChild(objMenu); const r = objMenu.getBoundingClientRect();
-  objMenu.style.left = Math.min(px, innerWidth - r.width - 4) + "px"; objMenu.style.top = Math.min(py, innerHeight - r.height - 4) + "px";
-  return true;
-}
+let sprint = false;                            // Shift: boost
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button", "file"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
-  if (e.code === "Tab" || e.key === "Tab") { e.preventDefault(); if (!e.repeat && window.Inventory) window.Inventory.toggle(); return; }   // (owner) TAB opens / closes the inventory (in the chat input it switches channel)
-  if (e.code === "Escape") { hideMenu(); if (window.Inventory && window.Inventory.open) window.Inventory.toggle(false); }
+  if (e.code === "Escape") hideMenu();
 });
-addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (e.code === "KeyX" && !e.repeat && !e.ctrlKey && !e.metaKey && !build.open && !build.editorOpen) dropCube(); if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
+addEventListener("keydown", (e) => { if (typing()) return; if (e.key === "Shift") sprint = true; if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); } });   // (owner, 2026-10-14) Q / E strafe
 addEventListener("keyup", (e) => { if (e.key === "Shift") sprint = false; keys.delete(e.code); });
-addEventListener("blur", () => { keys.clear(); sprint = false; });
-// (owner, 2026-10-13) the admin Build menu (build3d.js): [B] / B for staff
-const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, makeShipPlain: () => makeVisual(false), shipReady: () => !!shipTemplate, onPivot: () => applyShipPivot(), shipGizmos: () => shipGizmos(), makeShip: () => makeVisual(true), botObjects: () => [...players.values()].filter((p) => p.holder.userData.id && p.near).map((p) => p.holder),
-  botPos: (bid) => { const p = players.get("b" + bid); return p && { x: p.holder.position.x, y: -p.holder.position.z, h: p.heading }; }, inside: (x, y) => inside(x, y, 0), clearKeys: () => keys.clear() });
-// ---- (owner, 2026-10-14) the railgun: left click fires a fast projectile from my ship toward the pointer (the server
-// flies it, decides what it hits and keeps the 1 s cooldown); everyone near sees the glowing slug, sparks where it hits a
-// ship. A ship the shooter can't see (line of sight) isn't hit: the slug flies through it. ----
-// (owner, 2026-10-14) weapons (the staff Weapon panel, Z): the list from the server and the one I have. Its numbers drive
-// the shot rate, magazine and reload, the spread cone, the aim line's length (the optimal range) and how fast the aim
-// line turns toward the pointer; the server keeps all of it, this mirrors it so the screen matches
-let weapons = [], myWeapon = null;
-const WPN0 = { id: "0", name: "Railgun", type: "bullet", optimal: 1000, falloff: 10, life: 1.43, speed: 700, rate: 0.5, dmg: 25, spread0: 0, spreadAdd: 1.5, aimSpeed: 3, rotSpeed: 360, reload: 2, mag: 20 };
-const wpn = () => facOf(mySide).weapon || weapons.find((w) => w.id === myWeapon) || weapons[0] || WPN0;   // (owner, 2026-10-15) my faction's weapon first
-let railAt = 0, ammo = null, reloadAt = 0;
-const SPREAD_MAX = 45;
-let spreadDeg = 0, spreadT = 0;                // the extra spread from shooting (over the weapon's default), and when
-const spreadNow = (now = performance.now()) => Math.min(SPREAD_MAX, wpn().spread0 + Math.max(0, spreadDeg - wpn().aimSpeed * (now - spreadT) / 1000));
-let aimAng = null, aimOx = 0, aimOy = 0;   // aimOx / aimOy: my Weapon Origin this frame (owner, 2026-10-14: the aim line and shots start there)
-// aimAng: the aim line's direction (scene x / z angle); it turns toward the pointer at the weapon's rotation speed
-const aimDir = () => (aimAng === null ? null : { x: Math.cos(aimAng), y: -Math.sin(aimAng) });   // (on the game plane)
-const aimInArc = () => { const d = aimDir(), mine = players.get(myId); return !d || hpInArc(mine ? mine.heading : 0, collExtra[SHIPK], d.x, d.y); };   // (owner, 2026-10-15) inside the hardpoint's rotation limit
-// (owner, 2026-10-14) R reloads the magazine (not while building, where R turns pieces, nor while typing)
-function reloadGun() {
-  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing()) return;
-  const w = wpn(), now = performance.now(); if (w.type === "beam") return;
-  if (reloadAt) { if (now < reloadAt) return; reloadAt = 0; ammo = w.mag; }
-  if (ammo === null || ammo >= w.mag) return;
-  reloadAt = now + w.reload * 1000; ws.send(JSON.stringify({ t: "reload" }));
-}
-addEventListener("keydown", (e) => { if (e.code === "KeyR" && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey) reloadGun(); });
-function fireRail(px, py) {
-  if (!haveMe || !ws || ws.readyState !== 1 || build.open || build.editorOpen || typing() || amSpawning()) return;
-  const w = wpn(), now = performance.now(); if (w.type === "beam" || now - railAt < w.rate * 1000) return;
-  if (reloadAt) { if (now < reloadAt) return; reloadAt = 0; ammo = w.mag; }   // (reloading)
-  if (ammo === null) ammo = w.mag;
-  if (ammo <= 0) return;                       // (owner, 2026-10-14) empty: R reloads
-  const d = aimDir(); if (!d) return;                                       // along the aim line (it lags the pointer by the rotation speed)
-  if (!aimInArc()) return;                     // (owner, 2026-10-15) past the hardpoint's rotation limit: no shot until it's back inside
-  railAt = now; spreadDeg = Math.min(SPREAD_MAX, Math.max(0, spreadDeg - w.aimSpeed * (now - spreadT) / 1000) + w.spreadAdd); spreadT = now;
-  ammo--;
-  void px; void py;
-  ws.send(JSON.stringify({ t: "fire", x: Math.round(d.x * 1000) / 1000, y: Math.round(d.y * 1000) / 1000 }));
-}
-const projs = new Map();                       // id -> { g, x, y, vx, vy, t0 }
-const projCore = new THREE.MeshBasicMaterial({ color: 0xeafcff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
-const projGlow = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
-const projTrail = new THREE.MeshBasicMaterial({ color: 0x3fb8ff, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending });
-const projGeo = new THREE.CylinderGeometry(1, 1, 1, 8, 1, false).rotateZ(Math.PI / 2).translate(-0.5, 0, 0);   // along x, from -1 to 0 (the tip at its origin)
-const projYellow = { core: new THREE.MeshBasicMaterial({ color: 0xfff6d8, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), glow: new THREE.MeshBasicMaterial({ color: 0xffb830, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }), trail: new THREE.MeshBasicMaterial({ color: 0xffb830, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending }) };
-function addProj(m) {
-  if (![m.x, m.y, m.vx, m.vy].every(Number.isFinite) || projs.has(m.i)) return;
-  const yl = sideOf(players.get(m.a)) === "red";   // (owner, 2026-10-15) Yellow's bullets are yellow
-  const g = new THREE.Group(), core = new THREE.Mesh(projGeo, yl ? projYellow.core : projCore), glow = new THREE.Mesh(projGeo, yl ? projYellow.glow : projGlow), trail = new THREE.Mesh(projGeo, yl ? projYellow.trail : projTrail);
-  if (yl) { core.scale.set(9, 0.9, 0.9); glow.scale.set(13, 2.4, 2.4); trail.scale.set(26, 1.1, 1.1); }   // (Yellow's: short tracers, so a stream reads as bullets)
-  else { core.scale.set(18, 1, 1); glow.scale.set(26, 3, 3); trail.scale.set(70, 1.6, 1.6); }
-  g.add(trail, glow, core);
-  g.rotation.y = Math.atan2(m.vy, m.vx); g.renderOrder = 3; scene.add(g);
-  projs.set(m.i, { g, x: m.x, y: m.y, vx: m.vx, vy: m.vy, k: Number.isFinite(m.k) && m.k > 0 ? m.k : 0, t0: performance.now() });   // k: (owner, 2026-10-15) drag, it slows down
-}
-function endProj(m) {
-  const q = projs.get(m.i); if (q) { scene.remove(q.g); projs.delete(m.i); }
-  if (!Number.isFinite(m.x) || !Number.isFinite(m.y)) return;
-  const bx = q ? -q.vx : undefined, by = q ? -q.vy : undefined;   // (owner, 2026-10-14) sparks fly back the way the slug came
-  if (m.h != null && m.sh) { shieldHit(m.h, m.x, m.y); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // (owner, 2026-10-15) it stopped on the shield
-  else if (m.h != null) { burst(m.x, m.y, 260, bx, by); if (q && q.a === myId) revealed.set(m.h, performance.now()); }   // sparks on the ship it hit (a ship I hit shows in a cloud)
-  else if (m.s) burst(m.x, m.y, 60, bx, by);   // a small puff of sparks on a wall
-}
-function updateShots(now) {
-  for (const [id, q] of projs) {
-    const t = (now - q.t0) / 1000; if (t > 3) { scene.remove(q.g); projs.delete(id); continue; }   // (never told it ended)
-    const f = q.k ? (1 - Math.exp(-q.k * t)) / q.k : t;   // (how far it's gone, slowing down with drag)
-    q.g.position.set(q.x + q.vx * f, shipMid, -(q.y + q.vy * f));
-  }
-}
+addEventListener("blur", () => { keys.clear(); sprint = false; fireHeld = false; });
+// (owner, 2026-10-13) the Build menu (build3d.js): [B] / B for staff
+const build = initBuild({ noiseTex, cloudShips: () => cloudShips, cloudCores: (b) => cloudCores(b).map((c) => c.v), myPos: () => (haveMe ? { x: me.x, y: me.y } : null), onChange: () => { visVer++; }, scene, camera, canvas, toWorld, send, typing, farMat, inside: (x, y) => inside(x, y, 0) });
+
 document.addEventListener("contextmenu", (e) => e.preventDefault());   // (owner) the browser's menu never opens in the game, on the UI either (the game's own menus still do)
 let orbiting = false, aiming = false, aimPin = null, orbitLock = null;   // aimPin: while orbiting the pointer is locked, so the reticle keeps its screen spot; orbitLock: MMB holds the camera frame
 const mouse = { x: 0, y: 0 };
 let myAim = null;                              // the reticle (three x / z) while aiming, from the last frame
 canvas.addEventListener("mousedown", (e) => { if (e.button === 1) { orbiting = true; aimPin = { x: e.clientX, y: e.clientY };
     orbitLock = { dist: viewDist, len: Math.hypot(focus.x - me.x, focus.y - me.y), ang: Math.atan2(focus.x - me.x, focus.y - me.y) - camYaw }; lockPointer(); e.preventDefault(); }
-  if (e.button === 0) { fireHeld = true; fireRail(e.clientX, e.clientY); }
-  if (e.button === 2) { aiming = true; rClick = { t: performance.now(), x: e.clientX, y: e.clientY }; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });   // (owner, 2026-10-14) aiming keeps the wheel zoom until the aim point leaves the 300 m dead zone
+  if (e.button === 0) fireHeld = true;
+  if (e.button === 2) { aiming = true; mouse.x = e.clientX; mouse.y = e.clientY; e.preventDefault(); } });   // (owner, 2026-10-14) aiming keeps the wheel zoom until the aim point leaves the 300 m dead zone
 addEventListener("mouseup", (e) => { if (e.button === 0) fireHeld = false; if (e.button === 1) { orbiting = false; aimPin = null; orbitLock = null; if (document.pointerLockElement === canvas) { try { document.exitPointerLock(); } catch {} } } if (e.button === 2) { aiming = false;
-  // (owner, 2026-10-14) a quick right-click (not a hold) on a crate or (staff) an object opens its menu
-  if (rClick && performance.now() - rClick.t < 300 && Math.hypot(e.clientX - rClick.x, e.clientY - rClick.y) < 6 && e.target === canvas) objectMenu(e.clientX, e.clientY);
-  rClick = null; } });
-let rClick = null;
-addEventListener("blur", () => { fireHeld = false; });
+  } });
 // unadjustedMovement avoids the Windows cursor-wrap path whose movementX spikes once per screen width
 function lockPointer() {
   let r; try { r = canvas.requestPointerLock({ unadjustedMovement: true }); } catch { try { r = canvas.requestPointerLock(); } catch {} }
@@ -1307,7 +965,7 @@ function inputDir() {
   if (keys.has("KeyD")) r += 1; if (keys.has("KeyA")) r -= 1;
   if (joy.id !== null && Math.hypot(joy.x, joy.y) > 0.15) { f = joy.y; r = joy.x; }   // the joystick: up / down thrust, left / right turn
   const b = sprint ? 1 : 0, mine = players.get(myId), h = mine ? mine.heading : 0, turn = -Math.max(-1, Math.min(1, r));   // turn: + = left (the heading rises)
-  if (amSpawning()) return { x: 0, y: 0, b: 0, turn: 0 };   // (owner) materializing: no moving or turning yet
+  if (amSpawning() || deadLeft || (players.get(myId) || {}).dead) return { x: 0, y: 0, b: 0, turn: 0 };   // (owner) materializing or dead: no moving or turning
   if (!f && !st) return { x: 0, y: 0, b, turn };
   f = Math.max(-1, Math.min(1, f));
   if (st) {                                     // the ship's right on the game plane: (-cos h, -sin h)
@@ -1320,122 +978,94 @@ function inputDir() {
 }
 
 // ---- socket ----
-let snapRows = new Map();                      // (owner, 2026-10-15) the last full snapshot, id -> row (snapshots come as changes)
-let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false;
-let rtt = 80, pingTimer = 0, srvOff = null;   // srvOff: local clock minus the server's, from snapshots                   // measured round trip, for latency-compensated correction
+let snapRows = new Map();                      // the last full snapshot, id -> row (snapshots come as changes)
+let ws = null, srvBuild = "", lastDir = { x: 0, y: 0, b: 0 }, lastSent = 0, closedForGood = false, amEditor = false;
+let rtt = 80, pingTimer = 0, srvOff = null;    // srvOff: local clock minus the server's, from snapshots
 const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);   // ?as: the PTR's second-account test hook (ignored live)
   return (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws?" + q.toString(); };
+function setShips(s) { if (!s || typeof s !== "object") return; SHIPS = s; if (window.ShipEditor) window.ShipEditor.set(SHIPS, mySide); }
 function connect() {
   statusEl.hidden = false; statusEl.textContent = "Connecting…";
   ws = new WebSocket(wsUrl());
-  ws.onopen = () => {
-    statusEl.hidden = true;
-    clearInterval(pingTimer);
-    pingTimer = setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "ping", ts: performance.now() })); }, 2000);
-  };
+  ws.onopen = () => { statusEl.hidden = true; clearInterval(pingTimer); pingTimer = setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: "ping", ts: performance.now() })); }, 2000); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) ws.onmessage({ data: JSON.stringify(x) }); return; }
-    if (m.t === "pship") { setPlayerShip(m.id); Creator.setPlayerShip(playerShipId); return; }   // (owner, 2026-10-15) the ship players fly changed
-    if (m.t === "types") setTimeout(refreshPlayerShip, 0);   // (its model or Front may have changed; the Object Placer takes them first)
-    if (Importer.onMsg(m)) return;             // (owner, 2026-10-15) RAW ASSETS: its lists and saves (icon renames too)
-    if (Creator.onMsg(m)) return;              // (owner, 2026-10-15) the CREATOR's lists and the saves it's waiting for   // (owner, 2026-10-14) objects entering / leaving the load circle
     if (m.t === "hello") {
-      if (Array.isArray(m.weapons)) weapons = m.weapons; if (typeof m.weapon === "string") myWeapon = m.weapon;   // (owner, 2026-10-14) weapons
-      if (window.Catalog) { window.Catalog.set("icons", m.icons || []); window.Catalog.set("items", m.items || []); }   // (owner, 2026-10-15) the Item Creator's items
       srvBuild = m.build || ""; snapRows = new Map();
-      if (m.updating && m.updating.parts) { if (typeof m.updating.to === "string" && /^[0-9a-f]{7,40}$/.test(m.updating.to)) countHead = m.updating.to; goUpdating(m.updating.parts); return; }   // (owner, 2026-10-15) an update in progress: nobody plays until it's done
-      if (m.cfg) { if (m.cfg.shipR) SHIP_R = m.cfg.shipR; if (m.cfg.blockHalf) BLOCK_HALF = m.cfg.blockHalf; if (m.cfg.hexFlat && m.cfg.hexFlat !== HEX_FLAT) { HEX_FLAT = m.cfg.hexFlat; rebuildBorder(); } SPEED = m.cfg.speed || SPEED; ACCEL = m.cfg.accel || ACCEL; BRAKE = m.cfg.brake || BRAKE; STOP_D = m.cfg.stopD || STOP_D; SPRINT = m.cfg.sprint || SPRINT; VEL_TURN = m.cfg.velTurn || VEL_TURN; SIDE_SPEED = m.cfg.sideSpeed || SIDE_SPEED; FWD_ARC = m.cfg.fwdArc || FWD_ARC; TURN_ACCEL = m.cfg.turnAccel || TURN_ACCEL; if (m.cfg.cap) CAPC = m.cfg.cap; if (m.cfg.loadR) LOAD_R = m.cfg.loadR; if (m.cfg.hpMax) HP_MAX = m.cfg.hpMax; if (m.cfg.shMax) SH_MAX = m.cfg.shMax; if (m.cfg.factions && typeof m.cfg.factions === "object") FACS = m.cfg.factions; if (m.cfg.facDefault) FACD = m.cfg.facDefault; }
-      myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null;
-      amStaff = !!m.you.staff;
+      if (m.updating && m.updating.parts) { if (typeof m.updating.to === "string" && /^[0-9a-f]{7,40}$/.test(m.updating.to)) countHead = m.updating.to; goUpdating(m.updating.parts); return; }   // an update in progress: nobody plays until it's done
+      const c = m.cfg || {};
+      if (c.shipR) SHIP_R = c.shipR; if (c.sphereR) SPHERE_R = c.sphereR; if (c.loadR) LOAD_R = c.loadR; if (c.turnAccel) TURN_ACCEL = c.turnAccel; if (c.velTurn) VEL_TURN = c.velTurn; if (c.fwdArc) FWD_ARC = c.fwdArc;
+      if (c.hexFlat && c.hexFlat !== HEX_FLAT) { HEX_FLAT = c.hexFlat; rebuildBorder(); }
+      if (Array.isArray(m.fields)) FIELDS = m.fields;
+      if (m.coll && Array.isArray(m.coll.ship)) shipParts = m.coll.ship; if (Array.isArray(m.shipVis)) shipVis = m.shipVis; if (Array.isArray(m.shipPivot)) shipPivot = m.shipPivot; if (m.oval) OVAL = m.oval;
+      myId = m.you.id; myName = m.you.name; haveMe = false; mySide = null; amStaff = !!m.you.staff; amEditor = !!m.you.editor;
+      setShips(m.ships);
       if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();   // (owner) the Admin button, for staff accounts
-      if (window.WinPos) { window.WinPos.set(m.ui); window.WinPos.setSend(send); }   // (owner, 2026-10-15) where my editor windows were
-      if (m.you.items && window.ItemCreator) window.ItemCreator.mount({ send });   // (owner, 2026-10-15) the Item Editor, icon picker and Icon Creator pop-ups
-      if (m.you.creator) Creator.mount({ send, build, types: objTypes, staff: true, head: true });   // (owner, 2026-10-15: ships and modules only, the head admin's) Creator.setSounds(m.sounds);   // (owner, 2026-10-15) the CREATOR (C)
-      amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
-      for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
-      if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }
-      if (m.you.builder && window.Tuning) window.Tuning.mount({ send });   // (owner, 2026-10-15) the Tuning panel (T)   // (owner, 2026-10-15) the Importer (I), head admin
-      build.setStaff(!!m.you.builder, !!m.you.creator); build.setClock(m.now); build.setTypes(m.types); playerShipId = typeof m.playerShip === "string" ? m.playerShip : null; Creator.setPlayerShip(playerShipId); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins, m.collExtra);
-      refreshPlayerShip();   // (owner, 2026-10-15) the ship players fly
+      if (window.WinPos) { window.WinPos.set(m.ui); window.WinPos.setSend(send); }   // where my editor windows were
+      if (amEditor && window.ShipEditor) window.ShipEditor.mount({ send, fields: FIELDS });   // (owner, 2026-10-15) the Ship Editor (head admin, developers)
+      build.setStaff(!!m.you.builder); build.load([], c.buildH, m.coll);
+      applyShipPivot();
       for (const p of [...players.keys()]) dropPlayer(p);
       for (const r of m.roster || []) setSide(addPlayer(r.i, r.n), r.s);
-      for (const id of [...blocks.keys()]) dropBlock(id);
-      for (const [id, x, y] of m.blocks || []) addBlock(id, x, y);
-      // (owner, 2026-10-13) the side is remembered: re-join it, unless this is the first time or the player ticked
-      // Reset faction on the Welcome back page (game.html?reset=1), which shows the picker
+      // (owner, 2026-10-13) the team is remembered: re-join it, unless this is the first time or the player ticked Reset
+      // faction on the Welcome back page (game.html?reset=1), which shows the picker
       const reset = new URLSearchParams(location.search).get("reset") === "1";
       if (m.side && !reset) sendSide(m.side); else sidePick.hidden = false;
       if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts, m.countdown.head);
     } else if (m.t === "spawn") {
-      me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true;
-      focus.x = me.x; focus.y = me.y;
-      { const mp = addPlayer(myId, myName, me.x, me.y); setSide(mp, m.s); mp.near = true; mp.holder.visible = true; } applyFaction(); teamBox();
-      drawPrefix();
+      me.x = m.x; me.y = m.y; haveMe = true; mySide = m.s; sidePick.hidden = true; focus.x = me.x; focus.y = me.y;
+      { const mp = addPlayer(myId, myName, me.x, me.y); mp.side = null; setSide(mp, m.s); mp.near = true; mp.holder.visible = true; }
+      teamBox(); setShips(SHIPS); drawPrefix();
     } else if (m.t === "snap") {
       { const off = Date.now() - m.ts; srvOff = srvOff === null || off < srvOff ? off : srvOff + (off - srvOff) * 0.01; }
-      // (owner, 2026-10-15: less traffic) the server sends only what changed: p (changed rows), u (ids exactly as before),
-      // or same (nothing changed); the full list is rebuilt from the last one
       { const full = m.same ? [...snapRows.values()] : [...(Array.isArray(m.p) ? m.p : []), ...(Array.isArray(m.u) ? m.u : []).map((id) => snapRows.get(id)).filter(Boolean)];
         snapRows = new Map(full.map((r) => [r[0], r])); m.p = full; }
       const inSnap = new Set();
-      for (const [id, cx, cy, ch, hp, ta, shv, bm, sl] of m.p) {
-        { const pp = players.get(id); if (pp) pp.ta = Number.isFinite(ta) ? ta / 100 : null; }   // (owner, 2026-10-15) its turret's yaw
-        const x = cx / 100, y = cy / 100;
-        inSnap.add(id);
-        { const end = Number.isFinite(sl) && sl > 0 ? performance.now() + sl * 10 : 0, was = spawnEnd.get(id) || 0;   // (owner, 2026-10-14) materializing: when it's done
+      for (const [id, cx, cy, ch, hp, shv, bm, sl, dead] of m.p) {
+        const x = cx / 100, y = cy / 100; inSnap.add(id);
+        { const end = Number.isFinite(sl) && sl > 0 ? performance.now() + sl * 10 : 0, was = spawnEnd.get(id) || 0;   // materializing: when it's done
           if (!end) spawnEnd.delete(id); else if (!was || Math.abs(was - end) > 200) spawnEnd.set(id, end); }
-        { const pp = players.get(id); if (pp && Number.isFinite(hp)) pp.hp = hp; if (pp && Number.isFinite(shv)) pp.sh = shv; if (pp) pp.bm = Array.isArray(bm) && bm.every(Number.isFinite) ? bm : null; }   // + shield (owner, 2026-10-15)   // (owner, 2026-10-14) health
-        if (id === myId) {                     // soft-correct my prediction toward where the server will be once
-          const lead = (rtt / 2 + 50) / 1000;  // it has heard my latest input (its snapshot is ~half a round trip old)
-          const lspd = Math.max(SPEED, Math.hypot(vel.x, vel.y));
-          let tx = x + vel.x * lead, ty = y + vel.y * lead;
-          if (!inside(tx, ty)) { tx = x; ty = y; }
+        const pp = players.get(id) || (id !== myId ? addPlayer(id, "") : null);
+        if (pp) { if (Number.isFinite(hp)) pp.hp = hp; if (Number.isFinite(shv)) pp.sh = shv; pp.bm = Array.isArray(bm) && bm.every(Number.isFinite) ? bm : null; pp.dead = dead === 1; }
+        if (id === myId) {                     // soft-correct my prediction toward where the server will be once it has heard my latest input
+          if (dead === 1 || (pp && pp.wasDead)) { me.x = x; me.y = y; vel.x = vel.y = 0; corr.x = corr.y = 0; if (pp) pp.wasDead = dead === 1; continue; }
+          const lead = (rtt / 2 + 50) / 1000, lspd = Math.max(myStats().speed || 50, Math.hypot(vel.x, vel.y));
+          let tx = x + vel.x * lead, ty = y + vel.y * lead; if (!inside(tx, ty)) { tx = x; ty = y; }
           const err = Math.hypot(tx - me.x, ty - me.y);
-          if (err > lspd * 0.4) { me.x = tx; me.y = ty; corr.x = corr.y = 0; } else { corr.x = tx - me.x; corr.y = ty - me.y; }   // (owner, 2026-10-14) small errors are worked off smoothly every frame, not in jumps
+          if (err > lspd * 0.4) { me.x = tx; me.y = ty; corr.x = corr.y = 0; } else { corr.x = tx - me.x; corr.y = ty - me.y; }
           continue;
         }
-        const p = players.get(id) || addPlayer(id, "");
+        const p = pp;
         if (!p.near) { p.near = true; p.buf = []; p.holder.visible = true; p.holder.position.copy(toWorld(x, y, 0)); }   // entering the load circle: start fresh there
-        p.buf.push({ x, y, h: (ch || 0) / 1000, t: m.ts }); if (p.buf.length > 30) p.buf.shift();   // a short history, timed by the server
-        if (p.buf.length > 1) { const q = p.buf[p.buf.length - 2], dt2 = Math.max(0.001, (m.ts - q.t) / 1000); p.vx = (x - q.x) / dt2; p.vy = (y - q.y) / dt2; }   // its velocity, for bumping into it
+        p.buf.push({ x, y, h: (ch || 0) / 1000, t: m.ts }); if (p.buf.length > 30) p.buf.shift();
+        if (p.buf.length > 1) { const q = p.buf[p.buf.length - 2], dt2 = Math.max(0.001, (m.ts - q.t) / 1000); p.vx = (x - q.x) / dt2; p.vy = (y - q.y) / dt2; }
         p.to = { x, y };
       }
       for (const p of players.values()) if (p.id !== myId && p.near && !inSnap.has(p.id)) { p.near = false; p.buf = []; p.holder.visible = false; }   // left the load circle
-    } else if (m.t === "side") {               // (owner, 2026-10-15) a ship switched faction (mine too)
+    } else if (m.t === "side") {               // a ship switched team (mine too)
       if (m.s !== "red" && m.s !== "blue") return;
-      if (m.i === myId) { mySide = m.s; const mp = players.get(myId); if (mp) { mp.side = null; setSide(mp, m.s); } applyFaction(); teamBox(); }
+      if (m.i === myId) { mySide = m.s; const mp = players.get(myId); if (mp) { mp.side = null; setSide(mp, m.s); } teamBox(); setShips(SHIPS); spreadDeg = 0; }
       else { const p = players.get(m.i); if (p) setSide(p, m.s); }
     } else if (m.t === "join") { if (m.i !== myId) setSide(addPlayer(m.i, m.n), m.s); }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
-    else if (m.t === "cap") { cap = m.c; capOut = !!m.o; }
-    else if (m.t === "weapons") { if (Array.isArray(m.list)) { weapons = m.list; ammo = null; reloadAt = 0; } }
-    else if (m.t === "items" || m.t === "icons") { if (window.Catalog) window.Catalog.set(m.t, m.list); }   // (owner, 2026-10-15) the item catalog
-    else if (m.t === "itemsaved" || m.t === "isaved") { if (window.ItemCreator) window.ItemCreator.saved(m); }
-    else if (m.t === "inv") { if (window.Inventory) window.Inventory.set(m.slots); }   // (owner, 2026-10-14) my hotbar and inventory, from the server
-    else if (m.t === "crate") { if (m.c) { setCrate(m.c); if (window.Inventory) window.Inventory.updateCrate(m.c); } }
-    else if (m.t === "crategone") { dropCrate(String(m.id)); if (window.Inventory) window.Inventory.crateGone(String(m.id)); }
-    else if (m.t === "equipped") { if (typeof m.id === "string") { myWeapon = m.id; ammo = null; reloadAt = 0; spreadDeg = 0; } }   // (owner, 2026-10-14) my primary weapon
-    else if (m.t === "proj") { addProj(m); const q = projs.get(m.i); if (q) q.a = m.a; }
+    else if (m.t === "me") { cap = +m.c || 0; capOut = !!m.o; ammo = +m.a || 0; reloadLeft = +m.r || 0; deadLeft = +m.d || 0; }
+    else if (m.t === "ships") setShips(m.ships);   // (owner, 2026-10-15) the Ship Editor changed a number
+    else if (m.t === "proj") addProj(m);
     else if (m.t === "pend") endProj(m);
-    else if (m.t === "ord") onOrd(m);
-    else if (m.t === "hit") {                  // (owner, 2026-10-14) an impact: sparks, if I can see either ship (or it's mine)
+    else if (m.t === "hit") {                  // an impact: sparks, if I can see either ship (or it's mine)
       const seen = (id) => { if (id === myId) return true; const p = players.get(id), t = p && visTargets.get(p.holder.children[0]); return !!t && t.a > 0.01; };
-      if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());   // (owner) a ship I hit shows in a cloud
-      if (m.sa) shieldHit(m.a, m.x, m.y); if (m.sb) shieldHit(m.b, m.x, m.y);   // (owner, 2026-10-15) a shield took the bump
+      if (m.a === myId && m.b != null) revealed.set(m.b, performance.now()); else if (m.b === myId && m.a != null) revealed.set(m.a, performance.now());
+      if (m.sa) shieldHit(m.a, m.x, m.y); if (m.sb) shieldHit(m.b, m.x, m.y);
       if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)), +m.dx, +m.dy);
     }
-    else if (m.t === "staff") location.reload();   // (owner, 2026-10-15) made (or removed as) staff: reload so every menu follows (the Admin panel, Build, the Creators, Tuning)
-    else if (m.t === "factions") { if (m.f && typeof m.f === "object") { FACS = m.f; applyFaction(); if (window.Tuning) window.Tuning.set(FACS); } }   // (owner, 2026-10-15) staff tuned a faction   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
+    else if (m.t === "staff") location.reload();   // made (or removed as) staff: reload so every menu follows
     else if (m.t === "chat") addChat(m);
-    else if (build.onMsg(m)) { /* Build menu pieces */ }
-    else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
-    else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; brakeA = 0; focus.x = me.x; focus.y = me.y; }   // (owner) an admin moved this ship
+    else if (build.onMsg(m)) { /* Build pieces */ }
+    else if (m.t === "teleport") { me.x = m.x; me.y = m.y; vel.x = vel.y = 0; focus.x = me.x; focus.y = me.y; }   // an admin moved this ship
     else if (m.t === "pong") rtt = rtt * 0.7 + Math.max(0, performance.now() - m.ts) * 0.3;
     else if (m.t === "countdown") startCountdown(Date.now() + m.in, m.parts, m.head);
     else if (m.t === "update") {               // the website switched: reload, unless this page already is that version
-      // (owner, 2026-10-14) the waiting page can see the new website before the server does; a player who came back in
-      // on it was sent out again when the server caught up
       if (typeof m.web === "string" && WEB_BUILD && m.web === WEB_BUILD) return;
       if (typeof m.web === "string" && /^[0-9a-f]{7,40}$/.test(m.web)) countHead = m.web; goUpdating(["web"]);
     }
@@ -1444,8 +1074,6 @@ function connect() {
     if (closedForGood) return;
     if (ev.code === 4001) { location.href = "login.html"; return; }
     if (ev.code === 4002) { closedForGood = true; statusEl.hidden = false; statusEl.textContent = "Playing on another tab or device."; setTimeout(() => location.href = "play.html", 1500); return; }
-    // (owner, 2026-10-13) another account on this device, a kick, a ban: say so, then back to the Welcome back page (a ban
-    // goes to Log in, which shows it)
     if (ev.code === 4003 || ev.code === 4005 || ev.code === 4006) {
       closedForGood = true; statusEl.hidden = false;
       statusEl.textContent = ev.code === 4003 ? "Another account is playing on this device." : (ev.code === 4005 ? "Kicked" : "Banned") + (ev.reason ? ": " + ev.reason : ".");
@@ -1456,7 +1084,8 @@ function connect() {
   };
 }
 connect();
-let lastH = 0, lastAim = null, lastTa = null, trailing = 0;
+
+let lastH = 0, lastAim = null, trailing = 0;
 // the reticle's direction from my ship (the movement convention: atan2(x, -y) on the game plane), or null when not aiming
 // (owner, 2026-10-14) "forward" for top speed and sprint is the nose: backing up is at the side / back rate and can't sprint.
 // (The reticle is independent of the ship.)
@@ -1465,8 +1094,7 @@ function sendDir(d, now) {
   if (!ws || ws.readyState !== 1) return;
   const mine = players.get(myId), h = mine ? Math.round(mine.heading * 100) / 100 : 0;   // the heading, to 0.01 rad
   const ag = aimAngle(), aq = ag === null ? null : Math.round(ag * 100) / 100;   // (owner) aiming: forward is the reticle
-  const tq = myTa === null ? null : Math.round(myTa * 100) / 100;   // (owner, 2026-10-15) my turret's yaw
-  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH || aq !== lastAim || tq !== lastTa;
+  const changed = d.x !== lastDir.x || d.y !== lastDir.y || d.b !== lastDir.b || h !== lastH || aq !== lastAim;
   // at most 20 sends a second (the frame loop retries, so the latest state always goes out), a heartbeat while
   // moving, and (owner) after movement or rotation stops, the settled state twice more so the server and
   // everyone else land on the real final position and heading
@@ -1475,10 +1103,11 @@ function sendDir(d, now) {
   else if (trailing > 0) { if (now - lastSent >= 100) { due = true; trailing--; } }
   else if ((d.x || d.y) && now - lastSent >= 500) due = true;
   if (!due) return;
-  lastDir = d; lastH = h; lastAim = aq; lastTa = tq; lastSent = now;
-  const mv = aq === null ? { t: "move", x: d.x, y: d.y, b: d.b, h } : { t: "move", x: d.x, y: d.y, b: d.b, h, a: aq }; if (tq !== null) mv.ta = tq;
+  lastDir = d; lastH = h; lastAim = aq; lastSent = now;
+  const mv = aq === null ? { t: "move", x: d.x, y: d.y, b: d.b, h } : { t: "move", x: d.x, y: d.y, b: d.b, h, a: aq };
   ws.send(JSON.stringify(mv));
 }
+
 
 // ---- deploy countdown (a live push warns everyone ~30 s ahead) ----
 let countAt = 0, countParts = ["server", "web"], countHead = "";   // countHead: (owner, 2026-10-14) the commit going live
@@ -1491,6 +1120,7 @@ function goUpdating(parts) {
   if (countHead) q.set("to", countHead);
   location.href = "play.html?" + q.toString();
 }
+
 
 // ---- frame loop ----
 let lastT = performance.now();
@@ -1541,22 +1171,17 @@ renderer.setAnimationLoop(() => {
 
   const d = inputDir(); sendDir(d, now);
   const movingIn = !!(d.x || d.y);
-  if (cap <= 0) capOut = true; else if (capOut && cap >= CAPC.resume) capOut = false;
-  const mineP = players.get(myId);
+  const mineP = players.get(myId), S = myStats();
   const wrap = (q) => { q %= Math.PI * 2; return q > Math.PI ? q - Math.PI * 2 : q < -Math.PI ? q + Math.PI * 2 : q; };
-  const want = Math.atan2(d.x, -d.y), ag = aimAngle();
-  const dh = movingIn ? wrap(want - (mineP ? mineP.heading : 0)) : 0;    // off the nose: the acceleration share (as the server)
-  const df = movingIn && ag !== null ? wrap(want - ag) : 0;             // (owner) off "forward": not aiming, everything is forward
-  const sprintOn = !!d.b && movingIn && Math.abs(df) <= FWD_ARC && !capOut;   // (owner) sprint only forward
-  if (haveMe) cap = sprintOn ? Math.max(0, cap - CAPC.drain * Math.hypot(vel.x, vel.y) * dt / 100) : Math.min(CAPC.max, cap + (movingIn ? CAPC.walk : CAPC.idle) * dt);
+  const want = Math.atan2(d.x, -d.y), dh = movingIn ? wrap(want - (mineP ? mineP.heading : 0)) : 0;   // the push off the nose (as the server)
+  if (haveMe) { if (cap <= 0.001) capOut = true; else if (capOut && cap >= (S.boostMin || 0)) capOut = false; }
+  const sprintOn = !!d.b && movingIn && Math.abs(dh) <= FWD_ARC && !capOut && S.boost > 0;   // boost: forward only
+  if (haveMe) cap = Math.min(S.cap || 100, Math.max(0, cap + ((S.capRegen || 0) - (sprintOn ? S.boostCap || 0 : 0)) * dt));
   drawCap();
   if (haveMe && (d.x || d.y || vel.x || vel.y)) {   // predict my own movement exactly as the server integrates it
-    const spd = SPEED * facOf(mySide).speed * dirSpeed(df) * (sprintOn ? SPRINT : 1);   // (owner, 2026-10-15) my faction's speed
-    let a = ACCEL;                             // letting go brakes harder than thrust accelerates, stopping within STOP_D
-    if (d.x || d.y) brakeA = 0; else { brakeA = stopRate(Math.hypot(vel.x, vel.y)); a = brakeA; }
-    if (movingIn) a *= accelShare(dh);         // a push off the nose gets only part of the acceleration
-    [vel.x, vel.y] = movingIn ? carry(vel.x, vel.y, d.x, d.y, spd * Math.min(1, Math.hypot(d.x, d.y)), a, BRAKE, dt, mineP ? mineP.heading : 0) : steer(vel.x, vel.y, 0, 0, a, a, dt);   // as on the server
-    if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; brakeA = 0; }
+    const spd = S.speed * dirSpeed(dh, S) * (sprintOn ? 1 + S.boost / 100 : 1);   // (owner, 2026-10-15) my team's numbers
+    [vel.x, vel.y] = movingIn ? carry(vel.x, vel.y, d.x, d.y, spd * Math.min(1, Math.hypot(d.x, d.y)), S.accel * accelShare(dh), S.brake, dt) : steer(vel.x, vel.y, 0, 0, S.brake, S.brake, dt);   // as on the server
+    if (Math.hypot(vel.x, vel.y) < 0.01 && !d.x && !d.y) { vel.x = vel.y = 0; }
     const nx = me.x + vel.x * dt, ny = me.y + vel.y * dt;
     if (inside(nx, ny)) { me.x = nx; me.y = ny; }
     else { let lo = 0, hi = 1; for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; inside(me.x + (nx - me.x) * mid, me.y + (ny - me.y) * mid) ? (lo = mid) : (hi = mid); } me.x += (nx - me.x) * lo; me.y += (ny - me.y) * lo; vel.x = vel.y = 0; }
@@ -1573,10 +1198,10 @@ renderer.setAnimationLoop(() => {
   const rt = Date.now() - (srvOff || 0) - 150;
   for (const p of players.values()) {
     if (p.id === myId) {                       // (owner, 2026-10-14) A / D turn the ship: the turn spins up and eases off (TURN_A)
-      const T2 = Math.PI * 2, want = (d.turn || 0) * TURN, dw = want - (p.omega || 0), lim = TURN_A * dt;
+      const T2 = Math.PI * 2, want = (d.turn || 0) * TURN(), dw = want - (p.omega || 0), lim = TURN_A() * dt;
       p.omega = (p.omega || 0) + Math.max(-lim, Math.min(lim, dw)); if (!d.turn && Math.abs(p.omega) < 0.02) p.omega = 0;
       p.heading = ((p.heading + p.omega * dt + Math.PI) % T2 + T2) % T2 - Math.PI;
-      p.holder.rotation.y = p.heading; p.holder.position.copy(toWorld(me.x, me.y, 0));
+      p.holder.rotation.y = p.heading; p.holder.position.copy(toWorld(me.x, me.y, 0)); p.holder.visible = !p.dead;
       bank(p, dt); continue;
     }
     const B = p.buf; let x = p.to.x, y = p.to.y, h = null;
@@ -1592,7 +1217,7 @@ renderer.setAnimationLoop(() => {
         const z = B[i - 1], k = Math.min(rt - a.t, 120) / Math.max(1, a.t - z.t); x = a.x + (a.x - z.x) * k; y = a.y + (a.y - z.y) * k; h = a.h;
       } else { x = a.x; y = a.y; h = a.h; }
     }
-    placeShip(p, x, y, dt);
+    placeShip(p, x, y, dt); p.holder.visible = p.near && !p.dead;
     if (h !== null) { p.heading = h; p.holder.rotation.y = h; }   // the owner's own heading, as they see it
     bank(p, dt);
   }
@@ -1673,18 +1298,16 @@ renderer.setAnimationLoop(() => {
   // this frame so it never trails the pointer
   let aimShown = false; myAim = null;
   if (haveMe) {                                // (owner, 2026-10-14) the aim direction turns toward the pointer at the weapon's rotation speed
-    const r0 = aimAt(aimPx().x, aimPx().y); if (r0) lastPtr = { x: aimHit.x, y: -aimHit.z };   // (the ground under the pointer, for F)
-    const mine = players.get(myId); [aimOx, aimOy] = shipOrigin(me.x, me.y, mine ? mine.heading : 0);   // (owner, 2026-10-14) the aim line runs from the Weapon Origin
-    if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = wpn().rotSpeed * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
+    const r0 = aimAt(aimPx().x, aimPx().y); aimOx = me.x; aimOy = me.y;   // the aim line runs from the ship's pivot
+    if (r0) { const want = Math.atan2(aimHit.z + aimOy, aimHit.x - aimOx); if (aimAng === null) aimAng = want; else { const d = Math.atan2(Math.sin(want - aimAng), Math.cos(want - aimAng)), st = (S.rot || 360) * Math.PI / 180 * dt; aimAng += Math.max(-st, Math.min(st, d)); } }
   }
-  { const mine = players.get(myId); myTa = haveMe && mine && modInfo() ? myTurret(mine.heading) : null; } modFrame();   // (owner, 2026-10-15) the turrets
   if (aiming && haveMe && aimAng !== null) {
-    const L0 = wpn().optimal, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner) the line runs the optimal range
+    const L0 = maxRange(S) || 500, a = { x: aimOx + Math.cos(aimAng) * L0, z: -aimOy + Math.sin(aimAng) * L0 };   // (owner, 2026-10-15) the line runs the weapon's max range
     {
       aimShown = true;
       const lp = aimLineGeo.attributes.position, lc = aimLineGeo.attributes.color, sx = aimOx, sz = -aimOy;
       const at = (f) => [sx + (a.x - sx) * f, sz + (a.z - sz) * f];
-      const tb = aimInArc() ? aimBlocked(aimOx, aimOy, a.x, -a.z) : 0;   // (owner, 2026-10-15) past the hardpoint's rotation limit: red all the way
+      const tb = aimBlocked(aimOx, aimOy, a.x, -a.z);
       // four points: white from the ship, then (blocked) red from the hit to the reticle, else fading out over the last stretch
       const pts = tb === null ? [[0, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [AIM_FADE, 1, 1, 1, 0.85], [1, 1, 1, 1, 0]]
         : [[0, 1, 1, 1, 0.85], [tb, 1, 1, 1, 0.85], [tb, 1, 0.25, 0.2, 0.9], [1, 1, 0.25, 0.2, 0.5]];
@@ -1695,7 +1318,7 @@ renderer.setAnimationLoop(() => {
     }
   }
   aimLine.visible = aimShown;
-  { const sp = Math.min(SPREAD_MAX, spreadNow()) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line)
+  { const sp = (S.wtype === 0 ? spreadNow() : 0) * Math.PI / 180, on = aimShown && myAim && sp > 0.001;   // (the cone, around the aim line; bullets only)
     cone.visible = coneEdges.visible = !!on;
     if (on) {
       const sx = aimOx, sz = -aimOy, ux = myAim.x - sx, uz = myAim.z - sz, L = Math.hypot(ux, uz) || 1, a = Math.atan2(uz, ux);
@@ -1703,7 +1326,7 @@ renderer.setAnimationLoop(() => {
       coneGeo.attributes.position.array.set([sx, 0.35, sz, lx, 0.35, lz, rx, 0.35, rz]); coneGeo.attributes.position.needsUpdate = true;
       coneEdgeGeo.attributes.position.array.set([sx, 0.38, sz, lx, 0.38, lz, sx, 0.38, sz, rx, 0.38, rz]); coneEdgeGeo.attributes.position.needsUpdate = true;
     } }
-  updateShots(nowP); updateCrates(nowP);
+  updateShots(nowP, dt);
   drawMinimap(nowP);
 
   if (countAt) {
@@ -1712,7 +1335,7 @@ renderer.setAnimationLoop(() => {
   }
 
   updateShipVis(Math.min(0.1, dt || 0.016), performance.now());
-  weaponFrame(performance.now()); drawBeams(performance.now()); updateOrds(Math.min(0.1, dt || 0.016), performance.now());
+  weaponFrame(performance.now()); drawBeams(performance.now());
   drawHpBars(); updateShields(performance.now()); updateSparks(Math.min(0.1, dt || 0.016));
   build.frame(); starT.value = skyT.value = performance.now() / 1000; sky.position.x = camera.position.x; sky.position.z = camera.position.z;
   updateVis();
@@ -1783,12 +1406,12 @@ function drawMinimap(now) {
   for (const p of players.values()) {
     if (p.id === myId || !p.side || !p.near) continue;
     const t = visTargets.get(p.holder.children[0]); if (haveMe && (!t || t.a <= 0.01)) continue;   // (owner) as see-through as the ship itself
-    mmx.globalAlpha = t ? t.a : 1; arrow(p.holder.position.x, -p.holder.position.z, p.heading, facOf(sideOf(p)).color, 3, false); mmx.globalAlpha = 1;
+    mmx.globalAlpha = t ? t.a : 1; arrow(p.holder.position.x, -p.holder.position.z, p.heading, TEAM_COLOR[sideOf(p)] || "#e04848", 3, false); mmx.globalAlpha = 1;
   }
   if (haveMe) {
     const [X, Y] = P(me.x, me.y), mine = players.get(myId);
     mmx.strokeStyle = "#ffffff"; mmx.lineWidth = 1.5; mmx.beginPath(); mmx.moveTo(X, Y); mmx.lineTo(X + Math.sin(camYaw) * 9, Y - Math.cos(camYaw) * 9); mmx.stroke();
-    arrow(me.x, me.y, mine ? mine.heading : 0, facOf(mySide).color, 4, true);
+    arrow(me.x, me.y, mine ? mine.heading : 0, TEAM_COLOR[mySide] || "#4f8fe8", 4, true);
   }
   mmx.restore();
   hexPath(FR, frame); mmx.strokeStyle = "#4f8fe8"; mmx.lineWidth = 1.5; mmx.stroke();   // the frame
@@ -1926,4 +1549,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { shieldHit: (id, x, y) => shieldHit(id, x, y), get crates() { return [...crates.values()].map((o) => { const v = o.mesh.position.clone().project(camera); return { id: o.id, x: o.x, y: o.y, n: o.items.length, sx: (v.x + 1) / 2 * innerWidth, sy: (1 - v.y) / 2 * innerHeight }; }); }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}), ...(b.k === "ship" && b.extra ? { route: b.extra.route ? b.extra.route.length : 0, atk: !!b.extra.atk } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get blocks() { return [...blocks].map(([id, b]) => ({ id, x: b.x, y: b.y })); }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { shieldHit: (id, x, y) => shieldHit(id, x, y), screenOf: (id) => { const p = players.get(id); if (!p) return null; const v = p.holder.position.clone(); v.y = shipMid; v.project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, hp: p.hp, dead: !!p.dead, vis: p.holder.visible }; }, get stats() { return { cap, ammo, reloadLeft, deadLeft, side: mySide }; }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
