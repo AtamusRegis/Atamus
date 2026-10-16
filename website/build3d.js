@@ -8,8 +8,8 @@
 import * as THREE from "./vendor/three.module.js";
 
 export const SHAPES = ["square", "cylinder", "triangle"];
-const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", cloud: "Nebula" };
-const kindOk = (k) => SHAPES.includes(k) || k === "cloud";
+const NAMES = { square: "Square", cylinder: "Cylinder", triangle: "Triangle", cloud: "Nebula", capture: "Capture Point" };
+const kindOk = (k) => SHAPES.includes(k) || k === "cloud" || k === "capture";
 // (owner, 2026-10-14) nebula color themes: deep, main and highlight colors
 export const CLOUD_THEMES = [
   [[0.3, 0.1, 0.5], [0.8, 0.3, 0.75], [1, 0.75, 0.95]],    // violet / pink
@@ -59,6 +59,10 @@ export const builds = new Map();               // id -> { id, k, x, y, w, d, r, 
 // a shape's mesh: its outline parts stood up BUILD_H tall (a unit footprint; the piece scales it to w x d)
 const pieceMat = new THREE.MeshStandardMaterial({ color: 0x8c96aa, roughness: 0.65, metalness: 0.1 });
 const geoCache = new Map();
+// (owner, 2026-10-15) a capture point: a flat circle with a slight fill and a brighter rim (a unit circle, scaled to w)
+const capGeo = new THREE.CircleGeometry(0.5, 64).rotateX(-Math.PI / 2), capRimGeo = new THREE.RingGeometry(0.49, 0.5, 96).rotateX(-Math.PI / 2);
+const capFill = new THREE.MeshBasicMaterial({ color: 0x5fd1a0, transparent: true, opacity: 0.12, depthWrite: false }), capRim = new THREE.MeshBasicMaterial({ color: 0x7fe8bb, transparent: true, opacity: 0.6, depthWrite: false });
+function captureMesh(ghost) { const g = new THREE.Group(), f = new THREE.Mesh(capGeo, ghost ? capFill.clone() : capFill), rim = new THREE.Mesh(capRimGeo, capRim); if (ghost) f.material.opacity = 0.2; g.add(f, rim); g.position.y = 0.6; g.renderOrder = -1; return g; }
 function shapeGeos(k) {
   const key = k + "|" + BUILD_H + "|" + JSON.stringify(coll[k] || ""); if (geoCache.has(key)) return geoCache.get(key);
   const geos = (coll[k] || COLL_DEFAULT[k]).map((v) => { const s = new THREE.Shape(v.map(([x, y]) => new THREE.Vector2(x, y))); return new THREE.ExtrudeGeometry(s, { depth: BUILD_H, bevelEnabled: false }).rotateX(-Math.PI / 2); });
@@ -311,12 +315,17 @@ export function initBuild(ctx) {
 
   // ---- placing pieces ----
   const hold = (b) => {
+    if (b.k === "capture") { b.polys = []; b.rad = b.w / 2; return; }   // (blocks nothing)
     if (b.k === "cloud") { b.poly = cloudPoly(b); b.polys = []; b.rad = polyRad(b, b.poly); return; }
     b.polys = partsOf(b); b.rad = Math.max(...b.polys.map((v) => polyRad(b, v)));
   };
   function shapeMesh(k, mat) { const g = new THREE.Group(); for (const geo of shapeGeos(k)) g.add(new THREE.Mesh(geo, mat)); g.userData.key = k + JSON.stringify(coll[k] || ""); return g; }
   function place(b) {
     if (b.k === "cloud") { placeCloud(b); hold(b); if (ctx.onChange) ctx.onChange(); return; }
+    if (b.k === "capture") {
+      if (!b.mesh) { b.mesh = captureMesh(false); b.mesh.userData.id = b.id; scene.add(b.mesh); }
+      b.mesh.position.set(b.x, 0.6, -b.y); b.mesh.scale.set(b.w, 1, b.w); hold(b); return;
+    }
     if (b.mesh && b.mesh.userData.key !== b.k + JSON.stringify(coll[b.k] || "")) { scene.remove(b.mesh); b.mesh = null; }
     if (!b.mesh) { b.mesh = shapeMesh(b.k, ctx.farMat ? ctx.farMat(pieceMat) : pieceMat); b.mesh.userData.id = b.id; scene.add(b.mesh); if (held && held.id === b.id) holo(b.mesh, true); }
     b.mesh.position.copy(toWorld(b.x, b.y, 0)); b.mesh.scale.set(b.w, 1, b.d); b.mesh.rotation.y = b.r;
@@ -347,13 +356,15 @@ export function initBuild(ctx) {
   const PICS = { square: '<rect x="7" y="7" width="16" height="16"/>', cylinder: '<circle cx="15" cy="15" r="8.5"/>', triangle: '<path d="M15 6 L24 23 L6 23 Z"/>' };
   const cloudPic = () => { const c = CLOUD_THEMES[cloudTheme][1].map((v) => Math.round(v * 255)).join(","), d = document.createElement("span");
     d.innerHTML = '<svg viewBox="0 0 30 30" width="30" height="30"><path d="M8 21 Q3 21 4 16 Q5 12 9 13 Q10 7 16 8 Q21 8 22 13 Q27 13 26 18 Q25 22 21 21 Z" fill="rgba(' + c + ',0.5)" stroke="rgb(' + c + ')" stroke-width="1.6"/></svg>'; return d.firstChild; };
-  const shapeSlot = document.createElement("div"), cloudSlot = document.createElement("div");
-  for (const d of [shapeSlot, cloudSlot]) { d.className = "inv-slot build-slot"; bar.appendChild(d); }
+  const shapeSlot = document.createElement("div"), cloudSlot = document.createElement("div"), capSlot = document.createElement("div");
+  for (const d of [shapeSlot, cloudSlot, capSlot]) { d.className = "inv-slot build-slot"; bar.appendChild(d); }
+  capSlot.addEventListener("click", () => { if (picking && picking.k === "capture") stopPicking(); else startPicking("capture"); });
   shapeSlot.addEventListener("click", () => { if (picking && SHAPES.includes(picking.k)) stopPicking(); else startPicking(shapeAt); });
   cloudSlot.addEventListener("click", () => { if (picking && picking.k === "cloud") stopPicking(); else startPicking("cloud"); });
   function drawSlots() {
     shapeSlot.title = NAMES[shapeAt]; shapeSlot.replaceChildren(svgPic(PICS[shapeAt])); cloudSlot.title = NAMES.cloud; cloudSlot.replaceChildren(cloudPic());
     shapeSlot.classList.toggle("sel", !!picking && SHAPES.includes(picking.k)); cloudSlot.classList.toggle("sel", !!picking && picking.k === "cloud");
+    capSlot.title = NAMES.capture; capSlot.replaceChildren(svgPic('<circle cx="15" cy="15" r="10" fill="rgba(95,209,160,0.25)" stroke="#7fe8bb" stroke-width="1.6"/>')); capSlot.classList.toggle("sel", !!picking && picking.k === "capture");
   }
   drawSlots(); document.body.append(bar);
   function mountBtn() { const col = document.getElementById("staff-col") || document.body; if (!btn.parentNode) col.appendChild(btn); }
@@ -364,7 +375,7 @@ export function initBuild(ctx) {
   let ghost = null;
   function startPicking(k) {
     if (ghost) { scene.remove(ghost); ghost = null; } if (SHAPES.includes(k)) shapeAt = k; sel = null;
-    picking = k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } } : { k, w: 60, d: 60, r: 0 }; drawSlots();
+    picking = k === "cloud" ? { k, w: 100, d: 100, r: 0, extra: { pts: CLOUD_START.map((q) => q.slice()), v: cloudTheme } } : k === "capture" ? { k, w: 200, d: 200, r: 0 } : { k, w: 60, d: 60, r: 0 }; drawSlots();
   }
   function stopPicking() { picking = null; if (ghost) { scene.remove(ghost); ghost = null; } drawSlots(); }
   function cycle(dir) { if (!picking || !SHAPES.includes(picking.k)) return; startPicking(SHAPES[(SHAPES.indexOf(picking.k) + dir + SHAPES.length) % SHAPES.length]); }
@@ -382,15 +393,16 @@ export function initBuild(ctx) {
   const gBox = document.createElement("div"); gBox.id = "gen-box"; aPanel.appendChild(gBox);
   const gField = (label, el) => { const l = document.createElement("label"), sp = document.createElement("span"); sp.textContent = label; l.append(sp, el); gBox.appendChild(l); return el; };
   const num = (min, max) => Object.assign(document.createElement("input"), { type: "number", step: 1, ...(min != null ? { min } : {}), ...(max != null ? { max } : {}) });
-  const gRot = gField("Rotation", num()), gW = gField("Width", num(MIN, MAX)), gD = gField("Depth", num(MIN, MAX)), gScale = gField("Scale", num(MIN, MAX));
+  const gRot = gField("Rotation", num()), gW = gField("Width", num(MIN, MAX)), gD = gField("Depth", num(MIN, MAX)), gScale = gField("Scale", num(MIN, MAX)), gSize = gField("Size", num(MIN, MAX));
   const gTheme = gField("Theme", document.createElement("select")); ["Violet", "Teal", "Amber", "Emerald", "Crimson"].forEach((n, i) => gTheme.append(new Option(n, String(i))));
-  for (const el of [gRot, gW, gD, gScale, gTheme]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
+  for (const el of [gRot, gW, gD, gScale, gSize, gTheme]) el.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") el.blur(); });
   const selPiece = () => (sel && builds.get(sel)) || null;
   const setNum = (el, f) => { const go = (now) => { const b = selPiece(), v = Number(el.value); if (!b || el.value === "" || !Number.isFinite(v)) return; f(b, v); place(b); push(b, now); }; el.addEventListener("input", () => go(false)); el.addEventListener("change", () => go(true)); };
   setNum(gRot, (b, v) => { const r = -v * Math.PI / 180; b.r = Math.round(Math.atan2(Math.sin(r), Math.cos(r)) * 10000) / 10000; });
   setNum(gW, (b, v) => { if (b.k !== "cloud") b.w = Math.max(MIN, Math.min(MAX, v)); });
   setNum(gD, (b, v) => { if (b.k !== "cloud") b.d = Math.max(MIN, Math.min(MAX, v)); });
   setNum(gScale, (b, v) => { if (b.k === "cloud") b.w = b.d = Math.max(MIN, Math.min(MAX, v)); });
+  setNum(gSize, (b, v) => { if (b.k === "capture") b.w = b.d = Math.max(MIN, Math.min(MAX, v)); });   // (a capture point: m across)
   gTheme.addEventListener("change", () => { const b = selPiece(); if (!b || b.k !== "cloud") return; b.extra = { ...b.extra, v: +gTheme.value }; cloudTheme = b.extra.v; drawSlots(); place(b); push(b, true); gTheme.blur(); });
   let gShown = "";
   function attrPanel() {
@@ -398,9 +410,10 @@ export function initBuild(ctx) {
     const was = aPanel.hidden; aPanel.hidden = !b; if (!b) { gShown = ""; return; }
     if (was && window.WinPos) window.WinPos.place(aPanel, "attrs");
     aTop.textContent = NAMES[b.k] || "";
-    gW.parentNode.hidden = gD.parentNode.hidden = b.k === "cloud"; gScale.parentNode.hidden = gTheme.parentNode.hidden = b.k !== "cloud";
+    const cap = b.k === "capture"; gRot.parentNode.hidden = cap; gSize.parentNode.hidden = !cap;
+    gW.parentNode.hidden = gD.parentNode.hidden = b.k === "cloud" || cap; gScale.parentNode.hidden = gTheme.parentNode.hidden = b.k !== "cloud";
     const key = b.id + ":" + b.r + ":" + b.w + ":" + b.d + ":" + (b.extra && b.extra.v);
-    if (key !== gShown && !gBox.contains(document.activeElement)) { gRot.value = String(Math.round(-b.r * 180 / Math.PI * 10) / 10); gW.value = String(Math.round(b.w)); gD.value = String(Math.round(b.d)); gScale.value = String(Math.round(b.w)); if (b.k === "cloud") gTheme.value = String(b.extra.v || 0); gShown = key; }
+    if (key !== gShown && !gBox.contains(document.activeElement)) { gRot.value = String(Math.round(-b.r * 180 / Math.PI * 10) / 10); gW.value = String(Math.round(b.w)); gD.value = String(Math.round(b.d)); gScale.value = String(Math.round(b.w)); gSize.value = String(Math.round(b.w)); if (b.k === "cloud") gTheme.value = String(b.extra.v || 0); gShown = key; }
   }
 
   // ---- sending edits (throttled; the last always goes) ----
@@ -424,10 +437,11 @@ export function initBuild(ctx) {
     const g = ground(e.clientX, e.clientY);
     if (picking) { if (g && ctx.inside(g.x, g.y)) create({ k: picking.k, x: g.x, y: g.y, w: picking.w, d: picking.d, r: picking.r, ...(picking.extra ? { extra: picking.extra } : {}) }); return; }
     ray.setFromCamera(ndc(e.clientX, e.clientY), camera);
-    const hits = ray.intersectObjects([...builds.values()].filter((b) => b.k !== "cloud" && b.mesh).map((b) => b.mesh), true);
+    const hits = ray.intersectObjects([...builds.values()].filter((b) => b.k !== "cloud" && b.k !== "capture" && b.mesh).map((b) => b.mesh), true);
     let o = hits.length ? hits[0].object : null; while (o && !(o.userData && o.userData.id)) o = o.parent;
     let hitB = o && g ? builds.get(o.userData.id) : null;
     if (!hitB && g) for (const b of builds.values()) if (b.k === "cloud" && b.poly && inPolyF(g.x, g.y, b.poly)) { hitB = b; break; }   // a nebula: a click inside its outline
+    if (!hitB && g) for (const b of builds.values()) if (b.k === "capture" && Math.hypot(g.x - b.x, g.y - b.y) <= b.w / 2) { hitB = b; break; }   // a capture point: inside its circle
     if (hitB) {
       if (sel !== hitB.id) { sel = hitB.id; return; }   // the first click selects it; pressing on it again drags it
       oDrag = { id: hitB.id, ox: hitB.x - g.x, oy: hitB.y - g.y, pid: e.pointerId }; try { canvas.setPointerCapture(e.pointerId); } catch {} return;
@@ -458,14 +472,14 @@ export function initBuild(ctx) {
     cloudT.value = now / 1000; if (ctx.myPos) { const p = ctx.myPos(); if (p) cloudMe.value.set(p.x, p.y); }
     updateEdges(dt); cloudHandles(); attrPanel();
     if (!open || !picking) return;
-    const g = ground(mouse.x, mouse.y), gk = picking.k === "cloud" ? "cloud" : picking.k + JSON.stringify(coll[picking.k] || "");
+    const g = ground(mouse.x, mouse.y), gk = picking.k === "cloud" || picking.k === "capture" ? picking.k : picking.k + JSON.stringify(coll[picking.k] || "");
     if (!ghost || ghost.userData.gk !== gk) {
       if (ghost) scene.remove(ghost);
-      ghost = picking.k === "cloud" ? cloudMesh(picking.extra.pts, picking.extra.v, true) : shapeMesh(picking.k, holoMat);
+      ghost = picking.k === "cloud" ? cloudMesh(picking.extra.pts, picking.extra.v, true) : picking.k === "capture" ? captureMesh(true) : shapeMesh(picking.k, holoMat);
       ghost.userData.gk = gk; scene.add(ghost);
     }
     ghost.visible = !!g;
-    if (g) { ghost.position.copy(toWorld(g.x, g.y, 0)); ghost.rotation.y = picking.r; if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else ghost.scale.set(picking.w, 1, picking.d); }
+    if (g) { ghost.position.copy(toWorld(g.x, g.y, picking.k === "capture" ? 0.6 : 0)); ghost.rotation.y = picking.r; if (picking.k === "capture") ghost.scale.set(picking.w, 1, picking.w); else if (picking.k === "cloud") { ghost.scale.setScalar(picking.w / 100); ghost.material.uniforms.uS.value = picking.w / 100; } else ghost.scale.set(picking.w, 1, picking.d); }
   }
   function onMsg(m) {
     if (m.t === "build") { setBuild(m.o); return true; }

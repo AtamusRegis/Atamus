@@ -5,7 +5,7 @@
 // predicts my own ship with the same numbers and draws the rest.
 import * as THREE from "./vendor/three.module.js";
 import { GLTFLoader } from "./vendor/GLTFLoader.js";
-import { initBuild, builds, toWorldPts, polyRad, satPush, nudge, segPoly } from "./build3d.js?v=1792200001";
+import { initBuild, builds, toWorldPts, polyRad, satPush, nudge, segPoly } from "./build3d.js?v=1792200005";
 
 // (owner) returning players come through the log-in page first (live site only)
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -43,7 +43,7 @@ function steer(vx, vy, tx, ty, a, brake, dt) {
   const el = Math.hypot(ex, ey), s = a * dt; if (el > s) { ex *= s / el; ey *= s / el; } return [vx + ex, vy + ey];
 }
 const vel = { x: 0, y: 0 };                    // my ship's velocity, predicted the same way the server integrates it
-let cap = 100, capOut = false, ammo = 0, reloadLeft = 0, deadLeft = 0;   // mine, from the server ({t:"me"}, 5 a second)
+let cap = 100, capOut = false, ammo = 0, reloadLeft = 0, deadLeft = 0, credits = 0;   // mine, from the server ({t:"me"}, 5 a second)
 const SQ3 = Math.sqrt(3);
 const inside = (x, y, m = SPHERE_R) => { const a = HEX_FLAT / 2 - m; return Math.abs(y) <= a && Math.abs(SQ3 * x + y) <= 2 * a && Math.abs(SQ3 * x - y) <= 2 * a; };
 // Game plane: x east, y north. Three: x = x, z = -y, y (three) = up.
@@ -1069,7 +1069,7 @@ function connect() {
       else { const p = players.get(m.i); if (p) setSide(p, m.s); }
     } else if (m.t === "join") { if (m.i !== myId) setSide(addPlayer(m.i, m.n), m.s); }
     else if (m.t === "leave") { if (m.i !== myId) dropPlayer(m.i); }
-    else if (m.t === "me") { cap = +m.c || 0; capOut = !!m.o; ammo = +m.a || 0; reloadLeft = +m.r || 0; deadLeft = +m.d || 0; }
+    else if (m.t === "me") { cap = +m.c || 0; capOut = !!m.o; ammo = +m.a || 0; reloadLeft = +m.r || 0; deadLeft = +m.d || 0; credits = +m.k || 0; }
     else if (m.t === "ships") setShips(m.ships);   // (owner, 2026-10-15) the Ship Editor changed a number
     else if (m.t === "proj") addProj(m);
     else if (m.t === "pend") endProj(m);
@@ -1569,4 +1569,4 @@ if (reportBox) {
   });
 }
 // for the test harness and the console
-window.Atamus = { shieldHit: (id, x, y) => shieldHit(id, x, y), screenOf: (id) => { const p = players.get(id); if (!p) return null; const v = p.holder.position.clone(); v.y = shipMid; v.project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, hp: p.hp, dead: !!p.dead, vis: p.holder.visible }; }, get stats() { return { cap, ammo, reloadLeft, deadLeft, side: mySide }; }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };
+window.Atamus = { shieldHit: (id, x, y) => shieldHit(id, x, y), screenOf: (id) => { const p = players.get(id); if (!p) return null; const v = p.holder.position.clone(); v.y = shipMid; v.project(camera); return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, hp: p.hp, dead: !!p.dead, vis: p.holder.visible }; }, get stats() { return { cap, ammo, reloadLeft, deadLeft, credits, side: mySide }; }, burst: (x, y, s, dx, dy) => burst(x, y, s, dx, dy), get focus() { return { x: focus.x, y: focus.y }; }, get me() { return { ...me, id: myId }; }, get players() { return [...players.keys()]; }, get near() { return [...players.values()].filter((p) => p.near).map((p) => p.id); }, get ws() { return ws; }, get view() { return viewDist; }, get aim() { return aimLine.visible ? { x: aimHit.x, z: aimHit.z } : null; }, get builds() { return [...builds.values()].map((b) => ({ id: b.id, k: b.k, x: Math.round(b.x), y: Math.round(b.y), w: b.w, d: b.d, r: b.r, ...(b.extra && b.extra.pts ? { n: b.extra.pts.length, v: b.extra.v } : {}) })); }, get vis() { return [...players.values()].filter((p) => p.id !== myId).map((p) => { const t = visTargets.get(p.holder.children[0]); return { id: p.id, a: t ? +t.a.toFixed(2) : null, cf: t ? +(t.cf ?? 1).toFixed(2) : null }; }); }, get rinfo() { return { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, progs: renderer.info.programs.length }; }, get drawn() { return [...players.values()].map((p) => ({ id: p.id, x: p.holder.position.x, z: p.holder.position.z, h: p.heading, vis: p.holder.visible })); } };

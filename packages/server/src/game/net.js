@@ -205,7 +205,7 @@ export function attachGameServer(httpServer) {
   setInterval(() => {                          // each player's own capacitor, ammo and reload, 5 Hz, only on change
     const now = Date.now();
     for (const [pid, ws] of socks) { const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const msg = JSON.stringify({ t: "me", c: Math.round(p.cap * 10) / 10, o: p.capOut ? 1 : 0, a: Math.ceil(p.ammo), r: p.reloadAt ? Math.max(0, p.reloadAt - now) : 0, d: p.dead ? Math.max(0, p.deadUntil - now) : 0 });
+      const msg = JSON.stringify({ t: "me", c: Math.round(p.cap * 10) / 10, o: p.capOut ? 1 : 0, a: Math.ceil(p.ammo), r: p.reloadAt ? Math.max(0, p.reloadAt - now) : 0, d: p.dead ? Math.max(0, p.deadUntil - now) : 0, k: Math.floor(p.credits || 0) });   // k: (owner, 2026-10-15) credits
       if (msg !== ws.lastMe) { ws.lastMe = msg; ws.send(msg); } }
   }, 200);
   void inside;

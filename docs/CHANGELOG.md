@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Capture points (owner):** a new buildable circle; ships inside one earn credits over time (kept per account).
 - **Player names (owner):** other players' names now show over their ships, in their team's color.
 - **Tablets with a mouse (owner):** they're no longer treated as touch-only, so staff on a tablet with a mouse and keyboard see the Ship Editor and Build menu windows.
 - **Ship Editor descriptions (owner):** a field's description now shows in a popup beside the window and stays until another field is hovered or the window is left.

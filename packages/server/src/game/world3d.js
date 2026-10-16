@@ -43,7 +43,10 @@ export function steer(vx, vy, tx, ty, a, brake, dt) {
 }
 
 // ---- geometry: outlines are flat lists [x0, y0, x1, y1, ...] on the ground plane ----
-export const KINDS = ["square", "cylinder", "triangle", "cloud"];   // (owner, 2026-10-15) the Build menu: shapes and nebulae
+export const KINDS = ["square", "cylinder", "triangle", "cloud", "capture"];   // (owner, 2026-10-15) the Build menu: shapes, nebulae and capture points
+// (owner, 2026-10-15) a capture point: a circle (w across) that blocks nothing; a living ship inside one earns CAPTURE_RATE
+// credits a second (kept per account, world3d.credits)
+export const CAPTURE_RATE = 1;
 export const BUILD_H = 50, BUILD_MIN = 5, BUILD_MAX = 1000, BUILD_CAP = 3000, CLOUD_THEMES = 5;
 export const CLOUD_DEEP = 150;             // a nebula hides what's this far in (and its core blocks sight)
 const box = (hx, hy) => [[-hx, -hy], [hx, -hy], [hx, hy], [-hx, hy]];
@@ -132,6 +135,7 @@ export class World3D {
   async _load() {
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d (user_id TEXT PRIMARY KEY, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     await pool.query(`ALTER TABLE world3d ADD COLUMN IF NOT EXISTS team TEXT`);
+    await pool.query(`ALTER TABLE world3d ADD COLUMN IF NOT EXISTS credits DOUBLE PRECISION NOT NULL DEFAULT 0`);   // (owner, 2026-10-15) from capture points (the 2D game's credits stay untouched)
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_builds (id BIGSERIAL PRIMARY KEY, k TEXT NOT NULL, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL, w DOUBLE PRECISION NOT NULL, d DOUBLE PRECISION NOT NULL, r DOUBLE PRECISION NOT NULL, by_user TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     await pool.query(`ALTER TABLE world3d_builds ADD COLUMN IF NOT EXISTS extra JSONB`);
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_settings (k TEXT PRIMARY KEY, v JSONB)`);
@@ -163,9 +167,9 @@ export class World3D {
     id = String(id); let p = this.players.get(id);
     if (p) { p.name = name; if (p.team !== team) this.setTeam(id, team); if (resetPos) this.respawn(id); return p; }
     await this.ready;
-    const { rows } = await pool.query(`SELECT x, y FROM world3d WHERE user_id = $1`, [id]);
+    const { rows } = await pool.query(`SELECT x, y, credits FROM world3d WHERE user_id = $1`, [id]);
     let x, y; if (!resetPos && rows[0] && inside(rows[0].x, rows[0].y)) ({ x, y } = rows[0]); else [x, y] = this.spawnSpot();
-    p = { id, name, team, x, y, h: 0, dx: 0, dy: 0, vx: 0, vy: 0, dirty: true }; this.refill(p);
+    p = { id, name, team, x, y, h: 0, dx: 0, dy: 0, vx: 0, vy: 0, dirty: true, credits: rows[0] && Number.isFinite(+rows[0].credits) ? +rows[0].credits : 0 }; this.refill(p);
     await this._save(p).catch((e) => console.error("world3d join", e)); this.players.set(id, p); return p;
   }
   refill(p) { const S = this.stats(p); p.hp = S.hp; p.sh = S.shield; p.shBroken = false; p.cap = S.cap; p.ammo = S.mag; p.reloadAt = 0; p.capOut = false; p.hurtAt = 0; p.spread = 0; p.beamOn = false; p.beamOut = null; p.dead = false; }
@@ -201,6 +205,7 @@ export class World3D {
     for (const p of this.players.values()) {
       const S = this.stats(p);
       if (p.dead) { if (now >= p.deadUntil) { this.respawn(p.id); } continue; }
+      if (!spawning(p)) for (const b of this.builds.values()) if (b.k === "capture" && Math.hypot(p.x - b.x, p.y - b.y) <= b.w / 2) { p.credits = (p.credits || 0) + CAPTURE_RATE * dt; p.dirty = true; break; }   // (owner, 2026-10-15) in a capture point
       // capacitor, health and shield
       p.cap = Math.min(S.cap, (p.cap ?? S.cap) + S.capRegen * dt);
       if (p.hp > S.hp) p.hp = S.hp; if (p.sh > S.shield) p.sh = S.shield;
@@ -372,6 +377,7 @@ export class World3D {
   _put(id, b) {
     b.id = id;
     if (b.k === "cloud") { b.poly = cloudPoly(b); b.polys = []; b.rad = polyRad(b, b.poly); }
+    else if (b.k === "capture") { b.d = b.w; b.polys = []; b.rad = b.w / 2; }   // (blocks nothing)
     else { b.polys = (this.coll[b.k] || COLL_DEFAULT[b.k]).map((v) => toWorldPts(b, v)); b.rad = Math.max(...b.polys.map((v) => polyRad(b, v))); }
     this.builds.set(id, b); return b;
   }
@@ -384,7 +390,7 @@ export class World3D {
   setBuild(id, o) { if (!this.builds.has(id)) return null; const b = this._clean(o); if (!b) return null; b.dirty = true; return this._put(id, b); }
   async delBuild(id) { if (!this.builds.delete(id)) return false; await pool.query(`DELETE FROM world3d_builds WHERE id = $1`, [id]); return true; }
 
-  async _save(p) { await this.ready; await pool.query(`INSERT INTO world3d (user_id, x, y, team, updated_at) VALUES ($1, $2, $3, $4, now()) ON CONFLICT (user_id) DO UPDATE SET x = $2, y = $3, team = $4, updated_at = now()`, [p.id, p.x, p.y, p.team || null]); p.dirty = false; }
+  async _save(p) { await this.ready; await pool.query(`INSERT INTO world3d (user_id, x, y, team, credits, updated_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (user_id) DO UPDATE SET x = $2, y = $3, team = $4, credits = $5, updated_at = now()`, [p.id, p.x, p.y, p.team || null, p.credits || 0]); p.dirty = false; }
   async saveDirty() {
     for (const p of this.players.values()) if (p.dirty) await this._save(p);
     for (const b of this.builds.values()) if (b.dirty) { b.dirty = false; await pool.query(`UPDATE world3d_builds SET k = $2, x = $3, y = $4, w = $5, d = $6, r = $7, extra = $8, updated_at = now() WHERE id = $1`, [b.id, b.k, b.x, b.y, b.w, b.d, b.r, b.extra ? JSON.stringify(b.extra) : null]); }
