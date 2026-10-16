@@ -4,6 +4,9 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-15
 
+- **Tuning panel (owner):** staff (head admin, admins, developers) can tune every faction number live from a new panel; changes reach everyone at once and are kept.
+- **Staff access (owner):** developers and admins now get the Asset Creator and Object Creator too; being made or removed as staff reloads the game so the menus follow.
+- **Combat fixes (owner):** Yellow is faster (160%) with more armor (50%); missiles leave one at a time; a shield stops missile blasts; missiles and drones are easier to hit; the laser turns faster and a new beam starts where you aim (hits no longer show late); bullets slow down much more; respawning ships no longer show in nebulae while materializing.
 - **Faction switching (owner):** Blue / Yellow buttons at the top left switch your faction in the game (for now). Yellow's bullets are now short tracers so a stream of them doesn't look like a beam.
 - **Combat tuning (owner):** drones now circle their target zapping it while their own health runs down, and come 3 at a time; Yellow fires 3 missiles at once; Blue's laser weakens and thins with distance; Yellow's bullets slow down as they fly; Yellow ships have more health (150).
 - **X spawns an enemy ship (owner):** an AI ship of the other faction appears ahead and fights you with its faction's weapons (no longer drops a block).

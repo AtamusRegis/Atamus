@@ -86,7 +86,7 @@ export function attachGameServer(httpServer) {
     const staff = ["head", "admin"].includes(user.role);   // (owner, 2026-10-13) staff: the Item Creator, item commands (2026-10-14: not moderators)
     // (owner, 2026-10-15) the Object Placer (the Build menu): head admin, admins and developers (a role only the head admin
     // gives); the Object Creator (object types, models, colliders): the head admin only
-    const placer = ["head", "admin", "dev"].includes(user.role), creator = user.role === "head";
+    const placer = ["head", "admin", "dev"].includes(user.role), creator = placer;   // (owner, 2026-10-15) developers and admins get the Asset / Object Creators too
     let cmds = 0, blockAt = 0, teamAt = 0;                           // rough flood cap: ~40 commands a second
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
 
@@ -155,6 +155,10 @@ export function attachGameServer(httpServer) {
         const chat = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
         pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
+      }
+      else if (m.t === "tune") {              // (owner, 2026-10-15) staff tune a faction's numbers live (the Tuning panel)
+        if (!placer) return;
+        const f = world.tune(m.s, m.g, m.k, m.v); if (f) { tuneCast = true; }
       }
       else if (m.t === "team") {              // (owner, 2026-10-15) switching faction in the game (at most every 2 s)
         const now = Date.now(); if (!joined || (m.s !== "red" && m.s !== "blue") || now - teamAt < 2000) return; teamAt = now;
@@ -328,6 +332,8 @@ export function attachGameServer(httpServer) {
   setInterval(syncObjects, 500);
 
   const hadOrd = new Set();                    // sockets last sent a non-empty ordnance list
+  let tuneCast = false;                        // (owner, 2026-10-15) faction numbers changed: everyone gets them (at most 5 times a second)
+  setInterval(() => { if (!tuneCast) return; tuneCast = false; broadcast({ t: "factions", f: FACTIONS }); world.saveTune().catch((e) => console.error("tune save", e)); }, 200);
   setInterval(() => {                                                           // 20 Hz simulation
     world.step();
     for (const e of world.joined) broadcast({ t: "join", i: e.id, n: e.name, s: e.team }); world.joined.length = 0;   // (owner, 2026-10-15) X's enemies

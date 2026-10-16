@@ -63,18 +63,22 @@ export function segShield(x0, y0, x1, y1, px, py, h, o) {
 // off; load: the load circle (m); farIn / farOut: where sight starts fading / ends (m, on the clients); visLo / visHi: the
 // visibility another ship needs to start seeing this one / see it solid; cloudDeep / cloudIn: how far into a nebula it's
 // gone and the least it shows to a ship close by in the same cloud
-export const LASER = { name: "Laser", type: "beam", optimal: 900, dps: 60, rotSpeed: 50, fall: 0.65 };   // fall: share of the damage lost by its full reach (and it thins out on screen)
-export const AUTOCANNON = { name: "Autocannon", type: "bullet", optimal: 500, falloff: 20, life: 0.75, speed: 1100, drag: 1, rate: 0.2, dmg: 9, spread0: 0, spreadAdd: 0.8, aimSpeed: 6, rotSpeed: 540, reload: 2, mag: 40 };
+export const LASER = { name: "Laser", type: "beam", optimal: 900, dps: 60, rotSpeed: 100, fall: 0.65 };   // fall: share of the damage lost by its full reach (and it thins out on screen)
+export const AUTOCANNON = { name: "Autocannon", type: "bullet", optimal: 500, falloff: 20, life: 1.2, speed: 1300, drag: 2.2, rate: 0.2, dmg: 9, spread0: 0, spreadAdd: 0.8, aimSpeed: 6, rotSpeed: 540, reload: 2, mag: 40 };
 // secondaries (F): r: hit radius (m); hp: what shooting it down takes; zig / zigHz: the zigzag's swing (rad) and rate
-export const MISSILE = { kind: "missile", speed: 230, life: 7, turn: 3, pull: 450, zig: 0.55, zigHz: 1.4, blast: 90, dmg: 70, hp: 10, cd: 4, r: 6, n: 3, aim: 1600 };
+export const MISSILE = { kind: "missile", speed: 230, life: 7, turn: 3, pull: 450, zig: 0.55, zigHz: 1.4, blast: 90, dmg: 70, hp: 10, cd: 4, r: 14, n: 3, gap: 0.3, aim: 1600 };   // gap: s between a salvo's missiles
 // a drone that reaches its enemy circles it (orbit m outside the shield oval, spin rad/s), doing dps while its own hp drains (decay a second)
-export const DRONE = { kind: "drone", speed: 170, life: 10, turn: 4.5, seek: 300, zig: 0.8, zigHz: 2.4, dps: 4, decay: 1, orbit: 25, spin: 1.6, zap: 0.5, hp: 10, cd: 3, r: 5, n: 3, pick: 250, aim: 1200 };
+export const DRONE = { kind: "drone", speed: 170, life: 10, turn: 4.5, seek: 300, zig: 0.8, zigHz: 2.4, dps: 4, decay: 1, orbit: 25, spin: 1.6, zap: 0.5, hp: 10, cd: 3, r: 12, n: 3, pick: 250, aim: 1200 };
 export const FACTIONS = {
   blue: { hp: 100, speed: 0.8, shield: 100, regen: 8, resist: 0, load: 1500, farIn: 1100, farOut: 1500, visLo: 0.25, visHi: 0.75, cloudDeep: 150, cloudIn: 0.25, weapon: LASER, second: DRONE, color: "#4f8fe8" },
-  red: { hp: 150, speed: 1.25, shield: 0, regen: 0, resist: 0.4, load: 1100, farIn: 700, farOut: 1100, visLo: 0.45, visHi: 0.9, cloudDeep: 90, cloudIn: 0.12, weapon: AUTOCANNON, second: MISSILE, color: "#e8c14f" },
+  red: { hp: 150, speed: 1.6, shield: 0, regen: 0, resist: 0.5, load: 1100, farIn: 700, farOut: 1100, visLo: 0.45, visHi: 0.9, cloudDeep: 90, cloudIn: 0.12, weapon: AUTOCANNON, second: MISSILE, color: "#e8c14f" },
 };
 export const FAC_DEFAULT = { hp: HP_MAX, speed: 1, shield: SH_MAX, regen: SH_REGEN, resist: 0, load: 1300, farIn: 900, farOut: 1300, visLo: 0.25, visHi: 0.75, cloudDeep: 150, cloudIn: 0.25, weapon: null, second: null, color: "#e04848" };
 export const fac = (p) => FACTIONS[p && p.team] || FAC_DEFAULT;
+// (owner, 2026-10-15) the Tuning panel's limits per number (anything else: 0-5,000)
+export const TUNE_RANGE = { hp: [1, 5000], speed: [0.1, 5], resist: [0, 0.95], load: [300, 1500], farIn: [100, 1500], farOut: [200, 1500], visLo: [0, 1], visHi: [0.01, 1], cloudIn: [0, 1],
+  fall: [0, 1], rotSpeed: [1, 1440], life: [0.05, 30], drag: [0, 20], rate: [0.03, 10], spread0: [0, 45], spreadAdd: [0, 20], aimSpeed: [0, 90], mag: [1, 500], n: [1, 10], gap: [0, 5], zig: [0, 3], zigHz: [0, 10], zap: [0.05, 5], spin: [0, 10], turn: [0, 20] };
+const numsOf = (o) => { const out = {}; if (o) for (const [k, v] of Object.entries(o)) if (typeof v === "number") out[k] = v; return out; };
 const segCircle = (x0, y0, x1, y1, cx, cy, R) => {   // where along a segment (0..1) it first comes within R of a point
   const dx = x1 - x0, dy = y1 - y0, fx = x0 - cx, fy = y0 - cy, A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), C = fx * fx + fy * fy - R * R;
   if (C <= 0) return 0; if (A < 1e-12) return null; const D = B * B - 4 * A * C; if (D < 0) return null;
@@ -384,7 +388,7 @@ export const modelRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.glb$/.t
 // (owner, 2026-10-15) the Importer's assets (head admin): models (GLB), images (PNG / JPEG / WebP) and audio (MP3 / OGG /
 // WAV), each a name and its uploaded file; a model's icon (thumb) is a picture rendered from it (a PNG). The Object Creator
 // picks its models from these.
-export const UI_KEYS = ["creator", "assets", "objedit", "attrs", "shipedit", "se-attr", "cr-edit", "imp-pop", "we-creator", "we-pick", "we-item"];
+export const UI_KEYS = ["creator", "assets", "objedit", "attrs", "shipedit", "se-attr", "cr-edit", "imp-pop", "we-creator", "we-pick", "we-item", "tune"];
 export const ASSET_KINDS = ["model", "image", "audio"];
 export const imageRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(png|jpg|webp)$/.test(v) ? v : null);
 export const audioRef = (v) => (typeof v === "string" && /^[0-9a-f]{24}\.(mp3|ogg|wav)$/.test(v) ? v : null);
@@ -462,7 +466,7 @@ export class World3D {
     this.blockSeq = 1;
     this.weapons = new Map();                // (owner, 2026-10-14) id -> weapon (the Weapon panel's)
     this.catalog = new Map(); this.icons = new Map(); this.types = new Map(); this.assets = new Map(); this.sounds = new Map();   // assets: (owner, 2026-10-15) the Importer's   // types: (owner, 2026-10-15) id -> object type   // (owner, 2026-10-15) id -> item (the Item Creator's), id -> icon
-    this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = []; this.ords = []; this.ordSeq = 1; this.booms = []; this.enemySeq = 1; this.joined = []; this.left = [];   // joined / left: (owner, 2026-10-15) X's enemy ships coming and going, for net.js to announce   // (owner, 2026-10-15) missiles / drones in flight and this tick's blasts   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
+    this.hits = []; this.projs = []; this.projSeq = 1; this.projEv = []; this.ords = []; this.ordSeq = 1; this.booms = []; this.enemySeq = 1; this.joined = []; this.left = []; this.salvos = [];   // joined / left: (owner, 2026-10-15) X's enemy ships coming and going, for net.js to announce   // (owner, 2026-10-15) missiles / drones in flight and this tick's blasts   // (owner, 2026-10-14) railgun projectiles in flight, and this tick's starts / ends for the clients
                              // (owner, 2026-10-14) this tick's ship impacts, for the clients' sparks
     this.builds = new Map(); this.colliders = {}; this.pivots = {}; this.origins = {}; this.movers = {}; this.visOutlines = {}; this.collExtra = {};   // colliders: (owner, 2026-10-14) the Object Editor's outlines by kind                 // (owner, 2026-10-13) Build menu pieces: id -> { id, k, x, y, w, d, r, poly, rad, dirty }                // id -> { id, name, x, y, dx, dy, dirty }
     this.ready = this._ensure();
@@ -502,6 +506,8 @@ export class World3D {
     for (const o of (await pool.query(`SELECT id, data FROM world3d_sounds ORDER BY id`)).rows) { const a = cleanSound(o.data); if (a) this.sounds.set(String(o.id), { id: String(o.id), ...a }); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_settings (k TEXT PRIMARY KEY, v JSONB)`);   // (owner, 2026-10-15) the player ship
     { const r = (await pool.query(`SELECT v FROM world3d_settings WHERE k = 'playerShip'`)).rows[0]; this.playerShip = r && typeof r.v === "string" ? r.v : null; }
+    { const r = (await pool.query(`SELECT v FROM world3d_settings WHERE k = 'factions'`)).rows[0], t = r && r.v;   // (owner, 2026-10-15) the Tuning panel's numbers
+      if (t && typeof t === "object") for (const [s, G] of Object.entries(t)) for (const g of ["ship", "weapon", "second"]) for (const [k, v] of Object.entries((G && G[g]) || {})) this.tune(s, g, k, v); }
     await pool.query(`CREATE TABLE IF NOT EXISTS world3d_assets (id SERIAL PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);   // (owner, 2026-10-15) the Importer
     for (const o of (await pool.query(`SELECT id, data FROM world3d_assets ORDER BY id`)).rows) { const a = cleanAsset(o.data); if (a) this.assets.set(String(o.id), { id: String(o.id), ...a }); }
     for (const t of this.types.values()) if (t.model && ![...this.assets.values()].some((a) => a.file === t.model)) await this.setAsset(null, { kind: "model", name: t.mname.replace(/\.glb$/i, "") || t.name, file: t.model }, true);   // (models uploaded before the Importer)
@@ -682,14 +688,14 @@ export class World3D {
   }
   // (owner, 2026-10-14) health: HP_MAX full; at 0 the ship is back at full health near the center
   // (owner, 2026-10-14) part: the combat-points part a shot hit (body / main / left / right / weapon); for now every part is HP
-  hurt(p, d, part) {
+  hurt(p, d, part, shieldStops = false) {
     if (spawning(p)) return false;             // (still materializing)
     let shield = false;
     if ((p.sh ?? fac(p).shield) > 0) {                // (owner, 2026-10-15) the shield takes it first; what's left goes to the hull
       const sh = p.sh ?? fac(p).shield, take = Math.min(sh, d); p.sh = sh - take; d -= take; shield = true;
       if (p.sh <= 0) { p.sh = 0; p.shBroken = true; }
     }
-    if (d <= 0) return shield;
+    if (d <= 0 || (shield && shieldStops)) return shield;
     d *= 1 - fac(p).resist;                    // (owner, 2026-10-15) its faction's hull damage resistance
     p.hp = (p.hp ?? fac(p).hp) - d;
     if (p.hp <= 0 && p.enemy) { this.dropEnemy(p); return shield; }   // (owner, 2026-10-15) an X enemy is just gone
@@ -861,7 +867,7 @@ export class World3D {
     const w = this.weaponOf(p); if (w.type !== "beam") { p.beamOn = false; return; }
     if (!on) { p.beamOn = false; p.beamOut = null; return; }
     if (typeof dx !== "number" || typeof dy !== "number" || !Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 1e-6) return;
-    const want = Math.atan2(dy, dx); if (!p.beamOn) { p.beamA = p.beamA ?? want; } p.beamOn = true; p.beamWant = want; p.beamSeen = Date.now();
+    const want = Math.atan2(dy, dx); if (!p.beamOn) p.beamA = want; p.beamOn = true;   // (owner, 2026-10-15) a beam starts where you aim (it used to sweep over from where the last one ended) p.beamWant = want; p.beamSeen = Date.now();
   }
   stepBeams(dt) {
     const now = Date.now();
@@ -905,12 +911,13 @@ export class World3D {
     p.lastLaunch = now;
     let tgt = null;
     if (S.kind === "drone") { let best = S.pick; for (const q of this.players.values()) { if (q.team === p.team || spawning(q)) continue; const d = Math.hypot(q.x - ax, q.y - ay); if (d < best && this.sees(p, q)) { best = d; tgt = q.id; } } }
-    const [ox, oy] = this.shipOrigin(p), h0 = Math.atan2(ax - ox, -(ay - oy));
-    for (let i = 0; i < S.n; i++) {
-      const off = S.n > 1 ? (i / (S.n - 1) - 0.5) * 0.8 : 0;
-      this.ords.push({ id: this.ordSeq++, k: S.kind, S, a: p.id, team: p.team, x: ox, y: oy, h: h0 + off, base: h0 + off, gx: ax, gy: ay, tgt, age: 0, hp: S.hp, r: S.r, ph: Math.random() * Math.PI * 2 });
-    }
+    if (S.gap) { for (let i = 0; i < S.n; i++) this.salvos.push({ pid: p.id, S, ax, ay, tgt, i, at: now + i * S.gap * 1000 }); return true; }   // (owner, 2026-10-15) missiles leave one at a time
+    for (let i = 0; i < S.n; i++) this.launchOne(p, S, ax, ay, tgt, S.n > 1 ? (i / (S.n - 1) - 0.5) * 0.8 : 0);
     return true;
+  }
+  launchOne(p, S, ax, ay, tgt, off) {
+    const [ox, oy] = this.shipOrigin(p), h0 = Math.atan2(ax - ox, -(ay - oy));
+    this.ords.push({ id: this.ordSeq++, k: S.kind, S, a: p.id, team: p.team, x: ox, y: oy, h: h0 + off, base: h0 + off, gx: ax, gy: ay, tgt, age: 0, hp: S.hp, r: S.r, ph: Math.random() * Math.PI * 2 });
   }
   // (owner, 2026-10-15) a drone circling its enemy: zaps it every S.zap s (S.dps a second in all) while its own hp drains;
   // the enemy gone or materializing, it flies off to find another
@@ -933,9 +940,10 @@ export class World3D {
   }
   blast(o, direct) {                           // a missile's area damage: full on what it struck, then less out to its reach, measured to the hull's edge (enemies only)
     const S = o.S; this.booms.push({ x: o.x, y: o.y, r: S.blast, k: "missile", h: direct ? direct.id : null });
-    for (const q of this.players.values()) { if (q.team === o.team || spawning(q)) continue; const d = q === direct ? 0 : Math.max(0, Math.hypot(q.x - o.x, q.y - o.y) - SHIP_R); if (d < S.blast) this.hurt(q, S.dmg * (1 - d / S.blast)); }
+    for (const q of this.players.values()) { if (q.team === o.team || spawning(q)) continue; const d = q === direct ? 0 : Math.max(0, Math.hypot(q.x - o.x, q.y - o.y) - SHIP_R); if (d < S.blast) this.hurt(q, S.dmg * (1 - d / S.blast), null, true); }   // (owner, 2026-10-15) a shield up takes it all: none gets through to the hull
   }
   stepOrds(dt) {
+    if (this.salvos.length) { const now = Date.now(); this.salvos = this.salvos.filter((v) => { if (v.at > now) return true; const p = this.players.get(v.pid); if (p && !spawning(p)) this.launchOne(p, v.S, v.ax, v.ay, v.tgt, (Math.random() - 0.5) * 0.3); return false; }); }
     for (let k = this.ords.length - 1; k >= 0; k--) {
       const o = this.ords[k], S = o.S; if (!this.ords.includes(o)) continue;
       if (o.k === "drone" && o.orb) { this.droneOrbit(o, dt); continue; }
@@ -989,6 +997,19 @@ export class World3D {
     const id = "e" + this.enemySeq++, F = FACTIONS[team];
     const e = { id, name: "Enemy", team, enemy: true, owner: p.id, x, y, h: wrapA(h + Math.PI), dx: 0, dy: 0, vx: 0, vy: 0, hp: F.hp, sh: F.shield, spawnUntil: Date.now() + SPAWN_MS };
     this.players.set(id, e); this.joined.push(e); return e;
+  }
+  // (owner, 2026-10-15) the Tuning panel: staff change one of a faction's numbers (g: "ship", "weapon" or "second"; k: an
+  // existing number there), clamped to its range; kept in world3d_settings ("factions") and laid over the defaults at start
+  tune(side, g, k, v) {
+    const F = FACTIONS[side]; if (!F || typeof k !== "string" || !["ship", "weapon", "second"].includes(g)) return null;
+    const o = g === "ship" ? F : g === "weapon" ? F.weapon : F.second; if (!o || typeof o[k] !== "number" || k === "color") return null;
+    v = Number(v); if (!Number.isFinite(v)) return null;
+    const [lo, hi] = TUNE_RANGE[k] || [0, 5000]; v = Math.max(lo, Math.min(hi, v)); if (k === "n" || k === "mag") v = Math.round(v);
+    o[k] = Math.round(v * 10000) / 10000; return F;
+  }
+  async saveTune() {
+    const out = {}; for (const [s, F] of Object.entries(FACTIONS)) out[s] = { ship: numsOf(F), weapon: numsOf(F.weapon), second: numsOf(F.second) };
+    await pool.query(`INSERT INTO world3d_settings (k, v) VALUES ('factions', $1) ON CONFLICT (k) DO UPDATE SET v = $1`, [JSON.stringify(out)]);
   }
   // (owner, 2026-10-15) a player switches faction: its numbers and weapon change, and it materializes again where it is
   setTeam(id, team) {

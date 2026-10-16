@@ -31,6 +31,13 @@
     /* (owner, 2026-10-15) switching faction, top left (for now) */
     #team-box { position: fixed; top: 12px; left: 12px; display: flex; gap: 6px; z-index: 5; user-select: none; }
     #team-box[hidden] { display: none; }
+    /* (owner, 2026-10-15) the Tuning panel */
+    #tune-panel { width: 250px; max-height: 80vh; overflow-y: auto; }
+    #tune-panel .tn-head { margin: 10px 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--text-dim); }
+    #tune-panel .tn-sec:first-child .tn-head { margin-top: 0; }
+    #tune-panel .tn-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; }
+    #tune-panel .tn-lab { font-size: 12px; }
+    #tune-panel input { width: 84px; padding: 3px 6px; border: 1px solid #2a3a52; border-radius: 4px; background: rgba(8,12,20,.9); color: var(--text); font: 12px var(--font); cursor: ew-resize; }
     #team-box button { height: 30px; padding: 0 14px; border-radius: 6px; border: none; font: 600 13px system-ui, sans-serif; color: #fff; cursor: pointer; opacity: .5; }
     #team-box button[data-side="blue"] { background: linear-gradient(135deg, #4f8fe8 0%, #1f4d9b 100%); }
     #team-box button[data-side="red"] { background: linear-gradient(135deg, #f0c84a 0%, #a8780e 100%); }
@@ -105,7 +112,7 @@
     html:not(.touch) #chat { width: auto; } html:not(.touch) #chat-panel { width: 340px; }
     /* (owner, 2026-10-14) the staff buttons (A X B Z) are a column on the right edge of the screen, centered top to bottom */
     #staff-col { position: fixed; right: 8px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; z-index: 6; }
-    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #build-btn { order: 3; } #cr-btn { order: 4; } #imp-btn { order: 5; }
+    #staff-col > button { width: 28px; height: 30px; } #admin-btn { order: 1; } #build-btn { order: 3; } #cr-btn { order: 4; } #imp-btn { order: 5; } #tune-btn { order: 6; }
     html.touch #chat-panel { flex: 1; width: auto; }   /* (owner) [A] floats left of the panel, by the input */
     #chat-form { display: flex; align-items: center; gap: 6px; margin: 0; padding: 3px 4px 3px 7px; background: rgba(10, 14, 22, .85); border: 1px solid #2a3a52; border-radius: 4px; }
     #chat-form:focus-within { border-color: #4f8fe8; }
@@ -209,14 +216,14 @@
     #imp-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(110,230,160,0.14); border: none; border-radius: 5px; color: #a8f0c6; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #cr-btn { flex: none; width: 28px; height: 30px; padding: 0; display: grid; place-items: center; font: 700 12px system-ui, sans-serif; background: rgba(255,170,90,0.14); border: none; border-radius: 5px; color: #ffc89a; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
     #cr-btn:hover, #cr-btn.on { background: linear-gradient(135deg, #ffc58f, #e0752a); color: #1f0d02; }
-    :is(#imp-panel, #cr-panel) { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
-    :is(#imp-panel, #cr-panel) .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
+    :is(#imp-panel, #cr-panel, #tune-panel) { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 12px; background: rgba(14,19,30,0.94); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font: 13px var(--font); }
+    :is(#imp-panel, #cr-panel, #tune-panel) .we-top { display: flex; align-items: center; justify-content: space-between; margin: -4px -4px 10px; padding: 2px 4px 6px; cursor: move; touch-action: none; user-select: none; }
     .we-x { background: none; border: none; color: var(--text-dim); font-size: 16px; line-height: 1; padding: 0 4px; cursor: pointer; } .we-x:hover { color: #fff; }
-    :is(:is(#imp-panel, #cr-panel), .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
+    :is(:is(#imp-panel, #cr-panel, #tune-panel), .we-modal) .we-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
     /* (owner, 2026-10-14) the item slots, 5 a row, scrolling past 4 rows */
     .we-list { display: grid; grid-template-columns: repeat(5, 44px); gap: 6px; max-height: calc(44px * 4 + 6px * 3); overflow-y: auto; padding-right: 4px; }
-    :is(:is(#imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
-    :is(:is(#imp-panel, #cr-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
+    :is(:is(#imp-panel, #cr-panel, #tune-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox) { flex: 1; padding: 6px 14px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(20,28,42,0.95); color: var(--text); font: 600 12px var(--font); letter-spacing: .04em; cursor: pointer; }
+    :is(:is(#imp-panel, #cr-panel, #tune-panel), .we-modal) button:not(.inv-slot):not(.we-x):not(.ic-tool):not(.we-iconbox):hover { background: rgba(40,54,78,0.98); border-color: #3c5272; color: #fff; }
     .we-modal .we-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; } .we-modal .we-btns button { flex: none !important; }
     .we-modal .we-btns .we-ok { background: linear-gradient(135deg, #5fb4ff, #2f6fe0) !important; color: #fff !important; border: none !important; }   /* (owner) blue */
     .we-modal .we-btns .we-ok:hover { background: linear-gradient(135deg, #85c6ff, #4a86f0) !important; }
@@ -258,7 +265,7 @@
     .ic-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-dim); font-size: 12px; }
     .ic-field input[type=number] { width: 64px !important; } .ic-field input[type=color] { width: 40px; height: 24px; padding: 0; border: none; background: none; cursor: pointer; } .ic-field input[type=range] { width: 90px; }
     .ic-field input[type=checkbox] { accent-color: #38c6ff; }
-    html.touch :is(#imp-panel, #cr-panel), html.touch .we-back { display: none !important; }
+    html.touch :is(#imp-panel, #cr-panel, #tune-panel), html.touch .we-back { display: none !important; }
     #coll-edit { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; padding: 8px; background: rgba(14,19,30,0.92); border-radius: 8px; box-shadow: var(--shadow); color: var(--text); font-family: var(--font); user-select: none; }
     .ce-top { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 6px; cursor: move; touch-action: none; }
     .ce-title { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-dim); }
@@ -361,17 +368,17 @@
     input[type=number]:not(:focus) { cursor: ew-resize; } body.num-dragging, body.num-dragging * { cursor: ew-resize !important; user-select: none !important; }
     /* (owner, 2026-10-15) the Importer */
     #imp-btn:hover, #imp-btn.on { background: linear-gradient(135deg, #9df0c0, #2fae6a); color: #03170b; }
-    :is(#imp-panel, #cr-panel) .imp-grid { grid-template-columns: repeat(6, 44px); }
-    :is(#imp-panel, #cr-panel) .imp-tools { display: flex; gap: 6px; margin-bottom: 8px; box-sizing: border-box; width: calc(44px * 6 + 6px * 5); }
-    :is(#imp-panel, #cr-panel) .imp-tools button.imp-filter { flex: none !important; width: 30px; padding: 0 !important; display: grid; place-items: center; color: var(--text-dim); } :is(#imp-panel, #cr-panel) .imp-tools button.imp-filter.on svg { color: #38c6ff; filter: drop-shadow(0 0 3px rgba(56,198,255,0.85)); }
-    :is(#imp-panel, #cr-panel) .imp-tools button.imp-go { flex: none !important; padding: 4px 14px !important; border: none !important; background: linear-gradient(135deg, #5fe39a, #22a35c) !important; color: #03170b !important; font-weight: 700; }
-    :is(#imp-panel, #cr-panel) .imp-tools button.imp-go:hover { background: linear-gradient(135deg, #85f0b4, #2fbe6e) !important; }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-grid { grid-template-columns: repeat(6, 44px); }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-tools { display: flex; gap: 6px; margin-bottom: 8px; box-sizing: border-box; width: calc(44px * 6 + 6px * 5); }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-tools button.imp-filter { flex: none !important; width: 30px; padding: 0 !important; display: grid; place-items: center; color: var(--text-dim); } :is(#imp-panel, #cr-panel, #tune-panel) .imp-tools button.imp-filter.on svg { color: #38c6ff; filter: drop-shadow(0 0 3px rgba(56,198,255,0.85)); }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-tools button.imp-go { flex: none !important; padding: 4px 14px !important; border: none !important; background: linear-gradient(135deg, #5fe39a, #22a35c) !important; color: #03170b !important; font-weight: 700; }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-tools button.imp-go:hover { background: linear-gradient(135deg, #85f0b4, #2fbe6e) !important; }
     .imp-fmenu button.on { color: #38c6ff; }
     #imp-panel .imp-grid { grid-template-columns: repeat(5, 44px); } #imp-panel .imp-tools { width: calc(44px * 5 + 6px * 4); }   /* (owner, 2026-10-15) RAW ASSETS: 5 a row */
     #imp-panel .imp-tools button.imp-plus { width: 30px; padding: 0 !important; font-size: 19px !important; font-weight: 700; line-height: 1 !important; display: grid; place-items: center; }
     .imp-preview[hidden] { display: none; } .imp-opts { display: grid; gap: 6px; } .we-modal .imp-opts button { flex: none !important; }
-    :is(#imp-panel, #cr-panel) .imp-search { box-sizing: border-box; flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
-    :is(#imp-panel, #cr-panel).drop, .we-modal.drop { box-shadow: 0 0 0 2px #38c6ff, var(--shadow); }
+    :is(#imp-panel, #cr-panel, #tune-panel) .imp-search { box-sizing: border-box; flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid #2a3a52; border-radius: 5px; background: rgba(6,10,18,0.9); color: var(--text); font: 12px var(--font); }
+    :is(#imp-panel, #cr-panel, #tune-panel).drop, .we-modal.drop { box-shadow: 0 0 0 2px #38c6ff, var(--shadow); }
     .imp-slot { display: grid; place-items: center; } .we-pickslot { position: relative; }
     .raw-mark { position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; display: grid; place-items: center; background: rgba(10,14,22,0.85); box-shadow: 0 0 0 1px rgba(255,190,90,0.8); color: #ffbe5a; font: 700 7.5px/1 var(--font); pointer-events: none; }   /* (owner, 2026-10-15) a raw asset */ .imp-slot { position: relative; } .cr-mark { position: absolute; left: 3px; top: 1px; font: italic 700 10px Georgia, serif; color: #8fd3ff; text-shadow: 0 0 3px rgba(0,0,0,0.9); pointer-events: none; } .imp-pic { display: block; object-fit: contain; pointer-events: none; }
     .imp-preview { display: grid; place-items: center; min-height: 96px; } .imp-view { width: 192px; height: 192px; border-radius: 6px; cursor: grab; touch-action: none; background: repeating-conic-gradient(rgba(255,255,255,0.05) 0 25%, transparent 0 50%) 0 0 / 16px 16px, rgba(6,10,18,0.9); } .imp-view:active { cursor: grabbing; }
@@ -381,7 +388,7 @@
     .imp-front { display: flex; align-items: center; gap: 6px; } .imp-front[hidden] { display: none; } .we-modal .imp-front input { width: 70px !important; text-align: center; }
     .we-modal .imp-front button.imp-turn { flex: none !important; width: 30px; padding: 3px 0 !important; font-size: 15px; line-height: 1; }
     .we-modal .imp-reset { justify-self: center; flex: none !important; padding: 4px 12px !important; } .we-modal .imp-reset[hidden] { display: none; } .imp-big { width: 72px; height: 72px; font-size: 34px; }
-    :is(#imp-panel, #cr-panel) .we-err { margin: 8px 0 0; } html.touch #imp-btn, html.touch #imp-panel, html.touch #cr-panel, html.touch #cr-btn { display: none !important; }
+    :is(#imp-panel, #cr-panel, #tune-panel) .we-err { margin: 8px 0 0; } html.touch #imp-btn, html.touch #imp-panel, html.touch #cr-panel, html.touch #cr-btn { display: none !important; }
     #zone-handles { position: fixed; inset: 0; z-index: 4; pointer-events: none; overflow: visible; }
     #zone-handles .zn-line { fill: rgba(127,224,255,0.08); stroke: rgba(127,224,255,0.85); stroke-width: 2; stroke-dasharray: 8 6; }
     #zone-handles .zn-pt { fill: #fff; stroke: #2f9bd6; stroke-width: 2; pointer-events: auto; cursor: pointer; } #zone-handles .zn-pt:hover { fill: #cdeeff; }
@@ -411,12 +418,13 @@
   <div id="cap"><div id="cap-fill"></div><span id="cap-num">100</span></div>
   <div id="cursor" hidden></div>
   <script src="api.js?v=1791945557"></script>
-  <script src="winpos.js?v=1792105301"></script>
+  <script src="winpos.js?v=1792105302"></script>
   <script src="numdrag.js?v=1792049714"></script>
   <script src="icons.js?v=1792103206"></script>
   <script src="inventory.js?v=1792047695"></script>
   <script src="itemcreator.js?v=1792105050"></script>
   <script src="adminpanel.js?v=1792047695"></script>
-  <script type="module" src="game3d.js?v=1792105058"></script>
+  <script src="tuning.js?v=1792105060"></script>
+  <script type="module" src="game3d.js?v=1792105060"></script>
 </body>
 </html>

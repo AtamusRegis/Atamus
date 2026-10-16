@@ -43,7 +43,7 @@ function sniff(b) {
 }
 game.post("/assets", express.raw({ type: () => true, limit: "50mb" }), async (req, res) => {
   let u = null; try { u = await getSessionUser(readCookie(req)); } catch {}
-  if (!u || u.role !== "head") return res.status(403).json({ error: "Only the head admin can do that." });
+  if (!u || !["head", "admin", "dev"].includes(u.role)) return res.status(403).json({ error: "Only staff can do that." });   // (owner, 2026-10-15: admins and developers too)
   const b = req.body, k = Buffer.isBuffer(b) && sniff(b);
   if (!k) return res.status(400).json({ error: "That isn't a model, image or sound the game can use." });
   if (b.length > k.max * 1024 * 1024) return res.status(400).json({ error: "That file is over " + k.max + " MB." });

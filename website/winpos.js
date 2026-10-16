@@ -4,7 +4,7 @@
 // inside the screen if the window is smaller now). (owner, 2026-10-15) Pressing on a window brings it to the front.
 (function () {
   let pos = {}, send = () => {}, z = 9;
-  const KEYS = ["creator", "assets", "objedit", "attrs", "shipedit", "se-attr", "cr-edit", "imp-pop", "we-creator", "we-pick", "we-item"];
+  const KEYS = ["creator", "assets", "objedit", "attrs", "shipedit", "se-attr", "cr-edit", "imp-pop", "we-creator", "we-pick", "we-item", "tune"];
   function place(el, key) {
     if (el && !el.hidden && !el.classList.contains("we-modal")) front(el);   // (opening a window brings it forward)
     const p = pos[key]; if (!p || !el || el.hidden) return;

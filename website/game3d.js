@@ -584,7 +584,9 @@ function updateShipVis(dt, now) {
     const look = (vis, poly, x, y, spd = 99, id = null) => {
       if (!vis) return; seen.add(vis);
       const far = Math.hypot(x - me.x, y - me.y) > FAR_OUT + 100, r = far ? { f: 0, lines: null } : mutual(M, [me.x, me.y], asPts(poly), [x, y], W, edit);
-      const t = visTargets.get(vis) || { a: 0 }; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); t.side = id && players.get(id) ? players.get(id).side : null; visTargets.set(vis, t);
+      const t = visTargets.get(vis) || { a: 0 };
+      if (t.x !== undefined && Math.hypot(x - t.x, y - t.y) > 150) t.a = 0;   // (owner, 2026-10-15) jumped (a respawn): it doesn't carry its old visibility to the new spot
+      t.pid = id; t.f = r.f; t.lines = r.lines; t.x = x; t.y = y; t.cf = cloudFactor(x, y, spd, id); t.side = id && players.get(id) ? players.get(id).side : null; visTargets.set(vis, t);
     };
     for (const p of players.values()) if (p.id !== myId && p.near) look(p.holder.children[0], shipVisOutline(p.holder.position.x, -p.holder.position.z, p.heading), p.holder.position.x, -p.holder.position.z, Math.hypot(p.vx || 0, p.vy || 0), p.id);
     for (const v of [...visTargets.keys()]) if (!seen.has(v)) visTargets.delete(v);
@@ -593,7 +595,7 @@ function updateShipVis(dt, now) {
     // (owner, 2026-10-14) opacity rises smoothly from 0 at 25% visible to solid at 75% (no steps); it fades in fast
     // (about 0.15 s) and out slowly (about 0.6 s), so ships show promptly but don't flicker at corners
     const F = facOf(t.side), x = Math.max(0, Math.min(1, (t.f - F.visLo) / (F.visHi - F.visLo))), goal = x * x * (3 - 2 * x) * (t.cf ?? 1);   // (and the nebula clouds)
-    const k = Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));
+    const k = t.pid && spawnEnd.has(t.pid) ? 1 : Math.min(1, dt / (goal > t.a ? 0.15 : 0.6));   // (owner, 2026-10-15) materializing: its visibility at once, no fade (the hologram was seen in nebulae)
     t.a += (goal - t.a) * k; if (Math.abs(goal - t.a) < 0.003) t.a = goal;
     if (v.userData.va) { v.userData.va.value = t.a; const sp = v.userData.sp; for (const m of v.userData.mats) m.transparent = t.a < 0.999 || (sp && sp.s.value < 1); }
     v.visible = t.a > 0.01;
@@ -782,7 +784,7 @@ function updateShields(now) {
 // ---- (owner, 2026-10-15) factions in play: my faction's sight, load circle and weapon; held fire (bullets repeat at the
 // weapon's rate; Blue's laser stays on while held, its direction sent ~10 times a second); beams drawn for everyone ----
 function applyFaction() {
-  const F = facOf(mySide);
+  const F = facOf(mySide); if (window.Tuning) window.Tuning.set(FACS, mySide);
   FAR_IN = F.farIn; FAR_OUT = F.farOut; farInU.value = FAR_IN; visU.visFar.value = FAR_OUT; LOAD_R = F.load;
   ammo = null; reloadAt = 0;
 }
@@ -1352,7 +1354,8 @@ function connect() {
       if (m.you.creator) Creator.mount({ send, build, types: objTypes, staff: true, head: true });   // (owner, 2026-10-15: ships and modules only, the head admin's) Creator.setSounds(m.sounds);   // (owner, 2026-10-15) the CREATOR (C)
       amBuilder = !!m.you.builder; if (window.Inventory) window.Inventory.setStaff(amBuilder);
       for (const id of [...crates.keys()]) dropCrate(id); for (const c of Array.isArray(m.crates) ? m.crates : []) setCrate(c);   // (owner, 2026-10-14) dropped-item crates
-      if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }   // (owner, 2026-10-15) the Importer (I), head admin
+      if (m.you.creator) { Importer.mount({ send }); Importer.set(m.assets); }
+      if (m.you.builder && window.Tuning) window.Tuning.mount({ send });   // (owner, 2026-10-15) the Tuning panel (T)   // (owner, 2026-10-15) the Importer (I), head admin
       build.setStaff(!!m.you.builder, !!m.you.creator); build.setClock(m.now); build.setTypes(m.types); playerShipId = typeof m.playerShip === "string" ? m.playerShip : null; Creator.setPlayerShip(playerShipId); build.load(m.builds, m.cfg && m.cfg.buildH, m.cfg && m.cfg.shipR && 2 * m.cfg.shipR, m.colliders, m.pivots, m.movers, m.visOutlines, m.origins, m.collExtra);
       refreshPlayerShip();   // (owner, 2026-10-15) the ship players fly
       for (const p of [...players.keys()]) dropPlayer(p);
@@ -1422,7 +1425,8 @@ function connect() {
       if (m.sa) shieldHit(m.a, m.x, m.y); if (m.sb) shieldHit(m.b, m.x, m.y);   // (owner, 2026-10-15) a shield took the bump
       if (Number.isFinite(m.x) && Number.isFinite(m.y) && (seen(m.a) || seen(m.b))) burst(m.x, m.y, Math.min(600, Math.max(0, +m.s || 0)), +m.dx, +m.dy);
     }
-    else if (m.t === "staff") { if (window.AdminPanel) window.AdminPanel.mount(true).then((ok) => { amStaff = ok; }); }   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
+    else if (m.t === "staff") location.reload();   // (owner, 2026-10-15) made (or removed as) staff: reload so every menu follows (the Admin panel, Build, the Creators, Tuning)
+    else if (m.t === "factions") { if (m.f && typeof m.f === "object") { FACS = m.f; applyFaction(); if (window.Tuning) window.Tuning.set(FACS); } }   // (owner, 2026-10-15) staff tuned a faction   // (owner, 2026-10-14) made (or removed as) a moderator: the panel checks again
     else if (m.t === "chat") addChat(m);
     else if (build.onMsg(m)) { /* Build menu pieces */ }
     else if (m.t === "block") { for (const id of m.gone || []) dropBlock(id); if (m.b) addBlock(m.b[0], m.b[1], m.b[2]); }
