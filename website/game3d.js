@@ -935,8 +935,11 @@ canvas.addEventListener("touchend", (e) => { const t = e.targetTouches; touch1 =
 
 // (owner, 2026-10-13) touch devices get a joystick for WASD (drag elsewhere turns the camera). Right-click stays
 // PC-only: phones are just for testing a second account.
-const TOUCH = matchMedia("(pointer: coarse)").matches;
+// (owner, 2026-10-15) a tablet with a mouse and keyboard is played like a PC: touch mode only when there's no mouse at
+// all, and the first mouse movement ends it (touch mode hides the staff windows, the cursor dot and the rest)
+const TOUCH = matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches;
 const joy = { x: 0, y: 0, id: null };
+if (TOUCH) addEventListener("pointermove", function off(e) { if (e.pointerType !== "mouse") return; document.documentElement.classList.remove("touch"); removeEventListener("pointermove", off, true); }, true);
 if (TOUCH) {
   document.documentElement.classList.add("touch");
   const base = document.getElementById("joy"), knob = document.getElementById("joy-knob");
