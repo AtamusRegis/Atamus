@@ -123,6 +123,7 @@ function connect() {
 }
 function onMsg(m) {
   if (m.t === "batch") { for (const x of Array.isArray(m.m) ? m.m : []) onMsg(x); return; }
+  if (!G && !["hello", "countdown", "update", "chat", "staff", "pong", "join", "leave", "game"].includes(m.t)) return;   // (nothing that needs the game's numbers before the hello)
   if (m.t === "hello") {
     srvBuild = m.build || "";
     if (m.updating && m.updating.parts) { if (typeof m.updating.to === "string" && /^[0-9a-f]{7,40}$/.test(m.updating.to)) countHead = m.updating.to; goUpdating(m.updating.parts); return; }
@@ -201,7 +202,7 @@ function allowedMe(x, y) {
 }
 function stepMe(dt, inp) {
   const S = myHull(), empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
-  const k = empty ? S.crawl : 1, spd = S.speed * mySpeedMul() * k * (rock ? Math.min(1, towFactor(rock.n) * mval("tractor", "tow")) : 1), push = hyp(inp.x, inp.y);
+  const k = empty ? S.crawl : 1, spd = S.speed * mySpeedMul() * (ME.spdBoost || 1) * k * (rock ? Math.min(1, towFactor(rock.n) * mval("tractor", "tow")) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? S.accel * k : S.brake) * dt;
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
   mine.vx += ex; mine.vy += ey;
@@ -321,7 +322,11 @@ function shipFx(s, ts, under) {
       for (const lx of [35, 145]) { const [px, py] = at((lx - 90) * ART, (318 + (lay.off.tractor || 0) - yc) * ART); cx.moveTo(px, py); cx.lineTo(rk.dx, rk.dy); } cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; }
   }
   const link = (id, color, dash, ly) => { const q = id === myId ? { x: mine.x, y: mine.y } : ships.get(id); if (!q) return; const [px, py] = at(0, ly); cx.strokeStyle = color; cx.lineWidth = lw(2.5); cx.setLineDash(dash.map(lw)); cx.beginPath(); cx.moveTo(px, py); cx.quadraticCurveTo((px + q.x) / 2 + 10, (py + q.y) / 2 - 10, q.x, q.y); cx.stroke(); cx.setLineDash([]); };
-  if (r[9]) link(r[9], C.ice, [], (154 + (lay.off.fueler || 0) - yc) * ART);            // the fueler's hose, from the pump on top of the tank
+  if (r[9]) link(r[9], C.ice, [], (154 + (lay.off.fueler || 0) - yc) * ART);
+  if (r[18]) { const rk = rocks.get(r[18]); if (rk) {    // (a scan under way: a soft cone to the asteroid with pings running up it)
+    const a = Math.atan2(rk.dy - s.y, rk.dx - s.x), L = hyp(rk.dx - s.x, rk.dy - s.y), w = 0.3, k = (ts * 1.4) % 1;
+    cx.save(); cx.translate(s.x, s.y); cx.rotate(a); cx.globalAlpha = 0.1; cx.fillStyle = C.ice; cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(L, -L * w); cx.lineTo(L, L * w); cx.closePath(); cx.fill();
+    cx.strokeStyle = C.ice; cx.lineWidth = lw(2.5); cx.globalAlpha = 0.8 * (1 - k); cx.beginPath(); cx.arc(k * L - 30, 0, 30 + k * L * w * 0.6, -0.7, 0.7); cx.stroke(); cx.restore(); cx.globalAlpha = 1; } }            // the fueler's hose, from the pump on top of the tank
   if (r[10] && r[10] !== s.id) { const q = r[10] === myId ? { x: mine.x, y: mine.y } : ships.get(r[10]); if (q) { cx.strokeStyle = C.ore; cx.lineWidth = lw(2.5); cx.setLineDash([lw(6), lw(5)]); cx.beginPath(); cx.moveTo(q.x, q.y); cx.quadraticCurveTo((q.x + s.x) / 2 + 10, (q.y + s.y) / 2 - 10, s.x, s.y); cx.stroke(); cx.setLineDash([]); } }   // a refinery working on this ship's hold
 }
 function drawFx(t) {
@@ -546,12 +551,12 @@ const MOD_INFO = {
 };
 const STATS = {                                 // label, stat, how it reads (Speed shows only when it isn't 1)
   miner: [["Mining", "laserDps", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"], ["Ore per crack", "yield", (v) => v], ["Fuel", "burn", (v) => v + " / min firing"]],
-  hauler: [["Hold", "hold", (v) => v + " units"]],
+  hauler: [["Hold", "hold", (v) => v + " units"], ["Trade reach", "tradeRange", (v) => v + " m"]],
   fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"], ["Pay", "pay", (v) => v + " cr / unit"]],
-  tractor: [["Reach", "range", (v) => v + " m"], ["Tow speed", "tow", (v) => "×" + v], ["Fuel", "burn", (v) => v + "+ / min towing"]],
-  command: [["Boost", "boost", (v) => "×" + v], ["Reach", "radius", (v) => v + " m"], ["Fuel", "burn", (v) => v + " / min on"]],
-  scanner: [["Reach", "range", (v) => fmt(v) + " m"], ["Fuel", "fuel", (v) => v + " / scan"]],
-  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "activation", (v) => v + " / use"], ["Reach", "range", (v) => v + " m"]],
+  tractor: [["Reach", "range", (v) => v + " m"], ["Tow speed", "tow", (v) => "×" + v], ["Largest asteroid", "maxSize", (v) => "size " + v], ["Fuel", "burn", (v) => v + "+ / min towing"]],
+  command: [["Mining boost", "boost", (v) => "×" + v], ["Speed boost", "speedBoost", (v) => "×" + v], ["Reach", "radius", (v) => v + " m"], ["Fuel", "burn", (v) => v + " / min on"]],
+  scanner: [["Reach", "range", (v) => fmt(v) + " m"], ["Scan time", "scanTime", (v) => v + " s"], ["Fuel", "fuel", (v) => v + " / scan"]],
+  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "activation", (v) => v + " / use"], ["Reach", "range", (v) => v + " m"], ["Ships at once", "targets", (v) => v]],
 };
 const MK = ["Mk I", "Mk II", "Mk III", "Mk IV"];
 let shopKey = "";
@@ -754,8 +759,8 @@ function answerPrompt(yes) { const p = prompts.shift(); if (p) (yes ? p.yes : p.
 $("trade-yes").addEventListener("click", () => answerPrompt(true)); $("trade-no").addEventListener("click", () => answerPrompt(false));
 function showTrade(m) { pushPrompt((m.name || "?") + " · " + m.n + (m.n === 1 ? " unit" : " units"), () => send({ t: "tradeans", from: m.from, yes: true }), () => send({ t: "tradeans", from: m.from, yes: false }), (G && G.econ.tradeWait) || 30); }
 function showInvite(m) {
-  if (m.kind === "party") pushPrompt((m.name || "?") + " invited you to a party", () => send({ t: "party", op: "accept" }), () => send({ t: "party", op: "decline" }), 120);
-  else pushPrompt((m.name || "?") + " invited you to " + (m.corp || "a corporation"), () => send({ t: "corp", op: "accept" }), () => send({ t: "corp", op: "decline" }), 300);
+  if (m.kind === "party") pushPrompt((m.name || "?") + " invited you to a party", () => send({ t: "party", op: "accept" }), () => send({ t: "party", op: "decline" }), G.econ.partyInvite);
+  else pushPrompt((m.name || "?") + " invited you to " + (m.corp || "a corporation"), () => send({ t: "corp", op: "accept" }), () => send({ t: "corp", op: "decline" }), G.econ.corpInvite);
 }
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
 const reportBox = $("report-box"); let reportFor = null;
@@ -775,7 +780,54 @@ const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed (× for modules)"
   respawn: "Respawn s", despawn: "Despawn s", reseed: "Reseed s", stationPrice: "Station fuel price", pumpPay: "Pay / unit pumped", blockFuel: "Fuel per block", blockTime: "Seconds per block",
   refinedPrice: "Refined price", refinedSpace: "Refined space", refineTime: "Station refine s", hardness: "Hardness (crack health ×)", startCredits: "Starting credits", startFuel: "Starting fuel", dockR: "Docking radius", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
   despawnOre: "Loose ore despawn s", shardCap: "Players per shard", partyMax: "Party size" };
+Object.assign(DEV_LABELS, { speedBoost: "Ship speed boost ×", maxSize: "Largest asteroid", scanTime: "Seconds a scan", targets: "Ships at once", tradeRange: "Trade reach", partyInvite: "Party invite s", corpInvite: "Corp invite s" });
 const devLabel = (k) => DEV_LABELS[k] || k;
+// (owner, 2026-10-17) what each number does, shown in a wrapped window over its name
+const DEV_HELP = {
+  "hull.price": "Credits to buy this hull at the station (the Basic hull is the one everyone starts with).", "hull.slots": "How many modules a ship with this hull can fit at once (1 to 4).",
+  "hull.hold": "Cargo units the hold carries without a Hauler module (a Hauler replaces it with its own hold).", "hull.tank": "Fuel the tank holds without a Fueler module (a Fueler replaces it with its own tank).",
+  "hull.speed": "Top speed in m/s at full thrust (modules' speed factors and command boosts multiply it).", "hull.accel": "How fast the ship speeds up while thrusting, in m/s each second.",
+  "hull.brake": "How fast the ship slows down when no key is held, in m/s each second.", "hull.turn": "How fast the ship turns with A and D, in radians a second (about 57° each).",
+  "hull.crawl": "With an empty tank the ship still moves at this share of its speed and thrust (0.2 = a fifth).", "hull.flyBurn": "Fuel used a minute while thrusting at full power (less when thrusting part way).",
+  "hull.laserDps": "Crack damage a second from the free laser every ship has (a switched-on Miner replaces it).", "hull.interactR": "Reach in meters for the free laser, clicking ore to claim it and asking a hauler to trade. Shown as the dotted circle.",
+  "hull.shipR": "The ship's size for bumping into asteroids, in meters.",
+  "module.price": "Level I: credits to buy the module. Levels II to IV: credits to upgrade to that level.", "module.speed": "The ship's top speed is multiplied by this while the module is fitted (1 = no change, 0.8 = 20% slower).",
+  "miner.laserDps": "Crack damage a second while the Miner is switched on and firing.", "miner.burn": "Fuel used a minute while the switched-on Miner is firing.",
+  "miner.range": "How far the Miner's laser reaches, in meters.", "miner.yield": "Ore units each broken crack drops when this Miner helped break it (the best Miner on the asteroid counts).",
+  "hauler.hold": "Cargo units the Hauler's hold carries.", "hauler.tradeRange": "How near, in meters, another ship must be to trade its cargo into this Hauler.",
+  "fueler.tank": "Fuel the Fueler's tank holds.", "fueler.pump": "Fuel pumped into another ship each second.", "fueler.range": "How far, in meters, the Fueler can reach a ship to fuel it.", "fueler.pay": "Credits the world pays the Fueler for each unit of fuel pumped.",
+  "command.boost": "Ships mining within reach mine this many times faster (several command ships don't stack: the strongest counts).", "command.speedBoost": "Ships within reach fly this many times faster (1 = no speed boost; the strongest counts).",
+  "command.radius": "How far the boosts reach, in meters (the rotating ring).", "command.burn": "Fuel used a minute while the Command module is switched on.",
+  "tractor.range": "How far, in meters, the tractor can latch onto an asteroid.", "tractor.tow": "Towing speed multiplier on top of the asteroid's size slowdown.",
+  "tractor.burn": "Fuel used a minute while towing (before the size cost).", "tractor.sizeBurn": "Extra towing fuel for each asteroid size: the fuel a minute is multiplied by 1 + size × this.",
+  "tractor.pull": "How quickly the asteroid catches up to its place behind the ship (higher: a stiffer leash).", "tractor.leash": "Gap in meters between the claws and the towed asteroid.",
+  "tractor.maxSize": "The largest asteroid size (1 to 15) this tractor can latch onto.",
+  "scanner.range": "How far, in meters, the Scanner reaches an asteroid.", "scanner.scanTime": "Seconds a scan takes; the asteroid must stay in reach until it's done.", "scanner.fuel": "Fuel each finished scan uses.",
+  "refinery.unit": "Seconds to refine one unit in a ship's hold.", "refinery.activation": "Fuel the refinery uses each time a ship takes up its Refine ores offer.",
+  "refinery.range": "How far, in meters, ships can be to get the Refine ores offer.", "refinery.targets": "How many ships the refinery can work on at the same time.",
+  "ore.price": "Credits for one raw unit at the station.", "ore.refinedPrice": "Credits for one refined unit at the station.", "ore.refineTime": "Seconds the station takes to refine one unit (free, keeps going offline).",
+  "ore.refinedSpace": "Hold room one refined unit takes (0.2: five refined units fill the room of one raw unit).", "ore.hardness": "Crack health multiplier for asteroids of this ore (2 = twice as long to mine).",
+  "ringSizes": "Smallest and largest asteroid size in this ring (a size's number is also its crack count). Smaller sizes are more common.", "ringSlots": "Asteroids rolled per 400 m cell in this ring (0 to 3).",
+  "ringOres": "How likely an asteroid in this ring is this ore, against the other weights (0 = never; set all but one to 0 for a ring of one ore).",
+  "rock.dropGap": "Meters past the asteroid's edge a broken crack's ore lands.", "rock.dropSpread": "Extra random distance, up to this many meters, on top of the drop gap.",
+  "rock.radiusBase": "Asteroid radius in meters before size (radius = base + size × per size).", "rock.radiusPer": "Meters of radius each asteroid size adds.",
+  "rock.crackHpBase": "Crack health before size (health = base + size × per size, × the ore's hardness).", "rock.crackHpPer": "Crack health each asteroid size adds.",
+  "rock.towBase": "Towing speed share for a size 1 asteroid (each size up takes away the per size amount).", "rock.towPer": "Towing speed share lost for each asteroid size above 1.",
+  "rock.respawn": "Seconds before a mined-out asteroid's slot rolls a new asteroid.", "rock.despawn": "Seconds an asteroid someone worked on is left alone before it's gone.", "rock.reseed": "Seconds between reshuffles of the whole asteroid field.",
+  "econ.startCredits": "Credits a new player starts with.", "econ.startFuel": "Fuel a new player starts with.", "econ.dockR": "How close to the station, in meters, a ship is docked (delivers its hold, opens the station).",
+  "econ.tradeWait": "Seconds a hauler has to accept a trade request.", "econ.partyInvite": "Seconds a party invite waits for an answer.", "econ.corpInvite": "Seconds a corporation invite waits for an answer.",
+  "econ.offlineGrace": "Seconds after logging off before a carrier's ore crawls home to the station.", "econ.despawnOre": "Seconds loose ore lies untouched before it's gone.",
+  "fuel.stationPrice": "Credits for one unit of fuel bought at the station.", "fuel.blockFuel": "Fuel in one fuel block (made from one ice).", "fuel.blockTime": "Seconds the station takes to make one fuel block.",
+  "limits.shardCap": "Players in one zone before newcomers go to another copy of it.", "limits.partyMax": "Most players in a party.",
+};
+function devHelp(path) {
+  const [root, a, b] = path;
+  if (root === "hulls") return DEV_HELP["hull." + b];
+  if (root === "modules") return DEV_HELP[a + "." + b] || DEV_HELP["module." + b];
+  if (root === "ores") return DEV_HELP["ore." + b];
+  if (root === "ringSizes" || root === "ringSlots" || root === "ringOres") return DEV_HELP[root];
+  return DEV_HELP[root + "." + a];
+}
 const devGet = (path) => path.reduce((o, k) => (o == null ? o : o[k]), G);
 function devInput(path) {
   const i = document.createElement("input"); i.type = "number"; i.step = "any"; i.dataset.path = JSON.stringify(path); i.value = devGet(path);
@@ -783,7 +835,12 @@ function devInput(path) {
   i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
   return i;
 }
-function devRow(label, ...inputs) { const r = elx("div", "dev-row"); r.append(elx("span", "dev-l", label), ...inputs); return r; }
+function devRow(label, ...inputs) {
+  const r = elx("div", "dev-row"), l = elx("span", "dev-l", label); r.append(l, ...inputs);
+  const help = inputs[0] && inputs[0].dataset.path && devHelp(JSON.parse(inputs[0].dataset.path));
+  if (help) { l.classList.add("has-help"); l.addEventListener("mouseenter", (e) => { tipEl.classList.add("wrap"); showTip(e, () => help); }); l.addEventListener("mousemove", moveTip); l.addEventListener("mouseleave", () => { hideTip(); tipEl.classList.remove("wrap"); }); }
+  return r;
+}
 function devGroup(title, rows) { const g = elx("div", "dev-group"); g.append(elx("div", "dev-h", title), ...rows); return g; }
 function devNumbers(root, keys) { return keys.filter((k) => typeof devGet([root, k]) === "number").map((k) => devRow(devLabel(k), devInput([root, k]))); }
 function devDraw() {

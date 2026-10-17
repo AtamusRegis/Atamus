@@ -36,19 +36,20 @@ const up = (n) => [$p(n), $p(n * 0.6), $p(n * 1.2), $p(n * 2.4)];
 export const MODULES = {
   // the big laser: damage a second, fuel a minute while firing, its reach, ore units each crack it breaks drops
   miner:    { name: "Miner",    active: true, price: up(500),  speed: L4(1), laserDps: [40, 50, 62, 78], burn: L4(4), range: L4(200), yield: L4(1) },
-  hauler:   { name: "Hauler",   price: up(800),  speed: L4(1), hold: [40, 55, 70, 90] },
+  // hold; tradeRange: how near a ship must be to trade it cargo
+  hauler:   { name: "Hauler",   price: up(800),  speed: L4(1), hold: [40, 55, 70, 90], tradeRange: L4(200) },
   // pumps a second within its reach; the world pays it per unit pumped
   fueler:   { name: "Fueler",   price: up(800),  speed: L4(1), tank: [700, 900, 1100, 1400], pump: [20, 25, 30, 40], range: L4(200), pay: L4(2.5) },
-  // ships mining within reach mine boost x faster; fuel a minute while on
-  command:  { name: "Command",  active: true, price: up(1200), speed: L4(1), boost: [1.5, 1.6, 1.75, 1.9], radius: [300, 350, 400, 450], burn: L4(4) },
+  // ships within reach mine boost x faster and fly speedBoost x faster; fuel a minute while on
+  command:  { name: "Command",  active: true, price: up(1200), speed: L4(1), boost: [1.5, 1.6, 1.75, 1.9], speedBoost: L4(1), radius: [300, 350, 400, 450], burn: L4(4) },
   // latch reach; tow: speed x; fuel a minute towing x (1 + size x sizeBurn); pull: how fast the rock follows (a second);
   // leash: m between the claws and the rock
-  tractor:  { name: "Tractor",  active: true, price: up(1000), speed: L4(1), range: [200, 250, 300, 350], tow: [1, 1.1, 1.2, 1.35], burn: L4(6), sizeBurn: L4(0.067), pull: L4(2.5), leash: L4(12) },
-  // scan reach and fuel a scan
-  scanner:  { name: "Scanner",  price: up(1000), speed: L4(1), range: [800, 1000, 1200, 1500], fuel: L4(0) },
+  tractor:  { name: "Tractor",  active: true, price: up(1000), speed: L4(1), range: [200, 250, 300, 350], tow: [1, 1.1, 1.2, 1.35], burn: L4(6), sizeBurn: L4(0.067), pull: L4(2.5), leash: L4(12), maxSize: L4(15) },
+  // scan reach, seconds a scan takes (staying in reach) and fuel a scan
+  scanner:  { name: "Scanner",  price: up(1000), speed: L4(1), range: [800, 1000, 1200, 1500], scanTime: [2, 1.5, 1, 0.6], fuel: L4(0) },
   // (owner, 2026-10-17) switched on, it offers to refine the holds of ships within its reach: seconds a unit, in their hold,
   // adding the refiner's name; fuel once each time someone takes it up
-  refinery: { name: "Refinery", active: true, price: up(1500), speed: L4(1), unit: L4(1), activation: [10, 8, 6, 4], range: L4(200) },
+  refinery: { name: "Refinery", active: true, price: up(1500), speed: L4(1), unit: L4(1), activation: [10, 8, 6, 4], range: L4(200), targets: [3, 4, 6, 8] },   // targets: ships refined at once
 };
 export const MODULE_KINDS = Object.keys(MODULES);
 
@@ -81,6 +82,7 @@ export const ECON = {
   startCredits: 200, startFuel: 100,
   dockR: 220,                              // m: inside this a ship is docked at the station
   tradeWait: 30,                           // s a hauler has to answer a trade request
+  partyInvite: 120, corpInvite: 300,       // s an invite waits for an answer
   offlineGrace: 1800,                      // s after logging off before a carrier's ore crawls home
   despawnOre: 1800,                        // s loose ore lies untouched before it's gone
 };

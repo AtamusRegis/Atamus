@@ -81,6 +81,7 @@ export function attachGameServer(httpServer) {
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), dev: DEV_ROLES.includes(roles.get(pid)) }, spawn: { x: me.x, y: me.y, h: me.h },
       sectors: world.sectorList(), online: world.players.size, roster: world.roster(),
     }));
+    ws.ready = true;                           // (the loops below send nothing to a socket before its hello)
     broadcast({ t: "join", i: pid, n: user.username });
 
     ws.on("message", (data) => {
@@ -171,7 +172,7 @@ export function attachGameServer(httpServer) {
     world.step(0.05);
     if (world.fx.length) {
       for (const [pid, ws] of socks) {
-        const p = world.players.get(pid); if (!p) continue;
+        const p = world.players.get(pid); if (!p || !ws.ready) continue;
         const near = world.fx.filter((f) => (f.l === undefined || f.l === p.layer) && Math.hypot(f.x - p.x, f.y - p.y) <= R.WORLD.loadR + 200).map(({ l, ...f }) => ({ t: "fx", ...f }));
         if (near.length) send(ws, near.length === 1 ? near[0] : { t: "batch", m: near });
       }
@@ -184,7 +185,7 @@ export function attachGameServer(httpServer) {
     const ts = Date.now();
     const cache = world.shipRowCache();
     for (const [pid, ws] of socks) {
-      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      const p = world.players.get(pid); if (!p || !ws.ready || ws.readyState !== ws.OPEN) continue;
       const rows = world.shipRows(p, cache), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
       for (const { row: r, key } of rows) { now.set(r[0], key); if (last.get(r[0]) === key) un.push(r[0]); else ch.push(r); }
       ws.lastSnap = now;
@@ -203,7 +204,7 @@ export function attachGameServer(httpServer) {
     const t = Date.now();
     world.indexZones();
     for (const [pid, ws] of socks) {
-      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      const p = world.players.get(pid); if (!p || !ws.ready || ws.readyState !== ws.OPEN) continue;
       const view = world.rockView(p), rk = diff(ws, "knownRocks", view.rows), kc = ws.knownCells || (ws.knownCells = new Map()), c = {}, xc = [];
       let nc = 0; for (const [k, seeds] of Object.entries(view.cells)) { const j = seeds.join(","); if (kc.get(k) !== j) { kc.set(k, j); c[k] = seeds; nc++; } }
       for (const k of [...kc.keys()]) if (!(k in view.cells)) { kc.delete(k); xc.push(k); }
@@ -218,7 +219,7 @@ export function attachGameServer(httpServer) {
   setInterval(() => {                          // (each player is sent its own layer's beacons)
     const all = world.sosList();
     for (const [pid, ws] of socks) {
-      const p = world.players.get(pid); if (!p) continue;
+      const p = world.players.get(pid); if (!p || !ws.ready) continue;
       const mj = JSON.stringify(world.mates(p)); if (mj !== (ws.lastMates ?? "[]")) { ws.lastMates = mj; send(ws, { t: "mates", m: JSON.parse(mj) }); }
       const j = JSON.stringify(all.filter((b) => b[3] === p.layer).map((b) => b.slice(0, 3))); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
     }
