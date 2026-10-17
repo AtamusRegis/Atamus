@@ -50,6 +50,7 @@ packages/server/src/
                   station diffs, 1 Hz distress list
     rules.js      every fixed number: world, ship, modules and their upgrades, hulls, ores, ring sizes, fuel, prices (PRICE_SCALE)
     ringgen.js    asteroids from seeds (position, size): the same file as website/ringgen.js (check.sh compares them)
+    tuning.js     the developer panel's server side: the editable groups of rules.js, checked, kept in ring_tuning, reset
     world.js      the world: seeded asteroid cells, sectors, ships and fuel, mining and cracks, ore names and delivery,
                   modules, custody (handoff, offline crawl home), shards (layers), the station's ops and queue, parties,
                   corporations, saving
@@ -58,7 +59,7 @@ website/          GitHub Pages site (atamus.io) and the game client
   game.html       the game page (canvas, HUD, station panel, chat, minimap, overlays, __BUILD__ marker)
   game.js         the 2D canvas client: input, my ship predicted, others interpolated, camera and zoom, rings / sectors /
                   Saturn / station / rocks / ore / ships and their effects, HUD, station panel, party list, minimap, chat,
-                  name menu and reports, countdown and reconnect handling
+                  name menu and reports, prompts, the Shop, the developer panel, countdown and reconnect handling
   shipart.js      the art from the ship sheet: shipLayout / drawShip (a section per fitted module, animated), drawStation,
                   drawRock, drawSaturn
   ringgen.js      asteroids from seeds: identical to packages/server/src/game/ringgen.js

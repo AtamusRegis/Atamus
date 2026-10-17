@@ -25,7 +25,7 @@ export function zoneOf(x, y) {
   return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + R.SECTOR_NAMES[R.SECTORS[sectorOf(x, y)]];
 }
 const ORE_KEYS = Object.keys(R.ORES);
-const unitSpace = (u) => (u.r ? R.REFINED_SPACE : 1);
+const unitSpace = (u) => (u.r ? R.ECON.refinedSpace : 1);
 const holdUsed = (p) => p.hold.reduce((s, u) => s + unitSpace(u), 0);
 const storeKey = (o, r) => (r ? o + "+" : o);
 
@@ -101,6 +101,10 @@ export class World {
       this.rocks.set(rock.id, rock); this.slots.set(sk, rock); this.gridAdd(rock);
     }
   }
+  resetField() {                               // (developer panel) untouched asteroids are let go; every cell rolls again on its next wake
+    for (const r of [...this.rocks.values()]) if (r.home && !r.touched) { this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r); }
+    for (const c of this.cells.values()) c.awake = 0;
+  }
   dropRock(r, back) {                          // gone: its slot rolls again (a new size and ore) after `back` seconds
     this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r);
     const c = this.cells.get(r.cell); if (c) { c.gen[r.slot] = (c.gen[r.slot] || 0) + 1; c.back[r.slot] = now() + back * 1000; }
@@ -119,7 +123,7 @@ export class World {
       for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && !r.touched && r.home) { this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r); } }
     }
     for (const r of this.rocks.values()) if (r.touched && t - r.touched > R.ROCK.despawn * 1000 && !r.tow) this.dropRock(r, 0);
-    for (const o of this.ores.values()) if (t - o.touched > R.DESPAWN_ORE * 1000) this.ores.delete(o.id);
+    for (const o of this.ores.values()) if (t - o.touched > R.ECON.despawnOre * 1000) this.ores.delete(o.id);
   }
   // ---- sectors: one more opens per 50 online; a closing sector waits 10 minutes ----
   updateSectors(t) {
@@ -142,13 +146,13 @@ export class World {
       if (!this.shardingOn()) L = 0;
       else {
         const cnt = new Map(); for (const q of this.players.values()) if (q !== p && q.zone === p.zone) cnt.set(q.layer, (cnt.get(q.layer) || 0) + 1);
-        if ((cnt.get(p.layer) || 0) < R.SHARD_CAP) L = p.layer; else { L = 0; while ((cnt.get(L) || 0) >= R.SHARD_CAP) L++; }
+        if ((cnt.get(p.layer) || 0) < R.LIMITS.shardCap) L = p.layer; else { L = 0; while ((cnt.get(L) || 0) >= R.LIMITS.shardCap) L++; }
       }
     }
     if (L !== p.layer) this.setLayer(p, L);
   }
   setLayer(p, L) {                             // into another copy: links to other ships drop, a towed asteroid comes along
-    p.layer = L; p.pumpTo = null; p.refineTo = null; p.refineT = 0; p.meDirty = true; p.dirty = true;
+    p.layer = L; p.pumpTo = null; p.refineBy = null; p.refineT = 0; p.meDirty = true; p.dirty = true;
     const rock = p.tow && this.rocks.get(p.tow); if (rock) { rock.layer = L; this.gridMove(rock); }
   }
   shardOf(p) {                                 // shown with the zone only while the zone has more than one copy in use
@@ -171,7 +175,7 @@ export class World {
     const { rows } = await pool.query(`SELECT * FROM ring_players WHERE user_id = $1`, [id]), r = rows[0];
     const [sx, sy] = W.station;
     p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.START.fuel, fuelFrom: {}, mods: [R.START.module], hull: 0, upgrades: {},
-      modules: new Set([R.START.module]), credits: R.START.credits, storage: {}, queue: [], hold: [], corp: null, on: new Set(), tow: null, pumpTo: null, refineTo: null,
+      modules: new Set([R.START.module]), credits: R.ECON.startCredits, storage: {}, queue: [], hold: [], corp: null, on: new Set(), tow: null, pumpTo: null, refineBy: null,
       refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "" };
     if (r) {
       Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, fuelFrom: r.fuel_from || {}, hull: Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0)), upgrades: r.upgrades || {},
@@ -254,18 +258,18 @@ export class World {
       const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < W.dockR;
       if (dock && !p.docked && p.hold.length) this.deliver(p, p.hold.splice(0), true);
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
-      if (dock) { p.tow = null; p.pumpTo = null; p.refineTo = null; }
+      if (dock) { p.tow = null; p.pumpTo = null; p.refineBy = null; }
       // the laser: the first asteroid along the aim within reach; the big laser (miner, switched on, with fuel) and any
       // command ship boosting nearby make it faster
       p.laserOn = false; p.laserLen = 0;
       if (p.firing && !dock) {
-        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = SHIP.laserRange;
-        for (const r of this.rocksNear(p.x, p.y, SHIP.laserRange + 70, p.layer)) {
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = SHIP.interactR;
+        for (const r of this.rocksNear(p.x, p.y, SHIP.interactR + 70, p.layer)) {
           const rr = R.rockR(r.n), fx = r.x - p.x, fy = r.y - p.y, along = fx * ux + fy * uy; if (along < -rr) continue;
           const perp = Math.abs(fx * uy - fy * ux); if (perp > rr) continue;
           const tt = Math.max(0, along - Math.sqrt(rr * rr - perp * perp)); if (tt < bt) { bt = tt; best = r; }
         }
-        p.laserLen = best ? bt : SHIP.laserRange; p.laserOn = !!best;
+        p.laserLen = best ? bt : SHIP.interactR; p.laserOn = !!best;
         if (best) {
           let dps = SHIP.laserDps;
           if (this.isOn(p, "miner") && p.fuel > 0) { dps = this.val(p, "miner", "laserDps"); this.burn(p, MODULES.miner.burn / 60 * dt); }
@@ -290,21 +294,21 @@ export class World {
       }
       if (p.pumpTo) {                          // the fueler: pumps into a ship within reach; the world pays per unit
         const q = this.players.get(p.pumpTo), QS = q && this.stats(q);
-        if (!q || q.docked || !this.has(p, "fueler") || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > MODULES.fueler.range || p.fuel <= 0) p.pumpTo = null;
+        if (!q || q.docked || !this.has(p, "fueler") || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > SHIP.interactR || p.fuel <= 0) p.pumpTo = null;
         else {
           const amt = Math.min(this.val(p, "fueler", "pump") * dt, QS.tank - q.fuel, p.fuel);
           if (amt > 0) { this.burn(p, amt); q.fuel += amt; p.credits += amt * R.FUEL.pumpPay; q.meDirty = true; if (p.party && p.party === q.party) q.fuelFrom[p.id] = (q.fuelFrom[p.id] || 0) + amt; }
         }
       }
-      if (p.refineTo) {                        // the refinery: one raw unit at a time, in its own hold or another ship's
-        const q = this.players.get(p.refineTo), u = q && q.hold.find((x) => !x.r);
-        if (!q || !u || !this.has(p, "refinery") || (q !== p && (q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > MODULES.refinery.range)) || p.fuel < MODULES.refinery.burn) { p.refineTo = null; p.refineT = 0; }
+      if (p.refineBy) {                        // (owner, 2026-10-17) a refinery working on my hold: a raw unit a second, its name added
+        const r = this.players.get(p.refineBy), u = p.hold.find((x) => !x.r);
+        if (!r || !u || dock || r.docked || !this.isOn(r, "refinery") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) > SHIP.interactR) { p.refineBy = null; p.refineT = 0; }
         else {
           p.refineT += dt;
-          if (p.refineT >= this.val(p, "refinery", "unit")) { p.refineT = 0; this.burn(p, MODULES.refinery.burn); u.r = 1; if (!u.n.includes(p.id)) u.n.push(p.id); q.meDirty = true; this.fx.push({ k: "refine", x: q.x, y: q.y, l: q.layer }); }
+          if (p.refineT >= MODULES.refinery.unit) { p.refineT = 0; u.r = 1; if (!u.n.includes(r.id)) u.n.push(r.id); p.meDirty = true; p.dirty = true; this.fx.push({ k: "refine", x: p.x, y: p.y, l: p.layer }); }
         }
       }
-      if (p.firing || p.pumpTo || p.refineTo || p.tow || this.isOn(p, "command")) p.meDirty = true;
+      if (p.firing || p.pumpTo || p.refineBy || p.tow || this.isOn(p, "command")) p.meDirty = true;
       p.sos = p.fuel <= 0.0001 && !p.docked;
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; p.meDirty = false; }   // (anything that changed my state is saved within 10 s)
@@ -359,7 +363,7 @@ export class World {
   async offlineHolds() {
     await this.ready;
     const crawl = SHIP.speed * SHIP.crawl;
-    const { rows } = await pool.query(`SELECT user_id, x, y, hold FROM ring_players WHERE logout_at IS NOT NULL AND logout_at < now() - make_interval(secs => $1) AND hold <> '[]'::jsonb AND transit IS NULL`, [R.OFFLINE_GRACE]);
+    const { rows } = await pool.query(`SELECT user_id, x, y, hold FROM ring_players WHERE logout_at IS NOT NULL AND logout_at < now() - make_interval(secs => $1) AND hold <> '[]'::jsonb AND transit IS NULL`, [R.ECON.offlineGrace]);
     for (const r of rows) {
       if (this.players.has(r.user_id)) continue;
       const secs = Math.max(0, hyp(r.x - W.station[0], r.y - W.station[1]) - W.dockR) / crawl;
@@ -383,8 +387,7 @@ export class World {
   toggleModule(id, k) {
     const p = this.players.get(String(id)); if (!p) return;
     if (typeof k !== "string" || !this.has(p, k)) k = p.mods.find((m) => m === "miner" || m === "command" || m === "refinery"); if (!k) return;
-    if (k === "refinery") { p.refineTo = p.refineTo === p.id ? null : p.id; p.refineT = 0; }
-    else if (k === "miner" || k === "command") { if (p.on.has(k)) p.on.delete(k); else p.on.add(k); }
+    if (k === "miner" || k === "command" || k === "refinery") { if (p.on.has(k)) p.on.delete(k); else p.on.add(k); }
     p.meDirty = true;
   }
   // right-click actions and claiming ore (checked as hostile: the target must exist, be in my copy and in reach, and I
@@ -392,9 +395,13 @@ export class World {
   // (asking a hauler to take my cargo; it answers with tradeAnswer).
   act(id, m) {
     const p = this.players.get(String(id)); if (!p || p.docked || !m) return;
-    if (Number.isInteger(m.ore)) {             // claim a loose unit: click it from within reach, with room in the hold
-      const o = this.ores.get(m.ore); if (!o || o.layer !== p.layer || hyp(o.x - p.x, o.y - p.y) > SHIP.claimR) return;
-      if (holdUsed(p) + (o.r ? R.REFINED_SPACE : 1) > this.stats(p).hold + 1e-6) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: "Your hold is full." } }); return; }
+    if (m.op === "refineme") {                 // (owner, 2026-10-17) the "Refine ores" pop-up: the nearest switched-on refinery takes my hold
+      const r = this.refinerFor(p); if (!r || p.refineBy || !p.hold.some((u) => !u.r)) return;
+      const cost = this.val(r, "refinery", "activation"); if (r.fuel < cost) return;
+      this.burn(r, cost); r.meDirty = true; p.refineBy = r.id; p.refineT = 0;
+    } else if (Number.isInteger(m.ore)) {             // claim a loose unit: click it from within reach, with room in the hold
+      const o = this.ores.get(m.ore); if (!o || o.layer !== p.layer || hyp(o.x - p.x, o.y - p.y) > SHIP.interactR) return;
+      if (holdUsed(p) + (o.r ? R.ECON.refinedSpace : 1) > this.stats(p).hold + 1e-6) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: "Your hold is full." } }); return; }
       p.hold.push({ o: o.ore, r: o.r, n: o.names }); p.meDirty = true; p.dirty = true; this.ores.delete(o.id); this.fx.push({ k: "pick", x: o.x, y: o.y, i: p.id, l: o.layer });
     } else if (typeof m.rock === "string") {
       const r = this.rocks.get(m.rock); if (!r || r.layer !== p.layer) return; const d = hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n);
@@ -410,19 +417,26 @@ export class World {
       }
     } else if (typeof m.ship === "string") {
       const q = this.players.get(m.ship); if (!q || q === p || q.docked || q.layer !== p.layer) return; const d = hyp(q.x - p.x, q.y - p.y);
-      if (m.op === "fuel" && this.has(p, "fueler")) { if (d <= MODULES.fueler.range || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
-      else if (m.op === "refine" && this.has(p, "refinery")) { if (d <= MODULES.refinery.range || p.refineTo === q.id) { p.refineTo = p.refineTo === q.id ? null : q.id; p.refineT = 0; } }
+      if (m.op === "fuel" && this.has(p, "fueler")) { if (d <= SHIP.interactR || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
       else if (m.op === "trade") {             // one way: a ship without a hauler asks a hauler to take its cargo
         const say = (text) => this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text } });
         if (!this.has(q, "hauler") || this.has(p, "hauler")) return;
         if (!p.hold.length) { say("Your hold is empty."); return; }
-        if (d > R.TRADE_R) { say("Too far away to trade."); return; }
+        if (d > SHIP.interactR) { say("Too far away to trade."); return; }
         this.trades.set(q.id, { from: p.id, at: now() });
         this.msgs.push({ to: q.id, m: { t: "trade", from: p.id, name: p.name, n: p.hold.length } });
         say("Asked " + q.name + " to take your cargo.");
       }
     }
     p.meDirty = true;
+  }
+  refinerFor(p) {                              // the nearest switched-on refinery in reach (mine too) with fuel for an activation
+    let best = null, bd = Infinity;
+    for (const r of this.players.values()) {
+      if (!this.isOn(r, "refinery") || r.docked || r.layer !== p.layer || r.fuel < this.val(r, "refinery", "activation")) continue;
+      const d = hyp(r.x - p.x, r.y - p.y); if (d <= SHIP.interactR && d < bd) { bd = d; best = r; }
+    }
+    return best;
   }
   // the hauler answers a cargo request: accepted, the cargo moves over (as much as fits) if the two are still in reach
   tradeAnswer(id, from, yes) {
@@ -431,7 +445,7 @@ export class World {
     const p = this.players.get(from), say = (to, text) => this.msgs.push({ to, m: { t: "chat", ch: "sys", text } });
     if (!p) return;
     if (!yes) { say(p.id, q.name + " declined your cargo."); return; }
-    if (now() - t.at > R.TRADE_WAIT * 1000 || p.docked || q.docked || p.layer !== q.layer || hyp(q.x - p.x, q.y - p.y) > R.TRADE_R || !this.has(q, "hauler") || this.has(p, "hauler")) { say(q.id, "That trade is no longer possible."); say(p.id, "That trade is no longer possible."); return; }
+    if (now() - t.at > R.ECON.tradeWait * 1000 || p.docked || q.docked || p.layer !== q.layer || hyp(q.x - p.x, q.y - p.y) > SHIP.interactR || !this.has(q, "hauler") || this.has(p, "hauler")) { say(q.id, "That trade is no longer possible."); say(p.id, "That trade is no longer possible."); return; }
     const room = this.stats(q).hold - holdUsed(q); let used = 0; const keep = [];
     for (const u of p.hold) { const sp = unitSpace(u); if (used + sp <= room + 1e-6) { q.hold.push(u); used += sp; } else keep.push(u); }
     const moved = p.hold.length - keep.length; p.hold = keep; p.meDirty = q.meDirty = true; p.dirty = q.dirty = true;
@@ -444,7 +458,7 @@ export class World {
   settleQueue(p, t) {
     let changed = false;
     for (const j of p.queue) {
-      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000;
+      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.ECON.stationRefine) * 1000;
       if (j.at > t) { j.at = t; changed = true; }   // (jobs queued one behind another before 2026-10-17 start now too)
       while (j.left > 0 && t >= j.at + dur) { const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true; }
     }
@@ -456,7 +470,7 @@ export class World {
     if (m.op === "sell") {
       const k = String(m.k || ""), o = k.replace(/\+$/, ""), ref = k.endsWith("+"); if (!R.ORES[o]) return false;
       const n = cnt(m.n, p.storage[k] || 0); if (!n) return false;
-      p.storage[k] -= n; if (!p.storage[k]) delete p.storage[k]; p.credits += n * R.ORES[o].price * (ref ? R.REFINED_MUL : 1);
+      p.storage[k] -= n; if (!p.storage[k]) delete p.storage[k]; p.credits += n * R.ORES[o].price * (ref ? R.ECON.refinedMul : 1);
     } else if (m.op === "buy") {
       const M = MODULES[m.m]; if (!M || p.modules.has(m.m) || p.credits < M.price) return false;
       p.credits -= M.price; p.modules.add(m.m);
@@ -495,7 +509,7 @@ export class World {
     p.on.delete(k);
     if (k === "tractor" && p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; p.tow = null; }
     if (k === "fueler") p.pumpTo = null;
-    if (k === "refinery") { p.refineTo = null; p.refineT = 0; }
+    if (k === "refinery") for (const q of this.players.values()) if (q.refineBy === p.id) { q.refineBy = null; q.refineT = 0; }
   }
   fitTank(p) {                                 // a smaller tank: the spare fuel is kept as fuel blocks
     const T = this.stats(p).tank; if (p.fuel > T) { const blocks = Math.floor((p.fuel - T) / R.FUEL.blockFuel); if (blocks) p.storage.fuel = (p.storage.fuel || 0) + blocks; p.fuel = T; }
@@ -505,9 +519,9 @@ export class World {
   invite(from, toId) {
     const p = this.players.get(from), q = this.players.get(toId); if (!p || !q || p === q) return "That player isn't online.";
     if (q.party && q.party === p.party) return q.name + " is already in your party.";
-    const party = this.partyOf(p); if (party && party.members.size >= R.PARTY_MAX) return "Your party is full.";
+    const party = this.partyOf(p); if (party && party.members.size >= R.LIMITS.partyMax) return "Your party is full.";
     this.invites.set(q.id, { from: p.id, at: now() });
-    this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: p.name + " invited you to a party. Type /party accept to join." } });
+    this.msgs.push({ to: q.id, m: { t: "invite", kind: "party", from: p.id, name: p.name } });   // (an Accept / Decline prompt)
     return "Invited " + q.name + " to your party.";
   }
   acceptParty(id) {
@@ -515,22 +529,31 @@ export class World {
     const p = inv && this.players.get(inv.from); if (!q || !p || now() - inv.at > 120_000) return "No party invite waiting.";
     let party = this.partyOf(p);
     if (!party) { party = { id: this.partySeq++, leader: p.id, members: new Set([p.id]) }; this.parties.set(party.id, party); p.party = party.id; p.socDirty = true; }
-    if (party.members.size >= R.PARTY_MAX) return "That party is full.";
+    if (party.members.size >= R.LIMITS.partyMax) return "That party is full.";
     this.leaveParty(q, false); party.members.add(q.id); q.party = party.id;
     for (const m of party.members) { const x = this.players.get(m); if (x) x.socDirty = true; }
     this.placeLayer(q);                        // (into a party member's copy of this zone, if one's here)
     this.partyNote(party, q.name + " joined the party.");
     return null;
   }
+  declineParty(id) { const inv = this.invites.get(id); this.invites.delete(id); const q = this.players.get(id); if (inv && q) this.msgs.push({ to: inv.from, m: { t: "chat", ch: "sys", text: q.name + " declined your party invite." } }); return null; }
+  // (owner, 2026-10-17) the leader removes a member
+  kickParty(from, toId) {
+    const p = this.players.get(from), party = p && this.partyOf(p), q = this.players.get(toId);
+    if (!party || party.leader !== p.id) return "Only the party leader can remove members.";
+    if (!q || !party.members.has(q.id) || q === p) return "They're not in your party.";
+    this.leaveParty(q, false, true); this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You were removed from the party." } });
+    return null;
+  }
   // leaving: my name comes off the party fuel in every online member's tank, for good (offline members keep it)
-  leaveParty(p, quiet) {
+  leaveParty(p, quiet, kicked) {
     const party = this.partyOf(p); if (!party) return;
     party.members.delete(p.id); p.party = null; p.socDirty = true;
     for (const m of party.members) { const x = this.players.get(m); if (x) { if (x.fuelFrom[p.id] !== undefined) { delete x.fuelFrom[p.id]; x.dirty = true; } x.socDirty = true; } }
     delete p.fuelFrom; p.fuelFrom = {};
     if (party.leader === p.id) party.leader = [...party.members][0];
     if (party.members.size <= 1) { for (const m of party.members) { const x = this.players.get(m); if (x) { x.party = null; x.socDirty = true; this.msgs.push({ to: m, m: { t: "chat", ch: "sys", text: "The party disbanded." } }); } } this.parties.delete(party.id); }
-    else this.partyNote(party, p.name + (quiet ? " went offline and left the party." : " left the party."));
+    else this.partyNote(party, p.name + (kicked ? " was removed from the party." : quiet ? " went offline and left the party." : " left the party."));
   }
   partyNote(party, text) { for (const m of party.members) this.msgs.push({ to: m, m: { t: "chat", ch: "sys", text } }); }
   async createCorp(id, name) {
@@ -548,7 +571,7 @@ export class World {
     const p = this.players.get(from), q = this.players.get(toId); if (!p || !p.corp) return "You're not in a corporation.";
     if (!q) return "That player isn't online."; if (q.corp === p.corp) return q.name + " is already in it.";
     this.corpInvites.set(q.id, { corp: p.corp, from: p.id, at: now() });
-    this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: p.name + " invited you to " + this.corps.get(p.corp).name + ". Type /corp accept to join." } });
+    this.msgs.push({ to: q.id, m: { t: "invite", kind: "corp", from: p.id, name: p.name, corp: this.corps.get(p.corp).name } });
     return "Invited " + q.name + ".";
   }
   async corpAccept(id) {
@@ -557,11 +580,34 @@ export class World {
     if (q.corp) return "Leave your corporation first.";
     q.corp = inv.corp; q.socDirty = true; q.dirty = true; await this._save(q); return "Joined " + this.corps.get(inv.corp).name + ".";
   }
+  declineCorp(id) { const inv = this.corpInvites.get(id); this.corpInvites.delete(id); const q = this.players.get(id); if (inv && q) this.msgs.push({ to: inv.from, m: { t: "chat", ch: "sys", text: q.name + " declined your corporation invite." } }); return null; }
   async corpLeave(id) {
     const p = this.players.get(id); if (!p || !p.corp) return "You're not in a corporation.";
     const c = this.corps.get(p.corp); p.corp = null; p.socDirty = true; p.dirty = true; await this._save(p);
-    if (c) { const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ring_players WHERE corp_id = $1`, [c.id]); if (!rows[0].n) { await pool.query(`DELETE FROM ring_corps WHERE id = $1`, [c.id]); this.corps.delete(c.id); } }
+    if (c) await this.corpAfterLeave(c, p.id);
     return "Left " + (c ? c.name : "the corporation") + ".";
+  }
+  // someone left a corporation: an empty one is closed; an owner leaving hands it to a remaining member (an online one if any)
+  async corpAfterLeave(c, gone) {
+    const { rows } = await pool.query(`SELECT user_id FROM ring_players WHERE corp_id = $1`, [c.id]);
+    const left = rows.map((r) => r.user_id).filter((u) => u !== gone && !(this.players.has(u) && this.players.get(u).corp !== c.id));
+    for (const q of this.players.values()) if (q.corp === c.id && !left.includes(q.id)) left.push(q.id);
+    if (!left.length) { await pool.query(`DELETE FROM ring_corps WHERE id = $1`, [c.id]); this.corps.delete(c.id); return; }
+    if (c.owner === gone) {
+      c.owner = left.find((u) => this.players.has(u)) || left[0]; await pool.query(`UPDATE ring_corps SET owner = $2 WHERE id = $1`, [c.id, c.owner]);
+      for (const q of this.players.values()) if (q.corp === c.id) { q.socDirty = true; if (q.id === c.owner) this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You now own " + c.name + "." } }); }
+    }
+  }
+  // (owner, 2026-10-17) the owner removes a member, online or not
+  async corpKick(from, toId) {
+    const p = this.players.get(from), c = p && p.corp && this.corps.get(p.corp);
+    if (!c || c.owner !== p.id) return "Only the corporation's owner can remove members."; if (toId === p.id) return "Leave instead.";
+    const q = this.players.get(toId);
+    if (q) { if (q.corp !== c.id) return "They're not in your corporation."; q.corp = null; q.socDirty = true; q.dirty = true; await this._save(q); this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You were removed from " + c.name + "." } }); }
+    else { const r = await pool.query(`UPDATE ring_players SET corp_id = NULL WHERE user_id = $1 AND corp_id = $2`, [toId, c.id]); if (!r.rowCount) return "They're not in your corporation."; }
+    for (const x of this.players.values()) if (x.corp === c.id) x.socDirty = true;
+    await this.corpAfterLeave(c, toId);
+    return "Removed " + (q ? q.name : "them") + " from " + c.name + ".";
   }
 
   // ---- saving ----
@@ -575,18 +621,18 @@ export class World {
 
   // ---- what each player is sent ----
   // ships in the load circle: [id, x (dm), y (dm), heading (mrad), first module's index (its art), flags, aim (mrad),
-  // laser length (m), tow asteroid id | 0, pump target | 0, refine target | 0, hold raw %, hold refined %, fuel %,
+  // laser length (m), tow asteroid id | 0, pump target | 0, refined by (a refinery working on its hold) | 0, hold raw %, hold refined %, fuel %,
   // modules (a bit per kind), switched on (a bit per kind), hull size, command boost reach | 0]; flags: 1 laser on an asteroid, 2 laser firing,
   // 4 a module switched on, 8 distress, 16 docked
   shipRows(viewer) {
     const out = [];
     for (const p of this.players.values()) {
       if (p !== viewer && (p.layer !== viewer.layer || hyp(p.x - viewer.x, p.y - viewer.y) > W.loadR)) continue;
-      const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).length * R.REFINED_SPACE;
-      const bits = (list) => list.reduce((b, k) => b | (1 << R.MODULE_KINDS.indexOf(k)), 0), on = p.mods.filter((k) => p.on.has(k) || (k === "refinery" && p.refineTo));
+      const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).length * R.ECON.refinedSpace;
+      const bits = (list) => list.reduce((b, k) => b | (1 << R.MODULE_KINDS.indexOf(k)), 0), on = p.mods.filter((k) => p.on.has(k));
       out.push([p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.MODULE_KINDS.indexOf(p.mods[0]),
         (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (on.length ? 4 : 0) | (p.sos ? 8 : 0) | (p.docked ? 16 : 0),
-        Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.pumpTo || 0, p.refineTo || 0,
+        Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.pumpTo || 0, p.refineBy || 0,
         Math.round(raw / S.hold * 100), Math.round(ref / S.hold * 100), Math.round(p.fuel / S.tank * 100), bits(p.mods), bits(on), p.hull, this.has(p, "command") ? this.val(p, "command", "radius") : 0]);
     }
     return out;
@@ -621,7 +667,7 @@ export class World {
     const units = p.hold.map((u) => [ORE_KEYS.indexOf(u.o), u.r ? 1 : 0, u.n]), names = {};
     for (const u of p.hold) for (const nid of u.n) { const nm = this.nameCache.get(String(nid)); if (nm) names[nid] = nm; else this.nameWant.add(String(nid)); }
     return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, units, names, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0,
-      mods: p.mods, on: p.mods.filter((k) => p.on.has(k)), hull: p.hull, slots: S.slots, upgrades: p.upgrades, tow: p.tow || 0, pump: p.pumpTo || 0, refine: p.refineTo || 0, refineT: Math.round(p.refineT * 10) / 10, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p) };
+      mods: p.mods, on: p.mods.filter((k) => p.on.has(k)), hull: p.hull, slots: S.slots, upgrades: p.upgrades, tow: p.tow || 0, pump: p.pumpTo || 0, refineBy: p.refineBy || 0, refiner: p.hold.some((u) => !u.r) && !p.refineBy ? (this.refinerFor(p) || {}).id || 0 : 0, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p) };
   }
   stationMsg(p) { this.settleQueue(p, now()); return { t: "station", storage: p.storage, queue: p.queue, modules: [...p.modules], now: now() }; }
   async lookupNames() {                        // names for the accounts named on ore that aren't online (once each)
@@ -632,8 +678,10 @@ export class World {
   }
   socMsg(p) {
     const party = this.partyOf(p), corp = p.corp && this.corps.get(p.corp);
-    return { t: "soc", party: party ? { leader: party.leader, members: [...party.members].map((id) => { const q = this.players.get(id); return [id, q ? q.name : "?"]; }) } : null, corp: corp ? corp.name : null };
+    return { t: "soc", party: party ? { leader: party.leader, members: [...party.members].map((id) => { const q = this.players.get(id); return [id, q ? q.name : "?"]; }) } : null, corp: corp ? corp.name : null, corpOwner: corp ? corp.owner === p.id : false };
   }
+  // (owner, 2026-10-17) my party (bit 1) and corporation (bit 2) members online, wherever they are, for the minimap
+  mates(p) { const out = []; for (const q of this.players.values()) { if (q === p) continue; const k = (p.party && q.party === p.party ? 1 : 0) | (p.corp && q.corp === p.corp ? 2 : 0); if (k) out.push([q.id, Math.round(q.x), Math.round(q.y), k]); } return out; }
   sosList() { const out = []; for (const p of this.players.values()) if (p.sos) out.push([p.id, Math.round(p.x), Math.round(p.y), p.layer]); return out; }   // (each player sees its own layer's)
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }

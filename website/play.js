@@ -53,7 +53,7 @@ async function waitForUpdate() {
 }
 
 // always open the game fresh, never a cached copy of an older build
-document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); const rp = document.getElementById("reset-pos"); location.href = "game.html?cb=" + Date.now() + (rp && rp.checked ? "&resetpos=1" : ""); }));   // (owner) Reset location: back at the station
+document.querySelectorAll('a[href="game.html"]').forEach((a) => a.addEventListener("click", (e) => { e.preventDefault(); location.href = "game.html?cb=" + Date.now(); }));
 // (owner, 2026-10-15) an update in progress (its countdown started, or it hasn't fully landed yet): straight to the
 // update page instead of Enter System
 async function gate() {

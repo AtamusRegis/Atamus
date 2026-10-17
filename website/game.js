@@ -14,7 +14,7 @@ const TAU = Math.PI * 2, hyp = Math.hypot;
 
 // ---- the game's numbers (the hello sends them) ----
 let G = null;
-const rockR = (n) => 10 + 3.3 * n, crackHp = (n) => 80 + 8 * n, towFactor = (n) => 0.6 - (n - 1) * 0.025;
+const rockR = (n) => G.rock.radiusBase + G.rock.radiusPer * n, towFactor = (n) => Math.max(0.05, G.rock.towBase - (n - 1) * G.rock.towPer);   // (as the server's rules.js)
 const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;
 const ORE_KEYS = ["iron", "nickel", "ice", "titanium", "cobalt", "platinum"];
 const kindBit = (k) => 1 << G.kinds.indexOf(k);
@@ -28,7 +28,7 @@ const mine = { x: 0, y: 0, vx: 0, vy: 0, h: 0, inSector: -1 };
 const corr = { x: 0, y: 0 };
 let ME = { fuel: 100, tank: 100, cap: 5, hold: {}, units: [], names: {}, credits: 0, docked: 0, mods: ["miner"], on: ["miner"], hull: 0, slots: 1, upgrades: {}, tow: 0, pump: 0, refine: 0, sos: 0, zone: "" };
 let STATION = { storage: {}, queue: [], modules: [] }, SOC = { party: null, corp: null };
-let sectors = [1, 1, 1, 1], online = 0, sosList = [];
+let sectors = [1, 1, 1, 1], online = 0, sosList = [], mates = [];   // mates: [id, x, y, bits: 1 party, 2 corporation]
 const ships = new Map();                       // id -> { id, name, buf, row, x, y, h, near }
 const rocks = new Map();                       // id -> { id, x, y, n, cracks, hp, ore, tow, dx, dy }: built from the two below
 const rockCells = new Map();                   // "layer:cx,cy" -> [untouched asteroids built from their seeds (ringgen.js)]
@@ -100,8 +100,7 @@ const aimAngle = () => { const [sx, sy] = toScreen(mine.x, mine.y); return Math.
 // ---- the socket ----
 let ws = null, srvBuild = "", closedForGood = false, rtt = 80, srvOff = null, pingTimer = 0;
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
-let resetPos = new URLSearchParams(location.search).get("resetpos") === "1";   // Reset location (play.html): back at the station, on the first connection only
-const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as); if (resetPos) { q.set("resetpos", "1"); resetPos = false; }
+const wsUrl = () => { const q = new URLSearchParams(); if (typeof deviceId === "function") q.set("d", deviceId()); const as = new URLSearchParams(location.search).get("as"); if (as) q.set("as", as);
   return (typeof API_BASE !== "undefined" ? API_BASE : location.origin).replace(/^http/, "ws") + "/ws?" + q.toString(); };
 function connect() {
   statusEl.hidden = false; statusEl.textContent = "Connecting…";
@@ -125,7 +124,7 @@ function onMsg(m) {
   if (m.t === "hello") {
     srvBuild = m.build || "";
     if (m.updating && m.updating.parts) { if (typeof m.updating.to === "string" && /^[0-9a-f]{7,40}$/.test(m.updating.to)) countHead = m.updating.to; goUpdating(m.updating.parts); return; }
-    G = m.game; myId = m.you.id; myName = m.you.name; amStaff = !!m.you.staff;
+    G = m.game; myId = m.you.id; myName = m.you.name; amStaff = !!m.you.staff; if (m.you.dev) devMount();
     mine.x = m.spawn.x; mine.y = m.spawn.y; mine.h = m.spawn.h || 0; mine.vx = mine.vy = 0; corr.x = corr.y = 0; haveMe = true; cam.x = mine.x; cam.y = mine.y;
     sectors = m.sectors || sectors; online = m.online || 0;
     ships.clear(); rocks.clear(); rockCells.clear(); rockRows.clear(); ores.clear(); names.clear(); snapRows = new Map();
@@ -152,6 +151,13 @@ function onMsg(m) {
   } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (ME.docked !== wasDocked) drawStation_(); else if (ME.docked) { drawStation_(); drawShop(); } drawHud(); refreshTip(); }
   else if (m.t === "station") { STATION = m; STATION.at = performance.now(); drawStation_(); drawShop(); }
   else if (m.t === "trade") showTrade(m);
+  else if (m.t === "invite") showInvite(m);
+  else if (m.t === "mates") mates = m.m || [];
+  else if (m.t === "game") {                   // (developer panel) the numbers changed: everything that reads them redraws
+    G = m.game; hudKey = ""; stKey = ""; shopKey = "";
+    if (m.field) { rockCells.clear(); rockRows.clear(); rocks.clear(); }
+    drawHud(); drawStation_(); drawShop(); devRefresh();
+  }
   else if (m.t === "soc") { SOC = m; drawParty(); }
   else if (m.t === "sectors") { sectors = m.s; online = m.online; }
   else if (m.t === "sos") sosList = m.s || [];
@@ -267,18 +273,21 @@ function drawWorld(t) {
     o.dx += (o.x - o.dx) * 0.25; o.dy += (o.y - o.dy) * 0.25; const s = 9, bob = Math.sin(ts * 2 + o.id) * 1.2;
     cx.fillStyle = G.ores[o.o].color; cx.fillRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
     cx.strokeStyle = o.r ? "#fff" : "rgba(0,0,0,.45)"; cx.lineWidth = lw(o.r ? 1.6 : 1); cx.strokeRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
-    if (o === hov) { const near = hyp(o.dx - mine.x, o.dy - mine.y) <= G.ship.claimR; cx.strokeStyle = near ? C.gold : C.dim; cx.lineWidth = lw(1.5); cx.beginPath(); cx.arc(o.dx, o.dy + bob, s + 3, 0, TAU); cx.stroke(); }
+    if (o === hov) { const near = hyp(o.dx - mine.x, o.dy - mine.y) <= G.ship.interactR; cx.strokeStyle = near ? C.gold : C.dim; cx.lineWidth = lw(1.5); cx.beginPath(); cx.arc(o.dx, o.dy + bob, s + 3, 0, TAU); cx.stroke(); }
   }
-  // ships: module effects under them, the hull, lasers and links over
+  // ships: module effects under them, the hull, lasers and links over (refineries at work: some ship's hold is theirs)
+  const refining = new Set(); for (const q of ships.values()) if (q.row && q.row[10]) refining.add(q.row[10]);
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, true);
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) {
     const r = s.row, fl = r[5], onB = r[15] || 0, on = {}, mods = shipMods(r);
     for (const k of mods) on[k] = !!(onB & kindBit(k));
-    const st = { t: ts, raw: r[11] / 100, ref: r[12] / 100, fuel: r[13] / 100, firing: !!(fl & 2), on, busy: { tractor: !!r[8], fueler: !!r[9], refinery: !!r[10] || on.refinery }, thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
+    const st = { t: ts, raw: r[11] / 100, ref: r[12] / 100, fuel: r[13] / 100, firing: !!(fl & 2), on, busy: { tractor: !!r[8], fueler: !!r[9], refinery: refining.has(s.id) }, thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (s.id === myId) { st.fuel = ME.fuel / (ME.tank || 100); }
     cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore();
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
+  // (owner, 2026-10-17) my reach: claiming ore, the laser, fueling, refining, trading
+  cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, G.ship.interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawFx(t);
   cx.restore();
 }
@@ -311,7 +320,7 @@ function shipFx(s, ts, under) {
   }
   const link = (id, color, dash, ly) => { const q = id === myId ? { x: mine.x, y: mine.y } : ships.get(id); if (!q) return; const [px, py] = at(0, ly); cx.strokeStyle = color; cx.lineWidth = lw(2.5); cx.setLineDash(dash.map(lw)); cx.beginPath(); cx.moveTo(px, py); cx.quadraticCurveTo((px + q.x) / 2 + 10, (py + q.y) / 2 - 10, q.x, q.y); cx.stroke(); cx.setLineDash([]); };
   if (r[9]) link(r[9], C.ice, [], (154 + (lay.off.fueler || 0) - yc) * ART);            // the fueler's hose, from the pump on top of the tank
-  if (r[10] && r[10] !== s.id) link(r[10], C.ore, [6, 5], 0);   // the refinery working on another ship's hold
+  if (r[10] && r[10] !== s.id) { const q = r[10] === myId ? { x: mine.x, y: mine.y } : ships.get(r[10]); if (q) { cx.strokeStyle = C.ore; cx.lineWidth = lw(2.5); cx.setLineDash([lw(6), lw(5)]); cx.beginPath(); cx.moveTo(q.x, q.y); cx.quadraticCurveTo((q.x + s.x) / 2 + 10, (q.y + s.y) / 2 - 10, s.x, s.y); cx.stroke(); cx.setLineDash([]); } }   // a refinery working on this ship's hold
 }
 function drawFx(t) {
   const lw = (px) => px / zoom;
@@ -391,6 +400,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // ---- the HUD: a chip per module (a click switches it), the hold as squares and a bar, fuel, credits, where I am ----
+$("refine-pop").addEventListener("click", (e) => { send({ t: "act", op: "refineme" }); e.currentTarget.blur(); });
 const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), mods: $("mods"), cargo: $("cargo"), credits: $("credits"), zone: $("zone") };
 const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
 function holdCounts() { let raw = 0, ref = 0; for (const [k, n] of Object.entries(ME.hold || {})) { if (k.endsWith("+")) ref += n; else raw += n; } return { raw, ref }; }
@@ -398,19 +408,20 @@ const SWITCHES = { miner: 1, command: 1, refinery: 1 };
 let hudKey = "";
 function drawHud() {
   if (!G) return;
-  const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref * G.refinedSpace;
-  hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref * G.refinedSpace / cap) * 100 + "%";
+  const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref * G.econ.refinedSpace;
+  hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref * G.econ.refinedSpace / cap) * 100 + "%";
   hud.holdNum.textContent = (Math.round(used * 10) / 10) + " / " + cap;
   hud.credits.textContent = fmt(ME.credits || 0);
   hud.zone.textContent = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
-  const key = JSON.stringify([ME.mods, ME.on, ME.refine === myId, ME.units, ME.names]); if (key === hudKey) return; hudKey = key;
+  const key = JSON.stringify([ME.mods, ME.on, ME.units, ME.names, ME.refiner, ME.refineBy]); if (key === hudKey) return; hudKey = key;
   hud.mods.replaceChildren(...(ME.mods || []).map((k) => {
-    const sw = !!SWITCHES[k], on = k === "refinery" ? ME.refine === myId : (ME.on || []).includes(k);
-    const c = elx("div", "mod-chip" + (sw && on ? " on" : "") + (sw ? "" : " fixed"), G.modules[k].name + (sw ? (k === "refinery" ? (on ? " · Refining" : "") : on ? " · On" : " · Off") : ""));
+    const sw = !!SWITCHES[k], on = (ME.on || []).includes(k);
+    const c = elx("div", "mod-chip" + (sw && on ? " on" : "") + (sw ? "" : " fixed"), G.modules[k].name + (sw ? (on ? " · On" : " · Off") : ""));
     if (sw) c.addEventListener("click", () => send({ t: "mod", k }));
     return c;
   }));
   drawCargo();
+  const rp = $("refine-pop"); rp.hidden = !ME.refiner; rp.style.bottom = (hud.cargo.offsetHeight + 34) + "px";   // (above the hold bar and the squares)   // (owner, 2026-10-17) a refinery near me is on
 }
 // the hold, a square per unit in its ore's color; compressed (refined) units go five to a square, edged white (a part
 // stack fills part of its square). Hovering a square: how many of that ore and what they sell for; with Alt held, the
@@ -425,7 +436,7 @@ function drawCargo() {
   }));
 }
 function cargoTip(g) {                         // (owner, 2026-10-17) this square's own worth: one unit, or the compressed units in it
-  const price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
+  const price = G.ores[g.o].price * (g.r ? G.econ.refinedMul : 1);
   let t = oreName(g.o, g.r) + "\n" + fmt(g.units.length * price) + " cr";
   if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
   return t;
@@ -472,7 +483,7 @@ function drawStation_() {
   const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Queue"));
   const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(elx("p", "st-empty", "Idle"));
   Q.forEach((j) => {
-    const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.stationRefine) * 1000;
+    const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.econ.stationRefine) * 1000;
     row.append(elx("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o, true))), elx("span", "st-n", fmt(j.left)));
     const bar = elx("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = elx("i"); bar.appendChild(fill); fill.dataset.at = j.at; fill.dataset.dur = dur; row.appendChild(bar); sec2.appendChild(row);   // (every job runs at once)
   });
@@ -487,9 +498,9 @@ function drawStation_() {
 function slotActions(k) {                      // right-click a storage slot: sell, refine, make fuel (each asks how many), fill the tank
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return [["Fill tank", () => send({ t: "st", op: "blocks" })]];
-  const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.refinedMul : 1);
+  const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.econ.refinedMul : 1);
   const items = [["Sell", () => askAmount("Sell " + oreName(o, ref), "Sell", n, (c) => fmt(c * price) + " cr", (c) => ({ op: "sell", k, n: c }))]];
-  if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].price * G.refinedMul) + " cr", (c) => ({ op: "refine", o, n: c }))]);
+  if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].price * G.econ.refinedMul) + " cr", (c) => ({ op: "refine", o, n: c }))]);
   if (o === "ice" && !ref) items.push(["Make fuel", () => askAmount("Make fuel", "Make fuel", n, (c) => fmt(c * G.fuel.blockFuel) + " fuel", (c) => ({ op: "craft", n: c }))]);
   return items;
 }
@@ -510,7 +521,7 @@ amtBox.addEventListener("mousedown", (e) => e.stopPropagation());
 function storeTip(k) {
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return "Fuel blocks\n" + fmt(n * G.fuel.blockFuel) + " fuel (" + G.fuel.blockFuel + " each)";
-  const o = k.replace(/\+$/, ""), each = G.ores[o].price * (k.endsWith("+") ? G.refinedMul : 1);
+  const o = k.replace(/\+$/, ""), each = G.ores[o].price * (k.endsWith("+") ? G.econ.refinedMul : 1);
   return oreName(o, k.endsWith("+")) + "\n" + fmt(n * each) + " (" + fmt(each) + " each)";   // (owner, 2026-10-17: the total, then each)
 }
 setInterval(() => {                            // the running job's bar (between the server's updates)
@@ -528,16 +539,16 @@ const MOD_INFO = {
   tractor: "A tractor beam. Tow an asteroid behind you to wherever it's wanted. Bigger rocks tow slower and burn more fuel.",
   command: "A mining boost. Switch it on and every ship mining near you mines faster. It burns fuel while on.",
   scanner: "A long-range scanner. Reveal the ore inside an asteroid, for everyone.",
-  refinery: "A field refinery. Compress raw ore into a fifth of the space, worth half again as much, in your hold or another ship's.",
+  refinery: "A field refinery. Switch it on and ships near you can have the raw ore in their holds refined: a fifth of the space, worth half again as much. Each use costs fuel.",
 };
 const STATS = {                                 // label, stat, how it reads
   miner: [["Mining", "laserDps", (v) => v + " / s"], ["Fuel", "burn", (v) => v + " / min firing"]],
   hauler: [["Hold", "hold", (v) => v + " units"]],
-  fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"]],
+  fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"]],
   tractor: [["Reach", "range", (v) => v + " m"], ["Tow speed", "tow", (v) => "×" + v], ["Fuel", "burn", (v) => v + "+ / min towing"]],
   command: [["Boost", "boost", (v) => "×" + v], ["Reach", "radius", (v) => v + " m"], ["Fuel", "burn", (v) => v + " / min on"]],
   scanner: [["Reach", "range", (v) => fmt(v) + " m"]],
-  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "burn", (v) => v + " / unit"], ["Reach", "range", (v) => v + " m"]],
+  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "activation", (v) => v + " / use"]],
 };
 const MK = ["Mk I", "Mk II", "Mk III", "Mk IV"];
 let shopKey = "";
@@ -583,7 +594,14 @@ function drawParty() {
   const el = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
   const out = [];
   if (SOC.corp) out.push(el("div", "pt-corp", SOC.corp));
-  if (SOC.party) { const box = el("div", "pt-list"); box.appendChild(el("div", "pt-head", "Party")); for (const [id, n] of SOC.party.members) { const r = el("div", "pt-mem" + (id === SOC.party.leader ? " lead" : ""), n); box.appendChild(r); } out.push(box); }
+  if (SOC.party) {
+    const box = el("div", "pt-list"); box.appendChild(el("div", "pt-head", "Party"));
+    for (const [id, n] of SOC.party.members) {
+      const r = el("div", "pt-mem" + (id === SOC.party.leader ? " lead" : ""), n); box.appendChild(r);
+      if (id !== myId) r.addEventListener("contextmenu", (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, [["Whisper", () => whisperTo(id, n)], ...socialItems(id)]); });
+    }
+    out.push(box);
+  }
   partyEl.replaceChildren(...out); partyEl.hidden = !out.length;
 }
 
@@ -618,6 +636,7 @@ function drawMinimap(now) {
   { const [sx, sy] = P(W.station[0], W.station[1]); mx.fillStyle = C.gold; mx.fillRect(sx - 2.5, sy - 2.5, 5, 5); }
   const party = new Set(SOC.party ? SOC.party.members.map((m) => m[0]) : []);
   for (const s of ships.values()) if (s.id !== myId && s.near) { const [x, y] = P(s.x, s.y); mx.fillStyle = party.has(s.id) ? C.gold : C.ink; mx.beginPath(); mx.arc(x, y, 2, 0, TAU); mx.fill(); }
+  for (const [, x, y, k] of mates) { const [px, py] = P(x, y); mx.fillStyle = k & 1 ? C.gold : C.ice; mx.strokeStyle = C.void; mx.lineWidth = 1; mx.beginPath(); mx.arc(px, py, 3, 0, TAU); mx.fill(); mx.stroke(); }   // (my party gold, my corporation blue, anywhere)
   for (const [id, x, y] of sosList) { const [px, py] = P(x, y); mx.fillStyle = C.signal; mx.beginPath(); mx.arc(px, py, 4 + Math.sin(now / 200), 0, TAU); mx.fill(); void id; }
   { const [x, y] = P(mine.x, mine.y), h = mine.h; mx.fillStyle = C.ice; mx.beginPath(); mx.moveTo(x + Math.sin(h) * 6, y - Math.cos(h) * 6); mx.lineTo(x - Math.cos(h) * 3.5 - Math.sin(h) * 3, y - Math.sin(h) * 3.5 + Math.cos(h) * 3); mx.lineTo(x + Math.cos(h) * 3.5 - Math.sin(h) * 3, y + Math.sin(h) * 3.5 + Math.cos(h) * 3); mx.closePath(); mx.fill(); }
   mx.restore();
@@ -698,27 +717,42 @@ const whisperTo = (id, name) => { lastWhisper = { id, name }; chatCh = "whisper"
 chatLog.addEventListener("contextmenu", (e) => {
   e.preventDefault(); const who = e.target.closest && e.target.closest(".chat-who[data-id]"); if (!who) return;
   const id = who.dataset.id, name = who.dataset.name;
-  showMenu(e.clientX, e.clientY, [["Whisper", () => whisperTo(id, name)], ["Invite to party", () => send({ t: "party", op: "invite", to: id })],
-    ...(SOC.corp ? [["Invite to corporation", () => send({ t: "corp", op: "invite", to: id })]] : []), ["Report", () => openReport(id, name)],
+  showMenu(e.clientX, e.clientY, [["Whisper", () => whisperTo(id, name)], ...socialItems(id), ["Report", () => openReport(id, name)],
     ...(amStaff && window.AdminPanel ? [["Admin", () => window.AdminPanel.act(id, name)]] : [])]);
 });
-// (owner, 2026-10-16) another ship: Invite to party, Whisper, then what my modules can do for it: fuel it, refine its
-// cargo, or (without a hauler, to a hauler) ask it to take my cargo
+// (owner, 2026-10-17) invite to (or, for the leader / owner, remove from) my party and corporation
+function socialItems(id) {
+  const inParty = !!(SOC.party && SOC.party.members.some((m) => m[0] === id)), mate = mates.find((m) => m[0] === id), inCorp = !!(mate && mate[3] & 2), out = [];
+  if (!inParty) out.push(["Invite to party", () => send({ t: "party", op: "invite", to: id })]);
+  else if (SOC.party.leader === myId) out.push(["Kick from party", () => send({ t: "party", op: "kick", to: id })]);
+  if (SOC.corp && !inCorp) out.push(["Invite to corporation", () => send({ t: "corp", op: "invite", to: id })]);
+  else if (SOC.corp && inCorp && SOC.corpOwner) out.push(["Kick from corporation", () => send({ t: "corp", op: "kick", to: id })]);
+  return out;
+}
+// (owner, 2026-10-16) another ship: Whisper, party and corporation, then what my modules can do for it: fuel it, or
+// (without a hauler, to a hauler) ask it to take my cargo
 function shipMenu(s, x, y) {
-  const id = s.id, name = names.get(id) || "?", r = s.row, theirs = r[14] || 0, items = [["Invite to party", () => send({ t: "party", op: "invite", to: id })], ["Whisper", () => whisperTo(id, name)]];
+  const id = s.id, name = names.get(id) || "?", r = s.row, theirs = r[14] || 0, items = [["Whisper", () => whisperTo(id, name)], ...socialItems(id)];
   if (ME.mods.includes("fueler")) items.push([ME.pump === id ? "Stop fueling" : "Fuel ship", () => send({ t: "act", ship: id, op: "fuel" })]);
-  if (ME.mods.includes("refinery")) items.push([ME.refine === id ? "Stop refining" : "Refine cargo", () => send({ t: "act", ship: id, op: "refine" })]);
   if (!ME.mods.includes("hauler") && theirs & kindBit("hauler")) items.push(["Request trade", () => send({ t: "act", ship: id, op: "trade" })]);
   showMenu(x, y, items);
 }
-// a hauler is asked to take another ship's cargo: Accept / Decline (it lapses on its own)
-const tradeBox = $("trade-box"); let tradeFrom = null, tradeTimer = 0;
-function showTrade(m) {
-  tradeFrom = m.from; $("trade-text").textContent = (m.name || "?") + " · " + m.n + (m.n === 1 ? " unit" : " units"); tradeBox.hidden = false;
-  clearTimeout(tradeTimer); tradeTimer = setTimeout(() => { tradeBox.hidden = true; tradeFrom = null; }, ((G && G.tradeWait) || 30) * 1000);
+// (owner, 2026-10-17) Accept / Decline prompts, one at a time, top center: a ship asking this hauler to take its cargo,
+// party and corporation invites; each lapses on its own
+const tradeBox = $("trade-box"), prompts = [];
+function pushPrompt(text, yes, no, secs) { prompts.push({ text, yes, no, until: Date.now() + secs * 1000 }); drawPrompt(); }
+function drawPrompt() {
+  while (prompts.length && prompts[0].until < Date.now()) prompts.shift();
+  const p = prompts[0]; tradeBox.hidden = !p; if (p) $("trade-text").textContent = p.text;
 }
-const answerTrade = (yes) => { if (tradeFrom) send({ t: "tradeans", from: tradeFrom, yes }); tradeBox.hidden = true; tradeFrom = null; clearTimeout(tradeTimer); };
-$("trade-yes").addEventListener("click", () => answerTrade(true)); $("trade-no").addEventListener("click", () => answerTrade(false));
+setInterval(drawPrompt, 1000);
+function answerPrompt(yes) { const p = prompts.shift(); if (p) (yes ? p.yes : p.no)(); drawPrompt(); }
+$("trade-yes").addEventListener("click", () => answerPrompt(true)); $("trade-no").addEventListener("click", () => answerPrompt(false));
+function showTrade(m) { pushPrompt((m.name || "?") + " · " + m.n + (m.n === 1 ? " unit" : " units"), () => send({ t: "tradeans", from: m.from, yes: true }), () => send({ t: "tradeans", from: m.from, yes: false }), (G && G.econ.tradeWait) || 30); }
+function showInvite(m) {
+  if (m.kind === "party") pushPrompt((m.name || "?") + " invited you to a party", () => send({ t: "party", op: "accept" }), () => send({ t: "party", op: "decline" }), 120);
+  else pushPrompt((m.name || "?") + " invited you to " + (m.corp || "a corporation"), () => send({ t: "corp", op: "accept" }), () => send({ t: "corp", op: "decline" }), 300);
+}
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
 const reportBox = $("report-box"); let reportFor = null;
 function openReport(id, name) { reportFor = id; $("report-title").textContent = "Report " + name; $("report-text").value = ""; reportBox.hidden = false; keys.clear(); $("report-text").focus(); }
@@ -726,11 +760,82 @@ $("report-text").addEventListener("keydown", (e) => { e.stopPropagation(); if (e
 $("report-cancel").addEventListener("click", () => { reportBox.hidden = true; });
 $("report-send").addEventListener("click", () => { const text = $("report-text").value.trim(); if (!text || !reportFor) return; send({ t: "report", i: reportFor, text }); reportBox.hidden = true; });
 
+// ---- (owner, 2026-10-17) the developer panel (head admin and admins): every number of the ship, hulls, modules per
+// level, asteroids per ore and per ring, fuel, the economy and limits, changed live for everyone; the server keeps them ----
+const devEl = $("dev"); let devTab = "ship", devArmed = 0;
+const DEV_TABS = [["ship", "Ship"], ["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
+const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
+  interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
+  activation: "Fuel / use", radiusBase: "Radius base", radiusPer: "Radius per size", crackHpBase: "Crack health base", crackHpPer: "Crack health per size", towBase: "Tow share base", towPer: "Tow share per size",
+  respawn: "Respawn s", despawn: "Despawn s", reseed: "Reseed s", stationPrice: "Station fuel price", pumpPay: "Pay / unit pumped", blockFuel: "Fuel per block", blockTime: "Seconds per block",
+  refinedMul: "Refined price ×", refinedSpace: "Refined space", stationRefine: "Station refine s", startCredits: "Starting credits", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
+  despawnOre: "Loose ore despawn s", shardCap: "Players per shard", partyMax: "Party size" };
+const devLabel = (k) => DEV_LABELS[k] || k;
+const devGet = (path) => path.reduce((o, k) => (o == null ? o : o[k]), G);
+function devInput(path) {
+  const i = document.createElement("input"); i.type = "number"; i.step = "any"; i.dataset.path = JSON.stringify(path); i.value = devGet(path);
+  i.addEventListener("change", () => { const v = Number(i.value); if (Number.isFinite(v)) send({ t: "tune", path, value: v }); });
+  i.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); });
+  return i;
+}
+function devRow(label, ...inputs) { const r = elx("div", "dev-row"); r.append(elx("span", "dev-l", label), ...inputs); return r; }
+function devGroup(title, rows) { const g = elx("div", "dev-group"); g.append(elx("div", "dev-h", title), ...rows); return g; }
+function devNumbers(root, keys) { return keys.filter((k) => typeof devGet([root, k]) === "number").map((k) => devRow(devLabel(k), devInput([root, k]))); }
+function devDraw() {
+  if (devEl.hidden || !G) return;
+  const head = elx("div", "st-head"), reset = elx("button", "", devArmed ? "Sure?" : "Reset all"), close = elx("button", "", "Close");
+  reset.type = close.type = "button";
+  reset.addEventListener("click", () => { if (!devArmed) { devArmed = 1; devDraw(); setTimeout(() => { devArmed = 0; devDraw(); }, 3000); } else { devArmed = 0; send({ t: "tune", reset: true }); } });
+  close.addEventListener("click", () => { devEl.hidden = true; $("dev-btn").classList.remove("on"); });
+  head.append(elx("span", "st-title", "Developer"), reset, close);
+  const tabs = elx("div", "dev-tabs");
+  for (const [k, label] of DEV_TABS) { const b = elx("button", k === devTab ? "on" : "", label); b.type = "button"; b.addEventListener("click", () => { devTab = k; devDraw(); }); tabs.appendChild(b); }
+  const body = elx("div", "dev-body"), out = [];
+  if (devTab === "ship") out.push(devGroup("Hull (every ship)", devNumbers("ship", Object.keys(G.ship))));
+  else if (devTab === "hulls") G.hulls.forEach((h, i) => out.push(devGroup(h.name, [devRow("Slots", devInput(["hulls", i, "slots"])), devRow("Price", devInput(["hulls", i, "price"]))])));
+  else if (devTab === "modules") {
+    out.push(devGroup("Upgrade cost (× price)", [devRow("Mk II · III · IV", ...G.upgradeCost.map((_, i) => devInput(["upgradeCost", i])))]));
+    for (const k of G.kinds) {
+      const M = G.modules[k], rows = [];
+      for (const [stat, v] of Object.entries(M)) {
+        if (typeof v === "number") rows.push(devRow(devLabel(stat), devInput(["modules", k, stat])));
+        else if (Array.isArray(v)) rows.push(devRow(devLabel(stat), ...v.map((_, i) => devInput(["modules", k, stat, i]))));
+      }
+      out.push(devGroup(M.name, rows));
+    }
+  } else if (devTab === "asteroids") {
+    out.push(devGroup("Ores", Object.keys(G.ores).map((o) => devRow(G.ores[o].name + " price", devInput(["ores", o, "price"])))));
+    G.ringSizes.forEach((sz, i) => {
+      const rows = [devRow("Sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])), devRow("Asteroids per cell", devInput(["ringSlots", i]))];
+      for (const o of Object.keys(G.ringOres[i])) rows.push(devRow(G.ores[o].name + " weight", devInput(["ringOres", i, o])));
+      out.push(devGroup("Ring " + (i + 1), rows));
+    });
+    out.push(devGroup("Asteroids", devNumbers("rock", Object.keys(G.rock))));
+  } else {
+    out.push(devGroup("Economy", devNumbers("econ", Object.keys(G.econ))), devGroup("Fuel", devNumbers("fuel", Object.keys(G.fuel))), devGroup("Limits", devNumbers("limits", Object.keys(G.limits))));
+  }
+  body.append(...out);
+  const top = devEl.querySelector(".dev-body") ? devEl.querySelector(".dev-body").scrollTop : 0;
+  devEl.replaceChildren(head, tabs, body); body.scrollTop = top;
+}
+function devRefresh() {                        // new numbers from the server: fields not being typed in take them
+  if (devEl.hidden) return;
+  for (const i of devEl.querySelectorAll("input[data-path]")) if (document.activeElement !== i) i.value = devGet(JSON.parse(i.dataset.path));
+}
+function devMount() {
+  if ($("dev-btn")) return;
+  const b = document.createElement("button"); b.id = "dev-btn"; b.type = "button"; b.textContent = "D"; b.title = "Developer";
+  b.addEventListener("click", () => { devEl.hidden = !devEl.hidden; b.classList.toggle("on", !devEl.hidden); devDraw(); });
+  $("staff-col").appendChild(b);
+}
+devEl.addEventListener("mousedown", (e) => e.stopPropagation());
+devEl.addEventListener("keydown", (e) => e.stopPropagation());
+
 connect();
 
 // for the test harness and the console
 window.Atamus = {
-  get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get station() { return STATION; }, get soc() { return SOC; }, get sectors() { return sectors; }, get sos() { return sosList; },
+  get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get station() { return STATION; }, get soc() { return SOC; }, get sectors() { return sectors; }, get sos() { return sosList; }, get mates() { return mates; }, get game() { return G; },
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, n: r.n, cracks: r.cracks, hp: r.hp, ore: r.ore })); }, get ores() { return [...ores.values()]; },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, m: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7] })); },
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = z; },
