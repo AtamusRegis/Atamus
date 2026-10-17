@@ -445,6 +445,7 @@ export class World {
     let changed = false;
     for (const j of p.queue) {
       const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000;
+      if (j.at > t) { j.at = t; changed = true; }   // (jobs queued one behind another before 2026-10-17 start now too)
       while (j.left > 0 && t >= j.at + dur) { const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true; }
     }
     if (changed) { p.queue = p.queue.filter((j) => j.left > 0); p.stDirty = true; p.dirty = true; }
