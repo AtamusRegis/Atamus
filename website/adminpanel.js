@@ -198,7 +198,7 @@
       const more = $("div", "ap-form ap-report"); more.hidden = true;
       more.append($("p", "ap-text", r.reporter + ": " + r.text));
       const lines = $("div", "ap-lines");
-      for (const l of r.chat) { const p = $("p"); p.append($("span", "ap-dim", when(l.at) + " [" + ({ side: "Faction", global: "World", whisper: "Whisper" }[l.ch] || l.ch) + "] "), document.createTextNode(l.text)); lines.appendChild(p); }
+      for (const l of r.chat) { const p = $("p"); p.append($("span", "ap-dim", when(l.at) + " [" + ({ side: "Faction", global: "World", zone: "Zone", party: "Party", corp: "Corp", whisper: "Whisper" }[l.ch] || l.ch) + "] "), document.createTextNode(l.text)); lines.appendChild(p); }
       if (r.chat.length) more.append(lines);
       const btns = $("div", "dp-seg");
       if (r.target) { const a = $("button", "", "Discipline"); a.addEventListener("click", (e) => { e.stopPropagation(); act(r.target, r.targetName); }); btns.append(a); }

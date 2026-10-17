@@ -8,7 +8,7 @@ export const pool = new pg.Pool({ connectionString: config.databaseUrl });
  * Usernames are stored as typed but uniqueness is enforced case-insensitively.
  * (owner, 2026-10-13) Only what's in use is declared here now. The 2D game's tables (pilots, systems, instances, reports,
  * tickets, logins, suspicion, the ledger, staff notes and the rest) and their columns stay in the database untouched,
- * for reference; no code reads or writes them. The 3D world's own table (world3d) is made by game/world3d.js.
+ * for reference; no code reads or writes them. The ring world's own tables (ring_players, ring_corps) are made by game/world.js; the 3D world's world3d tables stay, unused.
  */
 export async function migrate() {
   await pool.query(`

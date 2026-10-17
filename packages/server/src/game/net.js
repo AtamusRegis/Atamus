@@ -1,44 +1,45 @@
-// The game socket (owner, 2026-10-12; rebuilt 2026-10-15). One shared world; one session per account (a new tab replaces
-// the old: 4002), one account per device (4003). The client sends commands; the server simulates at 20 Hz and sends each
-// player snapshots of their load circle at 15 Hz. Deploy countdowns and website reloads reach every client here.
+// The game socket (owner, 2026-10-12; the Saturn ring-mining prototype 2026-10-16). One shared world; one session per
+// account (a new tab replaces the old: 4002), one account per device (4003). The client sends commands; the server
+// simulates at 20 Hz and sends each player what's in its load circle. Deploy countdowns and website reloads reach every
+// client here.
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
-import { World3D, inside, HEX_FLAT, SPHERE_R, SHIP_R, BUILD_H, LOAD_R, buildMsg, TURN_ACCEL, VEL_TURN, FWD_ARC, COLL_DEFAULT, VIS_DEFAULT } from "./world3d.js";
-import { TEAMS, SHIP, WEAPONS, WEAPON_KINDS, ABILITIES, ABILITY_KINDS, UPGRADES, LV_MAX, upCost, BUFFS, AIM_ROT, maxRange } from "./ships.js";
+import { World, zoneOf } from "./world.js";
+import * as R from "./rules.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
 import { pool } from "../db.js";
 import { safeText } from "../textsafe.js";
 
-const UI_KEYS = ["attrs"];                                // editor windows whose spot is remembered per account
-// (owner, 2026-10-15) the game's fixed numbers, for the clients (the Hangar, prediction, drawing)
-const GAME = { ship: SHIP, weapons: WEAPONS, wk: WEAPON_KINDS, abilities: ABILITIES, ak: ABILITY_KINDS, upgrades: UPGRADES, lvMax: LV_MAX,
-  costs: Array.from({ length: LV_MAX }, (_, i) => upCost(i + 1)), buffs: BUFFS, aimRot: AIM_ROT };
+// the game's fixed numbers, for the clients (drawing, prediction, the station panel)
+const GAME = { world: R.WORLD, ship: R.SHIP, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, refinedMul: R.REFINED_MUL, refinedSpace: R.REFINED_SPACE,
+  fuel: R.FUEL, stationRefine: R.STATION_REFINE, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, partyMax: R.PARTY_MAX };
 
 export function attachGameServer(httpServer) {
-  const world = new World3D();
+  const world = new World();
   const socks = new Map();                     // account id -> ws
   const devs = new Map();                      // device id -> account id
   const mutes = new Map();                     // account id -> { perm, until }
   const roles = new Map(), badge = (pid) => { const r = roles.get(pid); return r === "mod" ? "m" : r === "head" || r === "admin" ? "a" : undefined; };
   const tell = (pid, obj) => { const w = socks.get(pid); if (w && w.readyState === w.OPEN) w.send(JSON.stringify(obj)); };
+  const sys = (pid, text) => tell(pid, { t: "chat", ch: "sys", text });
   const muted = (pid) => { const m = mutes.get(pid); return !!m && (m.perm || (m.until && m.until > Date.now())); };
   setGameHooks({                               // the admin panel's hooks into the world
     staffChanged: (pid, role) => { roles.set(pid, role || null); tell(pid, { t: "staff" }); },   // the client reloads so its menus follow
-    online: () => { const m = new Map(); for (const [pid] of socks) { const p = world.players.get(pid); m.set(pid, { side: p ? p.team : null }); } return m; },
-    kick: (pid, code, reason) => { const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
+    online: () => { const m = new Map(); for (const [pid] of socks) m.set(pid, { side: null }); return m; },
+    kick: (pid, code, reason) => { if (code === 4006) world.banned(pid).catch((e) => console.error("ban hold", e)); const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
-    respawn: (pid) => { const p = world.respawn(pid); if (p) tell(pid, { t: "teleport", x: p.x, y: p.y }); return !!p; },
-    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2;
-      const p = world.teleport(pid, q.x + Math.cos(a) * 150, q.y + Math.sin(a) * 150); if (p) tell(pid, { t: "teleport", x: p.x, y: p.y }); return !!p; },
+    respawn: (pid) => !!world.respawn(pid),
+    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80); },
     inWorld: (pid) => world.players.has(pid),
-    note: (pid, text) => tell(pid, { t: "chat", ch: "sys", text }),
+    note: (pid, text) => sys(pid, text),
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
   });
   const recent = [], remember = (line) => { recent.push(line); if (recent.length > 500) recent.shift(); };   // chat lines, to go with reports
   const reports = new Map(), reportOk = (pid) => { const now = Date.now(), l = (reports.get(pid) || []).filter((t) => now - t < 600_000); if (l.length >= 5) return false; l.push(now); reports.set(pid, l); return true; };
+  const byName = (name) => { const want = String(name || "").trim().toLowerCase().slice(0, 40); for (const [qid, q] of world.players) if (socks.has(qid) && String(q.name).toLowerCase() === want) return qid; return null; };
 
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
   const broadcast = (obj) => { const msg = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); };
@@ -57,185 +58,134 @@ export function attachGameServer(httpServer) {
     if (user.mute_perm || (user.mute_until && new Date(user.mute_until) > new Date())) mutes.set(pid, { perm: !!user.mute_perm, until: user.mute_until ? new Date(user.mute_until).getTime() : 0 });
     const old = socks.get(pid); if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
     socks.set(pid, ws); roles.set(pid, user.role || null);
-    // the Build menu: head admin, admins, developers
-    const placer = ["head", "admin", "dev"].includes(user.role);
-    let joined = false, cmds = 0, teamAt = 0;
+    let joined = false, cmds = 0;
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
-    let saved = null; try { saved = await world.savedTeam(pid); } catch (e) { console.error("saved side", e); }
-    let ui = {}; if (placer) try { ui = await uiGet(pid); } catch (e) { console.error("ui", e); }
-    if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } return; }
-    await world.ready;
-    const coll = {}; for (const k of Object.keys(COLL_DEFAULT)) coll[k] = world.coll[k] || COLL_DEFAULT[k];
+    const drop = () => { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); roles.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } };
+    ws.on("close", () => {
+      if (socks.get(pid) !== ws) { clearInterval(cmdReset); return; }
+      drop();
+      if (joined) world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));
+    });
+    ws.on("error", (e) => console.error("ws", e.message));
+    let me;
+    try { await world.ready; me = await world.join(pid, user.username); if (new URL(req.url, "http://x").searchParams.get("resetpos") === "1") me = world.respawn(pid) || me; } catch (e) { console.error("join", e); drop(); try { ws.close(1011, "Join failed"); } catch {} return; }
+    if (socks.get(pid) !== ws || ws.readyState !== ws.OPEN) { if (socks.get(pid) !== ws) return; drop(); world.leave(pid).catch(() => {}); return; }
+    joined = true;
     ws.send(JSON.stringify({
-      t: "hello", side: saved, build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), ui,
-      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), builder: placer },
-      cfg: { hexFlat: HEX_FLAT, sphereR: SPHERE_R, shipR: SHIP_R, buildH: BUILD_H, loadR: LOAD_R, turnAccel: TURN_ACCEL, velTurn: VEL_TURN, fwdArc: FWD_ARC },
-      game: GAME, stations: world.stationList(), rocks: world.rockList(), caps: world.capList(), match: { n: world.match.n, win: world.match.win, in: world.match.win ? Math.max(0, world.match.winAt - Date.now()) : 0 },
-      coll, shipVis: world.vis || VIS_DEFAULT, shipPivot: world.pivot, oval: world.oval, roster: world.roster(),
+      t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), game: GAME,
+      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role) }, spawn: { x: me.x, y: me.y, h: me.h },
+      sectors: world.sectorList(), online: world.players.size, roster: world.roster(),
     }));
+    broadcast({ t: "join", i: pid, n: user.username });
 
     ws.on("message", (data) => {
       if (socks.get(pid) !== ws || ++cmds > 80) return;
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
-      if (m.t === "side") {                    // joining the world with a team (once per session)
-        if (joined || !TEAMS.includes(m.s)) return; joined = true;
-        world.join(pid, user.username, m.s).then((me) => {
-          if (socks.get(pid) !== ws) return;
-          try { ws.send(JSON.stringify({ t: "spawn", x: me.x, y: me.y, h: me.h, s: me.team })); } catch {}
-          broadcast({ t: "join", i: pid, n: user.username, s: me.team });
-        }).catch((e) => { joined = false; console.error("join", e); });
-      }
-      else if (m.t === "move") world.setDir(pid, m.x, m.y, m.h);
-      else if (m.t === "fire") world.fire(pid, m.s, m.x, m.y);
-      else if (m.t === "beam") world.setBeam(pid, m.s === 1 ? 1 : 0, m.on === 1, m.x, m.y);
-      else if (m.t === "reload") world.reload(pid);
-      else if (m.t === "ab") world.useAbility(pid, m.x, m.y);
-      else if (m.t === "gear") world.setGear(pid, m.p, m.s, m.a);   // the Hangar: weapons and ability
-      else if (m.t === "up") world.upgrade(pid, m.k);
-      else if (m.t === "team") {               // switching team in the game (at most every 2 s)
-        const now = Date.now(); if (!joined || !TEAMS.includes(m.s) || now - teamAt < 2000) return; teamAt = now;
-        const p = world.setTeam(pid, m.s); if (p) broadcast({ t: "side", i: pid, s: p.team });
-      }
-      else if (m.t === "chat") {               // World (everyone), Faction (your team), Whisper (one player)
-        const me = world.players.get(pid); if (!me || typeof m.text !== "string" || muted(pid)) return;
-        const text = m.text.slice(0, 240); if (!text.trim()) return;
-        const ch = m.ch === "side" ? "side" : m.ch === "whisper" ? "whisper" : "global";
-        if (ch === "whisper") {
-          let to = typeof m.to === "string" ? m.to : "";
-          if (!to && typeof m.toName === "string") {
-            const want = m.toName.trim().toLowerCase().slice(0, 40);
-            for (const [qid, q] of world.players) if (socks.has(qid) && String(q.name).toLowerCase() === want) { to = qid; break; }
-            if (!to) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, withName: m.toName.trim().slice(0, 40), text: "offline" })); return; }
-          }
-          const tws = socks.get(to), tp = world.players.get(to);
-          if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to, text: "offline" })); return; }
-          const line = { t: "chat", ch, i: pid, n: user.username, s: me.team, r: badge(pid), text };
-          tws.send(JSON.stringify({ ...line, with: pid, withName: user.username })); ws.send(JSON.stringify({ ...line, with: to, withName: tp.name }));
-          remember({ at: Date.now(), i: pid, n: user.username, ch: "whisper", text }); return;
-        }
-        const msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, s: me.team, r: badge(pid), text });
-        for (const [qid, qws] of socks) { const q = world.players.get(qid); if (q && qws.readyState === qws.OPEN && (ch === "global" || q.team === me.team)) qws.send(msg); }
-        remember({ at: Date.now(), i: pid, n: user.username, ch, text });
-      }
+      if (m.t === "in") world.setInput(pid, m);
+      else if (m.t === "mod") world.toggleModule(pid);
+      else if (m.t === "act") world.act(pid, m);
+      else if (m.t === "st") { if (world.station(pid, m)) { const p = world.players.get(pid); if (p) tell(pid, world.stationMsg(p)); } }
+      else if (m.t === "party" || m.t === "corp") social(m).catch((e) => console.error("social", e));
+      else if (m.t === "chat") chat(m);
       else if (m.t === "report") {             // a player reports another: kept for the admin panel with their recent lines
         if (!reportOk(pid) || typeof m.i !== "string" || m.i === pid || !/^[0-9]{1,15}$/.test(m.i)) return;
         const text = safeText(m.text, 1000); if (!text) return;
-        const chat = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
-        pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(chat)])
+        const lines = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
+        pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(lines)])
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
       }
-      else if (m.t === "bnew" || m.t === "bset" || m.t === "bdel") {   // the Build menu
-        if (!placer) return;
-        const bid = typeof m.id === "string" && /^[0-9]{1,15}$/.test(m.id) ? m.id : null;
-        if (m.t === "bnew") { const q = Number.isInteger(m.q) ? m.q : 0; world.addBuild(m, pid).then((b) => { if (!b) return; objCast(b); if (socks.get(pid) === ws) ws.send(JSON.stringify({ t: "bnew", q, id: b.id })); }).catch((e) => console.error("build", e)); }
-        else if (m.t === "bset") { const b = bid && world.setBuild(bid, m); if (b) objCast(b); }
-        else if (bid) world.delBuild(bid).then((ok) => { if (ok) objGone([bid]); }).catch((e) => console.error("unbuild", e));
-      }
-      else if (m.t === "ui") { if (placer && UI_KEYS.includes(m.k) && Number.isFinite(m.x) && Number.isFinite(m.y)) uiSet(pid, m.k, m.x, m.y).catch((e) => console.error("ui", e)); }
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
-    ws.on("close", () => {
-      clearInterval(cmdReset); if (socks.get(pid) !== ws) return;
-      socks.delete(pid); mutes.delete(pid); roles.delete(pid); if (device && devs.get(device) === pid) devs.delete(device);
-      if (joined) world.leave(pid).then(() => broadcast({ t: "leave", i: pid })).catch((e) => console.error("leave", e));
-    });
-    ws.on("error", (e) => console.error("ws", e.message));
+    // parties and corporations, from chat commands and the name menu
+    async function social(m) {
+      const target = typeof m.to === "string" && /^[0-9]{1,15}$/.test(m.to) ? m.to : typeof m.name === "string" ? byName(m.name) : null;
+      let say = null;
+      if (m.t === "party") {
+        if (m.op === "invite") say = target ? world.invite(pid, target) : "That player isn't online.";
+        else if (m.op === "accept") say = world.acceptParty(pid);
+        else if (m.op === "leave") { const p = world.players.get(pid); if (p && p.party) { world.leaveParty(p, false); say = "You left the party."; } else say = "You're not in a party."; }
+      } else {
+        if (m.op === "create") say = await world.createCorp(pid, m.name);
+        else if (m.op === "invite") say = target ? world.corpInvite(pid, target) : "That player isn't online.";
+        else if (m.op === "accept") say = await world.corpAccept(pid);
+        else if (m.op === "leave") say = await world.corpLeave(pid);
+      }
+      if (say) sys(pid, say);
+    }
+    // chat: World (everyone), Zone (my ring and sector, or the station), Party, Corporation, Whisper (one player)
+    function chat(m) {
+      const p = world.players.get(pid); if (!p || typeof m.text !== "string" || muted(pid)) return;
+      const text = m.text.slice(0, 240); if (!text.trim()) return;
+      const ch = ["zone", "party", "corp", "whisper"].includes(m.ch) ? m.ch : "global";
+      if (ch === "whisper") {
+        const to = typeof m.to === "string" ? m.to : byName(m.toName);
+        const tws = to && socks.get(to), tp = to && world.players.get(to);
+        if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to || undefined, withName: typeof m.toName === "string" ? m.toName.trim().slice(0, 40) : undefined, text: "offline" })); return; }
+        const line = { t: "chat", ch, i: pid, n: user.username, r: badge(pid), text };
+        tws.send(JSON.stringify({ ...line, with: pid, withName: user.username })); ws.send(JSON.stringify({ ...line, with: to, withName: tp.name }));
+        remember({ at: Date.now(), i: pid, n: user.username, ch, text }); return;
+      }
+      if (ch === "party" && !p.party) { sys(pid, "You're not in a party."); return; }
+      if (ch === "corp" && !p.corp) { sys(pid, "You're not in a corporation."); return; }
+      const zone = zoneOf(p.x, p.y), msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, r: badge(pid), text, ...(ch === "zone" ? { z: zone } : {}) });
+      for (const [qid, qws] of socks) {
+        const q = world.players.get(qid); if (!q || qws.readyState !== qws.OPEN) continue;
+        if (ch === "global" || (ch === "zone" && zoneOf(q.x, q.y) === zone) || (ch === "party" && q.party === p.party) || (ch === "corp" && q.corp === p.corp)) qws.send(msg);
+      }
+      remember({ at: Date.now(), i: pid, n: user.username, ch, text });
+    }
   });
 
-  // editor window spots, per account
-  const uiTable = pool.query(`CREATE TABLE IF NOT EXISTS world3d_ui (user_id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}'::jsonb)`);
-  async function uiGet(uid) { await uiTable; const { rows } = await pool.query(`SELECT data FROM world3d_ui WHERE user_id = $1`, [String(uid)]); return rows[0] ? rows[0].data : {}; }
-  async function uiSet(uid, k, x, y) { await uiTable; const v = { x: Math.max(0, Math.min(20000, Math.round(x))), y: Math.max(0, Math.min(20000, Math.round(y))) }; await pool.query(`INSERT INTO world3d_ui (user_id, data) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET data = world3d_ui.data || $2`, [String(uid), JSON.stringify({ [k]: v })]); }
-
-  // ---- Build pieces go only to players whose load circle reaches them (each socket keeps the ids it was sent) ----
-  const reach = (p, b) => Math.hypot(b.x - p.x, b.y - p.y) - b.rad <= LOAD_R;
-  const known = (ws) => ws.known || (ws.known = new Set());
-  function objCast(b) { const id = String(b.id); let msg = null; for (const [qid, qws] of socks) { const p = world.players.get(qid); if (!p || qws.readyState !== qws.OPEN) continue; const k = known(qws); if (k.has(id) || reach(p, b)) { k.add(id); qws.send(msg || (msg = JSON.stringify({ t: "build", o: buildMsg(b) }))); } } }
-  function objGone(ids) { for (const [, qws] of socks) { if (qws.readyState !== qws.OPEN) continue; const k = known(qws); for (const id of ids) if (k.delete(id)) qws.send(JSON.stringify({ t: "unbuild", id })); } }
-  setInterval(() => {
-    for (const [pid, ws] of socks) {
-      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const k = known(ws), seen = new Set(), out = [];
-      for (const b of world.builds.values()) { const id = String(b.id); if (!reach(p, b)) continue; seen.add(id); if (!k.has(id)) { k.add(id); out.push({ t: "build", o: buildMsg(b) }); } }
-      for (const id of [...k]) if (!seen.has(id)) { k.delete(id); out.push({ t: "unbuild", id }); }
-      if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
-    }
-  }, 500);
-
-
-  const r1 = (v) => Math.round(v * 10) / 10;
-  setInterval(() => {                          // 20 Hz simulation, then this tick's impacts and shots to the players near them
-    world.step();
-    if (world.hits.length) {
+  // ---- the loops ----
+  const send = (ws, o) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); };
+  let lastWake = 0, lastSector = 0;
+  setInterval(() => {                          // 20 Hz simulation, then effects and messages
+    const t = Date.now();
+    if (t - lastWake > 1000) { lastWake = t; world.wakeAround(t); }
+    if (t - lastSector > 1000) { lastSector = t; world.updateSectors(t); if (world.sectorsDirty) { world.sectorsDirty = false; broadcast({ t: "sectors", s: world.sectorList(), online: world.players.size }); } }
+    world.step(0.05);
+    if (world.fx.length) {
       for (const [pid, ws] of socks) {
-        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-        const near = world.hits.filter((h) => Math.hypot(h.x - p.x, h.y - p.y) <= LOAD_R).map((h) => ({ t: "hit", x: Math.round(h.x), y: Math.round(h.y), s: h.s, a: h.a, b: h.b, dx: Math.round(h.dx * 100) / 100, dy: Math.round(h.dy * 100) / 100, ...(h.sa ? { sa: 1 } : {}), ...(h.sb ? { sb: 1 } : {}) }));
-        if (near.length) ws.send(JSON.stringify(near.length === 1 ? near[0] : { t: "batch", m: near }));
-      }
-      world.hits.length = 0;
-    }
-    if (world.projEv.length) {
-      for (const [pid, ws] of socks) {
-        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-        const out = [];
-        for (const e of world.projEv) {
-          if (e.t === "proj") { const q = e.q, S = q.S; if (Math.hypot(q.x - p.x, q.y - p.y) > LOAD_R + maxRange(S)) continue;
-            out.push({ t: "proj", i: q.id, a: q.a, x: r1(q.x), y: r1(q.y), ux: Math.round(q.ux * 1000) / 1000, uy: Math.round(q.uy * 1000) / 1000, s: [S.bspeed, S.optimal, S.falloff, S.spdEnd, S.spdCurve] }); }
-          else if (Math.hypot(e.x - p.x, e.y - p.y) <= LOAD_R) out.push({ t: "pend", i: e.i, x: r1(e.x), y: r1(e.y), h: e.h, s: e.s, ...(e.sh ? { sh: 1 } : {}) });
-        }
-        if (out.length) ws.send(JSON.stringify({ t: "batch", m: out }));
-      }
-      world.projEv.length = 0;
-    }
-    world.deaths.length = 0;
-    if (world.fx.length) {                     // effects (explosions, railgun shots, teleports) to the players near them
-      for (const [pid, ws] of socks) {
-        const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-        const near = world.fx.filter((f) => Math.hypot(f.x - p.x, f.y - p.y) <= LOAD_R + 600).map((f) => { const o = { t: "fx" }; for (const [k, v] of Object.entries(f)) o[k] = typeof v === "number" ? r1(v) : v; return o; });
-        if (near.length) ws.send(JSON.stringify(near.length === 1 ? near[0] : { t: "batch", m: near }));
+        const p = world.players.get(pid); if (!p) continue;
+        const near = world.fx.filter((f) => Math.hypot(f.x - p.x, f.y - p.y) <= R.WORLD.loadR + 200).map((f) => ({ t: "fx", ...f }));
+        if (near.length) send(ws, near.length === 1 ? near[0] : { t: "batch", m: near });
       }
       world.fx.length = 0;
     }
     if (world.msgs.length) { for (const { to, m } of world.msgs) { if (to === null) broadcast(m); else tell(to, m); } world.msgs.length = 0; }
-    for (const [pid, ws] of socks) {           // my ship's numbers and my Hangar picks, when they change
-      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue; const e = world.stats(p), r2 = (v) => Math.round(v * 100) / 100;
-      const st = JSON.stringify({ t: "stats", s: { hp: r2(e.hp), speed: r2(e.speed), accel: r2(e.accel), brake: e.brake, turn: r2(e.turn), turnAccel: r2(e.turnAccel), strafe: e.strafe, reverse: e.reverse, cap: e.cap, capRegen: r2(e.capRegen), range: r2(e.rangeMul), armor: r2(e.armor), dmg: r2(e.dmgMul), regen: r2(e.hpRegen) } });
-      if (st !== ws.lastStats) { ws.lastStats = st; ws.send(st); }
-      const g = JSON.stringify({ t: "gear", w: p.load, a: p.ab, lv: p.lv });
-      if (g !== ws.lastGear) { ws.lastGear = g; ws.send(g); }
-    }
   }, 50);
-  setInterval(() => {                          // asteroids, stations and capture points that changed, 5 a second
-    if (world.rockDirty.size || world.rockGone.length) {
-      const a = [...world.rockDirty].map((id) => world.rocks.get(id)).filter(Boolean).map((r) => [r.id, r.x, r.y, r.r, Math.ceil(r.hp), r.max]);
-      broadcast({ t: "rocks", a, x: world.rockGone }); world.rockDirty.clear(); world.rockGone = [];
-    }
-    if (world.stDirty) { world.stDirty = false; broadcast({ t: "st", s: world.stationList().map((s) => [s.s, s.hp]) }); }
-    if (world.capDirty) { world.capDirty = false; broadcast({ t: "caps", c: world.capList() }); }
-  }, 200);
-  // 15 Hz snapshots: only the rows that changed since this socket's last (p), the ids of the unchanged ones (u), or
-  // { same: 1 }; a ship in neither has left the load circle
+  // 15 Hz: ships, as changes since this socket's last (p), the unchanged ids (u), or { same: 1 }
   setInterval(() => {
     const ts = Date.now();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const rows = world.snapshotFor(p), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
-      for (const r of rows) { const id = r[0], key = JSON.stringify(r); now.set(id, key); if (last.get(id) === key) un.push(id); else ch.push(r); }
+      const rows = world.shipRows(p), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
+      for (const r of rows) { const key = JSON.stringify(r); now.set(r[0], key); if (last.get(r[0]) === key) un.push(r[0]); else ch.push(r); }
       ws.lastSnap = now;
-      const mobs = world.mobsFor(p), mk = mobs.length || ws.hadMobs ? mobs : null; ws.hadMobs = mobs.length > 0;   // (missiles and drones: all of them each time, while any are near)
-      const o = !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un }; if (mk) o.m = mk;
-      ws.send(JSON.stringify(o));
+      send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un });
     }
   }, 66);
-  setInterval(() => {                          // each player's own capacitor, weapons, ability and credits, 5 Hz, only on change
-    const now = Date.now();
-    for (const [pid, ws] of socks) { const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const w = p.load.map((k) => { const s = p.w[k] || {}; return [Math.ceil(s.ammo || 0), s.reloadAt ? Math.max(0, s.reloadAt - now) : 0]; });
-      const A = ABILITIES[p.ab];
-      const msg = JSON.stringify({ t: "me", c: Math.round(p.cap * 10) / 10, w, g: Math.round(Math.min(1, p.abCharge / A.charge) * 1000), ga: p.abOn ? Math.max(0, p.abUntil - now) : 0, d: p.dead ? Math.max(0, p.deadUntil - now) : 0, k: Math.floor(p.credits || 0) });
-      if (msg !== ws.lastMe) { ws.lastMe = msg; ws.send(msg); } }
+  // 5 Hz: asteroids and loose ore that changed near each player, and each player's own state when it changes
+  const diff = (ws, field, rows) => {
+    const known = ws[field] || (ws[field] = new Map()), seen = new Set(), add = [], gone = [];
+    for (const r of rows) { const key = JSON.stringify(r); seen.add(r[0]); if (known.get(r[0]) !== key) { known.set(r[0], key); add.push(r); } }
+    for (const id of [...known.keys()]) if (!seen.has(id)) { known.delete(id); gone.push(id); }
+    return add.length || gone.length ? { a: add, x: gone } : null;
+  };
+  setInterval(() => {
+    const t = Date.now();
+    for (const [pid, ws] of socks) {
+      const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
+      const rk = diff(ws, "knownRocks", world.rockRows(p)); if (rk) send(ws, { t: "rocks", ...rk });
+      const or = diff(ws, "knownOres", world.oreRows(p)); if (or) send(ws, { t: "ores", ...or });
+      const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
+      if (p.stDirty || !ws.stSent || (p.queue.length && t - (ws.stAt || 0) > 2000)) { p.stDirty = false; ws.stSent = 1; ws.stAt = t; send(ws, world.stationMsg(p)); }
+      if (p.socDirty || !ws.socSent) { p.socDirty = false; ws.socSent = 1; send(ws, world.socMsg(p)); }
+    }
   }, 200);
-  void inside;
-  console.log("3D world attached at /ws (hex " + Math.round(HEX_FLAT) + " m flat to flat)");
+  // 1 Hz: every distress beacon, for everyone (a "!" every player sees, wherever it is)
+  let lastSos = "";
+  setInterval(() => { const s = JSON.stringify(world.sosList()); if (s !== lastSos) { lastSos = s; broadcast({ t: "sos", s: JSON.parse(s) }); } }, 1000);
+  console.log("Saturn ring world attached at /ws");
 }

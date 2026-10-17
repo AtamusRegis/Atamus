@@ -1,0 +1,17 @@
+/* (owner, 2026-10-16) The look from the design document: the void, plates and hairlines, warm ink, Saturn gold, ice for
+   fuel, purple for refined ore, signal red; Big Shoulders Display for titles, Atkinson Hyperlegible for text, JetBrains Mono
+   for labels and numbers (all self-hosted: the pages only allow their own fonts). Used by the game and the website. */
+@font-face { font-family: "Big Shoulders Display"; font-weight: 600; font-display: swap; src: url("fonts/big-shoulders-display-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Big Shoulders Display"; font-weight: 800; font-display: swap; src: url("fonts/big-shoulders-display-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 400; font-display: swap; src: url("fonts/atkinson-hyperlegible-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible"; font-weight: 700; font-display: swap; src: url("fonts/atkinson-hyperlegible-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-display: swap; src: url("fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 600; font-display: swap; src: url("fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+:root {
+  --void: #0b0e15; --plate: #121824; --rule: #263044; --ink: #ebe5d6; --dim: #9c9888;
+  --gold: #d8b06a; --ice: #7cc3d6; --signal: #e5604f; --ore: #b98cf0; --brown: #a67c52;
+  --f-display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}

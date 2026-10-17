@@ -5,10 +5,10 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atamus</title>
-  <meta name="description" content="WIP prototype of a persistent space warfare game.">
+  <meta name="description" content="WIP prototype of a cooperative space mining game.">
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=1791964623">
+  <link rel="stylesheet" href="style.css?v=1792300002">
 </head>
 <body class="front">
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
     <section class="card front-about" aria-labelledby="about-title">
       <h2 id="about-title" class="brand">Atamus</h2>
       <div class="front-body">
-        <p class="front-lead">WIP prototype of a persistent space warfare game.</p>
+        <p class="front-lead">WIP prototype of a cooperative space mining game.</p>
         <a class="btn btn-primary btn-play" href="signup.html">Play now</a>
       </div>
     </section>
@@ -34,48 +34,16 @@
       <h2 id="updates-title" class="brand">Updates</h2>
       <div class="front-body">
         <!-- one entry per day, newest first: that day's new features, saying what was added, never how it works (owner).
-             (owner, 2026-10-14) only the current game's design: the older versions' entries were cleared -->
+             (owner, 2026-10-14) only the current game's design: the older versions' entries were cleared (again 2026-10-16 for the ring game) -->
         <article class="update">
-          <time datetime="2026-10-15">Oct 15, 2026</time>
+          <time datetime="2026-10-16">Oct 16, 2026</time>
           <ul>
-            <li><b>Two teams, one ship.</b> Blue and Yellow fly the same ship in their own colors.</li>
-            <li><b>Stations.</b> Each team has a station that repairs nearby ships. Destroy the enemy's to win the match.</li>
-            <li><b>Loadouts.</b> Pick a primary and a secondary weapon from bullets, beams, railguns, missiles and drones in the new Hangar.</li>
-            <li><b>Abilities.</b> Choose a charged ability: shield, damage reduction, speed boost, damage boost, teleport, invisibility or chain.</li>
-            <li><b>Credits and upgrades.</b> Earn credits by breaking asteroids and destroying enemies, and spend them to upgrade your ship.</li>
-            <li><b>Capture points.</b> Hold a capture point to give your whole team a boost.</li>
-            <li><b>Explosions.</b> Destroyed ships now go out with a blast.</li>
-            <li><b>Player names.</b> Other players' names now show over their ships.</li>
-            <li><b>Respawning.</b> Destroyed ships now stay down for a moment before coming back.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-14">Oct 14, 2026</time>
-          <ul>
-            <li><b>Strafing.</b> Ships can now slide left and right while keeping their nose pointed where it is.</li>
-            <li><b>Materializing ships.</b> Destroyed ships now return as holograms that materialize before rejoining the fight.</li>
-            <li><b>Railguns.</b> Ships can now fire glowing railgun slugs at each other, and walls and structures stop them.</li>
-            <li><b>Nebula clouds.</b> Colorful nebula clouds now drift across the battlefield. Ships can hide inside them, their thick cores block the view to the other side, and their edges stir as ships pass through.</li>
-            <li><b>Ramming.</b> Ships now shove each other when they collide, throwing out sparks, and hard hits cause damage, shown by health bars over damaged ships.</li>
-            <li><b>A sky of stars.</b> The battlefield now floats over a deep blue nebula full of twinkling stars.</li>
-            <li><b>Line of sight.</b> If you can see a ship, it can see you: ships behind walls and structures fade from view, and whatever you can't see falls into shadow.</li>
-            <li><b>New flight controls.</b> Ships now fly the way they face, with smoother, weightier handling that lets them drift through turns.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-13">Oct 13, 2026</time>
-          <ul>
-            <li><b>Ship handling.</b> Ships have weight and momentum, and a capacitor that powers sprinting.</li>
-            <li><b>Sides and a minimap.</b> Choose Red or Blue when entering, and see friendlies and enemies on the minimap.</li>
-            <li><b>Chat.</b> World and faction chat, private whispers, and reporting players.</li>
-            <li><b>Collisions.</b> Ships bump into each other and into structures, and your aim line shows when something is in the way.</li>
-            <li><b>Hotbar and inventory.</b> A hotbar and an inventory to arrange your items.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-12">Oct 12, 2026</time>
-          <ul>
-            <li><b>Atamus is now 3D.</b> Rebuilt from the ground up as a persistent space warfare game in one shared 3D world, where you fly a cruiser.</li>
+            <li><b>Saturn's rings.</b> A new 2D world: fly out from the station around Saturn to mine the asteroids in its rings, with richer ores deeper out.</li>
+            <li><b>Mining together.</b> Everyone who helps break an asteroid gets their name on the ore, and every named player gets a copy when it's delivered.</li>
+            <li><b>Modules.</b> Fit your ship as a miner, hauler, fueler, tractor, command ship, refinery or scanner.</li>
+            <li><b>The station.</b> Sell ore, refine it, turn ice into fuel, refuel and buy modules.</li>
+            <li><b>Fuel.</b> Ships run on fuel, and fuelers can top up anyone who runs dry. Stranded ships can call for help.</li>
+            <li><b>Parties and corporations.</b> Team up with other players, with their own chat channels.</li>
           </ul>
         </article>
       </div>

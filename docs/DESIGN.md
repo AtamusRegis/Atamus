@@ -1,14 +1,20 @@
 # Atamus design
 
-**Superseded (owner, 2026-10-12): Atamus is being rebuilt in 3D.** The previous plan — the Expanse and nomad space built from POIs, arcs, the base surface, wormhole population flow and the 1,000-player engine budget — belongs to the 2D game and lives, with everything else, on the **`legacy-2d` branch** (`docs/DESIGN.md` there, plus `scripts/sim/wormholes.mjs` and its findings).
+**The ring game (owner, 2026-10-16).** The full design is the artifact **"Atamus Ring Mining"** (draft 6): https://claude.ai/artifact/CfeRmvahLSwVXTSod92caB, with the ship, station, asteroid and Saturn art in **"Atamus ships"**: https://claude.ai/artifact/LMCjSamVAaYs8WbwALuzJw. What's built is in `docs/FEATURES.md`. Earlier plans (the 2D space game, the 3D versions) are on the `legacy-2d`, `legacy-3d-v1` and `legacy-3d-v2` branches.
 
-## The 3D direction (owner, 2026-10-12, so far)
+## The direction
 
-- The game is 3D: one flat world with a 2D grid, the same flat-top hexagon border (126 km flat to flat).
-- **One shared world on one server: no POIs, no instancing. Everyone sees everyone.**
-- Players travel on the ground plane only (no Z), WASD relative to an orbiting camera (middle mouse, 75° down).
-- The player is a 100 m sphere for now; real ships, gameplay and everything else are still to be decided.
+- **A cooperative gather-and-craft MMO, like Palia.** Players work together, never against each other: no PvP for now, if ever.
+- **Everyone who helps gets the full amount:** names ride on each ore unit and every named player gets a copy on delivery.
+- Ships are one hull with one module each, so roles (miner, hauler, fueler, tractor, command, refinery, scanner) need each other; anyone can still solo slowly.
+- Fuel is the pressure: the station is near Saturn, the rich ore is far out, fuelers are paid by the world.
+
+## Decided but not built yet
+
+- **Shards:** once all four sectors are open, extra copies of the world split by congestion, keeping parties together.
+- **Asteroid layouts generated on the client** from the per-cell seed (today the server sends each player the rocks near them).
+- **Contracts** (personal, turned in remotely from station storage, needing your name on the ore) and **Operations** (party contracts with an ore quota and time limit, picked by the party leader from a station board).
+- **Crafting:** raw ore → refined ore → components → advanced components → modules and hulls; modules with levels; more hulls.
+- **Jump gates** and more stations, later. Trading, maybe later.
 
 Findings carried over from the 2D load tests, for whenever scale matters again: the $24 Vultr box held about 200–300 players spread out (100–150 gathered in one spot), at roughly 1.5–2 KB/s per player compressed.
-
-Nothing else is decided. New decisions go here as the owner makes them; what ships moves to `docs/FEATURES.md`.
