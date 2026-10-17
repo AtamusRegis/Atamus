@@ -11,8 +11,6 @@
 
 ## Decided but not built yet
 
-- **Shards:** once all four sectors are open, extra copies of the world split by congestion, keeping parties together.
-- **Asteroid layouts generated on the client** from the per-cell seed (today the server sends each player the rocks near them).
 - **Contracts** (personal, turned in remotely from station storage, needing your name on the ore) and **Operations** (party contracts with an ore quota and time limit, picked by the party leader from a station board).
 - **Crafting:** raw ore → refined ore → components → advanced components → modules and hulls; modules with levels; more hulls.
 - **Jump gates** and more stations, later. Trading, maybe later.

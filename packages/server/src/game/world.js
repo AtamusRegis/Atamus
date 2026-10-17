@@ -1,20 +1,21 @@
 // The Saturn ring-mining world (owner, 2026-10-16: the 2D prototype; design: the "Atamus Ring Mining" design document).
 // One shared 2D world: Saturn at the middle, one station beside it, two asteroid rings, a locked line past them, four
 // sectors (N, E, S, W) that open as more players come online. Asteroids come from seeds per grid cell and only exist while
-// a player is near (or someone has worked on them). Every crack drops one ore unit carrying the names of everyone who
+// a player is near (or someone has worked on them); clients get each asteroid as its seed and build it themselves
+// (ringgen.js). Shards: once all four sectors are open, a zone holds 40 players per copy ("layer"); a ship only meets the
+// ships, asteroids and ore of its own layer, and parties stay together. Every crack drops one ore unit carrying the names of everyone who
 // helped; when a unit is delivered to the station, every name on it gets a copy. The server decides everything; clients
 // send commands (a push, a heading, an aim) and predict their own ship.
 import crypto from "node:crypto";
 import { pool } from "../db.js";
 import * as R from "./rules.js";
+import { hash32, rng, genRock } from "./ringgen.js";
 
 const { WORLD: W, SHIP, MODULES } = R;
 const now = () => Date.now();
 const hyp = Math.hypot;
 // ---- seeded randomness: the seeds rotate with a secret only the server knows (so the map can't be learned) ----
 const SECRET = process.env.RING_SECRET || crypto.randomBytes(16).toString("hex");
-function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pickW = (weights, r) => { const keys = Object.keys(weights), tot = keys.reduce((s, k) => s + weights[k], 0); let x = r * tot; for (const k of keys) { x -= weights[k]; if (x <= 0) return k; } return keys[keys.length - 1]; };
 // ---- the map ----
 export const ringOf = (r) => { for (let i = 0; i < W.rings.length; i++) if (r >= W.rings[i][0] && r <= W.rings[i][1]) return i; return -1; };
@@ -32,9 +33,9 @@ export class World {
   constructor() {
     this.players = new Map();                  // account id -> ship
     this.rocks = new Map();                    // asteroid id -> asteroid (only the live ones)
-    this.slots = new Map();                    // "cx,cy,slot" -> the asteroid living in that slot (wherever it is now)
-    this.cells = new Map();                    // "cx,cy" -> { gen: [], back: [], awake: until }
-    this.grid = new Map();                     // asteroids by cell, for lookups
+    this.slots = new Map();                    // "layer:cx,cy,slot" -> the asteroid living in that slot (wherever it is now)
+    this.cells = new Map();                    // "layer:cx,cy" -> { gen: [], back: [], awake: until }
+    this.grid = new Map();                     // asteroids by layer and cell, for lookups
     this.ores = new Map(); this.oreSeq = 1;    // loose ore units
     this.fx = [];                              // effects for nearby players: { k, x, y, ... }
     this.msgs = [];                            // { to: account id | null (everyone), m }
@@ -61,18 +62,20 @@ export class World {
     return { hold: M.hold || SHIP.hold, tank: M.tank || SHIP.tank };
   }
   // ---- asteroids ----
-  cellKey(cx, cy) { return cx + "," + cy; }
-  gridAdd(r) { const k = this.cellKey(Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); r.gk = k; let s = this.grid.get(k); if (!s) this.grid.set(k, (s = new Set())); s.add(r); }
+  cellKey(layer, cx, cy) { return layer + ":" + cx + "," + cy; }
+  gridAdd(r) { const k = this.cellKey(r.layer, Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); r.gk = k; let s = this.grid.get(k); if (!s) this.grid.set(k, (s = new Set())); s.add(r); }
   gridDel(r) { const s = this.grid.get(r.gk); if (s) { s.delete(r); if (!s.size) this.grid.delete(r.gk); } }
-  gridMove(r) { const k = this.cellKey(Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); if (k !== r.gk) { this.gridDel(r); this.gridAdd(r); } }
-  *rocksNear(x, y, rad) {
+  gridMove(r) { const k = this.cellKey(r.layer, Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); if (k !== r.gk) { this.gridDel(r); this.gridAdd(r); } }
+  *rocksNear(x, y, rad, layer) {
     const c0 = Math.floor((x - rad) / W.cell), c1 = Math.floor((x + rad) / W.cell), d0 = Math.floor((y - rad) / W.cell), d1 = Math.floor((y + rad) / W.cell);
-    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) { const s = this.grid.get(cx + "," + cy); if (s) yield* s; }
+    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) { const s = this.grid.get(layer + ":" + cx + "," + cy); if (s) yield* s; }
   }
   // a cell comes awake when a player is near: its slots are rolled from the seed (unless a slot's asteroid is still out
   // somewhere, or it was mined out and hasn't come back yet). Nothing new appears in a closed or closing sector.
-  wakeCell(cx, cy, t) {
-    const key = this.cellKey(cx, cy); let c = this.cells.get(key);
+  // Each asteroid's seed comes from the secret, the 6-hour epoch, the layer, the cell, the slot and the slot's generation;
+  // the client is sent the seed (position and size, see ringgen.js), never the ore.
+  wakeCell(layer, cx, cy, t) {
+    const key = this.cellKey(layer, cx, cy); let c = this.cells.get(key);
     if (c && c.awake > t) { c.awake = t + 120_000; return; }
     const mx = (cx + 0.5) * W.cell, my = (cy + 0.5) * W.cell, rr = hyp(mx, my);
     if (rr < W.rings[0][0] - W.cell || rr > W.rings[W.rings.length - 1][1] + W.cell) return;
@@ -81,11 +84,10 @@ export class World {
     const epoch = Math.floor(t / 1000 / R.ROCK.reseed);
     for (let s = 0; s < Math.max(...R.RING_SLOTS); s++) {
       const sk = key + "," + s; if (this.slots.has(sk) || (c.back[s] || 0) > t) continue;
-      const gen = c.gen[s] || 0, rand = rng(hash32(SECRET + "|" + epoch + "|" + key + "|" + s + "|" + gen));
-      const x = cx * W.cell + rand() * W.cell, y = cy * W.cell + rand() * W.cell, ring = ringOf(hyp(x, y));
-      if (ring < 0 || s >= R.RING_SLOTS[ring] || !this.sectors[sectorOf(x, y)].open || this.sectors[sectorOf(x, y)].closeAt) continue;
-      const [lo, hi] = R.RING_SIZES[ring], n = Math.min(hi, lo + Math.floor((hi - lo + 1) * Math.pow(rand(), 1.6)));
-      const rock = { id: sk + "," + gen + "," + epoch, sk, cell: key, slot: s, x, y, n, cracks: n, hp: R.crackHp(n), ore: pickW(R.RING_ORES[ring], rand()), ring,
+      const gen = c.gen[s] || 0, seed = hash32(SECRET + "|" + epoch + "|" + key + "|" + s + "|" + gen), g = genRock(cx, cy, seed, W.cell, W.rings, R.RING_SIZES);
+      if (!g || s >= R.RING_SLOTS[g.ring] || !this.sectors[sectorOf(g.x, g.y)].open || this.sectors[sectorOf(g.x, g.y)].closeAt) continue;
+      const ore = pickW(R.RING_ORES[g.ring], rng(hash32(SECRET + "|ore|" + seed))());
+      const rock = { id: key + ":" + seed, seed, sk, cell: key, layer, slot: s, x: g.x, y: g.y, n: g.n, cracks: g.n, hp: R.crackHp(g.n), ore, ring: g.ring,
         scanned: false, cracked: false, names: new Set(), boost: new Set(), lasers: new Set(), tow: null, touched: 0, home: true };
       this.rocks.set(rock.id, rock); this.slots.set(sk, rock); this.gridAdd(rock);
     }
@@ -99,7 +101,7 @@ export class World {
     const R2 = W.loadR + W.cell;
     for (const p of this.players.values()) {
       const c0 = Math.floor((p.x - R2) / W.cell), c1 = Math.floor((p.x + R2) / W.cell), d0 = Math.floor((p.y - R2) / W.cell), d1 = Math.floor((p.y + R2) / W.cell);
-      for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) this.wakeCell(cx, cy, t);
+      for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) this.wakeCell(p.layer, cx, cy, t);
     }
     // cells nobody is near fall asleep: their untouched asteroids are let go (the seed brings them back); worked-on ones
     // stay until they've been left alone for 30 minutes
@@ -119,6 +121,28 @@ export class World {
     });
   }
   sectorList() { return this.sectors.map((s) => (s.open ? (s.closeAt ? 2 : 1) : 0)); }   // 1 open, 2 closing, 0 closed
+  // ---- shards: only once all four sectors are open (and none is closing), a zone holds SHARD_CAP ships per layer ----
+  shardingOn() { return this.sectors.every((s) => s.open && !s.closeAt); }
+  // a ship entering a zone (or joining) picks its layer: a party member's already there, else the one it's in while
+  // that has room, else the first with room, else a new one. With sharding off, everyone goes back to layer 0.
+  placeLayer(p) {
+    let L;
+    const party = this.partyOf(p);
+    if (party) for (const m of party.members) { const q = this.players.get(m); if (q && q !== p && q.zone === p.zone) { L = q.layer; break; } }
+    if (L === undefined) {
+      if (!this.shardingOn()) L = 0;
+      else {
+        const cnt = new Map(); for (const q of this.players.values()) if (q !== p && q.zone === p.zone) cnt.set(q.layer, (cnt.get(q.layer) || 0) + 1);
+        if ((cnt.get(p.layer) || 0) < R.SHARD_CAP) L = p.layer; else { L = 0; while ((cnt.get(L) || 0) >= R.SHARD_CAP) L++; }
+      }
+    }
+    if (L !== p.layer) this.setLayer(p, L);
+  }
+  setLayer(p, L) {                             // into another copy: links to other ships drop, a towed asteroid comes along
+    p.layer = L; p.pumpTo = null; p.refineTo = null; p.refineT = 0; p.meDirty = true; p.dirty = true;
+    const rock = p.tow && this.rocks.get(p.tow); if (rock) { rock.layer = L; this.gridMove(rock); }
+  }
+  shardOf(p) { return this.shardingOn() || p.layer > 0 ? p.layer + 1 : 0; }   // shown with the zone while it matters
   // may this ship be at (x, y)? Not inside Saturn, not past the locked line, not into a closed sector (unless it's already in it)
   allowed(p, x, y) {
     const r = hyp(x, y); if (r < W.saturnR + SHIP.shipR || r > W.lockedR) return false;
@@ -135,7 +159,7 @@ export class World {
     const [sx, sy] = W.station;
     p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.START.fuel, fuelFrom: {}, module: R.START.module,
       modules: new Set([R.START.module]), credits: R.START.credits, storage: {}, queue: [], hold: [], corp: null, modOn: true, tow: null, pumpTo: null, refineTo: null,
-      refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0 };
+      refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "" };
     if (r) {
       Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, fuelFrom: r.fuel_from || {}, module: MODULES[r.module] ? r.module : R.START.module,
         modules: new Set((r.modules || []).filter((m) => MODULES[m])), credits: +r.credits, storage: r.storage || {}, queue: r.queue || [], hold: Array.isArray(r.hold) ? r.hold : [] });
@@ -147,6 +171,7 @@ export class World {
     const S = this.stats(p); if (p.fuel > S.tank) p.fuel = S.tank;
     p.inSector = hyp(p.x, p.y) >= W.safeR ? sectorOf(p.x, p.y) : -1;
     this.settleQueue(p, now());
+    p.zone = zoneOf(p.x, p.y); this.placeLayer(p);
     this.players.set(id, p);
     await pool.query(`INSERT INTO ring_players (user_id, x, y, h, fuel, module, modules) VALUES ($1, $2, $3, $4, $5, $6, $7)
       ON CONFLICT (user_id) DO UPDATE SET logout_at = NULL`, [id, p.x, p.y, p.h, p.fuel, p.module, JSON.stringify([...p.modules])]);
@@ -158,10 +183,12 @@ export class World {
     await this._save(p); await pool.query(`UPDATE ring_players SET logout_at = now() WHERE user_id = $1`, [p.id]);
   }
   respawn(id) { const p = this.players.get(String(id)); if (!p) return null; const [sx, sy] = W.station; return this.teleport(id, sx, sy + 120); }
-  teleport(id, x, y) {
+  teleport(id, x, y, layer) {                  // (layer: into that copy, e.g. teleporting to another player)
     const p = this.players.get(String(id)); if (!p || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     if (hyp(x, y) < W.saturnR + 60) { const a = Math.atan2(y, x); x = Math.cos(a) * (W.saturnR + 80); y = Math.sin(a) * (W.saturnR + 80); }
+    if (p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; }
     p.x = x; p.y = y; p.vx = p.vy = 0; p.tow = null; p.inSector = hyp(x, y) >= W.safeR ? sectorOf(x, y) : -1; p.dirty = true;
+    p.zone = zoneOf(x, y); if (Number.isInteger(layer) && layer >= 0) { if (layer !== p.layer) this.setLayer(p, layer); } else this.placeLayer(p);
     this.msgs.push({ to: p.id, m: { t: "teleport", x, y } }); return p;
   }
   // the client's input, checked as hostile: a push (fx, fy: world directions, length clamped to 1), the heading it turned
@@ -200,11 +227,12 @@ export class World {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
         if (this.allowed(p, nx, ny)) { p.x = nx; p.y = ny; }
         else if (this.allowed(p, nx, p.y)) { p.x = nx; p.vy = 0; } else if (this.allowed(p, p.x, ny)) { p.y = ny; p.vx = 0; } else { p.vx = p.vy = 0; }
-        for (const r of this.rocksNear(p.x, p.y, 80)) {   // bump off asteroids (not the one on my own leash)
+        for (const r of this.rocksNear(p.x, p.y, 80, p.layer)) {   // bump off asteroids (not the one on my own leash)
           if (r.id === p.tow) continue; const d = hyp(p.x - r.x, p.y - r.y), min = R.rockR(r.n) + SHIP.shipR;
           if (d < min && d > 0.01) { const ux = (p.x - r.x) / d, uy = (p.y - r.y) / d, px = r.x + ux * min, py = r.y + uy * min; if (this.allowed(p, px, py)) { p.x = px; p.y = py; } const vn = p.vx * ux + p.vy * uy; if (vn < 0) { p.vx -= vn * ux; p.vy -= vn * uy; } }
         }
         p.inSector = hyp(p.x, p.y) >= W.safeR ? sectorOf(p.x, p.y) : -1; p.dirty = true;
+        const z = zoneOf(p.x, p.y); if (z !== p.zone) { p.zone = z; this.placeLayer(p); p.meDirty = true; }
       }
       // docking: entering the station's circle delivers the hold
       const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < W.dockR;
@@ -216,7 +244,7 @@ export class World {
       p.laserOn = false; p.laserLen = 0;
       if (p.firing && !dock) {
         const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = SHIP.laserRange;
-        for (const r of this.rocksNear(p.x, p.y, SHIP.laserRange + 70)) {
+        for (const r of this.rocksNear(p.x, p.y, SHIP.laserRange + 70, p.layer)) {
           const rr = R.rockR(r.n), fx = r.x - p.x, fy = r.y - p.y, along = fx * ux + fy * uy; if (along < -rr) continue;
           const perp = Math.abs(fx * uy - fy * ux); if (perp > rr) continue;
           const tt = Math.max(0, along - Math.sqrt(rr * rr - perp * perp)); if (tt < bt) { bt = tt; best = r; }
@@ -226,7 +254,7 @@ export class World {
           let dps = SHIP.laserDps;
           if (p.module === "miner" && p.modOn && p.fuel > 0) { dps = MODULES.miner.laserDps; this.burn(p, MODULES.miner.burn / 60 * dt); }
           let boosted = false;   // (several command ships don't stack, but every one boosting is named)
-          for (const q of this.players.values()) if (q.module === "command" && q.modOn && q.fuel > 0 && !q.docked && hyp(q.x - p.x, q.y - p.y) <= MODULES.command.radius) { boosted = true; best.boost.add(q.id); }
+          for (const q of this.players.values()) if (q.module === "command" && q.modOn && q.fuel > 0 && !q.docked && q.layer === p.layer && hyp(q.x - p.x, q.y - p.y) <= MODULES.command.radius) { boosted = true; best.boost.add(q.id); }
           if (boosted) dps *= MODULES.command.boost;
           best.hp -= dps * dt; best.lasers.add(p.id); best.touched = t; best.home = false;
         }
@@ -245,7 +273,7 @@ export class World {
       }
       if (p.pumpTo) {                          // the fueler: pumps into a ship within reach; the world pays per unit
         const q = this.players.get(p.pumpTo), QS = q && this.stats(q);
-        if (!q || q.docked || hyp(q.x - p.x, q.y - p.y) > MODULES.fueler.range || p.fuel <= 0) p.pumpTo = null;
+        if (!q || q.docked || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > MODULES.fueler.range || p.fuel <= 0) p.pumpTo = null;
         else {
           const amt = Math.min(MODULES.fueler.pump * dt, QS.tank - q.fuel, p.fuel);
           if (amt > 0) { this.burn(p, amt); q.fuel += amt; p.credits += amt * R.FUEL.pumpPay; q.meDirty = true; if (p.party && p.party === q.party) q.fuelFrom[p.id] = (q.fuelFrom[p.id] || 0) + amt; }
@@ -253,23 +281,24 @@ export class World {
       }
       if (p.refineTo) {                        // the refinery: one raw unit at a time, in its own hold or another ship's
         const q = this.players.get(p.refineTo), u = q && q.hold.find((x) => !x.r);
-        if (!q || !u || (q !== p && hyp(q.x - p.x, q.y - p.y) > MODULES.refinery.range) || p.fuel < MODULES.refinery.burn) { p.refineTo = null; p.refineT = 0; }
+        if (!q || !u || (q !== p && (q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > MODULES.refinery.range)) || p.fuel < MODULES.refinery.burn) { p.refineTo = null; p.refineT = 0; }
         else {
           p.refineT += dt;
-          if (p.refineT >= MODULES.refinery.unit) { p.refineT = 0; this.burn(p, MODULES.refinery.burn); u.r = 1; if (!u.n.includes(p.id)) u.n.push(p.id); q.meDirty = true; this.fx.push({ k: "refine", x: q.x, y: q.y }); }
+          if (p.refineT >= MODULES.refinery.unit) { p.refineT = 0; this.burn(p, MODULES.refinery.burn); u.r = 1; if (!u.n.includes(p.id)) u.n.push(p.id); q.meDirty = true; this.fx.push({ k: "refine", x: q.x, y: q.y, l: q.layer }); }
         }
       }
       if (p.firing || p.pumpTo || p.refineTo || p.tow || (p.module === "command" && p.modOn)) p.meDirty = true;
       p.sos = p.fuel <= 0.0001 && !p.docked;
     }
+    for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; p.meDirty = false; }   // (anything that changed my state is saved within 10 s)
     // cracks that broke this tick
     for (const r of [...this.rocks.values()]) if (r.hp <= 0 && r.lasers.size) this.breakCrack(r);
     // loose ore: drifts to a stop; flies into the nearest ship within reach that has room
     for (const o of this.ores.values()) {
       if (o.vx || o.vy) { o.x += o.vx * dt; o.y += o.vy * dt; const d = Math.exp(-dt * 1.5); o.vx *= d; o.vy *= d; if (hyp(o.vx, o.vy) < 0.5) o.vx = o.vy = 0; }
       let best = null, bd = SHIP.pickupR;
-      for (const p of this.players.values()) { if (p.docked) continue; const d = hyp(p.x - o.x, p.y - o.y); if (d < bd && holdUsed(p) + (o.r ? R.REFINED_SPACE : 1) <= this.stats(p).hold + 1e-6) { bd = d; best = p; } }
-      if (best) { best.hold.push({ o: o.ore, r: o.r, n: o.names }); best.meDirty = true; best.dirty = true; this.ores.delete(o.id); this.fx.push({ k: "pick", x: o.x, y: o.y, i: best.id }); }
+      for (const p of this.players.values()) { if (p.docked || p.layer !== o.layer) continue; const d = hyp(p.x - o.x, p.y - o.y); if (d < bd && holdUsed(p) + (o.r ? R.REFINED_SPACE : 1) <= this.stats(p).hold + 1e-6) { bd = d; best = p; } }
+      if (best) { best.hold.push({ o: o.ore, r: o.r, n: o.names }); best.meDirty = true; best.dirty = true; this.ores.delete(o.id); this.fx.push({ k: "pick", x: o.x, y: o.y, i: best.id, l: o.layer }); }
     }
   }
   // a crack breaks: one ore unit drops, named with every ship lasering the asteroid right now, every command ship that
@@ -282,11 +311,11 @@ export class World {
     const first = this.players.get([...r.lasers][0]), rr = R.rockR(r.n);
     const a = (first ? Math.atan2(first.y - r.y, first.x - r.x) : Math.random() * 6.28) + (Math.random() - 0.5) * 0.7;
     const travel = first ? Math.max(10, Math.min(160, hyp(first.x - r.x, first.y - r.y) - rr - 30)) : 10, v = travel * 1.5;
-    const o = { id: this.oreSeq++, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * (rr + 6), y: r.y + Math.sin(a) * (rr + 6), vx: Math.cos(a) * v, vy: Math.sin(a) * v, touched: now() };
+    const o = { id: this.oreSeq++, layer: r.layer, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * (rr + 6), y: r.y + Math.sin(a) * (rr + 6), vx: Math.cos(a) * v, vy: Math.sin(a) * v, touched: now() };
     this.ores.set(o.id, o);
     r.cracks--; r.cracked = true; r.boost.clear(); r.hp = R.crackHp(r.n); r.touched = now();
     if (r.tow) { const q = this.players.get(r.tow); if (q) q.tow = null; r.tow = null; }
-    this.fx.push({ k: "crack", x: r.x, y: r.y, r: rr, done: r.cracks <= 0 ? 1 : 0 });
+    this.fx.push({ k: "crack", x: r.x, y: r.y, r: rr, done: r.cracks <= 0 ? 1 : 0, l: r.layer });
     if (r.cracks <= 0) this.dropRock(r, R.ROCK.respawn);
   }
   // ---- delivery: every name on a unit gets a copy (the carrier is named as deliverer, as are its party fuelers) ----
@@ -300,7 +329,7 @@ export class World {
     }
     for (const [id, g] of gifts) this.give(id, g);
     if (p) { p.meDirty = true; p.dirty = true; }
-    if (p && units.length) this.fx.push({ k: "deliver", x: p.x, y: p.y, n: units.length, i: p.id });
+    if (p && units.length) this.fx.push({ k: "deliver", x: p.x, y: p.y, n: units.length, i: p.id, l: p.layer });
   }
   give(id, items) {                            // into station storage, online or not
     const p = this.players.get(String(id));
@@ -351,7 +380,7 @@ export class World {
   act(id, m) {
     const p = this.players.get(String(id)); if (!p || p.docked) return;
     if (typeof m.rock === "string") {
-      const r = this.rocks.get(m.rock); if (!r) return; const d = hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n);
+      const r = this.rocks.get(m.rock); if (!r || r.layer !== p.layer) return; const d = hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n);
       if (p.module === "tractor") {
         if (p.tow === r.id) { p.tow = null; r.tow = null; }
         else if (!r.cracked && !r.tow && d <= MODULES.tractor.range && p.fuel > 0) {
@@ -359,16 +388,16 @@ export class World {
           p.tow = r.id; r.tow = p.id; r.names.add(p.id); r.touched = now(); r.home = false;
         }
       } else if (p.module === "scanner" && !r.scanned && d <= MODULES.scanner.range) {
-        r.scanned = true; r.names.add(p.id); r.touched = now(); r.home = false; this.fx.push({ k: "scan", x: p.x, y: p.y, x2: r.x, y2: r.y, i: p.id });
+        r.scanned = true; r.names.add(p.id); r.touched = now(); r.home = false; this.fx.push({ k: "scan", x: p.x, y: p.y, x2: r.x, y2: r.y, i: p.id, l: p.layer });
       }
     } else if (typeof m.ship === "string") {
-      const q = this.players.get(m.ship); if (!q || q === p || q.docked) return; const d = hyp(q.x - p.x, q.y - p.y);
+      const q = this.players.get(m.ship); if (!q || q === p || q.docked || q.layer !== p.layer) return; const d = hyp(q.x - p.x, q.y - p.y);
       if (p.module === "fueler") { if (d <= MODULES.fueler.range) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
       else if (p.module === "refinery") { if (d <= MODULES.refinery.range) { p.refineTo = p.refineTo === q.id ? null : q.id; p.refineT = 0; } }
       else if (q.module === "hauler" && p.module !== "hauler" && d <= 150 && p.hold.length) {   // one handoff, one way: into a hauler
         const room = this.stats(q).hold - holdUsed(q); let used = 0; const keep = [];
         for (const u of p.hold) { const s = unitSpace(u); if (used + s <= room + 1e-6) { q.hold.push(u); used += s; } else keep.push(u); }
-        p.hold = keep; p.meDirty = q.meDirty = true; p.dirty = q.dirty = true; this.fx.push({ k: "hand", x: p.x, y: p.y, x2: q.x, y2: q.y });
+        p.hold = keep; p.meDirty = q.meDirty = true; p.dirty = q.dirty = true; this.fx.push({ k: "hand", x: p.x, y: p.y, x2: q.x, y2: q.y, l: p.layer });
       }
     }
     p.meDirty = true;
@@ -432,6 +461,7 @@ export class World {
     if (party.members.size >= R.PARTY_MAX) return "That party is full.";
     this.leaveParty(q, false); party.members.add(q.id); q.party = party.id;
     for (const m of party.members) { const x = this.players.get(m); if (x) x.socDirty = true; }
+    this.placeLayer(q);                        // (into a party member's copy of this zone, if one's here)
     this.partyNote(party, q.name + " joined the party.");
     return null;
   }
@@ -439,7 +469,7 @@ export class World {
   leaveParty(p, quiet) {
     const party = this.partyOf(p); if (!party) return;
     party.members.delete(p.id); p.party = null; p.socDirty = true;
-    for (const m of party.members) { const x = this.players.get(m); if (x) { delete x.fuelFrom[p.id]; x.socDirty = true; } }
+    for (const m of party.members) { const x = this.players.get(m); if (x) { if (x.fuelFrom[p.id] !== undefined) { delete x.fuelFrom[p.id]; x.dirty = true; } x.socDirty = true; } }
     delete p.fuelFrom; p.fuelFrom = {};
     if (party.leader === p.id) party.leader = [...party.members][0];
     if (party.members.size <= 1) { for (const m of party.members) { const x = this.players.get(m); if (x) { x.party = null; x.socDirty = true; this.msgs.push({ to: m, m: { t: "chat", ch: "sys", text: "The party disbanded." } }); } } this.parties.delete(party.id); }
@@ -493,7 +523,7 @@ export class World {
   shipRows(viewer) {
     const out = [];
     for (const p of this.players.values()) {
-      if (p !== viewer && hyp(p.x - viewer.x, p.y - viewer.y) > W.loadR) continue;
+      if (p !== viewer && (p.layer !== viewer.layer || hyp(p.x - viewer.x, p.y - viewer.y) > W.loadR)) continue;
       const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).length * R.REFINED_SPACE;
       out.push([p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.MODULE_KINDS.indexOf(p.module),
         (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.modOn || p.refineTo ? 4 : 0) | (p.sos ? 8 : 0) | (p.docked ? 16 : 0),
@@ -502,30 +532,40 @@ export class World {
     }
     return out;
   }
-  rockRows(viewer) {                           // [id, x, y, size, cracks left, crack health %, ore (once scanned) | 0, towed 0 / 1]
-    const out = [];
-    for (const r of this.rocksNear(viewer.x, viewer.y, W.loadR)) {
-      if (hyp(r.x - viewer.x, r.y - viewer.y) > W.loadR) continue;
-      out.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / R.crackHp(r.n) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
+  // asteroids near a player, in its layer: the untouched ones only as seeds, per cell ({ "layer:cx,cy": [seed, ...] }: the
+  // client builds them with ringgen.js and names them "layer:cx,cy:seed"), and the ones someone has worked on (lasered,
+  // scanned, towed) as rows: [id, x, y, size, cracks left, crack health %, ore (once scanned) | 0, towed 0 / 1]
+  rockView(viewer) {
+    const cells = {}, rows = [], L = viewer.layer, R2 = W.loadR + W.cell * 0.71;
+    const c0 = Math.floor((viewer.x - R2) / W.cell), c1 = Math.floor((viewer.x + R2) / W.cell), d0 = Math.floor((viewer.y - R2) / W.cell), d1 = Math.floor((viewer.y + R2) / W.cell);
+    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) {
+      if (hyp((cx + 0.5) * W.cell - viewer.x, (cy + 0.5) * W.cell - viewer.y) > R2) continue;
+      const key = this.cellKey(L, cx, cy); if (!this.cells.has(key)) continue;
+      const seeds = []; for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && r.home && !r.touched) seeds.push(r.seed); }
+      if (seeds.length) cells[key] = seeds;
     }
-    return out;
+    for (const r of this.rocksNear(viewer.x, viewer.y, W.loadR, L)) {
+      if ((r.home && !r.touched) || hyp(r.x - viewer.x, r.y - viewer.y) > W.loadR) continue;
+      rows.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / R.crackHp(r.n) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
+    }
+    return { cells, rows };
   }
   oreRows(viewer) {                            // [id, x, y, ore index, refined 0 / 1]
     const out = [];
-    for (const o of this.ores.values()) if (hyp(o.x - viewer.x, o.y - viewer.y) <= W.loadR) out.push([o.id, Math.round(o.x), Math.round(o.y), ORE_KEYS.indexOf(o.ore), o.r]);
+    for (const o of this.ores.values()) if (o.layer === viewer.layer && hyp(o.x - viewer.x, o.y - viewer.y) <= W.loadR) out.push([o.id, Math.round(o.x), Math.round(o.y), ORE_KEYS.indexOf(o.ore), o.r]);
     return out;
   }
   meMsg(p) {
     const S = this.stats(p), hold = {};
     for (const u of p.hold) { const k = storeKey(u.o, u.r); hold[k] = (hold[k] || 0) + 1; }
     return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0, module: p.module,
-      on: p.modOn ? 1 : 0, tow: p.tow || 0, pump: p.pumpTo || 0, refine: p.refineTo || 0, refineT: Math.round(p.refineT * 10) / 10, sos: p.sos ? 1 : 0, zone: zoneOf(p.x, p.y) };
+      on: p.modOn ? 1 : 0, tow: p.tow || 0, pump: p.pumpTo || 0, refine: p.refineTo || 0, refineT: Math.round(p.refineT * 10) / 10, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p) };
   }
   stationMsg(p) { this.settleQueue(p, now()); return { t: "station", storage: p.storage, queue: p.queue, modules: [...p.modules], now: now() }; }
   socMsg(p) {
     const party = this.partyOf(p), corp = p.corp && this.corps.get(p.corp);
     return { t: "soc", party: party ? { leader: party.leader, members: [...party.members].map((id) => { const q = this.players.get(id); return [id, q ? q.name : "?"]; }) } : null, corp: corp ? corp.name : null };
   }
-  sosList() { const out = []; for (const p of this.players.values()) if (p.sos) out.push([p.id, Math.round(p.x), Math.round(p.y)]); return out; }
+  sosList() { const out = []; for (const p of this.players.values()) if (p.sos) out.push([p.id, Math.round(p.x), Math.round(p.y), p.layer]); return out; }   // (each player sees its own layer's)
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }

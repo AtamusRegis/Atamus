@@ -25,7 +25,7 @@
     #hold-raw { background: var(--brown); } #hold-ref { background: var(--ore); } #fuel-fill { background: var(--ice); } #fuel-fill.low { background: var(--signal); }
     .bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 600 11px var(--f-mono); color: #fff; text-shadow: 0 0 3px #000; letter-spacing: .04em; }
     .bar span b { font-weight: 600; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
-    #mod-chip { height: 22px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+    #mod-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
     #mod-chip.on { color: var(--gold); border-color: rgba(216,176,106,.55); }
     #credits { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 600 13px var(--f-mono); color: var(--gold); }
     #credits::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
@@ -55,7 +55,7 @@
     .st-acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
     .st-tag { font: 600 10.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); padding: 3px 8px; border: 1px solid rgba(216,176,106,.5); border-radius: 10px; }
     .st-empty { margin: 0; color: var(--dim); font-size: 13px; }
-    .st-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; } .st-bar i { display: block; height: 100%; width: 0; background: var(--ore); }
+    .st-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; } .st-bar i { display: block; height: 100%; width: 0; background: var(--ore); } .st-bar.fuel i { background: var(--ice); }
     #station button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; white-space: nowrap; }
     #station button:hover:not(:disabled) { background: rgba(255,255,255,.1); }
     #station button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
@@ -85,6 +85,7 @@
     #report-box button { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); cursor: pointer; } #report-box #report-send { background: var(--gold); color: #1a1205; border: none; font-weight: 700; }
     #staff-col { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 6; display: flex; flex-direction: column; gap: 4px; }
     body:has(#station:not([hidden])) #staff-col { right: 384px; }
+    @media (max-width: 1199px) and (min-width: 901px) { #hud { left: 50%; bottom: 236px; } }   /* (too narrow to sit between the minimap and the chat: above them) */
     @media (max-width: 900px) { #hud { grid-template-columns: 1fr 1fr; bottom: 220px; } #chat { width: calc(100vw - 230px); } }
   </style>
 </head>
@@ -108,6 +109,6 @@
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792300002"></script>
+  <script type="module" src="game.js?v=1792300003"></script>
 </body>
 </html>

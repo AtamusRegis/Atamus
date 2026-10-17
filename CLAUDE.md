@@ -49,8 +49,10 @@ packages/server/src/
                   chat (World, Zone, Party, Corp, Whisper) in; 20 Hz sim, 15 Hz ship snapshots, 5 Hz rocks / ores / me /
                   station diffs, 1 Hz distress list
     rules.js      every fixed number: world, ship, modules, ores, ring sizes, fuel, station refining, sectors
+    ringgen.js    asteroids from seeds (position, size): the same file as website/ringgen.js (check.sh compares them)
     world.js      the world: seeded asteroid cells, sectors, ships and fuel, mining and cracks, ore names and delivery,
-                  modules, custody (handoff, offline crawl home), the station's ops and queue, parties, corporations, saving
+                  modules, custody (handoff, offline crawl home), shards (layers), the station's ops and queue, parties,
+                  corporations, saving
                   (`ring_players`, `ring_corps`)
 website/          GitHub Pages site (atamus.io) and the game client
   game.html       the game page (canvas, HUD, station panel, chat, minimap, overlays, __BUILD__ marker)
@@ -58,6 +60,7 @@ website/          GitHub Pages site (atamus.io) and the game client
                   Saturn / station / rocks / ore / ships and their effects, HUD, station panel, party list, minimap, chat,
                   name menu and reports, countdown and reconnect handling
   shipart.js      the art from the ship sheet: drawShip (every module, animated), drawStation, drawRock, drawSaturn
+  ringgen.js      asteroids from seeds: identical to packages/server/src/game/ringgen.js
   theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
   admin.css       the admin and disciplinary panels' styles
   adminpanel.js   the Admin button and panel (staff accounts only)
@@ -65,7 +68,7 @@ website/          GitHub Pages site (atamus.io) and the game client
                   the website, as before; play.html goes straight to Enter System (no pilots)
 reference/        old snapshots, for reference only (never deployed); the full 2D game is the legacy-2d branch
 scripts/
-  check.sh        syntax-check every JS file (run before every push)
+  check.sh        syntax-check every JS file, and that both ringgen.js copies match (run before every push)
   ptr.sh          start|stop|reset|status for a local copy (local Postgres :5433, server :8090 serving website/)
   ptr-run.mjs     run a JS snippet in headless Chromium against the local copy (window.Atamus)
   deploy.sh       server-side redeploy (the forced command for the deploy key)
@@ -85,7 +88,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;
    - it then sleeps 30 s and switches the live build;
    - clients are sent to `play.html?updating=1`, which waits for the new build.
-6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user).
+6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user; `?as=Name`, 3+ characters, plays as another account). To try shards locally, start it as `RING_SECTOR_EVERY=1 RING_SHARD_CAP=2 scripts/ptr.sh start` (all four sectors open with three online, two per copy).
 
 ## Code conventions
 

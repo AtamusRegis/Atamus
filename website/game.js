@@ -4,6 +4,7 @@
 // an asteroid; F switches the module on or off; the wheel zooms. Fly into the station to deliver the hold and use its panel.
 // The server decides everything; this page predicts my own ship with the same numbers and draws the rest.
 import { C, ART, hullLen, drawShip, drawStation, drawRock, drawSaturn } from "./shipart.js?v=1792300002";
+import { genRock } from "./ringgen.js?v=1792300003";
 
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
 const $ = (id) => document.getElementById(id);
@@ -26,7 +27,9 @@ let ME = { fuel: 100, tank: 100, cap: 5, hold: {}, credits: 0, docked: 0, module
 let STATION = { storage: {}, queue: [], modules: [] }, SOC = { party: null, corp: null };
 let sectors = [1, 0, 0, 0], online = 0, sosList = [];
 const ships = new Map();                       // id -> { id, name, buf, row, x, y, h, near }
-const rocks = new Map();                       // id -> { id, x, y, n, cracks, hp, ore, tow, dx, dy }
+const rocks = new Map();                       // id -> { id, x, y, n, cracks, hp, ore, tow, dx, dy }: built from the two below
+const rockCells = new Map();                   // "layer:cx,cy" -> [untouched asteroids built from their seeds (ringgen.js)]
+const rockRows = new Map();                    // id -> the asteroids someone has worked on, as the server sends them
 const ores = new Map();                        // id -> { id, x, y, o, r }
 const names = new Map();                       // id -> name (the roster)
 const fx = [];                                 // effects being drawn
@@ -113,15 +116,24 @@ function onMsg(m) {
     G = m.game; myId = m.you.id; myName = m.you.name; amStaff = !!m.you.staff;
     mine.x = m.spawn.x; mine.y = m.spawn.y; mine.h = m.spawn.h || 0; mine.vx = mine.vy = 0; corr.x = corr.y = 0; haveMe = true; cam.x = mine.x; cam.y = mine.y;
     sectors = m.sectors || sectors; online = m.online || 0;
-    ships.clear(); rocks.clear(); ores.clear(); names.clear(); snapRows = new Map();
+    ships.clear(); rocks.clear(); rockCells.clear(); rockRows.clear(); ores.clear(); names.clear(); snapRows = new Map();
     for (const r of m.roster || []) names.set(r.i, r.n);
     if (m.you.staff && window.AdminPanel) window.AdminPanel.mount();
     if (m.countdown) startCountdown(Date.now() + m.countdown.in, m.countdown.parts, m.countdown.head);
     drawPrefix();
   } else if (m.t === "snap") onSnap(m);
-  else if (m.t === "rocks") {
-    for (const r of m.a || []) { const [id, x, y, n, cracks, hp, ore, tow] = r; const o = rocks.get(id); if (o) Object.assign(o, { x, y, n, cracks, hp, ore, tow }); else rocks.set(id, { id, x, y, n, cracks, hp, ore, tow, dx: x, dy: y }); }
-    for (const id of m.x || []) rocks.delete(id);
+  else if (m.t === "rocks") {                  // untouched asteroids come as seeds per cell; worked-on ones as rows
+    for (const [key, seeds] of Object.entries(m.c || {})) {
+      const [cx, cy] = key.slice(key.indexOf(":") + 1).split(",").map(Number), list = [];
+      for (const seed of seeds) { const id = key + ":" + seed, old = rocks.get(id), g = genRock(cx, cy, seed, G.world.cell, G.world.rings, G.ringSizes); if (g) list.push(old && !rockRows.has(id) ? old : { id, x: g.x, y: g.y, n: g.n, cracks: g.n, hp: 100, ore: 0, tow: 0, dx: g.x, dy: g.y }); }
+      rockCells.set(key, list);
+    }
+    for (const key of m.xc || []) rockCells.delete(key);
+    for (const r of m.a || []) { const [id, x, y, n, cracks, hp, ore, tow] = r; const o = rockRows.get(id) || rocks.get(id); if (o) { Object.assign(o, { x, y, n, cracks, hp, ore, tow }); rockRows.set(id, o); } else rockRows.set(id, { id, x, y, n, cracks, hp, ore, tow, dx: x, dy: y }); }
+    for (const id of m.x || []) rockRows.delete(id);
+    rocks.clear();
+    for (const list of rockCells.values()) for (const r of list) if (!rockRows.has(r.id)) rocks.set(r.id, r);
+    for (const r of rockRows.values()) rocks.set(r.id, r);
   } else if (m.t === "ores") {
     for (const r of m.a || []) { const [id, x, y, oi, ref] = r; const o = ores.get(id); if (o) Object.assign(o, { x, y }); else ores.set(id, { id, x, y, dx: x, dy: y, o: ORE_KEYS[oi] || "iron", r: ref }); }
     for (const id of m.x || []) ores.delete(id);
@@ -317,7 +329,7 @@ function drawOverlay(t) {
   for (const [id, x, y] of sosList) {
     const px = id === myId ? mine.x : x, py = id === myId ? mine.y : y; let [sx, sy] = toScreen(px, py); const off = sx < 16 || sy < 16 || sx > VW - 16 || sy > VH - 16;
     if (off) { const a = Math.atan2(sy - VH / 2, sx - VW / 2), k = Math.min((VW / 2 - 28) / Math.abs(Math.cos(a) || 1e-6), (VH / 2 - 28) / Math.abs(Math.sin(a) || 1e-6)); sx = VW / 2 + Math.cos(a) * k; sy = VH / 2 + Math.sin(a) * k; }
-    else sy -= 56 * Math.max(0.6, zoom);
+    else sy -= 40 * Math.max(0.6, zoom) + 30;     // (above the name)
     const p = 0.6 + 0.4 * Math.sin(t / 200);
     cx.fillStyle = C.signal; cx.globalAlpha = p; cx.beginPath(); cx.arc(sx, sy, 11, 0, TAU); cx.fill(); cx.globalAlpha = 1;
     cx.fillStyle = C.void; cx.font = `800 16px "Big Shoulders Display", sans-serif`; cx.fillText("!", sx, sy + 6); cx.font = `700 12px "Atkinson Hyperlegible", system-ui, sans-serif`;
@@ -366,7 +378,7 @@ function drawHud() {
   hud.mod.textContent = (M.name || ME.module) + (actv ? (ME.module === "refinery" ? (ME.refine ? " · Refining" : "") : ME.on ? " · On" : " · Off") : "");
   hud.mod.classList.toggle("on", !!(actv && (ME.on || ME.refine)));
   hud.credits.textContent = fmt(ME.credits || 0);
-  hud.zone.textContent = ME.zone || "";
+  hud.zone.textContent = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
 }
 function drawHudLive() {
   const f = Math.max(0, ME.fuel), T = ME.tank || 100;
@@ -408,7 +420,7 @@ function drawStation_() {
   Q.forEach((j, i) => {
     const row = el("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.stationRefine) * 1000;
     row.append(el("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o) + " · refining")), el("span", "st-n", fmt(j.left)));
-    const bar = el("span", "st-bar"); const fill = el("i"); bar.appendChild(fill); if (i === 0) { fill.dataset.at = j.at; fill.dataset.dur = dur; } row.appendChild(bar); sec2.appendChild(row);
+    const bar = el("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = el("i"); bar.appendChild(fill); if (i === 0) { fill.dataset.at = j.at; fill.dataset.dur = dur; } row.appendChild(bar); sec2.appendChild(row);
   });
   // fuel
   const sec3 = el("section"); sec3.appendChild(el("h3", null, "Fuel"));
@@ -554,7 +566,7 @@ connect();
 
 // for the test harness and the console
 window.Atamus = {
-  get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get station() { return STATION; }, get soc() { return SOC; }, get sectors() { return sectors; },
+  get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get station() { return STATION; }, get soc() { return SOC; }, get sectors() { return sectors; }, get sos() { return sosList; },
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, n: r.n, cracks: r.cracks, hp: r.hp, ore: r.ore })); }, get ores() { return [...ores.values()]; },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, m: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7] })); },
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = z; },

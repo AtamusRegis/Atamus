@@ -13,21 +13,26 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 ## The world
 
 - **A 2D plane, north up.** Saturn sits at the center (nothing flies inside it); **one station** sits just north of it. Around them, **two asteroid rings**: ring 1 (3–6 km out) and ring 2 (9–14 km out). **Deeper means outward**: ring 2 has the rarer ores and bigger rocks. A **red dashed locked line** at 15 km: nobody flies past it.
-- **Four sectors, North, East, South and West**, radiate from Saturn (owner). **One sector is open per 50 players online** (North first, then East, South, West); around Saturn and the station (2.6 km) everything is open. A sector that's no longer needed **waits 10 minutes before closing**, and a ship already inside a closing or closed sector can stay and fly out, but nobody new enters. Closed sectors are shaded on the map and minimap. Shards (copies of a full world) come later, only once all four are open.
-- **The zone** shown top center: "Station", or the ring and sector ("Ring 1 · North").
+- **Four sectors, North, East, South and West**, radiate from Saturn (owner). **One sector is open per 50 players online** (North first, then East, South, West); around Saturn and the station (2.6 km) everything is open. A sector that's no longer needed **waits 10 minutes before closing**, and a ship already inside a closing or closed sector can stay and fly out, but nobody new enters. Closed sectors are shaded on the map and minimap.
+- **The zone** shown top center: "Station", or the ring and sector ("Ring 1 · North"), plus the shard while shards are running ("Ring 1 · North · Shard 2").
+
+## Shards (owner: "crowded zones split into copies once all four sectors are open")
+
+- **Only once all four sectors are open** (and none is closing), **each zone holds 40 players per copy**. A ship picks its copy whenever it enters a zone (or logs in): **a party member's copy of that zone if one is there**, else the copy it's already in while that has room, else the first copy with room, else a new one. **Accepting a party invite moves you into a party member's copy** if they're in your zone. With shards off, ships go back to copy 1 as they change zones.
+- **Each copy has its own asteroids, loose ore, ships, effects and distress beacons**; you can only see, mine, scan, tow, pump, refine and hand ore within your copy. **Zone chat stays in your copy**; World, Party, Corp and Whispers reach every copy. Storage, credits, parties and corporations are shared. Changing copy drops your links to other ships (pumping, refining); a towed asteroid comes with you. Staff teleporting to a player join that player's copy.
 
 ## Asteroids
 
-- **15 sizes; size n has n cracks** (owner: "15 asteroid sizes for 15 variations of crack counts"). Each crack has health; **mining is holding the laser on the rock**. Ring 1 has sizes 1–10, ring 2 sizes 4–15. Bigger rocks are bigger on screen.
+- **15 sizes; size n has n cracks** (owner: "15 asteroid sizes for 15 variations of crack counts"). Each crack has health; **mining is holding the laser on the rock**. Ring 1 has sizes 1–10, ring 2 sizes 4–15; smaller sizes are commoner. Bigger rocks are bigger on screen.
 - **Each crack that breaks drops one ore unit**, a small square that drifts out toward the ship lasering it. When the last crack breaks the rock is gone.
 - **The ore is hidden until scanned.** Ring 1: iron, nickel, ice. Ring 2: titanium, cobalt, ice, platinum, a little iron.
-- **Seeded and changing (owner):** the rings are cut into 400 m cells; each cell's rocks come from a secret seed, so nobody can map the field from the client. **A mined-out rock comes back as a new rock (different ore and size) after 3 minutes**; a rock nobody touches for 30 minutes despawns and is replaced the same way; the whole field reshuffles every 6 hours. Cells only exist near players and are dropped when nobody's been near for 2 minutes (keeping rocks someone has worked on). Each player is sent only what's within 3.2 km.
+- **Seeded and changing (owner):** the rings are cut into 400 m cells; each rock's seed comes from a secret only the server knows (with the 6-hour epoch, the shard, the cell, the slot and how many times the slot has rerolled), so nobody can map the field ahead. **The client builds the rocks itself (owner, 2026-10-16):** each untouched rock near you arrives as just its seed, and the client turns it into the same position and size as the server (`ringgen.js`, the same file on both). Rocks someone has worked on (lasered, scanned, towed) are sent in full. **The ore never comes from the seed**: it stays on the server until the rock is scanned. **A mined-out rock comes back as a new rock (different ore and size) after 3 minutes**; a rock nobody touches for 30 minutes despawns and is replaced the same way; the whole field reshuffles every 6 hours. Cells only exist near players and are dropped when nobody's been near for 2 minutes (keeping rocks someone has worked on). Each player is sent only what's within 3.2 km.
 
 ## Ships and controls
 
 - **One hull for everyone** (owner), with a **free base laser**, a **5-unit hold**, a **100-unit fuel tank** and **one module**. New players start with 200 credits, a full tank and the **Miner** module.
 - **W / S** thrust forward / back along the nose, **A / D** turn, **Q / E** slide sideways. **The mouse aims; holding the left button fires the laser** at the first rock along the aim (170 m reach). **Right-click** uses your module on the ship or rock under the pointer. **F** switches an active module on or off. **The mouse wheel zooms** (kept per browser). The camera follows your ship.
-- **Fuel:** flying at full thrust burns fuel, and active modules burn it while working. **An empty tank means crawling** at a fifth of the speed, and the ship sends a **distress beacon: a red "!" every player sees** (at the screen edge when it's off screen, and on the minimap) until it has fuel again.
+- **Fuel:** flying at full thrust burns fuel, and active modules burn it while working. **An empty tank means crawling** at a fifth of the speed, and the ship sends a **distress beacon: a red "!" every player in its shard sees** (above its name; at the screen edge when it's off screen, and on the minimap) until it has fuel again.
 - Ships bump off asteroids and pass through each other. Ships can't be destroyed.
 
 ## Modules (owner: one at a time, swapped only at the station)
@@ -54,7 +59,7 @@ The station sells each module once (Miner 500, Hauler 800, Fueler 800, Command 1
 
 ## The station
 
-Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage** (each ore, raw and refined, with **Sell** and **Refine**; ice also has **Make fuel**; fuel blocks have **Fill tank**), the **Queue** (refining and fuel blocks, with progress), **Fuel** (**Fill** the tank at 2 credits a unit), and **Modules** (Buy / Equip / Equipped). **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block): cheaper than buying fuel, since ice sells for 30. No trading between players for now; progression is modules (and hulls later).
+Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage** (each ore, raw and refined, with **Sell** and **Refine**; ice also has **Make fuel**; fuel blocks have **Fill tank**), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank at 2 credits a unit), and **Modules** (Buy / Equip / Equipped). **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block): cheaper than buying fuel, since ice sells for 30. No trading between players for now; progression is modules (and hulls later).
 
 ## Parties and corporations
 
@@ -64,14 +69,14 @@ Flying into the station's circle docks the ship (delivering its hold) and opens 
 ## Chat (rebuilt 2026-10-16)
 
 - **At the bottom right**: tabs **All | World | Zone | Party | Corp | Whisper** (which lines show), the lines, then the input with its label **"[Channel] Name:"**. **The tab is what you read; the channel is where you type**: picking a tab points the channel at it, and **TAB while typing cycles the channel** (World → Zone → Party → Corp → Whisper, skipping ones you're not in).
-- **Zone** reaches players in your zone; **Party** and **Corp** your party and corporation; **Whispers** one player (`/w Name message`, or `/w "Name with spaces" message`). No one online by that name: "<name> is offline."
+- **Zone** reaches players in your zone (and shard); **Party** and **Corp** your party and corporation; **Whispers** one player (`/w Name message`, or `/w "Name with spaces" message`). No one online by that name: "<name> is offline."
 - **Enter** opens the input and sends; Escape or an empty line closes it. Game keys are ignored while typing.
 - **Right-clicking a name in chat**: **Whisper**, **Invite to party**, **Invite to corporation** (when you're in one), **Report** (a short note to the admins with the player's recent lines; at most 5 in 10 minutes), and for staff **Admin** (the disciplinary panel). A muted player's lines go nowhere. 240 characters at most. No history.
 
 ## Map and HUD
 
 - **The minimap** (bottom left): Saturn, the station, the rings, the locked line, closed sectors, your ship and distress beacons; the wheel zooms it.
-- **The HUD** (bottom center): the module (and whether it's on), the hold bar (brown raw, purple refined), the fuel bar, credits.
+- **The HUD** (bottom center, between the minimap and the chat; in windows too narrow for that, above them): the module (and whether it's on), the hold bar (brown raw, purple refined), the fuel bar, credits.
 - Names show over other ships.
 
 ## Accounts and sessions

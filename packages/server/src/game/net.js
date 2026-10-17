@@ -5,7 +5,7 @@
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
-import { World, zoneOf } from "./world.js";
+import { World } from "./world.js";
 import * as R from "./rules.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
@@ -15,7 +15,7 @@ import { safeText } from "../textsafe.js";
 
 // the game's fixed numbers, for the clients (drawing, prediction, the station panel)
 const GAME = { world: R.WORLD, ship: R.SHIP, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, refinedMul: R.REFINED_MUL, refinedSpace: R.REFINED_SPACE,
-  fuel: R.FUEL, stationRefine: R.STATION_REFINE, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, partyMax: R.PARTY_MAX };
+  fuel: R.FUEL, stationRefine: R.STATION_REFINE, ringSizes: R.RING_SIZES, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, partyMax: R.PARTY_MAX };
 
 export function attachGameServer(httpServer) {
   const world = new World();
@@ -32,7 +32,7 @@ export function attachGameServer(httpServer) {
     kick: (pid, code, reason) => { if (code === 4006) world.banned(pid).catch((e) => console.error("ban hold", e)); const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     respawn: (pid) => !!world.respawn(pid),
-    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80); },
+    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80, q.layer); },
     inWorld: (pid) => world.players.has(pid),
     note: (pid, text) => sys(pid, text),
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
@@ -113,7 +113,7 @@ export function attachGameServer(httpServer) {
       }
       if (say) sys(pid, say);
     }
-    // chat: World (everyone), Zone (my ring and sector, or the station), Party, Corporation, Whisper (one player)
+    // chat: World (everyone, every shard), Zone (my ring and sector, or the station, in my shard), Party, Corporation, Whisper
     function chat(m) {
       const p = world.players.get(pid); if (!p || typeof m.text !== "string" || muted(pid)) return;
       const text = m.text.slice(0, 240); if (!text.trim()) return;
@@ -128,10 +128,10 @@ export function attachGameServer(httpServer) {
       }
       if (ch === "party" && !p.party) { sys(pid, "You're not in a party."); return; }
       if (ch === "corp" && !p.corp) { sys(pid, "You're not in a corporation."); return; }
-      const zone = zoneOf(p.x, p.y), msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, r: badge(pid), text, ...(ch === "zone" ? { z: zone } : {}) });
+      const zone = p.zone, msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, r: badge(pid), text, ...(ch === "zone" ? { z: zone } : {}) });
       for (const [qid, qws] of socks) {
         const q = world.players.get(qid); if (!q || qws.readyState !== qws.OPEN) continue;
-        if (ch === "global" || (ch === "zone" && zoneOf(q.x, q.y) === zone) || (ch === "party" && q.party === p.party) || (ch === "corp" && q.corp === p.corp)) qws.send(msg);
+        if (ch === "global" || (ch === "zone" && q.zone === zone && q.layer === p.layer) || (ch === "party" && q.party === p.party) || (ch === "corp" && q.corp === p.corp)) qws.send(msg);
       }
       remember({ at: Date.now(), i: pid, n: user.username, ch, text });
     }
@@ -148,7 +148,7 @@ export function attachGameServer(httpServer) {
     if (world.fx.length) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p) continue;
-        const near = world.fx.filter((f) => Math.hypot(f.x - p.x, f.y - p.y) <= R.WORLD.loadR + 200).map((f) => ({ t: "fx", ...f }));
+        const near = world.fx.filter((f) => (f.l === undefined || f.l === p.layer) && Math.hypot(f.x - p.x, f.y - p.y) <= R.WORLD.loadR + 200).map(({ l, ...f }) => ({ t: "fx", ...f }));
         if (near.length) send(ws, near.length === 1 ? near[0] : { t: "batch", m: near });
       }
       world.fx.length = 0;
@@ -166,7 +166,8 @@ export function attachGameServer(httpServer) {
       send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un });
     }
   }, 66);
-  // 5 Hz: asteroids and loose ore that changed near each player, and each player's own state when it changes
+  // 5 Hz: asteroids and loose ore that changed near each player, and each player's own state when it changes. Asteroids:
+  // the cells whose untouched seeds changed (c: { key: [seeds] }, xc: cells gone) and the worked-on rows that changed (a, x)
   const diff = (ws, field, rows) => {
     const known = ws[field] || (ws[field] = new Map()), seen = new Set(), add = [], gone = [];
     for (const r of rows) { const key = JSON.stringify(r); seen.add(r[0]); if (known.get(r[0]) !== key) { known.set(r[0], key); add.push(r); } }
@@ -177,15 +178,23 @@ export function attachGameServer(httpServer) {
     const t = Date.now();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const rk = diff(ws, "knownRocks", world.rockRows(p)); if (rk) send(ws, { t: "rocks", ...rk });
+      const view = world.rockView(p), rk = diff(ws, "knownRocks", view.rows), kc = ws.knownCells || (ws.knownCells = new Map()), c = {}, xc = [];
+      let nc = 0; for (const [k, seeds] of Object.entries(view.cells)) { const j = seeds.join(","); if (kc.get(k) !== j) { kc.set(k, j); c[k] = seeds; nc++; } }
+      for (const k of [...kc.keys()]) if (!(k in view.cells)) { kc.delete(k); xc.push(k); }
+      if (rk || nc || xc.length) send(ws, { t: "rocks", ...(rk || {}), ...(nc ? { c } : {}), ...(xc.length ? { xc } : {}) });
       const or = diff(ws, "knownOres", world.oreRows(p)); if (or) send(ws, { t: "ores", ...or });
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
       if (p.stDirty || !ws.stSent || (p.queue.length && t - (ws.stAt || 0) > 2000)) { p.stDirty = false; ws.stSent = 1; ws.stAt = t; send(ws, world.stationMsg(p)); }
       if (p.socDirty || !ws.socSent) { p.socDirty = false; ws.socSent = 1; send(ws, world.socMsg(p)); }
     }
   }, 200);
-  // 1 Hz: every distress beacon, for everyone (a "!" every player sees, wherever it is)
-  let lastSos = "";
-  setInterval(() => { const s = JSON.stringify(world.sosList()); if (s !== lastSos) { lastSos = s; broadcast({ t: "sos", s: JSON.parse(s) }); } }, 1000);
+  // 1 Hz: every distress beacon (a "!" every player in that shard sees, wherever it is)
+  setInterval(() => {                          // (each player is sent its own layer's beacons)
+    const all = world.sosList();
+    for (const [pid, ws] of socks) {
+      const p = world.players.get(pid); if (!p) continue;
+      const j = JSON.stringify(all.filter((b) => b[3] === p.layer).map((b) => b.slice(0, 3))); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
+    }
+  }, 1000);
   console.log("Saturn ring world attached at /ws");
 }

@@ -58,7 +58,10 @@ export const FUEL = { stationPrice: 2, pumpPay: 2.5, blockFuel: 25, blockTime: 1
 export const STATION_REFINE = 60;          // s a unit, free, keeps going while you're away
 export const START = { credits: 200, fuel: 100, module: "miner" };
 export const SECTORS = ["N", "E", "S", "W"], SECTOR_NAMES = { N: "North", E: "East", S: "South", W: "West" };
-export const SECTOR_EVERY = 50, SECTOR_CLOSE_WAIT = 600;   // one more sector per 50 online; a closing sector waits 10 min
+// one more sector per 50 online; a closing sector waits 10 min. Shards: once all four sectors are open, a zone holds 40
+// players per copy (RING_SECTOR_EVERY / RING_SHARD_CAP override the two for local tests)
+export const SECTOR_EVERY = +process.env.RING_SECTOR_EVERY || 50, SECTOR_CLOSE_WAIT = 600;
+export const SHARD_CAP = +process.env.RING_SHARD_CAP || 40;
 export const PARTY_MAX = 10;
 export const OFFLINE_GRACE = 1800;         // s after logging off before a carrier's ore crawls home
 export const DESPAWN_ORE = 1800;           // loose ore untouched
