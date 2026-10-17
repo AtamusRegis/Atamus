@@ -443,43 +443,31 @@ function drawHudLive() {
   hud.fuelNum.textContent = Math.round(f) + " / " + T;
 }
 
-// ---- the station panel (docked): Storage as a grid of slots (click one for what can be done with it), the queue,
-// fuel, and the Shop button ----
+// ---- the station panel (docked): Storage as a grid of slots (right-click one for what can be done with it), the
+// queue, fuel, and the Shop button ----
 const stEl = $("station");
-let stKey = "", stSel = null;
+let stKey = "";
 function drawStation_() {
-  stEl.hidden = !ME.docked; if (!ME.docked) { shopEl.hidden = true; return; } if (!G) return;
-  const key = JSON.stringify([STATION.storage, STATION.queue, ME.credits, Math.round(ME.fuel), ME.tank, stSel]); if (key === stKey) return; stKey = key;
+  stEl.hidden = !ME.docked; if (!ME.docked) { shopEl.hidden = true; amtBox.hidden = true; return; } if (!G) return;
+  const key = JSON.stringify([STATION.storage, STATION.queue, ME.credits, Math.round(ME.fuel), ME.tank]); if (key === stKey) return; stKey = key;
   const btn = (label, op, disabled = false, cls = "") => { const b = elx("button", cls, label); b.type = "button"; b.disabled = disabled; b.addEventListener("click", () => { send({ t: "st", ...op }); b.blur(); }); return b; };
   const head = elx("div", "st-head"), shopB = elx("button", "gold", "Shop"); shopB.type = "button"; shopB.addEventListener("click", () => { shopEl.hidden = !shopEl.hidden; drawShop(); });
   head.append(elx("span", "st-title", "Station"), shopB, elx("span", "st-cr", fmt(ME.credits)));
   // storage: a slot per kind (raw, refined, fuel blocks)
   const sec1 = elx("section"); sec1.appendChild(elx("h3", null, "Storage"));
   const S = STATION.storage || {}, keys = Object.keys(S).filter((k) => S[k] > 0).sort((a, b) => (a === "fuel") - (b === "fuel") || ORE_KEYS.indexOf(a.replace("+", "")) - ORE_KEYS.indexOf(b.replace("+", "")) || a.length - b.length);
-  if (stSel && !S[stSel]) stSel = null;
   const grid = elx("div", "st-grid");
   for (let i = 0; i < Math.max(15, Math.ceil(keys.length / 5) * 5); i++) {
-    const k = keys[i], slot = elx("div", "st-slot" + (k && k === stSel ? " sel" : "") + (k ? "" : " empty"));
+    const k = keys[i], slot = elx("div", "st-slot" + (k ? "" : " empty"));
     if (k) {
       const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), sw = elx("i", ref ? "ref" : ""); sw.style.background = k === "fuel" ? "var(--ice)" : G.ores[o].color; if (k === "fuel") sw.classList.add("fuel");
       slot.append(sw, elx("span", "n", fmt(S[k])));
-      slot.addEventListener("click", () => { stSel = stSel === k ? null : k; drawStation_(); });
+      slot.addEventListener("contextmenu", (e) => { e.preventDefault(); hideTip(); showMenu(e.clientX, e.clientY, slotActions(k)); });
       slot.addEventListener("mouseenter", (e) => showTip(e, () => storeTip(k))); slot.addEventListener("mousemove", moveTip); slot.addEventListener("mouseleave", hideTip);
     }
     grid.appendChild(slot);
   }
   sec1.appendChild(grid);
-  if (stSel) {                                 // what can be done with the selected slot
-    const k = stSel, n = S[k], acts = elx("div", "st-acts-row");
-    if (k === "fuel") acts.append(elx("span", "st-name", "Fuel blocks"), btn("Fill tank", { op: "blocks" }, ME.fuel >= ME.tank - G.fuel.blockFuel + 0.01, "gold"));
-    else {
-      const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.refinedMul : 1);
-      acts.append(elx("span", "st-name", oreName(o) + (ref ? " · compressed" : "")), btn("Sell " + fmt(price * n), { op: "sell", k, n }, false, "gold"));
-      if (!ref) acts.append(btn("Refine", { op: "refine", o, n }));
-      if (o === "ice" && !ref) acts.append(btn("Make fuel", { op: "craft", n }));
-    }
-    sec1.appendChild(acts);
-  }
   // the queue
   const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Queue"));
   const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(elx("p", "st-empty", "Idle"));
@@ -496,6 +484,29 @@ function drawStation_() {
   stEl.replaceChildren(head, sec1, sec2, sec3);
   if (!shopEl.hidden) drawShop();
 }
+function slotActions(k) {                      // right-click a storage slot: sell, refine, make fuel (each asks how many), fill the tank
+  const n = (STATION.storage || {})[k] || 0;
+  if (k === "fuel") return [["Fill tank", () => send({ t: "st", op: "blocks" })]];
+  const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.refinedMul : 1);
+  const items = [["Sell", () => askAmount("Sell " + oreName(o) + (ref ? " · compressed" : ""), "Sell", n, (c) => fmt(c * price) + " cr", (c) => ({ op: "sell", k, n: c }))]];
+  if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].price * G.refinedMul) + " cr", (c) => ({ op: "refine", o, n: c }))]);
+  if (o === "ice" && !ref) items.push(["Make fuel", () => askAmount("Make fuel", "Make fuel", n, (c) => fmt(c * G.fuel.blockFuel) + " fuel", (c) => ({ op: "craft", n: c }))]);
+  return items;
+}
+// how many: a slider from 1 to all of them (starting at all), the amount and what it comes to, the action and Cancel
+const amtBox = $("amount-box"), amtRange = $("amount-range"); let amtDo = null, amtWorth = null, amtMax = 1;
+function askAmount(title, label, max, worth, make) {
+  amtMax = Math.max(1, max); amtWorth = worth; amtDo = make;
+  $("amount-title").textContent = title; $("amount-go").textContent = label;
+  amtRange.min = 1; amtRange.max = amtMax; amtRange.value = amtMax; amtRange.disabled = amtMax <= 1;
+  drawAmount(); amtBox.hidden = false; amtRange.focus();
+}
+function drawAmount() { const c = +amtRange.value; $("amount-n").textContent = fmt(c) + " / " + fmt(amtMax); $("amount-worth").textContent = amtWorth(c); }
+amtRange.addEventListener("input", drawAmount);
+$("amount-go").addEventListener("click", () => { if (amtDo) send({ t: "st", ...amtDo(+amtRange.value) }); amtBox.hidden = true; });
+$("amount-cancel").addEventListener("click", () => { amtBox.hidden = true; });
+amtBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") amtBox.hidden = true; if (e.key === "Enter") $("amount-go").click(); });
+amtBox.addEventListener("mousedown", (e) => e.stopPropagation());
 function storeTip(k) {
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return "Fuel blocks\n" + n + " · " + fmt(n * G.fuel.blockFuel) + " fuel";

@@ -62,7 +62,7 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 
 ## The station and the Shop
 
-- Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage, a scrollable grid of slots** (a slot per ore, raw and compressed, and fuel blocks, with its count; hovering shows the count and what it sells for; **clicking a slot shows what can be done with it: Sell, Refine, Make fuel for ice, Fill tank for fuel blocks**), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank), and the **Shop** button. **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block).
+- Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage, a scrollable grid of slots** (a slot per ore, raw and compressed, and fuel blocks, with its count; hovering shows the count and what it sells for; **right-clicking a slot opens its menu: Sell and Refine (raw ore), Make fuel (ice), Fill tank (fuel blocks)**; **Sell, Refine and Make fuel ask how many with a slider** from one to all of them (starting at all), showing the amount and what it comes to: credits for selling, the compressed value for refining, the fuel made (owner, 2026-10-17)), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank), and the **Shop** button. **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block).
 - **The Shop is its own scrollable window** (owner, 2026-10-16) beside the station panel: the **hull** (its slots and the next size up with its price), then **every module as a card with what it does, its price and its numbers**. An owned module shows its level, **its next upgrade's numbers (current → next) and price**, and **Equip / Unequip** (with one slot, Equip swaps; the last fitted module shows Equipped and can't come off).
 
 ## Parties and corporations
@@ -111,7 +111,7 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 - **Sectors opening with the number of players online** (one per 50, a 10-minute close, shaded closed sectors) and **shards waiting for all four to open** (owner, 2026-10-16: all sectors always open).
 - **Loose ore flying to the miner and flying into the nearest ship by itself** (owner, 2026-10-16): it now waits by the asteroid to be clicked.
 - **Handing cargo to a hauler with a plain right-click** (2026-10-16): it's a trade request the hauler accepts now.
-- **One module per ship and the station panel's Modules list** (2026-10-16): hull slots, upgrades and the Shop window replaced them. **The text list of storage rows** became the slot grid.
+- **One module per ship and the station panel's Modules list** (2026-10-16): hull slots, upgrades and the Shop window replaced them. **The text list of storage rows** became the slot grid; **clicking a slot for a row of action buttons** became its right-click menu (2026-10-17).
 - **The ore names Iron, Nickel, Titanium, Cobalt, Platinum** (owner, 2026-10-16): now Alpha to Epsilon (Ice kept).
 
 
