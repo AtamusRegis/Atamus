@@ -2,6 +2,7 @@
 // numbers" (all meant to change once we play). Sent to every client in the hello. Units: m, m/s, seconds, credits.
 // The plane: x east, y south (screen down); north is -y. Saturn is at (0, 0).
 
+// (owner, 2026-10-17) the world's shape is editable from the developer panel too, except the station's place
 export const WORLD = {
   saturnR: 1200,            // the planet: nothing flies inside it
   station: [0, -1900],      // the one station, north of the planet

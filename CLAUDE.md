@@ -50,7 +50,8 @@ packages/server/src/
                   station diffs, 1 Hz distress list
     rules.js      every fixed number: world, ship, modules and their upgrades, hulls, ores, ring sizes, fuel, prices (PRICE_SCALE)
     ringgen.js    asteroids from seeds (position, size): the same file as website/ringgen.js (check.sh compares them)
-    tuning.js     the developer panel's server side: the editable groups of rules.js, checked, kept in ring_tuning, reset
+    tuning.js     the developer panel's server side: the editable groups of rules.js (the world's shape too), checked,
+                  kept in ring_tuning, reset
     world.js      the world: seeded asteroid cells, sectors, ships and fuel, mining and cracks, ore names and delivery,
                   modules, custody (handoff, offline crawl home), shards (layers), the station's ops and queue, parties,
                   corporations, saving

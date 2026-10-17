@@ -1,16 +1,17 @@
 // (owner, 2026-10-17) The developer panel's side on the server: the game's numbers that may be changed live (each
 // hull's numbers, modules per level, ores and rings, asteroids, fuel, economy, limits), checked as hostile, kept in the database
-// (ring_tuning, one row) and put back on every start. The world's shape (Saturn, the station, the rings' radii, the
-// asteroid grid) isn't here: clients build asteroids from it.
+// (ring_tuning, one row) and put back on every start. The world's shape is here too (changing the rings or the cell
+// rebuilds the untouched asteroids); only the station's place stays fixed.
 import { pool } from "../db.js";
 import * as R from "./rules.js";
 
-export const ROOTS = { hulls: R.HULLS, modules: R.MODULES, ores: R.ORES, ringOres: R.RING_ORES, ringSizes: R.RING_SIZES,
+export const ROOTS = { world: R.WORLD, hulls: R.HULLS, modules: R.MODULES, ores: R.ORES, ringOres: R.RING_ORES, ringSizes: R.RING_SIZES,
   ringSlots: R.RING_SLOTS, rock: R.ROCK, fuel: R.FUEL, econ: R.ECON, limits: R.LIMITS };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // whole numbers, with their limits (everything else: 0 up to a million)
 function limitsFor(path) {
   const [root, a, b] = path, last = path[path.length - 1];
+  if (root === "world") return a === "cell" ? [100, 5000, true] : [50, 1e6, true];
   if (root === "hulls" && last === "slots") return [1, 4, true];
   if (root === "ringSizes") return [1, 15, true];
   if (root === "ringSlots") return [0, 3, true];
@@ -30,6 +31,7 @@ function at(path) {
   return { o, k };
 }
 export function setValue(path, value) {
+  if (path && path[0] === "world" && path[1] === "station") return false;   // (the station's place isn't a tuning number)
   const t = at(path); if (!t || typeof value !== "number" || !Number.isFinite(value)) return false;
   const [lo, hi, int] = limitsFor(path); let v = Math.max(lo, Math.min(hi, value)); if (int) v = Math.round(v);
   if (path[0] === "ringSizes") { const pair = R.RING_SIZES[path[1]]; if (path[2] === 0) v = Math.min(v, pair[1]); else v = Math.max(v, pair[0]); }   // (min <= max)
@@ -51,4 +53,4 @@ export async function saveTuning() {
   await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify(ROOTS)]);
 }
 // which changes rebuild the untouched asteroids (their sizes and ores come from these)
-export const reshapes = (path) => ["ringSizes", "ringSlots", "ringOres"].includes(path[0]);
+export const reshapes = (path) => ["ringSizes", "ringSlots", "ringOres"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell"));

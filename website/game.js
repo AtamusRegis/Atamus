@@ -772,7 +772,7 @@ $("report-send").addEventListener("click", () => { const text = $("report-text")
 // ---- (owner, 2026-10-17) the developer panel (head admin and admins): every number of the ship, hulls, modules per
 // level, asteroids per ore and per ring, fuel, the economy and limits, changed live for everyone; the server keeps them ----
 const devEl = $("dev"); let devTab = "hulls", devArmed = 0;
-const DEV_TABS = [["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
+const DEV_TABS = [["world", "World"], ["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
 let devHull = 0; const devLv = {};             // (owner, 2026-10-17) the hull and each module's level being edited
 const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed (× for modules)", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
   interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", laserDps: "Mining / s", yield: "Ore per crack", pay: "Pay / unit", fuel: "Fuel / scan", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
@@ -820,8 +820,15 @@ const DEV_HELP = {
   "fuel.stationPrice": "Credits for one unit of fuel bought at the station.", "fuel.blockFuel": "Fuel in one fuel block (made from one ice).", "fuel.blockTime": "Seconds the station takes to make one fuel block.",
   "limits.shardCap": "Players in one zone before newcomers go to another copy of it.", "limits.partyMax": "Most players in a party.",
 };
+Object.assign(DEV_HELP, {
+  "world.saturnR": "Saturn's radius in meters: nothing flies inside it.", "world.safeR": "Radius of the open zone around Saturn and the station, where no ring or sector applies.",
+  "world.rings": "The ring's inner and outer radius in meters. Asteroids only exist between them; changing this rebuilds the untouched ones.",
+  "world.lockedR": "The red dashed line's radius: nobody flies past it.", "world.loadR": "How far around each player, in meters, the server sends ships, asteroids and ore.",
+  "world.cell": "The asteroid grid's cell size in meters (each cell rolls its own asteroids from the seed); changing it rebuilds the untouched field.",
+});
 function devHelp(path) {
   const [root, a, b] = path;
+  if (root === "world") return DEV_HELP["world." + a];
   if (root === "hulls") return DEV_HELP["hull." + b];
   if (root === "modules") return DEV_HELP[a + "." + b] || DEV_HELP["module." + b];
   if (root === "ores") return DEV_HELP["ore." + b];
@@ -853,7 +860,14 @@ function devDraw() {
   const tabs = elx("div", "dev-tabs");
   for (const [k, label] of DEV_TABS) { const b = elx("button", k === devTab ? "on" : "", label); b.type = "button"; b.addEventListener("click", () => { devTab = k; devDraw(); }); tabs.appendChild(b); }
   const body = elx("div", "dev-body"), out = [];
-  if (devTab === "hulls") {                    // a hull at a time: every number it flies with
+  if (devTab === "world") {
+    out.push(devGroup("The map", [
+      devRow("Saturn radius", devInput(["world", "saturnR"])), devRow("Safe zone radius", devInput(["world", "safeR"])),
+      devRow("Ring 1 (inner · outer)", devInput(["world", "rings", 0, 0]), devInput(["world", "rings", 0, 1])),
+      devRow("Ring 2 (inner · outer)", devInput(["world", "rings", 1, 0]), devInput(["world", "rings", 1, 1])),
+      devRow("Locked line radius", devInput(["world", "lockedR"])), devRow("Load circle", devInput(["world", "loadR"])), devRow("Asteroid cell", devInput(["world", "cell"])),
+    ]));
+  } else if (devTab === "hulls") {                    // a hull at a time: every number it flies with
     const pick = elx("div", "dev-pick"); G.hulls.forEach((h, i) => { const b = elx("button", i === devHull ? "on" : "", h.name); b.type = "button"; b.addEventListener("click", () => { devHull = i; devDraw(); }); pick.appendChild(b); });
     const H = G.hulls[devHull], rows = Object.keys(H).filter((k) => typeof H[k] === "number").map((k) => devRow(devLabel(k), devInput(["hulls", devHull, k])));
     const g = devGroup(H.name + " hull", rows); g.insertBefore(pick, g.children[1]); out.push(g);
