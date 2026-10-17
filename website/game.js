@@ -426,7 +426,7 @@ function drawCargo() {
 }
 function cargoTip(g) {
   const all = (ME.units || []).filter(([oi, r]) => ORE_KEYS[oi] === g.o && !!r === !!g.r), n = all.length, price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
-  let t = oreName(g.o) + (g.r ? " · compressed" : "") + "\n" + n + " · " + fmt(n * price) + " cr";
+  let t = oreName(g.o) + "\n" + fmt(n * price) + " (" + fmt(price) + " each)";   // (owner, 2026-10-17: the total, then each)
   if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
   return t;
 }
@@ -509,9 +509,9 @@ amtBox.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "
 amtBox.addEventListener("mousedown", (e) => e.stopPropagation());
 function storeTip(k) {
   const n = (STATION.storage || {})[k] || 0;
-  if (k === "fuel") return "Fuel blocks\n" + n + " · " + fmt(n * G.fuel.blockFuel) + " fuel";
-  const o = k.replace(/\+$/, ""), ref = k.endsWith("+");
-  return oreName(o) + (ref ? " · compressed" : "") + "\n" + n + " · " + fmt(n * G.ores[o].price * (ref ? G.refinedMul : 1)) + " cr";
+  if (k === "fuel") return "Fuel blocks\n" + fmt(n * G.fuel.blockFuel) + " fuel (" + G.fuel.blockFuel + " each)";
+  const o = k.replace(/\+$/, ""), each = G.ores[o].price * (k.endsWith("+") ? G.refinedMul : 1);
+  return oreName(o) + "\n" + fmt(n * each) + " (" + fmt(each) + " each)";   // (owner, 2026-10-17: the total, then each)
 }
 setInterval(() => {                            // the running job's bar (between the server's updates)
   for (const f of stEl.querySelectorAll(".st-bar i[data-at]")) { const at = +f.dataset.at, dur = +f.dataset.dur, srvNow = Date.now() - (srvOff || 0); f.style.width = Math.max(0, Math.min(100, (srvNow - at) / dur * 100)) + "%"; }

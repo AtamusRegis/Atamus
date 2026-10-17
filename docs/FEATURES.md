@@ -62,7 +62,7 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 
 ## The station and the Shop
 
-- Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage, a scrollable grid of slots** (a slot per ore, raw and compressed, and fuel blocks, with its count; hovering shows the count and what it sells for; **right-clicking a slot opens its menu: Sell and Refine (raw ore), Make fuel (ice), Fill tank (fuel blocks)**; **Sell, Refine and Make fuel ask how many with a slider** from one to all of them (starting at all), showing the amount and what it comes to: credits for selling, the compressed value for refining, the fuel made (owner, 2026-10-17)), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank), and the **Shop** button. **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block).
+- Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage, a scrollable grid of slots** (a slot per ore, raw and compressed, and fuel blocks, with its count; **hovering shows the ore and what it sells for, the total then each: "Beta / 42 (21 each)"** (fuel blocks: the fuel); **right-clicking a slot opens its menu: Sell and Refine (raw ore), Make fuel (ice), Fill tank (fuel blocks)**; **Sell, Refine and Make fuel ask how many with a slider** from one to all of them (starting at all), showing the amount and what it comes to: credits for selling, the compressed value for refining, the fuel made (owner, 2026-10-17)), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank), and the **Shop** button. **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block).
 - **The Shop is its own scrollable window** (owner, 2026-10-16) beside the station panel: the **hull** (its slots and the next size up with its price), then **every module as a card with what it does, its price and its numbers**. An owned module shows its level, **its next upgrade's numbers (current → next) and price**, and **Equip / Unequip** (with one slot, Equip swaps; the last fitted module shows Equipped and can't come off).
 
 ## Parties and corporations
@@ -81,7 +81,7 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 
 - **The minimap** (bottom left): Saturn, the station, the rings, the locked line, your ship, ships near you and distress beacons; the wheel zooms it; hovering names the zone.
 - **The HUD** (bottom center, between the minimap and the chat; in windows too narrow for that, above them): **a chip per fitted module** (stacked upward; switchable ones show On / Off and switch when clicked), the hold bar (brown raw, purple refined), the fuel bar, credits.
-- **The cargo, above the hold bar: a square per unit in its ore's color; compressed units go five to a square, edged white** (a part stack fills part of its square) (owner, 2026-10-16). **Hovering a square shows that ore's count in the hold and what it sells for; holding Alt adds everyone named on those units.**
+- **The cargo, above the hold bar: a square per unit in its ore's color; compressed units go five to a square, edged white** (a part stack fills part of its square) (owner, 2026-10-16). **Hovering a square shows the ore and what that ore in the hold sells for, the total then each ("Beta / 42 (21 each)"); holding Alt adds everyone named on those units.**
 
 ## Accounts and sessions
 
