@@ -22,13 +22,23 @@ function gauge(c, x, y, raw, ref) {
   if (ref > 0) box(c, x, y + 30 - 30 * (raw + ref), 24, 30 * ref, 1, C.ore);
 }
 
-// one ship, centered at the current origin, nose up, in sheet units. s: { t (s), raw, ref, fuel (0-1), firing, on,
-// thrust (0-1), busy (pumping / refining / towing) }
-export function drawShip(c, mod, s) {
-  const L = hullLen(mod), r = 56 + L, t = s.t;
+// (owner, 2026-10-16) a ship carries a section per fitted module, nose to tail: the miner always up front, the tractor
+// always at the back (its claws trail past the engines), the rest in between. shipLayout gives each section's offset
+// down the hull and the whole length (sheet units).
+const ORDER = ["miner", "command", "scanner", "refinery", "hauler", "fueler", "tractor"];
+export function shipLayout(mods) {
+  const list = (Array.isArray(mods) ? mods : mods ? [mods] : []).filter((k, i, a) => ORDER.includes(k) && a.indexOf(k) === i).sort((x, y) => ORDER.indexOf(x) - ORDER.indexOf(y));
+  const off = {}; let L = 0; for (const k of list) { off[k] = L; L += hullLen(k); }
+  if (!list.length) L = 130;
+  return { list, off, L, yc: (10 + 56 + L + 92) / 2 };   // yc: the drawing's middle (the ship's center), from the top
+}
+// one ship, centered at the current origin, nose up, in sheet units. mods: the fitted modules; s: { t (s), raw, ref,
+// fuel (0-1), firing, thrust (0-1), on: { kind: switched on }, busy: { kind: pumping / refining / towing } }
+export function drawShip(c, mods, s) {
+  const lay = shipLayout(mods), L = lay.L, r = 56 + L, t = s.t, at = (k) => ({ ...s, on: !!(s.on && s.on[k]), busy: !!(s.busy && s.busy[k]) });
   c.save(); c.translate(-90, -(10 + r + 92) / 2);
   box(c, 74, 56, 32, L, 0, C.hullDk);
-  MIDS[mod] && MIDS[mod](c, s);
+  for (const k of [...lay.list].reverse()) { c.save(); c.translate(0, lay.off[k]); MIDS[k](c, at(k)); c.restore(); }   // (back to front: the front sections' parts lie over)
   // nose: a dome with the round cockpit
   c.fillStyle = C.hull; c.beginPath(); c.moveTo(68, 60); c.lineTo(68, 36); c.arc(90, 36, 22, Math.PI, 0); c.lineTo(112, 60); c.closePath(); c.fill();
   disc(c, 90, 38, 11, C.glass, 0.9); disc(c, 86, 34, 4, "#fff", 0.6);
@@ -41,7 +51,7 @@ export function drawShip(c, mod, s) {
   c.globalAlpha = 0.85 * fl; c.fillStyle = C.heat;
   for (const ex of [68, 112]) { c.beginPath(); c.ellipse(ex, r + 88 + 4 * fl, 10, 6 + 10 * fl * fk, 0, 0, TAU); c.fill(); }
   c.globalAlpha = 1;
-  OVERS[mod] && OVERS[mod](c, s);
+  for (const k of lay.list) if (OVERS[k]) { c.save(); c.translate(0, lay.off[k]); OVERS[k](c, at(k)); c.restore(); }
   c.restore();
 }
 const MIDS = {

@@ -13,58 +13,62 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 ## The world
 
 - **A 2D plane, north up.** Saturn sits at the center (nothing flies inside it); **one station** sits just north of it. Around them, **two asteroid rings**: ring 1 (3–6 km out) and ring 2 (9–14 km out). **Deeper means outward**: ring 2 has the rarer ores and bigger rocks. A **red dashed locked line** at 15 km: nobody flies past it.
-- **Four sectors, North, East, South and West**, radiate from Saturn (owner). **One sector is open per 50 players online** (North first, then East, South, West); around Saturn and the station (2.6 km) everything is open. A sector that's no longer needed **waits 10 minutes before closing**, and a ship already inside a closing or closed sector can stay and fly out, but nobody new enters. Closed sectors are shaded on the map and minimap.
-- **The zone** shown top center: "Station", or the ring and sector ("Ring 1 · North"), plus the shard while shards are running ("Ring 1 · North · Shard 2").
+- **Four sectors, North, East, South and West**, radiate from Saturn and name the zones. **All four are always open** (owner, 2026-10-16: "sectioning them off feels weird").
+- **The zone** shown top center: "Station", or the ring and sector ("Ring 1 · North"), plus the shard when your zone is split ("Ring 1 · North · Shard 2"). **Hovering the minimap shows the name of the zone under the pointer.**
 
-## Shards (owner: "crowded zones split into copies once all four sectors are open")
+## Shards (owner: "crowded zones split into copies")
 
-- **Only once all four sectors are open** (and none is closing), **each zone holds 40 players per copy**. A ship picks its copy whenever it enters a zone (or logs in): **a party member's copy of that zone if one is there**, else the copy it's already in while that has room, else the first copy with room, else a new one. **Accepting a party invite moves you into a party member's copy** if they're in your zone. With shards off, ships go back to copy 1 as they change zones.
-- **Each copy has its own asteroids, loose ore, ships, effects and distress beacons**; you can only see, mine, scan, tow, pump, refine and hand ore within your copy. **Zone chat stays in your copy**; World, Party, Corp and Whispers reach every copy. Storage, credits, parties and corporations are shared. Changing copy drops your links to other ships (pumping, refining); a towed asteroid comes with you. Staff teleporting to a player join that player's copy.
+- **Each zone holds 40 players per copy.** A ship picks its copy whenever it enters a zone (or logs in): **a party member's copy of that zone if one is there**, else the copy it's already in while that has room, else the first copy with room, else a new one. **Accepting a party invite moves you into a party member's copy** if they're in your zone. The shard only shows in the zone label while the zone has more than one copy in use.
+- **Each copy has its own asteroids, loose ore, ships, effects and distress beacons**; you can only see, mine, scan, tow, fuel, refine and trade within your copy. **Zone chat stays in your copy**; World, Party, Corp and Whispers reach every copy. Storage, credits, parties and corporations are shared. Changing copy drops your links to other ships (fueling, refining); a towed asteroid comes with you. Staff teleporting to a player join that player's copy.
 
-## Asteroids
+## Asteroids and ore
 
 - **15 sizes; size n has n cracks** (owner: "15 asteroid sizes for 15 variations of crack counts"). Each crack has health; **mining is holding the laser on the rock**. Ring 1 has sizes 1–10, ring 2 sizes 4–15; smaller sizes are commoner. Bigger rocks are bigger on screen.
-- **Each crack that breaks drops one ore unit**, a small square that drifts out toward the ship lasering it. When the last crack breaks the rock is gone.
-- **The ore is hidden until scanned.** Ring 1: iron, nickel, ice. Ring 2: titanium, cobalt, ice, platinum, a little iron.
-- **Seeded and changing (owner):** the rings are cut into 400 m cells; each rock's seed comes from a secret only the server knows (with the 6-hour epoch, the shard, the cell, the slot and how many times the slot has rerolled), so nobody can map the field ahead. **The client builds the rocks itself (owner, 2026-10-16):** each untouched rock near you arrives as just its seed, and the client turns it into the same position and size as the server (`ringgen.js`, the same file on both). Rocks someone has worked on (lasered, scanned, towed) are sent in full. **The ore never comes from the seed**: it stays on the server until the rock is scanned. **A mined-out rock comes back as a new rock (different ore and size) after 3 minutes**; a rock nobody touches for 30 minutes despawns and is replaced the same way; the whole field reshuffles every 6 hours. Cells only exist near players and are dropped when nobody's been near for 2 minutes (keeping rocks someone has worked on). Each player is sent only what's within 3.2 km.
+- **Ores (owner, 2026-10-16): Ice keeps its name; the rest are Greek letters, rarer down the alphabet**: Alpha, Beta, Gamma, Delta, Epsilon (each with its own color). Ring 1: Alpha, Beta, Ice. Ring 2: Gamma, Delta, Ice, Epsilon, a little Alpha. (Saved storage keeps the old internal names: iron, nickel, titanium, cobalt, platinum.)
+- **Each crack that breaks drops one ore unit, a square that appears just off the asteroid's edge and stays there** (owner, 2026-10-16: no more flying to the miner or picking up by itself). **Click a unit to claim it** from within 200 m, if it fits in your hold; the one under the pointer is ringed, gold when it's in reach. Clicking ore doesn't fire the laser. Loose ore despawns after 30 minutes untouched.
+- **The ore is hidden until scanned.**
+- **Seeded and changing (owner):** the rings are cut into 400 m cells; each rock's seed comes from a secret only the server knows (with the 6-hour epoch, the shard, the cell, the slot and how many times the slot has rerolled), so nobody can map the field ahead. **The client builds the rocks itself:** each untouched rock near you arrives as just its seed, and the client turns it into the same position and size as the server (`ringgen.js`, the same file on both). Rocks someone has worked on (lasered, scanned, towed) are sent in full. **The ore never comes from the seed**: it stays on the server until the rock is scanned. **A mined-out rock comes back as a new rock (different ore and size) after 3 minutes**; a rock nobody touches for 30 minutes despawns and is replaced the same way; the whole field reshuffles every 6 hours. Cells only exist near players and are dropped when nobody's been near for 2 minutes (keeping rocks someone has worked on). Each player is sent only what's within 3.2 km.
 
 ## Ships and controls
 
-- **One hull for everyone** (owner), with a **free base laser**, a **5-unit hold**, a **100-unit fuel tank** and **one module**. New players start with 200 credits, a full tank and the **Miner** module.
-- **W / S** thrust forward / back along the nose, **A / D** turn, **Q / E** slide sideways. **The mouse aims; holding the left button fires the laser** at the first rock along the aim (170 m reach). **Right-click** uses your module on the ship or rock under the pointer. **F** switches an active module on or off. **The mouse wheel zooms** (kept per browser). The camera follows your ship.
+- **One hull for everyone** (owner), with a **free base laser**, a **5-unit hold**, a **100-unit fuel tank** and **module slots**: the Basic hull has one; **hull upgrades (Small, Medium, Large) each add a slot**, each four times the price of the last (owner, 2026-10-16). **A ship always has at least one module fitted.** New players start with 200 credits, a full tank and the **Miner** module.
+- **Every fitted module adds its own section to the ship's look** (owner, 2026-10-16): **the miner always up front, the tractor always at the back** (its claws trail past the engines), the rest in between; the ship is longer with more modules.
+- **W / S** thrust forward / back along the nose, **A / D** turn, **Q / E** slide sideways. **The mouse aims; holding the left button fires the laser** at the first rock along the aim (170 m reach). **Switching modules:** F switches the first switchable module (miner, command, refinery), **1–4 switch the module in that slot**, and **clicking a module's chip on the HUD switches it**. **The mouse wheel zooms** (kept per browser). The camera follows your ship.
+- **Right-clicking another ship opens its menu** (owner, 2026-10-16): **Invite to party, Whisper**, then what your modules can do for it: **Fuel ship / Stop fueling** (fueler), **Refine cargo / Stop refining** (refinery), **Request trade** (you have no hauler and it does). **Right-clicking an asteroid** does what your modules can do to it (Scan, Tow / Release); with both a scanner and a tractor fitted, a menu asks which.
+- **Names over other ships are dim, and bright while the pointer is over the ship** (owner, 2026-10-16).
 - **Fuel:** flying at full thrust burns fuel, and active modules burn it while working. **An empty tank means crawling** at a fifth of the speed, and the ship sends a **distress beacon: a red "!" every player in its shard sees** (above its name; at the screen edge when it's off screen, and on the minimap) until it has fuel again.
 - Ships bump off asteroids and pass through each other. Ships can't be destroyed.
 
-## Modules (owner: one at a time, swapped only at the station)
+## Modules (owner: swapped only at the station; three upgrades each)
 
-| Module | What it does |
-| --- | --- |
-| **Miner** | F switches on the big laser: 4x mining speed, burning fuel while it fires. |
-| **Hauler** | A 40-unit hold. Only a hauler can take another ship's ore. |
-| **Fueler** | A 700-unit tank. Right-click a ship to pump fuel into it (until full or you stop); **the world pays the fueler** 2.5 credits per unit pumped, not the ship being fueled. |
-| **Tractor** | Right-click a rock to tow it behind you on a leash (slower the bigger it is; burns fuel by size). A rock can't be moved once its first crack has broken. |
-| **Command** | F switches on a boost: every ship mining within 300 m mines 1.5x faster (several command ships don't stack), burning fuel. |
-| **Scanner** | Right-click a rock (800 m reach) to reveal its ore to everyone. |
-| **Refinery** | Refines raw ore in the field, one unit every 15 s for 2 fuel: F refines your own hold, right-click a ship to refine theirs. |
+| Module | What it does | Base → Mk IV |
+| --- | --- | --- |
+| **Miner** | Switch on the big laser to mine much faster; burns fuel while it fires. | 40 → 50 → 62 → 78 a second |
+| **Hauler** | A big hold. Ships without one can trade it their cargo. | 40 → 55 → 70 → 90 units |
+| **Fueler** | A large tank and a pump: fuel other ships; **the world pays the fueler** 2.5 credits per unit pumped, not the ship being fueled. | tank 700 → 900 → 1,100 → 1,400; pump 20 → 25 → 30 → 40 a second |
+| **Tractor** | Tow an asteroid behind you on a leash (slower the bigger it is; burns fuel by size). A rock can't be moved once its first crack has broken. | reach 200 → 350 m; tow speed ×1 → ×1.35 |
+| **Command** | Switch on a boost: every ship mining in reach mines faster (several command ships don't stack: the strongest counts), burning fuel. | ×1.5 → 1.6 → 1.75 → 1.9; reach 300 → 450 m |
+| **Scanner** | Reveal an asteroid's ore to everyone. | reach 800 → 1,500 m |
+| **Refinery** | Refine raw ore in the field, in your hold (switch it) or another ship's (its menu); 2 fuel a unit. | 15 → 12 → 10 → 8 s a unit |
 
-The station sells each module once (Miner 500, Hauler 800, Fueler 800, Command 1,200, Tractor 1,000, Scanner 1,000, Refinery 1,500 credits); owned modules are equipped there for free. Each tank keeps its fuel; swapping to a module with a smaller tank turns the extra into fuel blocks in storage.
+**Prices (owner, 2026-10-16: every price but the ores' is at 20% for prototype testing; `PRICE_SCALE` in `rules.js`):** Miner 100, Hauler 160, Fueler 160, Tractor 200, Scanner 200, Command 240, Refinery 300 credits; upgrades Mk II / III / IV cost 0.6× / 1.2× / 2.4× the module's price; hulls Small 500, Medium 2,000, Large 8,000; station fuel 0.4 a unit. Each module is bought once and stays owned; owned modules are equipped and unequipped for free. A smaller tank after a change turns the spare fuel into fuel blocks in storage.
 
-## Ore, names and delivery (owner: "everyone gets paid out the full amount for helping")
+## Names and delivery (owner: "everyone gets paid out the full amount for helping")
 
 - **Every ore unit carries the names of everyone who helped**, each at most once: every ship **lasering the rock at the moment the crack breaks**, every command ship that boosted them during that crack, whoever scanned or towed the rock, and **party fuelers whose fuel the miner is burning**.
 - **Any ship that delivers it is named too** (and its party fuelers). **Delivering** (flying into the station's circle) puts **a full copy of each unit into the station storage of every named player**. Names stop at the station.
-- **Loose ore** flies into the nearest ship within 50 m that has room. It despawns after 30 minutes untouched.
-- **Custody (owner):** ore in a hold can't be dropped or given away, with **one exception: a non-hauler can hand its whole hold to a hauler** (right-click the hauler within 150 m); haulers can't hand ore on. **If a carrier logs off, after 30 minutes their hold "crawls home"** and is delivered after the crawl time (they aren't added as deliverer). **A banned player's hold is delivered** at once.
-- **Refining:** a refined unit takes **a fifth of the space** and **sells for 1.5x**. Raw ore is brown, refined is purple, in the hold bar and on the ships' fill gauges. Field refining (Refinery) keeps the names. **The station refines for free, one unit a minute**, and keeps going while you're offline.
+- **Custody (owner):** ore in a hold can't be dropped or given away, with **one exception, trading, one way: a ship without a hauler asks a hauler to take its cargo** ("Request trade" in the hauler's menu, within 150 m); **the hauler gets Accept / Decline** (it lapses after 30 s), and on Accept as much as fits moves over. Haulers can't trade ore on. **If a carrier logs off, after 30 minutes their hold "crawls home"** and is delivered after the crawl time (they aren't added as deliverer). **A banned player's hold is delivered** at once.
+- **Refining:** a refined (compressed) unit takes **a fifth of the space** and **sells for 1.5x**. Field refining (Refinery) keeps the names. **The station refines for free, one unit a minute**, and keeps going while you're offline.
 
-## The station
+## The station and the Shop
 
-Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage** (each ore, raw and refined, with **Sell** and **Refine**; ice also has **Make fuel**; fuel blocks have **Fill tank**), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank at 2 credits a unit), and **Modules** (Buy / Equip / Equipped). **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block): cheaper than buying fuel, since ice sells for 30. No trading between players for now; progression is modules (and hulls later).
+- Flying into the station's circle docks the ship (delivering its hold) and opens the **Station panel** on the right: **Storage, a scrollable grid of slots** (a slot per ore, raw and compressed, and fuel blocks, with its count; hovering shows the count and what it sells for; **clicking a slot shows what can be done with it: Sell, Refine, Make fuel for ice, Fill tank for fuel blocks**), the **Queue** (refining in purple and fuel blocks in blue, with progress), **Fuel** (**Fill** the tank), and the **Shop** button. **Make fuel** turns ice into fuel blocks (25 fuel each, 15 s a block).
+- **The Shop is its own scrollable window** (owner, 2026-10-16) beside the station panel: the **hull** (its slots and the next size up with its price), then **every module as a card with what it does, its price and its numbers**. An owned module shows its level, **its next upgrade's numbers (current → next) and price**, and **Equip / Unequip** (with one slot, Equip swaps; the last fitted module shows Equipped and can't come off).
 
 ## Parties and corporations
 
-- **Parties of up to 10** (owner): right-click a name → Invite to party, or `/party invite Name` (`/invite Name`); `/party accept`, `/party leave`. The party list shows at the top left. A fueler's name rides on fuel only within a party, and leaving takes it off for good.
-- **Corporations**, any size: `/corp create Name`, `/corp invite Name` (or from a name), `/corp accept`, `/corp leave`.
+- **Parties of up to 10** (owner): Invite to party from a ship's or a chat name's menu, or `/party invite Name` (`/invite Name`); `/party accept`, `/party leave`. The party list shows at the top left. A fueler's name rides on fuel only within a party, and leaving takes it off for good.
+- **Corporations**, any size: `/corp create Name`, `/corp invite Name` (or from a chat name), `/corp accept`, `/corp leave`.
 
 ## Chat (rebuilt 2026-10-16)
 
@@ -75,9 +79,9 @@ Flying into the station's circle docks the ship (delivering its hold) and opens 
 
 ## Map and HUD
 
-- **The minimap** (bottom left): Saturn, the station, the rings, the locked line, closed sectors, your ship and distress beacons; the wheel zooms it.
-- **The HUD** (bottom center, between the minimap and the chat; in windows too narrow for that, above them): the module (and whether it's on), the hold bar (brown raw, purple refined), the fuel bar, credits.
-- Names show over other ships.
+- **The minimap** (bottom left): Saturn, the station, the rings, the locked line, your ship, ships near you and distress beacons; the wheel zooms it; hovering names the zone.
+- **The HUD** (bottom center, between the minimap and the chat; in windows too narrow for that, above them): **a chip per fitted module** (stacked upward; switchable ones show On / Off and switch when clicked), the hold bar (brown raw, purple refined), the fuel bar, credits.
+- **The cargo, above the hold bar: a square per unit in its ore's color; compressed units go five to a square, edged white** (a part stack fills part of its square) (owner, 2026-10-16). **Hovering a square shows that ore's count in the hold and what it sells for; holding Alt adds everyone named on those units.**
 
 ## Accounts and sessions
 
@@ -104,6 +108,11 @@ Kept from before (`auth.js`, `sessions.js`, `security.js`): sign-up with the EUL
 
 - **The 3D team game (owner, 2026-10-16: the design restarted as a cooperative 2D ring-mining game)**, kept on the **`legacy-3d-v2`** branch (tip `23df787`): the hexagon world, its background, stars and grid, Three.js, two teams (Blue / Yellow) and team picking, the Hangar, weapons (bullets, beam, railgun, missiles, drones), abilities, upgrades and levels, team stations and matches, capture points and buffs, health, death and respawning, nebulae and visibility, the Build menu (shapes, nebulae, capture points), number-field dragging, remembered window positions, **Reset faction** on the Welcome back page. Its tables (`world3d`, `world3d_ui`, `world3d_builds` and the rest) stay untouched.
 - **PvP, for now if not ever (owner, 2026-10-16).**
+- **Sectors opening with the number of players online** (one per 50, a 10-minute close, shaded closed sectors) and **shards waiting for all four to open** (owner, 2026-10-16: all sectors always open).
+- **Loose ore flying to the miner and flying into the nearest ship by itself** (owner, 2026-10-16): it now waits by the asteroid to be clicked.
+- **Handing cargo to a hauler with a plain right-click** (2026-10-16): it's a trade request the hauler accepts now.
+- **One module per ship and the station panel's Modules list** (2026-10-16): hull slots, upgrades and the Shop window replaced them. **The text list of storage rows** became the slot grid.
+- **The ore names Iron, Nickel, Titanium, Cobalt, Platinum** (owner, 2026-10-16): now Alpha to Epsilon (Ice kept).
 
 
 - **The Ship Editor and the two teams' different ships (owner, 2026-10-15: "everyone gets the same ship")**: the S window, its descriptions popup, every per-team number (the `world3d_settings` "ships" row stays untouched, unused), **boost on Shift** (Speed Boost is an ability now), **shield regeneration and restoring a broken shield with capacitor**, **capture points paying 1 credit a second** (they give buffs now), and entering where you left off (ships start at their station).

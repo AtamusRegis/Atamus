@@ -15,7 +15,7 @@ import { safeText } from "../textsafe.js";
 
 // the game's fixed numbers, for the clients (drawing, prediction, the station panel)
 const GAME = { world: R.WORLD, ship: R.SHIP, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, refinedMul: R.REFINED_MUL, refinedSpace: R.REFINED_SPACE,
-  fuel: R.FUEL, stationRefine: R.STATION_REFINE, ringSizes: R.RING_SIZES, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, partyMax: R.PARTY_MAX };
+  fuel: R.FUEL, stationRefine: R.STATION_REFINE, ringSizes: R.RING_SIZES, upgradeCost: R.UPGRADE_COST, hulls: R.HULLS, tradeR: R.TRADE_R, tradeWait: R.TRADE_WAIT, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, partyMax: R.PARTY_MAX };
 
 export function attachGameServer(httpServer) {
   const world = new World();
@@ -83,7 +83,8 @@ export function attachGameServer(httpServer) {
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
       if (m.t === "in") world.setInput(pid, m);
-      else if (m.t === "mod") world.toggleModule(pid);
+      else if (m.t === "mod") world.toggleModule(pid, m.k);
+      else if (m.t === "tradeans") { if (typeof m.from === "string") world.tradeAnswer(pid, m.from, m.yes === true); }
       else if (m.t === "act") world.act(pid, m);
       else if (m.t === "st") { if (world.station(pid, m)) { const p = world.players.get(pid); if (p) tell(pid, world.stationMsg(p)); } }
       else if (m.t === "party" || m.t === "corp") social(m).catch((e) => console.error("social", e));

@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-17
+
+- **Ships, shop and cargo (owner):** module upgrades (three each) and hull upgrades (Small, Medium, Large; each adds a module slot), so a ship can fit several modules at once, each switching on its own (1–4, or clicking its chip); each fitted module adds its section to the ship's look (miner up front, tractor at the back). A Shop window from the station with every module's description, price and numbers, and the next upgrade's. Station storage is a grid of slots. The hold shows as a square per unit (compressed: five to a square, edged white), with count and value on hover and the names on the ore with Alt. Ores other than Ice are renamed Alpha to Epsilon. Ore now waits by the asteroid to be clicked instead of flying into holds. All four sectors are always open; the shard only shows when a zone is split. Right-clicking a ship opens its menu (party, whisper, fuel, refine, Request trade); trading is a request the hauler accepts, one way to haulers. The minimap names the zone under the pointer; names over ships are dim until hovered. Every price but the ores' is at 20% for testing.
+
 ## 2026-10-16
 
 - **Shards and client-built asteroids (owner):** once all four sectors are open, each zone holds 40 players per copy, with parties kept together (a party invite pulls you into your party's copy); each copy has its own asteroids, ore, ships and distress beacons, and Zone chat stays in it. The zone label shows the shard while shards run. Untouched asteroids now reach the client as just their seed and the client builds them (the ore still only comes from the server, once scanned). Fixes: fuel pumped in and other changes to a ship were only saved when it moved or logged off; leaving a party now saves the fueler's name coming off the fuel; the distress "!" sits above the ship's name instead of over it; fuel blocks' progress is blue; the HUD moves above the minimap and chat in narrow windows.

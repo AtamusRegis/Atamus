@@ -9,7 +9,7 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 3. `docs/DESIGN.md` holds the agreed direction (the ring game; the full design document is linked there).
 4. **The 3D rebuild (owner, 2026-10-12):** the 2D game (the Expanse, ships, modules, combat, the ETA, market, pilots, licenses, the whole old client and world) was wiped from `main` and preserved on the **`legacy-2d` branch** (tip `e56e61d`); older snapshots are in `reference/`. Bring pieces back only when the owner asks. **Old database data stays untouched for reference.**
 5. **Rebuilt from scratch (owner, 2026-10-15):** the first 3D version is on the **`legacy-3d-v1` branch** (tip `c2088a7`).
-6. **The ring game (owner, 2026-10-16):** the design restarted as a **cooperative 2D gather-and-craft MMO like Palia, no PvP**. The 3D team game (Blue / Yellow, Hangar, weapons, abilities, Build menu) is on the **`legacy-3d-v2` branch** (tip `23df787`). Now: Saturn with one station, two asteroid rings, four sectors that open with players online, one hull with one module (miner, hauler, fueler, tractor, command, refinery, scanner), ore named with everyone who helped and copied to each of them on delivery. The design document and ship art are artifacts linked from `docs/DESIGN.md`; use their look (`website/theme.css`) for the game and the website. Every number is in `rules.js`.
+6. **The ring game (owner, 2026-10-16):** the design restarted as a **cooperative 2D gather-and-craft MMO like Palia, no PvP**. The 3D team game (Blue / Yellow, Hangar, weapons, abilities, Build menu) is on the **`legacy-3d-v2` branch** (tip `23df787`). Now: Saturn with one station, two asteroid rings, four always-open sectors with shards per zone, one hull with module slots (hull upgrades add slots; modules: miner, hauler, fueler, tractor, command, refinery, scanner, each with three upgrades), ore named with everyone who helped and copied to each of them on delivery. The design document and ship art are artifacts linked from `docs/DESIGN.md`; use their look (`website/theme.css`) for the game and the website. Every number is in `rules.js`.
 
 **In the same commit as any change to behavior:**
 
@@ -48,7 +48,7 @@ packages/server/src/
                   hooks (kick 4005 / ban 4006 delivers the hold / mute), input / module / act / station / party / corp /
                   chat (World, Zone, Party, Corp, Whisper) in; 20 Hz sim, 15 Hz ship snapshots, 5 Hz rocks / ores / me /
                   station diffs, 1 Hz distress list
-    rules.js      every fixed number: world, ship, modules, ores, ring sizes, fuel, station refining, sectors
+    rules.js      every fixed number: world, ship, modules and their upgrades, hulls, ores, ring sizes, fuel, prices (PRICE_SCALE)
     ringgen.js    asteroids from seeds (position, size): the same file as website/ringgen.js (check.sh compares them)
     world.js      the world: seeded asteroid cells, sectors, ships and fuel, mining and cracks, ore names and delivery,
                   modules, custody (handoff, offline crawl home), shards (layers), the station's ops and queue, parties,
@@ -59,7 +59,8 @@ website/          GitHub Pages site (atamus.io) and the game client
   game.js         the 2D canvas client: input, my ship predicted, others interpolated, camera and zoom, rings / sectors /
                   Saturn / station / rocks / ore / ships and their effects, HUD, station panel, party list, minimap, chat,
                   name menu and reports, countdown and reconnect handling
-  shipart.js      the art from the ship sheet: drawShip (every module, animated), drawStation, drawRock, drawSaturn
+  shipart.js      the art from the ship sheet: shipLayout / drawShip (a section per fitted module, animated), drawStation,
+                  drawRock, drawSaturn
   ringgen.js      asteroids from seeds: identical to packages/server/src/game/ringgen.js
   theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
   admin.css       the admin and disciplinary panels' styles
@@ -88,7 +89,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
    - each one first calls `/game/update-countdown`, which starts the 30 s countdown in every client;
    - it then sleeps 30 s and switches the live build;
    - clients are sent to `play.html?updating=1`, which waits for the new build.
-6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user; `?as=Name`, 3+ characters, plays as another account). To try shards locally, start it as `RING_SECTOR_EVERY=1 RING_SHARD_CAP=2 scripts/ptr.sh start` (all four sectors open with three online, two per copy).
+6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user; `?as=Name`, 3+ characters, plays as another account). To try shards locally, start it as `RING_SHARD_CAP=2 scripts/ptr.sh start` (two per copy).
 
 ## Code conventions
 

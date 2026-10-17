@@ -3,7 +3,7 @@
 // Q / E strafe; the mouse aims; the left button holds the mining laser on; the right button uses the module on a ship or
 // an asteroid; F switches the module on or off; the wheel zooms. Fly into the station to deliver the hold and use its panel.
 // The server decides everything; this page predicts my own ship with the same numbers and draws the rest.
-import { C, ART, hullLen, drawShip, drawStation, drawRock, drawSaturn } from "./shipart.js?v=1792300002";
+import { C, ART, shipLayout, drawShip, drawStation, drawRock, drawSaturn } from "./shipart.js?v=1792300005";
 import { genRock } from "./ringgen.js?v=1792300003";
 
 if (typeof needLogin === "function" && needLogin()) location.replace("login.html");
@@ -17,15 +17,18 @@ let G = null;
 const rockR = (n) => 10 + 3.3 * n, crackHp = (n) => 80 + 8 * n, towFactor = (n) => 0.6 - (n - 1) * 0.025;
 const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;
 const ORE_KEYS = ["iron", "nickel", "ice", "titanium", "cobalt", "platinum"];
+const kindBit = (k) => 1 << G.kinds.indexOf(k);
+const lvlOf = (k) => (ME.upgrades && ME.upgrades[k]) || 0;
+const mval = (k, stat, lv = lvlOf(k)) => { const v = G.modules[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, lv)] : v; };
 const oreName = (k) => (G && G.ores[k] ? G.ores[k].name : k);
 
 // ---- state ----
 let myId = null, myName = "", amStaff = false, haveMe = false;
 const mine = { x: 0, y: 0, vx: 0, vy: 0, h: 0, inSector: -1 };
 const corr = { x: 0, y: 0 };
-let ME = { fuel: 100, tank: 100, cap: 5, hold: {}, credits: 0, docked: 0, module: "miner", on: 1, tow: 0, pump: 0, refine: 0, sos: 0, zone: "" };
+let ME = { fuel: 100, tank: 100, cap: 5, hold: {}, units: [], names: {}, credits: 0, docked: 0, mods: ["miner"], on: ["miner"], hull: 0, slots: 1, upgrades: {}, tow: 0, pump: 0, refine: 0, sos: 0, zone: "" };
 let STATION = { storage: {}, queue: [], modules: [] }, SOC = { party: null, corp: null };
-let sectors = [1, 0, 0, 0], online = 0, sosList = [];
+let sectors = [1, 1, 1, 1], online = 0, sosList = [];
 const ships = new Map();                       // id -> { id, name, buf, row, x, y, h, near }
 const rocks = new Map();                       // id -> { id, x, y, n, cracks, hp, ore, tow, dx, dy }: built from the two below
 const rockCells = new Map();                   // "layer:cx,cy" -> [untouched asteroids built from their seeds (ringgen.js)]
@@ -58,21 +61,30 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape") hideMenu();
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
   if (e.code === "KeyF" && !e.repeat) { send({ t: "mod" }); e.preventDefault(); }
+  if (/^Digit[1-4]$/.test(e.code) && !e.repeat) { const k = (ME.mods || [])[+e.code.slice(5) - 1]; if (k) send({ t: "mod", k }); }   // (a module by its slot)
+  if (e.key === "Alt") { altDown = true; e.preventDefault(); refreshTip(); }
 });
-addEventListener("keyup", (e) => keys.delete(e.code));
-addEventListener("blur", () => { keys.clear(); firing = false; });
+addEventListener("keyup", (e) => { keys.delete(e.code); if (e.key === "Alt") { altDown = false; refreshTip(); } });
+addEventListener("blur", () => { keys.clear(); firing = false; altDown = false; });
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 cv.addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; mouse.over = true; });
 cv.addEventListener("mouseleave", () => { mouse.over = false; });
+// what's under the pointer: a loose ore unit, another ship, an asteroid
+function oreAt(sx, sy) { const [wx, wy] = toWorld(sx, sy); let best = null, bd = Math.max(9, 12 / zoom); for (const o of ores.values()) { const d = hyp(o.dx - wx, o.dy - wy); if (d < bd) { bd = d; best = o; } } return best; }
+function shipAt(sx, sy) { const [wx, wy] = toWorld(sx, sy); let best = null, bd = 34 / Math.min(1, zoom); for (const s of ships.values()) { if (s.id === myId || !s.near) continue; const d = hyp(s.x - wx, s.y - wy); if (d < bd) { bd = d; best = s; } } return best; }
+function rockAt(sx, sy) { const [wx, wy] = toWorld(sx, sy); for (const r of rocks.values()) if (hyp(r.dx - wx, r.dy - wy) < rockR(r.n) + 6) return r; return null; }
 cv.addEventListener("mousedown", (e) => {
   mouse.x = e.clientX; mouse.y = e.clientY;
-  if (e.button === 0) firing = true;
-  if (e.button === 2) {                        // the module, on whatever is under the pointer: another ship, else an asteroid
-    const [wx, wy] = toWorld(e.clientX, e.clientY); let best = null, bd = 34 / Math.min(1, zoom);
-    for (const s of ships.values()) { if (s.id === myId || !s.near) continue; const d = hyp(s.x - wx, s.y - wy); if (d < bd) { bd = d; best = s; } }
-    if (best) { send({ t: "act", ship: best.id }); return; }
-    let rk = null; for (const r of rocks.values()) { const d = hyp(r.dx - wx, r.dy - wy); if (d < rockR(r.n) + 6) { rk = r; break; } }
-    if (rk) send({ t: "act", rock: rk.id });
+  if (e.button === 0) {                        // a loose ore unit under the pointer is claimed; otherwise the laser fires
+    const o = oreAt(e.clientX, e.clientY); if (o) { send({ t: "act", ore: o.id }); return; }
+    firing = true;
+  }
+  if (e.button === 2) {                        // another ship: its menu; an asteroid: what my modules can do to it
+    const s = shipAt(e.clientX, e.clientY); if (s) { shipMenu(s, e.clientX, e.clientY); return; }
+    const r = rockAt(e.clientX, e.clientY); if (!r) return;
+    const ops = [...(ME.mods.includes("scanner") && !r.ore ? [["Scan", "scan"]] : []), ...(ME.mods.includes("tractor") ? [[ME.tow === r.id ? "Release" : "Tow", "tow"]] : [])];
+    if (ops.length === 1) send({ t: "act", rock: r.id, op: ops[0][1] });
+    else if (ops.length > 1) showMenu(e.clientX, e.clientY, ops.map(([label, op]) => [label, () => send({ t: "act", rock: r.id, op })]));
   }
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
@@ -137,8 +149,9 @@ function onMsg(m) {
   } else if (m.t === "ores") {
     for (const r of m.a || []) { const [id, x, y, oi, ref] = r; const o = ores.get(id); if (o) Object.assign(o, { x, y }); else ores.set(id, { id, x, y, dx: x, dy: y, o: ORE_KEYS[oi] || "iron", r: ref }); }
     for (const id of m.x || []) ores.delete(id);
-  } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (ME.docked !== wasDocked) drawStation_(); drawHud(); }
-  else if (m.t === "station") { STATION = m; STATION.at = performance.now(); drawStation_(); }
+  } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (ME.docked !== wasDocked) drawStation_(); else if (ME.docked) { drawStation_(); drawShop(); } drawHud(); refreshTip(); }
+  else if (m.t === "station") { STATION = m; STATION.at = performance.now(); drawStation_(); drawShop(); }
+  else if (m.t === "trade") showTrade(m);
   else if (m.t === "soc") { SOC = m; drawParty(); }
   else if (m.t === "sectors") { sectors = m.s; online = m.online; }
   else if (m.t === "sos") sosList = m.s || [];
@@ -180,7 +193,7 @@ function allowedMe(x, y) {
 }
 function stepMe(dt, inp) {
   const S = G.ship, empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
-  const k = empty ? S.crawl : 1, spd = S.speed * k * (rock ? towFactor(rock.n) : 1), push = hyp(inp.x, inp.y);
+  const k = empty ? S.crawl : 1, spd = S.speed * k * (rock ? Math.min(1, towFactor(rock.n) * mval("tractor", "tow")) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? S.accel * k : S.brake) * dt;
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
   mine.vx += ex; mine.vy += ey;
@@ -247,25 +260,36 @@ function drawWorld(t) {
     if (r.ore && zoom > 0.5) { cx.fillStyle = C.ink; cx.globalAlpha = 0.85; cx.font = `600 ${lw(11)}px "JetBrains Mono", monospace`; cx.textAlign = "center"; cx.fillText(oreName(r.ore).toUpperCase() + " · " + r.cracks, 0, R + lw(16)); cx.globalAlpha = 1; }
     cx.restore();
   }
-  // loose ore: raw brown, refined purple, edged with the ore's color
-  for (const o of ores.values()) { o.dx += (o.x - o.dx) * 0.25; o.dy += (o.y - o.dy) * 0.25; const s = 7; cx.fillStyle = o.r ? C.ore : C.brown; cx.fillRect(o.dx - s / 2, o.dy - s / 2, s, s); cx.strokeStyle = G.ores[o.o].color; cx.lineWidth = lw(1.5); cx.strokeRect(o.dx - s / 2, o.dy - s / 2, s, s); }
+  // loose ore: a square in the ore's color (refined: a white edge), waiting to be clicked; the one under the pointer is
+  // ringed (gold when it's in reach)
+  const hov = mouse.over ? oreAt(mouse.x, mouse.y) : null;
+  for (const o of ores.values()) {
+    o.dx += (o.x - o.dx) * 0.25; o.dy += (o.y - o.dy) * 0.25; const s = 9, bob = Math.sin(ts * 2 + o.id) * 1.2;
+    cx.fillStyle = G.ores[o.o].color; cx.fillRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
+    cx.strokeStyle = o.r ? "#fff" : "rgba(0,0,0,.45)"; cx.lineWidth = lw(o.r ? 1.6 : 1); cx.strokeRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
+    if (o === hov) { const near = hyp(o.dx - mine.x, o.dy - mine.y) <= G.ship.claimR; cx.strokeStyle = near ? C.gold : C.dim; cx.lineWidth = lw(1.5); cx.beginPath(); cx.arc(o.dx, o.dy + bob, s + 3, 0, TAU); cx.stroke(); }
+  }
   // ships: module effects under them, the hull, lasers and links over
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, true);
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) {
-    const r = s.row, m = G.kinds[r[4]], fl = r[5], st = { t: ts, raw: r[11] / 100, ref: r[12] / 100, fuel: r[13] / 100, firing: !!(fl & 2), on: !!(fl & 4), busy: !!(r[8] || r[9] || r[10]) || (m === "refinery" && !!(fl & 4)), thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
+    const r = s.row, fl = r[5], onB = r[15] || 0, on = {}, mods = shipMods(r);
+    for (const k of mods) on[k] = !!(onB & kindBit(k));
+    const st = { t: ts, raw: r[11] / 100, ref: r[12] / 100, fuel: r[13] / 100, firing: !!(fl & 2), on, busy: { tractor: !!r[8], fueler: !!r[9], refinery: !!r[10] || on.refinery }, thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (s.id === myId) { st.fuel = ME.fuel / (ME.tank || 100); }
-    cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, m, st); cx.restore();
+    cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore();
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
   drawFx(t);
   cx.restore();
 }
-// a ship's module at work: the command ring under it; over it, the laser, the tractor's leash, the hose, the refine link
+// a ship's fitted modules, from the row's bits (the art orders them: see shipLayout)
+function shipMods(r) { const b = r[14]; if (b === undefined) return [G.kinds[r[4]]]; return G.kinds.filter((k) => b & kindBit(k)); }
+// a ship's modules at work: the command ring under it; over it, the laser, the tractor's leash, the hose, the refine link
 function shipFx(s, ts, under) {
-  const r = s.row, m = G.kinds[r[4]], fl = r[5], lw = (px) => px / zoom;
+  const r = s.row, fl = r[5], lw = (px) => px / zoom, lay = shipLayout(shipMods(r)), yc = lay.yc;
   if (under) {
-    if (m === "command" && fl & 4) {
-      const R = G.modules.command.radius;
+    if ((r[15] || 0) & kindBit("command")) {
+      const R = r[17] || 300;
       cx.save(); cx.translate(s.x, s.y);
       cx.strokeStyle = C.gold; cx.lineWidth = lw(2); cx.globalAlpha = 0.5; cx.setLineDash([lw(26), lw(10), lw(4), lw(10)]); cx.rotate(ts / 20 * TAU); cx.beginPath(); cx.arc(0, 0, R, 0, TAU); cx.stroke();
       cx.setLineDash([]); const k = (ts % 2.6) / 2.6; cx.globalAlpha = 0.6 * (1 - k); cx.beginPath(); cx.arc(0, 0, 20 + (R - 20) * k, 0, TAU); cx.stroke(); cx.restore(); cx.globalAlpha = 1;
@@ -273,21 +297,20 @@ function shipFx(s, ts, under) {
     return;
   }
   if (fl & 2) {                                // the mining laser, from the nose along the aim to whatever it hits
-    const a = r[6] / 1000, len = r[7], big = m === "miner" && fl & 4, x0 = s.x + Math.sin(s.h) * 20, y0 = s.y - Math.cos(s.h) * 20, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
+    const a = r[6] / 1000, len = r[7], big = (r[15] || 0) & kindBit("miner"), nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
     cx.strokeStyle = C.signal; cx.lineCap = "round";
     cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 9 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
     cx.globalAlpha = 1; cx.lineWidth = lw(big ? 3 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
     if (fl & 1) { cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(big ? 6 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1; }
   }
   const at = (lx, ly) => { const c = Math.cos(s.h), sn = Math.sin(s.h); return [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c]; };
-  const yc = (10 + 56 + hullLen(m) + 92) / 2;
   if (r[8]) {                                  // the tractor's leash, from both claw tips back to the asteroid
     const rk = rocks.get(r[8]);
     if (rk) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(5)]); cx.globalAlpha = 0.5 + 0.5 * Math.sin(ts * 4.5); cx.beginPath();
-      for (const lx of [35, 145]) { const [px, py] = at((lx - 90) * ART, (318 - yc) * ART); cx.moveTo(px, py); cx.lineTo(rk.dx, rk.dy); } cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; }
+      for (const lx of [35, 145]) { const [px, py] = at((lx - 90) * ART, (318 + (lay.off.tractor || 0) - yc) * ART); cx.moveTo(px, py); cx.lineTo(rk.dx, rk.dy); } cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1; }
   }
   const link = (id, color, dash, ly) => { const q = id === myId ? { x: mine.x, y: mine.y } : ships.get(id); if (!q) return; const [px, py] = at(0, ly); cx.strokeStyle = color; cx.lineWidth = lw(2.5); cx.setLineDash(dash.map(lw)); cx.beginPath(); cx.moveTo(px, py); cx.quadraticCurveTo((px + q.x) / 2 + 10, (py + q.y) / 2 - 10, q.x, q.y); cx.stroke(); cx.setLineDash([]); };
-  if (r[9]) link(r[9], C.ice, [], (154 - yc) * ART);            // the fueler's hose, from the pump on top of the tank
+  if (r[9]) link(r[9], C.ice, [], (154 + (lay.off.fueler || 0) - yc) * ART);            // the fueler's hose, from the pump on top of the tank
   if (r[10] && r[10] !== s.id) link(r[10], C.ore, [6, 5], 0);   // the refinery working on another ship's hold
 }
 function drawFx(t) {
@@ -321,10 +344,11 @@ function drawFx(t) {
 function drawOverlay(t) {
   cx.font = `700 12px "Atkinson Hyperlegible", system-ui, sans-serif`; cx.textAlign = "center";
   const party = new Set(SOC.party ? SOC.party.members.map((m) => m[0]) : []);
+  const hov = mouse.over ? shipAt(mouse.x, mouse.y) : null;   // (owner, 2026-10-16) names dim, bright while the pointer is over the ship
   for (const s of ships.values()) {
     if (!s.row || s.id === myId || !s.near) continue;
     const [sx, sy] = toScreen(s.x, s.y); if (sx < -50 || sy < -50 || sx > VW + 50 || sy > VH + 50) continue;
-    cx.fillStyle = party.has(s.id) ? C.gold : C.ink; cx.globalAlpha = 0.9; cx.fillText(names.get(s.id) || "", sx, sy - 40 * Math.max(0.6, zoom) - 6); cx.globalAlpha = 1;
+    cx.fillStyle = party.has(s.id) ? C.gold : C.ink; cx.globalAlpha = s === hov ? 1 : 0.35; cx.fillText(names.get(s.id) || "", sx, sy - 40 * Math.max(0.6, zoom) - 6); cx.globalAlpha = 1;
   }
   for (const [id, x, y] of sosList) {
     const px = id === myId ? mine.x : x, py = id === myId ? mine.y : y; let [sx, sy] = toScreen(px, py); const off = sx < 16 || sy < 16 || sx > VW - 16 || sy > VH - 16;
@@ -366,83 +390,181 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// ---- the HUD: the hold (raw brown, refined purple), fuel, the module, credits, where I am ----
-const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), mod: $("mod-chip"), credits: $("credits"), zone: $("zone") };
+// ---- the HUD: a chip per module (a click switches it), the hold as squares and a bar, fuel, credits, where I am ----
+const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), mods: $("mods"), cargo: $("cargo"), credits: $("credits"), zone: $("zone") };
+const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
 function holdCounts() { let raw = 0, ref = 0; for (const [k, n] of Object.entries(ME.hold || {})) { if (k.endsWith("+")) ref += n; else raw += n; } return { raw, ref }; }
+const SWITCHES = { miner: 1, command: 1, refinery: 1 };
+let hudKey = "";
 function drawHud() {
   if (!G) return;
   const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref * G.refinedSpace;
   hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref * G.refinedSpace / cap) * 100 + "%";
   hud.holdNum.textContent = (Math.round(used * 10) / 10) + " / " + cap;
-  const M = G.modules[ME.module] || {}, actv = M.active && ME.module !== "tractor" && ME.module !== "scanner";
-  hud.mod.textContent = (M.name || ME.module) + (actv ? (ME.module === "refinery" ? (ME.refine ? " · Refining" : "") : ME.on ? " · On" : " · Off") : "");
-  hud.mod.classList.toggle("on", !!(actv && (ME.on || ME.refine)));
   hud.credits.textContent = fmt(ME.credits || 0);
   hud.zone.textContent = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
+  const key = JSON.stringify([ME.mods, ME.on, ME.refine === myId, ME.units, ME.names]); if (key === hudKey) return; hudKey = key;
+  hud.mods.replaceChildren(...(ME.mods || []).map((k) => {
+    const sw = !!SWITCHES[k], on = k === "refinery" ? ME.refine === myId : (ME.on || []).includes(k);
+    const c = elx("div", "mod-chip" + (sw && on ? " on" : "") + (sw ? "" : " fixed"), G.modules[k].name + (sw ? (k === "refinery" ? (on ? " · Refining" : "") : on ? " · On" : " · Off") : ""));
+    if (sw) c.addEventListener("click", () => send({ t: "mod", k }));
+    return c;
+  }));
+  drawCargo();
 }
+// the hold, a square per unit in its ore's color; compressed (refined) units go five to a square, edged white (a part
+// stack fills part of its square). Hovering a square: how many of that ore and what they sell for; with Alt held, the
+// names on those units.
+function drawCargo() {
+  const groups = [], byOre = new Map();
+  (ME.units || []).forEach(([oi, r, n]) => { const o = ORE_KEYS[oi]; if (!r) groups.push({ o, r: 0, units: [n] }); else { let g = byOre.get(o); if (!g || g.units.length >= 5) { g = { o, r: 1, units: [] }; byOre.set(o, g); groups.push(g); } g.units.push(n); } });
+  hud.cargo.replaceChildren(...groups.map((g) => {
+    const sq = elx("i", g.r ? "ref" : ""), fill = elx("b"); fill.style.background = G.ores[g.o].color; fill.style.top = g.r ? (100 - g.units.length / 5 * 100) + "%" : "0";
+    sq.appendChild(fill); sq.addEventListener("mouseenter", (e) => showTip(e, () => cargoTip(g))); sq.addEventListener("mousemove", moveTip); sq.addEventListener("mouseleave", hideTip);
+    return sq;
+  }));
+}
+function cargoTip(g) {
+  const all = (ME.units || []).filter(([oi, r]) => ORE_KEYS[oi] === g.o && !!r === !!g.r), n = all.length, price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
+  let t = oreName(g.o) + (g.r ? " · compressed" : "") + "\n" + n + " · " + fmt(n * price) + " cr";
+  if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
+  return t;
+}
+// the tooltip: one at a time, following the pointer; Alt redraws it
+const tipEl = $("tip"); let altDown = false, tipFn = null, tipX = 0, tipY = 0;
+function placeTip() { tipEl.style.left = Math.min(tipX + 14, innerWidth - tipEl.offsetWidth - 8) + "px"; tipEl.style.top = Math.max(8, tipY - tipEl.offsetHeight - 10) + "px"; }
+function showTip(e, fn) { tipFn = fn; tipX = e.clientX; tipY = e.clientY; tipEl.textContent = fn(); tipEl.hidden = false; placeTip(); }
+function moveTip(e) { tipX = e.clientX; tipY = e.clientY; placeTip(); }
+function hideTip() { tipFn = null; tipEl.hidden = true; }
+function refreshTip() { if (tipFn) { tipEl.textContent = tipFn(); placeTip(); } }
 function drawHudLive() {
   const f = Math.max(0, ME.fuel), T = ME.tank || 100;
   hud.fuel.style.width = Math.min(100, f / T * 100) + "%"; hud.fuel.classList.toggle("low", f < T * 0.15);
   hud.fuelNum.textContent = Math.round(f) + " / " + T;
 }
 
-// ---- the station panel (docked) ----
+// ---- the station panel (docked): Storage as a grid of slots (click one for what can be done with it), the queue,
+// fuel, and the Shop button ----
 const stEl = $("station");
-let stKey = "";
+let stKey = "", stSel = null;
 function drawStation_() {
-  stEl.hidden = !ME.docked; if (!ME.docked || !G) return;
-  const key = JSON.stringify([STATION.storage, STATION.queue, STATION.modules, ME.module, ME.credits, Math.round(ME.fuel), ME.tank]); if (key === stKey) return; stKey = key;
-  const el = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
-  const btn = (label, op, disabled = false, cls = "") => { const b = el("button", cls, label); b.type = "button"; b.disabled = disabled; b.addEventListener("click", () => { send({ t: "st", ...op }); b.blur(); }); return b; };
-  const head = el("div", "st-head"); head.append(el("span", "st-title", "Station"), el("span", "st-cr", fmt(ME.credits)));
-  // storage
-  const sec1 = el("section"); sec1.appendChild(el("h3", null, "Storage"));
-  const S = STATION.storage || {}, rows = Object.keys(S).filter((k) => S[k] > 0).sort();
-  if (!rows.length) sec1.appendChild(el("p", "st-empty", "Empty"));
-  for (const k of rows) {
-    const n = S[k], row = el("div", "st-row");
-    if (k === "fuel") { row.append(el("span", "st-sw fuel"), el("span", "st-name", "Fuel blocks"), el("span", "st-n", fmt(n)), btn("Fill tank", { op: "blocks" }, ME.fuel >= ME.tank - G.fuel.blockFuel + 0.01)); }
+  stEl.hidden = !ME.docked; if (!ME.docked) { shopEl.hidden = true; return; } if (!G) return;
+  const key = JSON.stringify([STATION.storage, STATION.queue, ME.credits, Math.round(ME.fuel), ME.tank, stSel]); if (key === stKey) return; stKey = key;
+  const btn = (label, op, disabled = false, cls = "") => { const b = elx("button", cls, label); b.type = "button"; b.disabled = disabled; b.addEventListener("click", () => { send({ t: "st", ...op }); b.blur(); }); return b; };
+  const head = elx("div", "st-head"), shopB = elx("button", "gold", "Shop"); shopB.type = "button"; shopB.addEventListener("click", () => { shopEl.hidden = !shopEl.hidden; drawShop(); });
+  head.append(elx("span", "st-title", "Station"), shopB, elx("span", "st-cr", fmt(ME.credits)));
+  // storage: a slot per kind (raw, refined, fuel blocks)
+  const sec1 = elx("section"); sec1.appendChild(elx("h3", null, "Storage"));
+  const S = STATION.storage || {}, keys = Object.keys(S).filter((k) => S[k] > 0).sort((a, b) => (a === "fuel") - (b === "fuel") || ORE_KEYS.indexOf(a.replace("+", "")) - ORE_KEYS.indexOf(b.replace("+", "")) || a.length - b.length);
+  if (stSel && !S[stSel]) stSel = null;
+  const grid = elx("div", "st-grid");
+  for (let i = 0; i < Math.max(15, Math.ceil(keys.length / 5) * 5); i++) {
+    const k = keys[i], slot = elx("div", "st-slot" + (k && k === stSel ? " sel" : "") + (k ? "" : " empty"));
+    if (k) {
+      const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), sw = elx("i", ref ? "ref" : ""); sw.style.background = k === "fuel" ? "var(--ice)" : G.ores[o].color; if (k === "fuel") sw.classList.add("fuel");
+      slot.append(sw, elx("span", "n", fmt(S[k])));
+      slot.addEventListener("click", () => { stSel = stSel === k ? null : k; drawStation_(); });
+      slot.addEventListener("mouseenter", (e) => showTip(e, () => storeTip(k))); slot.addEventListener("mousemove", moveTip); slot.addEventListener("mouseleave", hideTip);
+    }
+    grid.appendChild(slot);
+  }
+  sec1.appendChild(grid);
+  if (stSel) {                                 // what can be done with the selected slot
+    const k = stSel, n = S[k], acts = elx("div", "st-acts-row");
+    if (k === "fuel") acts.append(elx("span", "st-name", "Fuel blocks"), btn("Fill tank", { op: "blocks" }, ME.fuel >= ME.tank - G.fuel.blockFuel + 0.01, "gold"));
     else {
       const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.refinedMul : 1);
-      const sw = el("span", "st-sw" + (ref ? " ref" : "")); sw.style.borderColor = G.ores[o].color;
-      row.append(sw, el("span", "st-name", oreName(o) + (ref ? " · refined" : "")), el("span", "st-n", fmt(n)));
-      const acts = el("span", "st-acts");
-      acts.append(btn("Sell " + fmt(price * n), { op: "sell", k, n }, false, "gold"));
+      acts.append(elx("span", "st-name", oreName(o) + (ref ? " · compressed" : "")), btn("Sell " + fmt(price * n), { op: "sell", k, n }, false, "gold"));
       if (!ref) acts.append(btn("Refine", { op: "refine", o, n }));
       if (o === "ice" && !ref) acts.append(btn("Make fuel", { op: "craft", n }));
-      row.appendChild(acts);
     }
-    sec1.appendChild(row);
+    sec1.appendChild(acts);
   }
   // the queue
-  const sec2 = el("section"); sec2.appendChild(el("h3", null, "Queue"));
-  const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(el("p", "st-empty", "Idle"));
+  const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Queue"));
+  const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(elx("p", "st-empty", "Idle"));
   Q.forEach((j, i) => {
-    const row = el("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.stationRefine) * 1000;
-    row.append(el("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o) + " · refining")), el("span", "st-n", fmt(j.left)));
-    const bar = el("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = el("i"); bar.appendChild(fill); if (i === 0) { fill.dataset.at = j.at; fill.dataset.dur = dur; } row.appendChild(bar); sec2.appendChild(row);
+    const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.stationRefine) * 1000;
+    row.append(elx("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o) + " · refining")), elx("span", "st-n", fmt(j.left)));
+    const bar = elx("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = elx("i"); bar.appendChild(fill); if (i === 0) { fill.dataset.at = j.at; fill.dataset.dur = dur; } row.appendChild(bar); sec2.appendChild(row);
   });
   // fuel
-  const sec3 = el("section"); sec3.appendChild(el("h3", null, "Fuel"));
-  { const space = Math.max(0, ME.tank - ME.fuel), cost = Math.ceil(space) * G.fuel.stationPrice, row = el("div", "st-row");
-    row.append(el("span", "st-sw fuel"), el("span", "st-name", "Tank"), el("span", "st-n", Math.round(ME.fuel) + " / " + ME.tank), btn("Fill " + fmt(cost), { op: "fuel" }, space < 1 || ME.credits < G.fuel.stationPrice, "gold"));
+  const sec3 = elx("section"); sec3.appendChild(elx("h3", null, "Fuel"));
+  { const space = Math.max(0, ME.tank - ME.fuel), cost = Math.ceil(space) * G.fuel.stationPrice, row = elx("div", "st-row");
+    row.append(elx("span", "st-sw fuel"), elx("span", "st-name", "Tank"), elx("span", "st-n", Math.round(ME.fuel) + " / " + ME.tank), btn("Fill " + fmt(Math.ceil(cost)), { op: "fuel" }, space < 1 || ME.credits < G.fuel.stationPrice, "gold"));
     sec3.appendChild(row); }
-  // modules
-  const sec4 = el("section"); sec4.appendChild(el("h3", null, "Modules"));
-  for (const k of G.kinds) {
-    const M = G.modules[k], owned = (STATION.modules || []).includes(k), row = el("div", "st-row");
-    row.append(el("span", "st-name", M.name));
-    if (ME.module === k) row.appendChild(el("span", "st-tag", "Equipped"));
-    else if (owned) row.appendChild(btn("Equip", { op: "equip", m: k }));
-    else row.appendChild(btn("Buy " + fmt(M.price), { op: "buy", m: k }, ME.credits < M.price, "gold"));
-    sec4.appendChild(row);
-  }
-  stEl.replaceChildren(head, sec1, sec2, sec3, sec4);
+  stEl.replaceChildren(head, sec1, sec2, sec3);
+  if (!shopEl.hidden) drawShop();
+}
+function storeTip(k) {
+  const n = (STATION.storage || {})[k] || 0;
+  if (k === "fuel") return "Fuel blocks\n" + n + " · " + fmt(n * G.fuel.blockFuel) + " fuel";
+  const o = k.replace(/\+$/, ""), ref = k.endsWith("+");
+  return oreName(o) + (ref ? " · compressed" : "") + "\n" + n + " · " + fmt(n * G.ores[o].price * (ref ? G.refinedMul : 1)) + " cr";
 }
 setInterval(() => {                            // the running job's bar (between the server's updates)
   for (const f of stEl.querySelectorAll(".st-bar i[data-at]")) { const at = +f.dataset.at, dur = +f.dataset.dur, srvNow = Date.now() - (srvOff || 0); f.style.width = Math.max(0, Math.min(100, (srvNow - at) / dur * 100)) + "%"; }
 }, 250);
 stEl.addEventListener("mousedown", (e) => e.stopPropagation());
+
+// ---- the Shop (opened from the station): hulls, then every module with what it does, its price and its numbers; an
+// owned module shows its next upgrade's numbers and price, and Equip / Unequip ----
+const shopEl = $("shop");
+const MOD_INFO = {
+  miner: "A heavy mining laser. Switch it on to break asteroids much faster. It burns fuel while it fires.",
+  hauler: "A big cargo hold. Ships without one can trade you their cargo to carry home.",
+  fueler: "A large fuel tank and a pump. Fuel other ships: the station pays you for every unit pumped.",
+  tractor: "A tractor beam. Tow an asteroid behind you to wherever it's wanted. Bigger rocks tow slower and burn more fuel.",
+  command: "A mining boost. Switch it on and every ship mining near you mines faster. It burns fuel while on.",
+  scanner: "A long-range scanner. Reveal the ore inside an asteroid, for everyone.",
+  refinery: "A field refinery. Compress raw ore into a fifth of the space, worth half again as much, in your hold or another ship's.",
+};
+const STATS = {                                 // label, stat, how it reads
+  miner: [["Mining", "laserDps", (v) => v + " / s"], ["Fuel", "burn", (v) => v + " / min firing"]],
+  hauler: [["Hold", "hold", (v) => v + " units"]],
+  fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"]],
+  tractor: [["Reach", "range", (v) => v + " m"], ["Tow speed", "tow", (v) => "×" + v], ["Fuel", "burn", (v) => v + "+ / min towing"]],
+  command: [["Boost", "boost", (v) => "×" + v], ["Reach", "radius", (v) => v + " m"], ["Fuel", "burn", (v) => v + " / min on"]],
+  scanner: [["Reach", "range", (v) => fmt(v) + " m"]],
+  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "burn", (v) => v + " / unit"], ["Reach", "range", (v) => v + " m"]],
+};
+const MK = ["Mk I", "Mk II", "Mk III", "Mk IV"];
+let shopKey = "";
+function drawShop() {
+  if (shopEl.hidden || !G) return;
+  const key = JSON.stringify([STATION.modules, ME.mods, ME.upgrades, ME.hull, ME.credits]); if (key === shopKey && shopEl.childElementCount) return; shopKey = key;
+  const btn = (label, op, disabled = false, cls = "") => { const b = elx("button", cls, label); b.type = "button"; b.disabled = disabled; b.addEventListener("click", () => { send({ t: "st", ...op }); b.blur(); }); return b; };
+  const head = elx("div", "st-head"), close = elx("button", "", "Close"); close.type = "button"; close.addEventListener("click", () => { shopEl.hidden = true; });
+  head.append(elx("span", "st-title", "Shop"), close, elx("span", "st-cr", fmt(ME.credits)));
+  const list = elx("div", "shop-list");
+  // hulls
+  const hc = elx("div", "shop-card"), H = G.hulls, cur = H[ME.hull || 0], next = H[(ME.hull || 0) + 1];
+  hc.append(elx("div", "shop-name", "Hull · " + cur.name), elx("p", "shop-info", "A bigger hull fits more modules at once."));
+  const hs = elx("div", "shop-stats"); hs.append(elx("span", null, "Module slots"), elx("b", null, cur.slots + (next ? "  →  " + next.slots : ""))); hc.appendChild(hs);
+  const ha = elx("div", "shop-acts"); if (next) ha.appendChild(btn(next.name + " hull · " + fmt(next.price), { op: "hull" }, ME.credits < next.price, "gold")); else ha.appendChild(elx("span", "st-tag", "Largest")); hc.appendChild(ha);
+  list.appendChild(hc);
+  // modules
+  for (const k of G.kinds) {
+    const M = G.modules[k], owned = (STATION.modules || []).includes(k), lv = owned ? lvlOf(k) : 0, nextLv = owned && lv < G.upgradeCost.length ? lv + 1 : null, fitted = (ME.mods || []).includes(k);
+    const card = elx("div", "shop-card" + (fitted ? " fitted" : ""));
+    const nm = elx("div", "shop-name", M.name); if (owned) nm.appendChild(elx("span", "st-lv", "  " + MK[lv])); card.append(nm, elx("p", "shop-info", MOD_INFO[k]));
+    const st = elx("div", "shop-stats");
+    for (const [label, stat, f] of STATS[k]) { const v = mval(k, stat, lv), nv = nextLv !== null ? mval(k, stat, nextLv) : null; st.append(elx("span", null, label), elx("b", null, f(v) + (nv !== null && nv !== v ? "  →  " + f(nv) : ""))); }
+    card.appendChild(st);
+    const acts = elx("div", "shop-acts");
+    if (!owned) acts.appendChild(btn("Buy · " + fmt(M.price), { op: "buy", m: k }, ME.credits < M.price, "gold"));
+    else {
+      if (nextLv !== null) { const cost = Math.round(M.price * G.upgradeCost[lv]); acts.appendChild(btn("Upgrade to " + MK[nextLv] + " · " + fmt(cost), { op: "upgrade", m: k }, ME.credits < cost, "gold")); }
+      else acts.appendChild(elx("span", "st-tag", MK[lv]));
+      if (fitted) { if ((ME.mods || []).length > 1) acts.appendChild(btn("Unequip", { op: "unequip", m: k })); else acts.appendChild(elx("span", "st-tag", "Equipped")); }
+      else acts.appendChild(btn("Equip", { op: "equip", m: k }, (ME.mods || []).length >= (ME.slots || 1) && (ME.slots || 1) > 1));
+    }
+    card.appendChild(acts); list.appendChild(card);
+  }
+  const top = shopEl.querySelector(".shop-list") ? shopEl.querySelector(".shop-list").scrollTop : 0;
+  shopEl.replaceChildren(head, list); list.scrollTop = top;
+}
+shopEl.addEventListener("mousedown", (e) => e.stopPropagation());
 
 // ---- my party and corporation, top left ----
 const partyEl = $("party");
@@ -458,14 +580,24 @@ function drawParty() {
 const mm = $("minimap"), mx = mm.getContext("2d");
 let mmZoom = 1; try { const z = +localStorage.getItem("atamus.mmZoom"); if (z >= 1 && z <= 12) mmZoom = z; } catch {}
 mm.addEventListener("wheel", (e) => { e.preventDefault(); e.stopPropagation(); mmZoom = Math.min(12, Math.max(1, mmZoom * (e.deltaY > 0 ? 0.8 : 1.25))); try { localStorage.setItem("atamus.mmZoom", String(mmZoom)); } catch {} }, { passive: false });
-let mmNext = 0;
+let mmNext = 0, mmView = null;
+// (owner, 2026-10-16) hovering the minimap names the zone under the pointer
+function zoneAt(x, y) {
+  const W = G.world, r = hyp(x, y); if (r < W.safeR) return "Station"; if (r > W.lockedR) return "";
+  return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + G.sectorNames[G.sectors[sectorOf(x, y)]];
+}
+mm.addEventListener("mousemove", (e) => {
+  if (!mmView || !G) return; const b = mm.getBoundingClientRect(), x = mmView.ox + (e.clientX - b.left - mmView.cx) / mmView.k, y = mmView.oy + (e.clientY - b.top - mmView.cy) / mmView.k, z = zoneAt(x, y);
+  if (!z) { hideTip(); return; } if (tipEl.hidden || tipFn === null) showTip(e, () => zoneAt(x, y)); else { tipFn = () => z; refreshTip(); moveTip(e); }
+});
+mm.addEventListener("mouseleave", hideTip);
 function drawMinimap(now) {
   if (now < mmNext) return; mmNext = now + 100;
   const d = Math.min(devicePixelRatio || 1, 2), Wd = mm.clientWidth, Hd = mm.clientHeight;
   if (mm.width !== Math.round(Wd * d)) { mm.width = Math.round(Wd * d); mm.height = Math.round(Hd * d); }
   mx.setTransform(d, 0, 0, d, 0, 0); mx.clearRect(0, 0, Wd, Hd);
   const W = G.world, R = Wd / 2 - 4, k = R / W.lockedR * mmZoom, ox = mmZoom > 1.01 ? mine.x : 0, oy = mmZoom > 1.01 ? mine.y : 0;
-  const P = (x, y) => [Wd / 2 + (x - ox) * k, Hd / 2 + (y - oy) * k];
+  const P = (x, y) => [Wd / 2 + (x - ox) * k, Hd / 2 + (y - oy) * k]; mmView = { k, ox, oy, cx: Wd / 2, cy: Hd / 2 };
   mx.save(); mx.beginPath(); mx.arc(Wd / 2, Hd / 2, R + 3, 0, TAU); mx.fillStyle = "rgba(11,14,21,0.88)"; mx.fill(); mx.clip();
   const [c0, c1] = P(0, 0);
   for (const [a, b] of W.rings) { mx.strokeStyle = "rgba(216,176,106,0.18)"; mx.lineWidth = (b - a) * k; mx.beginPath(); mx.arc(c0, c1, (a + b) / 2 * k, 0, TAU); mx.stroke(); }
@@ -546,15 +678,36 @@ function addChat(m) {
 }
 drawTabs();
 function hideMenu() { ctxMenu.hidden = true; }
+function showMenu(x, y, items) {               // items: [label, fn]
+  ctxMenu.replaceChildren(...items.map(([label, fn]) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { hideMenu(); fn(); }); return b; }));
+  ctxMenu.hidden = false; ctxMenu.style.left = Math.min(x, innerWidth - 180) + "px"; ctxMenu.style.top = Math.min(y, innerHeight - ctxMenu.offsetHeight - 8) + "px";
+}
+const whisperTo = (id, name) => { lastWhisper = { id, name }; chatCh = "whisper"; openChat(); };
+// a name in chat: Whisper, Invite to party, Invite to corporation, Report (and Admin for staff)
 chatLog.addEventListener("contextmenu", (e) => {
   e.preventDefault(); const who = e.target.closest && e.target.closest(".chat-who[data-id]"); if (!who) return;
   const id = who.dataset.id, name = who.dataset.name;
-  const item = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.addEventListener("click", () => { hideMenu(); fn(); }); return b; };
-  ctxMenu.replaceChildren(item("Whisper", () => { lastWhisper = { id, name }; chatCh = "whisper"; openChat(); }), item("Invite to party", () => send({ t: "party", op: "invite", to: id })),
-    ...(SOC.corp ? [item("Invite to corporation", () => send({ t: "corp", op: "invite", to: id }))] : []), item("Report", () => openReport(id, name)),
-    ...(amStaff && window.AdminPanel ? [item("Admin", () => window.AdminPanel.act(id, name))] : []));
-  ctxMenu.hidden = false; ctxMenu.style.left = Math.min(e.clientX, innerWidth - 170) + "px"; ctxMenu.style.top = Math.min(e.clientY, innerHeight - 170) + "px";
+  showMenu(e.clientX, e.clientY, [["Whisper", () => whisperTo(id, name)], ["Invite to party", () => send({ t: "party", op: "invite", to: id })],
+    ...(SOC.corp ? [["Invite to corporation", () => send({ t: "corp", op: "invite", to: id })]] : []), ["Report", () => openReport(id, name)],
+    ...(amStaff && window.AdminPanel ? [["Admin", () => window.AdminPanel.act(id, name)]] : [])]);
 });
+// (owner, 2026-10-16) another ship: Invite to party, Whisper, then what my modules can do for it: fuel it, refine its
+// cargo, or (without a hauler, to a hauler) ask it to take my cargo
+function shipMenu(s, x, y) {
+  const id = s.id, name = names.get(id) || "?", r = s.row, theirs = r[14] || 0, items = [["Invite to party", () => send({ t: "party", op: "invite", to: id })], ["Whisper", () => whisperTo(id, name)]];
+  if (ME.mods.includes("fueler")) items.push([ME.pump === id ? "Stop fueling" : "Fuel ship", () => send({ t: "act", ship: id, op: "fuel" })]);
+  if (ME.mods.includes("refinery")) items.push([ME.refine === id ? "Stop refining" : "Refine cargo", () => send({ t: "act", ship: id, op: "refine" })]);
+  if (!ME.mods.includes("hauler") && theirs & kindBit("hauler")) items.push(["Request trade", () => send({ t: "act", ship: id, op: "trade" })]);
+  showMenu(x, y, items);
+}
+// a hauler is asked to take another ship's cargo: Accept / Decline (it lapses on its own)
+const tradeBox = $("trade-box"); let tradeFrom = null, tradeTimer = 0;
+function showTrade(m) {
+  tradeFrom = m.from; $("trade-text").textContent = (m.name || "?") + " · " + m.n + (m.n === 1 ? " unit" : " units"); tradeBox.hidden = false;
+  clearTimeout(tradeTimer); tradeTimer = setTimeout(() => { tradeBox.hidden = true; tradeFrom = null; }, ((G && G.tradeWait) || 30) * 1000);
+}
+const answerTrade = (yes) => { if (tradeFrom) send({ t: "tradeans", from: tradeFrom, yes }); tradeBox.hidden = true; tradeFrom = null; clearTimeout(tradeTimer); };
+$("trade-yes").addEventListener("click", () => answerTrade(true)); $("trade-no").addEventListener("click", () => answerTrade(false));
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
 const reportBox = $("report-box"); let reportFor = null;
 function openReport(id, name) { reportFor = id; $("report-title").textContent = "Report " + name; $("report-text").value = ""; reportBox.hidden = false; keys.clear(); $("report-text").focus(); }
