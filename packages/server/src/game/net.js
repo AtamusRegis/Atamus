@@ -102,6 +102,7 @@ export function attachGameServer(httpServer) {
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
       }
       else if (m.t === "tune") tune(m);
+      else if (m.t === "tut") world.setTutorial(pid, m.step);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
     // (owner, 2026-10-17) the developer panel: one number at a time, or everything back to the defaults; kept, and sent to
@@ -181,10 +182,11 @@ export function attachGameServer(httpServer) {
   // 15 Hz: ships, as changes since this socket's last (p), the unchanged ids (u), or { same: 1 }
   setInterval(() => {
     const ts = Date.now();
+    const cache = world.shipRowCache();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
-      const rows = world.shipRows(p), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
-      for (const r of rows) { const key = JSON.stringify(r); now.set(r[0], key); if (last.get(r[0]) === key) un.push(r[0]); else ch.push(r); }
+      const rows = world.shipRows(p, cache), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
+      for (const { row: r, key } of rows) { now.set(r[0], key); if (last.get(r[0]) === key) un.push(r[0]); else ch.push(r); }
       ws.lastSnap = now;
       send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un });
     }
@@ -199,6 +201,7 @@ export function attachGameServer(httpServer) {
   };
   setInterval(() => {
     const t = Date.now();
+    world.indexZones();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || ws.readyState !== ws.OPEN) continue;
       const view = world.rockView(p), rk = diff(ws, "knownRocks", view.rows), kc = ws.knownCells || (ws.knownCells = new Map()), c = {}, xc = [];

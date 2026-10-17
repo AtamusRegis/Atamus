@@ -9,6 +9,12 @@
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="theme.css?v=1792300002">
+  <!-- (2026-10-17) fetched up front: the fonts the canvas draws with, and the game's modules -->
+  <link rel="preload" href="fonts/big-shoulders-display-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="modulepreload" href="shipart.js?v=1792300005">
+  <link rel="modulepreload" href="ringgen.js?v=1792300003">
   <link rel="stylesheet" href="admin.css?v=1792300002">
   <style>
     /* (owner, 2026-10-16) the Saturn ring-mining prototype, in the design document's look */
@@ -39,7 +45,14 @@
     .pt-mem { pointer-events: auto; cursor: context-menu; }
     #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
     #tip[hidden] { display: none; }
-    #trade-box { position: fixed; left: 50%; top: 52px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 13px var(--f-body); color: var(--ink); }
+    /* (owner, 2026-10-17) the tutorial: a step at the top; what to press glows */
+    #tut { position: fixed; left: 50%; top: 48px; transform: translateX(-50%); z-index: 19; display: flex; align-items: center; gap: 12px; max-width: min(620px, calc(100vw - 440px)); padding: 9px 10px 9px 14px; background: rgba(18,24,36,.96); border: 1px solid rgba(216,176,106,.55); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 14px var(--f-body); color: var(--ink); line-height: 1.35; }
+    #tut[hidden] { display: none; }
+    #tut-n { flex: none; font: 600 11px var(--f-mono); color: var(--gold); letter-spacing: .08em; }
+    #tut-skip { flex: none; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--dim); font: 600 12px var(--f-body); cursor: pointer; }
+    .tut-glow { animation: tutglow 1.1s ease-in-out infinite; position: relative; z-index: 1; }
+    @keyframes tutglow { 0%, 100% { box-shadow: 0 0 0 1px rgba(216,176,106,.4), 0 0 0 0 rgba(216,176,106,0); } 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 16px 2px rgba(216,176,106,.55); } }
+    #trade-box { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 13px var(--f-body); color: var(--ink); }
     #trade-box[hidden] { display: none; }
     #trade-box button { padding: 4px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
     #trade-box button.gold { background: var(--gold); border-color: var(--gold); color: var(--void); }
@@ -165,12 +178,13 @@
   <div id="chat"><div id="chat-tabs"></div><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" enterkeyhint="send"></form></div></div>
   <div id="ctx-menu" hidden></div>
   <div id="tip" hidden></div>
+  <div id="tut" hidden><span id="tut-n"></span><span id="tut-text"></span><button id="tut-skip" type="button">Skip</button></div>
   <div id="trade-box" hidden><span id="trade-text"></span><button id="trade-yes" class="gold" type="button">Accept</button><button id="trade-no" type="button">Decline</button></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-cancel" type="button">Cancel</button><button id="report-send" type="button">Send</button></div></div></div>
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792300014"></script>
+  <script type="module" src="game.js?v=1792300017"></script>
 </body>
 </html>

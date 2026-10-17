@@ -31,15 +31,16 @@ const $p = (n) => Math.round(n * PRICE_SCALE);
 // the modules: the station sells each at its basic level, then three upgrades (Mk II-IV; owner, 2026-10-16). A number
 // given as a list is per level. Active ones burn fuel while working.
 export const MODULES = {
-  miner:    { name: "Miner",    price: $p(500),  active: true, burn: 4, laserDps: [40, 50, 62, 78] },                    // the big laser (fuel a minute while firing)
+  miner:    { name: "Miner",    price: $p(500),  active: true, burn: [4, 4, 4, 4], laserDps: [40, 50, 62, 78] },        // the big laser (fuel a minute while firing)
   hauler:   { name: "Hauler",   price: $p(800),  hold: [40, 55, 70, 90] },
   fueler:   { name: "Fueler",   price: $p(800),  tank: [700, 900, 1100, 1400], pump: [20, 25, 30, 40] },                 // pumps a second
-  command:  { name: "Command",  price: $p(1200), active: true, burn: 4, boost: [1.5, 1.6, 1.75, 1.9], radius: [300, 350, 400, 450] },
-  tractor:  { name: "Tractor",  price: $p(1000), active: true, burn: 6, range: [200, 250, 300, 350], tow: [1, 1.1, 1.2, 1.35] },   // burn x (1 + size / 15) while towing; tow: speed x
+  command:  { name: "Command",  price: $p(1200), active: true, burn: [4, 4, 4, 4], boost: [1.5, 1.6, 1.75, 1.9], radius: [300, 350, 400, 450] },
+  // tractor: fuel a minute towing x (1 + size x sizeBurn); tow: speed x; pull: how fast the rock follows (a second); leash: m between the claws and the rock
+  tractor:  { name: "Tractor",  price: $p(1000), active: true, burn: [6, 6, 6, 6], range: [200, 250, 300, 350], tow: [1, 1.1, 1.2, 1.35], sizeBurn: 0.067, pull: 2.5, leash: 12 },
   scanner:  { name: "Scanner",  price: $p(1000), range: [800, 1000, 1200, 1500] },
   // (owner, 2026-10-17) switched on, it offers to refine the holds of ships near it: a unit a second, in their hold, adding the
   // refiner's name; it pays fuel once each time someone takes it up (less at higher levels)
-  refinery: { name: "Refinery", price: $p(1500), active: true, unit: 1, activation: [10, 8, 6, 4] },
+  refinery: { name: "Refinery", price: $p(1500), active: true, unit: [1, 1, 1, 1], activation: [10, 8, 6, 4] },
 };
 export const UPGRADE_COST = [0.6, 1.2, 2.4];   // Mk II, III, IV: x the module's price
 // hulls: each size up costs four times the last and adds a module slot (owner, 2026-10-16)
@@ -61,8 +62,8 @@ export const ORES = {
 export const RING_ORES = [{ iron: 45, nickel: 35, ice: 20 }, { titanium: 42, cobalt: 32, ice: 14, platinum: 8, iron: 4 }];
 export const RING_SIZES = [[1, 10], [4, 15]];
 export const RING_SLOTS = [3, 2];          // asteroid slots per cell
-// asteroids: radius and crack health by size, tow speed by size (s: a mined-out slot comes back; untouched despawns; seeds rotate)
-export const ROCK = { radiusBase: 10, radiusPer: 3.3, crackHpBase: 80, crackHpPer: 8, towBase: 0.6, towPer: 0.025, respawn: 180, despawn: 1800, reseed: 6 * 3600 };
+// asteroids: where a crack's ore lands (m past the edge, plus up to spread), radius and crack health by size, tow speed by size (s: a mined-out slot comes back; untouched despawns; seeds rotate)
+export const ROCK = { dropGap: 10, dropSpread: 14, radiusBase: 10, radiusPer: 3.3, crackHpBase: 80, crackHpPer: 8, towBase: 0.6, towPer: 0.025, respawn: 180, despawn: 1800, reseed: 6 * 3600 };
 export const rockR = (n) => ROCK.radiusBase + ROCK.radiusPer * n;   // m
 export const crackHp = (n) => ROCK.crackHpBase + ROCK.crackHpPer * n;
 export const towFactor = (n) => Math.max(0.05, ROCK.towBase - (n - 1) * ROCK.towPer);   // tow speed share: size 1 0.6 ... size 15 0.25

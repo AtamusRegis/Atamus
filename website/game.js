@@ -161,7 +161,7 @@ function onMsg(m) {
   else if (m.t === "soc") { SOC = m; drawParty(); }
   else if (m.t === "sectors") { sectors = m.s; online = m.online; }
   else if (m.t === "sos") sosList = m.s || [];
-  else if (m.t === "fx") fx.push({ ...m, t0: performance.now() });
+  else if (m.t === "fx") { fx.push({ ...m, t0: performance.now() }); if (m.k === "crack" && hyp(m.x - mine.x, m.y - mine.y) < 600) tutS.cracked = true; }
   else if (m.t === "join") names.set(m.i, m.n);
   else if (m.t === "leave") { ships.delete(m.i); }
   else if (m.t === "teleport") { mine.x = m.x; mine.y = m.y; mine.vx = mine.vy = 0; corr.x = corr.y = 0; }
@@ -250,7 +250,7 @@ function drawWorld(t) {
   cx.strokeStyle = "rgba(38,48,68,0.9)"; cx.lineWidth = lw(1.5); cx.setLineDash([lw(4), lw(10)]); cx.beginPath();
   for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + i * Math.PI / 2; cx.moveTo(Math.cos(a) * W.safeR, Math.sin(a) * W.safeR); cx.lineTo(Math.cos(a) * W.lockedR, Math.sin(a) * W.lockedR); } cx.stroke();
   cx.strokeStyle = C.signal; cx.lineWidth = lw(2); cx.setLineDash([lw(14), lw(10)]); cx.beginPath(); cx.arc(0, 0, W.lockedR, 0, TAU); cx.stroke(); cx.setLineDash([]);
-  drawSaturn(cx, W.saturnR, ts);
+  if (hyp(cam.x, cam.y) - W.saturnR < hyp(VW, VH) / zoom) drawSaturn(cx, W.saturnR, ts);   // (only while it's on screen)
   // the station and its docking circle
   cx.save(); cx.translate(W.station[0], W.station[1]);
   cx.strokeStyle = C.gold; cx.globalAlpha = 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, W.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
@@ -393,7 +393,7 @@ function frame(now) {
   }
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawBackground(now);
-  if (G) { drawWorld(now); drawOverlay(now); drawMinimap(now); drawHudLive(now); }
+  if (G) { drawWorld(now); drawOverlay(now); tutArrow(now); drawMinimap(now); drawHudLive(now); tutTick(); }
   if (countAt) { const left = Math.ceil((countAt - Date.now()) / 1000); if (left <= 0) { countAt = 0; goUpdating(); } else countEl.textContent = "Update incoming — " + left + " s"; }
   requestAnimationFrame(frame);
 }
@@ -766,7 +766,7 @@ const devEl = $("dev"); let devTab = "ship", devArmed = 0;
 const DEV_TABS = [["ship", "Ship"], ["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
 const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
   interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
-  activation: "Fuel / use", radiusBase: "Radius base", radiusPer: "Radius per size", crackHpBase: "Crack health base", crackHpPer: "Crack health per size", towBase: "Tow share base", towPer: "Tow share per size",
+  activation: "Fuel / use", sizeBurn: "Fuel × per size", pull: "Pull / s", leash: "Leash gap", dropGap: "Ore drop gap", dropSpread: "Ore drop spread", radiusBase: "Radius base", radiusPer: "Radius per size", crackHpBase: "Crack health base", crackHpPer: "Crack health per size", towBase: "Tow share base", towPer: "Tow share per size",
   respawn: "Respawn s", despawn: "Despawn s", reseed: "Reseed s", stationPrice: "Station fuel price", pumpPay: "Pay / unit pumped", blockFuel: "Fuel per block", blockTime: "Seconds per block",
   refinedMul: "Refined price ×", refinedSpace: "Refined space", stationRefine: "Station refine s", startCredits: "Starting credits", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
   despawnOre: "Loose ore despawn s", shardCap: "Players per shard", partyMax: "Party size" };
@@ -830,6 +830,69 @@ function devMount() {
 }
 devEl.addEventListener("mousedown", (e) => e.stopPropagation());
 devEl.addEventListener("keydown", (e) => e.stopPropagation());
+
+// ---- (owner, 2026-10-17) the tutorial: a step at a time, each waiting for the player to do it; an arrow points at what to
+// fly to and the panel buttons to use glow. Saved per account (the server keeps the step; -1: done or skipped). ----
+const tutEl = $("tut"); let tut = null, tutS = {}, tutSent = null;
+const holdN = () => (ME.units || []).length;
+const storeN = (raw) => Object.entries(STATION.storage || {}).reduce((n, [k, v]) => n + (k === "fuel" || (raw && k.endsWith("+")) ? 0 : v), 0);
+function nearestRock() { let b = null, bd = Infinity; for (const r of rocks.values()) { if (r.cracks <= 0) continue; const d = hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n); if (d < bd) { bd = d; b = r; } } return b; }
+function nearestOre() { let b = null, bd = Infinity; for (const o of ores.values()) { const d = hyp(o.dx - mine.x, o.dy - mine.y); if (d < bd) { bd = d; b = o; } } return b; }
+const STATION_PT = () => ({ x: G.world.station[0], y: G.world.station[1] });
+const TUT = [
+  { text: "Fly with W and S and turn with A and D. Q and E slide sideways.", start: (s) => { s.x = mine.x; s.y = mine.y; }, done: (s) => hyp(mine.x - s.x, mine.y - s.y) > 150 },
+  { text: "Fly to an asteroid. Follow the arrow.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, done: () => { const r = nearestRock(); return !!r && hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n) < G.ship.interactR - 30; } },
+  { text: "Aim at it with the mouse and hold the left button to mine. Every crack you break drops ore.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, start: (s) => { s.cracked = false; }, done: (s) => s.cracked },
+  { text: "Your Miner module mines faster but burns fuel. Press F, or click its button, to switch it.", glow: ".mod-chip", start: (s) => { s.on = JSON.stringify(ME.on); }, done: (s) => JSON.stringify(ME.on) !== s.on },
+  { text: "Click the ore beside the asteroid to claim it. You can reach anything inside the dotted circle.", target: () => { const o = nearestOre(); return o && { x: o.dx, y: o.dy, r: 8 }; }, start: (s) => { s.h = holdN(); }, done: (s) => holdN() > s.h, skip: () => !ores.size && holdN() > 0 },
+  { text: "Fly into the station to deliver your hold. Everyone who helped mine it gets a copy.", target: () => ({ ...STATION_PT(), r: 140 }), done: () => !!ME.docked && storeN() > 0 },
+  { text: "Right-click an ore in Storage, choose Refine and slide to how many. Refined ore takes less room and sells for more.", dock: true, glow: ".st-slot:not(.empty)", done: () => (STATION.queue || []).some((j) => j.k === "refine"), skip: () => !!ME.docked && storeN(true) === 0 },
+  { text: "Right-click an ore and choose Sell.", wait: () => storeN() === 0 && (STATION.queue || []).length > 0, waitText: "Your refined ore comes out of the Queue into Storage. Sell it once it arrives.", dock: true, glow: ".st-slot:not(.empty)", start: (s) => { s.c = ME.credits; }, done: (s) => ME.credits > s.c, skip: () => !!ME.docked && storeN() === 0 && !(STATION.queue || []).length },
+  { text: "Top up your fuel tank with Fill.", dock: true, glow: "#station .st-row button.gold", done: () => ME.fuel >= ME.tank - 0.5 },
+  { text: "Open the Shop and upgrade your Miner.", dock: true, glow: "#station .st-head button.gold, .shop-card.fitted button.gold", done: () => Object.values(ME.upgrades || {}).some((v) => v > 0) },
+  { text: "That's the basics. Good mining out in the rings!", final: true },
+];
+function tutGo(step) {                         // move to a step (or -1: finished) and tell the server
+  tut = step; tutS = {}; if (tut >= 0 && TUT[tut] && TUT[tut].start) TUT[tut].start(tutS);
+  if (tutSent !== tut) { tutSent = tut; send({ t: "tut", step: tut }); }
+  tutDraw();
+}
+function tutDraw() {
+  tutEl.hidden = tut === null || tut < 0 || !TUT[tut]; if (tutEl.hidden) { document.querySelectorAll(".tut-glow").forEach((e) => e.classList.remove("tut-glow")); return; }
+  const st = TUT[tut], undocked = st.dock && !ME.docked;
+  $("tut-n").textContent = (tut + 1) + " / " + TUT.length;
+  $("tut-text").textContent = undocked ? "Fly back into the station." : st.wait && st.wait() ? st.waitText : st.text;
+  $("tut-skip").textContent = st.final ? "Done" : "Skip";
+}
+$("tut-skip").addEventListener("click", (e) => { e.currentTarget.blur(); tutGo(-1); });
+tutEl.addEventListener("mousedown", (e) => e.stopPropagation());
+function tutTick() {                           // every frame: has the player done the step? which buttons glow?
+  if (tut === null && haveMe && ME.tut !== undefined && G) tutGo(ME.tut);
+  if (tut === null || tut < 0 || !TUT[tut]) return;
+  const st = TUT[tut];
+  if (!st.final && ((st.skip && st.skip(tutS)) || (!(st.dock && !ME.docked) && st.done(tutS)))) { tutGo(tut + 1); return; }
+  const want = st.glow && !(st.dock && !ME.docked) ? new Set(document.querySelectorAll(st.glow)) : new Set();
+  document.querySelectorAll(".tut-glow").forEach((e) => { if (!want.has(e)) e.classList.remove("tut-glow"); });
+  for (const e of want) e.classList.add("tut-glow");
+  if (st.dock || st.wait) { const want = st.dock && !ME.docked ? "Fly back into the station." : st.wait && st.wait() ? st.waitText : st.text; if ($("tut-text").textContent !== want) tutDraw(); }
+}
+function tutTarget() { if (tut === null || tut < 0 || !TUT[tut]) return null; const st = TUT[tut]; if (st.dock && !ME.docked) return { ...STATION_PT(), r: 140 }; return st.target ? st.target() : null; }
+function tutArrow(t) {                         // a gold chevron over the target, or at the screen's edge pointing at it
+  const g = tutTarget(); if (!g) return;
+  { const [mx0, my0] = toScreen(mine.x, mine.y), [tx, ty] = toScreen(g.x, g.y), d = hyp(tx - mx0, ty - my0), gap = (g.r || 0) * zoom + 10;   // a faint guide line from my ship toward it
+    if (d > 80 + gap) { const ux = (tx - mx0) / d, uy = (ty - my0) / d; cx.save(); cx.strokeStyle = C.gold; cx.globalAlpha = 0.35; cx.lineWidth = 2; cx.setLineDash([6, 8]); cx.lineDashOffset = -t / 40; cx.beginPath(); cx.moveTo(mx0 + ux * 46, my0 + uy * 46); cx.lineTo(tx - ux * gap, ty - uy * gap); cx.stroke(); cx.restore(); } }
+  let [sx, sy] = toScreen(g.x, g.y); const off = sx < 30 || sy < 30 || sx > VW - 30 || sy > VH - 30, bob = Math.sin(t / 180) * 5;
+  cx.save(); cx.fillStyle = C.gold; cx.strokeStyle = C.void; cx.lineWidth = 2;
+  if (off) {
+    const a = Math.atan2(sy - VH / 2, sx - VW / 2), k = Math.min((VW / 2 - 46) / Math.abs(Math.cos(a) || 1e-6), (VH / 2 - 46) / Math.abs(Math.sin(a) || 1e-6));
+    cx.translate(VW / 2 + Math.cos(a) * (k + bob), VH / 2 + Math.sin(a) * (k + bob)); cx.rotate(a);
+    cx.beginPath(); cx.moveTo(16, 0); cx.lineTo(-10, -12); cx.lineTo(-4, 0); cx.lineTo(-10, 12); cx.closePath(); cx.fill(); cx.stroke();
+  } else {
+    cx.translate(sx, sy - (g.r || 0) * zoom - 18 + bob);
+    cx.beginPath(); cx.moveTo(0, 12); cx.lineTo(-12, -6); cx.lineTo(0, -1); cx.lineTo(12, -6); cx.closePath(); cx.fill(); cx.stroke();
+  }
+  cx.restore();
+}
 
 connect();
 

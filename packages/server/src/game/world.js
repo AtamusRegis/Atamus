@@ -56,7 +56,7 @@ export class World {
       credits DOUBLE PRECISION NOT NULL DEFAULT 0, storage JSONB NOT NULL DEFAULT '{}', hold JSONB NOT NULL DEFAULT '[]', queue JSONB NOT NULL DEFAULT '[]',
       corp_id INTEGER, logout_at TIMESTAMPTZ, transit JSONB, transit_due TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     // (2026-10-16) several modules (mods), the hull size and each module's upgrade level
-    await pool.query(`ALTER TABLE ring_players ADD COLUMN IF NOT EXISTS mods JSONB, ADD COLUMN IF NOT EXISTS hull INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS upgrades JSONB NOT NULL DEFAULT '{}'`);
+    await pool.query(`ALTER TABLE ring_players ADD COLUMN IF NOT EXISTS mods JSONB, ADD COLUMN IF NOT EXISTS hull INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS upgrades JSONB NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS tutorial INTEGER NOT NULL DEFAULT 0`);   // (2026-10-17: the tutorial's step; -1 done)
     await pool.query(`CREATE TABLE IF NOT EXISTS ring_corps (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, owner TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     for (const c of (await pool.query(`SELECT id, name, owner FROM ring_corps`)).rows) this.corps.set(c.id, { id: c.id, name: c.name, owner: c.owner });
   }
@@ -157,8 +157,7 @@ export class World {
   }
   shardOf(p) {                                 // shown with the zone only while the zone has more than one copy in use
     if (p.layer > 0) return p.layer + 1;
-    for (const q of this.players.values()) if (q.zone === p.zone && q.layer !== p.layer) return p.layer + 1;
-    return 0;
+    const z = this.zoneLayers && this.zoneLayers.get(p.zone); return z && z.size > 1 ? p.layer + 1 : 0;
   }
   // may this ship be at (x, y)? Not inside Saturn, not past the locked line, not into a closed sector (unless it's already in it)
   allowed(p, x, y) {
@@ -176,9 +175,9 @@ export class World {
     const [sx, sy] = W.station;
     p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.START.fuel, fuelFrom: {}, mods: [R.START.module], hull: 0, upgrades: {},
       modules: new Set([R.START.module]), credits: R.ECON.startCredits, storage: {}, queue: [], hold: [], corp: null, on: new Set(), tow: null, pumpTo: null, refineBy: null,
-      refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "" };
+      refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "", tut: 0 };
     if (r) {
-      Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, fuelFrom: r.fuel_from || {}, hull: Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0)), upgrades: r.upgrades || {},
+      Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, fuelFrom: r.fuel_from || {}, hull: Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0)), upgrades: r.upgrades || {}, tut: Number.isInteger(r.tutorial) ? r.tutorial : 0,
         modules: new Set((r.modules || []).filter((m) => MODULES[m])), credits: +r.credits, storage: r.storage || {}, queue: r.queue || [], hold: Array.isArray(r.hold) ? r.hold : [] });
       const mods = (Array.isArray(r.mods) ? r.mods : [r.module]).filter((m, i, a) => MODULES[m] && a.indexOf(m) === i);
       p.mods = mods.length ? mods.slice(0, R.HULLS[p.hull].slots) : [R.START.module];
@@ -272,7 +271,7 @@ export class World {
         p.laserLen = best ? bt : SHIP.interactR; p.laserOn = !!best;
         if (best) {
           let dps = SHIP.laserDps;
-          if (this.isOn(p, "miner") && p.fuel > 0) { dps = this.val(p, "miner", "laserDps"); this.burn(p, MODULES.miner.burn / 60 * dt); }
+          if (this.isOn(p, "miner") && p.fuel > 0) { dps = this.val(p, "miner", "laserDps"); this.burn(p, this.val(p, "miner", "burn") / 60 * dt); }
           let boost = 1;         // (several command ships don't stack: the strongest counts, but every one boosting is named)
           for (const q of this.players.values()) if (this.isOn(q, "command") && q.fuel > 0 && !q.docked && q.layer === p.layer && hyp(q.x - p.x, q.y - p.y) <= this.val(q, "command", "radius")) { boost = Math.max(boost, this.val(q, "command", "boost")); best.boost.add(q.id); }
           dps *= boost;
@@ -280,14 +279,14 @@ export class World {
         }
       }
       // active modules
-      if (this.isOn(p, "command") && !dock) { if (p.fuel <= 0) p.on.delete("command"); else this.burn(p, MODULES.command.burn / 60 * dt); }
+      if (this.isOn(p, "command") && !dock) { if (p.fuel <= 0) p.on.delete("command"); else this.burn(p, this.val(p, "command", "burn") / 60 * dt); }
       if (rock) {                              // the tractor: the asteroid follows on a leash behind the ship
         if (rock.cracked || p.fuel <= 0) { p.tow = null; rock.tow = null; }
         else {
-          this.burn(p, MODULES.tractor.burn / 60 * (1 + rock.n / 15) * dt);
+          this.burn(p, this.val(p, "tractor", "burn") / 60 * (1 + rock.n * MODULES.tractor.sizeBurn) * dt);
           // (behind the claws, which trail off the back of the ship: it's longer with more modules, see the art's shipLayout)
-          const hullL = p.mods.reduce((n, k) => n + (k === "hauler" || k === "fueler" ? 200 : 130), 0), L = R.rockR(rock.n) + 12 + (109 + hullL / 2) * 0.28, gx = p.x - Math.cos(p.h - Math.PI / 2) * L, gy = p.y - Math.sin(p.h - Math.PI / 2) * L;
-          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * 2.5);
+          const hullL = p.mods.reduce((n, k) => n + (k === "hauler" || k === "fueler" ? 200 : 130), 0), L = R.rockR(rock.n) + MODULES.tractor.leash + (109 + hullL / 2) * 0.28, gx = p.x - Math.cos(p.h - Math.PI / 2) * L, gy = p.y - Math.sin(p.h - Math.PI / 2) * L;
+          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * MODULES.tractor.pull);
           if (d > 1 && hyp(rock.x + dx * pull, rock.y + dy * pull) > W.saturnR + R.rockR(rock.n)) { rock.x += dx * pull; rock.y += dy * pull; this.gridMove(rock); }
           rock.touched = t;
         }
@@ -305,7 +304,7 @@ export class World {
         if (!r || !u || dock || r.docked || !this.isOn(r, "refinery") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) > SHIP.interactR) { p.refineBy = null; p.refineT = 0; }
         else {
           p.refineT += dt;
-          if (p.refineT >= MODULES.refinery.unit) { p.refineT = 0; u.r = 1; if (!u.n.includes(r.id)) u.n.push(r.id); p.meDirty = true; p.dirty = true; this.fx.push({ k: "refine", x: p.x, y: p.y, l: p.layer }); }
+          if (p.refineT >= this.val(r, "refinery", "unit")) { p.refineT = 0; u.r = 1; if (!u.n.includes(r.id)) u.n.push(r.id); p.meDirty = true; p.dirty = true; this.fx.push({ k: "refine", x: p.x, y: p.y, l: p.layer }); }
         }
       }
       if (p.firing || p.pumpTo || p.refineBy || p.tow || this.isOn(p, "command")) p.meDirty = true;
@@ -323,7 +322,7 @@ export class World {
     for (const id of r.lasers) { names.add(id); const p = this.players.get(id); if (p) for (const f of this.fuelNames(p)) names.add(f); }
     for (const id of r.boost) names.add(id);
     // (owner, 2026-10-16) the unit appears just off the asteroid's edge and waits there to be clicked
-    const rr = R.rockR(r.n), a = Math.random() * Math.PI * 2, d = rr + 10 + Math.random() * 14;
+    const rr = R.rockR(r.n), a = Math.random() * Math.PI * 2, d = rr + R.ROCK.dropGap + Math.random() * R.ROCK.dropSpread;
     const o = { id: this.oreSeq++, layer: r.layer, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * d, y: r.y + Math.sin(a) * d, touched: now() };
     this.ores.set(o.id, o);
     r.cracks--; r.cracked = true; r.boost.clear(); r.hp = R.crackHp(r.n); r.touched = now();
@@ -438,6 +437,7 @@ export class World {
     }
     return best;
   }
+  setTutorial(id, step) { const p = this.players.get(String(id)); if (!p || !Number.isInteger(step) || step < -1 || step > 50) return; p.tut = step; p.dirty = true; }   // (the tutorial runs in the client; it reports its step)
   // the hauler answers a cargo request: accepted, the cargo moves over (as much as fits) if the two are still in reach
   tradeAnswer(id, from, yes) {
     const q = this.players.get(String(id)), t = this.trades.get(String(id)); if (!q || !t || t.from !== from) return;
@@ -613,8 +613,8 @@ export class World {
   // ---- saving ----
   async _save(p) {
     await this.ready;
-    await pool.query(`UPDATE ring_players SET x = $2, y = $3, h = $4, fuel = $5, fuel_from = $6, module = $7, modules = $8, credits = $9, storage = $10, hold = $11, queue = $12, corp_id = $13, mods = $14, hull = $15, upgrades = $16, updated_at = now() WHERE user_id = $1`,
-      [p.id, p.x, p.y, p.h, p.fuel, JSON.stringify(p.fuelFrom), p.mods[0], JSON.stringify([...p.modules]), p.credits, JSON.stringify(p.storage), JSON.stringify(p.hold), JSON.stringify(p.queue), p.corp, JSON.stringify(p.mods), p.hull, JSON.stringify(p.upgrades)]);
+    await pool.query(`UPDATE ring_players SET x = $2, y = $3, h = $4, fuel = $5, fuel_from = $6, module = $7, modules = $8, credits = $9, storage = $10, hold = $11, queue = $12, corp_id = $13, mods = $14, hull = $15, upgrades = $16, tutorial = $17, updated_at = now() WHERE user_id = $1`,
+      [p.id, p.x, p.y, p.h, p.fuel, JSON.stringify(p.fuelFrom), p.mods[0], JSON.stringify([...p.modules]), p.credits, JSON.stringify(p.storage), JSON.stringify(p.hold), JSON.stringify(p.queue), p.corp, JSON.stringify(p.mods), p.hull, JSON.stringify(p.upgrades), p.tut]);
     p.dirty = false;
   }
   async saveDirty() { for (const p of this.players.values()) { this.settleQueue(p, now()); if (p.dirty) await this._save(p); } }
@@ -624,19 +624,27 @@ export class World {
   // laser length (m), tow asteroid id | 0, pump target | 0, refined by (a refinery working on its hold) | 0, hold raw %, hold refined %, fuel %,
   // modules (a bit per kind), switched on (a bit per kind), hull size, command boost reach | 0]; flags: 1 laser on an asteroid, 2 laser firing,
   // 4 a module switched on, 8 distress, 16 docked
-  shipRows(viewer) {
+  // (2026-10-17) every ship's row is built once per snapshot (with its JSON, for the per-socket diffs) and shared by all
+  // the players who can see it
+  shipRowCache() {
     const out = [];
     for (const p of this.players.values()) {
-      if (p !== viewer && (p.layer !== viewer.layer || hyp(p.x - viewer.x, p.y - viewer.y) > W.loadR)) continue;
       const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).length * R.ECON.refinedSpace;
       const bits = (list) => list.reduce((b, k) => b | (1 << R.MODULE_KINDS.indexOf(k)), 0), on = p.mods.filter((k) => p.on.has(k));
       out.push([p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.MODULE_KINDS.indexOf(p.mods[0]),
         (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (on.length ? 4 : 0) | (p.sos ? 8 : 0) | (p.docked ? 16 : 0),
         Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.pumpTo || 0, p.refineBy || 0,
         Math.round(raw / S.hold * 100), Math.round(ref / S.hold * 100), Math.round(p.fuel / S.tank * 100), bits(p.mods), bits(on), p.hull, this.has(p, "command") ? this.val(p, "command", "radius") : 0]);
+      out[out.length - 1] = { row: out[out.length - 1], key: "", p };
     }
+    for (const e of out) e.key = JSON.stringify(e.row);
     return out;
   }
+  shipRows(viewer, cache = this.shipRowCache()) {   // the rows a player sees: its own, and its copy's within the load circle
+    return cache.filter((e) => e.p === viewer || (e.p.layer === viewer.layer && hyp(e.p.x - viewer.x, e.p.y - viewer.y) <= W.loadR));
+  }
+  // (2026-10-17) which copies each zone has in use, worked out once per update instead of per player
+  indexZones() { const z = new Map(); for (const p of this.players.values()) { let s = z.get(p.zone); if (!s) z.set(p.zone, (s = new Set())); s.add(p.layer); } this.zoneLayers = z; }
   // asteroids near a player, in its layer: the untouched ones only as seeds, per cell ({ "layer:cx,cy": [seed, ...] }: the
   // client builds them with ringgen.js and names them "layer:cx,cy:seed"), and the ones someone has worked on (lasered,
   // scanned, towed) as rows: [id, x, y, size, cracks left, crack health %, ore (once scanned) | 0, towed 0 / 1]
@@ -667,7 +675,7 @@ export class World {
     const units = p.hold.map((u) => [ORE_KEYS.indexOf(u.o), u.r ? 1 : 0, u.n]), names = {};
     for (const u of p.hold) for (const nid of u.n) { const nm = this.nameCache.get(String(nid)); if (nm) names[nid] = nm; else this.nameWant.add(String(nid)); }
     return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, units, names, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0,
-      mods: p.mods, on: p.mods.filter((k) => p.on.has(k)), hull: p.hull, slots: S.slots, upgrades: p.upgrades, tow: p.tow || 0, pump: p.pumpTo || 0, refineBy: p.refineBy || 0, refiner: p.hold.some((u) => !u.r) && !p.refineBy ? (this.refinerFor(p) || {}).id || 0 : 0, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p) };
+      mods: p.mods, on: p.mods.filter((k) => p.on.has(k)), hull: p.hull, slots: S.slots, upgrades: p.upgrades, tow: p.tow || 0, pump: p.pumpTo || 0, refineBy: p.refineBy || 0, refiner: p.hold.some((u) => !u.r) && !p.refineBy ? (this.refinerFor(p) || {}).id || 0 : 0, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p), tut: p.tut };
   }
   stationMsg(p) { this.settleQueue(p, now()); return { t: "station", storage: p.storage, queue: p.queue, modules: [...p.modules], now: now() }; }
   async lookupNames() {                        // names for the accounts named on ore that aren't online (once each)
