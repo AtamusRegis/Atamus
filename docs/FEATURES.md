@@ -81,7 +81,7 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 
 - **The minimap** (bottom left): Saturn, the station, the rings, the locked line, your ship, ships near you and distress beacons; the wheel zooms it; hovering names the zone.
 - **The HUD** (bottom center, between the minimap and the chat; in windows too narrow for that, above them): **a chip per fitted module** (stacked upward; switchable ones show On / Off and switch when clicked), the hold bar (brown raw, purple refined), the fuel bar, credits.
-- **The cargo, above the hold bar: a square per unit in its ore's color; compressed units go five to a square, edged white** (a part stack fills part of its square) (owner, 2026-10-16). **Hovering a square shows the ore and what that ore in the hold sells for, the total then each ("Beta / 42 (21 each)"); holding Alt adds everyone named on those units.**
+- **The cargo, above the hold bar: a square per unit in its ore's color; compressed units go five to a square, edged white** (a part stack fills part of its square) (owner, 2026-10-16). **Hovering a square shows the ore and what that square alone sells for (one unit, or the compressed units in it) (owner, 2026-10-17); holding Alt adds everyone named on its units.**
 
 ## Accounts and sessions
 

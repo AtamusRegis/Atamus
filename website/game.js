@@ -424,9 +424,9 @@ function drawCargo() {
     return sq;
   }));
 }
-function cargoTip(g) {
-  const all = (ME.units || []).filter(([oi, r]) => ORE_KEYS[oi] === g.o && !!r === !!g.r), n = all.length, price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
-  let t = oreName(g.o) + "\n" + fmt(n * price) + " (" + fmt(price) + " each)";   // (owner, 2026-10-17: the total, then each)
+function cargoTip(g) {                         // (owner, 2026-10-17) this square's own worth: one unit, or the compressed units in it
+  const price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
+  let t = oreName(g.o) + "\n" + fmt(g.units.length * price) + " cr";
   if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
   return t;
 }
