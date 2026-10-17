@@ -118,6 +118,9 @@
     .dev-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding-right: 4px; }
     .dev-group { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); display: grid; gap: 4px; }
     .dev-h { font: 800 15px var(--f-display); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 2px; }
+    .dev-pick { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 4px; } .dev-pick.lv { margin: 0; }
+    .dev-pick button { padding: 2px 9px !important; font: 600 11px var(--f-mono) !important; }
+    .dev-h.with-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .dev-row { display: flex; align-items: center; gap: 4px; } .dev-l { flex: 1; min-width: 0; font: 12px var(--f-mono); color: var(--dim); }
     .dev-row input { width: 62px; padding: 3px 5px; background: var(--void); border: 1px solid var(--rule); border-radius: 3px; color: var(--ink); font: 12px var(--f-mono); text-align: right; }
     .dev-row input:focus { outline: none; border-color: var(--ice); }
@@ -185,6 +188,6 @@
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792300017"></script>
+  <script type="module" src="game.js?v=1792300019"></script>
 </body>
 </html>

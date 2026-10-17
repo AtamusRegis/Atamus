@@ -19,6 +19,8 @@ const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4
 const ORE_KEYS = ["iron", "nickel", "ice", "titanium", "cobalt", "platinum"];
 const kindBit = (k) => 1 << G.kinds.indexOf(k);
 const lvlOf = (k) => (ME.upgrades && ME.upgrades[k]) || 0;
+const myHull = () => G.hulls[Math.max(0, Math.min(G.hulls.length - 1, ME.hull || 0))];   // (owner, 2026-10-17: every flying number is the hull's)
+const mySpeedMul = () => (ME.mods || []).reduce((m, k) => m * (G.modules[k] ? mval(k, "speed") : 1), 1);
 const mval = (k, stat, lv = lvlOf(k)) => { const v = G.modules[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, lv)] : v; };
 const oreName = (k, ref) => (ref ? "Refined " : "") + (G && G.ores[k] ? G.ores[k].name : k);   // (owner, 2026-10-17: "Refined Beta")
 
@@ -194,12 +196,12 @@ function onSnap(m) {
 
 // ---- my ship, predicted as the server integrates it ----
 function allowedMe(x, y) {
-  const r = hyp(x, y); if (r < G.world.saturnR + G.ship.shipR || r > G.world.lockedR) return false;
+  const r = hyp(x, y); if (r < G.world.saturnR + myHull().shipR || r > G.world.lockedR) return false;
   if (r < G.world.safeR) return true; const s = sectorOf(x, y); return sectors[s] > 0 || mine.inSector === s;
 }
 function stepMe(dt, inp) {
-  const S = G.ship, empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
-  const k = empty ? S.crawl : 1, spd = S.speed * k * (rock ? Math.min(1, towFactor(rock.n) * mval("tractor", "tow")) : 1), push = hyp(inp.x, inp.y);
+  const S = myHull(), empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
+  const k = empty ? S.crawl : 1, spd = S.speed * mySpeedMul() * k * (rock ? Math.min(1, towFactor(rock.n) * mval("tractor", "tow")) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? S.accel * k : S.brake) * dt;
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
   mine.vx += ex; mine.vy += ey;
@@ -253,7 +255,7 @@ function drawWorld(t) {
   if (hyp(cam.x, cam.y) - W.saturnR < hyp(VW, VH) / zoom) drawSaturn(cx, W.saturnR, ts);   // (only while it's on screen)
   // the station and its docking circle
   cx.save(); cx.translate(W.station[0], W.station[1]);
-  cx.strokeStyle = C.gold; cx.globalAlpha = 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, W.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
+  cx.strokeStyle = C.gold; cx.globalAlpha = 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, G.econ.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawStation(cx, ts); cx.restore();
   // asteroids
   const vr = Math.max(VW, VH) / zoom;
@@ -273,7 +275,7 @@ function drawWorld(t) {
     o.dx += (o.x - o.dx) * 0.25; o.dy += (o.y - o.dy) * 0.25; const s = 9, bob = Math.sin(ts * 2 + o.id) * 1.2;
     cx.fillStyle = G.ores[o.o].color; cx.fillRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
     cx.strokeStyle = o.r ? "#fff" : "rgba(0,0,0,.45)"; cx.lineWidth = lw(o.r ? 1.6 : 1); cx.strokeRect(o.dx - s / 2, o.dy - s / 2 + bob, s, s);
-    if (o === hov) { const near = hyp(o.dx - mine.x, o.dy - mine.y) <= G.ship.interactR; cx.strokeStyle = near ? C.gold : C.dim; cx.lineWidth = lw(1.5); cx.beginPath(); cx.arc(o.dx, o.dy + bob, s + 3, 0, TAU); cx.stroke(); }
+    if (o === hov) { const near = hyp(o.dx - mine.x, o.dy - mine.y) <= myHull().interactR; cx.strokeStyle = near ? C.gold : C.dim; cx.lineWidth = lw(1.5); cx.beginPath(); cx.arc(o.dx, o.dy + bob, s + 3, 0, TAU); cx.stroke(); }
   }
   // ships: module effects under them, the hull, lasers and links over (refineries at work: some ship's hold is theirs)
   const refining = new Set(); for (const q of ships.values()) if (q.row && q.row[10]) refining.add(q.row[10]);
@@ -287,7 +289,7 @@ function drawWorld(t) {
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
   // (owner, 2026-10-17) my reach: claiming ore, the laser, fueling, refining, trading
-  cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, G.ship.interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
+  cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, myHull().interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawFx(t);
   cx.restore();
 }
@@ -403,13 +405,13 @@ requestAnimationFrame(frame);
 $("refine-pop").addEventListener("click", (e) => { send({ t: "act", op: "refineme" }); e.currentTarget.blur(); });
 const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), mods: $("mods"), cargo: $("cargo"), credits: $("credits"), zone: $("zone") };
 const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
-function holdCounts() { let raw = 0, ref = 0; for (const [k, n] of Object.entries(ME.hold || {})) { if (k.endsWith("+")) ref += n; else raw += n; } return { raw, ref }; }
+function holdCounts() { let raw = 0, ref = 0; for (const [k, n] of Object.entries(ME.hold || {})) { if (k.endsWith("+")) ref += n * G.ores[k.slice(0, -1)].refinedSpace; else raw += n; } return { raw, ref }; }   // (ref: the room refined units take)
 const SWITCHES = { miner: 1, command: 1, refinery: 1 };
 let hudKey = "";
 function drawHud() {
   if (!G) return;
-  const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref * G.econ.refinedSpace;
-  hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref * G.econ.refinedSpace / cap) * 100 + "%";
+  const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref;
+  hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref / cap) * 100 + "%";
   hud.holdNum.textContent = (Math.round(used * 10) / 10) + " / " + cap;
   hud.credits.textContent = fmt(ME.credits || 0);
   hud.zone.textContent = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
@@ -428,15 +430,16 @@ function drawHud() {
 // names on those units.
 function drawCargo() {
   const groups = [], byOre = new Map();
-  (ME.units || []).forEach(([oi, r, n]) => { const o = ORE_KEYS[oi]; if (!r) groups.push({ o, r: 0, units: [n] }); else { let g = byOre.get(o); if (!g || g.units.length >= 5) { g = { o, r: 1, units: [] }; byOre.set(o, g); groups.push(g); } g.units.push(n); } });
+  const per = (o) => Math.max(1, Math.round(1 / G.ores[o].refinedSpace));   // (refined units to a square: as many as fit in one unit's room)
+  (ME.units || []).forEach(([oi, r, n]) => { const o = ORE_KEYS[oi]; if (!r) groups.push({ o, r: 0, units: [n] }); else { let g = byOre.get(o); if (!g || g.units.length >= per(o)) { g = { o, r: 1, units: [] }; byOre.set(o, g); groups.push(g); } g.units.push(n); } });
   hud.cargo.replaceChildren(...groups.map((g) => {
-    const sq = elx("i", g.r ? "ref" : ""), fill = elx("b"); fill.style.background = G.ores[g.o].color; fill.style.top = g.r ? (100 - g.units.length / 5 * 100) + "%" : "0";
+    const sq = elx("i", g.r ? "ref" : ""), fill = elx("b"); fill.style.background = G.ores[g.o].color; fill.style.top = g.r ? (100 - g.units.length / per(g.o) * 100) + "%" : "0";
     sq.appendChild(fill); sq.addEventListener("mouseenter", (e) => showTip(e, () => cargoTip(g))); sq.addEventListener("mousemove", moveTip); sq.addEventListener("mouseleave", hideTip);
     return sq;
   }));
 }
 function cargoTip(g) {                         // (owner, 2026-10-17) this square's own worth: one unit, or the compressed units in it
-  const price = G.ores[g.o].price * (g.r ? G.econ.refinedMul : 1);
+  const price = g.r ? G.ores[g.o].refinedPrice : G.ores[g.o].price;
   let t = oreName(g.o, g.r) + "\n" + fmt(g.units.length * price) + " cr";
   if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
   return t;
@@ -483,7 +486,7 @@ function drawStation_() {
   const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Queue"));
   const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(elx("p", "st-empty", "Idle"));
   Q.forEach((j) => {
-    const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.econ.stationRefine) * 1000;
+    const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.ores[j.o].refineTime) * 1000;
     row.append(elx("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o, true))), elx("span", "st-n", fmt(j.left)));
     const bar = elx("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = elx("i"); bar.appendChild(fill); fill.dataset.at = j.at; fill.dataset.dur = dur; row.appendChild(bar); sec2.appendChild(row);   // (every job runs at once)
   });
@@ -498,9 +501,9 @@ function drawStation_() {
 function slotActions(k) {                      // right-click a storage slot: sell, refine, make fuel (each asks how many), fill the tank
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return [["Fill tank", () => send({ t: "st", op: "blocks" })]];
-  const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.econ.refinedMul : 1);
+  const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = ref ? G.ores[o].refinedPrice : G.ores[o].price;
   const items = [["Sell", () => askAmount("Sell " + oreName(o, ref), "Sell", n, (c) => fmt(c * price) + " cr", (c) => ({ op: "sell", k, n: c }))]];
-  if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].price * G.econ.refinedMul) + " cr", (c) => ({ op: "refine", o, n: c }))]);
+  if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].refinedPrice) + " cr", (c) => ({ op: "refine", o, n: c }))]);
   if (o === "ice" && !ref) items.push(["Make fuel", () => askAmount("Make fuel", "Make fuel", n, (c) => fmt(c * G.fuel.blockFuel) + " fuel", (c) => ({ op: "craft", n: c }))]);
   return items;
 }
@@ -521,7 +524,7 @@ amtBox.addEventListener("mousedown", (e) => e.stopPropagation());
 function storeTip(k) {
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return "Fuel blocks\n" + fmt(n * G.fuel.blockFuel) + " fuel (" + G.fuel.blockFuel + " each)";
-  const o = k.replace(/\+$/, ""), each = G.ores[o].price * (k.endsWith("+") ? G.econ.refinedMul : 1);
+  const o = k.replace(/\+$/, ""), each = k.endsWith("+") ? G.ores[o].refinedPrice : G.ores[o].price;
   return oreName(o, k.endsWith("+")) + "\n" + fmt(n * each) + " (" + fmt(each) + " each)";   // (owner, 2026-10-17: the total, then each)
 }
 setInterval(() => {                            // the running job's bar (between the server's updates)
@@ -541,14 +544,14 @@ const MOD_INFO = {
   scanner: "A long-range scanner. Reveal the ore inside an asteroid, for everyone.",
   refinery: "A field refinery. Switch it on and ships near you can have the raw ore in their holds refined: a fifth of the space, worth half again as much. Each use costs fuel.",
 };
-const STATS = {                                 // label, stat, how it reads
-  miner: [["Mining", "laserDps", (v) => v + " / s"], ["Fuel", "burn", (v) => v + " / min firing"]],
+const STATS = {                                 // label, stat, how it reads (Speed shows only when it isn't 1)
+  miner: [["Mining", "laserDps", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"], ["Ore per crack", "yield", (v) => v], ["Fuel", "burn", (v) => v + " / min firing"]],
   hauler: [["Hold", "hold", (v) => v + " units"]],
-  fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"]],
+  fueler: [["Tank", "tank", (v) => fmt(v)], ["Pump", "pump", (v) => v + " / s"], ["Reach", "range", (v) => v + " m"], ["Pay", "pay", (v) => v + " cr / unit"]],
   tractor: [["Reach", "range", (v) => v + " m"], ["Tow speed", "tow", (v) => "×" + v], ["Fuel", "burn", (v) => v + "+ / min towing"]],
   command: [["Boost", "boost", (v) => "×" + v], ["Reach", "radius", (v) => v + " m"], ["Fuel", "burn", (v) => v + " / min on"]],
-  scanner: [["Reach", "range", (v) => fmt(v) + " m"]],
-  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "activation", (v) => v + " / use"]],
+  scanner: [["Reach", "range", (v) => fmt(v) + " m"], ["Fuel", "fuel", (v) => v + " / scan"]],
+  refinery: [["Per unit", "unit", (v) => v + " s"], ["Fuel", "activation", (v) => v + " / use"], ["Reach", "range", (v) => v + " m"]],
 };
 const MK = ["Mk I", "Mk II", "Mk III", "Mk IV"];
 let shopKey = "";
@@ -567,16 +570,17 @@ function drawShop() {
   list.appendChild(hc);
   // modules
   for (const k of G.kinds) {
-    const M = G.modules[k], owned = (STATION.modules || []).includes(k), lv = owned ? lvlOf(k) : 0, nextLv = owned && lv < G.upgradeCost.length ? lv + 1 : null, fitted = (ME.mods || []).includes(k);
+    const M = G.modules[k], owned = (STATION.modules || []).includes(k), lv = owned ? lvlOf(k) : 0, nextLv = owned && lv < M.price.length - 1 ? lv + 1 : null, fitted = (ME.mods || []).includes(k);
     const card = elx("div", "shop-card" + (fitted ? " fitted" : ""));
     const nm = elx("div", "shop-name", M.name); if (owned) nm.appendChild(elx("span", "st-lv", "  " + MK[lv])); card.append(nm, elx("p", "shop-info", MOD_INFO[k]));
     const st = elx("div", "shop-stats");
-    for (const [label, stat, f] of STATS[k]) { const v = mval(k, stat, lv), nv = nextLv !== null ? mval(k, stat, nextLv) : null; st.append(elx("span", null, label), elx("b", null, f(v) + (nv !== null && nv !== v ? "  →  " + f(nv) : ""))); }
+    const rows = [...STATS[k]]; if (G.modules[k].speed && G.modules[k].speed.some((v) => v !== 1)) rows.push(["Ship speed", "speed", (v) => "×" + v]);
+    for (const [label, stat, f] of rows) { if (G.modules[k][stat] === undefined) continue; const v = mval(k, stat, lv), nv = nextLv !== null ? mval(k, stat, nextLv) : null; st.append(elx("span", null, label), elx("b", null, f(v) + (nv !== null && nv !== v ? "  →  " + f(nv) : ""))); }
     card.appendChild(st);
     const acts = elx("div", "shop-acts");
-    if (!owned) acts.appendChild(btn("Buy · " + fmt(M.price), { op: "buy", m: k }, ME.credits < M.price, "gold"));
+    if (!owned) acts.appendChild(btn("Buy · " + fmt(M.price[0]), { op: "buy", m: k }, ME.credits < M.price[0], "gold"));
     else {
-      if (nextLv !== null) { const cost = Math.round(M.price * G.upgradeCost[lv]); acts.appendChild(btn("Upgrade to " + MK[nextLv] + " · " + fmt(cost), { op: "upgrade", m: k }, ME.credits < cost, "gold")); }
+      if (nextLv !== null) { const cost = M.price[nextLv]; acts.appendChild(btn("Upgrade to " + MK[nextLv] + " · " + fmt(cost), { op: "upgrade", m: k }, ME.credits < cost, "gold")); }
       else acts.appendChild(elx("span", "st-tag", MK[lv]));
       if (fitted) { if ((ME.mods || []).length > 1) acts.appendChild(btn("Unequip", { op: "unequip", m: k })); else acts.appendChild(elx("span", "st-tag", "Equipped")); }
       else acts.appendChild(btn("Equip", { op: "equip", m: k }, (ME.mods || []).length >= (ME.slots || 1) && (ME.slots || 1) > 1));
@@ -762,13 +766,14 @@ $("report-send").addEventListener("click", () => { const text = $("report-text")
 
 // ---- (owner, 2026-10-17) the developer panel (head admin and admins): every number of the ship, hulls, modules per
 // level, asteroids per ore and per ring, fuel, the economy and limits, changed live for everyone; the server keeps them ----
-const devEl = $("dev"); let devTab = "ship", devArmed = 0;
-const DEV_TABS = [["ship", "Ship"], ["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
-const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
-  interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
+const devEl = $("dev"); let devTab = "hulls", devArmed = 0;
+const DEV_TABS = [["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
+let devHull = 0; const devLv = {};             // (owner, 2026-10-17) the hull and each module's level being edited
+const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed (× for modules)", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
+  interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", laserDps: "Mining / s", yield: "Ore per crack", pay: "Pay / unit", fuel: "Fuel / scan", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
   activation: "Fuel / use", sizeBurn: "Fuel × per size", pull: "Pull / s", leash: "Leash gap", dropGap: "Ore drop gap", dropSpread: "Ore drop spread", radiusBase: "Radius base", radiusPer: "Radius per size", crackHpBase: "Crack health base", crackHpPer: "Crack health per size", towBase: "Tow share base", towPer: "Tow share per size",
   respawn: "Respawn s", despawn: "Despawn s", reseed: "Reseed s", stationPrice: "Station fuel price", pumpPay: "Pay / unit pumped", blockFuel: "Fuel per block", blockTime: "Seconds per block",
-  refinedMul: "Refined price ×", refinedSpace: "Refined space", stationRefine: "Station refine s", startCredits: "Starting credits", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
+  refinedPrice: "Refined price", refinedSpace: "Refined space", refineTime: "Station refine s", hardness: "Hardness (crack health ×)", startCredits: "Starting credits", startFuel: "Starting fuel", dockR: "Docking radius", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
   despawnOre: "Loose ore despawn s", shardCap: "Players per shard", partyMax: "Party size" };
 const devLabel = (k) => DEV_LABELS[k] || k;
 const devGet = (path) => path.reduce((o, k) => (o == null ? o : o[k]), G);
@@ -791,20 +796,23 @@ function devDraw() {
   const tabs = elx("div", "dev-tabs");
   for (const [k, label] of DEV_TABS) { const b = elx("button", k === devTab ? "on" : "", label); b.type = "button"; b.addEventListener("click", () => { devTab = k; devDraw(); }); tabs.appendChild(b); }
   const body = elx("div", "dev-body"), out = [];
-  if (devTab === "ship") out.push(devGroup("Hull (every ship)", devNumbers("ship", Object.keys(G.ship))));
-  else if (devTab === "hulls") G.hulls.forEach((h, i) => out.push(devGroup(h.name, [devRow("Slots", devInput(["hulls", i, "slots"])), devRow("Price", devInput(["hulls", i, "price"]))])));
-  else if (devTab === "modules") {
-    out.push(devGroup("Upgrade cost (× price)", [devRow("Mk II · III · IV", ...G.upgradeCost.map((_, i) => devInput(["upgradeCost", i])))]));
+  if (devTab === "hulls") {                    // a hull at a time: every number it flies with
+    const pick = elx("div", "dev-pick"); G.hulls.forEach((h, i) => { const b = elx("button", i === devHull ? "on" : "", h.name); b.type = "button"; b.addEventListener("click", () => { devHull = i; devDraw(); }); pick.appendChild(b); });
+    const H = G.hulls[devHull], rows = Object.keys(H).filter((k) => typeof H[k] === "number").map((k) => devRow(devLabel(k), devInput(["hulls", devHull, k])));
+    const g = devGroup(H.name + " hull", rows); g.insertBefore(pick, g.children[1]); out.push(g);
+  } else if (devTab === "modules") {           // a module at a time per level (Mk I-IV): a row per number
     for (const k of G.kinds) {
-      const M = G.modules[k], rows = [];
+      const M = G.modules[k], lv = devLv[k] || 0, pick = elx("div", "dev-pick lv");
+      ["I", "II", "III", "IV"].forEach((n, i) => { const b = elx("button", i === lv ? "on" : "", n); b.type = "button"; b.addEventListener("click", () => { devLv[k] = i; devDraw(); }); pick.appendChild(b); });
+      const rows = [];
       for (const [stat, v] of Object.entries(M)) {
-        if (typeof v === "number") rows.push(devRow(devLabel(stat), devInput(["modules", k, stat])));
-        else if (Array.isArray(v)) rows.push(devRow(devLabel(stat), ...v.map((_, i) => devInput(["modules", k, stat, i]))));
+        if (Array.isArray(v)) rows.push(devRow(devLabel(stat), devInput(["modules", k, stat, Math.min(lv, v.length - 1)])));
+        else if (typeof v === "number") rows.push(devRow(devLabel(stat), devInput(["modules", k, stat])));
       }
-      out.push(devGroup(M.name, rows));
+      const g = devGroup(M.name, rows), h = g.firstChild; h.classList.add("with-pick"); h.appendChild(pick); out.push(g);
     }
   } else if (devTab === "asteroids") {
-    out.push(devGroup("Ores", Object.keys(G.ores).map((o) => devRow(G.ores[o].name + " price", devInput(["ores", o, "price"])))));
+    for (const o of Object.keys(G.ores)) { const O = G.ores[o]; out.push(devGroup(O.name, Object.keys(O).filter((k) => typeof O[k] === "number").map((k) => devRow(devLabel(k), devInput(["ores", o, k]))))); }
     G.ringSizes.forEach((sz, i) => {
       const rows = [devRow("Sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])), devRow("Asteroids per cell", devInput(["ringSlots", i]))];
       for (const o of Object.keys(G.ringOres[i])) rows.push(devRow(G.ores[o].name + " weight", devInput(["ringOres", i, o])));
@@ -841,7 +849,7 @@ function nearestOre() { let b = null, bd = Infinity; for (const o of ores.values
 const STATION_PT = () => ({ x: G.world.station[0], y: G.world.station[1] });
 const TUT = [
   { text: "Fly with W and S and turn with A and D. Q and E slide sideways.", start: (s) => { s.x = mine.x; s.y = mine.y; }, done: (s) => hyp(mine.x - s.x, mine.y - s.y) > 150 },
-  { text: "Fly to an asteroid. Follow the arrow.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, done: () => { const r = nearestRock(); return !!r && hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n) < G.ship.interactR - 30; } },
+  { text: "Fly to an asteroid. Follow the arrow.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, done: () => { const r = nearestRock(); return !!r && hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n) < myHull().interactR - 30; } },
   { text: "Aim at it with the mouse and hold the left button to mine. Every crack you break drops ore.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, start: (s) => { s.cracked = false; }, done: (s) => s.cracked },
   { text: "Your Miner module mines faster but burns fuel. Press F, or click its button, to switch it.", glow: ".mod-chip", start: (s) => { s.on = JSON.stringify(ME.on); }, done: (s) => JSON.stringify(ME.on) !== s.on },
   { text: "Click the ore beside the asteroid to claim it. You can reach anything inside the dotted circle.", target: () => { const o = nearestOre(); return o && { x: o.dx, y: o.dy, r: 8 }; }, start: (s) => { s.h = holdN(); }, done: (s) => holdN() > s.h, skip: () => !ores.size && holdN() > 0 },

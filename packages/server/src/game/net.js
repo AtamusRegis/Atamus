@@ -17,8 +17,8 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 
 // the game's numbers, for the clients (drawing, prediction, the station panel, the developer panel); sent again whenever
 // the developer panel changes one
-const gameInfo = () => ({ world: R.WORLD, ship: R.SHIP, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, econ: R.ECON, fuel: R.FUEL, rock: R.ROCK,
-  ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringSlots: R.RING_SLOTS, upgradeCost: R.UPGRADE_COST, hulls: R.HULLS, limits: R.LIMITS, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
+const gameInfo = () => ({ world: R.WORLD, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, econ: R.ECON, fuel: R.FUEL, rock: R.ROCK,
+  ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringSlots: R.RING_SLOTS, hulls: R.HULLS, limits: R.LIMITS, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
 const DEV_ROLES = ["head", "admin"];           // (owner, 2026-10-17) who gets the developer panel
 
 export function attachGameServer(httpServer) {

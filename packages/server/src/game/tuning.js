@@ -1,11 +1,11 @@
-// (owner, 2026-10-17) The developer panel's side on the server: the game's numbers that may be changed live (the ship,
-// hulls, modules per level, ores and rings, asteroids, fuel, economy, limits), checked as hostile, kept in the database
+// (owner, 2026-10-17) The developer panel's side on the server: the game's numbers that may be changed live (each
+// hull's numbers, modules per level, ores and rings, asteroids, fuel, economy, limits), checked as hostile, kept in the database
 // (ring_tuning, one row) and put back on every start. The world's shape (Saturn, the station, the rings' radii, the
 // asteroid grid) isn't here: clients build asteroids from it.
 import { pool } from "../db.js";
 import * as R from "./rules.js";
 
-export const ROOTS = { ship: R.SHIP, hulls: R.HULLS, modules: R.MODULES, upgradeCost: R.UPGRADE_COST, ores: R.ORES, ringOres: R.RING_ORES, ringSizes: R.RING_SIZES,
+export const ROOTS = { hulls: R.HULLS, modules: R.MODULES, ores: R.ORES, ringOres: R.RING_ORES, ringSizes: R.RING_SIZES,
   ringSlots: R.RING_SLOTS, rock: R.ROCK, fuel: R.FUEL, econ: R.ECON, limits: R.LIMITS };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // whole numbers, with their limits (everything else: 0 up to a million)
@@ -15,8 +15,10 @@ function limitsFor(path) {
   if (root === "ringSizes") return [1, 15, true];
   if (root === "ringSlots") return [0, 3, true];
   if (root === "limits") return [1, 1000, true];
-  if (root === "ship" && (a === "hold" || a === "tank")) return [1, 1e6, true];
+  if (root === "hulls" && (b === "hold" || b === "tank")) return [1, 1e6, true];
   if (root === "modules" && (b === "hold" || b === "tank")) return [1, 1e6, true];
+  if (root === "modules" && b === "yield") return [1, 20, true];
+  if (root === "modules" && b === "speed") return [0.05, 10, false];
   return [0, 1e6, false];
 }
 // walk to a number in the live objects (only numbers already there can be set)

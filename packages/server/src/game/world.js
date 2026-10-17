@@ -11,12 +11,12 @@ import { pool } from "../db.js";
 import * as R from "./rules.js";
 import { hash32, rng, genRock } from "./ringgen.js";
 
-const { WORLD: W, SHIP, MODULES } = R;
+const { WORLD: W, MODULES } = R;
 const now = () => Date.now();
 const hyp = Math.hypot;
 // ---- seeded randomness: the seeds rotate with a secret only the server knows (so the map can't be learned) ----
 const SECRET = process.env.RING_SECRET || crypto.randomBytes(16).toString("hex");
-const pickW = (weights, r) => { const keys = Object.keys(weights), tot = keys.reduce((s, k) => s + weights[k], 0); let x = r * tot; for (const k of keys) { x -= weights[k]; if (x <= 0) return k; } return keys[keys.length - 1]; };
+const pickW = (weights, r) => { const keys = Object.keys(weights), tot = keys.reduce((s, k) => s + weights[k], 0); if (tot <= 0) return keys[0]; let x = r * tot; for (const k of keys) { if (weights[k] <= 0) continue; x -= weights[k]; if (x <= 0) return k; } return keys.filter((k) => weights[k] > 0).pop(); };
 // ---- the map ----
 export const ringOf = (r) => { for (let i = 0; i < W.rings.length; i++) if (r >= W.rings[i][0] && r <= W.rings[i][1]) return i; return -1; };
 export const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;   // 0 N, 1 E, 2 S, 3 W
@@ -25,7 +25,8 @@ export function zoneOf(x, y) {
   return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + R.SECTOR_NAMES[R.SECTORS[sectorOf(x, y)]];
 }
 const ORE_KEYS = Object.keys(R.ORES);
-const unitSpace = (u) => (u.r ? R.ECON.refinedSpace : 1);
+const unitSpace = (u) => (u.r ? R.ORES[u.o].refinedSpace : 1);
+const rockHp = (r) => R.crackHp(r.n) * R.ORES[r.ore].hardness;   // (a crack's health: by size, x the ore's hardness)
 const holdUsed = (p) => p.hold.reduce((s, u) => s + unitSpace(u), 0);
 const storeKey = (o, r) => (r ? o + "+" : o);
 
@@ -67,8 +68,10 @@ export class World {
   has(p, k) { return p.mods.includes(k); }
   val(p, k, stat) { const v = MODULES[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, p.upgrades[k] || 0)] : v; }
   isOn(p, k) { return this.has(p, k) && p.on.has(k); }
+  hullOf(p) { return R.HULLS[Math.max(0, Math.min(R.HULLS.length - 1, p.hull | 0))]; }
   stats(p) {
-    return { hold: this.has(p, "hauler") ? this.val(p, "hauler", "hold") : SHIP.hold, tank: this.has(p, "fueler") ? this.val(p, "fueler", "tank") : SHIP.tank, slots: R.HULLS[p.hull].slots };
+    const H = this.hullOf(p); let speedMul = 1; for (const k of p.mods) speedMul *= this.val(p, k, "speed");
+    return { hold: this.has(p, "hauler") ? this.val(p, "hauler", "hold") : H.hold, tank: this.has(p, "fueler") ? this.val(p, "fueler", "tank") : H.tank, slots: H.slots, speedMul };
   }
   // ---- asteroids ----
   cellKey(layer, cx, cy) { return layer + ":" + cx + "," + cy; }
@@ -96,7 +99,7 @@ export class World {
       const gen = c.gen[s] || 0, seed = hash32(SECRET + "|" + epoch + "|" + key + "|" + s + "|" + gen), g = genRock(cx, cy, seed, W.cell, W.rings, R.RING_SIZES);
       if (!g || s >= R.RING_SLOTS[g.ring] || !this.sectors[sectorOf(g.x, g.y)].open || this.sectors[sectorOf(g.x, g.y)].closeAt) continue;
       const ore = pickW(R.RING_ORES[g.ring], rng(hash32(SECRET + "|ore|" + seed))());
-      const rock = { id: key + ":" + seed, seed, sk, cell: key, layer, slot: s, x: g.x, y: g.y, n: g.n, cracks: g.n, hp: R.crackHp(g.n), ore, ring: g.ring,
+      const rock = { id: key + ":" + seed, seed, sk, cell: key, layer, slot: s, x: g.x, y: g.y, n: g.n, cracks: g.n, hp: R.crackHp(g.n) * R.ORES[ore].hardness, ore, ring: g.ring,
         scanned: false, cracked: false, names: new Set(), boost: new Set(), lasers: new Set(), tow: null, touched: 0, home: true };
       this.rocks.set(rock.id, rock); this.slots.set(sk, rock); this.gridAdd(rock);
     }
@@ -161,7 +164,7 @@ export class World {
   }
   // may this ship be at (x, y)? Not inside Saturn, not past the locked line, not into a closed sector (unless it's already in it)
   allowed(p, x, y) {
-    const r = hyp(x, y); if (r < W.saturnR + SHIP.shipR || r > W.lockedR) return false;
+    const r = hyp(x, y); if (r < W.saturnR + this.hullOf(p).shipR || r > W.lockedR) return false;
     if (r < W.safeR) return true;
     const s = sectorOf(x, y); return this.sectors[s].open || p.inSector === s;
   }
@@ -173,7 +176,7 @@ export class World {
     await this.ready; await (this.offline.get(id) || Promise.resolve());
     const { rows } = await pool.query(`SELECT * FROM ring_players WHERE user_id = $1`, [id]), r = rows[0];
     const [sx, sy] = W.station;
-    p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.START.fuel, fuelFrom: {}, mods: [R.START.module], hull: 0, upgrades: {},
+    p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.ECON.startFuel, fuelFrom: {}, mods: [R.START.module], hull: 0, upgrades: {},
       modules: new Set([R.START.module]), credits: R.ECON.startCredits, storage: {}, queue: [], hold: [], corp: null, on: new Set(), tow: null, pumpTo: null, refineBy: null,
       refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "", tut: 0 };
     if (r) {
@@ -198,6 +201,8 @@ export class World {
   }
   async leave(id) {
     const p = this.players.get(String(id)); if (!p) return;
+    if (p.tow) { const r = this.rocks.get(p.tow); if (r && r.tow === p.id) r.tow = null; p.tow = null; }   // (a towed asteroid is let go)
+    for (const q of this.players.values()) { if (q.refineBy === p.id) q.refineBy = null; if (q.pumpTo === p.id) q.pumpTo = null; }
     this.leaveParty(p, true); this.players.delete(p.id);
     await this._save(p); await pool.query(`UPDATE ring_players SET logout_at = now() WHERE user_id = $1`, [p.id]);
   }
@@ -218,7 +223,7 @@ export class World {
     let fx = n(m.x), fy = n(m.y); const L = hyp(fx, fy); if (L > 1) { fx /= L; fy /= L; }
     p.fx = fx; p.fy = fy;
     if (typeof m.h === "number" && Number.isFinite(m.h)) {
-      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = SHIP.turn * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
+      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = this.hullOf(p).turn * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
       p.h = p.h + Math.max(-mx, Math.min(mx, d)); p.h = Math.atan2(Math.sin(p.h), Math.cos(p.h)); p.hAt = t;
     }
     p.aim = n(m.a); p.firing = m.f === 1;
@@ -235,26 +240,26 @@ export class World {
     const t = now();
     for (const r of this.rocks.values()) r.lasers.clear();
     for (const p of this.players.values()) {
-      const S = this.stats(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
+      const S = this.stats(p), H = this.hullOf(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
       // movement: thrust toward the push, coasting brakes gently; an empty tank crawls; towing slows by the rock's size
-      const k = empty ? SHIP.crawl : 1, spd = SHIP.speed * k * (rock ? Math.min(1, R.towFactor(rock.n) * this.val(p, "tractor", "tow")) : 1), push = hyp(p.fx, p.fy);
-      const tx = p.fx * spd, ty = p.fy * spd, a = (push > 0.01 ? SHIP.accel : SHIP.brake) * (push > 0.01 ? k : 1) * dt;
+      const k = empty ? H.crawl : 1, spd = H.speed * S.speedMul * k * (rock ? Math.min(1, R.towFactor(rock.n) * this.val(p, "tractor", "tow")) : 1), push = hyp(p.fx, p.fy);
+      const tx = p.fx * spd, ty = p.fy * spd, a = (push > 0.01 ? H.accel : H.brake) * (push > 0.01 ? k : 1) * dt;
       let ex = tx - p.vx, ey = ty - p.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
       p.vx += ex; p.vy += ey;
-      if (push > 0.01 && !empty) this.burn(p, SHIP.flyBurn / 60 * push * dt);
+      if (push > 0.01 && !empty) this.burn(p, H.flyBurn / 60 * push * dt);
       if (p.vx || p.vy) {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
         if (this.allowed(p, nx, ny)) { p.x = nx; p.y = ny; }
         else if (this.allowed(p, nx, p.y)) { p.x = nx; p.vy = 0; } else if (this.allowed(p, p.x, ny)) { p.y = ny; p.vx = 0; } else { p.vx = p.vy = 0; }
         for (const r of this.rocksNear(p.x, p.y, 80, p.layer)) {   // bump off asteroids (not the one on my own leash)
-          if (r.id === p.tow) continue; const d = hyp(p.x - r.x, p.y - r.y), min = R.rockR(r.n) + SHIP.shipR;
+          if (r.id === p.tow) continue; const d = hyp(p.x - r.x, p.y - r.y), min = R.rockR(r.n) + H.shipR;
           if (d < min && d > 0.01) { const ux = (p.x - r.x) / d, uy = (p.y - r.y) / d, px = r.x + ux * min, py = r.y + uy * min; if (this.allowed(p, px, py)) { p.x = px; p.y = py; } const vn = p.vx * ux + p.vy * uy; if (vn < 0) { p.vx -= vn * ux; p.vy -= vn * uy; } }
         }
         p.inSector = hyp(p.x, p.y) >= W.safeR ? sectorOf(p.x, p.y) : -1; p.dirty = true;
         const z = zoneOf(p.x, p.y); if (z !== p.zone) { p.zone = z; this.placeLayer(p); p.meDirty = true; }
       }
       // docking: entering the station's circle delivers the hold
-      const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < W.dockR;
+      const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < R.ECON.dockR;
       if (dock && !p.docked && p.hold.length) this.deliver(p, p.hold.splice(0), true);
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
       if (dock) { p.tow = null; p.pumpTo = null; p.refineBy = null; }
@@ -262,16 +267,17 @@ export class World {
       // command ship boosting nearby make it faster
       p.laserOn = false; p.laserLen = 0;
       if (p.firing && !dock) {
-        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = SHIP.interactR;
-        for (const r of this.rocksNear(p.x, p.y, SHIP.interactR + 70, p.layer)) {
+        const big = this.isOn(p, "miner") && p.fuel > 0, reach = big ? this.val(p, "miner", "range") : H.interactR;
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = reach;
+        for (const r of this.rocksNear(p.x, p.y, reach + 70, p.layer)) {
           const rr = R.rockR(r.n), fx = r.x - p.x, fy = r.y - p.y, along = fx * ux + fy * uy; if (along < -rr) continue;
           const perp = Math.abs(fx * uy - fy * ux); if (perp > rr) continue;
           const tt = Math.max(0, along - Math.sqrt(rr * rr - perp * perp)); if (tt < bt) { bt = tt; best = r; }
         }
-        p.laserLen = best ? bt : SHIP.interactR; p.laserOn = !!best;
+        p.laserLen = best ? bt : reach; p.laserOn = !!best;
         if (best) {
-          let dps = SHIP.laserDps;
-          if (this.isOn(p, "miner") && p.fuel > 0) { dps = this.val(p, "miner", "laserDps"); this.burn(p, this.val(p, "miner", "burn") / 60 * dt); }
+          let dps = H.laserDps;
+          if (big) { dps = this.val(p, "miner", "laserDps"); this.burn(p, this.val(p, "miner", "burn") / 60 * dt); }
           let boost = 1;         // (several command ships don't stack: the strongest counts, but every one boosting is named)
           for (const q of this.players.values()) if (this.isOn(q, "command") && q.fuel > 0 && !q.docked && q.layer === p.layer && hyp(q.x - p.x, q.y - p.y) <= this.val(q, "command", "radius")) { boost = Math.max(boost, this.val(q, "command", "boost")); best.boost.add(q.id); }
           dps *= boost;
@@ -283,25 +289,25 @@ export class World {
       if (rock) {                              // the tractor: the asteroid follows on a leash behind the ship
         if (rock.cracked || p.fuel <= 0) { p.tow = null; rock.tow = null; }
         else {
-          this.burn(p, this.val(p, "tractor", "burn") / 60 * (1 + rock.n * MODULES.tractor.sizeBurn) * dt);
+          this.burn(p, this.val(p, "tractor", "burn") / 60 * (1 + rock.n * this.val(p, "tractor", "sizeBurn")) * dt);
           // (behind the claws, which trail off the back of the ship: it's longer with more modules, see the art's shipLayout)
-          const hullL = p.mods.reduce((n, k) => n + (k === "hauler" || k === "fueler" ? 200 : 130), 0), L = R.rockR(rock.n) + MODULES.tractor.leash + (109 + hullL / 2) * 0.28, gx = p.x - Math.cos(p.h - Math.PI / 2) * L, gy = p.y - Math.sin(p.h - Math.PI / 2) * L;
-          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * MODULES.tractor.pull);
+          const hullL = p.mods.reduce((n, k) => n + (k === "hauler" || k === "fueler" ? 200 : 130), 0), L = R.rockR(rock.n) + this.val(p, "tractor", "leash") + (109 + hullL / 2) * 0.28, gx = p.x - Math.cos(p.h - Math.PI / 2) * L, gy = p.y - Math.sin(p.h - Math.PI / 2) * L;
+          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * this.val(p, "tractor", "pull"));
           if (d > 1 && hyp(rock.x + dx * pull, rock.y + dy * pull) > W.saturnR + R.rockR(rock.n)) { rock.x += dx * pull; rock.y += dy * pull; this.gridMove(rock); }
           rock.touched = t;
         }
       }
       if (p.pumpTo) {                          // the fueler: pumps into a ship within reach; the world pays per unit
         const q = this.players.get(p.pumpTo), QS = q && this.stats(q);
-        if (!q || q.docked || !this.has(p, "fueler") || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > SHIP.interactR || p.fuel <= 0) p.pumpTo = null;
+        if (!q || q.docked || !this.has(p, "fueler") || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > this.val(p, "fueler", "range") || p.fuel <= 0) p.pumpTo = null;
         else {
           const amt = Math.min(this.val(p, "fueler", "pump") * dt, QS.tank - q.fuel, p.fuel);
-          if (amt > 0) { this.burn(p, amt); q.fuel += amt; p.credits += amt * R.FUEL.pumpPay; q.meDirty = true; if (p.party && p.party === q.party) q.fuelFrom[p.id] = (q.fuelFrom[p.id] || 0) + amt; }
+          if (amt > 0) { this.burn(p, amt); q.fuel += amt; p.credits += amt * this.val(p, "fueler", "pay"); q.meDirty = true; if (p.party && p.party === q.party) q.fuelFrom[p.id] = (q.fuelFrom[p.id] || 0) + amt; }
         }
       }
       if (p.refineBy) {                        // (owner, 2026-10-17) a refinery working on my hold: a raw unit a second, its name added
         const r = this.players.get(p.refineBy), u = p.hold.find((x) => !x.r);
-        if (!r || !u || dock || r.docked || !this.isOn(r, "refinery") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) > SHIP.interactR) { p.refineBy = null; p.refineT = 0; }
+        if (!r || !u || dock || r.docked || !this.isOn(r, "refinery") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) > this.val(r, "refinery", "range")) { p.refineBy = null; p.refineT = 0; }
         else {
           p.refineT += dt;
           if (p.refineT >= this.val(r, "refinery", "unit")) { p.refineT = 0; u.r = 1; if (!u.n.includes(r.id)) u.n.push(r.id); p.meDirty = true; p.dirty = true; this.fx.push({ k: "refine", x: p.x, y: p.y, l: p.layer }); }
@@ -321,11 +327,16 @@ export class World {
     const names = new Set(r.names);
     for (const id of r.lasers) { names.add(id); const p = this.players.get(id); if (p) for (const f of this.fuelNames(p)) names.add(f); }
     for (const id of r.boost) names.add(id);
-    // (owner, 2026-10-16) the unit appears just off the asteroid's edge and waits there to be clicked
-    const rr = R.rockR(r.n), a = Math.random() * Math.PI * 2, d = rr + R.ROCK.dropGap + Math.random() * R.ROCK.dropSpread;
-    const o = { id: this.oreSeq++, layer: r.layer, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * d, y: r.y + Math.sin(a) * d, touched: now() };
-    this.ores.set(o.id, o);
-    r.cracks--; r.cracked = true; r.boost.clear(); r.hp = R.crackHp(r.n); r.touched = now();
+    // (owner, 2026-10-16) the units appear just off the asteroid's edge and wait there to be clicked: one, or as many as the
+    // best switched-on miner lasering it yields (owner, 2026-10-17: ore per crack, per miner level)
+    let yieldN = 1; for (const id of r.lasers) { const q = this.players.get(id); if (q && this.isOn(q, "miner")) yieldN = Math.max(yieldN, Math.round(this.val(q, "miner", "yield"))); }
+    const rr = R.rockR(r.n);
+    for (let i = 0; i < Math.min(20, yieldN); i++) {
+      const a = Math.random() * Math.PI * 2, d = rr + R.ROCK.dropGap + Math.random() * R.ROCK.dropSpread;
+      const o = { id: this.oreSeq++, layer: r.layer, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * d, y: r.y + Math.sin(a) * d, touched: now() };
+      this.ores.set(o.id, o);
+    }
+    r.cracks--; r.cracked = true; r.boost.clear(); r.hp = rockHp(r); r.touched = now();
     if (r.tow) { const q = this.players.get(r.tow); if (q) q.tow = null; r.tow = null; }
     this.fx.push({ k: "crack", x: r.x, y: r.y, r: rr, done: r.cracks <= 0 ? 1 : 0, l: r.layer });
     if (r.cracks <= 0) this.dropRock(r, R.ROCK.respawn);
@@ -361,11 +372,10 @@ export class World {
   // take from there), to every name on it; the carrier isn't named. Banned or deleted: delivered at once.
   async offlineHolds() {
     await this.ready;
-    const crawl = SHIP.speed * SHIP.crawl;
-    const { rows } = await pool.query(`SELECT user_id, x, y, hold FROM ring_players WHERE logout_at IS NOT NULL AND logout_at < now() - make_interval(secs => $1) AND hold <> '[]'::jsonb AND transit IS NULL`, [R.ECON.offlineGrace]);
+    const { rows } = await pool.query(`SELECT user_id, x, y, hold, hull FROM ring_players WHERE logout_at IS NOT NULL AND logout_at < now() - make_interval(secs => $1) AND hold <> '[]'::jsonb AND transit IS NULL`, [R.ECON.offlineGrace]);
     for (const r of rows) {
       if (this.players.has(r.user_id)) continue;
-      const secs = Math.max(0, hyp(r.x - W.station[0], r.y - W.station[1]) - W.dockR) / crawl;
+      const H = R.HULLS[Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0))], secs = Math.max(0, hyp(r.x - W.station[0], r.y - W.station[1]) - R.ECON.dockR) / Math.max(1, H.speed * H.crawl);
       await pool.query(`UPDATE ring_players SET transit = hold, hold = '[]'::jsonb, transit_due = now() + make_interval(secs => $2) WHERE user_id = $1 AND transit IS NULL`, [r.user_id, secs]);
     }
     const due = await pool.query(`SELECT user_id, transit FROM ring_players WHERE transit IS NOT NULL AND transit_due <= now()`);
@@ -399,29 +409,29 @@ export class World {
       const cost = this.val(r, "refinery", "activation"); if (r.fuel < cost) return;
       this.burn(r, cost); r.meDirty = true; p.refineBy = r.id; p.refineT = 0;
     } else if (Number.isInteger(m.ore)) {             // claim a loose unit: click it from within reach, with room in the hold
-      const o = this.ores.get(m.ore); if (!o || o.layer !== p.layer || hyp(o.x - p.x, o.y - p.y) > SHIP.interactR) return;
-      if (holdUsed(p) + (o.r ? R.ECON.refinedSpace : 1) > this.stats(p).hold + 1e-6) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: "Your hold is full." } }); return; }
+      const o = this.ores.get(m.ore); if (!o || o.layer !== p.layer || hyp(o.x - p.x, o.y - p.y) > this.hullOf(p).interactR) return;
+      if (holdUsed(p) + unitSpace({ o: o.ore, r: o.r }) > this.stats(p).hold + 1e-6) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: "Your hold is full." } }); return; }
       p.hold.push({ o: o.ore, r: o.r, n: o.names }); p.meDirty = true; p.dirty = true; this.ores.delete(o.id); this.fx.push({ k: "pick", x: o.x, y: o.y, i: p.id, l: o.layer });
     } else if (typeof m.rock === "string") {
       const r = this.rocks.get(m.rock); if (!r || r.layer !== p.layer) return; const d = hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n);
       const op = m.op === "scan" || m.op === "tow" ? m.op : this.has(p, "scanner") && !r.scanned ? "scan" : "tow";
       if (op === "tow" && this.has(p, "tractor")) {
         if (p.tow === r.id) { p.tow = null; r.tow = null; }
-        else if (!r.cracked && !r.tow && d <= this.val(p, "tractor", "range") && p.fuel > 0) {
+        else if (!r.cracked && (!r.tow || !this.players.has(r.tow)) && d <= this.val(p, "tractor", "range") && p.fuel > 0) {
           if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; }
           p.tow = r.id; r.tow = p.id; r.names.add(p.id); r.touched = now(); r.home = false;
         }
-      } else if (op === "scan" && this.has(p, "scanner") && !r.scanned && d <= this.val(p, "scanner", "range")) {
-        r.scanned = true; r.names.add(p.id); r.touched = now(); r.home = false; this.fx.push({ k: "scan", x: p.x, y: p.y, x2: r.x, y2: r.y, i: p.id, l: p.layer });
+      } else if (op === "scan" && this.has(p, "scanner") && !r.scanned && d <= this.val(p, "scanner", "range") && p.fuel >= this.val(p, "scanner", "fuel")) {
+        this.burn(p, this.val(p, "scanner", "fuel")); r.scanned = true; r.names.add(p.id); r.touched = now(); r.home = false; this.fx.push({ k: "scan", x: p.x, y: p.y, x2: r.x, y2: r.y, i: p.id, l: p.layer });
       }
     } else if (typeof m.ship === "string") {
       const q = this.players.get(m.ship); if (!q || q === p || q.docked || q.layer !== p.layer) return; const d = hyp(q.x - p.x, q.y - p.y);
-      if (m.op === "fuel" && this.has(p, "fueler")) { if (d <= SHIP.interactR || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
+      if (m.op === "fuel" && this.has(p, "fueler")) { if (d <= this.val(p, "fueler", "range") || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
       else if (m.op === "trade") {             // one way: a ship without a hauler asks a hauler to take its cargo
         const say = (text) => this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text } });
         if (!this.has(q, "hauler") || this.has(p, "hauler")) return;
         if (!p.hold.length) { say("Your hold is empty."); return; }
-        if (d > SHIP.interactR) { say("Too far away to trade."); return; }
+        if (d > this.hullOf(p).interactR) { say("Too far away to trade."); return; }
         this.trades.set(q.id, { from: p.id, at: now() });
         this.msgs.push({ to: q.id, m: { t: "trade", from: p.id, name: p.name, n: p.hold.length } });
         say("Asked " + q.name + " to take your cargo.");
@@ -433,7 +443,7 @@ export class World {
     let best = null, bd = Infinity;
     for (const r of this.players.values()) {
       if (!this.isOn(r, "refinery") || r.docked || r.layer !== p.layer || r.fuel < this.val(r, "refinery", "activation")) continue;
-      const d = hyp(r.x - p.x, r.y - p.y); if (d <= SHIP.interactR && d < bd) { bd = d; best = r; }
+      const d = hyp(r.x - p.x, r.y - p.y); if (d <= this.val(r, "refinery", "range") && d < bd) { bd = d; best = r; }
     }
     return best;
   }
@@ -445,7 +455,7 @@ export class World {
     const p = this.players.get(from), say = (to, text) => this.msgs.push({ to, m: { t: "chat", ch: "sys", text } });
     if (!p) return;
     if (!yes) { say(p.id, q.name + " declined your cargo."); return; }
-    if (now() - t.at > R.ECON.tradeWait * 1000 || p.docked || q.docked || p.layer !== q.layer || hyp(q.x - p.x, q.y - p.y) > SHIP.interactR || !this.has(q, "hauler") || this.has(p, "hauler")) { say(q.id, "That trade is no longer possible."); say(p.id, "That trade is no longer possible."); return; }
+    if (now() - t.at > R.ECON.tradeWait * 1000 || p.docked || q.docked || p.layer !== q.layer || hyp(q.x - p.x, q.y - p.y) > this.hullOf(p).interactR || !this.has(q, "hauler") || this.has(p, "hauler")) { say(q.id, "That trade is no longer possible."); say(p.id, "That trade is no longer possible."); return; }
     const room = this.stats(q).hold - holdUsed(q); let used = 0; const keep = [];
     for (const u of p.hold) { const sp = unitSpace(u); if (used + sp <= room + 1e-6) { q.hold.push(u); used += sp; } else keep.push(u); }
     const moved = p.hold.length - keep.length; p.hold = keep; p.meDirty = q.meDirty = true; p.dirty = q.dirty = true;
@@ -458,7 +468,7 @@ export class World {
   settleQueue(p, t) {
     let changed = false;
     for (const j of p.queue) {
-      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.ECON.stationRefine) * 1000;
+      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.ORES[j.o].refineTime) * 1000;
       if (j.at > t) { j.at = t; changed = true; }   // (jobs queued one behind another before 2026-10-17 start now too)
       while (j.left > 0 && t >= j.at + dur) { const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true; }
     }
@@ -470,13 +480,13 @@ export class World {
     if (m.op === "sell") {
       const k = String(m.k || ""), o = k.replace(/\+$/, ""), ref = k.endsWith("+"); if (!R.ORES[o]) return false;
       const n = cnt(m.n, p.storage[k] || 0); if (!n) return false;
-      p.storage[k] -= n; if (!p.storage[k]) delete p.storage[k]; p.credits += n * R.ORES[o].price * (ref ? R.ECON.refinedMul : 1);
+      p.storage[k] -= n; if (!p.storage[k]) delete p.storage[k]; p.credits += n * (ref ? R.ORES[o].refinedPrice : R.ORES[o].price);
     } else if (m.op === "buy") {
-      const M = MODULES[m.m]; if (!M || p.modules.has(m.m) || p.credits < M.price) return false;
-      p.credits -= M.price; p.modules.add(m.m);
+      const M = MODULES[m.m]; if (!M || p.modules.has(m.m) || p.credits < M.price[0]) return false;
+      p.credits -= M.price[0]; p.modules.add(m.m);
     } else if (m.op === "upgrade") {           // the next upgrade of a module I own (three after the base)
-      const M = MODULES[m.m], lv = p.upgrades[m.m] || 0; if (!M || !p.modules.has(m.m) || lv >= R.UPGRADE_COST.length) return false;
-      const cost = Math.round(M.price * R.UPGRADE_COST[lv]); if (p.credits < cost) return false;
+      const M = MODULES[m.m], lv = p.upgrades[m.m] || 0; if (!M || !p.modules.has(m.m) || lv >= M.price.length - 1) return false;
+      const cost = M.price[lv + 1]; if (p.credits < cost) return false;
       p.credits -= cost; p.upgrades[m.m] = lv + 1;
       if (m.m === "fueler" || m.m === "hauler") this.fitTank(p);
     } else if (m.op === "hull") {              // the next hull size up: one more module slot
@@ -629,7 +639,7 @@ export class World {
   shipRowCache() {
     const out = [];
     for (const p of this.players.values()) {
-      const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).length * R.ECON.refinedSpace;
+      const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).reduce((n, u) => n + unitSpace(u), 0);
       const bits = (list) => list.reduce((b, k) => b | (1 << R.MODULE_KINDS.indexOf(k)), 0), on = p.mods.filter((k) => p.on.has(k));
       out.push([p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.MODULE_KINDS.indexOf(p.mods[0]),
         (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (on.length ? 4 : 0) | (p.sos ? 8 : 0) | (p.docked ? 16 : 0),
@@ -659,7 +669,7 @@ export class World {
     }
     for (const r of this.rocksNear(viewer.x, viewer.y, W.loadR, L)) {
       if ((r.home && !r.touched) || hyp(r.x - viewer.x, r.y - viewer.y) > W.loadR) continue;
-      rows.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / R.crackHp(r.n) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
+      rows.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / rockHp(r) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
     }
     return { cells, rows };
   }
