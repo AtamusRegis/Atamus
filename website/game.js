@@ -471,10 +471,10 @@ function drawStation_() {
   // the queue
   const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Queue"));
   const Q = STATION.queue || []; if (!Q.length) sec2.appendChild(elx("p", "st-empty", "Idle"));
-  Q.forEach((j, i) => {
+  Q.forEach((j) => {
     const row = elx("div", "st-row q"), dur = (j.k === "fuel" ? G.fuel.blockTime : G.stationRefine) * 1000;
-    row.append(elx("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o) + " · refining")), elx("span", "st-n", fmt(j.left)));
-    const bar = elx("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = elx("i"); bar.appendChild(fill); if (i === 0) { fill.dataset.at = j.at; fill.dataset.dur = dur; } row.appendChild(bar); sec2.appendChild(row);
+    row.append(elx("span", "st-name", (j.k === "fuel" ? "Fuel blocks" : oreName(j.o, true))), elx("span", "st-n", fmt(j.left)));
+    const bar = elx("span", "st-bar" + (j.k === "fuel" ? " fuel" : "")); const fill = elx("i"); bar.appendChild(fill); fill.dataset.at = j.at; fill.dataset.dur = dur; row.appendChild(bar); sec2.appendChild(row);   // (every job runs at once)
   });
   // fuel
   const sec3 = elx("section"); sec3.appendChild(elx("h3", null, "Fuel"));

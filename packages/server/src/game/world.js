@@ -439,15 +439,15 @@ export class World {
     say(p.id, moved ? q.name + " took " + moved + (moved === 1 ? " unit." : " units.") + (keep.length ? " Their hold is full." : "") : q.name + "'s hold is full.");
   }
   // ---- the station (docked only) ----
+  // (owner, 2026-10-17) one job per ore type (and one for fuel blocks), all running at once; each makes a unit per
+  // duration from its own start
   settleQueue(p, t) {
     let changed = false;
-    while (p.queue.length) {
-      const j = p.queue[0], dur = (j.k === "fuel" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000;
-      if (t < j.at + dur) break;
-      const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true;
-      if (j.left <= 0) { p.queue.shift(); if (p.queue[0]) p.queue[0].at = Math.max(p.queue[0].at, j.at); }
+    for (const j of p.queue) {
+      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000;
+      while (j.left > 0 && t >= j.at + dur) { const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true; }
     }
-    if (changed) { p.stDirty = true; p.dirty = true; }
+    if (changed) { p.queue = p.queue.filter((j) => j.left > 0); p.stDirty = true; p.dirty = true; }
   }
   station(id, m) {
     const p = this.players.get(String(id)); if (!p || !p.docked || !m || typeof m.op !== "string") return false;
@@ -481,13 +481,12 @@ export class World {
     } else if (m.op === "blocks") {            // fuel blocks from storage into the tank
       const n = Math.min(p.storage.fuel || 0, Math.floor((S.tank - p.fuel) / R.FUEL.blockFuel)); if (n <= 0) return false;
       p.storage.fuel -= n; if (!p.storage.fuel) delete p.storage.fuel; p.fuel += n * R.FUEL.blockFuel;
-    } else if (m.op === "refine" || m.op === "craft") {   // queue raw ore to refine (60 s a unit) or ice into fuel blocks (15 s)
-      const o = m.op === "craft" ? "ice" : String(m.o || ""); if (!R.ORES[o] || p.queue.length >= 8) return false;
+    } else if (m.op === "refine" || m.op === "craft") {   // raw ore to refine (60 s a unit) or ice into fuel blocks (15 s): into that ore's own job
+      const o = m.op === "craft" ? "ice" : String(m.o || ""), k = m.op === "craft" ? "fuel" : "refine"; if (!R.ORES[o]) return false;
       const n = cnt(m.n, p.storage[o] || 0); if (!n) return false;
       p.storage[o] -= n; if (!p.storage[o]) delete p.storage[o];
-      const last = p.queue[p.queue.length - 1], dur = (m.op === "craft" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000;
-      const at = last ? last.at + last.left * ((last.k === "fuel" ? R.FUEL.blockTime : R.STATION_REFINE) * 1000) : now(); void dur;
-      p.queue.push({ k: m.op === "craft" ? "fuel" : "refine", o, left: n, at: Math.max(at, now()) });
+      const job = p.queue.find((j) => j.k === k && j.o === o);
+      if (job) job.left += n; else p.queue.push({ k, o, left: n, at: now() });
     } else return false;
     p.stDirty = true; p.meDirty = true; p.dirty = true; return true;
   }
