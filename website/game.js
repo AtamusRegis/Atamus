@@ -20,7 +20,7 @@ const ORE_KEYS = ["iron", "nickel", "ice", "titanium", "cobalt", "platinum"];
 const kindBit = (k) => 1 << G.kinds.indexOf(k);
 const lvlOf = (k) => (ME.upgrades && ME.upgrades[k]) || 0;
 const mval = (k, stat, lv = lvlOf(k)) => { const v = G.modules[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, lv)] : v; };
-const oreName = (k) => (G && G.ores[k] ? G.ores[k].name : k);
+const oreName = (k, ref) => (ref ? "Refined " : "") + (G && G.ores[k] ? G.ores[k].name : k);   // (owner, 2026-10-17: "Refined Beta")
 
 // ---- state ----
 let myId = null, myName = "", amStaff = false, haveMe = false;
@@ -426,7 +426,7 @@ function drawCargo() {
 }
 function cargoTip(g) {                         // (owner, 2026-10-17) this square's own worth: one unit, or the compressed units in it
   const price = G.ores[g.o].price * (g.r ? G.refinedMul : 1);
-  let t = oreName(g.o) + "\n" + fmt(g.units.length * price) + " cr";
+  let t = oreName(g.o, g.r) + "\n" + fmt(g.units.length * price) + " cr";
   if (altDown) { const ids = new Set(); for (const u of g.units) for (const id of u) ids.add(String(id)); t += "\n" + [...ids].map((id) => (ME.names && ME.names[id]) || names.get(id) || "…").join("\n"); }
   return t;
 }
@@ -488,7 +488,7 @@ function slotActions(k) {                      // right-click a storage slot: se
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return [["Fill tank", () => send({ t: "st", op: "blocks" })]];
   const o = k.replace(/\+$/, ""), ref = k.endsWith("+"), price = G.ores[o].price * (ref ? G.refinedMul : 1);
-  const items = [["Sell", () => askAmount("Sell " + oreName(o) + (ref ? " · compressed" : ""), "Sell", n, (c) => fmt(c * price) + " cr", (c) => ({ op: "sell", k, n: c }))]];
+  const items = [["Sell", () => askAmount("Sell " + oreName(o, ref), "Sell", n, (c) => fmt(c * price) + " cr", (c) => ({ op: "sell", k, n: c }))]];
   if (!ref) items.push(["Refine", () => askAmount("Refine " + oreName(o), "Refine", n, (c) => fmt(c * G.ores[o].price * G.refinedMul) + " cr", (c) => ({ op: "refine", o, n: c }))]);
   if (o === "ice" && !ref) items.push(["Make fuel", () => askAmount("Make fuel", "Make fuel", n, (c) => fmt(c * G.fuel.blockFuel) + " fuel", (c) => ({ op: "craft", n: c }))]);
   return items;
@@ -511,7 +511,7 @@ function storeTip(k) {
   const n = (STATION.storage || {})[k] || 0;
   if (k === "fuel") return "Fuel blocks\n" + fmt(n * G.fuel.blockFuel) + " fuel (" + G.fuel.blockFuel + " each)";
   const o = k.replace(/\+$/, ""), each = G.ores[o].price * (k.endsWith("+") ? G.refinedMul : 1);
-  return oreName(o) + "\n" + fmt(n * each) + " (" + fmt(each) + " each)";   // (owner, 2026-10-17: the total, then each)
+  return oreName(o, k.endsWith("+")) + "\n" + fmt(n * each) + " (" + fmt(each) + " each)";   // (owner, 2026-10-17: the total, then each)
 }
 setInterval(() => {                            // the running job's bar (between the server's updates)
   for (const f of stEl.querySelectorAll(".st-bar i[data-at]")) { const at = +f.dataset.at, dur = +f.dataset.dur, srvNow = Date.now() - (srvOff || 0); f.style.width = Math.max(0, Math.min(100, (srvNow - at) / dur * 100)) + "%"; }

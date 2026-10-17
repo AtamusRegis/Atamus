@@ -58,7 +58,7 @@ Every number is in `packages/server/src/game/rules.js` (the design document's "f
 - **Every ore unit carries the names of everyone who helped**, each at most once: every ship **lasering the rock at the moment the crack breaks**, every command ship that boosted them during that crack, whoever scanned or towed the rock, and **party fuelers whose fuel the miner is burning**.
 - **Any ship that delivers it is named too** (and its party fuelers). **Delivering** (flying into the station's circle) puts **a full copy of each unit into the station storage of every named player**. Names stop at the station.
 - **Custody (owner):** ore in a hold can't be dropped or given away, with **one exception, trading, one way: a ship without a hauler asks a hauler to take its cargo** ("Request trade" in the hauler's menu, within 150 m); **the hauler gets Accept / Decline** (it lapses after 30 s), and on Accept as much as fits moves over. Haulers can't trade ore on. **If a carrier logs off, after 30 minutes their hold "crawls home"** and is delivered after the crawl time (they aren't added as deliverer). **A banned player's hold is delivered** at once.
-- **Refining:** a refined (compressed) unit takes **a fifth of the space** and **sells for 1.5x**. Field refining (Refinery) keeps the names. **The station refines for free, one unit a minute**, and keeps going while you're offline.
+- **Refining:** a refined (compressed) unit is named **"Refined" and its ore** ("Refined Beta"; owner, 2026-10-17) and takes **a fifth of the space** and **sells for 1.5x**. Field refining (Refinery) keeps the names. **The station refines for free, one unit a minute**, and keeps going while you're offline.
 
 ## The station and the Shop
 
