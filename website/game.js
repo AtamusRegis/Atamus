@@ -110,6 +110,8 @@ addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Escape") hideMenu();
   if (e.code === "KeyF" && !e.repeat) { toggleMode(); e.preventDefault(); }
+  const mn = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];          // 1 / 2 pick the mode switch's segments directly
+  if (mn !== undefined) { const labels = modeLabels(); if (labels && mn < labels.length) { modeIdx = mn; drawHud(); e.preventDefault(); } }
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
 });
 addEventListener("keyup", (e) => keys.delete(e.code));

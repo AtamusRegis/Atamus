@@ -51,7 +51,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## Ships (owner: each role is its own ship, swapped free at the station)
 
-W / S thrust along the nose, A / D turn, Q / E strafe; the mouse aims; **holding the left button fires the beam**; **F flips the mode switch by the hold bar**; the wheel zooms. **On a touch screen: twin sticks** — the left half flies, the right half aims and fires — holding still for half a second opens the thing's menu, a second finger on a busy half pinches the zoom, zoom buttons by the minimap. New players start as a **Miner**.
+W / S thrust along the nose, A / D turn, Q / E strafe; the mouse aims; **holding the left button fires the beam**; **F flips the mode switch by the hold bar, and 1 / 2 pick its segments directly** (owner, 2026-10-18); the wheel zooms. **On a touch screen: twin sticks** — the left half flies, the right half aims and fires — holding still for half a second opens the thing's menu, a second finger on a busy half pinches the zoom, zoom buttons by the minimap. New players start as a **Miner**.
 
 | Ship | Role | Numbers (start) |
 | --- | --- | --- |
