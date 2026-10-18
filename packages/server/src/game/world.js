@@ -248,6 +248,7 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
       const towK = rock ? Math.max(0.2, 60 / (60 + rock.r)) : 1;
+      if (p.drill && hyp(p.fx, p.fy) > 0.25) p.drill = null;   // (owner, 2026-10-18) moving lets go of the drill
       if (p.drill) { p.vx = 0; p.vy = 0; }     // drilled in: anchored to the rock
       const k = empty ? FLY.crawl : 1, spd = S.speed * k * towK, push = p.drill ? 0 : hyp(p.fx, p.fy);
       const a = (push > 0.01 ? FLY.accel : FLY.brake) * (push > 0.01 ? k : 1) * dt;

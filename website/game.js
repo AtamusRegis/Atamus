@@ -311,6 +311,7 @@ function onSnap(m) {
 function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + G.fly.shipR && r <= G.world.lockedR; }
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
+  if (ME.drill && hyp(inp.x, inp.y) > 0.25) ME.drill = 0;      // moving lets go of the drill (the server releases on the same input)
   if (ME.drill) { mine.vx = 0; mine.vy = 0; inp = { x: 0, y: 0, turn: inp.turn, stick: inp.stick }; }   // drilled in: anchored
   const k = empty ? F.crawl : 1, spd = S.speed * k * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? F.accel * k : F.brake) * dt;
