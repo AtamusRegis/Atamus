@@ -58,8 +58,9 @@ export const HEAT = {
   rate: 0.09,               // heat a second the mined chunk gains (x its density's heat factor, x the beam stage, x a boost)
   hSoft: 1, hNormal: 1, hDense: 1.6, hUltra: 2.2, hBed: 3,   // heat factor per density (denser and bedrock run hotter)
   spread: 0.3,              // share of the mined chunk's heating that leaks to each touching chunk
-  cool: 0.02,               // heat a second a chunk sheds on its own
-  coreCool: 0.008,          // heat a second the core sheds
+  cool: 0.08,               // heat a second a chunk sheds on its own (owner, 2026-10-18: chunks cool quick)
+  coreCool: 0.05,           // heat a second the core sheds (a bit slower than chunks)
+  coreSeep: 0.12,           // share of what a chunk sheds that seeps into the core (heat transfers in over time, not only at breaks)
   coreK: 0.25,              // core heat gained per chunk broken, x the chunk's heat at the break
   burn: 0.05,               // share of core health burned a second while the core is overheated (heat at 1)
   coolBeam: 0.3,            // heat a second the coolant spray pulls out of a chunk (or the core, down a bore); cooling a chunk also pulls half that from the core
@@ -70,7 +71,7 @@ export const HEAT = {
 export const BEAM = { ramp: 14, cool: 3, heatF: [0, 0.6, 2], dpsF: [1, 1.5, 2.2], stages: [0.35, 0.7] };
 // (owner, 2026-10-18) the Miner's charge shot: a chunk at its breaking point primes instead of popping while the beam
 // holds; released, it blasts damage into the chunks behind it along the beam line, at a heavy heat price.
-export const CHARGE = { time: 2, depth: 55, dmg: 0.9, heat: 0.5 };
+export const CHARGE = { time: 2, depth: 55, dmg: 0.9, heat: 0.5, blastMin: 0.5 };   // below blastMin charge, release just breaks the chunk — no blast
 export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
 // which ores each ring holds (rarer outward); per-ring bedrock weight x, rock chance x, and whether a bedrock-free line
 // to the core is guaranteed (ring 3's cores can roll bedrock-encapsulated)

@@ -152,9 +152,15 @@ export class World {
       c.awake = 0;
       const r = this.slots.get(key); if (r && r.home && !r.touched) { this.rocks.delete(r.id); this.slots.delete(r.key); this.gridDel(r); }
     }
-    // heat cools on its own, chunk by chunk and in the core; an overheated core burns itself down and pops early
+    // heat cools on its own — chunks quick, the core a bit slower — and a share of what the chunks shed seeps into the
+    // core (owner, 2026-10-18: heat transfers to the core over time, not only at breaks); an overheated core burns
+    // itself down and pops early
     for (const r of [...this.rocks.values()]) {
-      if (r.hot && r.hot.size) for (const i of [...r.hot]) { const ch = r.chunks[i]; const s0 = this.heatStage(ch); ch.heat = Math.max(0, (ch.heat || 0) - R.HEAT.cool); if (this.heatStage(ch) !== s0) r.v++; if (ch.heat <= 0) r.hot.delete(i); }
+      if (r.hot && r.hot.size) {
+        let seep = 0;
+        for (const i of [...r.hot]) { const ch = r.chunks[i]; const s0 = this.heatStage(ch); const shed = Math.min(ch.heat || 0, R.HEAT.cool); ch.heat = (ch.heat || 0) - shed; seep += shed * (R.HEAT.coreSeep || 0); if (this.heatStage(ch) !== s0) r.v++; if (ch.heat <= 0) r.hot.delete(i); }
+        if (seep > 0 && !r.core.popped) r.core.heat = Math.min(1.25, (r.core.heat || 0) + seep);
+      }
       const c = r.core;
       if ((c.heat || 0) > 0 && !c.popped) {
         if (c.heat >= 1) { c.hp -= c.maxHp * R.HEAT.burn; if (c.hp <= 0) { this.popCore(r, null); continue; } }
@@ -372,7 +378,7 @@ export class World {
           const k = p.chargeAmt || 0; p.chargeTgt = null; p.chargeAmt = 0;
           if (rk && c && !c.broken && !rk.core.popped) {
             this.breakChunk(rk, c, p);
-            if (k > 0.15) {
+            if (k >= (R.CHARGE.blastMin ?? 0.5)) {   // a blast takes a deliberate charge; a slip of the aim just breaks the chunk
               const seen = new Set([c.i]), reach = cT.t + 4 + k * R.CHARGE.depth;
               for (let t2 = cT.t; t2 <= reach; t2 += 1.2) {
                 const x2 = cT.ox + cT.ux * t2, y2 = cT.oy + cT.uy * t2, rr = hyp(x2 - rk.x, y2 - rk.y);
@@ -380,10 +386,10 @@ export class World {
                 const c2 = this.chunkAt(rk, rr, Math.atan2(y2 - rk.y, x2 - rk.x));
                 if (!c2 || c2.broken || seen.has(c2.i)) continue;
                 seen.add(c2.i);
-                this.heatChunk(rk, c2, R.CHARGE.heat * k);
                 const st0 = this.dmgStage(c2);
                 if (c2.d !== 4) { c2.hp -= c2.maxHp * R.CHARGE.dmg * k; if (c2.hp <= 0 && !c2.broken) this.breakChunk(rk, c2, p); else if (this.dmgStage(c2) !== st0) rk.v++; }
                 else { c2.wear = Math.min(c2.maxHp, (c2.wear || 0) + c2.maxHp * R.CHARGE.dmg * k); if (this.dmgStage(c2) !== st0) rk.v++; }
+                if (!c2.broken) this.heatChunk(rk, c2, R.CHARGE.heat * k);   // the heat price lands on what survives, not straight into the core
                 if (rk.core.popped) break;
               }
               this.fx.push({ k: "lance", x: cT.ox + cT.ux * cT.t, y: cT.oy + cT.uy * cT.t, x2: cT.ox + cT.ux * reach, y2: cT.oy + cT.uy * reach });
