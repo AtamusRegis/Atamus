@@ -39,12 +39,37 @@ const rockRows = new Map();                    // id -> the asteroids someone ha
 const ores = new Map();                        // id -> { id, x, y, o, r }
 const names = new Map();                       // id -> name (the roster)
 const fx = [];                                 // effects being drawn
+// (owner, 2026-10-17) small world-space particles: mining sparks, crack debris, engine exhaust, delivery glitter
+const parts = [];
+function spawnPart(x, y, o) { if (parts.length > 360) parts.splice(0, 40); parts.push({ x, y, vx: o.vx || 0, vy: o.vy || 0, life: o.life || 0.6, age: 0, size: o.size || 3, color: o.color || "#fff", drag: o.drag ?? 2.5 }); }
+function burst(x, y, n, colors, speed) { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = speed * (0.4 + Math.random()); spawnPart(x, y, { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.5, size: 2 + Math.random() * 3.5, color: colors[(Math.random() * colors.length) | 0], drag: 3 }); } }
+function drawParts(wdt) {
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i]; p.age += wdt; if (p.age >= p.life) { parts.splice(i, 1); continue; }
+    const k = Math.exp(-wdt * p.drag); p.vx *= k; p.vy *= k; p.x += p.vx * wdt; p.y += p.vy * wdt;
+    const f = 1 - p.age / p.life, sz = p.size * (0.5 + 0.5 * f);
+    cx.globalAlpha = f; cx.fillStyle = p.color; cx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
+  }
+  cx.globalAlpha = 1;
+}
+// a nudge of screen shake (a crack nearby, docking, bumping an asteroid), decaying fast
+const shk = { a: 0, x: 0, y: 0 };
+const addShake = (a) => { shk.a = Math.min(7, shk.a + a); };
+let lastBumpT = 0;
+// a claimed unit flies from where it lay into the hold bar
+function flyOre(wx, wy) {
+  const [sx, sy] = toScreen(wx, wy), wrap = $("hold-wrap"), tgt = wrap.getBoundingClientRect();
+  const d = document.createElement("i"); d.className = "ore-fly"; d.style.left = sx + "px"; d.style.top = sy + "px"; document.body.appendChild(d);
+  requestAnimationFrame(() => { d.style.transform = `translate(${tgt.left + tgt.width / 2 - sx}px, ${tgt.top + 8 - sy}px) scale(.45)`; d.style.opacity = "0.25"; });
+  setTimeout(() => { d.remove(); wrap.classList.remove("pop"); void wrap.offsetWidth; wrap.classList.add("pop"); }, 430);
+}
 
 // ---- the canvas and camera ----
 const cv = $("view"), cx = cv.getContext("2d");
 let VW = 0, VH = 0, DPR = 1, zoom = 1.1;
 const ZMIN = 0.32, ZMAX = 3;
 try { const z = +localStorage.getItem("atamus.zoom"); if (z >= ZMIN && z <= ZMAX) zoom = z; } catch {}
+let zoomT = zoom;                              // (owner, 2026-10-17: the wheel eases the zoom instead of stepping it)
 function resize() { DPR = Math.min(devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight; cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR); cv.style.width = VW + "px"; cv.style.height = VH + "px"; }
 addEventListener("resize", resize); resize();
 const cam = { x: 0, y: 0 };
@@ -91,7 +116,7 @@ cv.addEventListener("mousedown", (e) => {
   }
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
-cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.min(ZMAX, Math.max(ZMIN, zoom * (e.deltaY > 0 ? 0.9 : 1.11))); try { localStorage.setItem("atamus.zoom", String(zoom)); } catch {} }, { passive: false });
+cv.addEventListener("wheel", (e) => { e.preventDefault(); zoomT = Math.min(ZMAX, Math.max(ZMIN, zoomT * (e.deltaY > 0 ? 0.88 : 1.14))); try { localStorage.setItem("atamus.zoom", String(zoomT)); } catch {} }, { passive: false });
 // ship-relative controls: W thrusts along the nose (nose: (sin h, -cos h)), S backs up, Q / E push sideways, A / D turn
 function pushInput() {
   let f = 0, s = 0; if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1; if (keys.has("KeyE")) s += 1; if (keys.has("KeyQ")) s -= 1;
@@ -152,7 +177,7 @@ function onMsg(m) {
   } else if (m.t === "ores") {
     for (const r of m.a || []) { const [id, x, y, oi, ref] = r; const o = ores.get(id); if (o) Object.assign(o, { x, y }); else ores.set(id, { id, x, y, dx: x, dy: y, o: ORE_KEYS[oi] || "iron", r: ref }); }
     for (const id of m.x || []) ores.delete(id);
-  } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (ME.docked !== wasDocked) drawStation_(); else if (ME.docked) { drawStation_(); drawShop(); } drawHud(); refreshTip(); }
+  } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (!wasDocked && ME.docked) addShake(2.2); if (ME.docked !== wasDocked) drawStation_(); else if (ME.docked) { drawStation_(); drawShop(); } drawHud(); refreshTip(); }
   else if (m.t === "station") { STATION = m; STATION.at = performance.now(); drawStation_(); drawShop(); }
   else if (m.t === "trade") showTrade(m);
   else if (m.t === "invite") showInvite(m);
@@ -165,7 +190,14 @@ function onMsg(m) {
   else if (m.t === "soc") { SOC = m; drawParty(); }
   else if (m.t === "sectors") { sectors = m.s; online = m.online; }
   else if (m.t === "sos") sosList = m.s || [];
-  else if (m.t === "fx") { fx.push({ ...m, t0: performance.now() }); if (m.k === "crack" && hyp(m.x - mine.x, m.y - mine.y) < 600) tutS.cracked = true; }
+  else if (m.t === "fx") {
+    fx.push({ ...m, t0: performance.now() });
+    const d = hyp(m.x - mine.x, m.y - mine.y);
+    if (m.k === "crack") { if (d < 600) tutS.cracked = true; burst(m.x, m.y, m.done ? 22 : 10, [C.rock, "#fff", C.dim], m.done ? 95 : 55); addShake((m.done ? 4 : 1.6) * Math.max(0, 1 - d / 700)); }
+    else if (m.k === "deliver") { burst(m.x, m.y, 14, [C.gold, "#fff"], 65); if (m.i === myId) addShake(1); }
+    else if (m.k === "pick") { if (m.i === myId) flyOre(m.x, m.y); else burst(m.x, m.y, 5, [C.gold], 40); }
+    else if (m.k === "scan") burst(m.x2, m.y2, 8, [C.ice, "#fff"], 45);
+  }
   else if (m.t === "join") names.set(m.i, m.n);
   else if (m.t === "leave") { ships.delete(m.i); }
   else if (m.t === "teleport") { mine.x = m.x; mine.y = m.y; mine.vx = mine.vy = 0; corr.x = corr.y = 0; }
@@ -213,7 +245,15 @@ function stepMe(dt, inp) {
     if (allowedMe(nx, ny)) { mine.x = nx; mine.y = ny; } else if (allowedMe(nx, mine.y)) { mine.x = nx; mine.vy = 0; } else if (allowedMe(mine.x, ny)) { mine.y = ny; mine.vx = 0; } else mine.vx = mine.vy = 0;
     for (const r of rocks.values()) {          // bump off asteroids, as the server does
       if (r.id === ME.tow) continue; const d = hyp(mine.x - r.dx, mine.y - r.dy), min = rockR(r.n) + S.shipR;
-      if (d < min && d > 0.01) { const ux = (mine.x - r.dx) / d, uy = (mine.y - r.dy) / d; mine.x = r.dx + ux * min; mine.y = r.dy + uy * min; const vn = mine.vx * ux + mine.vy * uy; if (vn < 0) { mine.vx -= vn * ux; mine.vy -= vn * uy; } }
+      if (d < min && d > 0.01) {
+        const ux = (mine.x - r.dx) / d, uy = (mine.y - r.dy) / d; mine.x = r.dx + ux * min; mine.y = r.dy + uy * min;
+        const vn = mine.vx * ux + mine.vy * uy;
+        if (vn < 0) {
+          mine.vx -= vn * ux; mine.vy -= vn * uy;
+          const now2 = performance.now();
+          if (-vn > 28 && now2 - lastBumpT > 260) { lastBumpT = now2; addShake(Math.min(4, -vn / 32)); burst(r.dx + ux * min, r.dy + uy * min, 6, [C.rock, C.dim], 40); }
+        }
+      }
     }
     mine.inSector = hyp(mine.x, mine.y) >= G.world.safeR ? sectorOf(mine.x, mine.y) : -1;
   }
@@ -240,9 +280,10 @@ function drawBackground(t) {
   }
   cx.globalAlpha = 1;
 }
+let lastWT = 0;
 function drawWorld(t) {
-  const W = G.world, ts = t / 1000;
-  cx.save(); cx.translate(VW / 2, VH / 2); cx.scale(zoom, zoom); cx.translate(-cam.x, -cam.y);
+  const W = G.world, ts = t / 1000, wdt = Math.min(0.05, Math.max(0, (t - lastWT) / 1000)); lastWT = t;
+  cx.save(); cx.translate(VW / 2 + shk.x, VH / 2 + shk.y); cx.scale(zoom, zoom); cx.translate(-cam.x, -cam.y);
   const lw = (px) => px / zoom;
   // rings: soft gold bands; the closed sectors shaded; the sector lines; the locked line
   for (const [a, b] of W.rings) { cx.strokeStyle = "rgba(216,176,106,0.07)"; cx.lineWidth = b - a; cx.beginPath(); cx.arc(0, 0, (a + b) / 2, 0, TAU); cx.stroke(); }
@@ -257,7 +298,7 @@ function drawWorld(t) {
   if (hyp(cam.x, cam.y) - W.saturnR < hyp(VW, VH) / zoom) drawSaturn(cx, W.saturnR, ts);   // (only while it's on screen)
   // the station and its docking circle
   cx.save(); cx.translate(W.station[0], W.station[1]);
-  cx.strokeStyle = C.gold; cx.globalAlpha = 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, G.econ.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
+  cx.strokeStyle = C.gold; cx.globalAlpha = ME.docked ? 0.42 + 0.16 * Math.sin(ts * 3) : 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, G.econ.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawStation(cx, ts); cx.restore();
   // asteroids
   const vr = Math.max(VW, VH) / zoom;
@@ -265,6 +306,7 @@ function drawWorld(t) {
     r.dx += (r.x - r.dx) * 0.2; r.dy += (r.y - r.dy) * 0.2;
     if (Math.abs(r.dx - cam.x) > vr || Math.abs(r.dy - cam.y) > vr) continue;
     const R = rockR(r.n); cx.save(); cx.translate(r.dx, r.dy);
+    if (t - (r.hitT || 0) < 130) cx.translate((Math.random() - 0.5) * 2.4 / zoom, (Math.random() - 0.5) * 2.4 / zoom);   // (shivers under the laser)
     drawRock(cx, r.id, r.n, R, r.n - r.cracks, r.ore ? G.ores[r.ore].color : null, ts, r.tow);
     if (r.hp < 100 && r.hp > 0) { const w = R * 1.6; cx.fillStyle = "rgba(0,0,0,.6)"; cx.fillRect(-w / 2, -R - lw(14), w, lw(5)); cx.fillStyle = C.signal; cx.fillRect(-w / 2, -R - lw(14), w * r.hp / 100, lw(5)); }
     if (r.ore && zoom > 0.5) { cx.fillStyle = C.ink; cx.globalAlpha = 0.85; cx.font = `600 ${lw(11)}px "JetBrains Mono", monospace`; cx.textAlign = "center"; cx.fillText(oreName(r.ore).toUpperCase() + " · " + r.cracks, 0, R + lw(16)); cx.globalAlpha = 1; }
@@ -287,12 +329,18 @@ function drawWorld(t) {
     for (const k of mods) on[k] = !!(onB & kindBit(k));
     const st = { t: ts, raw: r[11] / 100, ref: r[12] / 100, fuel: r[13] / 100, firing: !!(fl & 2), on, busy: { tractor: !!r[8], fueler: !!r[9], refinery: refining.has(s.id) }, thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (s.id === myId) { st.fuel = ME.fuel / (ME.tank || 100); }
+    if (st.thrust > 0.15 && !(fl & 16)) {      // engine exhaust trailing off the stern
+      s.exA = (s.exA || 0) + wdt * 15 * st.thrust;
+      const rear = shipLayout(mods).yc * ART, bx = s.x - Math.sin(s.h) * rear, by = s.y + Math.cos(s.h) * rear;
+      while (s.exA >= 1) { s.exA--; spawnPart(bx + (Math.random() - 0.5) * 5, by + (Math.random() - 0.5) * 5, { vx: -Math.sin(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, vy: Math.cos(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, life: 0.45 + Math.random() * 0.35, size: 2.4 + Math.random() * 2, color: Math.random() < 0.75 ? C.heat : "#6b7382", drag: 2 }); }
+    }
     cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore();
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
   // (owner, 2026-10-17) my reach: claiming ore, the laser, fueling, refining, trading
   cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, myHull().interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawFx(t);
+  drawParts(wdt);
   // (owner, 2026-10-17) the fog of war: the world fades out past my vision (the server stops sending there too)
   { const V = myVision(), fog = cx.createRadialGradient(mine.x, mine.y, V * 0.78, mine.x, mine.y, V * 1.06);
     fog.addColorStop(0, "rgba(11,14,21,0)"); fog.addColorStop(1, "rgba(11,14,21,0.84)");
@@ -318,7 +366,11 @@ function shipFx(s, ts, under) {
     cx.strokeStyle = C.signal; cx.lineCap = "round";
     cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 9 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
     cx.globalAlpha = 1; cx.lineWidth = lw(big ? 3 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
-    if (fl & 1) { cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(big ? 6 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1; }
+    if (fl & 1) {
+      cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(big ? 6 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1;
+      if (Math.random() < (big ? 0.8 : 0.45)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : (Math.random() < 0.5 ? C.signal : C.heat), drag: 4 }); }
+      for (const rk of rocks.values()) if (hyp(rk.dx - x1, rk.dy - y1) < rockR(rk.n) + 8) { rk.hitT = performance.now(); break; }
+    }
   }
   const at = (lx, ly) => { const c = Math.cos(s.h), sn = Math.sin(s.h); return [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c]; };
   if (r[8]) {                                  // the tractor's leash, from both claw tips back to the asteroid
@@ -379,6 +431,11 @@ function drawOverlay(t) {
     cx.fillStyle = C.signal; cx.globalAlpha = p; cx.beginPath(); cx.arc(sx, sy, 11, 0, TAU); cx.fill(); cx.globalAlpha = 1;
     cx.fillStyle = C.void; cx.font = `800 16px "Big Shoulders Display", sans-serif`; cx.fillText("!", sx, sy + 6); cx.font = `700 12px "Atkinson Hyperlegible", system-ui, sans-serif`;
   }
+  if (ME.sos) {                                // out of fuel: the screen's edges breathe signal red
+    const p = 0.22 + 0.12 * Math.sin(t / 280), g = cx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.38, VW / 2, VH / 2, Math.max(VW, VH) * 0.74);
+    g.addColorStop(0, "rgba(229,96,79,0)"); g.addColorStop(1, `rgba(229,96,79,${p.toFixed(3)})`);
+    cx.fillStyle = g; cx.fillRect(0, 0, VW, VH);
+  }
 }
 
 // ---- the frame ----
@@ -401,8 +458,11 @@ function frame(now) {
       else { s.x = a.x; s.y = a.y; s.h = a.h; }
       s.spd = (s.spd || 0) * 0.8 + (dt > 0 ? hyp(s.x - px, s.y - py) / dt : 0) * 0.2;
     }
-    cam.x += (mine.x - cam.x) * Math.min(1, dt * 8); cam.y += (mine.y - cam.y) * Math.min(1, dt * 8);
+    const lead = 0.3, lx = Math.max(-140, Math.min(140, mine.vx * lead)), ly = Math.max(-140, Math.min(140, mine.vy * lead));   // (the camera looks a touch ahead)
+    cam.x += (mine.x + lx - cam.x) * Math.min(1, dt * 6); cam.y += (mine.y + ly - cam.y) * Math.min(1, dt * 6);
   }
+  zoom += (zoomT - zoom) * Math.min(1, dt * 11); if (Math.abs(zoomT - zoom) < 0.002) zoom = zoomT;
+  shk.a *= Math.exp(-dt * 5.5); if (shk.a < 0.05) shk.a = 0; shk.x = (Math.random() * 2 - 1) * shk.a; shk.y = (Math.random() * 2 - 1) * shk.a;
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawBackground(now);
   if (G) { drawWorld(now); drawOverlay(now); tutArrow(now); drawMinimap(now); drawHudLive(now); tutTick(); }
@@ -423,8 +483,8 @@ function drawHud() {
   const { raw, ref } = holdCounts(), cap = ME.cap || 5, used = raw + ref;
   hud.holdRaw.style.width = (raw / cap) * 100 + "%"; hud.holdRef.style.width = (ref / cap) * 100 + "%";
   hud.holdNum.textContent = (Math.round(used * 10) / 10) + " / " + cap;
-  hud.credits.textContent = fmt(ME.credits || 0);
-  hud.zone.textContent = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
+  const zt = (ME.zone || "") + (ME.shard ? " · Shard " + ME.shard : "");
+  if (hud.zone.textContent !== zt) { hud.zone.textContent = zt; hud.zone.classList.remove("zswap"); void hud.zone.offsetWidth; hud.zone.classList.add("zswap"); }
   const key = JSON.stringify([ME.mods, ME.on, ME.units, ME.names, ME.refiner, ME.refineBy]); if (key === hudKey) return; hudKey = key;
   hud.mods.replaceChildren(...(ME.mods || []).map((k) => {
     const sw = !!SWITCHES[k], on = (ME.on || []).includes(k);
@@ -461,10 +521,18 @@ function showTip(e, fn) { tipFn = fn; tipX = e.clientX; tipY = e.clientY; tipEl.
 function moveTip(e) { tipX = e.clientX; tipY = e.clientY; placeTip(); }
 function hideTip() { tipFn = null; tipEl.hidden = true; }
 function refreshTip() { if (tipFn) { tipEl.textContent = tipFn(); placeTip(); } }
-function drawHudLive() {
+let shownCr = null, lastCrFlash = 0;
+function drawHudLive(now) {
   const f = Math.max(0, ME.fuel), T = ME.tank || 100;
   hud.fuel.style.width = Math.min(100, f / T * 100) + "%"; hud.fuel.classList.toggle("low", f < T * 0.15);
   hud.fuelNum.textContent = Math.round(f) + " / " + T;
+  const target = ME.credits || 0;              // (owner, 2026-10-17: credits count toward their new value and flash on a gain)
+  if (shownCr === null) { shownCr = target; hud.credits.textContent = fmt(target); }
+  else if (shownCr !== target) {
+    if (target > shownCr && now - lastCrFlash > 700) { lastCrFlash = now; hud.credits.classList.remove("flash"); void hud.credits.offsetWidth; hud.credits.classList.add("flash"); }
+    const d = target - shownCr; shownCr = Math.abs(d) < 1 ? target : shownCr + d * 0.16;
+    hud.credits.textContent = fmt(Math.round(shownCr));
+  }
 }
 
 // ---- the station panel (docked): Storage as a grid of slots (right-click one for what can be done with it), the
@@ -986,5 +1054,5 @@ window.Atamus = {
   get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get station() { return STATION; }, get soc() { return SOC; }, get sectors() { return sectors; }, get sos() { return sosList; }, get mates() { return mates; }, get game() { return G; },
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, n: r.n, cracks: r.cracks, hp: r.hp, ore: r.ore })); }, get ores() { return [...ores.values()]; },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, m: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7] })); },
-  screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = z; },
+  screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = zoomT = z; },
 };
