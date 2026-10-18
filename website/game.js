@@ -430,7 +430,53 @@ function chunkPoly(det, c0) {                  // the server's exact polygon (a 
     pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
   polyBounds(pts); det.polys.set(i, pts); return pts;
 }
-function chunkPath(det, c0) { const p = chunkPoly(det, c0); cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); }
+function chunkPath(det, c0, g = cx) { const p = chunkPoly(det, c0); g.beginPath(); g.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) g.lineTo(p[k][0], p[k][1]); g.closePath(); }
+// (owner, 2026-10-18) the chunk sheet: each chunk a slab in its density's grey with a dark outline, a lit outer edge and a
+// shadowed inner one, a few speckles, its ore bits (1-3) as small squares in the ore's color, and cracks as it's cut.
+// g: the context to draw on; zl: the zoom its line widths are for
+function drawChunk(g, det, c0, zl) {
+  const [i, r0, r1, a0, a1, , d, ore, st] = c0, nb = c0[9] || 0;
+  const sh = DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
+  g.fillStyle = sh[0]; chunkPath(det, c0, g); g.fill();
+  { const p = chunkPoly(det, c0), nO = p.nO; g.save(); chunkPath(det, c0, g); g.clip(); g.lineWidth = 2.2;
+    g.strokeStyle = sh[1]; g.beginPath(); for (let k = 0; k <= nO; k++) k ? g.lineTo(p[k][0], p[k][1]) : g.moveTo(p[0][0], p[0][1]); g.stroke();
+    g.strokeStyle = sh[2]; g.beginPath(); for (let k = nO + 1; k < p.length; k++) k > nO + 1 ? g.lineTo(p[k][0], p[k][1]) : g.moveTo(p[k][0], p[k][1]); g.stroke();
+    g.restore(); }
+  g.strokeStyle = OUTLINE; g.lineWidth = Math.max(0.6, Math.min(1.3, 1.6 / zl)); chunkPath(det, c0, g); g.stroke();
+  let b0 = a0 / 1000, b1 = a1 / 1000; if (b1 < b0) b1 += TAU;
+  const mid = (r0 + r1) / 2, span = b1 - b0, th = r1 - r0;
+  g.fillStyle = sh[3];                         // speckles
+  for (let j = 0, nj = 2 + Math.floor(span * mid / 12); j < nj; j++) { const aa = b0 + span * (0.12 + 0.76 * h01(i, 200 + j)), rr = r0 + th * (0.25 + 0.5 * h01(i, 260 + j)); g.fillRect(Math.cos(aa) * rr - 0.45, Math.sin(aa) * rr - 0.45, 0.9, 0.9); }
+  if (oc && nb > 0) {                          // ore bits: spread along the chunk, a darker lower corner on each
+    const dk = mix(oc, "#05070c", 0.3), q = Math.min(2.8, th * 0.42);
+    for (let j = 0; j < nb; j++) {
+      const aa = b0 + span * ((j + 0.5) / nb + (h01(i, 300 + j) - 0.5) * 0.5 / nb), rr = mid + (h01(i, 340 + j) - 0.5) * Math.max(0, th - q * 2) * 0.8;
+      const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr;
+      g.fillStyle = oc; g.fillRect(x - q / 2, y - q / 2, q, q);
+      g.fillStyle = dk; g.fillRect(x - q / 2 + q * 0.5, y - q / 2 + q * 0.5, q * 0.5, q * 0.5);
+    }
+  }
+  if (st) {                                    // crack lines on a part-cut chunk
+    const am = (b0 + b1) / 2; g.strokeStyle = "#11151d"; g.lineWidth = 1.6 / zl; g.lineCap = "round"; g.beginPath();
+    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = th * (0.3 + 0.2 * j), px = Math.cos(am) * mid, py = Math.sin(am) * mid; g.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); g.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
+    g.stroke();
+  }
+}
+// (2026-10-18: big rocks hold hundreds of chunks) a rock's masonry is drawn once into its own bitmap, redrawn only when
+// its layout changes (a new rockd) or the zoom moves a half-octave; every frame just stamps the bitmap
+const CACHE_PX = 1536;
+function rockBitmap(det) {
+  let R0 = det.R0;
+  if (!R0) { R0 = 0; for (const c0 of det.c) { const p = chunkPoly(det, c0); R0 = Math.max(R0, hyp(p.cx, p.cy) + p.br); } R0 = det.R0 = Math.ceil(R0 + 2); }
+  const want = Math.pow(2, Math.ceil(Math.log2(Math.max(0.05, zoom * DPR)) * 2) / 2), sc = Math.min(want, CACHE_PX / (2 * R0));
+  if (det.bm && det.bmS === sc) return det.bm;
+  const n = Math.max(2, Math.ceil(2 * R0 * sc)), cvs = det.bm && det.bm.cv.width === n ? det.bm.cv : document.createElement("canvas");
+  cvs.width = cvs.height = n;
+  const g = cvs.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n);
+  g.setTransform(sc, 0, 0, sc, n / 2, n / 2); g.lineJoin = "round";
+  for (const c0 of det.c) if (!(c0[5] & 1)) drawChunk(g, det, c0, sc / DPR);
+  det.bm = { cv: cvs, R: n / 2 / sc }; det.bmS = sc; return det.bm;
+}
 function drawChunkRock(r, det, ts) {
   const lw = (px) => px / zoom;
   cx.save(); cx.translate(r.dx, r.dy);
@@ -475,44 +521,10 @@ function drawChunkRock(r, det, ts) {
     cx.stroke();
   }
   cx.restore();
-  // (owner, 2026-10-18) the chunk sheet: each chunk a slab in its density's grey with a dark outline, a lit outer edge
-  // and a shadowed inner one, a few speckles, and its ore bits (1-3) as small squares in the ore's color
-  cx.lineJoin = "round";
-  for (const c0 of det.c) {
-    const [i, r0, r1, a0, a1, bits, d, ore] = c0, nb = c0[9] || 0;
-    if (bits & 1) continue;
-    const bnc = i === bI; if (bnc) { cx.save(); cx.translate(bx, by); }
-    const sh = DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
-    cx.fillStyle = sh[0]; chunkPath(det, c0); cx.fill();
-    { const p = chunkPoly(det, c0), nO = p.nO; cx.save(); chunkPath(det, c0); cx.clip(); cx.lineWidth = 2.2;
-      cx.strokeStyle = sh[1]; cx.beginPath(); for (let k = 0; k <= nO; k++) k ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[0][0], p[0][1]); cx.stroke();
-      cx.strokeStyle = sh[2]; cx.beginPath(); for (let k = nO + 1; k < p.length; k++) k > nO + 1 ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[k][0], p[k][1]); cx.stroke();
-      cx.restore(); }
-    cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.6, Math.min(1.3, lw(1.6))); chunkPath(det, c0); cx.stroke();
-    let b0 = a0 / 1000, b1 = a1 / 1000; if (b1 < b0) b1 += TAU;
-    const mid = (r0 + r1) / 2, span = b1 - b0, th = r1 - r0;
-    cx.fillStyle = sh[3];                      // speckles
-    for (let j = 0, nj = 2 + Math.floor(span * mid / 12); j < nj; j++) { const aa = b0 + span * (0.12 + 0.76 * h01(i, 200 + j)), rr = r0 + th * (0.25 + 0.5 * h01(i, 260 + j)); cx.fillRect(Math.cos(aa) * rr - 0.45, Math.sin(aa) * rr - 0.45, 0.9, 0.9); }
-    if (oc && nb > 0) {                        // ore bits: spread along the chunk, a darker lower corner on each
-      const dk = mix(oc, "#05070c", 0.3), q = Math.min(2.8, th * 0.42);
-      for (let j = 0; j < nb; j++) {
-        const aa = b0 + span * ((j + 0.5) / nb + (h01(i, 300 + j) - 0.5) * 0.5 / nb), rr = mid + (h01(i, 340 + j) - 0.5) * Math.max(0, th - q * 2) * 0.8;
-        const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr;
-        cx.fillStyle = oc; cx.fillRect(x - q / 2, y - q / 2, q, q);
-        cx.fillStyle = dk; cx.fillRect(x - q / 2 + q * 0.5, y - q / 2 + q * 0.5, q * 0.5, q * 0.5);
-      }
-    }
-    if (bnc) cx.restore();
-  }
-  // crack lines on part-cut chunks
-  cx.strokeStyle = "#11151d"; cx.lineWidth = lw(1.6); cx.lineCap = "round";
-  for (const c0 of det.c) {
-    const [i, r0, r1, a0, a1, bits, , , st] = c0;
-    if (bits & 1 || !st) continue;
-    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000, ox2 = i === bI ? bx : 0, oy2 = i === bI ? by : 0;
-    cx.beginPath();
-    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = (r1 - r0) * (0.3 + 0.2 * j); const px = Math.cos(am) * mid + ox2, py = Math.sin(am) * mid + oy2; cx.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); cx.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
-    cx.stroke();
+  { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
+  if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted
+    const cb = det.c.find((x) => x[0] === bI);
+    if (cb) { cx.fillStyle = C.void; chunkPath(det, cb); cx.fill(); cx.save(); cx.translate(bx, by); cx.lineJoin = "round"; drawChunk(cx, det, cb, zoom); cx.restore(); }
   }
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
   cx.restore();
@@ -553,7 +565,7 @@ function drawWorld(t) {
   const vr = Math.max(VW, VH) / zoom;
   for (const r of rocks.values()) {
     r.dx += (r.x - r.dx) * 0.2; r.dy += (r.y - r.dy) * 0.2;
-    if (Math.abs(r.dx - cam.x) > vr + r.r || Math.abs(r.dy - cam.y) > vr + r.r) continue;
+    if (Math.abs(r.dx - cam.x) > VW / 2 / zoom + r.r * 1.2 + 40 || Math.abs(r.dy - cam.y) > VH / 2 / zoom + r.r * 1.2 + 40) { const d0 = details.get(r.id); if (d0 && d0.bm) { d0.bm = null; d0.bmS = 0; } continue; }
     drawChunkRock(r, details.get(r.id), ts);
   }
   // ore drops adrift: free for anyone — fly over one and it pours in
