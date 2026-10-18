@@ -1,26 +1,21 @@
 // (owner, 2026-10-17; the sandbox build 2026-10-18) Live tuning on the server: the game's numbers that may be changed at
-// runtime (the world's shape, each ship, chunks and densities, ring shells, the core, heat, the beam stages and the
-// charge shot, drops), checked as hostile, kept in the database (ring_tuning, one row) and put back on every start. The
+// runtime (the world's shape, each ship, chunks and densities, ring shells, the core,
+// drops), checked as hostile, kept in the database (ring_tuning, one row) and put back on every start. The
 // game client no longer carries a developer panel; staff sessions can still send tune ops. Changing the rings, the cell
 // or the ring shells regrows the asteroids; only the station's place stays fixed.
 import { pool } from "../db.js";
 import * as R from "./rules.js";
 
-export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE, heat: R.HEAT, beam: R.BEAM, charge: R.CHARGE,
-  rock: R.ROCK, ringShells: R.RING_SHELLS, ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
-  drops: R.DROPS, econ: R.ECON };
+export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
+  rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, drops: R.DROPS, econ: R.ECON };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // each number's limits: [low, high, whole]
 function limitsFor(path) {
   const [root, a] = path, last = path[path.length - 1];
   if (root === "world") return a === "cell" ? [100, 5000, true] : [50, 1e6, true];
   if (root === "ringShells") return [2, 24, true];
-  if (root === "ringBed") return [0, 20, false];
   if (root === "ringSpawn") return [0, 3, false];
-  if (root === "ringFree") return [0, 1, true];
   if (root === "chunk") return last === "burst" || last === "barren" ? [0, 1, false] : last.startsWith("w") ? [0, 100, true] : [0.01, 100, false];
-  if (root === "beam") return last === "ramp" || last === "cool" ? [0.5, 120, false] : [0, 10, false];
-  if (root === "charge") return last === "time" ? [0.2, 30, false] : last === "depth" ? [0, 400, false] : [0, 3, false];
   if (root === "ships" && last === "hold") return [1, 1e6, false];
   return [0, 1e6, false];
 }
@@ -50,10 +45,10 @@ export function resetAll() { copyInto(ROOTS, DEFAULTS); }
 export async function loadTuning() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ring_tuning (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`);
-  if (rows[0]) { const d = rows[0].data; if (d._v >= 6) copyInto(ROOTS, d); }   // (_v < 6: saved before the sandbox build; its ships and numbers mean other things)
+  if (rows[0]) { const d = rows[0].data; if (d._v >= 7) copyInto(ROOTS, d); }   // (_v < 7: saved before the back-to-basics build; its numbers mean other things)
 }
 export async function saveTuning() {
-  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 6, ...ROOTS })]);
+  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 7, ...ROOTS })]);
 }
 // which changes regrow the asteroids (their places, sizes and layouts come from these)
-export const reshapes = (path) => ["ringShells", "ringBed", "ringSpawn", "ringFree"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || (path[0] === "chunk" && ["wSoft", "wNormal", "wDense", "wUltra", "wBed", "barren", "bedOre"].includes(path[1]));
+export const reshapes = (path) => ["ringShells", "ringSpawn"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || (path[0] === "chunk" && ["wSoft", "wNormal", "wDense", "wUltra", "barren"].includes(path[1]));

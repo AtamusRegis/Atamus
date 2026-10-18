@@ -18,8 +18,7 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 
 // the game's numbers, for the clients (drawing, prediction, the station panel); sent again whenever tuning changes one
 const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
-  rock: R.ROCK, heat: R.HEAT, beam: R.BEAM, charge: R.CHARGE, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES,
-  ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
+  rock: R.ROCK, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES, ringSpawn: R.RING_SPAWN,
   ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, econ: R.ECON,
   sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
 const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff sessions — the game client has no dev UI)

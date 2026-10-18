@@ -254,10 +254,11 @@ function onMsg(m) {
     drawHud();
   } else if (m.t === "snap") onSnap(m);
   else if (m.t === "rocks") {
-    for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, tow, heat, fill] = row; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, tow, heat, fill }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, tow, heat, fill, dx: x, dy: y }); }
+    for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, fill] = row; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, fill }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, fill, dx: x, dy: y }); }
     for (const id of m.x || []) { rocks.delete(id); details.delete(id); }
   } else if (m.t === "rockd") {
     const cl = m.c || [], prev = details.get(m.id), rk0 = rocks.get(m.id);
+    for (const c0 of cl) c0[5] = c0[5] ? 1 : 2;  // (every chunk shows its density and ore: drawn as the scanned look)
     if (prev && rk0) {                         // chunks that just broke shatter into drifting shards
       let n = 0;
       for (const c0 of cl) { const was = prev.c[c0[0]] || prev.c.find((x) => x[0] === c0[0]); if (was && !(was[5] & 1) && (c0[5] & 1) && n++ < 10) spawnChunkShards(rk0, c0); }
@@ -453,8 +454,8 @@ function drawChunkRock(r, det, ts) {
     cx.stroke();
   }
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
-  // the core: blue and growing as chunks are stripped, running orange with heat, cracking with the mining it has taken
-  const frac = (r.broken || 0) / 100, heat = Math.max(0, (r.heat || 0) / 100), hot = Math.min(1, heat);
+  // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken
+  const frac = (r.fill || 0) / 100, heat = 0, hot = 0;
   if (!det.worked && frac <= 0 && heat <= 0) { cx.restore(); return; }
   const gk = r.gulpT ? (performance.now() - r.gulpT) / 300 : 2;
   const cr = det.coreR * (1 + (G.core.grow || 1.5) * frac) * (gk < 1 ? 1 + 0.22 * Math.sin(gk * Math.PI) : 1);
@@ -544,9 +545,8 @@ function drawWorld(t) {
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, true);
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) {
     const r = s.row, kind = G.kinds[r[4]] || "miner", SP = G.ships[kind], fl = r[5], mods = SP.art;
-    const st = { t: ts, raw: r[10] / 100, ref: 0, fuel: 1, firing: !!(fl & 2),
-      on: { miner: !!(fl & 2), scanner: !!(fl & 2), command: !!r[9], refinery: !(fl & 8) },
-      busy: { tractor: !!r[8], refinery: !(fl & 8) && kind === "hauler" },
+    const st = { t: ts, raw: (r[8] || 0) / 100, ref: 0, fuel: 1, firing: !!(fl & 2),
+      on: { miner: !!(fl & 2) }, busy: {},
       thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (st.thrust > 0.15) {
       s.exA = (s.exA || 0) + wdt * 15 * st.thrust;
@@ -587,9 +587,7 @@ function shipFx(s, ts, under) {
     const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
     if (isMe) { a = aimAngle(); const c2 = castLocal(mine.x, mine.y, a, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
-    const bt = (r[11] || 0) / 100, ck = (r[12] || 0) / 100;
-    let bc = bt < 0.5 ? mix("#6fb7d8", "#f2a33a", bt * 2) : mix("#f2a33a", "#ff3d20", (bt - 0.5) * 2);
-    if (ck > 0.5) bc = mix(bc, "#ffffff", (ck - 0.5) * 0.9);
+    const ck = 0, bc = C.signal;                 // (back to basics: one laser, signal red)
     if (len > 0) {
       const x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
       cx.strokeStyle = bc; cx.lineCap = "round";
@@ -848,7 +846,7 @@ function drawStation_() {
     }
     card.append(h2, st); sec1.appendChild(card);
   }
-  stEl.replaceChildren(head, sec2, sec1);
+  stEl.replaceChildren(head, sec2, ...(G.kinds.length > 1 ? [sec1] : []));   // (one ship for now: no board list)
 }
 stEl.addEventListener("mousedown", (e) => e.stopPropagation());
 
@@ -916,10 +914,10 @@ const nearRock = () => { for (const r of rocks.values()) if (hyp(r.dx - mine.x, 
 const TUT = {
   miner: [
     ["Fly out to a ring and up to an asteroid", nearRock],
-    ["Hold fire on the rock to cut chunks free — a held beam runs yellow then red, cutting faster but cooking the rock", () => tutEv.cut],
-    ["Hold the beam past a chunk's break to overcharge it — let go to blast the chunks behind it", () => tutEv.blast, 40],
-    ["Ore banks into the glowing core: open a path and hold fire on it until it pops", () => tutEv.popped],
-    ["Haul the payout to the station — what didn't fit drifts by the rock for more trips", () => tutEv.delivered],
+    ["Hold fire to cut through the masonry — darker chunks are denser and take longer", () => tutEv.cut],
+    ["Chunks with ore send their bits into the core — cut a path to it and break it open", () => tutEv.popped],
+    ["Fly over the scattered ore to scoop it up", () => (ME.hold || []).length > 0],
+    ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
   scanner: [
     ["Fly out to a ring and up to an asteroid", nearRock],
