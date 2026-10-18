@@ -6,7 +6,7 @@ import { pool } from "../db.js";
 import * as R from "./rules.js";
 
 export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE, rock: R.ROCK,
-  ringSizes: R.RING_SIZES, ores: R.ORES, pieces: R.PIECES, cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME,
+  ringSizes: R.RING_SIZES, ores: R.ORES, cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME,
   fuel: R.FUEL, econ: R.ECON, services: R.SERVICES, limits: R.LIMITS };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // each number's limits: [low, high, whole]
@@ -14,11 +14,10 @@ function limitsFor(path) {
   const [root, a] = path, last = path[path.length - 1];
   if (root === "world") return a === "cell" ? [100, 5000, true] : [50, 1e6, true];
   if (root === "ringSizes") return [0, R.ROCKS.length - 1, true];
-  if (root === "rockSizes") return last === "chunks" ? [4, 400, true] : last === "oreTypes" ? [1, 3, true] : [1, 1e6, false];
+  if (root === "rockSizes") return last === "chunks" ? [4, 400, true] : last === "oreTypes" ? [1, 3, true] : last === "shells" ? [2, 24, true] : [1, 1e6, false];
   if (root === "chunk") return last === "burst" || last === "barren" ? [0, 1, false] : last.startsWith("w") ? [0, 100, true] : [0.01, 100, false];
   if (root === "crateShare") return [0, 1, false];
   if (root === "downtime") return last === "hourUTC" ? [0, 23, true] : [0, 86400, true];
-  if (root === "pieces") return [1, 1e6, true];
   if (root === "limits") return [1, 1000, true];
   if (root === "ships" && (last === "hold" || last === "tank")) return [1, 1e6, false];
   return [0, 1e6, false];

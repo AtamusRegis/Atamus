@@ -16,13 +16,15 @@ export const WORLD = {
 // (owner, 2026-10-18) each role is its own ship: the old hull with that module's section is how it looks and behaves.
 // Only the Miner cuts rock. The Scanner also tows (the old tractor). The Hauler has the refinery aboard. The Booster
 // speeds up one player's mining at a time. vision: the fog of war (the Scanner sees furthest).
+// (owner, 2026-10-18) every ship can mine — a light laser on each; the Miner just does a far better job of it
 export const SHIPS = {
   miner:   { name: "Miner",   art: ["miner"],               hold: 12, tank: 100, speed: 80, laserDps: 15, laserRange: 220, burn: 4, vision: 1000 },
-  scanner: { name: "Scanner", art: ["scanner", "tractor"],  hold: 6,  tank: 120, speed: 85, scanTime: 0.35, scanRange: 600, vision: 1500,
+  scanner: { name: "Scanner", art: ["scanner", "tractor"],  hold: 6,  tank: 120, speed: 85, laserDps: 5, laserRange: 180, burn: 4,
+             scanTime: 0.35, scanRange: 600, vision: 1500,
              towRange: 250, towBurn: 6, towPull: 2.5, towLeash: 12 },   // towing: fuel a minute x (1 + rock radius / 60)
-  booster: { name: "Booster", art: ["command"],             hold: 6,  tank: 140, speed: 85, boost: 1.6, boostRange: 350, burn: 4, vision: 1000 },
-  fueler:  { name: "Fueler",  art: ["fueler"],              hold: 6,  tank: 700, speed: 75, pump: 20, pumpRange: 200, vision: 1000 },
-  hauler:  { name: "Hauler",  art: ["refinery", "hauler"],  hold: 60, tank: 160, speed: 70, refineUnit: 5, vision: 1000 },   // refines a raw unit every refineUnit s while undocked
+  booster: { name: "Booster", art: ["command"],             hold: 6,  tank: 140, speed: 85, laserDps: 5, laserRange: 180, boost: 1.6, boostRange: 350, burn: 4, vision: 1000 },
+  fueler:  { name: "Fueler",  art: ["fueler"],              hold: 6,  tank: 700, speed: 75, laserDps: 5, laserRange: 180, burn: 4, pump: 20, pumpRange: 200, vision: 1000 },
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"],  hold: 60, tank: 160, speed: 70, laserDps: 5, laserRange: 180, burn: 4, refineUnit: 5, vision: 1000 },   // refines a raw unit every refineUnit s while undocked
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // shared flying numbers (every hull)
@@ -31,17 +33,19 @@ export const FLY = { accel: 45, brake: 30, turn: 2.4, crawl: 0.2, flyBurn: 6, in
 // ---- the asteroid: masonry around a core (the document's prototype numbers) ----
 export const CHUNK = {
   burst: 0.25,              // breaking a chunk shocks every touching chunk for this share of its max health; chains cascade
-  hpK: 0.5,                 // health = chunk area (m^2) x this x density
+  hpK: 0.11,                // health = chunk area (m^2) x this x density (chunks got bigger with the 2026-10-18 rocks)
   wSoft: 14, wNormal: 46, wDense: 18, wUltra: 8, wBed: 14,   // density weights, %
   soft: 0.55, dense: 2.3, ultra: 4,               // health x (normal is 1; bedrock never breaks)
   denseOre: 1, ultraOre: 2, // extra ore units in a dense / ultra ore chunk (base is 1)
   barren: 0.5,              // share of breakable chunks with no ore
 };
-// rock sizes: chunks on average, core radius, the core's rare ore at full strip, core health, how many ore types
+// rock sizes (owner, 2026-10-18: bigger, varied by shells and size): chunks on average, shells of masonry (plus tower
+// splits: up to ~14 deep at one angle on a large rock), the rock's radius, core radius, the core's rare ore at full
+// strip, core health, how many ore types
 export const ROCKS = [
-  { name: "Small",  chunks: 60,  coreR: 10, rareMax: 8,  coreHp: 260, oreTypes: 1 },
-  { name: "Medium", chunks: 80,  coreR: 13, rareMax: 16, coreHp: 400, oreTypes: 2 },
-  { name: "Large",  chunks: 100, coreR: 16, rareMax: 22, coreHp: 560, oreTypes: 3 },
+  { name: "Small",  chunks: 60,  shells: 6,  radius: 90,  coreR: 12, rareMax: 8,  coreHp: 260, oreTypes: 1 },
+  { name: "Medium", chunks: 80,  shells: 9,  radius: 130, coreR: 16, rareMax: 16, coreHp: 400, oreTypes: 2 },
+  { name: "Large",  chunks: 100, shells: 12, radius: 175, coreR: 20, rareMax: 22, coreHp: 560, oreTypes: 3 },
 ];
 export const CORE = { grow: 0.5, fastBreak: 4, rarePrice: 50 };   // swells up to +50% full; breaks up to x4 faster full; the rare ore's price
 export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
@@ -49,7 +53,7 @@ export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 
 export const RING_SIZES = [[0, 1], [1, 2]];
 export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"]];
 
-// ores: credits a unit, delivered. Payouts fill the biggest pieces first (1, 5, 25).
+// ores: credits a unit, delivered
 export const ORES = {
   iron: { name: "Iron", price: 10, color: "#aab3c2" },
   ice: { name: "Ice", price: 14, color: "#9fdcef" },
@@ -58,7 +62,6 @@ export const ORES = {
   platinum: { name: "Platinum", price: 60, color: "#b98cf0" },
   core: { name: "Core", price: 50, color: "#e89a3c" },           // the core's rare ore
 };
-export const PIECES = [25, 5, 1];
 export const REFINED_SPACE = 0.2;              // a refined unit's share of a raw unit's hold room (the hauler compresses en route)
 
 // ---- cans and crates (where overflow ore goes) ----

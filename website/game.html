@@ -23,7 +23,7 @@
     .overlay { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 20; padding: 7px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; font: 600 13px var(--f-mono); color: var(--ink); user-select: none; }
     .overlay[hidden] { display: none; }
     #countdown { color: var(--gold); border-color: rgba(216,176,106,.5); }
-    /* the HUD: the ship, the hold (as ore pieces) and fuel bars, credits */
+    /* the HUD: the ship, the hold and fuel bars, credits */
     #hud { position: fixed; left: calc((204px + 100vw - 414px) / 2); bottom: 16px; transform: translateX(-50%); z-index: 5; display: grid; grid-template-columns: auto 190px 190px auto; gap: 8px; align-items: end; user-select: none; pointer-events: none; }
     .bar { position: relative; height: 22px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); overflow: hidden; display: flex; }
     .bar i { display: block; height: 100%; transition: width .25s cubic-bezier(.3,.8,.4,1); }
@@ -31,14 +31,16 @@
     .bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 600 11px var(--f-mono); color: #fff; text-shadow: 0 0 3px #000; letter-spacing: .04em; }
     .bar span b { font-weight: 600; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
     #ship-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
-    /* the hold above its bar: a square per ore piece (25 · 5 · 1, biggest first); refined pieces edged white; aboard cans as crates */
+    /* the hold above its bar (owner, 2026-10-18): one square per ore type with that square's own count; refined squares
+       edged white; party ore dotted gold; aboard cans and crates their own containers. Right-click: Drop cargo. */
     #hold-wrap { position: relative; }
     #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 190px; display: flex; flex-wrap: wrap-reverse; gap: 3px; align-items: flex-end; pointer-events: auto; }
-    #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); }
-    #cargo i.p25 { width: 16px; height: 16px; } #cargo i.p5 { width: 12px; height: 12px; } #cargo i.p1 { width: 9px; height: 9px; }
+    #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); cursor: context-menu; }
+    #cargo i.slot { width: 22px; height: 20px; }
+    #cargo i b.n, #cargo i.can b.n { position: absolute; right: 2px; bottom: 0; font: 600 10px var(--f-mono); font-style: normal; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
     #cargo i.ref { box-shadow: inset 0 0 0 1.5px #fff; }
-    #cargo i.party::after { content: ""; position: absolute; right: -1px; top: -1px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 1px #000; }
-    #cargo i.can { width: 18px; height: 14px; border-radius: 3px; background: #3a4458; border: 1px solid var(--gold); box-shadow: none; }
+    #cargo i.party::after { content: ""; position: absolute; right: -1px; top: -1px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 1px #000; }
+    #cargo i.can { width: 24px; height: 18px; border-radius: 3px; background: #3a4458; border: 1px solid var(--gold); box-shadow: none; }
     #cargo i.can.crate { border-color: var(--ore); }
     #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
     #tip[hidden] { display: none; }
@@ -179,6 +181,6 @@
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792400001"></script>
+  <script type="module" src="game.js?v=1792400002"></script>
 </body>
 </html>

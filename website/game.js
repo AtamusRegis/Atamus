@@ -283,38 +283,48 @@ function drawBackground(t) {
   }
   cx.globalAlpha = 1;
 }
-// ---- the asteroid: its chunk masonry (owner, 2026-10-18, the design document) ----
-// unscanned chunks are one solid mass (no seams); scanned ones show their borders, density and ore; bedrock is dark red,
-// hatched; broken ones are holes; the core swells and ripens gold to orange as ore banks into it
+// ---- the asteroid: its chunk masonry, in the design document's Fig. 1 look (owner, 2026-10-18) ----
+// unscanned chunks are one soft solid mass (filled and fatly stroked in their own color, so no seams give the layout
+// away); scanned ones are dark-outlined blocks tinted toward their ore, with a pip per ore unit and speckles on dense
+// and ultra; bedrock is dark red, hatched; broken ones are holes; the core swells and ripens gold to orange
 const mix = (h1, h2, k) => { const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
-const DGREY = ["#6e7687", "#596070", "#454c5c", "#343a47"];      // soft, normal, dense, ultra
-const UNSCANNED = "#4e545e", BEDROCK = "#5a2420", SEAM = "#161b24";
+const DGREY = ["#9aa1b0", "#8f96a5", "#6e737f", "#50555f"];      // soft (paler), normal, dense (darker), ultra (darkest)
+const UNSCANNED = "#838999", BEDROCK = "#261016", OUTLINE = "#05070c";
 function chunkPath(c0) { const [, r0, r1, a0, a1] = c0; const b0 = a0 / 1000, b1 = a1 / 1000; cx.beginPath(); cx.arc(0, 0, r1, b0, b1 < b0 ? b1 + TAU : b1); cx.arc(0, 0, r0, b1 < b0 ? b1 + TAU : b1, b0, true); cx.closePath(); }
 function drawChunkRock(r, det, ts) {
   const lw = (px) => px / zoom;
   cx.save(); cx.translate(r.dx, r.dy);
   if (performance.now() - (r.hitT || 0) < 130) cx.translate((Math.random() - 0.5) * 2.4 / zoom, (Math.random() - 0.5) * 2.4 / zoom);   // (shivers under the laser)
   if (!det) { cx.fillStyle = UNSCANNED; cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.restore(); return; }
-  // unscanned first, filled and edged in the same flat color so no seams give the layout away
-  cx.fillStyle = cx.strokeStyle = UNSCANNED; cx.lineWidth = lw(1.5);
+  // unscanned first, filled and edged in the same flat color with rounded joins: one soft mass
+  cx.fillStyle = cx.strokeStyle = UNSCANNED; cx.lineWidth = 3; cx.lineJoin = "round";
   for (const c0 of det.c) { const bits = c0[5]; if (bits & 1 || bits & 2) continue; chunkPath(c0); cx.fill(); cx.stroke(); }
-  // scanned: density greys tinted toward the ore, speckles on dense and ultra, bedrock dark red and hatched
+  cx.lineJoin = "miter";
+  // scanned: density greys tinted toward the ore, a pip per ore unit, speckles on dense and ultra, bedrock hatched
   for (const c0 of det.c) {
     const [i, r0, r1, a0, a1, bits, d, ore] = c0;
     if (bits & 1 || !(bits & 2)) continue;
-    const bed = d === 4, base = bed ? BEDROCK : DGREY[d] || DGREY[1];
-    cx.fillStyle = ore >= 0 ? mix(base.length === 7 ? base : "#596070", G.ores[ORE_KEYS[ore]].color, 0.42) : base;
+    const bed = d === 4, oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
+    cx.fillStyle = bed ? BEDROCK : oc ? mix(DGREY[d] || DGREY[1], oc, 0.35) : DGREY[d] || DGREY[1];
     chunkPath(c0); cx.fill();
-    cx.strokeStyle = SEAM; cx.lineWidth = lw(1); cx.stroke();
+    cx.strokeStyle = OUTLINE; cx.lineWidth = Math.min(1.2, lw(2)); cx.stroke();
     const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000;
+    const cxm = Math.cos(am) * mid, cym = Math.sin(am) * mid;
     if (bed) {                                 // hatch lines across it
-      cx.save(); chunkPath(c0); cx.clip(); cx.strokeStyle = "#2e1210"; cx.lineWidth = lw(1.2); cx.beginPath();
-      const cxm = Math.cos(am) * mid, cym = Math.sin(am) * mid, span = (r1 - r0) + 8;
-      for (let o = -span; o <= span; o += 5) { cx.moveTo(cxm - span + o, cym - span); cx.lineTo(cxm + span + o, cym + span); }
+      cx.save(); chunkPath(c0); cx.clip(); cx.strokeStyle = "rgba(229,96,79,.4)"; cx.lineWidth = 1; cx.beginPath();
+      const span = (r1 - r0) + 10;
+      for (let o = -span; o <= span; o += 4.5) { cx.moveTo(cxm - span + o, cym - span); cx.lineTo(cxm + span + o, cym + span); }
       cx.stroke(); cx.restore();
-    } else if (d >= 2) {                       // speckles
-      cx.fillStyle = "rgba(0,0,0,.5)";
-      for (let j = 0, nj = d === 2 ? 4 : 8; j < nj; j++) { const aa = am + Math.sin(i * 13.7 + j * 5.1) * 0.5 * ((a1 - a0 + TAU * 1000) % (TAU * 1000)) / 2000, rr = r0 + ((Math.sin(i * 7.3 + j * 3.9) + 1) / 2) * (r1 - r0); cx.fillRect(Math.cos(aa) * rr - 0.7, Math.sin(aa) * rr - 0.7, 1.4, 1.4); }
+    } else {
+      if (d >= 2) {                            // speckles
+        cx.fillStyle = "rgba(0,0,0,.45)";
+        for (let j = 0, nj = d === 2 ? 4 : 8; j < nj; j++) { const aa = am + Math.sin(i * 13.7 + j * 5.1) * 0.4, rr = r0 + 1 + ((Math.sin(i * 7.3 + j * 3.9) + 1) / 2) * (r1 - r0 - 2); cx.fillRect(Math.cos(aa) * rr - 0.7, Math.sin(aa) * rr - 0.7, 1.4, 1.4); }
+      }
+      if (oc) {                                // a pip per ore unit (1, +1 dense, +2 ultra)
+        cx.fillStyle = oc;
+        const u = 1 + (d === 2 ? 1 : d === 3 ? 2 : 0);
+        for (let j = 0; j < u; j++) { const aa = am + Math.sin(i * 5.9 + j * 2.3) * 0.25, rr = Math.max(r0 + 2, Math.min(r1 - 2, mid + Math.cos(i * 3.1 + j * 4.7) * (r1 - r0) * 0.28)); cx.fillRect(Math.cos(aa) * rr - 1.3, Math.sin(aa) * rr - 1.3, 2.6, 2.6); }
+      }
     }
   }
   // crack lines on part-cut chunks (the laser's progress; on bedrock they spread, then it turns dark red)
@@ -332,14 +342,44 @@ function drawChunkRock(r, det, ts) {
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
   const fill = (r.fill || 0) / 100;
   if (!det.worked && fill <= 0) { cx.restore(); return; }
-  const cr = det.coreR * (1 + (G.core.grow || 0.5) * fill), col = mix("#e8c76a", "#e86a28", fill);
+  const cr = det.coreR * (1 + (G.core.grow || 0.5) * fill), col = mix("#e89a3c", "#ff7a28", fill);
   const glowR = cr * (2.2 + fill * 1.6) + (fill > 0 ? Math.sin(ts * 3) * 2 : 0);
   const g = cx.createRadialGradient(0, 0, cr * 0.4, 0, 0, glowR);
-  g.addColorStop(0, col.replace("rgb", "rgba").replace(")", `,${0.5 + fill * 0.5})`)); g.addColorStop(1, "rgba(232,154,60,0)");
+  g.addColorStop(0, `rgba(255,179,71,${(0.35 + fill * 0.45).toFixed(2)})`); g.addColorStop(1, "rgba(255,179,71,0)");
   cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, glowR, 0, TAU); cx.fill();
   cx.fillStyle = col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
-  cx.fillStyle = "rgba(255,255,255,.45)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
+  cx.strokeStyle = "#7a5524"; cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
+  cx.fillStyle = "rgba(255,255,255,.4)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
   cx.restore();
+}
+// the beam's local ray-walk, as the server's (my own beam is drawn from it so it doesn't lag the mouse):
+// forScan skips scanned chunks (they're glass to the scanner); otherwise the first unbroken chunk, or the core down a bore
+function castLocal(px, py, ang, forScan, range) {
+  const ux = Math.cos(ang), uy = Math.sin(ang);
+  let bestT = range || 0, hit = 0;
+  for (const r of rocks.values()) {
+    const dx = px - r.dx, dy = py - r.dy;
+    const b = dx * ux + dy * uy, c0 = dx * dx + dy * dy - r.r * r.r;
+    const disc = b * b - c0; if (disc < 0) continue;
+    const t1 = -b + Math.sqrt(disc); if (t1 < 0) continue;
+    const t0 = Math.max(0, -b - Math.sqrt(disc));
+    if (t0 > bestT) continue;
+    const det = details.get(r.id);
+    if (!det) { bestT = t0; hit = 1; continue; }
+    for (let t = t0; t <= Math.min(t1, bestT); t += 1.2) {
+      const x = px + ux * t - r.dx, y = py + uy * t - r.dy, rr = hyp(x, y);
+      if (rr <= det.coreR + 1) { if (!forScan) { bestT = t; hit = 1; } break; }
+      let found = null;
+      const a = ((Math.atan2(y, x) % TAU) + TAU) % TAU;
+      for (const cc of det.c) {
+        if (rr < cc[1] || rr > cc[2]) continue;
+        const b0 = cc[3] / 1000, span = (((cc[4] - cc[3]) / 1000) % TAU + TAU) % TAU, d2 = ((a - b0) % TAU + TAU) % TAU;
+        if (d2 <= (span || 0.001)) { found = cc; break; }
+      }
+      if (found && !(found[5] & 1) && (!forScan || !(found[5] & 2))) { bestT = t; hit = 1; break; }
+    }
+  }
+  return { len: bestT, hit };
 }
 let lastWT = 0;
 function drawWorld(t) {
@@ -415,16 +455,29 @@ function shipFx(s, ts, under) {
     }
     return;
   }
-  if (fl & 2 && r[7] > 0 && (kind === "miner" || kind === "scanner")) {   // the beam, from the nose along the aim
-    const a = r[6] / 1000, len = r[7], scan = kind === "scanner", nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
-    cx.strokeStyle = scan ? C.ice : C.signal; cx.lineCap = "round";
-    if (scan) cx.setLineDash([lw(8), lw(7)]);
-    cx.globalAlpha = 0.25; cx.lineWidth = lw(scan ? 6 : 8); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
-    cx.globalAlpha = 1; cx.lineWidth = lw(scan ? 1.4 : 2.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke(); cx.setLineDash([]);
-    if (fl & 1) {
-      cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(scan ? 4 : 5), 0, TAU); cx.fill(); cx.globalAlpha = 1;
-      if (!scan && Math.random() < 0.6) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : (Math.random() < 0.5 ? C.signal : C.heat), drag: 4 }); }
-      for (const rk of rocks.values()) if (hyp(rk.dx - x1, rk.dy - y1) < rk.r + 8) { rk.hitT = performance.now(); break; }
+  // the beam, from the nose along the aim: every ship's light laser in thin red, the Miner's fat, the Scanner's survey
+  // in dashed ice. My own is predicted locally (aim and endpoint from what I see), so it doesn't lag the mouse.
+  const isMe = s.id === myId, S2 = G.ships[kind] || {}, fireNow = isMe ? firing && !ME.docked : !!(fl & 2);
+  if (fireNow && (S2.laserDps || S2.scanTime)) {
+    const scan = kind === "scanner", big = kind === "miner";
+    let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
+    if (isMe) {
+      a = aimAngle();
+      let c2 = scan ? castLocal(mine.x, mine.y, a, true, S2.scanRange) : castLocal(mine.x, mine.y, a, false, S2.laserRange);
+      if (scan && !c2.hit && S2.laserDps) c2 = castLocal(mine.x, mine.y, a, false, S2.laserRange);   // (nothing left to map: the light laser's cut shows)
+      len = c2.len; hitF = !!c2.hit;
+    }
+    if (len > 0) {
+      const nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
+      cx.strokeStyle = scan ? C.ice : C.signal; cx.lineCap = "round";
+      if (scan) cx.setLineDash([lw(8), lw(7)]);
+      cx.globalAlpha = 0.25; cx.lineWidth = lw(scan ? 6 : big ? 8 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+      cx.globalAlpha = 1; cx.lineWidth = lw(scan ? 1.4 : big ? 2.6 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke(); cx.setLineDash([]);
+      if (hitF) {
+        cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(scan ? 4 : big ? 5 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1;
+        if (!scan && Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : (Math.random() < 0.5 ? C.signal : C.heat), drag: 4 }); }
+        for (const rk of rocks.values()) if (hyp(rk.dx - x1, rk.dy - y1) < rk.r + 8) { rk.hitT = performance.now(); break; }
+      }
     }
   }
   const at = (lx, ly) => { const c = Math.cos(s.h), sn = Math.sin(s.h); return [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c]; };
@@ -533,7 +586,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// ---- the HUD: my ship, the hold as ore pieces (25 · 5 · 1, biggest first) and a bar, fuel, credits, where I am ----
+// ---- the HUD: my ship, the hold as a square per ore type and a bar, fuel, credits, where I am ----
 const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), ship: $("ship-chip"), cargo: $("cargo"), credits: $("credits"), zone: $("zone") };
 const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
 const holdUsed = () => (ME.hold || []).reduce((s, e) => s + e.u * (e.raw ? 1 : G.refinedSpace), 0) + (ME.cans || []).reduce((s, c) => s + c.u, 0);
@@ -550,28 +603,31 @@ function drawHud() {
   const key = JSON.stringify([ME.ship, ME.hold, ME.cans]); if (key === hudKey) return; hudKey = key;
   drawCargo();
 }
-// the hold: a square per piece, biggest first (25 big, 5 middling, 1 small), in the ore's color; refined pieces edged
-// white; party-tagged ore gets a gold dot; cans and crates aboard ride along as little containers. Hovering: what it is
-// and what it's worth.
-function pieceList(u) { const out = []; for (const p of G.pieces) { while (u >= p) { out.push(p); u -= p; } } return out; }
+// the hold (owner, 2026-10-18): one square per ore type (raw / refined / party each their own), in the ore's color with
+// its own count; refined squares edged white; party ore dotted gold; cans and crates aboard are their own containers.
+// Hovering a square: that square's count and worth. Right-clicking the cargo: Drop cargo (never on a hauler).
 function drawCargo() {
-  const items = [];
-  for (const e of ME.hold || []) for (const p of pieceList(e.u)) items.push({ e, p });
   hud.cargo.replaceChildren(
-    ...items.map(({ e, p }) => {
-      const sq = elx("i", (p === 25 ? "p25" : p === 5 ? "p5" : "p1") + (e.raw ? "" : " ref") + (e.party ? " party" : ""));
+    ...(ME.hold || []).map((e) => {
+      const sq = elx("i", "slot" + (e.raw ? "" : " ref") + (e.party ? " party" : ""));
       sq.style.background = G.ores[e.o] ? G.ores[e.o].color : "#888";
+      sq.appendChild(elx("b", "n", e.u > 999 ? "999+" : String(e.u)));
       sq.addEventListener("mouseenter", (ev) => showTip(ev, () => cargoTip(e)));
       sq.addEventListener("mousemove", moveTip); sq.addEventListener("mouseleave", hideTip);
       return sq;
     }),
     ...(ME.cans || []).map((c) => {
       const sq = elx("i", "can" + (c.crate ? " crate" : ""));
+      sq.appendChild(elx("b", "n", c.u > 999 ? "999+" : String(c.u)));
       sq.addEventListener("mouseenter", (ev) => showTip(ev, () => (c.crate ? "Crate" : "Can") + "\n" + fmt(c.u) + " units · " + fmt(c.v) + " cr"));
       sq.addEventListener("mousemove", moveTip); sq.addEventListener("mouseleave", hideTip);
       return sq;
     }));
 }
+hud.cargo.addEventListener("contextmenu", (e) => {
+  e.preventDefault(); if (!G || myShip().refineUnit || !(ME.hold || []).length) return;
+  hideTip(); showMenu(e.clientX, e.clientY, [["Drop cargo", () => send({ t: "act", op: "drop" })]]);
+});
 function cargoTip(e) {
   let t2 = oreName(e.o) + (e.raw ? "" : " · refined") + "\n" + fmt(e.u) + (e.u === 1 ? " unit · " : " units · ") + fmt(e.u * (G.ores[e.o] ? G.ores[e.o].price : 0)) + " cr";
   if (e.party) t2 += "\nParty ore";
@@ -600,12 +656,12 @@ function drawHudLive(now) {
 
 // ---- the station panel (docked): the five ships, one to board, and fuel ----
 const stEl = $("station");
-const SHIP_STATS = {                           // what each ship's row shows, from its live numbers
+const SHIP_STATS = {                           // what each ship's row shows, from its live numbers (every ship has a laser)
   miner: [["Laser", "laserDps", (v) => v + " / s"], ["Reach", "laserRange", (v) => v + " m"]],
-  scanner: [["Scan", "scanTime", (v) => v + " s"], ["Reach", "scanRange", (v) => v + " m"], ["Vision", "vision", (v) => fmt(v) + " m"], ["Tow reach", "towRange", (v) => v + " m"]],
-  booster: [["Boost", "boost", (v) => "×" + v], ["Reach", "boostRange", (v) => v + " m"]],
-  fueler: [["Pump", "pump", (v) => v + " / s"], ["Reach", "pumpRange", (v) => v + " m"]],
-  hauler: [["Refines", "refineUnit", (v) => "1 / " + v + " s"]],
+  scanner: [["Laser", "laserDps", (v) => v + " / s"], ["Scan", "scanTime", (v) => v + " s"], ["Scan reach", "scanRange", (v) => v + " m"], ["Vision", "vision", (v) => fmt(v) + " m"], ["Tow reach", "towRange", (v) => v + " m"]],
+  booster: [["Laser", "laserDps", (v) => v + " / s"], ["Boost", "boost", (v) => "×" + v], ["Reach", "boostRange", (v) => v + " m"]],
+  fueler: [["Laser", "laserDps", (v) => v + " / s"], ["Pump", "pump", (v) => v + " / s"], ["Reach", "pumpRange", (v) => v + " m"]],
+  hauler: [["Laser", "laserDps", (v) => v + " / s"], ["Refines", "refineUnit", (v) => "1 / " + v + " s"]],
 };
 let stKey = "";
 function drawStation_() {
@@ -832,7 +888,7 @@ const DEV_LABELS = { saturnR: "Saturn radius", safeR: "Safe zone radius", locked
   accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", interactR: "Reach", shipR: "Bump radius",
   burst: "Burst share", hpK: "Health per area", wSoft: "Soft %", wNormal: "Normal %", wDense: "Dense %", wUltra: "Ultra %", wBed: "Bedrock %",
   soft: "Soft health ×", dense: "Dense health ×", ultra: "Ultra health ×", denseOre: "Dense extra ore", ultraOre: "Ultra extra ore", barren: "Barren share",
-  chunks: "Chunks", coreR: "Core radius", rareMax: "Rare ore at full strip", coreHp: "Core health", oreTypes: "Ore types",
+  chunks: "Chunks", shells: "Shells", radius: "Radius", coreR: "Core radius", rareMax: "Rare ore at full strip", coreHp: "Core health", oreTypes: "Ore types",
   grow: "Core swell share", fastBreak: "Full-core break ×", rarePrice: "Rare ore price",
   linger: "Lasts after last touch s", respawn: "Respawn s", reseed: "Reseed s", spawnChance: "Rock chance per cell",
   price: "Price", lock: "Can locked s", public: "Can public s", hourUTC: "Downtime hour (UTC)", logoffGuard: "Logoff guard s",
@@ -849,7 +905,7 @@ const DEV_HELP = {
   "fly.turn": "How fast a ship turns, in radians a second (about 57° each).", "fly.crawl": "With an empty tank a ship still moves at this share of its speed.",
   "fly.flyBurn": "Fuel used a minute while thrusting at full power.", "fly.interactR": "Reach in meters for picking up cans (the dotted circle).", "fly.shipR": "A ship's size for bumping into asteroids, in meters.",
   "ships.hold": "Cargo units this ship's hold carries (a refined unit takes a fifth of the room).", "ships.tank": "Fuel this ship's tank holds.", "ships.speed": "This ship's top speed in m/s.",
-  "ships.laserDps": "Chunk damage a second from the Miner's laser.", "ships.laserRange": "How far the laser reaches, in meters.", "ships.burn": "Fuel used a minute while this ship's gear works.",
+  "ships.laserDps": "Chunk damage a second from this ship's laser — every ship has one; the Miner's is the strong one.", "ships.laserRange": "How far this ship's laser reaches, in meters.", "ships.burn": "Fuel used a minute while this ship's gear works.",
   "ships.vision": "How far this ship sees, in meters: nothing beyond it is sent or shown (the fog of war).",
   "ships.scanTime": "Seconds the Scanner's beam must hold on a chunk to map it.", "ships.scanRange": "How far the survey beam reaches, in meters.",
   "ships.towRange": "How far the Scanner can latch onto an asteroid to tow it.", "ships.towBurn": "Towing fuel a minute, before the size cost (× (1 + radius / 60)).",
@@ -863,7 +919,10 @@ const DEV_HELP = {
   "chunk.soft": "A soft chunk's health multiplier.", "chunk.dense": "A dense chunk's health multiplier (it also holds extra ore).", "chunk.ultra": "An ultra chunk's health multiplier (it also holds extra ore).",
   "chunk.denseOre": "Extra ore units in a dense ore chunk (the base is 1).", "chunk.ultraOre": "Extra ore units in an ultra ore chunk.",
   "chunk.barren": "Share of breakable chunks with no ore: plain stone that still has to be cleared.",
-  "rockSizes.chunks": "Chunks this size of rock is built from, on average.", "rockSizes.coreR": "The core's radius in meters before it swells.",
+  "rockSizes.chunks": "Chunks this size of rock is built from, on average (spread over the shells' circumferences).",
+  "rockSizes.shells": "Shells of masonry around the core; thick shells split into stacked towers, so the depth at one angle runs a little past this.",
+  "rockSizes.radius": "The rock's radius in meters: the shells divide the room between the core and this edge.",
+  "rockSizes.coreR": "The core's radius in meters before it swells.",
   "rockSizes.rareMax": "Rare core ore paid at a full strip (scaled down by every chunk still attached at the pop).", "rockSizes.coreHp": "The core's health (it breaks up to ×4 faster as it fills).",
   "rockSizes.oreTypes": "How many ore types this size of rock holds (1 to 3).",
   "core.grow": "How much the core swells as ore banks into it (0.5 = half again its size when full).", "core.fastBreak": "How many times faster a full core breaks.", "core.rarePrice": "Credits a unit of the core's rare ore.",
@@ -871,7 +930,6 @@ const DEV_HELP = {
   "rock.reseed": "Seconds between reshuffles of the untouched field.", "rock.spawnChance": "The chance each grid cell holds a rock.",
   "ringSizes": "The smallest and largest rock size in this ring (0 small, 1 medium, 2 large).",
   "ores.price": "Credits one unit pays when it's delivered.",
-  "pieces": "The payout piece sizes, biggest first: a large haul is a few heavy pieces, not a hundred crumbs.",
   "cans.lock": "Seconds a can stays locked to its owner before it turns public.", "cans.public": "Seconds a public can sits before it's gone.",
   "crateShare": "The unlock slider's ends: the share of a crate's value a deliverer outside the party keeps (locked at pickup).",
   "downtime.hourUTC": "The daily downtime hour (UTC), when party crates auto-deliver.", "downtime.logoffGuard": "Crates aboard a ship logged off this many seconds before downtime wait for it instead.",
@@ -885,7 +943,7 @@ function devHelp(path) {
   if (root === "ships") return DEV_HELP["ships." + b];
   if (root === "rockSizes") return DEV_HELP["rockSizes." + b];
   if (root === "ores") return DEV_HELP["ores." + b];
-  if (root === "ringSizes" || root === "pieces" || root === "crateShare") return DEV_HELP[root];
+  if (root === "ringSizes" || root === "crateShare") return DEV_HELP[root];
   return DEV_HELP[root + "." + a];
 }
 const devGet = (path) => path.reduce((o, k) => (o == null ? o : o[k]), G);
@@ -935,7 +993,6 @@ function devDraw() {
     out.push(devGroup("Rings", G.ringSizes.map((pair, i) => devRow("Ring " + (i + 1) + " sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])))));
   } else if (devTab === "ores") {
     for (const o of ORE_KEYS) out.push(devGroup(G.ores[o].name, Object.keys(G.ores[o]).filter((k) => typeof G.ores[o][k] === "number").map((k) => devRow(devLabel(k), devInput(["ores", o, k])))));
-    out.push(devGroup("Pieces", G.pieces.map((p, i) => devRow("Piece " + (i + 1), devInput(["pieces", i])))));
     out.push(devGroup("Cans", devNumbers("cans", G.cans)));
     out.push(devGroup("Crate unlock share (low · high)", [devRow("Share", devInput(["crateShare", 0]), devInput(["crateShare", 1]))]));
   } else {
