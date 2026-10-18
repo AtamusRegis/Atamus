@@ -430,7 +430,13 @@ function edgeStroke(det, c0) {                 // a lit outer edge and a shadowe
 function drawChunkRock(r, det, ts) {
   const lw = (px) => px / zoom;
   cx.save(); cx.translate(r.dx, r.dy);
-  if (performance.now() - (r.hitT || 0) < 130) cx.translate((Math.random() - 0.5) * 2.4 / zoom, (Math.random() - 0.5) * 2.4 / zoom);
+  // (owner, 2026-10-18) the chunk under a laser bounces slightly; the rest of the asteroid holds still
+  let bI = -1, bx = 0, by = 0;
+  if (det && performance.now() - (r.hitT || 0) < 130 && r.hitI >= 0) {
+    const cb = det.c.find((x) => x[0] === r.hitI);
+    if (cb && !(cb[5] & 1)) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
+      bI = r.hitI; bx = Math.cos(am) * k; by = Math.sin(am) * k; }
+  }
   if (!det) { cx.fillStyle = UNSCANNED; cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.restore(); return; }
   cx.fillStyle = "#464c58"; cx.beginPath(); cx.arc(0, 0, det.coreR + 4, 0, TAU); cx.fill();   // deep-rock plug behind the core pocket
   // unscanned first, filled and edged in the same mottled color with rounded joins: one soft craggy mass
@@ -444,6 +450,7 @@ function drawChunkRock(r, det, ts) {
   for (const c0 of det.c) {
     const [i, r0, r1, a0, a1, bits, d, ore] = c0, hq = c0[9] || 0;
     if (bits & 1 || !(bits & 2)) continue;
+    const bnc = i === bI; if (bnc) { cx.save(); cx.translate(bx, by); }
     const bed = d === 4, oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
     let fillCol = bed ? BEDROCK : oc ? mix(DGREY[d] || DGREY[1], oc, 0.35) : DGREY[d] || DGREY[1];
     fillCol = mix(fillCol, "#05070c", h01(i, 7) * 0.14);
@@ -464,15 +471,16 @@ function drawChunkRock(r, det, ts) {
         for (let j = 0; j < u; j++) { const aa = am + Math.sin(i * 5.9 + j * 2.3) * 0.25, rr = Math.max(r0 + 2, Math.min(r1 - 2, mid + Math.cos(i * 3.1 + j * 4.7) * (r1 - r0) * 0.28)); cx.fillRect(Math.cos(aa) * rr - 1.3, Math.sin(aa) * rr - 1.3, 2.6, 2.6); }
       }
     }
+    if (bnc) cx.restore();
   }
   // crack lines on part-cut chunks
   cx.strokeStyle = "#11151d"; cx.lineWidth = lw(1.6); cx.lineCap = "round";
   for (const c0 of det.c) {
     const [i, r0, r1, a0, a1, bits, , , st] = c0;
     if (bits & 1 || !st) continue;
-    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000;
+    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000, ox2 = i === bI ? bx : 0, oy2 = i === bI ? by : 0;
     cx.beginPath();
-    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = (r1 - r0) * (0.3 + 0.2 * j); const px = Math.cos(am) * mid, py = Math.sin(am) * mid; cx.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); cx.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
+    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = (r1 - r0) * (0.3 + 0.2 * j); const px = Math.cos(am) * mid + ox2, py = Math.sin(am) * mid + oy2; cx.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); cx.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
     cx.stroke();
   }
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
@@ -511,7 +519,7 @@ function drawChunkRock(r, det, ts) {
 // drawn from it so it doesn't lag the mouse)
 function castLocal(px, py, ang, range) {
   const ux = Math.cos(ang), uy = Math.sin(ang);
-  let bestT = range || 0, hit = 0;
+  let bestT = range || 0, hit = 0, hitRock = null, hitI = -1;
   for (const r of rocks.values()) {
     const det = details.get(r.id), ox = px - r.dx, oy = py - r.dy, reach = r.r * 1.3;
     const along = -(ox * ux + oy * uy), perp = Math.abs(ox * uy - oy * ux);
@@ -520,12 +528,12 @@ function castLocal(px, py, ang, range) {
     for (const c0 of det.c) {
       if (c0[5] & 1) continue;
       const t = rayPoly(ox, oy, ux, uy, chunkPoly(det, c0));
-      if (t < bestT) { bestT = t; hit = 1; }
+      if (t < bestT) { bestT = t; hit = 1; hitRock = r; hitI = c0[0]; }
     }
     { const b = ox * ux + oy * uy, cr = det.coreR, disc = b * b - (ox * ox + oy * oy - cr * cr);
-      if (disc >= 0) { const t = -b - Math.sqrt(disc); if (t >= 0 && t < bestT) { bestT = t; hit = 1; } } }
+      if (disc >= 0) { const t = -b - Math.sqrt(disc); if (t >= 0 && t < bestT) { bestT = t; hit = 1; hitRock = r; hitI = -1; } } }
   }
-  return { len: bestT, hit };
+  return { len: bestT, hit, rock: hitRock, chunk: hitI };
 }
 let lastWT = 0;
 function drawWorld(t) {
@@ -600,7 +608,10 @@ function shipFx(s, ts, under) {
   if (fireNow && S2.laserDps && !drillMode && !coolMode && !boostMode && !refineMode) {
     const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
-    if (isMe) { a = aimAngle(); const c2 = castLocal(mine.x, mine.y, a, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
+    let c2 = null;
+    if (isMe) { a = aimAngle(); c2 = castLocal(mine.x, mine.y, a, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
+    else if (hitF) c2 = castLocal(s.x, s.y, a, len + 3);
+    if (hitF && c2 && c2.rock) { c2.rock.hitT = performance.now(); c2.rock.hitI = c2.chunk; }
     const ck = 0, bc = C.signal;                 // (back to basics: one laser, signal red)
     if (len > 0) {
       const x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
@@ -610,7 +621,6 @@ function shipFx(s, ts, under) {
       if (hitF) {
         cx.fillStyle = "#fff"; cx.globalAlpha = (0.6 + 0.4 * Math.sin(ts * 50)) * (0.6 + ck); cx.beginPath(); cx.arc(x1, y1, lw(big ? 5 : 4) * (1 + ck * 1.6), 0, TAU); cx.fill(); cx.globalAlpha = 1;
         if (Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : bc, drag: 4 }); }
-        for (const rk of rocks.values()) if (hyp(rk.dx - x1, rk.dy - y1) < rk.r + 8) { rk.hitT = performance.now(); break; }
       }
     }
   }
@@ -655,7 +665,6 @@ function shipFx(s, ts, under) {
       cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9); cx.lineWidth = lw(2.4); cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(hx, hy); cx.stroke();
       cx.globalAlpha = 1; cx.fillStyle = "#fff"; cx.beginPath(); cx.arc(hx, hy, lw(3.5), 0, TAU); cx.fill();
       if (Math.random() < 0.35) spawnPart(hx, hy, { vx: Math.cos(ang) * 25 + (Math.random() - 0.5) * 20, vy: Math.sin(ang) * 25 + (Math.random() - 0.5) * 20, life: 0.3 + Math.random() * 0.3, size: 1.6 + Math.random() * 1.6, color: Math.random() < 0.6 ? C.ice : "#fff", drag: 3 });
-      if (Math.random() < 0.15) rk.hitT = performance.now();
     }
   }
   const at = (lx, ly) => { const c = Math.cos(s.h), sn = Math.sin(s.h); return [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c]; };

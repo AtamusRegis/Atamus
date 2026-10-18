@@ -69,7 +69,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 ## The look
 
 - **The design document's style** (`theme.css`): the void, plates with hairline borders, warm ink, Saturn gold for actions, signal red for the laser and the locked line. **Big Shoulders Display**, **Atkinson Hyperlegible**, **JetBrains Mono**, self-hosted. Ships, the station and Saturn from `shipart.js`; rocks chunk by chunk from the server's geometry (jittered slabs, density greys tinted toward their ore, ore pips, the blue swelling core).
-- **Motion:** exhaust trails, laser sparks and shivering rocks, crack debris and ore bits streaking into the core, the piñata's burst rings, shards and screen shake, eased zoom, a camera that looks slightly ahead, a pulsing dock circle — skipped for reduced-motion browsers.
+- **Motion:** exhaust trails, laser sparks, **the chunk under a laser bouncing slightly outward while it's cut — the rest of the asteroid holds still** (owner, 2026-10-18: no more whole-rock shake), crack debris and ore bits streaking into the core, the piñata's burst rings, shards and screen shake, eased zoom, a camera that looks slightly ahead, a pulsing dock circle — skipped for reduced-motion browsers.
 
 ## Rejected / removed (don't reintroduce)
 
