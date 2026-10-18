@@ -300,8 +300,10 @@ export class World {
           const rock = best.r, dmg = S.laserDps * dt;
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
           { const LZ = R.LASER, wv = Math.floor((t / 1000 * LZ.waveSpeed - best.hit.t) / LZ.waveGap);   // a wave landing at the tip pushes the ship back
-            if (p.lastWave !== undefined && wv !== p.lastWave) { p.vx -= ux * LZ.kick; p.vy -= uy * LZ.kick; }
-            p.lastWave = wv; }
+            // (owner, 2026-10-18) sweeping the beam must not push harder: waves only count forward, at most one per
+            // wave period, so the push rate stays the wave rate however the tip moves
+            if (p.lastWave !== undefined && wv > p.lastWave && t - (p.lastKick || 0) >= 900 * LZ.waveGap / LZ.waveSpeed) { p.vx -= ux * LZ.kick; p.vy -= uy * LZ.kick; p.lastKick = t; }
+            if (p.lastWave === undefined || wv > p.lastWave) p.lastWave = wv; }
           rock.touched = t; rock.home = false;
           if (best.hit.core) this.hitCore(rock, dmg);
           else {

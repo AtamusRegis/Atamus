@@ -665,11 +665,13 @@ function shipFx(s, ts, under) {
         // fast to slow; my own ship predicts it as the server applies it, with a little shake
         if (hitF) {
           const wv = Math.floor((tsS * spd - L5) / gap);
-          if (s.lastWave !== undefined && wv !== s.lastWave) {
+          const nowK = tsS * 1000;                     // (forward only, one per wave period: sweeping never pushes harder)
+          if (s.lastWave !== undefined && wv > s.lastWave && nowK - (s.lastKick || 0) >= 900 * gap / spd) {
+            s.lastKick = nowK;
             if (isMe) { mine.vx -= ux5 * LZ.kick; mine.vy -= uy5 * LZ.kick; addShake(0.45); }
             for (let j = 0; j < 3; j++) { const na = Math.atan2(-uy5, -ux5) + (Math.random() - 0.5) * 1.6, v = 50 + Math.random() * 50; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.2, size: 2 + Math.random() * 1.5, color: Math.random() < 0.5 ? "#ff8a72" : "#fff", drag: 4 }); }
           }
-          s.lastWave = wv;
+          if (s.lastWave === undefined || wv > s.lastWave) s.lastWave = wv;
         } else s.lastWave = undefined;
       }
       if (hitF) {
