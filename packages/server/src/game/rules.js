@@ -14,9 +14,13 @@ export const WORLD = {
   loadR: 3200,              // the hard cap on what a player can ever be sent
 };
 
-// (owner, 2026-10-18) just the Miner for now
+// (owner, 2026-10-18) the Miner mines; the Scanner, Booster and Hauler fly (and scoop drops into their holds) but have
+// no abilities yet
 export const SHIPS = {
-  miner: { name: "Miner", art: ["miner"], hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 8.3 },   // muzzle: m ahead of center the beam starts (the sprite's red dot)
+  miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 8.3 },   // muzzle: m ahead of center the beam starts (the sprite's red dot)
+  scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, vision: 1500 },
+  booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 85, vision: 1000 },
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // shared flying numbers (every hull)

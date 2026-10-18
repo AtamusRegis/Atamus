@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **The fleet flies, the laser waves, the core shakes (owner):** the Scanner, Booster and Hauler are back as flyable ships with no abilities yet (boarded at the station; they scoop drops into their holds; their tutorial is a short flight version). The laser now has small waves running from the emitter to the tip. While the laser is on the core, the whole asteroid shakes and the core shudders; on a chunk, only that chunk bounces.
 - **Beams from the red dot (owner):** the laser now originates at the emitter the owner marked in red on the ship sheet (the Miner's, 8.3 m ahead of center) — the server's ray, the aim and the drawn beam all start there.
 - **New ship art (owner):** ships are drawn from the owner's pixel-art ship sheet — the Miner live now; the Scanner, Booster and Hauler sprites saved in `website/assets/ships/` for when they return. Same in-game size and hitbox.
 - **Chunk bounce (owner):** the chunk under a laser bounces slightly outward while it's being cut, instead of the whole asteroid shaking.

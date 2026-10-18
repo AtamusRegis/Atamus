@@ -437,7 +437,9 @@ function drawChunkRock(r, det, ts) {
   cx.save(); cx.translate(r.dx, r.dy);
   // (owner, 2026-10-18) the chunk under a laser bounces slightly; the rest of the asteroid holds still
   let bI = -1, bx = 0, by = 0;
-  if (det && performance.now() - (r.hitT || 0) < 130 && r.hitI >= 0) {
+  const hitNow = performance.now() - (r.hitT || 0) < 130;
+  if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.6 / zoom, (Math.random() - 0.5) * 2.6 / zoom);   // the core under the laser: the whole asteroid shakes
+  if (det && hitNow && r.hitI >= 0) {
     const cb = det.c.find((x) => x[0] === r.hitI);
     if (cb && !(cb[5] & 1)) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
       bI = r.hitI; bx = Math.cos(am) * k; by = Math.sin(am) * k; }
@@ -503,6 +505,7 @@ function drawChunkRock(r, det, ts) {
   g.addColorStop(0, "rgba(" + gc + "," + (0.28 + hot * 0.55 + over * 0.15).toFixed(2) + ")");
   g.addColorStop(1, "rgba(" + gc + ",0)");
   cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, glowR, 0, TAU); cx.fill();
+  if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.2 / zoom, (Math.random() - 0.5) * 2.2 / zoom);   // and the core itself shudders harder
   cx.fillStyle = col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
   cx.strokeStyle = mix("#2b5a74", "#7a4a1e", hot); cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
   cx.fillStyle = "rgba(255,255,255,.4)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
@@ -628,6 +631,16 @@ function shipFx(s, ts, under) {
       cx.strokeStyle = bc; cx.lineCap = "round";
       cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5) * (1 + ck * 0.9); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6) * (1 + ck); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+      { // (owner, 2026-10-18) small waves running from the emitter to the tip
+        const L5 = hyp(x1 - x0, y1 - y0), ux5 = (x1 - x0) / (L5 || 1), uy5 = (y1 - y0) / (L5 || 1), gap = 14, spd = 90;
+        cx.strokeStyle = "#ffd2c8"; cx.lineCap = "round";
+        for (let d5 = (ts * spd) % gap; d5 < L5; d5 += gap) {
+          const f5 = Math.sin(Math.PI * d5 / L5), w5 = lw(big ? 5.5 : 3.5) * (0.6 + 0.4 * f5), half = 2.2;
+          cx.globalAlpha = 0.35 + 0.5 * f5; cx.lineWidth = w5;
+          cx.beginPath(); cx.moveTo(x0 + ux5 * (d5 - half), y0 + uy5 * (d5 - half)); cx.lineTo(x0 + ux5 * (d5 + half), y0 + uy5 * (d5 + half)); cx.stroke();
+        }
+        cx.globalAlpha = 1;
+      }
       if (hitF) {
         cx.fillStyle = "#fff"; cx.globalAlpha = (0.6 + 0.4 * Math.sin(ts * 50)) * (0.6 + ck); cx.beginPath(); cx.arc(x1, y1, lw(big ? 5 : 4) * (1 + ck * 1.6), 0, TAU); cx.fill(); cx.globalAlpha = 1;
         if (Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : bc, drag: 4 }); }
@@ -952,24 +965,10 @@ const TUT = {
     ["Fly over the scattered ore to scoop it up", () => (ME.hold || []).length > 0],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
-  scanner: [
+  flight: [
     ["Fly out to a ring and up to an asteroid", nearRock],
-    ["Switch to Drill, get close, and hold fire to bore a revealing line toward the core", () => ME.drill && (ships.get(myId) || { row: [] }).row[13] > 20],
-    ["Keep holding and circle the rock to sweep new columns — bedrock drills slowly and shakes ore loose", null, 10],
-    ["The Scanner also tows: hold a finger (or right-click) on a rock to bring it to the group", null, 8],
-    ["Your light laser mines too — deliver what you take to the station", () => tutEv.delivered],
-  ],
-  booster: [
-    ["Find another ship — the Booster carries no laser of its own", () => true, 6],
-    ["Hold fire on a ship to boost it: green pluses stream in, and it runs faster at everything — boosted lasers even cut bedrock", () => { const me = ships.get(myId); return !!(me && me.row && me.row[9]); }, 30],
-    ["Switch to Cool and hold the spray on hot rock to pull the heat out before a core blows", () => true, 12],
-    ["A boosted ship glows blue; top it up before the glow fades", null, 8],
-  ],
-  hauler: [
-    ["The Hauler is the big hold: sweep up ore drops by flying over them", () => true, 8],
-    ["Your refinery compresses raw ore as you fly — refined ore takes a fifth of the room", null, 8],
-    ["Switch to Refine and hold fire on another ship to compress their cargo where they sit", () => tutEv.refined, 30],
-    ["Deliver at the station — the hold pays into your storage", () => tutEv.delivered],
+    ["This ship has no tools yet — fly over ore drops to scoop them into your hold", () => (ME.hold || []).length > 0],
+    ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
 };
 const tut = { on: false, idx: 0, at: 0 };
@@ -980,11 +979,12 @@ function tutStart() {
   tutShow(); hudKey = ""; drawHud();
 }
 function tutStop() { tut.on = false; $("tut").hidden = true; hudKey = ""; drawHud(); }
-function tutShow() { const steps = TUT[tutShipK] || TUT.miner; $("tut").hidden = false; $("tut-n").textContent = (tut.idx + 1) + "/" + steps.length; $("tut-text").textContent = steps[tut.idx][0]; }
+const tutSteps = () => (G && G.ships[tutShipK] && G.ships[tutShipK].laserDps ? TUT.miner : TUT.flight);
+function tutShow() { const steps = tutSteps(); $("tut").hidden = false; $("tut-n").textContent = (tut.idx + 1) + "/" + steps.length; $("tut-text").textContent = steps[tut.idx][0]; }
 function tutTick(now) {
   if (!tut.on) return;
   if (ME.ship !== tutShipK) { tutStart(); return; }               // switched ships: that ship's tutorial
-  const steps = TUT[tutShipK] || TUT.miner, st = steps[tut.idx];
+  const steps = tutSteps(), st = steps[tut.idx];
   if (!((st[1] && st[1]()) || (st[2] && now - tut.at > st[2] * 1000))) return;
   tut.idx++; tut.at = now;
   if (tut.idx >= steps.length) { tutStop(); note("Tutorial complete"); } else tutShow();

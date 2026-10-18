@@ -33,6 +33,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## Mining
 
+- **The laser is drawn with small bright waves running from the emitter to the tip** (owner, 2026-10-18). **The chunk under it bounces slightly; when the laser is on the core, the whole asteroid shakes and the core shudders harder** (owner, 2026-10-18).
 - **The Miner's laser (15 / s at 220 m) hits exactly what it points at (owner, 2026-10-18):** the first unbroken chunk — or the core — its line meets, with **no anchoring or lock-on**. **Every chunk has an exact hitbox**: the server builds each chunk's rock-shaped polygon once, sends the points to clients, which draw exactly those, and the laser ray tests exactly those edges (and the core's circle) on both sides. Getting deeper means cutting a way there. Cracks spread across a chunk as it's cut. Your own beam is drawn from your own aim with the same ray, so it doesn't lag. **The beam originates at the ship's red dot** (owner, 2026-10-18: the ability origin marked on the ship sheet — the Miner's emitter, `muzzle` 8.3 m ahead of center; the server's ray, your aim and the drawn beam all start there). The sheet's dots for the other ships, for when they return: Scanner 52%, Booster 42%, Hauler 53% of their length from the stern, all on the centerline.
 - **When a chunk breaks, its ore bits fly into the core and bank there.** No shocks, no chain breaks, no heat — every chunk is broken by the laser, one at a time.
 - **The core** sits in the middle: blue, **swelling as ore bits bank into it** (up to ×2.5 radius, `CORE.grow`, with a gulp per swallow), **cracking as the laser damages it**. The laser reaches it only down a path you've cut.
@@ -43,14 +44,14 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 - **Drop cargo:** right-click (or hold) the cargo squares to jettison the hold as drops where you sit.
 - **Delivery** (flying into the station circle) empties the hold **into the deliverer's own station storage**.
 
-## The ship
+## The ships
 
-- **Just the Miner for now** (owner, 2026-10-18): hold 1,200, speed 80, laser 15 / s at 220 m, vision 1,000 m. W / S thrust along the nose, A / D turn, Q / E strafe; the mouse aims; **holding the left button fires**; the wheel zooms. **On a touch screen: twin sticks** — the left half flies, the right half aims and fires — holding still half a second opens the thing's menu, a second finger pinches the zoom, zoom buttons by the minimap.
+- **The Miner mines; the Scanner, Booster and Hauler fly but have no abilities yet** (owner, 2026-10-18: "add the other ships to fly just dont have them doing anything just yet"). Board any of them free at the station. Miner: hold 1,200, speed 80, laser 15 / s at 220 m, vision 1,000 m. Scanner: hold 600, speed 85, vision 1,500 m. Booster: hold 600, speed 85. Hauler: hold 6,000, speed 70. Every ship scoops ore drops into its hold by flying over them. The tutorial on a ship without a laser is a short flight version (fly out, scoop, deliver). W / S thrust along the nose, A / D turn, Q / E strafe; the mouse aims; **holding the left button fires**; the wheel zooms. **On a touch screen: twin sticks** — the left half flies, the right half aims and fires — holding still half a second opens the thing's menu, a second finger pinches the zoom, zoom buttons by the minimap.
 - **Fog of war:** nothing beyond the ship's vision is sent; the world fades to dark past the edge. Ships bump off rocks, pass through each other, can't be destroyed. **No PvP.**
 
 ## The station
 
-- Flying into the station circle docks (delivering everything aboard) and opens the **Station panel**: **Storage**, each ore's count. (With one ship, there is no boarding list.)
+- Flying into the station circle docks (delivering everything aboard) and opens the **Station panel**: **Storage**, each ore's count. Below it, **the ships** (name, numbers, **Board**).
 
 ## The optional tutorial (owner, 2026-10-18)
 
