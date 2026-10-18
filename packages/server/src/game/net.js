@@ -1,7 +1,8 @@
-// The game socket (owner, 2026-10-12; the Saturn ring-mining prototype 2026-10-16). One shared world; one session per
-// account (a new tab replaces the old: 4002), one account per device (4003). The client sends commands; the server
-// simulates at 20 Hz and sends each player what's in its load circle. Deploy countdowns and website reloads reach every
-// client here.
+// The game socket (owner, 2026-10-12; the mining redesign 2026-10-18). One shared world; one session per account (a new
+// tab replaces the old: 4002), one account per device (4003). The client sends commands; the server simulates at 20 Hz
+// and sends each player only what's in its vision (the fog of war is server-side). Rocks travel as summaries at 5 Hz;
+// each rock's chunk layout goes separately, re-sent when its version changes. Deploy countdowns and website reloads
+// reach every client here.
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
@@ -17,8 +18,10 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 
 // the game's numbers, for the clients (drawing, prediction, the station panel, the developer panel); sent again whenever
 // the developer panel changes one
-const gameInfo = () => ({ world: R.WORLD, modules: R.MODULES, kinds: R.MODULE_KINDS, ores: R.ORES, econ: R.ECON, fuel: R.FUEL, rock: R.ROCK,
-  ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringSlots: R.RING_SLOTS, hulls: R.HULLS, limits: R.LIMITS, sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
+const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE,
+  rock: R.ROCK, ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ores: R.ORES, pieces: R.PIECES, refinedSpace: R.REFINED_SPACE,
+  cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME, fuel: R.FUEL, econ: R.ECON, services: R.SERVICES,
+  sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, limits: R.LIMITS });
 const DEV_ROLES = ["head", "admin"];           // (owner, 2026-10-17) who gets the developer panel
 
 export function attachGameServer(httpServer) {
@@ -37,7 +40,7 @@ export function attachGameServer(httpServer) {
     kick: (pid, code, reason) => { if (code === 4006) world.banned(pid).catch((e) => console.error("ban hold", e)); const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
     mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
     respawn: (pid) => !!world.respawn(pid),
-    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80, q.layer); },
+    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80); },
     inWorld: (pid) => world.players.has(pid),
     note: (pid, text) => sys(pid, text),
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
@@ -79,7 +82,7 @@ export function attachGameServer(httpServer) {
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), game: gameInfo(),
       you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), dev: DEV_ROLES.includes(roles.get(pid)) }, spawn: { x: me.x, y: me.y, h: me.h },
-      sectors: world.sectorList(), online: world.players.size, roster: world.roster(),
+      online: world.players.size, roster: world.roster(),
     }));
     ws.ready = true;                           // (the loops below send nothing to a socket before its hello)
     broadcast({ t: "join", i: pid, n: user.username });
@@ -89,11 +92,9 @@ export function attachGameServer(httpServer) {
       let m; try { m = JSON.parse(String(data)); } catch { return; }
       if (!m || typeof m !== "object") return;
       if (m.t === "in") world.setInput(pid, m);
-      else if (m.t === "mod") world.toggleModule(pid, m.k);
-      else if (m.t === "tradeans") { if (typeof m.from === "string") world.tradeAnswer(pid, m.from, m.yes === true); }
       else if (m.t === "act") world.act(pid, m);
-      else if (m.t === "st") { if (world.station(pid, m)) { const p = world.players.get(pid); if (p) tell(pid, world.stationMsg(p)); } }
-      else if (m.t === "party" || m.t === "corp") social(m).catch((e) => console.error("social", e));
+      else if (m.t === "st") world.station(pid, m);
+      else if (m.t === "party") social(m).catch((e) => console.error("social", e));
       else if (m.t === "chat") chat(m);
       else if (m.t === "report") {             // a player reports another: kept for the admin panel with their recent lines
         if (!reportOk(pid) || typeof m.i !== "string" || m.i === pid || !/^[0-9]{1,15}$/.test(m.i)) return;
@@ -103,11 +104,10 @@ export function attachGameServer(httpServer) {
           .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
       }
       else if (m.t === "tune") tune(m);
-      else if (m.t === "tut") world.setTutorial(pid, m.step);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
     // (owner, 2026-10-17) the developer panel: one number at a time, or everything back to the defaults; kept, and sent to
-    // everyone at once (changes to asteroid sizes, slots or ores rebuild the untouched asteroids)
+    // everyone at once (changes to the rings, the cell, rock sizes or ores regrow the asteroids)
     function tune(m) {
       if (!DEV_ROLES.includes(roles.get(pid))) return;
       let field = false;
@@ -115,34 +115,25 @@ export function attachGameServer(httpServer) {
       else if (Array.isArray(m.path) && setValue(m.path, m.value)) field = reshapes(m.path);
       else return;
       saveTuning().catch((e) => console.error("tuning save", e));
-      if (field) { world.resetField(); for (const c of wss.clients) { c.knownCells = null; c.knownRocks = null; } }
+      if (field) { world.resetField(); for (const c of wss.clients) { c.knownRocks = null; c.rockVers = null; } }
       broadcast({ t: "game", game: gameInfo(), field: field ? 1 : 0 });
     }
-    // parties and corporations, from chat commands and the name menu
+    // parties, from chat commands and the name menu
     async function social(m) {
       const target = typeof m.to === "string" && /^[0-9]{1,15}$/.test(m.to) ? m.to : typeof m.name === "string" ? byName(m.name) : null;
       let say = null;
-      if (m.t === "party") {
-        if (m.op === "invite") say = target ? world.invite(pid, target) : "That player isn't online.";
-        else if (m.op === "accept") say = world.acceptParty(pid);
-        else if (m.op === "decline") say = world.declineParty(pid);
-        else if (m.op === "kick") say = target ? world.kickParty(pid, target) : "That player isn't online.";
-        else if (m.op === "leave") { const p = world.players.get(pid); if (p && p.party) { world.leaveParty(p, false); say = "You left the party."; } else say = "You're not in a party."; }
-      } else {
-        if (m.op === "create") say = await world.createCorp(pid, m.name);
-        else if (m.op === "invite") say = target ? world.corpInvite(pid, target) : "That player isn't online.";
-        else if (m.op === "accept") say = await world.corpAccept(pid);
-        else if (m.op === "decline") say = world.declineCorp(pid);
-        else if (m.op === "kick") say = target ? await world.corpKick(pid, target) : "That player isn't online.";
-        else if (m.op === "leave") say = await world.corpLeave(pid);
-      }
+      if (m.op === "invite") say = target ? world.invite(pid, target) : "That player isn't online.";
+      else if (m.op === "accept") say = world.acceptParty(pid);
+      else if (m.op === "decline") say = world.declineParty(pid);
+      else if (m.op === "kick") say = target ? world.kickParty(pid, target) : "That player isn't online.";
+      else if (m.op === "leave") { const p = world.players.get(pid); if (p && p.party) { world.leaveParty(p, false); say = "You left the party."; } else say = "You're not in a party."; }
       if (say) sys(pid, say);
     }
-    // chat: World (everyone, every shard), Zone (my ring and sector, or the station, in my shard), Party, Corporation, Whisper
+    // chat: World (everyone), Zone (my ring and sector, or the station), Party, Whisper
     function chat(m) {
       const p = world.players.get(pid); if (!p || typeof m.text !== "string" || muted(pid)) return;
       const text = m.text.slice(0, 240); if (!text.trim()) return;
-      const ch = ["zone", "party", "corp", "whisper"].includes(m.ch) ? m.ch : "global";
+      const ch = ["zone", "party", "whisper"].includes(m.ch) ? m.ch : "global";
       if (ch === "whisper") {
         const to = typeof m.to === "string" ? m.to : byName(m.toName);
         const tws = to && socks.get(to), tp = to && world.players.get(to);
@@ -152,11 +143,10 @@ export function attachGameServer(httpServer) {
         remember({ at: Date.now(), i: pid, n: user.username, ch, text }); return;
       }
       if (ch === "party" && !p.party) { sys(pid, "You're not in a party."); return; }
-      if (ch === "corp" && !p.corp) { sys(pid, "You're not in a corporation."); return; }
       const zone = p.zone, msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, r: badge(pid), text, ...(ch === "zone" ? { z: zone } : {}) });
       for (const [qid, qws] of socks) {
         const q = world.players.get(qid); if (!q || qws.readyState !== qws.OPEN) continue;
-        if (ch === "global" || (ch === "zone" && q.zone === zone && q.layer === p.layer) || (ch === "party" && q.party === p.party) || (ch === "corp" && q.corp === p.corp)) qws.send(msg);
+        if (ch === "global" || (ch === "zone" && q.zone === zone) || (ch === "party" && q.party === p.party)) qws.send(msg);
       }
       remember({ at: Date.now(), i: pid, n: user.username, ch, text });
     }
@@ -164,16 +154,15 @@ export function attachGameServer(httpServer) {
 
   // ---- the loops ----
   const send = (ws, o) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(o)); };
-  let lastWake = 0, lastSector = 0;
+  let lastWake = 0;
   setInterval(() => {                          // 20 Hz simulation, then effects and messages
     const t = Date.now();
     if (t - lastWake > 1000) { lastWake = t; world.wakeAround(t); }
-    if (t - lastSector > 1000) { lastSector = t; world.updateSectors(t); if (world.sectorsDirty) { world.sectorsDirty = false; broadcast({ t: "sectors", s: world.sectorList(), online: world.players.size }); } }
     world.step(0.05);
     if (world.fx.length) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || !ws.ready) continue;
-        const near = world.fx.filter((f) => (f.l === undefined || f.l === p.layer) && Math.hypot(f.x - p.x, f.y - p.y) <= world.visionOf(p) + 200).map(({ l, ...f }) => ({ t: "fx", ...f }));
+        const near = world.fx.filter((f) => Math.hypot(f.x - p.x, f.y - p.y) <= world.visionOf(p) + 200).map((f) => ({ t: "fx", ...f }));
         if (near.length) send(ws, near.length === 1 ? near[0] : { t: "batch", m: near });
       }
       world.fx.length = 0;
@@ -192,8 +181,8 @@ export function attachGameServer(httpServer) {
       send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un });
     }
   }, 66);
-  // 5 Hz: asteroids and loose ore that changed near each player, and each player's own state when it changes. Asteroids:
-  // the cells whose untouched seeds changed (c: { key: [seeds] }, xc: cells gone) and the worked-on rows that changed (a, x)
+  // 5 Hz: what changed near each player — rock summaries (and each visible rock's chunk layout when its version moves),
+  // cans, my own state, my party
   const diff = (ws, field, rows) => {
     const known = ws[field] || (ws[field] = new Map()), seen = new Set(), add = [], gone = [];
     for (const r of rows) { const key = JSON.stringify(r); seen.add(r[0]); if (known.get(r[0]) !== key) { known.set(r[0], key); add.push(r); } }
@@ -201,27 +190,29 @@ export function attachGameServer(httpServer) {
     return add.length || gone.length ? { a: add, x: gone } : null;
   };
   setInterval(() => {
-    const t = Date.now();
-    world.indexZones();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || !ws.ready || ws.readyState !== ws.OPEN) continue;
-      const view = world.rockView(p), rk = diff(ws, "knownRocks", view.rows), kc = ws.knownCells || (ws.knownCells = new Map()), c = {}, xc = [];
-      let nc = 0; for (const [k, seeds] of Object.entries(view.cells)) { const j = seeds.join(","); if (kc.get(k) !== j) { kc.set(k, j); c[k] = seeds; nc++; } }
-      for (const k of [...kc.keys()]) if (!(k in view.cells)) { kc.delete(k); xc.push(k); }
-      if (rk || nc || xc.length) send(ws, { t: "rocks", ...(rk || {}), ...(nc ? { c } : {}), ...(xc.length ? { xc } : {}) });
-      const or = diff(ws, "knownOres", world.oreRows(p)); if (or) send(ws, { t: "ores", ...or });
+      const rows = world.rockRows(p), rk = diff(ws, "knownRocks", rows);
+      if (rk) send(ws, { t: "rocks", ...rk });
+      const vers = ws.rockVers || (ws.rockVers = new Map());       // the chunk layouts, one message per rock that changed
+      const seen = new Set();
+      for (const row of rows) {
+        const r = world.rocks.get(row[0]); if (!r) continue; seen.add(r.id);
+        if (vers.get(r.id) !== r.v) { vers.set(r.id, r.v); send(ws, world.rockDetail(r)); }
+      }
+      for (const id of [...vers.keys()]) if (!seen.has(id)) vers.delete(id);   // out of vision: sent fresh on return
+      const cn = diff(ws, "knownCans", world.canRows(p)); if (cn) send(ws, { t: "cans", ...cn });
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
-      if (p.stDirty || !ws.stSent || (p.queue.length && t - (ws.stAt || 0) > 2000)) { p.stDirty = false; ws.stSent = 1; ws.stAt = t; send(ws, world.stationMsg(p)); }
       if (p.socDirty || !ws.socSent) { p.socDirty = false; ws.socSent = 1; send(ws, world.socMsg(p)); }
     }
   }, 200);
-  // 1 Hz: every distress beacon (a "!" every player in that shard sees, wherever it is)
-  setInterval(() => {                          // (each player is sent its own layer's beacons)
+  // 1 Hz: every distress beacon (a "!" every player sees, wherever it is) and my party mates' places for the minimap
+  setInterval(() => {
     const all = world.sosList();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || !ws.ready) continue;
       const mj = JSON.stringify(world.mates(p)); if (mj !== (ws.lastMates ?? "[]")) { ws.lastMates = mj; send(ws, { t: "mates", m: JSON.parse(mj) }); }
-      const j = JSON.stringify(all.filter((b) => b[3] === p.layer).map((b) => b.slice(0, 3))); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
+      const j = JSON.stringify(all); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
     }
   }, 1000);
   console.log("Saturn ring world attached at /ws");

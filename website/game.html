@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="atamus-build" content="__BUILD__">
   <title>Atamus — Saturn</title>
   <link rel="icon" href="favicon.png" type="image/png">
@@ -14,105 +14,78 @@
   <link rel="preload" href="fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="modulepreload" href="shipart.js?v=1792300005">
-  <link rel="modulepreload" href="ringgen.js?v=1792300003">
   <link rel="stylesheet" href="admin.css?v=1792300002">
   <style>
-    /* (owner, 2026-10-16) the Saturn ring-mining prototype, in the design document's look */
-    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--void); color: var(--ink); font: 14px/1.45 var(--f-body); }
+    /* (owner, 2026-10-18) the mining redesign — Crack, Bank and Haul — in the design document's look */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--void); color: var(--ink); font: 14px/1.45 var(--f-body); touch-action: none; }
     #view { display: block; width: 100%; height: 100%; cursor: crosshair; }
     button { font-family: var(--f-body); }
     .overlay { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 20; padding: 7px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; font: 600 13px var(--f-mono); color: var(--ink); user-select: none; }
     .overlay[hidden] { display: none; }
     #countdown { color: var(--gold); border-color: rgba(216,176,106,.5); }
-    /* the HUD: hold and fuel bars, the module, credits */
+    /* the HUD: the ship, the hold (as ore pieces) and fuel bars, credits */
     #hud { position: fixed; left: calc((204px + 100vw - 414px) / 2); bottom: 16px; transform: translateX(-50%); z-index: 5; display: grid; grid-template-columns: auto 190px 190px auto; gap: 8px; align-items: end; user-select: none; pointer-events: none; }
     .bar { position: relative; height: 22px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); overflow: hidden; display: flex; }
-    .bar i { display: block; height: 100%; transition: width .15s; }
+    .bar i { display: block; height: 100%; transition: width .25s cubic-bezier(.3,.8,.4,1); }
     #hold-raw { background: var(--brown); } #hold-ref { background: var(--ore); } #fuel-fill { background: var(--ice); } #fuel-fill.low { background: var(--signal); }
     .bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 600 11px var(--f-mono); color: #fff; text-shadow: 0 0 3px #000; letter-spacing: .04em; }
     .bar span b { font-weight: 600; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
-    /* (owner, 2026-10-16) a chip per fitted module (a click switches it), the hold as a square per unit above the hold bar */
-    #mods { display: flex; flex-direction: column-reverse; align-items: stretch; gap: 4px; pointer-events: auto; }   /* (stacked upward, one per slot) */
-    .mod-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); cursor: pointer; user-select: none; }
-    .mod-chip.on { color: var(--gold); border-color: rgba(216,176,106,.55); } .mod-chip.fixed { cursor: default; }
+    #ship-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
+    /* the hold above its bar: a square per ore piece (25 · 5 · 1, biggest first); refined pieces edged white; aboard cans as crates */
     #hold-wrap { position: relative; }
-    #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 190px; display: flex; flex-wrap: wrap-reverse; gap: 3px; pointer-events: auto; }
-    #cargo i { width: 10px; height: 10px; border-radius: 2px; position: relative; background: rgba(18,24,36,.9); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); overflow: hidden; }
-    #cargo i b { position: absolute; left: 0; right: 0; bottom: 0; }
+    #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 190px; display: flex; flex-wrap: wrap-reverse; gap: 3px; align-items: flex-end; pointer-events: auto; }
+    #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); }
+    #cargo i.p25 { width: 16px; height: 16px; } #cargo i.p5 { width: 12px; height: 12px; } #cargo i.p1 { width: 9px; height: 9px; }
     #cargo i.ref { box-shadow: inset 0 0 0 1.5px #fff; }
-    #refine-pop { position: absolute; left: 0; pointer-events: auto; padding: 4px 10px; border: 1px solid rgba(185,140,240,.6); border-radius: 4px; background: rgba(18,24,36,.95); color: var(--ore); font: 600 12px var(--f-body); cursor: pointer; white-space: nowrap; }
-    #refine-pop:hover { background: rgba(185,140,240,.15); } #refine-pop[hidden] { display: none; }
-    .pt-mem { pointer-events: auto; cursor: context-menu; }
+    #cargo i.party::after { content: ""; position: absolute; right: -1px; top: -1px; width: 5px; height: 5px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 1px #000; }
+    #cargo i.can { width: 18px; height: 14px; border-radius: 3px; background: #3a4458; border: 1px solid var(--gold); box-shadow: none; }
+    #cargo i.can.crate { border-color: var(--ore); }
     #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
     #tip[hidden] { display: none; }
-    #tip.wrap { white-space: normal; max-width: 300px; font: 13px var(--f-body); line-height: 1.45; padding: 8px 11px; }   /* (descriptions: wrapped, not one long line) */
+    #tip.wrap { white-space: normal; max-width: 300px; font: 13px var(--f-body); line-height: 1.45; padding: 8px 11px; }   /* (the developer panel's descriptions: wrapped, not one long line) */
     .dev-l.has-help { cursor: help; text-decoration: underline dotted rgba(156,152,136,.5); text-underline-offset: 3px; }
-    /* (owner, 2026-10-17) the tutorial: a step at the top; what to press glows */
-    #tut { position: fixed; left: 50%; top: 48px; transform: translateX(-50%); z-index: 19; display: flex; align-items: center; gap: 12px; max-width: min(620px, calc(100vw - 440px)); padding: 9px 10px 9px 14px; background: rgba(18,24,36,.96); border: 1px solid rgba(216,176,106,.55); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 14px var(--f-body); color: var(--ink); line-height: 1.35; }
-    #tut[hidden] { display: none; }
-    #tut-n { flex: none; font: 600 11px var(--f-mono); color: var(--gold); letter-spacing: .08em; }
-    #tut-skip { flex: none; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--dim); font: 600 12px var(--f-body); cursor: pointer; }
-    .tut-glow { animation: tutglow 1.1s ease-in-out infinite; position: relative; z-index: 1; }
-    @keyframes tutglow { 0%, 100% { box-shadow: 0 0 0 1px rgba(216,176,106,.4), 0 0 0 0 rgba(216,176,106,0); } 50% { box-shadow: 0 0 0 2px var(--gold), 0 0 16px 2px rgba(216,176,106,.55); } }
-    #trade-box { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 13px var(--f-body); color: var(--ink); }
-    #trade-box[hidden] { display: none; }
-    #trade-box button { padding: 4px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
-    #trade-box button.gold { background: var(--gold); border-color: var(--gold); color: var(--void); }
-    .st-lv { font: 600 11px var(--f-mono); color: var(--dim); letter-spacing: .06em; }
+    #prompt-box { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 13px var(--f-body); color: var(--ink); animation: dropin .25s cubic-bezier(.2,.9,.35,1.15); }
+    #prompt-box[hidden] { display: none; }
+    #prompt-box button { padding: 4px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
+    #prompt-box button.gold { background: var(--gold); border-color: var(--gold); color: var(--void); }
     #credits { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 600 13px var(--f-mono); color: var(--gold); }
     #credits::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
     #zone { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 4; font: 800 18px var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .75; pointer-events: none; text-shadow: 0 0 6px #000; }
-    /* my party and corporation */
+    /* my party */
     #party { position: fixed; left: 14px; top: 14px; z-index: 5; display: grid; gap: 6px; min-width: 150px; pointer-events: none; }
     #party[hidden] { display: none; }
-    .pt-corp { font: 800 16px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--ice); text-shadow: 0 0 6px #000; }
     .pt-list { padding: 8px 10px; background: rgba(18,24,36,.88); border: 1px solid var(--rule); border-radius: 6px; display: grid; gap: 2px; }
     .pt-head { font: 600 10px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin-bottom: 2px; }
-    .pt-mem { font: 13px var(--f-body); color: var(--ink); } .pt-mem.lead::after { content: " ★"; color: var(--gold); }
+    .pt-mem { font: 13px var(--f-body); color: var(--ink); pointer-events: auto; cursor: context-menu; } .pt-mem.lead::after { content: " ★"; color: var(--gold); }
     /* the minimap */
     #minimap { position: fixed; left: 14px; bottom: 14px; width: 190px; height: 190px; z-index: 5; }
-    /* the station panel (docked) */
-    #station { position: fixed; right: 14px; top: 14px; bottom: 270px; width: 360px; max-width: calc(100vw - 28px); z-index: 7; overflow-y: auto; padding: 12px 14px 14px; background: rgba(18,24,36,.96); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); }
+    /* the station panel (docked): the ships, one to board, and fuel */
+    #station { position: fixed; right: 14px; top: 14px; bottom: 270px; width: 360px; max-width: calc(100vw - 28px); z-index: 7; overflow-y: auto; padding: 12px 14px 14px; background: rgba(18,24,36,.96); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); animation: panelin .18s ease-out; }
     #station[hidden] { display: none; }
     .st-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .st-title { font: 800 28px var(--f-display); letter-spacing: .04em; text-transform: uppercase; }
     .st-cr { display: flex; align-items: center; gap: 6px; font: 600 14px var(--f-mono); color: var(--gold); } .st-cr::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
     #station section { margin-top: 12px; }
     #station h3 { margin: 0 0 6px; font: 600 11px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
-    .st-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(38,48,68,.6); }
-    .st-row:last-child { border-bottom: none; }
-    .st-sw { flex: none; width: 12px; height: 12px; border-radius: 2px; background: var(--brown); border: 2px solid transparent; } .st-sw.ref { background: var(--ore); } .st-sw.fuel { background: var(--ice); }
+    .st-ship { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); margin-bottom: 8px; transition: border-color .15s ease; }
+    .st-ship:hover { border-color: var(--dim); } .st-ship.aboard { border-color: rgba(216,176,106,.55); }
+    .st-ship-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .st-ship-name { font: 800 18px var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
+    .st-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font: 12px var(--f-mono); color: var(--dim); margin-top: 4px; } .st-stats b { font-weight: 600; color: var(--ink); text-align: right; }
+    .st-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+    .st-sw { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--ice); }
     .st-name { flex: 1; min-width: 0; font-size: 14px; }
     .st-n { font: 600 13px var(--f-mono); color: var(--dim); font-variant-numeric: tabular-nums; }
-    .st-acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
     .st-tag { font: 600 10.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); padding: 3px 8px; border: 1px solid rgba(216,176,106,.5); border-radius: 10px; }
-    .st-empty { margin: 0; color: var(--dim); font-size: 13px; }
-    .st-bar { flex: 0 0 90px; height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; } .st-bar i { display: block; height: 100%; width: 0; background: var(--ore); } .st-bar.fuel i { background: var(--ice); }
-    #station button, #shop button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; white-space: nowrap; }
-    #station button:hover:not(:disabled), #shop button:hover:not(:disabled) { background: rgba(255,255,255,.1); }
-    #station button.gold, #shop button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
-    #station button.gold:hover:not(:disabled), #shop button.gold:hover:not(:disabled) { filter: brightness(1.08); }
-    #station button:disabled, #shop button:disabled { opacity: .4; cursor: default; }
-    /* (owner, 2026-10-16) storage as slots; the shop, its own window beside the station panel */
-    .st-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-height: 196px; overflow-y: auto; padding: 2px; }
-    .st-slot { position: relative; aspect-ratio: 1; border-radius: 5px; background: rgba(11,14,21,.7); border: 1px solid var(--rule); display: grid; place-items: center; cursor: context-menu; }
-    .st-slot.empty { cursor: default; opacity: .5; } .st-slot:not(.empty):hover { border-color: var(--dim); } .st-slot.sel { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
-    .st-slot i { width: 46%; height: 46%; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.4); } .st-slot i.ref { box-shadow: inset 0 0 0 2px #fff; } .st-slot i.fuel { border-radius: 50%; }
-    .st-slot .n { position: absolute; right: 4px; bottom: 2px; font: 600 11px var(--f-mono); color: var(--ink); text-shadow: 0 0 3px #000; }
-    .st-acts-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-    #shop { position: fixed; right: 388px; top: 14px; bottom: 270px; width: 380px; max-width: calc(100vw - 28px); z-index: 8; display: flex; flex-direction: column; padding: 12px 14px 14px; background: rgba(18,24,36,.97); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); }
-    #shop[hidden] { display: none; }
-    .shop-list { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; margin-top: 8px; padding-right: 4px; }
-    .shop-card { padding: 10px 12px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); } .shop-card.fitted { border-color: rgba(216,176,106,.55); }
-    .shop-name { font: 800 18px var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
-    .shop-info { margin: 3px 0 8px; font-size: 13px; color: var(--dim); line-height: 1.4; }
-    .shop-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font: 12px var(--f-mono); color: var(--dim); } .shop-stats b { font-weight: 600; color: var(--ink); text-align: right; }
-    .shop-acts { display: flex; gap: 6px; justify-content: flex-end; align-items: center; margin-top: 8px; flex-wrap: wrap; }
-    @media (max-width: 800px) { #shop { right: 14px; z-index: 9; } }
+    #station button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; white-space: nowrap; }
+    #station button:hover:not(:disabled) { background: rgba(255,255,255,.1); }
+    #station button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
+    #station button.gold:hover:not(:disabled) { filter: brightness(1.08); }
+    #station button:disabled { opacity: .4; cursor: default; }
     /* (owner, 2026-10-17) the developer panel */
     #dev-btn { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; background: var(--plate); border: 1px solid var(--rule); border-radius: 5px; color: var(--ice); font: 800 15px var(--f-display); cursor: pointer; }
     #dev-btn:hover, #dev-btn.on { background: var(--ice); color: var(--void); }
-    #dev { position: fixed; left: 14px; top: 14px; bottom: 220px; width: 430px; max-width: calc(100vw - 28px); z-index: 21; display: flex; flex-direction: column; padding: 12px 14px 14px; background: rgba(18,24,36,.97); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); }
+    #dev { position: fixed; left: 14px; top: 14px; bottom: 220px; width: 430px; max-width: calc(100vw - 28px); z-index: 21; display: flex; flex-direction: column; padding: 12px 14px 14px; background: rgba(18,24,36,.97); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); animation: panelin .18s ease-out; }
     #dev[hidden] { display: none; }
     #dev button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
     #dev button.on { background: var(--ice); color: var(--void); border-color: transparent; }
@@ -120,14 +93,13 @@
     .dev-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding-right: 4px; }
     .dev-group { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); display: grid; gap: 4px; }
     .dev-h { font: 800 15px var(--f-display); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 2px; }
-    .dev-pick { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 4px; } .dev-pick.lv { margin: 0; }
+    .dev-pick { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 4px; }
     .dev-pick button { padding: 2px 9px !important; font: 600 11px var(--f-mono) !important; }
-    .dev-h.with-pick { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .dev-row { display: flex; align-items: center; gap: 4px; } .dev-l { flex: 1; min-width: 0; font: 12px var(--f-mono); color: var(--dim); }
     .dev-row input { width: 62px; padding: 3px 5px; background: var(--void); border: 1px solid var(--rule); border-radius: 3px; color: var(--ink); font: 12px var(--f-mono); text-align: right; }
     .dev-row input:focus { outline: none; border-color: var(--ice); }
-    /* (owner, 2026-10-17) how many to sell / refine / make into fuel */
-    #amount-box { position: fixed; right: 388px; top: 120px; z-index: 12; width: 280px; padding: 12px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.55); display: grid; gap: 10px; }
+    /* the crate unlock slider (the deliverer's share) */
+    #amount-box { position: fixed; left: 50%; top: 120px; transform: translateX(-50%); z-index: 12; width: 280px; padding: 12px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.55); display: grid; gap: 10px; animation: panelin .18s ease-out; }
     #amount-box[hidden] { display: none; }
     #amount-title { font: 800 18px var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
     #amount-range { width: 100%; accent-color: var(--gold); }
@@ -135,26 +107,25 @@
     .amount-acts { display: flex; gap: 6px; justify-content: flex-end; }
     #amount-box button { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
     #amount-box button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
-    @media (max-width: 800px) { #amount-box { right: 14px; } }
     /* chat, bottom right */
     #chat { position: fixed; right: 14px; bottom: 14px; width: 400px; max-width: calc(100vw - 28px); z-index: 6; display: grid; gap: 4px; }
     #chat-tabs { display: flex; gap: 3px; }
     #chat-tabs button { padding: 2px 9px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(18,24,36,.85); color: var(--dim); font: 600 11px var(--f-mono); letter-spacing: .04em; cursor: pointer; }
-    #chat-tabs button.on { color: var(--ink); border-color: var(--gold); } #chat-tabs button.new { color: var(--gold); }
+    #chat-tabs button.on { color: var(--ink); border-color: var(--gold); } #chat-tabs button.new { color: var(--gold); animation: unreadpulse 1.4s ease-in-out infinite; }
     #chat-panel { background: rgba(18,24,36,.82); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
     #chat-log { height: 140px; overflow-y: auto; padding: 6px 8px; font: 13px/1.4 var(--f-body); display: flex; flex-direction: column; }
     #chat-log > :first-child { margin-top: auto; }
-    .chat-line { overflow-wrap: anywhere; } .chat-line.sys { color: var(--dim); font-style: italic; }
-    .chat-ch { font: 600 11px var(--f-mono); } .chat-ch.global { color: var(--dim); } .chat-ch.zone { color: var(--ink); } .chat-ch.party { color: var(--gold); } .chat-ch.corp { color: var(--ice); } .chat-ch.whisper { color: var(--ore); }
+    .chat-line { overflow-wrap: anywhere; animation: linein .18s ease-out; } .chat-line.sys { color: var(--dim); font-style: italic; }
+    .chat-ch { font: 600 11px var(--f-mono); } .chat-ch.global { color: var(--dim); } .chat-ch.zone { color: var(--ink); } .chat-ch.party { color: var(--gold); } .chat-ch.whisper { color: var(--ore); }
     .chat-who { font-weight: 700; color: var(--ink); cursor: context-menu; }
     #chat-form { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--rule); background: rgba(11,14,21,.6); }
     #chat-pre { flex: none; white-space: nowrap; }
     #chat-in { flex: 1; min-width: 0; padding: 3px 0; border: none; background: transparent; color: var(--ink); font: 13px var(--f-body); outline: none; }
-    #ctx-menu { position: fixed; z-index: 30; display: grid; min-width: 160px; padding: 4px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+    #ctx-menu { position: fixed; z-index: 30; display: grid; min-width: 160px; padding: 4px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); animation: menuin .12s ease-out; transform-origin: 12px 10px; }
     #ctx-menu[hidden] { display: none; }
     #ctx-menu button { padding: 6px 10px; border: none; border-radius: 4px; background: none; color: var(--ink); text-align: left; font: 13px var(--f-body); cursor: pointer; } #ctx-menu button:hover { background: rgba(255,255,255,.07); }
     #report-box { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0,0,0,.45); } #report-box[hidden] { display: none; }
-    #report-box .box { display: grid; gap: 8px; width: 340px; padding: 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; }
+    #report-box .box { display: grid; gap: 8px; width: 340px; padding: 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; animation: panelin .18s ease-out; }
     #report-box textarea { height: 90px; padding: 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--void); color: var(--ink); font: 13px var(--f-body); resize: none; }
     #report-box .row { display: flex; justify-content: flex-end; gap: 6px; }
     #report-box button { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); cursor: pointer; } #report-box #report-send { background: var(--gold); color: #1a1205; border: none; font-weight: 700; }
@@ -173,26 +144,15 @@
     @keyframes crflash { 25% { background: rgba(216,176,106,.4); transform: scale(1.07); } }
     @keyframes zonein { from { opacity: 0; letter-spacing: .3em; } to { opacity: .75; } }
     @keyframes popin { from { transform: scale(.2); } 70% { transform: scale(1.25); } }
-    #station, #shop, #dev, #amount-box, #report-box .box { animation: panelin .18s ease-out; }
-    #trade-box, #tut { animation: dropin .25s cubic-bezier(.2,.9,.35,1.15); }
-    #ctx-menu { animation: menuin .12s ease-out; transform-origin: 12px 10px; }
     #tip { animation: menuin .1s ease-out; }
-    .chat-line { animation: linein .18s ease-out; }
-    #chat-tabs button.new { animation: unreadpulse 1.4s ease-in-out infinite; }
     #fuel-fill.low { animation: fuelpulse 0.9s ease-in-out infinite; }
     #hold-wrap.pop .bar { animation: barpop .28s ease-out; }
-    #cargo i { animation: popin .3s cubic-bezier(.3,1.2,.4,1); }
     #credits.flash { animation: crflash .55s ease-out; }
     #zone.zswap { animation: zonein .5s ease-out; }
     .ore-fly { position: fixed; z-index: 18; width: 11px; height: 11px; margin: -5px 0 0 -5px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 8px rgba(216,176,106,.8); pointer-events: none; transition: transform .42s cubic-bezier(.35,.65,.3,1), opacity .42s ease-in; }
-    #station button, #shop button, #dev button, #ctx-menu button, #chat-tabs button, #amount-box button, #trade-box button, #tut-skip, .mod-chip, #dev-btn, #admin-btn { transition: transform .07s ease, background .14s ease, border-color .14s ease, color .14s ease, filter .14s ease; }
-    #station button:active:not(:disabled), #shop button:active:not(:disabled), #dev button:active:not(:disabled), #ctx-menu button:active, #chat-tabs button:active, #amount-box button:active, #trade-box button:active, #tut-skip:active, .mod-chip:not(.fixed):active, #refine-pop:active { transform: scale(.94); }
-    .st-slot { transition: border-color .12s ease, transform .1s ease, box-shadow .12s ease; }
-    .st-slot:not(.empty):hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,.4); }
-    .shop-card, .dev-group { transition: border-color .15s ease; } .shop-card:hover { border-color: var(--dim); }
-    .bar i { transition: width .25s cubic-bezier(.3,.8,.4,1); }
-    #refine-pop { animation: dropin2 .25s cubic-bezier(.2,.9,.35,1.15); } @keyframes dropin2 { from { opacity: 0; transform: translateY(10px); } }
-    @media (prefers-reduced-motion: reduce) { #station, #shop, #dev, #amount-box, #trade-box, #tut, #ctx-menu, #tip, .chat-line, #cargo i, #refine-pop, #report-box .box { animation: none !important; } #fuel-fill.low, #chat-tabs button.new { animation: none !important; } }
+    #station button, #dev button, #ctx-menu button, #chat-tabs button, #amount-box button, #prompt-box button, #dev-btn, #admin-btn { transition: transform .07s ease, background .14s ease, border-color .14s ease, color .14s ease, filter .14s ease; }
+    #station button:active:not(:disabled), #dev button:active:not(:disabled), #ctx-menu button:active, #chat-tabs button:active, #amount-box button:active, #prompt-box button:active { transform: scale(.94); }
+    @media (prefers-reduced-motion: reduce) { #station, #dev, #amount-box, #prompt-box, #ctx-menu, #tip, .chat-line, #cargo i, #report-box .box { animation: none !important; } #fuel-fill.low, #chat-tabs button.new { animation: none !important; } }
   </style>
 </head>
 <body>
@@ -200,27 +160,25 @@
   <div id="zone"></div>
   <div id="party" hidden></div>
   <div id="hud">
-    <div id="mods"></div>
-    <div id="hold-wrap"><button id="refine-pop" type="button" hidden>Refine ores</button><div id="cargo"></div><div class="bar"><i id="hold-raw"></i><i id="hold-ref"></i><span><b>Hold</b><em id="hold-num" style="font-style:normal"></em></span></div></div>
+    <div id="ship-chip"></div>
+    <div id="hold-wrap"><div id="cargo"></div><div class="bar"><i id="hold-raw"></i><i id="hold-ref"></i><span><b>Hold</b><em id="hold-num" style="font-style:normal"></em></span></div></div>
     <div class="bar"><i id="fuel-fill"></i><span><b>Fuel</b><em id="fuel-num" style="font-style:normal"></em></span></div>
     <div id="credits"></div>
   </div>
   <canvas id="minimap"></canvas>
   <div id="station" hidden></div>
-  <div id="shop" hidden></div>
   <div id="dev" hidden></div>
   <div id="amount-box" hidden><b id="amount-title"></b><input id="amount-range" type="range" min="1" max="1" step="1"><div class="amount-row"><span id="amount-n"></span><span id="amount-worth"></span></div><div class="amount-acts"><button id="amount-cancel" type="button">Cancel</button><button id="amount-go" class="gold" type="button"></button></div></div>
   <div id="staff-col"></div>
   <div id="chat"><div id="chat-tabs"></div><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" enterkeyhint="send"></form></div></div>
   <div id="ctx-menu" hidden></div>
   <div id="tip" hidden></div>
-  <div id="tut" hidden><span id="tut-n"></span><span id="tut-text"></span><button id="tut-skip" type="button">Skip</button></div>
-  <div id="trade-box" hidden><span id="trade-text"></span><button id="trade-yes" class="gold" type="button">Accept</button><button id="trade-no" type="button">Decline</button></div>
+  <div id="prompt-box" hidden><span id="prompt-text"></span><button id="prompt-yes" class="gold" type="button">Accept</button><button id="prompt-no" type="button">Decline</button></div>
   <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-cancel" type="button">Cancel</button><button id="report-send" type="button">Send</button></div></div></div>
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792300025"></script>
+  <script type="module" src="game.js?v=1792400001"></script>
 </body>
 </html>

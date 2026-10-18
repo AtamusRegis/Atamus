@@ -11,6 +11,4 @@ for f in packages/server/src/*.js packages/server/src/game/*.js website/*.js scr
   node --input-type=module --check < "$f" 2>/dev/null || node --input-type=commonjs --check < "$f" 2>/dev/null \
     || { echo "SYNTAX ERROR: $f"; node --input-type=module --check < "$f" || true; fail=1; }
 done
-# the asteroid generator must be the same file on the server and in the client (2026-10-16)
-cmp -s packages/server/src/game/ringgen.js website/ringgen.js || { echo "ringgen.js differs between the server and the website"; fail=1; }
 [ $fail -eq 0 ] && echo "check: all files parse" || exit 1

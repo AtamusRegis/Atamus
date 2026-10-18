@@ -1,175 +1,154 @@
-// The Saturn ring-mining world (owner, 2026-10-16: the 2D prototype; design: the "Atamus Ring Mining" design document).
-// One shared 2D world: Saturn at the middle, one station beside it, two asteroid rings, a locked line past them, four
-// sectors (N, E, S, W) that open as more players come online. Asteroids come from seeds per grid cell and only exist while
-// a player is near (or someone has worked on them); clients get each asteroid as its seed and build it themselves
-// (ringgen.js). Shards: once all four sectors are open, a zone holds 40 players per copy ("layer"); a ship only meets the
-// ships, asteroids and ore of its own layer, and parties stay together. Every crack drops one ore unit carrying the names of everyone who
-// helped; when a unit is delivered to the station, every name on it gets a copy. The server decides everything; clients
-// send commands (a push, a heading, an aim) and predict their own ship.
+// (owner, 2026-10-18) The mining redesign's world, from "Crack, Bank and Haul" (draft 9, docs/Atamus_Ring_Mining.html).
+// Asteroids are hidden masonry: shells of chunks around a core, seams staggered, thin chunks stacked into towers. The
+// miner's laser cuts the first chunk on its line; the scanner reveals one chunk at a time (scanned chunks are glass to
+// it); breaking a chunk shocks its neighbors and chains cascade; broken chunks bank their ore into the core, and only
+// the pop pays, into the miners' holds, overflowing into cans and party crates. Delivery turns ore into credits: a
+// party splits everything evenly. Kept around it: Saturn, two rings, sectors, fog of war, fuel, parties, one role per
+// ship. The server decides everything; clients send commands and predict their own ship.
 import crypto from "node:crypto";
 import { pool } from "../db.js";
 import * as R from "./rules.js";
-import { hash32, rng, genRock } from "./ringgen.js";
 
-const { WORLD: W, MODULES } = R;
+const { WORLD: W, SHIPS, FLY } = R;
 const now = () => Date.now();
-const hyp = Math.hypot;
-// ---- seeded randomness: the seeds rotate with a secret only the server knows (so the map can't be learned) ----
+const hyp = Math.hypot, TAU = Math.PI * 2;
 const SECRET = process.env.RING_SECRET || crypto.randomBytes(16).toString("hex");
-const pickW = (weights, r) => { const keys = Object.keys(weights), tot = keys.reduce((s, k) => s + weights[k], 0); if (tot <= 0) return keys[0]; let x = r * tot; for (const k of keys) { if (weights[k] <= 0) continue; x -= weights[k]; if (x <= 0) return k; } return keys.filter((k) => weights[k] > 0).pop(); };
-// ---- the map ----
+function hash32(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 export const ringOf = (r) => { for (let i = 0; i < W.rings.length; i++) if (r >= W.rings[i][0] && r <= W.rings[i][1]) return i; return -1; };
-export const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;   // 0 N, 1 E, 2 S, 3 W
+export const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;
 export function zoneOf(x, y) {
   const r = hyp(x, y); if (r < W.safeR) return "Station";
   return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + R.SECTOR_NAMES[R.SECTORS[sectorOf(x, y)]];
 }
 const ORE_KEYS = Object.keys(R.ORES);
-const unitSpace = (u) => (u.r ? R.ORES[u.o].refinedSpace : 1);
-const rockHp = (r) => R.crackHp(r.n) * R.ORES[r.ore].hardness;   // (a crack's health: by size, x the ore's hardness)
-const holdUsed = (p) => p.hold.reduce((s, u) => s + unitSpace(u), 0);
-const storeKey = (o, r) => (r ? o + "+" : o);
+const normA = (a) => ((a % TAU) + TAU) % TAU;
+const spanHas = (c, a) => { const d = normA(a - c.a0); return d >= 0 && d <= normA(c.a1 - c.a0); };
+const overlap = (c, d) => { const la = normA(c.a1 - c.a0), lb = normA(d.a1 - d.a0), off = normA(d.a0 - c.a0); return off < la || normA(c.a0 - d.a0) < lb; };
+const unitSpace = (e) => e.u * (e.raw ? 1 : R.REFINED_SPACE);
 
 export class World {
   constructor() {
-    this.players = new Map();                  // account id -> ship
-    this.rocks = new Map();                    // asteroid id -> asteroid (only the live ones)
-    this.slots = new Map();                    // "layer:cx,cy,slot" -> the asteroid living in that slot (wherever it is now)
-    this.cells = new Map();                    // "layer:cx,cy" -> { gen: [], back: [], awake: until }
-    this.grid = new Map();                     // asteroids by layer and cell, for lookups
-    this.ores = new Map(); this.oreSeq = 1;    // loose ore units
-    this.fx = [];                              // effects for nearby players: { k, x, y, ... }
-    this.msgs = [];                            // { to: account id | null (everyone), m }
+    this.players = new Map();
+    this.rocks = new Map();                    // id -> rock (chunks, core); whole rocks move when towed
+    this.slots = new Map(); this.cells = new Map(); this.grid = new Map();
+    this.cans = new Map(); this.canSeq = 1;    // cans and party crates, loose or aboard a hauler
     this.parties = new Map(); this.partySeq = 1; this.invites = new Map();
-    this.corps = new Map(); this.corpInvites = new Map();
-    this.sectors = R.SECTORS.map(() => ({ open: true, closeAt: 0 }));   // (owner, 2026-10-16: always all open)
-    this.offline = new Map();                  // account id -> a promise chain (storage written to offline players)
-    this.nameCache = new Map(); this.nameWant = new Set();   // account id -> name, for the names on ore
-    this.trades = new Map();                   // hauler id -> { from, at }: a cargo handoff waiting for the hauler's answer
-    const t3 = setInterval(() => this.lookupNames().catch((e) => console.error("ring names", e)), 1000); t3.unref && t3.unref();
+    this.msgs = []; this.fx = [];
+    this.offline = new Map();                  // account id -> promise chain (credits paid to offline players)
+    this.lastDowntime = 0;
     this.ready = this._load();
     const t = setInterval(() => this.saveDirty().catch((e) => console.error("ring save", e)), 10_000); t.unref && t.unref();
-    const t2 = setInterval(() => this.offlineHolds().catch((e) => console.error("ring transit", e)), 60_000); t2.unref && t2.unref();
+    const t2 = setInterval(() => this.minutely().catch((e) => console.error("ring minutely", e)), 60_000); t2.unref && t2.unref();
   }
   async _load() {
     await pool.query(`CREATE TABLE IF NOT EXISTS ring_players (user_id TEXT PRIMARY KEY, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL,
-      h DOUBLE PRECISION NOT NULL DEFAULT 0, fuel DOUBLE PRECISION NOT NULL, fuel_from JSONB NOT NULL DEFAULT '{}', module TEXT NOT NULL, modules JSONB NOT NULL,
+      h DOUBLE PRECISION NOT NULL DEFAULT 0, fuel DOUBLE PRECISION NOT NULL, fuel_from JSONB NOT NULL DEFAULT '{}', module TEXT NOT NULL, modules JSONB NOT NULL DEFAULT '[]',
       credits DOUBLE PRECISION NOT NULL DEFAULT 0, storage JSONB NOT NULL DEFAULT '{}', hold JSONB NOT NULL DEFAULT '[]', queue JSONB NOT NULL DEFAULT '[]',
       corp_id INTEGER, logout_at TIMESTAMPTZ, transit JSONB, transit_due TIMESTAMPTZ, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-    // (2026-10-16) several modules (mods), the hull size and each module's upgrade level
-    await pool.query(`ALTER TABLE ring_players ADD COLUMN IF NOT EXISTS mods JSONB, ADD COLUMN IF NOT EXISTS hull INTEGER NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS upgrades JSONB NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS tutorial INTEGER NOT NULL DEFAULT 0`);   // (2026-10-17: the tutorial's step; -1 done)
-    await pool.query(`CREATE TABLE IF NOT EXISTS ring_corps (id SERIAL PRIMARY KEY, name TEXT NOT NULL UNIQUE, owner TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-    for (const c of (await pool.query(`SELECT id, name, owner FROM ring_corps`)).rows) this.corps.set(c.id, { id: c.id, name: c.name, owner: c.owner });
+    // (2026-10-18) the mining redesign: module holds the ship kind, hold the tagged cargo entries; cans/crates and the
+    // daily downtime live in their own tables. Older columns stay untouched.
+    await pool.query(`ALTER TABLE ring_players ADD COLUMN IF NOT EXISTS mods JSONB, ADD COLUMN IF NOT EXISTS hull INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS upgrades JSONB NOT NULL DEFAULT '{}', ADD COLUMN IF NOT EXISTS tutorial INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS ring_cans (id SERIAL PRIMARY KEY, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL,
+      kind TEXT NOT NULL, contents JSONB NOT NULL, owner TEXT NOT NULL, roster JSONB NOT NULL DEFAULT '[]', share DOUBLE PRECISION,
+      held_by TEXT, mode TEXT, lock_until TIMESTAMPTZ, public_until TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS ring_meta (k TEXT PRIMARY KEY, v JSONB NOT NULL)`);
+    const { rows } = await pool.query(`SELECT * FROM ring_cans`);
+    for (const r of rows) this.cans.set(r.id, { id: r.id, x: +r.x, y: +r.y, kind: r.kind, contents: r.contents, owner: r.owner, roster: r.roster || [], share: r.share === null ? null : +r.share,
+      heldBy: r.held_by, mode: r.mode || null, rosterKey: (r.roster || []).join(","), lockUntil: r.lock_until ? new Date(r.lock_until).getTime() : 0, publicUntil: r.public_until ? new Date(r.public_until).getTime() : 0, dirty: false });
+    this.canSeq = Math.max(1, ...[...this.cans.keys()].map((k) => k + 1));
+    const m = await pool.query(`SELECT v FROM ring_meta WHERE k = 'downtime'`); this.lastDowntime = m.rows[0] ? +m.rows[0].v : 0;
   }
+  shipOf(p) { return SHIPS[p.ship] || SHIPS.miner; }
+  visionOf(p) { return Math.min(W.loadR, this.shipOf(p).vision); }
 
-  // ---- numbers for a ship: the hull with its module ----
-  // (owner, 2026-10-16) a ship carries as many modules as its hull has slots (always at least one); each module has an
-  // upgrade level 0-3, and a number given per level is read at it
-  has(p, k) { return p.mods.includes(k); }
-  val(p, k, stat) { const v = MODULES[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, p.upgrades[k] || 0)] : v; }
-  isOn(p, k) { return this.has(p, k) && p.on.has(k); }
-  hullOf(p) { return R.HULLS[Math.max(0, Math.min(R.HULLS.length - 1, p.hull | 0))]; }
-  // (owner, 2026-10-17) the fog of war: how far this ship sees. Nothing beyond it is sent (ships, asteroids, ore, effects),
-  // so it can't be read out of the traffic. A fitted scanner's reach extends it; the load circle is the hard cap.
-  visionOf(p) { return Math.min(W.loadR, Math.max(this.hullOf(p).vision, this.has(p, "scanner") ? this.val(p, "scanner", "range") : 0)); }
-  stats(p) {
-    const H = this.hullOf(p); let speedMul = 1; for (const k of p.mods) speedMul *= this.val(p, k, "speed");
-    return { hold: this.has(p, "hauler") ? this.val(p, "hauler", "hold") : H.hold, tank: this.has(p, "fueler") ? this.val(p, "fueler", "tank") : H.tank, slots: H.slots, speedMul };
-  }
-  // ---- asteroids ----
-  cellKey(layer, cx, cy) { return layer + ":" + cx + "," + cy; }
-  gridAdd(r) { const k = this.cellKey(r.layer, Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); r.gk = k; let s = this.grid.get(k); if (!s) this.grid.set(k, (s = new Set())); s.add(r); }
+  // ---- the asteroid: shells of chunks around a core ----
+  cellKey(cx, cy) { return cx + "," + cy; }
+  gridAdd(r) { const k = this.cellKey(Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); r.gk = k; let s = this.grid.get(k); if (!s) this.grid.set(k, (s = new Set())); s.add(r); }
   gridDel(r) { const s = this.grid.get(r.gk); if (s) { s.delete(r); if (!s.size) this.grid.delete(r.gk); } }
-  gridMove(r) { const k = this.cellKey(r.layer, Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); if (k !== r.gk) { this.gridDel(r); this.gridAdd(r); } }
-  *rocksNear(x, y, rad, layer) {
+  gridMove(r) { const k = this.cellKey(Math.floor(r.x / W.cell), Math.floor(r.y / W.cell)); if (k !== r.gk) { this.gridDel(r); this.gridAdd(r); } }
+  *rocksNear(x, y, rad) {
     const c0 = Math.floor((x - rad) / W.cell), c1 = Math.floor((x + rad) / W.cell), d0 = Math.floor((y - rad) / W.cell), d1 = Math.floor((y + rad) / W.cell);
-    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) { const s = this.grid.get(layer + ":" + cx + "," + cy); if (s) yield* s; }
+    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) { const s = this.grid.get(cx + "," + cy); if (s) yield* s; }
   }
-  // a cell comes awake when a player is near: its slots are rolled from the seed (unless a slot's asteroid is still out
-  // somewhere, or it was mined out and hasn't come back yet). Nothing new appears in a closed or closing sector.
-  // Each asteroid's seed comes from the secret, the 6-hour epoch, the layer, the cell, the slot and the slot's generation;
-  // the client is sent the seed (position and size, see ringgen.js), never the ore.
-  wakeCell(layer, cx, cy, t) {
-    const key = this.cellKey(layer, cx, cy); let c = this.cells.get(key);
+  genRock(key, cx, cy, gen, epoch) {
+    const rand = rng(hash32(SECRET + "|" + epoch + "|" + key + "|" + gen));
+    if (rand() > R.ROCK.spawnChance) return null;
+    const x = (cx + 0.12 + rand() * 0.76) * W.cell, y = (cy + 0.12 + rand() * 0.76) * W.cell, ring = ringOf(hyp(x, y));
+    if (ring < 0) return null;
+    const sizes = R.RING_SIZES[ring], sizeIdx = sizes[Math.floor(rand() * sizes.length)], SZ = R.ROCKS[sizeIdx];
+    const pool_ = [...R.RING_ORES[ring]]; const types = [];
+    for (let i = 0; i < SZ.oreTypes && pool_.length; i++) types.push(pool_.splice(Math.floor(rand() * pool_.length), 1)[0]);
+    const C = R.CHUNK, freeA = rand() * TAU;   // one straight line to the core kept free of bedrock
+    const chunks = [], shells = []; let rr = SZ.coreR + 2, shellIdx = 0;
+    while (chunks.length < SZ.chunks && shellIdx < 10) {
+      const th = 5 + rand() * 9, r1 = rr + th, mid = (rr + r1) / 2;
+      const nSeg = Math.max(4, Math.round((TAU * mid) / (10 + rand() * 14))), off = rand() * TAU, segs = [];
+      for (let i = 0; i < nSeg; i++) {
+        const a0 = normA(off + (i / nSeg) * TAU), a1 = normA(off + ((i + 1) / nSeg) * TAU);
+        const split = th > 9 && rand() < 0.3;                      // thin chunks stack into towers
+        const bands = split ? [[rr, mid], [mid, r1]] : [[rr, r1]];
+        for (const [b0, b1] of bands) {
+          const wsum = C.wSoft + C.wNormal + C.wDense + C.wUltra + C.wBed; let dv = rand() * wsum, d = 0;
+          for (const [i2, w] of [C.wSoft, C.wNormal, C.wDense, C.wUltra, C.wBed].entries()) { dv -= w; if (dv <= 0) { d = i2; break; } }
+          const c = { i: chunks.length, sh: shellIdx, r0: b0, r1: b1, a0, a1, d, ore: null, u: 0, broken: false, scanned: false, adj: [] };
+          if (c.d === 4 && spanHas(c, freeA)) c.d = 1;             // the guaranteed bore line
+          if (c.d !== 4 && rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.u = 1 + (c.d === 2 ? C.denseOre : c.d === 3 ? C.ultraOre : 0); }
+          const span = normA(c.a1 - c.a0) || TAU / nSeg, area = span * ((c.r0 + c.r1) / 2) * (c.r1 - c.r0);
+          c.maxHp = Math.max(8, area * C.hpK * [C.soft, 1, C.dense, C.ultra, 1][c.d]); c.hp = c.maxHp;
+          segs.push(c.i); chunks.push(c);
+        }
+      }
+      shells.push({ r0: rr, r1, segs }); rr = r1; shellIdx++;
+    }
+    // who touches whom (for bursts): stacked pairs, same-shell neighbors, and the shells either side where angles overlap
+    for (const c of chunks) for (const d of chunks) {
+      if (c === d || c.adj.includes(d.i)) continue;
+      const radial = (Math.abs(c.r1 - d.r0) < 0.01 || Math.abs(c.r0 - d.r1) < 0.01) && overlap(c, d);
+      const side = c.sh === d.sh && Math.abs(c.r0 - d.r0) < 0.01 && (Math.abs(normA(c.a1 - d.a0)) < 0.02 || Math.abs(normA(d.a1 - c.a0)) < 0.02);
+      if (radial || side) { c.adj.push(d.i); d.adj.push(c.i); }
+    }
+    const total = chunks.reduce((s, c) => s + c.u, 0);
+    return { id: key + ":" + gen + ":" + epoch, key, cell: key, gen, x, y, ring, sizeIdx, r: rr, chunks, shells,
+      core: { r0: SZ.coreR, hp: SZ.coreHp, maxHp: SZ.coreHp, banked: {}, bankedTotal: 0, total: Math.max(1, total), rareMax: SZ.rareMax, popped: false },
+      v: 1, touched: 0, home: true, tow: null };
+  }
+  wakeCell(cx, cy, t) {
+    const key = this.cellKey(cx, cy); let c = this.cells.get(key);
     if (c && c.awake > t) { c.awake = t + 120_000; return; }
     const mx = (cx + 0.5) * W.cell, my = (cy + 0.5) * W.cell, rr = hyp(mx, my);
     if (rr < W.rings[0][0] - W.cell || rr > W.rings[W.rings.length - 1][1] + W.cell) return;
-    if (!c) this.cells.set(key, (c = { gen: [], back: [], awake: 0 }));
+    if (!c) this.cells.set(key, (c = { gen: 0, back: 0, awake: 0 }));
     c.awake = t + 120_000;
-    const epoch = Math.floor(t / 1000 / R.ROCK.reseed);
-    for (let s = 0; s < Math.max(...R.RING_SLOTS); s++) {
-      const sk = key + "," + s; if (this.slots.has(sk) || (c.back[s] || 0) > t) continue;
-      const gen = c.gen[s] || 0, seed = hash32(SECRET + "|" + epoch + "|" + key + "|" + s + "|" + gen), g = genRock(cx, cy, seed, W.cell, W.rings, R.RING_SIZES);
-      if (!g || s >= R.RING_SLOTS[g.ring] || !this.sectors[sectorOf(g.x, g.y)].open || this.sectors[sectorOf(g.x, g.y)].closeAt) continue;
-      const ore = pickW(R.RING_ORES[g.ring], rng(hash32(SECRET + "|ore|" + seed))());
-      const rock = { id: key + ":" + seed, seed, sk, cell: key, layer, slot: s, x: g.x, y: g.y, n: g.n, cracks: g.n, hp: R.crackHp(g.n) * R.ORES[ore].hardness, ore, ring: g.ring,
-        scanned: false, cracked: false, names: new Set(), boost: new Set(), lasers: new Set(), tow: null, touched: 0, home: true };
-      this.rocks.set(rock.id, rock); this.slots.set(sk, rock); this.gridAdd(rock);
-    }
+    if (this.slots.has(key) || c.back > t) return;
+    const rock = this.genRock(key, cx, cy, c.gen, Math.floor(t / 1000 / R.ROCK.reseed));
+    if (rock) { this.rocks.set(rock.id, rock); this.slots.set(key, rock); this.gridAdd(rock); }
+    else c.back = t + 3600_000;                // (an empty roll stays empty until the next reseed)
   }
-  resetField() {                               // (developer panel) untouched asteroids are let go; every cell rolls again on its next wake
-    for (const r of [...this.rocks.values()]) if (r.home && !r.touched) { this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r); }
-    for (const c of this.cells.values()) c.awake = 0;
-  }
-  dropRock(r, back) {                          // gone: its slot rolls again (a new size and ore) after `back` seconds
-    this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r);
-    const c = this.cells.get(r.cell); if (c) { c.gen[r.slot] = (c.gen[r.slot] || 0) + 1; c.back[r.slot] = now() + back * 1000; }
+  dropRock(r, back) {                          // gone: its slot re-rolls (a new place, size and layout) after `back` seconds
+    this.rocks.delete(r.id); this.slots.delete(r.key); this.gridDel(r);
+    const c = this.cells.get(r.cell); if (c) { c.gen++; c.back = now() + back * 1000; }
     for (const p of this.players.values()) if (p.tow === r.id) p.tow = null;
   }
   wakeAround(t) {
     const R2 = W.loadR + W.cell;
     for (const p of this.players.values()) {
       const c0 = Math.floor((p.x - R2) / W.cell), c1 = Math.floor((p.x + R2) / W.cell), d0 = Math.floor((p.y - R2) / W.cell), d1 = Math.floor((p.y + R2) / W.cell);
-      for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) this.wakeCell(p.layer, cx, cy, t);
+      for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) this.wakeCell(cx, cy, t);
     }
-    // cells nobody is near fall asleep: their untouched asteroids are let go (the seed brings them back); worked-on ones
-    // stay until they've been left alone for 30 minutes
     for (const [key, c] of this.cells) if (c.awake && c.awake < t) {
       c.awake = 0;
-      for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && !r.touched && r.home) { this.rocks.delete(r.id); this.slots.delete(r.sk); this.gridDel(r); } }
+      const r = this.slots.get(key); if (r && r.home && !r.touched) { this.rocks.delete(r.id); this.slots.delete(r.key); this.gridDel(r); }
     }
-    for (const r of this.rocks.values()) if (r.touched && t - r.touched > R.ROCK.despawn * 1000 && !r.tow) this.dropRock(r, 0);
-    for (const o of this.ores.values()) if (t - o.touched > R.ECON.despawnOre * 1000) this.ores.delete(o.id);
+    for (const r of [...this.rocks.values()]) if (r.touched && t - r.touched > R.ROCK.linger * 1000 && !r.tow) this.dropRock(r, R.ROCK.respawn);
+    for (const can of [...this.cans.values()]) if (!can.heldBy && can.publicUntil && t > can.publicUntil) this.deleteCan(can);
   }
-  // ---- sectors: one more opens per 50 online; a closing sector waits 10 minutes ----
-  updateSectors(t) {
-    const want = 4;   // (owner, 2026-10-16: all four sectors always open)
-    this.sectors.forEach((s, i) => {
-      if (i < want) { if (!s.open || s.closeAt) this.sectorsDirty = true; s.open = true; s.closeAt = 0; }
-      else if (s.open) { if (!s.closeAt) { s.closeAt = t + R.SECTOR_CLOSE_WAIT * 1000; this.sectorsDirty = true; } else if (t >= s.closeAt) { s.open = false; s.closeAt = 0; this.sectorsDirty = true; } }
-    });
-  }
-  sectorList() { return this.sectors.map((s) => (s.open ? (s.closeAt ? 2 : 1) : 0)); }   // 1 open, 2 closing, 0 closed
-  // ---- shards: only once all four sectors are open (and none is closing), a zone holds SHARD_CAP ships per layer ----
-  shardingOn() { return this.sectors.every((s) => s.open && !s.closeAt); }
-  // a ship entering a zone (or joining) picks its layer: a party member's already there, else the one it's in while
-  // that has room, else the first with room, else a new one. With sharding off, everyone goes back to layer 0.
-  placeLayer(p) {
-    let L;
-    const party = this.partyOf(p);
-    if (party) for (const m of party.members) { const q = this.players.get(m); if (q && q !== p && q.zone === p.zone) { L = q.layer; break; } }
-    if (L === undefined) {
-      if (!this.shardingOn()) L = 0;
-      else {
-        const cnt = new Map(); for (const q of this.players.values()) if (q !== p && q.zone === p.zone) cnt.set(q.layer, (cnt.get(q.layer) || 0) + 1);
-        if ((cnt.get(p.layer) || 0) < R.LIMITS.shardCap) L = p.layer; else { L = 0; while ((cnt.get(L) || 0) >= R.LIMITS.shardCap) L++; }
-      }
-    }
-    if (L !== p.layer) this.setLayer(p, L);
-  }
-  setLayer(p, L) {                             // into another copy: links to other ships drop, a towed asteroid comes along
-    p.layer = L; p.pumpTo = null; p.refineBy = null; p.refineT = 0; p.scan = null; p.meDirty = true; p.dirty = true;
-    const rock = p.tow && this.rocks.get(p.tow); if (rock) { rock.layer = L; this.gridMove(rock); }
-  }
-  shardOf(p) {                                 // shown with the zone only while the zone has more than one copy in use
-    if (p.layer > 0) return p.layer + 1;
-    const z = this.zoneLayers && this.zoneLayers.get(p.zone); return z && z.size > 1 ? p.layer + 1 : 0;
-  }
-  // may this ship be at (x, y)? Not inside Saturn, not past the locked line, not into a closed sector (unless it's already in it)
-  allowed(p, x, y) {
-    const r = hyp(x, y); if (r < W.saturnR + this.hullOf(p).shipR || r > W.lockedR) return false;
-    if (r < W.safeR) return true;
-    const s = sectorOf(x, y); return this.sectors[s].open || p.inSector === s;
+  allowed(p, x, y) { const r = hyp(x, y); return r >= W.saturnR + FLY.shipR && r <= W.lockedR; }
+  resetField() {                               // (the developer panel changed the world's shape: every rock regrows)
+    for (const r of [...this.rocks.values()]) this.gridDel(r);
+    this.rocks.clear(); this.slots.clear(); this.cells.clear();
+    for (const p of this.players.values()) p.tow = null;
   }
 
   // ---- players ----
@@ -179,392 +158,372 @@ export class World {
     await this.ready; await (this.offline.get(id) || Promise.resolve());
     const { rows } = await pool.query(`SELECT * FROM ring_players WHERE user_id = $1`, [id]), r = rows[0];
     const [sx, sy] = W.station;
-    p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.ECON.startFuel, fuelFrom: {}, mods: [R.START.module], hull: 0, upgrades: {},
-      modules: new Set([R.START.module]), credits: R.ECON.startCredits, storage: {}, queue: [], hold: [], corp: null, on: new Set(), tow: null, pumpTo: null, refineBy: null,
-      refineT: 0, laserLen: 0, laserOn: false, docked: false, inSector: -1, party: null, dirty: true, hAt: 0, layer: 0, zone: "", tut: 0 };
+    p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.ECON.startFuel, ship: R.START.ship,
+      credits: R.ECON.startCredits, hold: [], cans: [], rate: 0, payer: null, hire: null, tow: null, boostTo: null, pumpTo: null,
+      scanRock: null, scanChunk: -1, scanT: 0, laserLen: 0, laserOn: false, laserRock: null, laserChunk: -1, docked: false, party: null,
+      dirty: true, hAt: 0, zone: "" };
     if (r) {
-      Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, fuelFrom: r.fuel_from || {}, hull: Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0)), upgrades: r.upgrades || {}, tut: Number.isInteger(r.tutorial) ? r.tutorial : 0,
-        modules: new Set((r.modules || []).filter((m) => MODULES[m])), credits: +r.credits, storage: r.storage || {}, queue: r.queue || [], hold: Array.isArray(r.hold) ? r.hold : [] });
-      const mods = (Array.isArray(r.mods) ? r.mods : [r.module]).filter((m, i, a) => MODULES[m] && a.indexOf(m) === i);
-      p.mods = mods.length ? mods.slice(0, R.HULLS[p.hull].slots) : [R.START.module];
-      for (const m of p.mods) p.modules.add(m);
-      if (r.corp_id && this.corps.has(r.corp_id)) p.corp = r.corp_id;
-      if (!this.allowed(p, p.x, p.y)) { p.x = sx; p.y = sy + 120; }   // (a sector closed while they were away)
+      Object.assign(p, { x: r.x, y: r.y, h: r.h, fuel: r.fuel, ship: SHIPS[r.module] ? r.module : R.START.ship, credits: +r.credits,
+        hold: Array.isArray(r.hold) ? r.hold.filter((e) => e && R.ORES[e.o] && Number.isFinite(e.u)) : [] });
+      if (!this.allowed(p, p.x, p.y)) { p.x = sx; p.y = sy + 120; }
+      for (const can of this.cans.values()) if (can.heldBy === id) p.cans.push(can.id);
     }
-    if (this.has(p, "miner")) p.on.add("miner");
-    const S = this.stats(p); if (p.fuel > S.tank) p.fuel = S.tank;
-    p.inSector = hyp(p.x, p.y) >= W.safeR ? sectorOf(p.x, p.y) : -1;
-    this.settleQueue(p, now());
-    p.zone = zoneOf(p.x, p.y); this.placeLayer(p);
+    const S = this.shipOf(p); if (p.fuel > S.tank) p.fuel = S.tank;
+    p.zone = zoneOf(p.x, p.y);
     this.players.set(id, p);
-    await pool.query(`INSERT INTO ring_players (user_id, x, y, h, fuel, module, modules, mods) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (user_id) DO UPDATE SET logout_at = NULL`, [id, p.x, p.y, p.h, p.fuel, p.mods[0], JSON.stringify([...p.modules]), JSON.stringify(p.mods)]);
-    this.nameCache.set(id, name);
+    await pool.query(`INSERT INTO ring_players (user_id, x, y, h, fuel, module, modules) VALUES ($1, $2, $3, $4, $5, $6, '[]')
+      ON CONFLICT (user_id) DO UPDATE SET logout_at = NULL`, [id, p.x, p.y, p.h, p.fuel, p.ship]);
     return p;
   }
   async leave(id) {
     const p = this.players.get(String(id)); if (!p) return;
-    if (p.tow) { const r = this.rocks.get(p.tow); if (r && r.tow === p.id) r.tow = null; p.tow = null; }   // (a towed asteroid is let go)
-    for (const q of this.players.values()) { if (q.refineBy === p.id) q.refineBy = null; if (q.pumpTo === p.id) q.pumpTo = null; }
+    if (p.tow) { const r = this.rocks.get(p.tow); if (r && r.tow === p.id) r.tow = null; p.tow = null; }
+    for (const q of this.players.values()) { if (q.pumpTo === p.id) q.pumpTo = null; if (q.boostTo === p.id) q.boostTo = null; if (q.payer === p.id) q.payer = null; if (q.hire === p.id) q.hire = null; }
     this.leaveParty(p, true); this.players.delete(p.id);
     await this._save(p); await pool.query(`UPDATE ring_players SET logout_at = now() WHERE user_id = $1`, [p.id]);
   }
   respawn(id) { const p = this.players.get(String(id)); if (!p) return null; const [sx, sy] = W.station; return this.teleport(id, sx, sy + 120); }
-  teleport(id, x, y, layer) {                  // (layer: into that copy, e.g. teleporting to another player)
+  teleport(id, x, y) {
     const p = this.players.get(String(id)); if (!p || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     if (hyp(x, y) < W.saturnR + 60) { const a = Math.atan2(y, x); x = Math.cos(a) * (W.saturnR + 80); y = Math.sin(a) * (W.saturnR + 80); }
-    if (p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; }
-    p.x = x; p.y = y; p.vx = p.vy = 0; p.tow = null; p.inSector = hyp(x, y) >= W.safeR ? sectorOf(x, y) : -1; p.dirty = true;
-    p.zone = zoneOf(x, y); if (Number.isInteger(layer) && layer >= 0) { if (layer !== p.layer) this.setLayer(p, layer); } else this.placeLayer(p);
+    if (p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; p.tow = null; }
+    p.x = x; p.y = y; p.vx = p.vy = 0; p.zone = zoneOf(x, y); p.dirty = true;
     this.msgs.push({ to: p.id, m: { t: "teleport", x, y } }); return p;
   }
-  // the client's input, checked as hostile: a push (fx, fy: world directions, length clamped to 1), the heading it turned
-  // to (no faster than the ship turns), its aim and whether the laser is held
   setInput(id, m) {
     const p = this.players.get(String(id)); if (!p) return;
     const n = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
     let fx = n(m.x), fy = n(m.y); const L = hyp(fx, fy); if (L > 1) { fx /= L; fy /= L; }
     p.fx = fx; p.fy = fy;
     if (typeof m.h === "number" && Number.isFinite(m.h)) {
-      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = this.hullOf(p).turn * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
+      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = FLY.turn * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
       p.h = p.h + Math.max(-mx, Math.min(mx, d)); p.h = Math.atan2(Math.sin(p.h), Math.cos(p.h)); p.hAt = t;
     }
     p.aim = n(m.a); p.firing = m.f === 1;
   }
-  burn(p, amt) {                               // use fuel; party fuel in the tank goes down in step
-    amt = Math.min(amt, p.fuel); if (amt <= 0) return 0;
-    const k = p.fuel > 0 ? (p.fuel - amt) / p.fuel : 0;
-    for (const f of Object.keys(p.fuelFrom)) { p.fuelFrom[f] *= k; if (p.fuelFrom[f] < 0.01) delete p.fuelFrom[f]; }
-    p.fuel -= amt; return amt;
+  burn(p, amt) { p.fuel = Math.max(0, p.fuel - amt); }
+
+  // walk a ray into a rock. For the laser: the first unbroken chunk (or the core, down an open bore). For the scanner:
+  // scanned chunks are glass, so the first unbroken chunk not yet scanned (or nothing once the way to the core is mapped).
+  castRock(rock, px, py, ux, uy, forScan) {
+    const dx = px - rock.x, dy = py - rock.y;
+    const b = dx * ux + dy * uy, c0 = dx * dx + dy * dy - rock.r * rock.r;
+    const disc = b * b - c0; if (disc < 0) return null;             // the line misses the rock
+    const t1 = -b + Math.sqrt(disc); if (t1 < 0) return null;       // the rock is behind
+    for (let t = Math.max(0, -b - Math.sqrt(disc)); t <= t1; t += 1.2) {
+      const x = px + ux * t - rock.x, y = py + uy * t - rock.y, rr = hyp(x, y);
+      if (rr <= rock.core.r0 + 1) return { core: true, t };
+      const ch = this.chunkAt(rock, rr, Math.atan2(y, x));
+      if (ch && !ch.broken && (!forScan || !ch.scanned)) return { chunk: ch, t };
+    }
+    return null;
   }
-  fuelNames(p) { return Object.keys(p.fuelFrom).filter((f) => p.fuelFrom[f] >= 0.01); }   // party fuelers whose fuel is in the tank
+  dmgStage(c) { return Math.min(3, Math.max(0, Math.floor((c.d === 4 ? (c.wear || 0) / c.maxHp : 1 - Math.max(0, c.hp) / c.maxHp) * 4))); }
+  usedSpace(p) { return p.hold.reduce((s, e) => s + unitSpace(e), 0) + p.cans.reduce((s, cid) => { const c = this.cans.get(cid); return s + (c ? this.spaceOf(c) : 0); }, 0); }
+  chunkAt(rock, rr, ang) {
+    const a = normA(ang);
+    for (const sh of rock.shells) {
+      if (rr < sh.r0 || rr > sh.r1) continue;
+      for (const i of sh.segs) { const c = rock.chunks[i]; if (rr >= c.r0 && rr <= c.r1 && spanHas(c, a)) return c; }
+    }
+    return null;
+  }
 
   step(dt) {
     const t = now();
-    for (const r of this.rocks.values()) r.lasers.clear();
-    // (owner, 2026-10-17) command ships switched on speed up every ship in their reach (the strongest counts)
-    const cmds = []; for (const q of this.players.values()) if (this.isOn(q, "command") && q.fuel > 0 && !q.docked) cmds.push(q);
-    for (const p of this.players.values()) { let b = 1; for (const q of cmds) if (q.layer === p.layer && hyp(q.x - p.x, q.y - p.y) <= this.val(q, "command", "radius")) b = Math.max(b, this.val(q, "command", "speedBoost")); p.spdBoost = b; }
     for (const p of this.players.values()) {
-      const S = this.stats(p), H = this.hullOf(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
-      // movement: thrust toward the push, coasting brakes gently; an empty tank crawls; towing slows by the rock's size
-      const k = empty ? H.crawl : 1, spd = H.speed * S.speedMul * (p.spdBoost || 1) * k * (rock ? Math.min(1, R.towFactor(rock.n) * this.val(p, "tractor", "tow")) : 1), push = hyp(p.fx, p.fy);
-      const tx = p.fx * spd, ty = p.fy * spd, a = (push > 0.01 ? H.accel : H.brake) * (push > 0.01 ? k : 1) * dt;
-      let ex = tx - p.vx, ey = ty - p.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
+      const S = this.shipOf(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
+      const towK = rock ? Math.max(0.2, 60 / (60 + rock.r)) : 1;
+      const k = empty ? FLY.crawl : 1, spd = S.speed * k * towK, push = hyp(p.fx, p.fy);
+      const a = (push > 0.01 ? FLY.accel : FLY.brake) * (push > 0.01 ? k : 1) * dt;
+      let ex = p.fx * spd - p.vx, ey = p.fy * spd - p.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
       p.vx += ex; p.vy += ey;
-      if (push > 0.01 && !empty) this.burn(p, H.flyBurn / 60 * push * dt);
+      if (push > 0.01 && !empty) this.burn(p, FLY.flyBurn / 60 * push * dt);
       if (p.vx || p.vy) {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
         if (this.allowed(p, nx, ny)) { p.x = nx; p.y = ny; }
         else if (this.allowed(p, nx, p.y)) { p.x = nx; p.vy = 0; } else if (this.allowed(p, p.x, ny)) { p.y = ny; p.vx = 0; } else { p.vx = p.vy = 0; }
-        for (const r of this.rocksNear(p.x, p.y, 80, p.layer)) {   // bump off asteroids (not the one on my own leash)
-          if (r.id === p.tow) continue; const d = hyp(p.x - r.x, p.y - r.y), min = R.rockR(r.n) + H.shipR;
-          if (d < min && d > 0.01) { const ux = (p.x - r.x) / d, uy = (p.y - r.y) / d, px = r.x + ux * min, py = r.y + uy * min; if (this.allowed(p, px, py)) { p.x = px; p.y = py; } const vn = p.vx * ux + p.vy * uy; if (vn < 0) { p.vx -= vn * ux; p.vy -= vn * uy; } }
+        for (const r of this.rocksNear(p.x, p.y, 220)) {
+          if (r.id === p.tow) continue; const d = hyp(p.x - r.x, p.y - r.y), min = r.r + FLY.shipR;
+          if (d < min && d > 0.01) { const ux = (p.x - r.x) / d, uy = (p.y - r.y) / d; p.x = r.x + ux * min; p.y = r.y + uy * min; const vn = p.vx * ux + p.vy * uy; if (vn < 0) { p.vx -= vn * ux; p.vy -= vn * uy; } }
         }
-        p.inSector = hyp(p.x, p.y) >= W.safeR ? sectorOf(p.x, p.y) : -1; p.dirty = true;
-        const z = zoneOf(p.x, p.y); if (z !== p.zone) { p.zone = z; this.placeLayer(p); p.meDirty = true; }
+        const z = zoneOf(p.x, p.y); if (z !== p.zone) { p.zone = z; p.meDirty = true; }
+        p.dirty = true;
       }
-      // docking: entering the station's circle delivers the hold
       const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < R.ECON.dockR;
-      if (dock && !p.docked && p.hold.length) this.deliver(p, p.hold.splice(0), true);
+      if (dock && !p.docked) this.deliver(p);
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
-      if (dock) { p.tow = null; p.pumpTo = null; p.refineBy = null; }
-      // the laser: the first asteroid along the aim within reach; the big laser (miner, switched on, with fuel) and any
-      // command ship boosting nearby make it faster
-      p.laserOn = false; p.laserLen = 0;
-      if (p.firing && !dock) {
-        const big = this.isOn(p, "miner") && p.fuel > 0, reach = big ? this.val(p, "miner", "range") : H.interactR;
-        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bt = reach;
-        for (const r of this.rocksNear(p.x, p.y, reach + 70, p.layer)) {
-          const rr = R.rockR(r.n), fx = r.x - p.x, fy = r.y - p.y, along = fx * ux + fy * uy; if (along < -rr) continue;
-          const perp = Math.abs(fx * uy - fy * ux); if (perp > rr) continue;
-          const tt = Math.max(0, along - Math.sqrt(rr * rr - perp * perp)); if (tt < bt) { bt = tt; best = r; }
+      if (dock) { p.tow = null; p.pumpTo = null; p.boostTo = null; p.scanRock = null; }
+      // the miner's laser: cut the first chunk on the line (a boosted miner cuts faster); down a bore, the core itself
+      p.laserOn = false; p.laserLen = 0; p.laserRock = null; p.laserChunk = -1;
+      if (p.firing && !dock && S.laserDps) {
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.laserRange;
+        for (const r of this.rocksNear(p.x, p.y, S.laserRange + 200)) {
+          const hit = this.castRock(r, p.x, p.y, ux, uy, false);
+          if (hit && hit.t <= S.laserRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
         }
-        p.laserLen = best ? bt : reach; p.laserOn = !!best;
         if (best) {
-          let dps = H.laserDps;
-          if (big) { dps = this.val(p, "miner", "laserDps"); this.burn(p, this.val(p, "miner", "burn") / 60 * dt); }
-          let boost = 1;         // (several command ships don't stack: the strongest counts, but every one boosting is named)
-          for (const q of this.players.values()) if (this.isOn(q, "command") && q.fuel > 0 && !q.docked && q.layer === p.layer && hyp(q.x - p.x, q.y - p.y) <= this.val(q, "command", "radius")) { boost = Math.max(boost, this.val(q, "command", "boost")); best.boost.add(q.id); }
-          dps *= boost;
-          best.hp -= dps * dt; best.lasers.add(p.id); best.touched = t; best.home = false;
-        }
+          let dps = S.laserDps;
+          for (const q of this.players.values()) if (q.boostTo === p.id && this.shipOf(q).boost && q.fuel > 0 && !q.docked && hyp(q.x - p.x, q.y - p.y) <= this.shipOf(q).boostRange) dps *= this.shipOf(q).boost;
+          this.burn(p, S.burn / 60 * dt);
+          p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = best.r.id;
+          best.r.touched = t; best.r.home = false;
+          if (best.hit.core) { this.hitCore(best.r, dps * dt, p); }
+          else {
+            const ch = best.hit.chunk; p.laserChunk = ch.i; const st0 = this.dmgStage(ch);
+            if (ch.d !== 4) { ch.hp -= dps * dt; if (ch.hp <= 0) this.breakChunk(best.r, ch, p); else if (this.dmgStage(ch) !== st0) best.r.v++; }
+            else {                             // bedrock holds: the cracks spread, then it turns dark red
+              ch.wear = (ch.wear || 0) + dps * dt;
+              if (!ch.scanned && ch.wear >= ch.maxHp) { ch.scanned = true; best.r.v++; }
+              else if (this.dmgStage(ch) !== st0) best.r.v++;
+            }
+          }
+        } else p.laserLen = S.laserRange;
       }
-      // active modules
-      if (this.isOn(p, "command") && !dock) { if (p.fuel <= 0) p.on.delete("command"); else this.burn(p, this.val(p, "command", "burn") / 60 * dt); }
-      if (rock) {                              // the tractor: the asteroid follows on a leash behind the ship
-        if (rock.cracked || p.fuel <= 0) { p.tow = null; rock.tow = null; }
+      // the scanner: hold the beam and it maps chunk after chunk; scanned ones are glass to it
+      if (p.firing && !dock && S.scanTime) {
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.scanRange;
+        for (const r of this.rocksNear(p.x, p.y, S.scanRange + 200)) {
+          const hit = this.castRock(r, p.x, p.y, ux, uy, true);
+          if (hit && !hit.core && hit.t <= S.scanRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
+        }
+        if (best) {
+          const key = best.r.id + ":" + best.hit.chunk.i;
+          if (p.scanChunk !== key) { p.scanChunk = key; p.scanT = 0; }
+          p.scanT += dt; p.scanRock = best.r.id; p.laserLen = best.hit.t; p.laserOn = true;
+          if (p.scanT >= S.scanTime) {
+            const ch = best.hit.chunk; ch.scanned = true; best.r.v++; best.r.touched = t; best.r.home = false;
+            p.scanT = 0; p.scanChunk = -1;
+            this.fx.push({ k: "scan", x: best.r.x + Math.cos((ch.a0 + normA(ch.a1 - ch.a0) / 2)) * (ch.r0 + ch.r1) / 2, y: best.r.y + Math.sin((ch.a0 + normA(ch.a1 - ch.a0) / 2)) * (ch.r0 + ch.r1) / 2 });
+          }
+        } else { p.scanRock = null; p.scanChunk = -1; p.scanT = 0; p.laserLen = S.scanRange; }
+      } else if (S.scanTime) { p.scanRock = null; p.scanChunk = -1; p.scanT = 0; }
+      if (rock) {                              // the scanner's tow (the old tractor): the rock follows on a leash
+        if (rock.core.popped || p.fuel <= 0 || !S.towRange) { p.tow = null; rock.tow = null; }
         else {
-          this.burn(p, this.val(p, "tractor", "burn") / 60 * (1 + rock.n * this.val(p, "tractor", "sizeBurn")) * dt);
-          // (behind the claws, which trail off the back of the ship: it's longer with more modules, see the art's shipLayout)
-          const hullL = p.mods.reduce((n, k) => n + (k === "hauler" || k === "fueler" ? 200 : 130), 0), L = R.rockR(rock.n) + this.val(p, "tractor", "leash") + (109 + hullL / 2) * 0.28, gx = p.x - Math.cos(p.h - Math.PI / 2) * L, gy = p.y - Math.sin(p.h - Math.PI / 2) * L;
-          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * this.val(p, "tractor", "pull"));
-          if (d > 1 && hyp(rock.x + dx * pull, rock.y + dy * pull) > W.saturnR + R.rockR(rock.n)) { rock.x += dx * pull; rock.y += dy * pull; this.gridMove(rock); }
+          this.burn(p, S.towBurn / 60 * (1 + rock.r / 60) * dt);
+          const L = rock.r + S.towLeash + 40, gx = p.x - Math.sin(p.h) * L, gy = p.y + Math.cos(p.h) * L;
+          const dx = gx - rock.x, dy = gy - rock.y, d = hyp(dx, dy), pull = Math.min(1, dt * S.towPull);
+          if (d > 1 && hyp(rock.x + dx * pull, rock.y + dy * pull) > W.saturnR + rock.r) { rock.x += dx * pull; rock.y += dy * pull; this.gridMove(rock); }
           rock.touched = t;
         }
       }
-      if (p.scan) {                            // the scanner: staying in reach for the scan's time, then the ore shows for everyone
-        const r = this.rocks.get(p.scan);
-        if (!r || r.scanned || dock || !this.has(p, "scanner") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n) > this.val(p, "scanner", "range") || p.fuel < this.val(p, "scanner", "fuel")) { p.scan = null; p.scanT = 0; }
-        else if ((p.scanT += dt) >= this.val(p, "scanner", "scanTime")) {
-          this.burn(p, this.val(p, "scanner", "fuel")); r.scanned = true; r.names.add(p.id); r.touched = t; r.home = false; this.fx.push({ k: "scan", x: p.x, y: p.y, x2: r.x, y2: r.y, i: p.id, l: p.layer });
-          p.scan = null; p.scanT = 0; p.meDirty = true;
+      if (p.pumpTo) {                          // the fueler
+        const q = this.players.get(p.pumpTo), QS = q && this.shipOf(q);
+        if (!q || q.docked || !S.pump || hyp(q.x - p.x, q.y - p.y) > S.pumpRange || p.fuel <= 0) p.pumpTo = null;
+        else { const amt = Math.min(S.pump * dt, QS.tank - q.fuel, p.fuel); if (amt > 0) { this.burn(p, amt); q.fuel += amt; q.meDirty = true; } }
+      }
+      if (p.boostTo) {                         // the booster: one player at a time
+        const q = this.players.get(p.boostTo);
+        if (!q || q.docked || !S.boost || hyp(q.x - p.x, q.y - p.y) > S.boostRange || p.fuel <= 0) p.boostTo = null;
+        else if (q.laserOn) this.burn(p, S.burn / 60 * dt);
+      }
+      if (S.refineUnit && !dock) {             // the hauler's refinery compresses the cargo on the way home
+        p.refT = (p.refT || 0) + dt;
+        if (p.refT >= S.refineUnit) { p.refT = 0; const e = p.hold.find((e2) => e2.raw && e2.u > 0); if (e) { e.u--; let f = p.hold.find((e2) => !e2.raw && e2.o === e.o && JSON.stringify(e2.tag) === JSON.stringify(e.tag)); if (!f) { f = { o: e.o, u: 0, raw: 0, tag: e.tag }; p.hold.push(f); } f.u++; if (!e.u) p.hold.splice(p.hold.indexOf(e), 1); p.meDirty = true; p.dirty = true; } }
+      }
+      // support for hire: strangers pay the posted rate while the service works near them (party members are free)
+      if (p.rate > 0 && p.payer) {
+        const q = this.players.get(p.payer);
+        const active = q && !q.docked && hyp(q.x - p.x, q.y - p.y) <= R.SERVICES.range &&
+          ((S.boost && p.boostTo === q.id && q.laserOn) || (S.pump && p.pumpTo === q.id) || (S.scanTime && p.scanRock));
+        if (!q) p.payer = null;
+        else if (active && !(q.party && q.party === p.party)) {
+          const pay = Math.min(q.credits, p.rate * dt);
+          if (pay <= 0) { p.payer = null; q.hire = null; this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You're out of credits; the hire stopped." } }); }
+          else { q.credits -= pay; p.credits += pay; q.meDirty = p.meDirty = true; q.dirty = p.dirty = true; }
         }
       }
-      if (p.pumpTo) {                          // the fueler: pumps into a ship within reach; the world pays per unit
-        const q = this.players.get(p.pumpTo), QS = q && this.stats(q);
-        if (!q || q.docked || !this.has(p, "fueler") || q.layer !== p.layer || hyp(q.x - p.x, q.y - p.y) > this.val(p, "fueler", "range") || p.fuel <= 0) p.pumpTo = null;
-        else {
-          const amt = Math.min(this.val(p, "fueler", "pump") * dt, QS.tank - q.fuel, p.fuel);
-          if (amt > 0) { this.burn(p, amt); q.fuel += amt; p.credits += amt * this.val(p, "fueler", "pay"); q.meDirty = true; if (p.party && p.party === q.party) q.fuelFrom[p.id] = (q.fuelFrom[p.id] || 0) + amt; }
-        }
-      }
-      if (p.refineBy) {                        // (owner, 2026-10-17) a refinery working on my hold: a raw unit a second, its name added
-        const r = this.players.get(p.refineBy), u = p.hold.find((x) => !x.r);
-        if (!r || !u || dock || r.docked || !this.isOn(r, "refinery") || r.layer !== p.layer || hyp(r.x - p.x, r.y - p.y) > this.val(r, "refinery", "range")) { p.refineBy = null; p.refineT = 0; }
-        else {
-          p.refineT += dt;
-          if (p.refineT >= this.val(r, "refinery", "unit")) { p.refineT = 0; u.r = 1; if (!u.n.includes(r.id)) u.n.push(r.id); p.meDirty = true; p.dirty = true; this.fx.push({ k: "refine", x: p.x, y: p.y, l: p.layer }); }
-        }
-      }
-      if (p.firing || p.pumpTo || p.refineBy || p.tow || p.scan || this.isOn(p, "command")) p.meDirty = true;
+      if (p.firing || p.pumpTo || p.boostTo || p.tow || p.scanRock) p.meDirty = true;
       p.sos = p.fuel <= 0.0001 && !p.docked;
     }
-    for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; p.meDirty = false; }   // (anything that changed my state is saved within 10 s)
-    // cracks that broke this tick
-    for (const r of [...this.rocks.values()]) if (r.hp <= 0 && r.lasers.size) this.breakCrack(r);
-    // (loose ore stays where it dropped until someone clicks it: see act)
+    for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
-  // a crack breaks: one ore unit drops, named with every ship lasering the asteroid right now, every command ship that
-  // boosted during this crack, whoever scanned or towed it, and the party fuelers whose fuel the miners are burning
-  breakCrack(r) {
-    const names = new Set(r.names);
-    for (const id of r.lasers) { names.add(id); const p = this.players.get(id); if (p) for (const f of this.fuelNames(p)) names.add(f); }
-    for (const id of r.boost) names.add(id);
-    // (owner, 2026-10-16) the units appear just off the asteroid's edge and wait there to be clicked: one, or as many as the
-    // best switched-on miner lasering it yields (owner, 2026-10-17: ore per crack, per miner level)
-    let yieldN = 1; for (const id of r.lasers) { const q = this.players.get(id); if (q && this.isOn(q, "miner")) yieldN = Math.max(yieldN, Math.round(this.val(q, "miner", "yield"))); }
-    const rr = R.rockR(r.n);
-    for (let i = 0; i < Math.min(20, yieldN); i++) {
-      const a = Math.random() * Math.PI * 2, d = rr + R.ROCK.dropGap + Math.random() * R.ROCK.dropSpread;
-      const o = { id: this.oreSeq++, layer: r.layer, ore: r.ore, r: 0, names: [...names], x: r.x + Math.cos(a) * d, y: r.y + Math.sin(a) * d, touched: now() };
-      this.ores.set(o.id, o);
+
+  // breaking a chunk banks its ore into the core and shocks every touching chunk; chains cascade (bedrock and the core ignore them)
+  breakChunk(rock, ch, breaker) {
+    const queue = [ch];
+    while (queue.length) {
+      const c = queue.shift(); if (c.broken || c.d === 4) continue;
+      c.broken = true; rock.v++;
+      if (c.u > 0 && c.ore) {
+        const b = rock.core.banked[breaker.id] || (rock.core.banked[breaker.id] = {});
+        b[c.ore] = (b[c.ore] || 0) + c.u; rock.core.bankedTotal += c.u;
+      }
+      const mid = (c.r0 + c.r1) / 2, ang = c.a0 + normA(c.a1 - c.a0) / 2;
+      this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: c.u, ore: c.ore || 0 });
+      for (const ni of c.adj) {
+        const n = rock.chunks[ni]; if (n.broken || n.d === 4) continue;
+        n.hp -= n.maxHp * R.CHUNK.burst;
+        if (n.hp <= 0) queue.push(n);
+      }
     }
-    r.cracks--; r.cracked = true; r.boost.clear(); r.hp = rockHp(r); r.touched = now();
-    if (r.tow) { const q = this.players.get(r.tow); if (q) q.tow = null; r.tow = null; }
-    this.fx.push({ k: "crack", x: r.x, y: r.y, r: rr, done: r.cracks <= 0 ? 1 : 0, l: r.layer });
-    if (r.cracks <= 0) this.dropRock(r, R.ROCK.respawn);
+    rock.touched = now(); rock.home = false;
   }
-  // ---- delivery: every name on a unit gets a copy (the carrier is named as deliverer, as are its party fuelers) ----
-  deliver(p, units, asCarrier) {
-    const gifts = new Map();                   // account id -> { key: count }
-    const extra = asCarrier && p ? [p.id, ...this.fuelNames(p)] : [];
-    for (const u of units) {
-      const names = new Set(u.n); for (const e of extra) names.add(e);
-      const key = storeKey(u.o, u.r);
-      for (const id of names) { let g = gifts.get(id); if (!g) gifts.set(id, (g = {})); g[key] = (g[key] || 0) + 1; }
+  hitCore(rock, dmg, p) {
+    const fill = Math.min(1, rock.core.bankedTotal / rock.core.total);
+    rock.core.hp -= dmg * (1 + (R.CORE.fastBreak - 1) * fill);
+    rock.touched = now(); rock.home = false;
+    if (rock.core.hp <= 0 && !rock.core.popped) this.popCore(rock, p);
+  }
+  // the pop pays everything banked, each miner's bank to them (to the popper if they're gone), plus the rare ore to the
+  // popper, scaled by how stripped the rock is; everything still attached shatters and its ore is lost
+  popCore(rock, popper) {
+    rock.core.popped = true;
+    const breakable = rock.chunks.filter((c) => c.d !== 4), strip = breakable.length ? breakable.filter((c) => c.broken).length / breakable.length : 1;
+    for (const [pid, ores] of Object.entries(rock.core.banked)) {
+      const q = this.players.get(pid), rcv = q && hyp(q.x - rock.x, q.y - rock.y) <= W.loadR ? q : popper;
+      for (const [o, u] of Object.entries(ores)) this.giveOre(rcv, o, u, rock);
     }
-    for (const [id, g] of gifts) this.give(id, g);
-    if (p) { p.meDirty = true; p.dirty = true; }
-    if (p && units.length) this.fx.push({ k: "deliver", x: p.x, y: p.y, n: units.length, i: p.id, l: p.layer });
+    const rare = Math.round(rock.core.rareMax * strip);
+    if (rare > 0) this.giveOre(popper, "core", rare, rock);
+    this.fx.push({ k: "pop", x: rock.x, y: rock.y, r: rock.r });
+    this.dropRock(rock, R.ROCK.respawn);
   }
-  give(id, items) {                            // into station storage, online or not
-    const p = this.players.get(String(id));
-    if (p) { for (const [k, n] of Object.entries(items)) p.storage[k] = (p.storage[k] || 0) + n; p.stDirty = true; p.dirty = true; return; }
-    const chain = (this.offline.get(id) || Promise.resolve()).then(async () => {
-      const c = await pool.connect();
-      try {
-        await c.query("BEGIN");
-        const { rows } = await c.query(`SELECT storage FROM ring_players WHERE user_id = $1 FOR UPDATE`, [id]);
-        if (rows[0]) { const s = rows[0].storage || {}; for (const [k, n] of Object.entries(items)) s[k] = (s[k] || 0) + n; await c.query(`UPDATE ring_players SET storage = $2 WHERE user_id = $1`, [id, JSON.stringify(s)]); }
-        await c.query("COMMIT");
-      } catch (e) { await c.query("ROLLBACK").catch(() => {}); console.error("ring give", e); } finally { c.release(); }
-    });
-    this.offline.set(id, chain);
+  // ore lands in the hold; what doesn't fit goes into a can locked to the player, or the party's crate
+  giveOre(p, o, u, rock) {
+    if (!p || u <= 0) return;
+    const party = this.partyOf(p), tag = party ? [...party.members] : [p.id];
+    const S = this.shipOf(p), room = Math.max(0, S.hold - this.usedSpace(p));
+    const into = Math.min(u, Math.floor(room));
+    if (into > 0) { let e = p.hold.find((e2) => e2.raw && e2.o === o && JSON.stringify(e2.tag) === JSON.stringify(tag)); if (!e) { e = { o, u: 0, raw: 1, tag }; p.hold.push(e); } e.u += into; p.meDirty = true; p.dirty = true; }
+    const over = u - into;
+    if (over > 0) this.intoCan(p, o, over, rock ? rock.x : p.x, rock ? rock.y : p.y, party, tag);
+    this.fx.push({ k: "pay", x: p.x, y: p.y, i: p.id, u });
   }
-  // a carrier offline for 30 minutes: their ore crawls home by itself (delivered after the time an empty-tanked ship would
-  // take from there), to every name on it; the carrier isn't named. Banned or deleted: delivered at once.
-  async offlineHolds() {
-    await this.ready;
-    const { rows } = await pool.query(`SELECT user_id, x, y, hold, hull FROM ring_players WHERE logout_at IS NOT NULL AND logout_at < now() - make_interval(secs => $1) AND hold <> '[]'::jsonb AND transit IS NULL`, [R.ECON.offlineGrace]);
-    for (const r of rows) {
-      if (this.players.has(r.user_id)) continue;
-      const H = R.HULLS[Math.max(0, Math.min(R.HULLS.length - 1, r.hull | 0))], secs = Math.max(0, hyp(r.x - W.station[0], r.y - W.station[1]) - R.ECON.dockR) / Math.max(1, H.speed * H.crawl);
-      await pool.query(`UPDATE ring_players SET transit = hold, hold = '[]'::jsonb, transit_due = now() + make_interval(secs => $2) WHERE user_id = $1 AND transit IS NULL`, [r.user_id, secs]);
+  intoCan(p, o, u, x, y, party, tag) {
+    const kind = party ? "crate" : "can";
+    let can = [...this.cans.values()].find((c) => c.owner === p.id && c.kind === kind && !c.heldBy && (!party || c.rosterKey === tag.join(",")) && hyp(c.x - x, c.y - y) < 120);
+    if (!can) {
+      if (!party) { const old = [...this.cans.values()].find((c) => c.owner === p.id && c.kind === "can" && !c.heldBy); if (old) this.deleteCan(old); }   // one can per player
+      can = { id: this.canSeq++, x: x + (Math.random() - 0.5) * 40, y: y + (Math.random() - 0.5) * 40, kind, contents: {}, owner: p.id, roster: tag, rosterKey: tag.join(","),
+        share: null, heldBy: null, lockUntil: now() + R.CANS.lock * 1000, publicUntil: now() + (R.CANS.lock + R.CANS.public) * 1000, dirty: true };
+      this.cans.set(can.id, can);
     }
-    const due = await pool.query(`SELECT user_id, transit FROM ring_players WHERE transit IS NOT NULL AND transit_due <= now()`);
-    for (const r of due.rows) {
-      await pool.query(`UPDATE ring_players SET transit = NULL, transit_due = NULL WHERE user_id = $1`, [r.user_id]);
-      if (Array.isArray(r.transit) && r.transit.length) this.deliver(null, r.transit, false);
+    can.contents[o] = (can.contents[o] || 0) + u; can.dirty = true; can.lockUntil = now() + R.CANS.lock * 1000; can.publicUntil = now() + (R.CANS.lock + R.CANS.public) * 1000;
+  }
+  deleteCan(can) { this.cans.delete(can.id); pool.query(`DELETE FROM ring_cans WHERE id = $1`, [can.id]).catch(() => {}); }
+
+  // ---- delivery: ore becomes credits; a party splits everything evenly among the members tagged at pickup ----
+  payRoster(roster, credits, note) {
+    const each = credits / Math.max(1, roster.length);
+    for (const pid of roster) {
+      const q = this.players.get(pid);
+      if (q) { q.credits += each; q.meDirty = true; q.dirty = true; if (note) this.msgs.push({ to: pid, m: { t: "chat", ch: "sys", text: note + " " + Math.floor(each) + " cr." } }); }
+      else {
+        const chain = (this.offline.get(pid) || Promise.resolve()).then(() =>
+          pool.query(`UPDATE ring_players SET credits = credits + $2 WHERE user_id = $1`, [pid, each]).catch((e) => console.error("ring pay", e)));
+        this.offline.set(pid, chain);
+      }
     }
   }
-  async banned(id) {                           // (admin) a banned account's hold is delivered to everyone named on it
-    const p = this.players.get(String(id));
-    if (p) { if (p.hold.length) this.deliver(null, p.hold.splice(0), false); return; }
-    await pool.query(`UPDATE ring_players SET transit = hold, hold = '[]'::jsonb, transit_due = now() WHERE user_id = $1 AND transit IS NULL AND hold <> '[]'::jsonb`, [String(id)]);
+  valueOf(contents) { return Object.entries(contents).reduce((s, [o, u]) => s + (R.ORES[o] ? R.ORES[o].price * u : 0), 0); }
+  deliver(p) {
+    let own = 0; const rosters = new Map();
+    for (const e of p.hold) { const v = (R.ORES[e.o] ? R.ORES[e.o].price : 0) * e.u; const k = e.tag.join(","); rosters.set(k, (rosters.get(k) || 0) + v); }
+    p.hold = [];
+    for (const [k, v] of rosters) { const roster = k.split(","); if (roster.length === 1 && roster[0] === p.id) { p.credits += v; own += v; } else this.payRoster(roster, v, "Delivery:"); }
+    for (const id of [...p.cans]) {
+      const can = this.cans.get(id); if (!can) continue;
+      const v = this.valueOf(can.contents);
+      if (can.mode === "public") { p.credits += v; own += v; }
+      else if (can.mode === "unlocked") { const cut = v * can.share; p.credits += cut; own += cut; this.payRoster(can.roster, v - cut, "Delivery:"); }
+      else if (can.kind === "crate") this.payRoster(can.roster, v, "Delivery:");
+      else this.payRoster([can.owner], v, "Delivery:");
+      this.deleteCan(can);
+    }
+    p.cans = []; p.meDirty = true; p.dirty = true;
+    if (own > 0) this.fx.push({ k: "deliver", x: p.x, y: p.y, i: p.id });
+  }
+  async banned(id) {                           // (admin) a banned account's cargo still pays the people it was tagged for
+    const p = this.players.get(String(id)); if (!p) return;
+    for (const e of p.hold) { const v = (R.ORES[e.o] ? R.ORES[e.o].price : 0) * e.u; const roster = e.tag.filter((x) => x !== p.id); if (roster.length) this.payRoster(roster, v * roster.length / e.tag.length); }
+    p.hold = []; for (const id2 of p.cans) { const can = this.cans.get(id2); if (can) { can.heldBy = null; can.x = p.x; can.y = p.y; can.dirty = true; } } p.cans = [];
   }
 
   // ---- commands ----
-  // F / 1-4 / a click on the HUD chip: switch one module (by kind; none given: the first that switches). The miner's big
-  // laser and the command boost switch on and off; the refinery starts or stops on my own hold.
-  toggleModule(id, k) {
-    const p = this.players.get(String(id)); if (!p) return;
-    if (typeof k !== "string" || !this.has(p, k)) k = p.mods.find((m) => m === "miner" || m === "command" || m === "refinery"); if (!k) return;
-    if (k === "miner" || k === "command" || k === "refinery") { if (p.on.has(k)) p.on.delete(k); else p.on.add(k); }
-    p.meDirty = true;
-  }
-  // right-click actions and claiming ore (checked as hostile: the target must exist, be in my copy and in reach, and I
-  // need the module). Rocks: op "scan" | "tow" (none: scan if I can, else tow). Ships: op "fuel" | "refine" | "trade"
-  // (asking a hauler to take my cargo; it answers with tradeAnswer).
   act(id, m) {
-    const p = this.players.get(String(id)); if (!p || p.docked || !m) return;
-    if (m.op === "refineme") {                 // (owner, 2026-10-17) the "Refine ores" pop-up: the nearest switched-on refinery takes my hold
-      const r = this.refinerFor(p); if (!r || p.refineBy || !p.hold.some((u) => !u.r)) return;
-      let busy = 0; for (const q of this.players.values()) if (q.refineBy === r.id) busy++;
-      if (busy >= this.val(r, "refinery", "targets")) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: r.name + "'s refinery is busy." } }); return; }
-      const cost = this.val(r, "refinery", "activation"); if (r.fuel < cost) return;
-      this.burn(r, cost); r.meDirty = true; p.refineBy = r.id; p.refineT = 0;
-    } else if (Number.isInteger(m.ore)) {             // claim a loose unit: click it from within reach, with room in the hold
-      const o = this.ores.get(m.ore); if (!o || o.layer !== p.layer || hyp(o.x - p.x, o.y - p.y) > this.hullOf(p).interactR) return;
-      if (holdUsed(p) + unitSpace({ o: o.ore, r: o.r }) > this.stats(p).hold + 1e-6) { this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text: "Your hold is full." } }); return; }
-      p.hold.push({ o: o.ore, r: o.r, n: o.names }); p.meDirty = true; p.dirty = true; this.ores.delete(o.id); this.fx.push({ k: "pick", x: o.x, y: o.y, i: p.id, l: o.layer });
-    } else if (typeof m.rock === "string") {
-      const r = this.rocks.get(m.rock); if (!r || r.layer !== p.layer) return; const d = hyp(r.x - p.x, r.y - p.y) - R.rockR(r.n);
-      const op = m.op === "scan" || m.op === "tow" ? m.op : this.has(p, "scanner") && !r.scanned ? "scan" : "tow";
-      if (op === "tow" && this.has(p, "tractor")) {
-        if (p.tow === r.id) { p.tow = null; r.tow = null; }
-        else if (!r.cracked && (!r.tow || !this.players.has(r.tow)) && d <= this.val(p, "tractor", "range") && r.n <= this.val(p, "tractor", "maxSize") && p.fuel > 0) {
-          if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; }
-          p.tow = r.id; r.tow = p.id; r.names.add(p.id); r.touched = now(); r.home = false;
-        }
-      } else if (op === "scan" && this.has(p, "scanner") && !r.scanned && d <= this.val(p, "scanner", "range") && p.fuel >= this.val(p, "scanner", "fuel")) {
-        p.scan = r.id; p.scanT = 0;               // (owner, 2026-10-17: a scan takes time; see step)
+    const p = this.players.get(String(id)); if (!p || !m) return;
+    const S = this.shipOf(p), say = (text) => this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text } });
+    if (typeof m.rock === "string" && S.towRange) {   // the scanner's tow
+      const r = this.rocks.get(m.rock); if (!r) return;
+      if (p.tow === r.id) { p.tow = null; r.tow = null; }
+      else if (!r.core.popped && (!r.tow || !this.players.has(r.tow)) && hyp(r.x - p.x, r.y - p.y) - r.r <= S.towRange && p.fuel > 0) {
+        if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; }
+        p.tow = r.id; r.tow = p.id; r.touched = now(); r.home = false;
       }
     } else if (typeof m.ship === "string") {
-      const q = this.players.get(m.ship); if (!q || q === p || q.docked || q.layer !== p.layer) return; const d = hyp(q.x - p.x, q.y - p.y);
-      if (m.op === "fuel" && this.has(p, "fueler")) { if (d <= this.val(p, "fueler", "range") || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
-      else if (m.op === "trade") {             // one way: a ship without a hauler asks a hauler to take its cargo
-        const say = (text) => this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text } });
-        if (!this.has(q, "hauler") || this.has(p, "hauler")) return;
-        if (!p.hold.length) { say("Your hold is empty."); return; }
-        if (d > this.val(q, "hauler", "tradeRange")) { say("Too far away to trade."); return; }
-        this.trades.set(q.id, { from: p.id, at: now() });
-        this.msgs.push({ to: q.id, m: { t: "trade", from: p.id, name: p.name, n: p.hold.length } });
-        say("Asked " + q.name + " to take your cargo.");
+      const q = this.players.get(m.ship); if (!q || q === p || q.docked) return; const d = hyp(q.x - p.x, q.y - p.y);
+      if (m.op === "pump" && S.pump) { if (d <= S.pumpRange || p.pumpTo === q.id) p.pumpTo = p.pumpTo === q.id ? null : q.id; }
+      else if (m.op === "boost" && S.boost) { if (d <= S.boostRange || p.boostTo === q.id) p.boostTo = p.boostTo === q.id ? null : q.id; }
+      else if (m.op === "hire") {              // I pay q's posted rate while their service works near me
+        if (p.hire === q.id) { p.hire = null; if (q.payer === p.id) q.payer = null; say("Stopped hiring " + q.name + "."); return; }
+        if (!(q.rate > 0)) { say(q.name + " hasn't posted a rate."); return; }
+        if (q.party && q.party === p.party) { say("Party members are free."); return; }
+        if (q.payer && q.payer !== p.id) { say(q.name + " is already hired."); return; }
+        p.hire = q.id; q.payer = p.id;
+        say("Hiring " + q.name + " at " + q.rate + " cr/s while they work near you.");
+        this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: p.name + " hired you at " + q.rate + " cr/s." } });
       }
+    } else if (Number.isInteger(m.can)) {      // taking a can or crate aboard (there is no dropping it: delivery is the only way out)
+      const can = this.cans.get(m.can); if (!can || can.heldBy || hyp(can.x - p.x, can.y - p.y) > FLY.interactR) return;
+      const t = now(), mine = can.owner === p.id, party = can.kind === "crate" && can.roster.includes(p.id);
+      const pub = t > can.lockUntil && can.kind === "can", unlocked = can.kind === "crate" && can.share != null && !party;
+      if (!(mine || party || pub || unlocked)) { say("That " + (can.kind === "crate" ? "crate" : "can") + " is locked."); return; }
+      if (this.spaceOf(can) > S.hold - this.usedSpace(p) + 1e-6) { say("No room aboard."); return; }
+      can.heldBy = p.id; can.mode = pub ? "public" : unlocked ? "unlocked" : null; can.dirty = true;   // (the share locks at pickup)
+      p.cans.push(can.id); p.meDirty = true;
+      this.fx.push({ k: "hand", x: can.x, y: can.y, x2: p.x, y2: p.y });
+    } else if (m.op === "unlock" && Number.isInteger(m.canId)) {   // a crate's owner opens it to outside haulers, picking the deliverer's share
+      const can = this.cans.get(m.canId); if (!can || can.kind !== "crate" || can.owner !== p.id || can.heldBy) return;
+      const sh = Math.max(R.CRATE_SHARE[0], Math.min(R.CRATE_SHARE[1], Number(m.share)));
+      if (!Number.isFinite(sh)) return;
+      can.share = sh; can.dirty = true; say("Crate unlocked: a deliverer outside the party keeps " + Math.round(sh * 100) + "%.");
+    } else if (m.op === "rate") {              // a support ship posts its price (0 clears it)
+      const v = Math.max(0, Math.min(R.SERVICES.maxRate, Number(m.v)));
+      if (!Number.isFinite(v)) return;
+      p.rate = Math.round(v * 10) / 10; p.meDirty = true;
+      if (p.rate === 0 && p.payer) { const q = this.players.get(p.payer); if (q) q.hire = null; p.payer = null; }
+      say(p.rate > 0 ? "Your rate is posted: " + p.rate + " cr/s." : "Your rate is cleared.");
     }
     p.meDirty = true;
   }
-  refinerFor(p) {                              // the nearest switched-on refinery in reach (mine too) with fuel for an activation
-    let best = null, bd = Infinity;
-    for (const r of this.players.values()) {
-      if (!this.isOn(r, "refinery") || r.docked || r.layer !== p.layer || r.fuel < this.val(r, "refinery", "activation")) continue;
-      const d = hyp(r.x - p.x, r.y - p.y); if (d <= this.val(r, "refinery", "range") && d < bd) { bd = d; best = r; }
-    }
-    return best;
-  }
-  setTutorial(id, step) { const p = this.players.get(String(id)); if (!p || !Number.isInteger(step) || step < -1 || step > 50) return; p.tut = step; p.dirty = true; }   // (the tutorial runs in the client; it reports its step)
-  // the hauler answers a cargo request: accepted, the cargo moves over (as much as fits) if the two are still in reach
-  tradeAnswer(id, from, yes) {
-    const q = this.players.get(String(id)), t = this.trades.get(String(id)); if (!q || !t || t.from !== from) return;
-    this.trades.delete(q.id);
-    const p = this.players.get(from), say = (to, text) => this.msgs.push({ to, m: { t: "chat", ch: "sys", text } });
-    if (!p) return;
-    if (!yes) { say(p.id, q.name + " declined your cargo."); return; }
-    if (now() - t.at > R.ECON.tradeWait * 1000 || p.docked || q.docked || p.layer !== q.layer || hyp(q.x - p.x, q.y - p.y) > this.val(q, "hauler", "tradeRange") || !this.has(q, "hauler") || this.has(p, "hauler")) { say(q.id, "That trade is no longer possible."); say(p.id, "That trade is no longer possible."); return; }
-    const room = this.stats(q).hold - holdUsed(q); let used = 0; const keep = [];
-    for (const u of p.hold) { const sp = unitSpace(u); if (used + sp <= room + 1e-6) { q.hold.push(u); used += sp; } else keep.push(u); }
-    const moved = p.hold.length - keep.length; p.hold = keep; p.meDirty = q.meDirty = true; p.dirty = q.dirty = true;
-    if (moved) this.fx.push({ k: "hand", x: p.x, y: p.y, x2: q.x, y2: q.y, l: p.layer });
-    say(p.id, moved ? q.name + " took " + moved + (moved === 1 ? " unit." : " units.") + (keep.length ? " Their hold is full." : "") : q.name + "'s hold is full.");
-  }
-  // ---- the station (docked only) ----
-  // (owner, 2026-10-17) one job per ore type (and one for fuel blocks), all running at once; each makes a unit per
-  // duration from its own start
-  settleQueue(p, t) {
-    let changed = false;
-    for (const j of p.queue) {
-      const dur = (j.k === "fuel" ? R.FUEL.blockTime : R.ORES[j.o].refineTime) * 1000;
-      if (j.at > t) { j.at = t; changed = true; }   // (jobs queued one behind another before 2026-10-17 start now too)
-      while (j.left > 0 && t >= j.at + dur) { const key = j.k === "fuel" ? "fuel" : j.o + "+"; p.storage[key] = (p.storage[key] || 0) + 1; j.left--; j.at += dur; changed = true; }
-    }
-    if (changed) { p.queue = p.queue.filter((j) => j.left > 0); p.stDirty = true; p.dirty = true; }
-  }
-  station(id, m) {
+  station(id, m) {                             // docked only: board another ship, or fill the tank
     const p = this.players.get(String(id)); if (!p || !p.docked || !m || typeof m.op !== "string") return false;
-    const S = this.stats(p), cnt = (v, max) => Math.max(0, Math.min(max, Number.isInteger(v) ? v : max));
-    if (m.op === "sell") {
-      const k = String(m.k || ""), o = k.replace(/\+$/, ""), ref = k.endsWith("+"); if (!R.ORES[o]) return false;
-      const n = cnt(m.n, p.storage[k] || 0); if (!n) return false;
-      p.storage[k] -= n; if (!p.storage[k]) delete p.storage[k]; p.credits += n * (ref ? R.ORES[o].refinedPrice : R.ORES[o].price);
-    } else if (m.op === "buy") {
-      const M = MODULES[m.m]; if (!M || p.modules.has(m.m) || p.credits < M.price[0]) return false;
-      p.credits -= M.price[0]; p.modules.add(m.m);
-    } else if (m.op === "upgrade") {           // the next upgrade of a module I own (three after the base)
-      const M = MODULES[m.m], lv = p.upgrades[m.m] || 0; if (!M || !p.modules.has(m.m) || lv >= M.price.length - 1) return false;
-      const cost = M.price[lv + 1]; if (p.credits < cost) return false;
-      p.credits -= cost; p.upgrades[m.m] = lv + 1;
-      if (m.m === "fueler" || m.m === "hauler") this.fitTank(p);
-    } else if (m.op === "hull") {              // the next hull size up: one more module slot
-      const H = R.HULLS[p.hull + 1]; if (!H || p.credits < H.price) return false;
-      p.credits -= H.price; p.hull++;
-    } else if (m.op === "equip") {             // into a free slot (with one slot, it swaps)
-      if (!p.modules.has(m.m) || this.has(p, m.m)) return false;
-      if (p.mods.length < S.slots) p.mods.push(m.m); else if (S.slots === 1) { this.unfit(p, p.mods[0]); p.mods = [m.m]; } else return false;
-      if (m.m === "miner") p.on.add("miner");
-      this.fitTank(p);
-    } else if (m.op === "unequip") {           // a ship always keeps at least one module
-      if (!this.has(p, m.m) || p.mods.length <= 1) return false;
-      this.unfit(p, m.m); p.mods = p.mods.filter((k) => k !== m.m); this.fitTank(p);
-    } else if (m.op === "fuel") {              // buy fuel into the tank
-      const space = S.tank - p.fuel, n = Math.min(space, Math.floor(p.credits / R.FUEL.stationPrice), Number.isFinite(m.n) && m.n > 0 ? m.n : space); if (n <= 0) return false;
+    if (m.op === "ship") {
+      if (!SHIPS[m.k] || p.ship === m.k) return false;
+      if (p.cans.length || p.hold.length) return false;            // (cargo was just delivered on docking; belt and braces)
+      p.ship = m.k; p.tow = null; p.pumpTo = null; p.boostTo = null; p.scanRock = null; p.rate = 0;
+      const T = this.shipOf(p).tank; if (p.fuel > T) p.fuel = T;
+    } else if (m.op === "fuel") {
+      const S = this.shipOf(p), space = S.tank - p.fuel, n = Math.min(space, p.credits / R.FUEL.stationPrice); if (n <= 0.01) return false;
       p.fuel += n; p.credits -= n * R.FUEL.stationPrice;
-    } else if (m.op === "blocks") {            // fuel blocks from storage into the tank
-      const n = Math.min(p.storage.fuel || 0, Math.floor((S.tank - p.fuel) / R.FUEL.blockFuel)); if (n <= 0) return false;
-      p.storage.fuel -= n; if (!p.storage.fuel) delete p.storage.fuel; p.fuel += n * R.FUEL.blockFuel;
-    } else if (m.op === "refine" || m.op === "craft") {   // raw ore to refine (60 s a unit) or ice into fuel blocks (15 s): into that ore's own job
-      const o = m.op === "craft" ? "ice" : String(m.o || ""), k = m.op === "craft" ? "fuel" : "refine"; if (!R.ORES[o]) return false;
-      const n = cnt(m.n, p.storage[o] || 0); if (!n) return false;
-      p.storage[o] -= n; if (!p.storage[o]) delete p.storage[o];
-      const job = p.queue.find((j) => j.k === k && j.o === o);
-      if (job) job.left += n; else p.queue.push({ k, o, left: n, at: now() });
     } else return false;
-    p.stDirty = true; p.meDirty = true; p.dirty = true; return true;
+    p.meDirty = true; p.dirty = true; return true;
   }
-  unfit(p, k) {                                // a module coming off: whatever it was doing stops
-    p.on.delete(k);
-    if (k === "tractor" && p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; p.tow = null; }
-    if (k === "fueler") p.pumpTo = null;
-    if (k === "scanner") { p.scan = null; p.scanT = 0; }
-    if (k === "refinery") for (const q of this.players.values()) if (q.refineBy === p.id) { q.refineBy = null; q.refineT = 0; }
-  }
-  fitTank(p) {                                 // a smaller tank: the spare fuel is kept as fuel blocks
-    const T = this.stats(p).tank; if (p.fuel > T) { const blocks = Math.floor((p.fuel - T) / R.FUEL.blockFuel); if (blocks) p.storage.fuel = (p.storage.fuel || 0) + blocks; p.fuel = T; }
-  }
-  // ---- parties (up to 10, for now) and corporations ----
+
+  // ---- parties (the only grouping; everything is split evenly on delivery) ----
   partyOf(p) { return p.party ? this.parties.get(p.party) : null; }
   invite(from, toId) {
     const p = this.players.get(from), q = this.players.get(toId); if (!p || !q || p === q) return "That player isn't online.";
     if (q.party && q.party === p.party) return q.name + " is already in your party.";
     const party = this.partyOf(p); if (party && party.members.size >= R.LIMITS.partyMax) return "Your party is full.";
     this.invites.set(q.id, { from: p.id, at: now() });
-    this.msgs.push({ to: q.id, m: { t: "invite", kind: "party", from: p.id, name: p.name } });   // (an Accept / Decline prompt)
+    this.msgs.push({ to: q.id, m: { t: "invite", kind: "party", from: p.id, name: p.name } });
     return "Invited " + q.name + " to your party.";
   }
   acceptParty(id) {
     const q = this.players.get(id), inv = this.invites.get(id); this.invites.delete(id);
-    const p = inv && this.players.get(inv.from); if (!q || !p || now() - inv.at > R.ECON.partyInvite * 1000) return "No party invite waiting.";
+    const p = inv && this.players.get(inv.from); if (!q || !p || now() - inv.at > 120_000) return "No party invite waiting.";
     let party = this.partyOf(p);
     if (!party) { party = { id: this.partySeq++, leader: p.id, members: new Set([p.id]) }; this.parties.set(party.id, party); p.party = party.id; p.socDirty = true; }
     if (party.members.size >= R.LIMITS.partyMax) return "That party is full.";
     this.leaveParty(q, false); party.members.add(q.id); q.party = party.id;
     for (const m of party.members) { const x = this.players.get(m); if (x) x.socDirty = true; }
-    this.placeLayer(q);                        // (into a party member's copy of this zone, if one's here)
     this.partyNote(party, q.name + " joined the party.");
     return null;
   }
   declineParty(id) { const inv = this.invites.get(id); this.invites.delete(id); const q = this.players.get(id); if (inv && q) this.msgs.push({ to: inv.from, m: { t: "chat", ch: "sys", text: q.name + " declined your party invite." } }); return null; }
-  // (owner, 2026-10-17) the leader removes a member
   kickParty(from, toId) {
     const p = this.players.get(from), party = p && this.partyOf(p), q = this.players.get(toId);
     if (!party || party.leader !== p.id) return "Only the party leader can remove members.";
@@ -572,153 +531,110 @@ export class World {
     this.leaveParty(q, false, true); this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You were removed from the party." } });
     return null;
   }
-  // leaving: my name comes off the party fuel in every online member's tank, for good (offline members keep it)
-  leaveParty(p, quiet, kicked) {
+  leaveParty(p, quiet, kicked) {               // tags on ore already earned outlast the party
     const party = this.partyOf(p); if (!party) return;
     party.members.delete(p.id); p.party = null; p.socDirty = true;
-    for (const m of party.members) { const x = this.players.get(m); if (x) { if (x.fuelFrom[p.id] !== undefined) { delete x.fuelFrom[p.id]; x.dirty = true; } x.socDirty = true; } }
-    delete p.fuelFrom; p.fuelFrom = {};
+    for (const m of party.members) { const x = this.players.get(m); if (x) x.socDirty = true; }
     if (party.leader === p.id) party.leader = [...party.members][0];
     if (party.members.size <= 1) { for (const m of party.members) { const x = this.players.get(m); if (x) { x.party = null; x.socDirty = true; this.msgs.push({ to: m, m: { t: "chat", ch: "sys", text: "The party disbanded." } }); } } this.parties.delete(party.id); }
     else this.partyNote(party, p.name + (kicked ? " was removed from the party." : quiet ? " went offline and left the party." : " left the party."));
   }
   partyNote(party, text) { for (const m of party.members) this.msgs.push({ to: m, m: { t: "chat", ch: "sys", text } }); }
-  async createCorp(id, name) {
-    const p = this.players.get(id); if (!p) return "Not in the world.";
-    name = String(name || "").replace(/\s+/g, " ").trim().slice(0, 32);
-    if (name.length < 3) return "A corporation name needs at least 3 characters.";
-    if (p.corp) return "Leave your corporation first.";
-    try {
-      const { rows } = await pool.query(`INSERT INTO ring_corps (name, owner) VALUES ($1, $2) RETURNING id`, [name, id]);
-      this.corps.set(rows[0].id, { id: rows[0].id, name, owner: id }); p.corp = rows[0].id; p.socDirty = true; p.dirty = true;
-      await this._save(p); return "Founded " + name + ".";
-    } catch (e) { if (String(e.code) === "23505") return "That name is taken."; throw e; }
-  }
-  corpInvite(from, toId) {
-    const p = this.players.get(from), q = this.players.get(toId); if (!p || !p.corp) return "You're not in a corporation.";
-    if (!q) return "That player isn't online."; if (q.corp === p.corp) return q.name + " is already in it.";
-    this.corpInvites.set(q.id, { corp: p.corp, from: p.id, at: now() });
-    this.msgs.push({ to: q.id, m: { t: "invite", kind: "corp", from: p.id, name: p.name, corp: this.corps.get(p.corp).name } });
-    return "Invited " + q.name + ".";
-  }
-  async corpAccept(id) {
-    const q = this.players.get(id), inv = this.corpInvites.get(id); this.corpInvites.delete(id);
-    if (!q || !inv || now() - inv.at > R.ECON.corpInvite * 1000 || !this.corps.has(inv.corp)) return "No corporation invite waiting.";
-    if (q.corp) return "Leave your corporation first.";
-    q.corp = inv.corp; q.socDirty = true; q.dirty = true; await this._save(q); return "Joined " + this.corps.get(inv.corp).name + ".";
-  }
-  declineCorp(id) { const inv = this.corpInvites.get(id); this.corpInvites.delete(id); const q = this.players.get(id); if (inv && q) this.msgs.push({ to: inv.from, m: { t: "chat", ch: "sys", text: q.name + " declined your corporation invite." } }); return null; }
-  async corpLeave(id) {
-    const p = this.players.get(id); if (!p || !p.corp) return "You're not in a corporation.";
-    const c = this.corps.get(p.corp); p.corp = null; p.socDirty = true; p.dirty = true; await this._save(p);
-    if (c) await this.corpAfterLeave(c, p.id);
-    return "Left " + (c ? c.name : "the corporation") + ".";
-  }
-  // someone left a corporation: an empty one is closed; an owner leaving hands it to a remaining member (an online one if any)
-  async corpAfterLeave(c, gone) {
-    const { rows } = await pool.query(`SELECT user_id FROM ring_players WHERE corp_id = $1`, [c.id]);
-    const left = rows.map((r) => r.user_id).filter((u) => u !== gone && !(this.players.has(u) && this.players.get(u).corp !== c.id));
-    for (const q of this.players.values()) if (q.corp === c.id && !left.includes(q.id)) left.push(q.id);
-    if (!left.length) { await pool.query(`DELETE FROM ring_corps WHERE id = $1`, [c.id]); this.corps.delete(c.id); return; }
-    if (c.owner === gone) {
-      c.owner = left.find((u) => this.players.has(u)) || left[0]; await pool.query(`UPDATE ring_corps SET owner = $2 WHERE id = $1`, [c.id, c.owner]);
-      for (const q of this.players.values()) if (q.corp === c.id) { q.socDirty = true; if (q.id === c.owner) this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You now own " + c.name + "." } }); }
+
+  // ---- the daily downtime: party crates auto-deliver, unless aboard a ship that logged off just before it ----
+  async minutely() {
+    await this.ready;
+    const t = now(), d = new Date(t), due = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), R.DOWNTIME.hourUTC);
+    for (const can of this.cans.values()) if (can.dirty) { can.dirty = false; await this.saveCan(can); }
+    if (t < due || this.lastDowntime >= due) return;
+    this.lastDowntime = due;
+    await pool.query(`INSERT INTO ring_meta (k, v) VALUES ('downtime', $1) ON CONFLICT (k) DO UPDATE SET v = $1`, [String(due)]);
+    for (const can of [...this.cans.values()]) {
+      if (can.kind !== "crate") continue;
+      if (can.heldBy && !this.players.has(can.heldBy)) {
+        const { rows } = await pool.query(`SELECT logout_at FROM ring_players WHERE user_id = $1`, [can.heldBy]);
+        const off = rows[0] && rows[0].logout_at ? new Date(rows[0].logout_at).getTime() : 0;
+        if (off > due - R.DOWNTIME.logoffGuard * 1000) continue;   // grabbed and logged off at the last minute: it waits for them
+      }
+      this.payRoster(can.roster, this.valueOf(can.contents), "Downtime delivery:");
+      const holder = can.heldBy && this.players.get(can.heldBy); if (holder) { holder.cans = holder.cans.filter((x) => x !== can.id); holder.meDirty = true; }
+      this.deleteCan(can);
     }
   }
-  // (owner, 2026-10-17) the owner removes a member, online or not
-  async corpKick(from, toId) {
-    const p = this.players.get(from), c = p && p.corp && this.corps.get(p.corp);
-    if (!c || c.owner !== p.id) return "Only the corporation's owner can remove members."; if (toId === p.id) return "Leave instead.";
-    const q = this.players.get(toId);
-    if (q) { if (q.corp !== c.id) return "They're not in your corporation."; q.corp = null; q.socDirty = true; q.dirty = true; await this._save(q); this.msgs.push({ to: q.id, m: { t: "chat", ch: "sys", text: "You were removed from " + c.name + "." } }); }
-    else { const r = await pool.query(`UPDATE ring_players SET corp_id = NULL WHERE user_id = $1 AND corp_id = $2`, [toId, c.id]); if (!r.rowCount) return "They're not in your corporation."; }
-    for (const x of this.players.values()) if (x.corp === c.id) x.socDirty = true;
-    await this.corpAfterLeave(c, toId);
-    return "Removed " + (q ? q.name : "them") + " from " + c.name + ".";
+  async saveCan(can) {
+    await pool.query(`INSERT INTO ring_cans (id, x, y, kind, contents, owner, roster, share, held_by, mode, lock_until, public_until)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11 / 1000.0), to_timestamp($12 / 1000.0))
+      ON CONFLICT (id) DO UPDATE SET x = $2, y = $3, contents = $5, roster = $7, share = $8, held_by = $9, mode = $10, lock_until = to_timestamp($11 / 1000.0), public_until = to_timestamp($12 / 1000.0)`,
+      [can.id, can.x, can.y, can.kind, JSON.stringify(can.contents), can.owner, JSON.stringify(can.roster), can.share, can.heldBy, can.mode || null, can.lockUntil, can.publicUntil]).catch((e) => console.error("ring can", e));
   }
-
-  // ---- saving ----
   async _save(p) {
     await this.ready;
-    await pool.query(`UPDATE ring_players SET x = $2, y = $3, h = $4, fuel = $5, fuel_from = $6, module = $7, modules = $8, credits = $9, storage = $10, hold = $11, queue = $12, corp_id = $13, mods = $14, hull = $15, upgrades = $16, tutorial = $17, updated_at = now() WHERE user_id = $1`,
-      [p.id, p.x, p.y, p.h, p.fuel, JSON.stringify(p.fuelFrom), p.mods[0], JSON.stringify([...p.modules]), p.credits, JSON.stringify(p.storage), JSON.stringify(p.hold), JSON.stringify(p.queue), p.corp, JSON.stringify(p.mods), p.hull, JSON.stringify(p.upgrades), p.tut]);
+    await pool.query(`UPDATE ring_players SET x = $2, y = $3, h = $4, fuel = $5, module = $6, credits = $7, hold = $8, updated_at = now() WHERE user_id = $1`,
+      [p.id, p.x, p.y, p.h, p.fuel, p.ship, p.credits, JSON.stringify(p.hold)]);
     p.dirty = false;
   }
-  async saveDirty() { for (const p of this.players.values()) { this.settleQueue(p, now()); if (p.dirty) await this._save(p); } }
+  async saveDirty() { for (const p of this.players.values()) if (p.dirty) await this._save(p); }
+  spaceOf(can) { return Object.values(can.contents).reduce((s, u) => s + u, 0); }
 
   // ---- what each player is sent ----
-  // ships in the load circle: [id, x (dm), y (dm), heading (mrad), first module's index (its art), flags, aim (mrad),
-  // laser length (m), tow asteroid id | 0, pump target | 0, refined by (a refinery working on its hold) | 0, hold raw %, hold refined %, fuel %,
-  // modules (a bit per kind), switched on (a bit per kind), hull size, command boost reach | 0, asteroid being scanned | 0]; flags: 1 laser on an asteroid, 2 laser firing,
-  // 4 a module switched on, 8 distress, 16 docked
-  // (2026-10-17) every ship's row is built once per snapshot (with its JSON, for the per-socket diffs) and shared by all
-  // the players who can see it
+  // ships in vision: [id, x dm, y dm, h mrad, ship idx, flags (1 beam on target, 2 firing, 4 sos, 8 docked), aim mrad,
+  // beam length, tow rock | 0, boost target | 0, pump target | 0, hold %, fuel %, rate x10]
   shipRowCache() {
     const out = [];
     for (const p of this.players.values()) {
-      const S = this.stats(p), raw = p.hold.filter((u) => !u.r).length, ref = p.hold.filter((u) => u.r).reduce((n, u) => n + unitSpace(u), 0);
-      const bits = (list) => list.reduce((b, k) => b | (1 << R.MODULE_KINDS.indexOf(k)), 0), on = p.mods.filter((k) => p.on.has(k));
-      out.push([p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.MODULE_KINDS.indexOf(p.mods[0]),
-        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (on.length ? 4 : 0) | (p.sos ? 8 : 0) | (p.docked ? 16 : 0),
-        Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.pumpTo || 0, p.refineBy || 0,
-        Math.round(raw / S.hold * 100), Math.round(ref / S.hold * 100), Math.round(p.fuel / S.tank * 100), bits(p.mods), bits(on), p.hull, this.has(p, "command") ? this.val(p, "command", "radius") : 0, p.scan || 0]);
-      out[out.length - 1] = { row: out[out.length - 1], key: "", p };
+      const S = this.shipOf(p), used = this.usedSpace(p);
+      out.push({ p, key: "", row: [p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.SHIP_KINDS.indexOf(p.ship),
+        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.sos ? 4 : 0) | (p.docked ? 8 : 0),
+        Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.boostTo || 0, p.pumpTo || 0,
+        Math.round(used / S.hold * 100), Math.round(p.fuel / S.tank * 100), Math.round((p.rate || 0) * 10)] });
     }
     for (const e of out) e.key = JSON.stringify(e.row);
     return out;
   }
-  shipRows(viewer, cache = this.shipRowCache()) {   // the rows a player sees: its own, and its copy's within its vision
+  shipRows(viewer, cache = this.shipRowCache()) {
     const V = this.visionOf(viewer);
-    return cache.filter((e) => e.p === viewer || (e.p.layer === viewer.layer && hyp(e.p.x - viewer.x, e.p.y - viewer.y) <= V));
+    return cache.filter((e) => e.p === viewer || hyp(e.p.x - viewer.x, e.p.y - viewer.y) <= V);
   }
-  // (2026-10-17) which copies each zone has in use, worked out once per update instead of per player
-  indexZones() { const z = new Map(); for (const p of this.players.values()) { let s = z.get(p.zone); if (!s) z.set(p.zone, (s = new Set())); s.add(p.layer); } this.zoneLayers = z; }
-  // asteroids near a player, in its layer: the untouched ones only as seeds, per cell ({ "layer:cx,cy": [seed, ...] }: the
-  // client builds them with ringgen.js and names them "layer:cx,cy:seed"), and the ones someone has worked on (lasered,
-  // scanned, towed) as rows: [id, x, y, size, cracks left, crack health %, ore (once scanned) | 0, towed 0 / 1]
-  rockView(viewer) {
-    const cells = {}, rows = [], L = viewer.layer, V = this.visionOf(viewer), R2 = V + W.cell * 0.71;
-    const c0 = Math.floor((viewer.x - R2) / W.cell), c1 = Math.floor((viewer.x + R2) / W.cell), d0 = Math.floor((viewer.y - R2) / W.cell), d1 = Math.floor((viewer.y + R2) / W.cell);
-    for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) {
-      if (hyp((cx + 0.5) * W.cell - viewer.x, (cy + 0.5) * W.cell - viewer.y) > R2) continue;
-      const key = this.cellKey(L, cx, cy); if (!this.cells.has(key)) continue;
-      const seeds = []; for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && r.home && !r.touched && hyp(r.x - viewer.x, r.y - viewer.y) <= V) seeds.push(r.seed); }
-      if (seeds.length) cells[key] = seeds;
+  // rocks in vision, as summaries: [id, x, y, size, outer r, core fill %, core hp %, towed]; the chunk layout travels
+  // separately (rockDetail) for rocks close to the viewer, re-sent when its version changes
+  rockRows(viewer) {
+    const out = [], V = this.visionOf(viewer);
+    for (const r of this.rocksNear(viewer.x, viewer.y, V)) {
+      if (hyp(r.x - viewer.x, r.y - viewer.y) > V) continue;
+      out.push([r.id, Math.round(r.x), Math.round(r.y), r.sizeIdx, Math.round(r.r), Math.round(Math.min(1, r.core.bankedTotal / r.core.total) * 100), Math.round(Math.max(0, r.core.hp / r.core.maxHp) * 100), r.tow ? 1 : 0]);
     }
-    for (const r of this.rocksNear(viewer.x, viewer.y, W.loadR, L)) {
-      if ((r.home && !r.touched) || hyp(r.x - viewer.x, r.y - viewer.y) > V) continue;
-      rows.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / rockHp(r) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
-    }
-    return { cells, rows };
+    return out;
   }
-  oreRows(viewer) {                            // [id, x, y, ore index, refined 0 / 1]
-    const out = [];
-    const V = this.visionOf(viewer);
-    for (const o of this.ores.values()) if (o.layer === viewer.layer && hyp(o.x - viewer.x, o.y - viewer.y) <= V) out.push([o.id, Math.round(o.x), Math.round(o.y), ORE_KEYS.indexOf(o.ore), o.r]);
+  // a chunk: [i, r0, r1, a0 mrad, a1 mrad, bits (1 broken, 2 scanned), density, ore idx | -1] — density and ore only
+  // once scanned (hidden masonry: the layout's look can't be read out of the traffic before a scan)
+  rockDetail(r) {
+    return { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
+      (c.broken ? 1 : 0) | (c.scanned ? 2 : 0), c.scanned ? c.d : 0, c.scanned && c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c)]) };
+  }
+  canRows(viewer) {                            // [id, x, y, crate 0/1, state (0 locked to another, 1 yours/your party's, 2 public, 3 unlocked), held 0/1]
+    const out = [], V = this.visionOf(viewer), t = now();
+    for (const can of this.cans.values()) {
+      if (can.heldBy) continue;
+      if (hyp(can.x - viewer.x, can.y - viewer.y) > V) continue;
+      const mine = can.owner === viewer.id || (can.kind === "crate" && can.roster.includes(viewer.id));
+      const st = mine ? 1 : can.kind === "can" && t > can.lockUntil ? 2 : can.kind === "crate" && can.share != null ? 3 : 0;
+      out.push([can.id, Math.round(can.x), Math.round(can.y), can.kind === "crate" ? 1 : 0, st, 0]);
+    }
     return out;
   }
   meMsg(p) {
-    const S = this.stats(p), hold = {};
-    for (const u of p.hold) { const k = storeKey(u.o, u.r); hold[k] = (hold[k] || 0) + 1; }
-    // my hold unit by unit ([ore index, refined 0 / 1, [named account ids]]) with the names of everyone on it
-    const units = p.hold.map((u) => [ORE_KEYS.indexOf(u.o), u.r ? 1 : 0, u.n]), names = {};
-    for (const u of p.hold) for (const nid of u.n) { const nm = this.nameCache.get(String(nid)); if (nm) names[nid] = nm; else this.nameWant.add(String(nid)); }
-    return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, units, names, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0,
-      mods: p.mods, on: p.mods.filter((k) => p.on.has(k)), hull: p.hull, slots: S.slots, upgrades: p.upgrades, tow: p.tow || 0, pump: p.pumpTo || 0, refineBy: p.refineBy || 0, refiner: p.hold.some((u) => !u.r) && !p.refineBy ? (this.refinerFor(p) || {}).id || 0 : 0, sos: p.sos ? 1 : 0, zone: p.zone, shard: this.shardOf(p), tut: p.tut, spdBoost: p.spdBoost || 1 };
-  }
-  stationMsg(p) { this.settleQueue(p, now()); return { t: "station", storage: p.storage, queue: p.queue, modules: [...p.modules], now: now() }; }
-  async lookupNames() {                        // names for the accounts named on ore that aren't online (once each)
-    if (!this.nameWant.size) return;
-    const ids = [...this.nameWant].filter((x) => /^[0-9]{1,15}$/.test(x)); this.nameWant.clear(); if (!ids.length) return;
-    const { rows } = await pool.query(`SELECT id::text AS id, username FROM users WHERE id::text = ANY($1)`, [ids]);
-    for (const r of rows) this.nameCache.set(r.id, r.username);
+    const S = this.shipOf(p);
+    const hold = p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0, party: e.tag.length > 1 ? 1 : 0 }));
+    const cans = p.cans.map((cid) => { const c = this.cans.get(cid); return c ? { id: c.id, crate: c.kind === "crate" ? 1 : 0, u: this.spaceOf(c), v: Math.round(this.valueOf(c.contents)) } : null; }).filter(Boolean);
+    const myCrates = [...this.cans.values()].filter((c) => c.kind === "crate" && c.owner === p.id && !c.heldBy).map((c) => ({ id: c.id, u: this.spaceOf(c), share: c.share }));
+    return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, cans, myCrates, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0,
+      ship: p.ship, tow: p.tow || 0, boost: p.boostTo || 0, pump: p.pumpTo || 0, hire: p.hire || 0, rate: p.rate || 0, sos: p.sos ? 1 : 0, zone: p.zone };
   }
   socMsg(p) {
-    const party = this.partyOf(p), corp = p.corp && this.corps.get(p.corp);
-    return { t: "soc", party: party ? { leader: party.leader, members: [...party.members].map((id) => { const q = this.players.get(id); return [id, q ? q.name : "?"]; }) } : null, corp: corp ? corp.name : null, corpOwner: corp ? corp.owner === p.id : false };
+    const party = this.partyOf(p);
+    return { t: "soc", party: party ? { leader: party.leader, members: [...party.members].map((id) => { const q = this.players.get(id); return [id, q ? q.name : "?"]; }) } : null };
   }
-  // (owner, 2026-10-17) my party (bit 1) and corporation (bit 2) members online, wherever they are, for the minimap
-  mates(p) { const out = []; for (const q of this.players.values()) { if (q === p) continue; const k = (p.party && q.party === p.party ? 1 : 0) | (p.corp && q.corp === p.corp ? 2 : 0); if (k) out.push([q.id, Math.round(q.x), Math.round(q.y), k]); } return out; }
-  sosList() { const out = []; for (const p of this.players.values()) if (p.sos) out.push([p.id, Math.round(p.x), Math.round(p.y), p.layer]); return out; }   // (each player sees its own layer's)
+  mates(p) { const out = []; if (!p.party) return out; for (const q of this.players.values()) { if (q !== p && q.party === p.party) out.push([q.id, Math.round(q.x), Math.round(q.y)]); } return out; }
+  sosList() { const out = []; for (const p of this.players.values()) if (p.sos) out.push([p.id, Math.round(p.x), Math.round(p.y)]); return out; }
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }
