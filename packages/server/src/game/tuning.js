@@ -5,7 +5,7 @@
 import { pool } from "../db.js";
 import * as R from "./rules.js";
 
-export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE, rock: R.ROCK,
+export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE, heat: R.HEAT, rock: R.ROCK,
   ringSizes: R.RING_SIZES, ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
   ores: R.ORES, cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME,
   fuel: R.FUEL, econ: R.ECON, services: R.SERVICES, limits: R.LIMITS };
@@ -52,10 +52,10 @@ export function resetAll() { copyInto(ROOTS, DEFAULTS); }
 export async function loadTuning() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ring_tuning (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`);
-  if (rows[0]) { const d = rows[0].data; if (d._v >= 4) copyInto(ROOTS, d); }   // (_v < 4: saved before ring 3 and the driller; its world shape and scanner numbers would undo them)
+  if (rows[0]) { const d = rows[0].data; if (d._v >= 5) copyInto(ROOTS, d); }   // (_v < 5: saved before the ore economy and heat; its prices and numbers mean other things)
 }
 export async function saveTuning() {
-  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 4, ...ROOTS })]);
+  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 5, ...ROOTS })]);
 }
 // which changes regrow the asteroids (their places, sizes and layouts come from these)
 export const reshapes = (path) => ["ringSizes", "ringBed", "ringSpawn", "ringFree", "rockSizes"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || (path[0] === "chunk" && ["wSoft", "wNormal", "wDense", "wUltra", "wBed", "barren", "bedOre"].includes(path[1]));

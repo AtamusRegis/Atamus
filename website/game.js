@@ -27,9 +27,9 @@ const towFactor = (r) => Math.max(0.2, 60 / (60 + r));             // (as the se
 let myId = null, myName = "", amStaff = false, haveMe = false;
 const mine = { x: 0, y: 0, vx: 0, vy: 0, h: 0 };
 const corr = { x: 0, y: 0 };
-let ME = { fuel: 100, tank: 100, cap: 12, hold: [], cans: [], myCrates: [], credits: 0, docked: 0, ship: "miner", tow: 0, boost: 0, pump: 0, hire: 0, rate: 0, sos: 0, zone: "" };
+let ME = { fuel: 100, tank: 100, cap: 1200, hold: [], cans: [], myCrates: [], credits: 0, docked: 0, ship: "miner", tow: 0, drill: 0, pump: 0, hire: 0, rate: 0, sos: 0, zone: "", storage: {}, myCan: 0, mark: 0, abilityIn: 0 };
 let SOC = { party: null };
-let online = 0, sosList = [], mates = [];      // mates: [id, x, y] (my party, anywhere, for the minimap)
+let online = 0, sosList = [], mates = [], marks = [];   // marks: [x, y] rocks marked by me and my party      // mates: [id, x, y] (my party, anywhere, for the minimap)
 const ships = new Map();                       // id -> { id, buf, row, x, y, h, near }
 const rocks = new Map();                       // id -> { id, x, y, size, r, fill, hp, tow, dx, dy }: the summaries
 const details = new Map();                     // id -> { v, coreR, c: [[i, r0, r1, a0, a1, bits, d, ore, st]] }: the chunk layouts
@@ -46,6 +46,30 @@ function drawParts(wdt) {
     const k = Math.exp(-wdt * p.drag); p.vx *= k; p.vy *= k; p.x += p.vx * wdt; p.y += p.vy * wdt;
     const f = 1 - p.age / p.life, sz = p.size * (0.5 + 0.5 * f);
     cx.globalAlpha = f; cx.fillStyle = p.color; cx.fillRect(p.x - sz / 2, p.y - sz / 2, sz, sz);
+  }
+  cx.globalAlpha = 1;
+}
+// chunks break off and dissipate: triangle shards drifting away from the rock, spinning and fading
+const shardsArr = [];
+function spawnChunkShards(rk, c0) {
+  if (shardsArr.length > 240) return;
+  const r0 = c0[1], r1 = c0[2], a0 = c0[3], a1 = c0[4];
+  const am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000, mid = (r0 + r1) / 2, sz = Math.max(4, (r1 - r0) * 0.5);
+  const px = rk.x + Math.cos(am) * mid, py = rk.y + Math.sin(am) * mid;
+  for (let j = 0; j < 4; j++) {
+    const oa = am + (Math.random() - 0.5) * 0.8, v = 26 + Math.random() * 40;
+    shardsArr.push({ x: px + (Math.random() - 0.5) * sz, y: py + (Math.random() - 0.5) * sz,
+      vx: Math.cos(oa) * v, vy: Math.sin(oa) * v, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 5,
+      s: sz * (0.4 + Math.random() * 0.6), color: UNSCANNED, age: 0, life: 0.7 + Math.random() * 0.6 });
+  }
+}
+function drawShards(wdt) {
+  for (let i = shardsArr.length - 1; i >= 0; i--) {
+    const p = shardsArr[i]; p.age += wdt; if (p.age >= p.life) { shardsArr.splice(i, 1); continue; }
+    p.x += p.vx * wdt; p.y += p.vy * wdt; p.rot += p.vr * wdt;
+    const f = 1 - p.age / p.life, sz = p.s * (0.4 + 0.6 * f);
+    cx.save(); cx.translate(p.x, p.y); cx.rotate(p.rot); cx.globalAlpha = f * 0.9; cx.fillStyle = p.color;
+    cx.beginPath(); cx.moveTo(sz, 0); cx.lineTo(-sz * 0.6, -sz * 0.7); cx.lineTo(-sz * 0.6, sz * 0.7); cx.closePath(); cx.fill(); cx.restore();
   }
   cx.globalAlpha = 1;
 }
@@ -80,12 +104,18 @@ const keys = new Set();
 const mouse = { x: 0, y: 0, over: false };
 let firing = false;
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
+let modeAlt = false;                           // (owner, 2026-10-18) the tool switch: the Scanner's Drill / Mine, the Booster's Boost / Cool
+const hasAlt = () => { const S = G && G.ships[ME.ship]; return !!(S && (S.drillSpeed || S.boost)); };
+function toggleMode() { if (!hasAlt()) return; modeAlt = !modeAlt; drawHud(); }
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Enter") { e.preventDefault(); openChat(); return; }
   if (e.code === "Escape") hideMenu();
+  if (e.code === "KeyF" && !e.repeat) { toggleMode(); e.preventDefault(); }
+  if (e.code === "Space" && !e.repeat) { sendAbility(); e.preventDefault(); }
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
 });
+function sendAbility() { const S = G && G.ships[ME.ship]; if (S && S.boost && !(ME.abilityIn > 0)) send({ t: "act", op: "ability" }); }
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); firing = false; });
 document.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -106,11 +136,9 @@ cv.addEventListener("mousedown", (e) => {
     const o = canAt(e.clientX, e.clientY); if (o) { canMenu(o, e.clientX, e.clientY); return; }
     const r = rockAt(e.clientX, e.clientY), S = myShip();
     if (!r) return;
-    const items = [];
-    if (S.drillSpeed) items.push([ME.drill === r.id ? "Undrill" : "Drill", () => send({ t: "act", rock: r.id, op: "drill" })]);
+    const items = [["Mark", () => send({ t: "act", rock: r.id, op: "mark" })]];
     if (S.towRange) items.push([ME.tow === r.id ? "Release" : "Tow", () => send({ t: "act", rock: r.id, op: "tow" })]);
-    if (items.length === 1) items[0][1]();
-    else if (items.length) showMenu(e.clientX, e.clientY, items);
+    showMenu(e.clientX, e.clientY, items);
   }
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
@@ -129,10 +157,8 @@ function touchMenuAt(x, y) {                   // the long-press: what a right-c
   const o = canAt(x, y); if (o) { canMenu(o, x, y); return true; }
   const r = rockAt(x, y), S = myShip();
   if (!r) return false;
-  const items = [];
-  if (S.drillSpeed) items.push([ME.drill === r.id ? "Undrill" : "Drill", () => send({ t: "act", rock: r.id, op: "drill" })]);
+  const items = [["Mark", () => send({ t: "act", rock: r.id, op: "mark" })]];
   if (S.towRange) items.push([ME.tow === r.id ? "Release" : "Tow", () => send({ t: "act", rock: r.id, op: "tow" })]);
-  if (!items.length) return false;
   showMenu(x, y, items); return true;
 }
 cv.addEventListener("touchstart", (e) => {
@@ -198,6 +224,8 @@ document.addEventListener("touchstart", (e) => {
   const timer = setTimeout(() => { if (!moved) tgt.dispatchEvent(new MouseEvent("contextmenu", { clientX: x0, clientY: y0, bubbles: true, cancelable: true })); done(); }, 480);
   document.addEventListener("touchmove", onMove); document.addEventListener("touchend", done); document.addEventListener("touchcancel", done);
 }, { passive: true });
+// zoom buttons (touch): pinch works on one half, these always work
+for (const [bid, f2] of [["zoom-in", 1.3], ["zoom-out", 1 / 1.3]]) $(bid).addEventListener("click", () => { zoomT = Math.min(ZMAX, Math.max(ZMIN, zoomT * f2)); try { localStorage.setItem("atamus.zoom", String(zoomT)); } catch {} });
 // the chat bubble (touch): chat stays folded so the aim half stays clear; the bubble pulses on unread
 $("chat-toggle").addEventListener("click", () => {
   const open = document.body.classList.toggle("chat-open");
@@ -252,15 +280,22 @@ function onMsg(m) {
     drawPrefix();
   } else if (m.t === "snap") onSnap(m);
   else if (m.t === "rocks") {
-    for (const row of m.a || []) { const [id, x, y, size, r, fill, hp, tow] = row; const o = rocks.get(id); if (o) Object.assign(o, { x, y, size, r, fill, hp, tow }); else rocks.set(id, { id, x, y, size, r, fill, hp, tow, dx: x, dy: y }); }
+    for (const row of m.a || []) { const [id, x, y, size, r, fill, hp, tow, heat] = row; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, size, r, fill, hp, tow, heat }); } else rocks.set(id, { id, x, y, size, r, fill, hp, tow, heat, dx: x, dy: y }); }
     for (const id of m.x || []) { rocks.delete(id); details.delete(id); }
-  } else if (m.t === "rockd") { const cl = m.c || []; details.set(m.id, { v: m.v, coreR: m.coreR, c: cl, worked: cl.some((x) => x[5] & 3) }); }
+  } else if (m.t === "rockd") {
+    const cl = m.c || [], prev = details.get(m.id), rk0 = rocks.get(m.id);
+    if (prev && rk0) {                         // chunks that just broke shatter into drifting shards
+      let n = 0;
+      for (const c0 of cl) { const was = prev.c[c0[0]] || prev.c.find((x) => x[0] === c0[0]); if (was && !(was[5] & 1) && (c0[5] & 1) && n++ < 10) spawnChunkShards(rk0, c0); }
+    }
+    details.set(m.id, { v: m.v, coreR: m.coreR, c: cl, worked: cl.some((x) => x[5] & 3) });
+  }
   else if (m.t === "cans") {
     for (const row of m.a || []) { const [id, x, y, crate, st] = row; const o = cans.get(id); if (o) Object.assign(o, { x, y, crate, st }); else cans.set(id, { id, x, y, crate, st, dx: x, dy: y }); }
     for (const id of m.x || []) cans.delete(id);
   } else if (m.t === "me") { const wasDocked = ME.docked; ME = m; if (!wasDocked && ME.docked) addShake(2.2); drawStation_(); drawHud(); refreshTip(); }
   else if (m.t === "invite") showInvite(m);
-  else if (m.t === "mates") mates = m.m || [];
+  else if (m.t === "mates") { mates = m.m || []; marks = m.marks || []; }
   else if (m.t === "game") {                   // (developer panel) the numbers changed: everything that reads them redraws
     G = m.game; ORE_KEYS = Object.keys(G.ores); hudKey = ""; stKey = "";
     if (m.field) { rocks.clear(); details.clear(); }
@@ -272,9 +307,15 @@ function onMsg(m) {
     fx.push({ ...m, t0: performance.now() });
     const d = hyp(m.x - mine.x, m.y - mine.y);
     if (m.k === "crack") { burst(m.x, m.y, 8 + Math.min(10, (m.u || 0) * 3), [C.rock, "#fff", C.dim], 60); addShake(1.6 * Math.max(0, 1 - d / 700)); }
-    else if (m.k === "pop") { burst(m.x, m.y, 30, [C.gold, C.heat, "#fff"], 140); addShake(5 * Math.max(0, 1 - d / 1400)); }
+    else if (m.k === "pop") {
+      burst(m.x, m.y, 30, [C.gold, C.heat, "#fff"], 140); addShake(5 * Math.max(0, 1 - d / 1400));
+      let popRk = null; for (const r of rocks.values()) if (hyp(r.x - m.x, r.y - m.y) < 20) { popRk = r; break; }
+      const popDet = popRk && details.get(popRk.id);
+      if (popDet) { let n = 0; for (const c0 of popDet.c) if (!(c0[5] & 1) && n++ < 26) spawnChunkShards(popRk, c0); }
+    }
     else if (m.k === "deliver") { burst(m.x, m.y, 14, [C.gold, "#fff"], 65); if (m.i === myId) addShake(1); }
-    else if (m.k === "pay") { if (m.i === myId) flyOre(m.x, m.y); else burst(m.x, m.y, 5, [C.gold], 40); }
+    else if (m.k === "pay") { /* drawn as a flight from the core in drawFx; the self hand-off happens when it lands */ }
+    else if (m.k === "pulse") { addShake(1.2 * Math.max(0, 1 - d / 900)); }
     else if (m.k === "scan") burst(m.x, m.y, 5, [C.ice, "#fff"], 35);
   }
   else if (m.t === "join") names.set(m.i, m.n);
@@ -311,8 +352,6 @@ function onSnap(m) {
 function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + G.fly.shipR && r <= G.world.lockedR; }
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
-  if (ME.drill && hyp(inp.x, inp.y) > 0.25) ME.drill = 0;      // moving lets go of the drill (the server releases on the same input)
-  if (ME.drill) { mine.vx = 0; mine.vy = 0; inp = { x: 0, y: 0, turn: inp.turn, stick: inp.stick }; }   // drilled in: anchored
   const k = empty ? F.crawl : 1, spd = S.speed * k * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? F.accel * k : F.brake) * dt;
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
@@ -343,7 +382,7 @@ function stepMe(dt, inp) {
 let lastSent = 0, lastKey = "", heartbeat = 0;
 function sendInput(inp, t) {
   const a = Math.round(aimAngle() * 100) / 100, f = firing ? 1 : 0;
-  const msg = { t: "in", x: Math.round(inp.x * 100) / 100, y: Math.round(inp.y * 100) / 100, h: Math.round(mine.h * 100) / 100, a, f };
+  const msg = { t: "in", x: Math.round(inp.x * 100) / 100, y: Math.round(inp.y * 100) / 100, h: Math.round(mine.h * 100) / 100, a, f, md: modeAlt && hasAlt() ? 1 : 0 };
   const key = JSON.stringify(msg);
   if ((key !== lastKey && t - lastSent >= 50) || t - heartbeat > 500) { send(msg); lastKey = key; lastSent = heartbeat = t; }
 }
@@ -365,7 +404,8 @@ function drawBackground(t) {
 // unscanned chunks are one soft solid mass (filled and fatly stroked in their own color, so no seams give the layout
 // away); scanned ones are dark-outlined blocks tinted toward their ore, with a pip per ore unit and speckles on dense
 // and ultra; bedrock is dark red, hatched; broken ones are holes; the core swells and ripens gold to orange
-const mix = (h1, h2, k) => { const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
+const hex2n = (h) => { if (h.startsWith("rgb")) { const m = h.match(/\d+/g); return (+m[0] << 16) | (+m[1] << 8) | +m[2]; } return parseInt(h.slice(1), 16); };
+const mix = (h1, h2, k) => { const a = hex2n(h1), b = hex2n(h2), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 const DGREY = ["#9aa1b0", "#8f96a5", "#6e737f", "#50555f"];      // soft (paler), normal, dense (darker), ultra (darkest)
 const UNSCANNED = "#838999", BEDROCK = "#261016", OUTLINE = "#05070c";
 function chunkPath(c0) { const [, r0, r1, a0, a1] = c0; const b0 = a0 / 1000, b1 = a1 / 1000; cx.beginPath(); cx.arc(0, 0, r1, b0, b1 < b0 ? b1 + TAU : b1); cx.arc(0, 0, r0, b1 < b0 ? b1 + TAU : b1, b0, true); cx.closePath(); }
@@ -374,16 +414,20 @@ function drawChunkRock(r, det, ts) {
   cx.save(); cx.translate(r.dx, r.dy);
   if (performance.now() - (r.hitT || 0) < 130) cx.translate((Math.random() - 0.5) * 2.4 / zoom, (Math.random() - 0.5) * 2.4 / zoom);   // (shivers under the laser)
   if (!det) { cx.fillStyle = UNSCANNED; cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.restore(); return; }
-  // unscanned first, filled and edged in the same flat color with rounded joins: one soft mass
-  cx.fillStyle = cx.strokeStyle = UNSCANNED; cx.lineWidth = 3; cx.lineJoin = "round";
-  for (const c0 of det.c) { const bits = c0[5]; if (bits & 1 || bits & 2) continue; chunkPath(c0); cx.fill(); cx.stroke(); }
+  // unscanned first, filled and edged in the same flat color with rounded joins: one soft mass (mined heat glows through)
+  cx.lineWidth = 3; cx.lineJoin = "round";
+  for (const c0 of det.c) { const bits = c0[5]; if (bits & 1 || bits & 2) continue;
+    const hq = c0[9] || 0, col0 = hq ? mix(UNSCANNED, "#ff7a28", hq / 4 * 0.6) : UNSCANNED;
+    cx.fillStyle = cx.strokeStyle = col0; chunkPath(c0); cx.fill(); cx.stroke(); }
   cx.lineJoin = "miter";
   // scanned: density greys tinted toward the ore, a pip per ore unit, speckles on dense and ultra, bedrock hatched
   for (const c0 of det.c) {
-    const [i, r0, r1, a0, a1, bits, d, ore] = c0;
+    const [i, r0, r1, a0, a1, bits, d, ore] = c0, hq = c0[9] || 0;
     if (bits & 1 || !(bits & 2)) continue;
     const bed = d === 4, oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
-    cx.fillStyle = bed ? BEDROCK : oc ? mix(DGREY[d] || DGREY[1], oc, 0.35) : DGREY[d] || DGREY[1];
+    let fillCol = bed ? BEDROCK : oc ? mix(DGREY[d] || DGREY[1], oc, 0.35) : DGREY[d] || DGREY[1];
+    if (hq) fillCol = mix(fillCol.startsWith("#") ? fillCol : "#80869a", "#ff7a28", hq / 4 * 0.6);   // mined chunks run orange with heat
+    cx.fillStyle = fillCol;
     chunkPath(c0); cx.fill();
     cx.strokeStyle = OUTLINE; cx.lineWidth = Math.min(1.2, lw(2)); cx.stroke();
     const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000;
@@ -418,14 +462,18 @@ function drawChunkRock(r, det, ts) {
   // the core: it swells and ripens gold to orange as ore banks in, glowing brighter the fuller it is. An untouched
   // rock shows nothing: unscanned rock is one solid mass.
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
-  const fill = (r.fill || 0) / 100;
-  if (!det.worked && fill <= 0) { cx.restore(); return; }
-  const cr = det.coreR * (1 + (G.core.grow || 0.5) * fill), col = mix("#e89a3c", "#ff7a28", fill);
-  const glowR = cr * (2.2 + fill * 1.6) + (fill > 0 ? Math.sin(ts * 3) * 2 : 0);
+  const fill = (r.fill || 0) / 100, heat = Math.max(0, (r.heat || 0) / 100), hot = Math.min(1, heat);
+  if (!det.worked && fill <= 0 && heat <= 0) { cx.restore(); return; }
+  // it swells as ore banks in (a little gulp per swallow), and ripens gold to orange with heat; overheated, it seethes
+  const gk = r.gulpT ? (performance.now() - r.gulpT) / 300 : 2;
+  const cr = det.coreR * (1 + (G.core.grow || 0.5) * fill) * (gk < 1 ? 1 + 0.22 * Math.sin(gk * Math.PI) : 1);
+  const col = mix("#e89a3c", "#ff5a1e", hot);
+  const over = heat >= 1 ? 0.5 + 0.5 * Math.sin(ts * 14) : 0;
+  const glowR = cr * (2 + hot * 2) + Math.sin(ts * 3) * 2;
   const g = cx.createRadialGradient(0, 0, cr * 0.4, 0, 0, glowR);
-  g.addColorStop(0, `rgba(255,179,71,${(0.35 + fill * 0.45).toFixed(2)})`); g.addColorStop(1, "rgba(255,179,71,0)");
+  g.addColorStop(0, `rgba(255,${Math.round(179 - hot * 90)},${Math.round(71 - hot * 40)},${(0.28 + hot * 0.55 + over * 0.15).toFixed(2)})`); g.addColorStop(1, "rgba(255,120,40,0)");
   cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, glowR, 0, TAU); cx.fill();
-  cx.fillStyle = col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
+  cx.fillStyle = over ? mix(col, "#ff2e18", over * 0.6) : col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
   cx.strokeStyle = "#7a5524"; cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
   cx.fillStyle = "rgba(255,255,255,.4)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
   cx.restore();
@@ -513,6 +561,7 @@ function drawWorld(t) {
   // my reach: picking up cans and other close work
   cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, G.fly.interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawFx(t);
+  drawShards(wdt);
   drawParts(wdt);
   // (owner, 2026-10-17) the fog of war: the world fades out past my vision (the server stops sending there too)
   { const V = myVision(), fog = cx.createRadialGradient(mine.x, mine.y, V * 0.78, mine.x, mine.y, V * 1.06);
@@ -525,24 +574,25 @@ function drawWorld(t) {
 function shipFx(s, ts, under) {
   const r = s.row, kind = G.kinds[r[4]] || "miner", fl = r[5], lw = (px) => px / zoom, lay = shipLayout(G.ships[kind].art), yc = lay.yc;
   if (under) {
-    if (kind === "booster" && r[9]) {
-      const R = G.ships.booster.boostRange;
-      cx.save(); cx.translate(s.x, s.y);
-      cx.strokeStyle = C.gold; cx.lineWidth = lw(2); cx.globalAlpha = 0.5; cx.setLineDash([lw(26), lw(10), lw(4), lw(10)]); cx.rotate(ts / 20 * TAU); cx.beginPath(); cx.arc(0, 0, R, 0, TAU); cx.stroke();
-      cx.setLineDash([]); const k = (ts % 2.6) / 2.6; cx.globalAlpha = 0.6 * (1 - k); cx.beginPath(); cx.arc(0, 0, 20 + (R - 20) * k, 0, TAU); cx.stroke(); cx.restore(); cx.globalAlpha = 1;
+    if (fl & 32) {                             // boosted: the ship glows blue (owner, 2026-10-18)
+      const gr = 48 + Math.sin(ts * 5) * 4, g2 = cx.createRadialGradient(s.x, s.y, 10, s.x, s.y, gr);
+      g2.addColorStop(0, "rgba(124,195,214,.5)"); g2.addColorStop(1, "rgba(124,195,214,0)");
+      cx.fillStyle = g2; cx.beginPath(); cx.arc(s.x, s.y, gr, 0, TAU); cx.fill();
     }
     return;
   }
   // the beam, from the nose along the aim: every ship's light laser in thin red, the Miner's fat. My own is predicted
   // locally (aim and endpoint from what I see), so it doesn't lag the mouse.
   const isMe = s.id === myId, S2 = G.ships[kind] || {}, fireNow = isMe ? firing && !ME.docked : !!(fl & 2);
-  if (fireNow && S2.laserDps) {
+  const drillMode = !!(fl & 16) || (isMe && modeAlt && S2.drillSpeed);
+  const coolMode = !!(fl & 64) || (isMe && modeAlt && S2.boost);
+  if (fireNow && S2.laserDps && !drillMode) {
     const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
     if (isMe) { a = aimAngle(); const c2 = castLocal(mine.x, mine.y, a, false, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
     if (len > 0) {
       const nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
-      cx.strokeStyle = C.signal; cx.lineCap = "round";
+      cx.strokeStyle = coolMode ? C.ice : C.signal; cx.lineCap = "round";
       cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       if (hitF) {
@@ -575,7 +625,6 @@ function shipFx(s, ts, under) {
   }
   const link = (id, color, dash, ly) => { const q = id === myId ? { x: mine.x, y: mine.y } : ships.get(id); if (!q || (id !== myId && !q.near)) return; const [px, py] = at(0, ly); cx.strokeStyle = color; cx.lineWidth = lw(2.5); cx.setLineDash(dash.map(lw)); cx.beginPath(); cx.moveTo(px, py); cx.quadraticCurveTo((px + q.x) / 2 + 10, (py + q.y) / 2 - 10, q.x, q.y); cx.stroke(); cx.setLineDash([]); };
   if (r[10]) link(r[10], C.ice, [], (154 + (lay.off.fueler || 0) - yc) * ART);                // the fueler's hose
-  if (r[9]) link(r[9], C.gold, [6, 5], 0);                                                    // the booster's link
 }
 function drawFx(t) {
   const lw = (px) => px / zoom;
@@ -600,7 +649,18 @@ function drawFx(t) {
     } else if (f.k === "deliver") {            // delivered: a gold flash at the ship
       if (k > 1) { fx.splice(i, 1); continue; }
       cx.globalAlpha = 1 - k; cx.strokeStyle = C.gold; cx.lineWidth = lw(2.5); cx.beginPath(); cx.arc(f.x, f.y, 14 + k * 70, 0, TAU); cx.stroke(); cx.globalAlpha = 1;
-    } else if (f.k === "hand" || f.k === "pay") {
+    } else if (f.k === "pay") {               // the pop's payout: ore squares fly from the core to each player it pays
+      const dur = 0.7;
+      if (k > dur) { if (f.i === myId && !f.done) { f.done = 1; flyOre(f.x, f.y); } fx.splice(i, 1); continue; }
+      const q = k / dur, qe = 1 - (1 - q) * (1 - q), ex = f.rx + (f.x - f.rx) * qe, ey = f.ry + (f.y - f.ry) * qe;
+      cx.fillStyle = C.gold; cx.globalAlpha = 0.95;
+      for (let j = 0, nj = Math.min(3, Math.ceil((f.u || 100) / 100)); j < nj; j++) { const o2 = j * 2.1 + k * 7; cx.fillRect(ex - 2.5 + Math.sin(o2) * 5, ey - 2.5 + Math.cos(o2) * 5, 5, 5); }
+      cx.globalAlpha = 1;
+    } else if (f.k === "pulse") {             // the Booster's pulse washing over everyone nearby
+      if (k > 0.9) { fx.splice(i, 1); continue; }
+      cx.strokeStyle = C.ice; cx.globalAlpha = 0.8 * (1 - k / 0.9); cx.lineWidth = lw(3); cx.beginPath(); cx.arc(f.x, f.y, 20 + (f.r || 350) * (k / 0.9), 0, TAU); cx.stroke();
+      cx.globalAlpha = 0.3 * (1 - k / 0.9); cx.lineWidth = lw(10); cx.beginPath(); cx.arc(f.x, f.y, 20 + (f.r || 350) * (k / 0.9) * 0.92, 0, TAU); cx.stroke(); cx.globalAlpha = 1;
+    } else if (f.k === "hand") {
       if (k > 0.5) { fx.splice(i, 1); continue; }
       cx.globalAlpha = 1 - k / 0.5; cx.strokeStyle = C.gold; cx.lineWidth = lw(2); cx.beginPath(); cx.arc(f.x, f.y, 10 + k * 60, 0, TAU); cx.stroke(); cx.globalAlpha = 1;
     } else fx.splice(i, 1);
@@ -626,6 +686,21 @@ function drawOverlay(t) {
     const p = 0.6 + 0.4 * Math.sin(t / 200);
     cx.fillStyle = C.signal; cx.globalAlpha = p; cx.beginPath(); cx.arc(sx, sy, 11, 0, TAU); cx.fill(); cx.globalAlpha = 1;
     cx.fillStyle = C.void; cx.font = `800 16px "Big Shoulders Display", sans-serif`; cx.fillText("!", sx, sy + 6); cx.font = `700 12px "Atkinson Hyperlegible", system-ui, sans-serif`;
+  }
+  if (ME.myCan) {                              // (owner, 2026-10-18) a gold arrow to my most recent can
+    let [sx2, sy2] = toScreen(ME.myCan.x, ME.myCan.y);
+    const off2 = sx2 < 30 || sy2 < 30 || sx2 > VW - 30 || sy2 > VH - 30, bob = Math.sin(t / 180) * 5;
+    cx.save(); cx.fillStyle = C.gold; cx.strokeStyle = C.void; cx.lineWidth = 2;
+    if (off2) {
+      const a2 = Math.atan2(sy2 - VH / 2, sx2 - VW / 2), k2 = Math.min((VW / 2 - 46) / Math.abs(Math.cos(a2) || 1e-6), (VH / 2 - 46) / Math.abs(Math.sin(a2) || 1e-6));
+      cx.translate(VW / 2 + Math.cos(a2) * (k2 + bob), VH / 2 + Math.sin(a2) * (k2 + bob)); cx.rotate(a2);
+      cx.beginPath(); cx.moveTo(14, 0); cx.lineTo(-9, -10); cx.lineTo(-4, 0); cx.lineTo(-9, 10); cx.closePath(); cx.fill(); cx.stroke();
+      cx.rotate(-a2); cx.fillRect(-22, -8, 13, 10); cx.strokeRect(-22, -8, 13, 10);
+    } else {
+      cx.translate(sx2, sy2 - 22 + bob);
+      cx.beginPath(); cx.moveTo(0, 10); cx.lineTo(-10, -5); cx.lineTo(0, -1); cx.lineTo(10, -5); cx.closePath(); cx.fill(); cx.stroke();
+    }
+    cx.restore();
   }
   if (ME.sos) {                                // out of fuel: the screen's edges breathe signal red
     const p = 0.22 + 0.12 * Math.sin(t / 280), g = cx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.38, VW / 2, VH / 2, Math.max(VW, VH) * 0.74);
@@ -674,6 +749,8 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // ---- the HUD: my ship, the hold as a square per ore type and a bar, fuel, credits, where I am ----
+$("ship-chip").addEventListener("click", toggleMode);
+$("ability-btn").addEventListener("click", (e) => { sendAbility(); e.currentTarget.blur(); });
 const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), fuel: $("fuel-fill"), fuelNum: $("fuel-num"), ship: $("ship-chip"), cargo: $("cargo"), credits: $("credits"), zone: $("zone") };
 const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
 const holdUsed = () => (ME.hold || []).reduce((s, e) => s + e.u * (e.raw ? 1 : G.refinedSpace), 0) + (ME.cans || []).reduce((s, c) => s + c.u, 0);
@@ -686,8 +763,10 @@ function drawHud() {
   hud.holdRaw.style.width = ((raw + canU) / cap) * 100 + "%"; hud.holdRef.style.width = (ref / cap) * 100 + "%";
   hud.holdNum.textContent = (Math.round((raw + ref + canU) * 10) / 10) + " / " + cap;
   if (hud.zone.textContent !== (ME.zone || "")) { hud.zone.textContent = ME.zone || ""; hud.zone.classList.remove("zswap"); void hud.zone.offsetWidth; hud.zone.classList.add("zswap"); }
-  hud.ship.textContent = myShip().name;
-  const key = JSON.stringify([ME.ship, ME.hold, ME.cans]); if (key === hudKey) return; hudKey = key;
+  hud.ship.textContent = myShip().name + (hasAlt() ? " · " + (myShip().drillSpeed ? (modeAlt ? "Drill" : "Mine") : (modeAlt ? "Cool" : "Boost")) : "");
+  hud.ship.classList.toggle("switch", hasAlt());
+  $("ability-btn").hidden = !myShip().boost;
+  const key = JSON.stringify([ME.ship, ME.hold, ME.cans, modeAlt]); if (key === hudKey) return; hudKey = key;
   drawCargo();
 }
 // the hold (owner, 2026-10-18): one square per ore type (raw / refined / party each their own), in the ore's color with
@@ -732,6 +811,8 @@ function drawHudLive(now) {
   const f = Math.max(0, ME.fuel), T = ME.tank || 100;
   hud.fuel.style.width = Math.min(100, f / T * 100) + "%"; hud.fuel.classList.toggle("low", f < T * 0.15);
   hud.fuelNum.textContent = Math.round(f) + " / " + T;
+  const ab = $("ability-btn");
+  if (!ab.hidden) { const cd = ME.abilityIn || 0; ab.disabled = cd > 0; ab.textContent = cd > 0 ? String(cd) : "BOOST"; }
   const target = ME.credits || 0;              // (owner, 2026-10-17: credits count toward their new value and flash on a gain)
   if (shownCr === null) { shownCr = target; hud.credits.textContent = fmt(target); }
   else if (shownCr !== target) {
@@ -746,14 +827,14 @@ const stEl = $("station");
 const SHIP_STATS = {                           // what each ship's row shows, from its live numbers (every ship has a laser)
   miner: [["Laser", "laserDps", (v) => v + " / s"], ["Reach", "laserRange", (v) => v + " m"]],
   scanner: [["Laser", "laserDps", (v) => v + " / s"], ["Drill", "drillSpeed", (v) => v + " m/s"], ["Drill reach", "drillRange", (v) => v + " m"], ["Vision", "vision", (v) => fmt(v) + " m"], ["Tow reach", "towRange", (v) => v + " m"]],
-  booster: [["Laser", "laserDps", (v) => v + " / s"], ["Boost", "boost", (v) => "×" + v], ["Reach", "boostRange", (v) => v + " m"]],
+  booster: [["Laser", "laserDps", (v) => v + " / s"], ["Boost", "boost", (v) => "×" + v], ["Pulse reach", "boostRange", (v) => v + " m"], ["Pulse", "boostDur", (v) => v + " s"], ["Cooldown", "boostCd", (v) => v + " s"]],
   fueler: [["Laser", "laserDps", (v) => v + " / s"], ["Pump", "pump", (v) => v + " / s"], ["Reach", "pumpRange", (v) => v + " m"]],
   hauler: [["Laser", "laserDps", (v) => v + " / s"], ["Refines", "refineUnit", (v) => "1 / " + v + " s"]],
 };
 let stKey = "";
 function drawStation_() {
   stEl.hidden = !ME.docked; if (!ME.docked) { amtBox.hidden = true; return; } if (!G) return;
-  const key = JSON.stringify([ME.ship, ME.credits, Math.round(ME.fuel), ME.tank, G.ships]); if (key === stKey) return; stKey = key;
+  const key = JSON.stringify([ME.ship, ME.credits, Math.round(ME.fuel), ME.tank, ME.storage, G.ships]); if (key === stKey) return; stKey = key;
   const btn = (label, op, disabled = false, cls = "") => { const b = elx("button", cls, label); b.type = "button"; b.disabled = disabled; b.addEventListener("click", () => { send({ t: "st", ...op }); b.blur(); }); return b; };
   const head = elx("div", "st-head");
   head.append(elx("span", "st-title", "Station"), elx("span", "st-cr", fmt(ME.credits)));
@@ -767,11 +848,21 @@ function drawStation_() {
     }
     card.append(h2, st); sec1.appendChild(card);
   }
+  const sec2 = elx("section"); sec2.appendChild(elx("h3", null, "Storage"));
+  const entries = Object.entries(ME.storage || {}).filter(([, u]) => u > 0).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) sec2.appendChild(elx("p", "st-empty", "Empty"));
+  for (const [o, u] of entries) {
+    const row = elx("div", "st-row"), sw = elx("span", "st-sw"); sw.style.background = G.ores[o] ? G.ores[o].color : "#888"; sw.style.borderRadius = "3px";
+    const sell = elx("button", "", "Sell"); sell.type = "button";
+    sell.addEventListener("click", () => askAmount("Sell " + oreName(o), "Sell", 1, u, u, (c) => fmt(c * (G.ores[o] ? G.ores[o].price : 0)) + " cr", (c) => send({ t: "st", op: "sell", o, n: c })));
+    row.append(sw, elx("span", "st-name", oreName(o)), elx("span", "st-n", fmt(u)), sell);
+    sec2.appendChild(row);
+  }
   const sec3 = elx("section"); sec3.appendChild(elx("h3", null, "Fuel"));
   { const space = Math.max(0, ME.tank - ME.fuel), cost = Math.ceil(space * G.fuel.stationPrice), row = elx("div", "st-row");
     row.append(elx("span", "st-sw"), elx("span", "st-name", "Tank"), elx("span", "st-n", Math.round(ME.fuel) + " / " + ME.tank), btn("Fill " + fmt(cost), { op: "fuel" }, space < 1 || ME.credits < G.fuel.stationPrice, "gold"));
     sec3.appendChild(row); }
-  stEl.replaceChildren(head, sec1, sec3);
+  stEl.replaceChildren(head, sec2, sec1, sec3);
 }
 stEl.addEventListener("mousedown", (e) => e.stopPropagation());
 // the crate unlock slider: the share a deliverer outside the party keeps, locked at pickup
@@ -837,6 +928,7 @@ function drawMinimap(now) {
   const party = new Set(SOC.party ? SOC.party.members.map((m) => m[0]) : []);
   for (const s of ships.values()) if (s.id !== myId && s.near) { const [x, y] = P(s.x, s.y); mx.fillStyle = party.has(s.id) ? C.gold : C.ink; mx.beginPath(); mx.arc(x, y, 2, 0, TAU); mx.fill(); }
   for (const [, x, y] of mates) { const [px, py] = P(x, y); mx.fillStyle = C.gold; mx.strokeStyle = C.void; mx.lineWidth = 1; mx.beginPath(); mx.arc(px, py, 3, 0, TAU); mx.fill(); mx.stroke(); }   // (my party, anywhere)
+  for (const [x, y] of marks) { const [px, py] = P(x, y); mx.save(); mx.translate(px, py); mx.rotate(Math.PI / 4); mx.fillStyle = C.gold; mx.strokeStyle = C.void; mx.lineWidth = 1; mx.fillRect(-3.4, -3.4, 6.8, 6.8); mx.strokeRect(-3.4, -3.4, 6.8, 6.8); mx.restore(); }   // marked rocks (mine and my party's)
   for (const [id, x, y] of sosList) { const [px, py] = P(x, y); mx.fillStyle = C.signal; mx.beginPath(); mx.arc(px, py, 4 + Math.sin(now / 200), 0, TAU); mx.fill(); void id; }
   { const [x, y] = P(mine.x, mine.y), h = mine.h; mx.fillStyle = C.ice; mx.beginPath(); mx.moveTo(x + Math.sin(h) * 6, y - Math.cos(h) * 6); mx.lineTo(x - Math.cos(h) * 3.5 - Math.sin(h) * 3, y - Math.sin(h) * 3.5 + Math.cos(h) * 3); mx.lineTo(x + Math.cos(h) * 3.5 - Math.sin(h) * 3, y + Math.sin(h) * 3.5 + Math.cos(h) * 3); mx.closePath(); mx.fill(); }
   mx.restore();
@@ -932,7 +1024,6 @@ function socialItems(id) {
 function shipMenu(s, x, y) {
   const id = s.id, name = names.get(id) || "?", r = s.row, S = myShip(), items = [["Whisper", () => whisperTo(id, name)], ...socialItems(id)];
   if (S.pump) items.push([ME.pump === id ? "Stop fueling" : "Fuel ship", () => send({ t: "act", ship: id, op: "pump" })]);
-  if (S.boost) items.push([ME.boost === id ? "Stop boosting" : "Boost their mining", () => send({ t: "act", ship: id, op: "boost" })]);
   const theirRate = (r[13] || 0) / 10, inParty = !!(SOC.party && SOC.party.members.some((m) => m[0] === id));
   if (ME.hire === id) items.push(["Stop hiring", () => send({ t: "act", ship: id, op: "hire" })]);
   else if (theirRate > 0 && !inParty) items.push(["Hire · " + theirRate + " cr/s", () => send({ t: "act", ship: id, op: "hire" })]);
@@ -975,10 +1066,12 @@ const DEV_LABELS = { saturnR: "Saturn radius", safeR: "Safe zone radius", locked
   hold: "Hold", tank: "Tank", speed: "Speed", laserDps: "Laser / s", laserRange: "Laser reach", burn: "Fuel / min working", vision: "Vision",
   drillSpeed: "Drill speed", drillBed: "Drill bedrock ×", drillShock: "Drill collateral / s", drillRange: "Drill reach",
   towRange: "Tow reach", towBurn: "Tow fuel / min", towPull: "Tow pull", towLeash: "Tow leash",
-  boost: "Boost ×", boostRange: "Boost reach", pump: "Pump / s", pumpRange: "Pump reach", refineUnit: "Seconds a refined unit",
+  boost: "Boost ×", boostRange: "Pulse reach", boostDur: "Pulse s", boostCd: "Pulse cooldown s", boostFuel: "Pulse fuel", pump: "Pump / s", pumpRange: "Pump reach", refineUnit: "Seconds a refined unit",
   accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", interactR: "Reach", shipR: "Bump radius",
   burst: "Burst share", hpK: "Health per area", wSoft: "Soft %", wNormal: "Normal %", wDense: "Dense %", wUltra: "Ultra %", wBed: "Bedrock %",
-  soft: "Soft health ×", dense: "Dense health ×", ultra: "Ultra health ×", bed: "Bedrock health ×", denseOre: "Dense extra ore", ultraOre: "Ultra extra ore", bedOre: "Bedrock extra ore", barren: "Barren share",
+  soft: "Soft health ×", dense: "Dense health ×", ultra: "Ultra health ×", bed: "Bedrock health ×", oreUnit: "Units per ore drop", denseOre: "Dense extra ore", ultraOre: "Ultra extra ore", bedOre: "Bedrock extra ore", barren: "Barren share",
+  rate: "Heat / s mined", hSoft: "Soft heat ×", hNormal: "Normal heat ×", hDense: "Dense heat ×", hUltra: "Ultra heat ×", hBed: "Bedrock heat ×",
+  spread: "Neighbor heat share", cool: "Chunk cooling / s", coreCool: "Core cooling / s", coreK: "Core heat per break ×", coolBeam: "Coolant beam / s",
   chunks: "Chunks", shells: "Shells", radius: "Radius", coreR: "Core radius", rareMax: "Rare ore at full strip", coreHp: "Core health", oreTypes: "Ore types",
   grow: "Core swell share", fastBreak: "Full-core break ×", rarePrice: "Rare ore price",
   linger: "Lasts after last touch s", respawn: "Respawn s", reseed: "Reseed s", spawnChance: "Rock chance per cell",
@@ -1004,7 +1097,8 @@ const DEV_HELP = {
   "ships.drillRange": "How near the rock's surface the ship must be to drill in.",
   "ships.towRange": "How far the Scanner can latch onto an asteroid to tow it.", "ships.towBurn": "Towing fuel a minute, before the size cost (× (1 + radius / 60)).",
   "ships.towPull": "How quickly a towed asteroid catches up to its place behind the ship.", "ships.towLeash": "Gap in meters between the ship and the towed asteroid.",
-  "ships.boost": "The boosted player's mining is multiplied by this.", "ships.boostRange": "How far the boost reaches, in meters (one player at a time).",
+  "ships.boost": "Boosted mining is multiplied by this (and only boosted lasers cut bedrock).", "ships.boostRange": "How far the pulse reaches, in meters — everyone inside is boosted.",
+  "ships.boostDur": "Seconds a pulse's boost lasts on each ship it caught.", "ships.boostCd": "Seconds between pulses.", "ships.boostFuel": "Fuel one pulse burns.",
   "ships.pump": "Fuel pumped into another ship each second.", "ships.pumpRange": "How far the Fueler reaches a ship to fuel it.",
   "ships.refineUnit": "Seconds the Hauler's onboard refinery takes to compress one raw unit while flying (refined units take a fifth of the room; the value stays the same).",
   "chunk.burst": "Breaking a chunk shocks every touching chunk for this share of its maximum health; chains cascade.",
@@ -1028,7 +1122,16 @@ const DEV_HELP = {
   "ringBed": "This ring's bedrock weight multiplier: deeper rings run heavier with bedrock.",
   "ringSpawn": "This ring's rock chance multiplier on the cell spawn chance: deeper rings roll rocks rarer.",
   "ringFree": "1: every rock in this ring keeps a bedrock-free line to the core. 0: no guarantee — cores can roll bedrock-encapsulated.",
-  "ores.price": "Credits one unit pays when it's delivered.",
+  "ores.price": "Credits one unit fetches when its owner sells it from station storage (delivery itself pays in ore, not money).",
+  "chunk.oreUnit": "Units in one ore drop (100: any split lands on clean percents).",
+  "heat.rate": "Heat a second the mined chunk gains, times its density's heat factor (a boosted laser heats times its boost).",
+  "heat.hSoft": "A soft chunk's heat factor.", "heat.hNormal": "A normal chunk's heat factor.", "heat.hDense": "A dense chunk's heat factor.", "heat.hUltra": "An ultra chunk's heat factor.", "heat.hBed": "Bedrock's heat factor — lucrative, but it runs hottest.",
+  "heat.spread": "The share of the mined chunk's heating that leaks into each chunk touching it.",
+  "heat.cool": "Heat a second a chunk sheds on its own — mine a bit, let it cool, mine another.",
+  "heat.coreCool": "Heat a second the core sheds on its own.",
+  "heat.coreK": "Core heat gained per broken chunk, times the chunk's heat at the moment it broke.",
+  "heat.burn": "Share of its health an overheated core (heat at 1) burns a second — left alone, it pops early and everything still attached is lost.",
+  "heat.coolBeam": "Heat a second the Booster's coolant beam pulls out of the chunk it touches, or the core down a bore.",
   "cans.lock": "Seconds a can stays locked to its owner before it turns public.", "cans.public": "Seconds a public can sits before it's gone.",
   "crateShare": "The unlock slider's ends: the share of a crate's value a deliverer outside the party keeps (locked at pickup).",
   "downtime.hourUTC": "The daily downtime hour (UTC), when party crates auto-deliver.", "downtime.logoffGuard": "Crates aboard a ship logged off this many seconds before downtime wait for it instead.",
@@ -1087,6 +1190,7 @@ function devDraw() {
     const SZ = G.rockSizes[devSize], rows = Object.keys(SZ).filter((k) => typeof SZ[k] === "number").map((k) => devRow(devLabel(k), devInput(["rockSizes", devSize, k])));
     const g = devGroup(SZ.name + " rocks", rows); g.insertBefore(pick, g.children[1]); out.push(g);
     out.push(devGroup("The core", devNumbers("core", G.core)));
+    out.push(devGroup("Heat", devNumbers("heat", G.heat)));
     out.push(devGroup("The field", devNumbers("rock", G.rock)));
     out.push(devGroup("Rings", G.ringSizes.flatMap((pair, i) => [
       devRow("Ring " + (i + 1) + " sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])),
@@ -1124,9 +1228,10 @@ connect();
 // for the test harness and the console
 window.Atamus = {
   get me() { return { ...mine, id: myId }; }, get state() { return ME; }, get soc() { return SOC; }, get sos() { return sosList; }, get mates() { return mates; }, get game() { return G; },
-  get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, size: r.size, r: r.r, fill: r.fill, hp: r.hp, tow: r.tow })); },
+  get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, size: r.size, r: r.r, fill: r.fill, hp: r.hp, tow: r.tow, heat: r.heat || 0 })); },
   chunks: (id) => details.get(id) || null,
   get cans() { return [...cans.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, crate: o.crate, st: o.st })); },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], rate: (s.row[13] || 0) / 10, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[14] || 0 } : null })); },
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = zoomT = z; },
+  get marks() { return marks; }, get mode() { return modeAlt; }, set mode(v) { modeAlt = !!v; drawHud(); },
 };

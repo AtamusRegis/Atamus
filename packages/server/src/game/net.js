@@ -19,7 +19,7 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 // the game's numbers, for the clients (drawing, prediction, the station panel, the developer panel); sent again whenever
 // the developer panel changes one
 const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE,
-  rock: R.ROCK, ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
+  rock: R.ROCK, heat: R.HEAT, ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
   ores: R.ORES, refinedSpace: R.REFINED_SPACE,
   cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME, fuel: R.FUEL, econ: R.ECON, services: R.SERVICES,
   sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, limits: R.LIMITS });
@@ -212,7 +212,7 @@ export function attachGameServer(httpServer) {
     const all = world.sosList();
     for (const [pid, ws] of socks) {
       const p = world.players.get(pid); if (!p || !ws.ready) continue;
-      const mj = JSON.stringify(world.mates(p)); if (mj !== (ws.lastMates ?? "[]")) { ws.lastMates = mj; send(ws, { t: "mates", m: JSON.parse(mj) }); }
+      const mj = JSON.stringify([world.mates(p), world.marksOf(p)]); if (mj !== (ws.lastMates ?? "")) { ws.lastMates = mj; const [mm2, mk2] = JSON.parse(mj); send(ws, { t: "mates", m: mm2, marks: mk2 }); }
       const j = JSON.stringify(all); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
     }
   }, 1000);

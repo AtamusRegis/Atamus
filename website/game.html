@@ -31,6 +31,14 @@
     .bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 600 11px var(--f-mono); color: #fff; text-shadow: 0 0 3px #000; letter-spacing: .04em; }
     .bar span b { font-weight: 600; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
     #ship-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
+    #ship-chip.switch { pointer-events: auto; cursor: pointer; } #ship-chip.switch:hover { background: rgba(216,176,106,.15); }
+    #ability-btn { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(190px + env(safe-area-inset-bottom, 0px)); z-index: 6; width: 54px; height: 54px; border-radius: 50%; background: rgba(18,24,36,.94); border: 2px solid var(--ice); color: var(--ice); font: 800 13px var(--f-display); letter-spacing: .04em; cursor: pointer; }
+    #ability-btn:hover:not(:disabled) { background: rgba(124,195,214,.18); } #ability-btn:disabled { opacity: .45; cursor: default; } #ability-btn[hidden] { display: none; }
+    .st-empty { margin: 0; color: var(--dim); font-size: 13px; }
+    #zoom-col { display: none; }
+    body.touch #zoom-col { position: fixed; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(126px + env(safe-area-inset-bottom, 0px)); z-index: 6; display: grid; gap: 5px; }
+    body.touch #zoom-col button { width: 38px; height: 38px; border-radius: 7px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); color: var(--ink); font: 800 19px var(--f-mono); cursor: pointer; padding: 0; }
+    body.touch #ability-btn { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); right: calc(62px + env(safe-area-inset-right, 0px)); }
     /* the hold above its bar (owner, 2026-10-18): one square per ore type with that square's own count; refined squares
        edged white; party ore dotted gold; aboard cans and crates their own containers. Right-click: Drop cargo. */
     #hold-wrap { position: relative; }
@@ -196,6 +204,8 @@
     <div id="credits"></div>
   </div>
   <canvas id="minimap"></canvas>
+  <div id="zoom-col"><button id="zoom-in" type="button">+</button><button id="zoom-out" type="button">−</button></div>
+  <button id="ability-btn" type="button" hidden>BOOST</button>
   <div id="station" hidden></div>
   <div id="dev" hidden></div>
   <div id="amount-box" hidden><b id="amount-title"></b><input id="amount-range" type="range" min="1" max="1" step="1"><div class="amount-row"><span id="amount-n"></span><span id="amount-worth"></span></div><div class="amount-acts"><button id="amount-cancel" type="button">Cancel</button><button id="amount-go" class="gold" type="button"></button></div></div>
@@ -210,6 +220,6 @@
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792400005"></script>
+  <script type="module" src="game.js?v=1792400007"></script>
 </body>
 </html>
