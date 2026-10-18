@@ -20,7 +20,7 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
 - **No helper or hint text**, anywhere. Tooltips show names only. (The developer panel's hover descriptions are the owner-requested exception.)
-- **Mobile parity.** The design document calls for twin-stick controls on touch screens: the left half flies, the right half aims and fires.
+- **Mobile parity.** The design document calls for twin-stick controls on touch screens: the left half flies, the right half aims and fires. Hold = right-click (menus), tap = pick up, a second finger on a busy half pinches the zoom; the layout compacts for landscape phones and chat folds behind a bubble.
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
 - **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a short countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
 - **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first). Say what was added or changed, never how it works: no timers, thresholds, counts or rules.

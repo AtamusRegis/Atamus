@@ -115,24 +115,95 @@ cv.addEventListener("mousedown", (e) => {
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
 cv.addEventListener("wheel", (e) => { e.preventDefault(); zoomT = Math.min(ZMAX, Math.max(ZMIN, zoomT * (e.deltaY > 0 ? 0.88 : 1.14))); try { localStorage.setItem("atamus.zoom", String(zoomT)); } catch {} }, { passive: false });
-// (owner, 2026-10-18, the design document) twin sticks on a touch screen: the left half flies, the right half aims and fires
+// (owner, 2026-10-18, the design document) twin sticks on a touch screen: the left half flies, the right half aims and
+// fires. A tap picks up the can under the finger; holding still for half a second opens the thing's menu, as a
+// right-click would; a second finger on a busy half pinches the zoom.
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+if (TOUCH) document.body.classList.add("touch");
 const sticks = { move: null, aim: null };
-let touchAim = null;
+let touchAim = null, pinch = null;
+const touches = new Map();                     // identifier -> { x0, y0, t0, side, moved, used, timer }
+function touchMenuAt(x, y) {                   // the long-press: what a right-click would open
+  if (!G) return false;
+  const s = shipAt(x, y); if (s) { shipMenu(s, x, y); return true; }
+  const o = canAt(x, y); if (o) { canMenu(o, x, y); return true; }
+  const r = rockAt(x, y), S = myShip();
+  if (!r) return false;
+  const items = [];
+  if (S.drillSpeed) items.push([ME.drill === r.id ? "Undrill" : "Drill", () => send({ t: "act", rock: r.id, op: "drill" })]);
+  if (S.towRange) items.push([ME.tow === r.id ? "Release" : "Tow", () => send({ t: "act", rock: r.id, op: "tow" })]);
+  if (!items.length) return false;
+  showMenu(x, y, items); return true;
+}
 cv.addEventListener("touchstart", (e) => {
   e.preventDefault();
   for (const t of e.changedTouches) {
     const side = t.clientX < VW / 2 ? "move" : "aim";
+    if (sticks[side] && !pinch) {              // a second finger on a busy half: pinch the zoom
+      const a = sticks[side], m0 = touches.get(a.id);
+      if (m0 && m0.timer) clearTimeout(m0.timer); if (m0) m0.used = true;
+      pinch = { aId: a.id, bId: t.identifier, d0: Math.max(20, hyp(t.clientX - a.x, t.clientY - a.y)), z0: zoomT, ax: a.x, ay: a.y };
+      sticks[side] = null; if (side === "aim") firing = false;
+      touches.set(t.identifier, { used: true, moved: true, t0: performance.now(), x0: t.clientX, y0: t.clientY, side, timer: 0 });
+      continue;
+    }
     if (!sticks[side]) sticks[side] = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: t.clientX, y: t.clientY };
+    const meta = { x0: t.clientX, y0: t.clientY, t0: performance.now(), side, moved: false, used: false, timer: 0 };
+    meta.timer = setTimeout(() => {            // held still: the menu, and the stick lets go
+      if (meta.moved || meta.used) return;
+      meta.used = true;
+      const s2 = sticks[side]; if (s2 && s2.id === t.identifier) { sticks[side] = null; if (side === "aim") firing = false; }
+      touchMenuAt(meta.x0, meta.y0);
+    }, 450);
+    touches.set(t.identifier, meta);
   }
 }, { passive: false });
 cv.addEventListener("touchmove", (e) => {
   e.preventDefault();
-  for (const t of e.changedTouches) for (const side of ["move", "aim"]) { const s = sticks[side]; if (s && s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; } }
+  for (const t of e.changedTouches) {
+    const meta = touches.get(t.identifier);
+    if (meta && !meta.moved && hyp(t.clientX - meta.x0, t.clientY - meta.y0) > 12) { meta.moved = true; if (meta.timer) clearTimeout(meta.timer); }
+    if (pinch && (t.identifier === pinch.aId || t.identifier === pinch.bId)) {
+      if (t.identifier === pinch.aId) { pinch.ax = t.clientX; pinch.ay = t.clientY; }
+      else { const d = Math.max(20, hyp(t.clientX - pinch.ax, t.clientY - pinch.ay)); zoomT = Math.min(ZMAX, Math.max(ZMIN, pinch.z0 * d / pinch.d0)); try { localStorage.setItem("atamus.zoom", String(zoomT)); } catch {} }
+      continue;
+    }
+    for (const side of ["move", "aim"]) { const s = sticks[side]; if (s && s.id === t.identifier) { s.x = t.clientX; s.y = t.clientY; } }
+  }
   const a = sticks.aim;
   if (a) { const dx = a.x - a.ox, dy = a.y - a.oy; if (hyp(dx, dy) > 18) { touchAim = Math.atan2(dy, dx); firing = true; } }
 }, { passive: false });
-const touchEnd = (e) => { for (const t of e.changedTouches) for (const side of ["move", "aim"]) { const s = sticks[side]; if (s && s.id === t.identifier) { sticks[side] = null; if (side === "aim") firing = false; } } };
+const touchEnd = (e) => {
+  for (const t of e.changedTouches) {
+    const meta = touches.get(t.identifier); touches.delete(t.identifier);
+    if (pinch && (t.identifier === pinch.aId || t.identifier === pinch.bId)) pinch = null;
+    if (meta) {
+      if (meta.timer) clearTimeout(meta.timer);
+      if (!meta.moved && !meta.used && performance.now() - meta.t0 < 300) {   // a tap: pick up the can under the finger
+        const o = canAt(meta.x0, meta.y0); if (o && G && hyp(o.dx - mine.x, o.dy - mine.y) <= G.fly.interactR) send({ t: "act", can: o.id });
+      }
+    }
+    for (const side of ["move", "aim"]) { const s = sticks[side]; if (s && s.id === t.identifier) { sticks[side] = null; if (side === "aim") firing = false; } }
+  }
+};
 cv.addEventListener("touchend", touchEnd); cv.addEventListener("touchcancel", touchEnd);
+// holding a finger on the cargo, a chat name or a party member works as its right-click
+document.addEventListener("touchstart", (e) => {
+  if (e.target === cv || !TOUCH) return;
+  const t = e.changedTouches[0]; if (!t) return;
+  const x0 = t.clientX, y0 = t.clientY, tgt = e.target;
+  let moved = false;
+  const onMove = (ev) => { const m = [...ev.changedTouches].find((q) => q.identifier === t.identifier); if (m && hyp(m.clientX - x0, m.clientY - y0) > 10) moved = true; };
+  const done = () => { clearTimeout(timer); document.removeEventListener("touchmove", onMove); document.removeEventListener("touchend", done); document.removeEventListener("touchcancel", done); };
+  const timer = setTimeout(() => { if (!moved) tgt.dispatchEvent(new MouseEvent("contextmenu", { clientX: x0, clientY: y0, bubbles: true, cancelable: true })); done(); }, 480);
+  document.addEventListener("touchmove", onMove); document.addEventListener("touchend", done); document.addEventListener("touchcancel", done);
+}, { passive: true });
+// the chat bubble (touch): chat stays folded so the aim half stays clear; the bubble pulses on unread
+$("chat-toggle").addEventListener("click", () => {
+  const open = document.body.classList.toggle("chat-open");
+  $("chat-toggle").classList.remove("new");
+  if (open) drawLog();
+});
 // ship-relative controls: W thrusts along the nose (nose: (sin h, -cos h)), S backs up, Q / E push sideways, A / D turn
 function pushInput() {
   const m = sticks.move;
@@ -833,6 +904,7 @@ function addChat(m) {
   lines.push(m); if (lines.length > 200) lines.shift();
   if (shows(chatTab, m)) { chatLog.appendChild(lineEl(m)); while (chatLog.children.length > 200) chatLog.firstChild.remove(); chatLog.scrollTop = chatLog.scrollHeight; }
   if (m.ch && m.i !== myId && chatTab !== "all") for (const [k] of TABS) if (k !== chatTab && k !== "all" && shows(k, m)) unread.add(k);
+  if (TOUCH && !document.body.classList.contains("chat-open") && m.i !== myId) $("chat-toggle").classList.add("new");
   drawTabs();
 }
 drawTabs();

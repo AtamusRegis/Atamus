@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="atamus-build" content="__BUILD__">
   <title>Atamus — Saturn</title>
   <link rel="icon" href="favicon.png" type="image/png">
@@ -155,6 +155,34 @@
     #station button, #dev button, #ctx-menu button, #chat-tabs button, #amount-box button, #prompt-box button, #dev-btn, #admin-btn { transition: transform .07s ease, background .14s ease, border-color .14s ease, color .14s ease, filter .14s ease; }
     #station button:active:not(:disabled), #dev button:active:not(:disabled), #ctx-menu button:active, #chat-tabs button:active, #amount-box button:active, #prompt-box button:active { transform: scale(.94); }
     @media (prefers-reduced-motion: reduce) { #station, #dev, #amount-box, #prompt-box, #ctx-menu, #tip, .chat-line, #cargo i, #report-box .box { animation: none !important; } #fuel-fill.low, #chat-tabs button.new { animation: none !important; } }
+    /* ---- (owner, 2026-10-18) touch screens, landscape: a compact layout with big tap targets. Sticks fly and aim;
+       tap picks up; hold = right-click; pinch zooms; chat folds behind a bubble so the aim half stays clear. ---- */
+    #chat-toggle { display: none; }
+    body.touch #chat-toggle { position: fixed; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 7; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; background: rgba(18,24,36,.92); border: 1px solid var(--rule); border-radius: 8px; color: var(--dim); font: 800 15px var(--f-display); cursor: pointer; }
+    body.touch #chat-toggle.new { color: var(--gold); animation: unreadpulse 1.4s ease-in-out infinite; }
+    body.touch #chat { display: none; }
+    body.touch.chat-open #chat { display: grid; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(58px + env(safe-area-inset-bottom, 0px)); width: min(340px, calc(100vw - 120px)); z-index: 8; }
+    body.touch #chat-in { font-size: 16px; }
+    body.touch #ctx-menu button { padding: 11px 14px; font-size: 15px; }
+    body.touch #station button, body.touch #prompt-box button, body.touch #amount-box button { padding: 9px 14px; font-size: 14px; }
+    body.touch #station { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: min(340px, 60vw); }
+    body.touch #staff-col { right: calc(10px + env(safe-area-inset-right, 0px)); top: 40%; }
+    body.touch:has(#station:not([hidden])) #staff-col { right: calc(356px + env(safe-area-inset-right, 0px)); }
+    @media (pointer: coarse) and (max-height: 620px) {
+      #minimap { width: 108px; height: 108px; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
+      #zone { font-size: 14px; top: calc(6px + env(safe-area-inset-top, 0px)); }
+      #party { left: calc(8px + env(safe-area-inset-left, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); min-width: 0; }
+      .pt-list { padding: 5px 8px; } .pt-mem { font-size: 11.5px; } .pt-head { font-size: 9px; }
+      #hud { left: 50%; transform: translateX(-50%); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); grid-template-columns: auto 128px 128px auto; gap: 5px; }
+      .bar { height: 19px; } .bar span { padding: 0 5px; font-size: 9.5px; }
+      #ship-chip { height: 19px; font-size: 12px; padding: 0 7px; } #credits { height: 19px; font-size: 11px; padding: 0 7px; }
+      #cargo { width: 128px; gap: 2px; }
+      #chat-log { height: 110px; }
+      #prompt-box { top: calc(40px + env(safe-area-inset-top, 0px)); font-size: 12.5px; }
+      #amount-box { top: 56px; width: 250px; }
+      #dev { bottom: 8px; width: min(400px, calc(100vw - 16px)); }
+      .overlay { top: calc(6px + env(safe-area-inset-top, 0px)); padding: 5px 10px; font-size: 11px; }
+    }
   </style>
 </head>
 <body>
@@ -173,6 +201,7 @@
   <div id="amount-box" hidden><b id="amount-title"></b><input id="amount-range" type="range" min="1" max="1" step="1"><div class="amount-row"><span id="amount-n"></span><span id="amount-worth"></span></div><div class="amount-acts"><button id="amount-cancel" type="button">Cancel</button><button id="amount-go" class="gold" type="button"></button></div></div>
   <div id="staff-col"></div>
   <div id="chat"><div id="chat-tabs"></div><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" enterkeyhint="send"></form></div></div>
+  <button id="chat-toggle" type="button">Chat</button>
   <div id="ctx-menu" hidden></div>
   <div id="tip" hidden></div>
   <div id="prompt-box" hidden><span id="prompt-text"></span><button id="prompt-yes" class="gold" type="button">Accept</button><button id="prompt-no" type="button">Decline</button></div>
@@ -181,6 +210,6 @@
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1791945557"></script>
   <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792400003"></script>
+  <script type="module" src="game.js?v=1792400004"></script>
 </body>
 </html>
