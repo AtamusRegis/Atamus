@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **A glowing laser (owner):** the beam is drawn with soft glow halos, a red body and a warm hot core with a faint flicker instead of a flat color, and each wave is a smooth red-to-orange gradient.
 - **A real push (owner):** each laser wave landing on rock now actually moves the ship back — half the old visual bounce, eased fast to slow by the ship's braking — instead of a visual jolt. Server-applied, predicted in step on the client (waves timed on the server's clock).
 - **Laser weight (owner):** the beam's waves are spread out and softer (near the beam's red, not white), and each wave landing at the tip kicks the ship back a touch with a little shake and sparks.
 - **Pivots and engines (owner):** each ship now turns around the pivot the owner marked in pink on the ship sheet, and its exhaust streams from each engine marked in red (Miner 3, Scanner 2, Booster 2, Hauler 5). The Miner's emitter offset moved to 15.8 m ahead of the pivot so the beam still leaves the same spot.

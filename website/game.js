@@ -641,19 +641,26 @@ function shipFx(s, ts, under) {
     const ck = 0, bc = C.signal;                 // (back to basics: one laser, signal red)
     if (len > 0) {
       const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
-      cx.strokeStyle = bc; cx.lineCap = "round";
-      cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5) * (1 + ck * 0.9); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
-      cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6) * (1 + ck); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+      // (owner, 2026-10-18) the beam glows: soft wide halos, a red body and a warm hot core, instead of one flat line
+      const beamLine = (w, col, a8) => { cx.strokeStyle = col; cx.globalAlpha = a8; cx.lineWidth = w; cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke(); };
+      cx.lineCap = "round"; const bw = lw(big ? 2.6 : 1.6);
+      const flick = 0.9 + 0.1 * Math.sin(ts * 31);
+      beamLine(bw * 7, bc, 0.07 * flick); beamLine(bw * 4.2, bc, 0.13 * flick); beamLine(bw * 2.2, bc, 0.3);
+      beamLine(bw, bc, 1); beamLine(bw * 0.45, "#ffb08f", 0.85);
+      cx.globalAlpha = 1;
       { // (owner, 2026-10-18) small waves running from the emitter to the tip
         const L5 = hyp(x1 - x0, y1 - y0), ux5 = (x1 - x0) / (L5 || 1), uy5 = (y1 - y0) / (L5 || 1), LZ = G.laser || { waveGap: 34, waveSpeed: 90, kick: 0 }, gap = LZ.waveGap, spd = LZ.waveSpeed;
         const tsS = (Date.now() - (srvOff || 0)) / 1000;   // (the server's clock: waves land, and push, when the server says)
-        cx.strokeStyle = "#ff8a72"; cx.lineCap = "round";   // (closer to the beam's red than white: soft, not contrasty)
+        cx.lineCap = "butt";                          // each wave a smooth gradient: beam red at its ends, warm orange at its crest
         for (let d5 = (tsS * spd) % gap; d5 < L5; d5 += gap) {
-          const f5 = Math.sin(Math.PI * d5 / L5), w5 = lw(big ? 5.5 : 3.5) * (0.6 + 0.4 * f5), half = 2.2;
-          cx.globalAlpha = 0.35 + 0.5 * f5; cx.lineWidth = w5;
-          cx.beginPath(); cx.moveTo(x0 + ux5 * (d5 - half), y0 + uy5 * (d5 - half)); cx.lineTo(x0 + ux5 * (d5 + half), y0 + uy5 * (d5 + half)); cx.stroke();
+          const f5 = Math.sin(Math.PI * d5 / L5), w5 = lw(big ? 5 : 3.2) * (0.6 + 0.4 * f5), half = 6;
+          const ax = x0 + ux5 * Math.max(0, d5 - half), ay = y0 + uy5 * Math.max(0, d5 - half), bx2 = x0 + ux5 * Math.min(L5, d5 + half), by2 = y0 + uy5 * Math.min(L5, d5 + half);
+          const g5 = cx.createLinearGradient(x0 + ux5 * (d5 - half), y0 + uy5 * (d5 - half), x0 + ux5 * (d5 + half), y0 + uy5 * (d5 + half));
+          g5.addColorStop(0, "rgba(229,96,79,0)"); g5.addColorStop(0.3, "rgba(240,112,88,0.55)"); g5.addColorStop(0.5, "rgba(255,150,105,0.95)"); g5.addColorStop(0.7, "rgba(240,112,88,0.55)"); g5.addColorStop(1, "rgba(229,96,79,0)");
+          cx.strokeStyle = g5; cx.globalAlpha = 0.45 + 0.5 * f5; cx.lineWidth = w5;
+          cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx2, by2); cx.stroke();
         }
-        cx.globalAlpha = 1;
+        cx.globalAlpha = 1; cx.lineCap = "round";
         // (owner, 2026-10-18) each wave that lands at the tip pushes the ship back — a real kick the braking eases out,
         // fast to slow; my own ship predicts it as the server applies it, with a little shake
         if (hitF) {
