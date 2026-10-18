@@ -19,7 +19,9 @@ export const ringOf = (r) => { for (let i = 0; i < W.rings.length; i++) if (r >=
 export const sectorOf = (x, y) => (((Math.round(Math.atan2(x, -y) / (Math.PI / 2))) % 4) + 4) % 4;
 export function zoneOf(x, y) {
   const r = hyp(x, y); if (r < W.safeR) return "Station";
-  return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + R.SECTOR_NAMES[R.SECTORS[sectorOf(x, y)]];
+  let ring = W.rings.length;                   // the nearest ring band (the gaps split halfway)
+  for (let i = 0; i < W.rings.length; i++) { const next = W.rings[i + 1]; if (!next || r < (W.rings[i][1] + next[0]) / 2) { ring = i + 1; break; } }
+  return "Ring " + ring + " · " + R.SECTOR_NAMES[R.SECTORS[sectorOf(x, y)]];
 }
 const ORE_KEYS = Object.keys(R.ORES);
 const normA = (a) => ((a % TAU) + TAU) % TAU;
@@ -75,13 +77,15 @@ export class World {
   }
   genRock(key, cx, cy, gen, epoch) {
     const rand = rng(hash32(SECRET + "|" + epoch + "|" + key + "|" + gen));
-    if (rand() > R.ROCK.spawnChance) return null;
+    const roll = rand();
     const x = (cx + 0.26 + rand() * 0.48) * W.cell, y = (cy + 0.26 + rand() * 0.48) * W.cell, ring = ringOf(hyp(x, y));   // (kept inward so big rocks in adjacent cells can't overlap)
     if (ring < 0) return null;
+    if (roll > R.ROCK.spawnChance * (R.RING_SPAWN[ring] ?? 1)) return null;   // (deeper rings roll rocks rarer)
     const sizes = R.RING_SIZES[ring], sizeIdx = sizes[Math.floor(rand() * sizes.length)], SZ = R.ROCKS[sizeIdx];
     const pool_ = [...R.RING_ORES[ring]]; const types = [];
     for (let i = 0; i < SZ.oreTypes && pool_.length; i++) types.push(pool_.splice(Math.floor(rand() * pool_.length), 1)[0]);
-    const C = R.CHUNK, freeA = rand() * TAU;   // one straight line to the core kept free of bedrock
+    const C = R.CHUNK, bedW = C.wBed * (R.RING_BED[ring] ?? 1);   // deeper rings run heavier with bedrock
+    const freeLine = (R.RING_FREELINE[ring] ?? 1) > 0, freeA = rand() * TAU;   // the guaranteed bore line, where the ring grants one
     // (owner, 2026-10-18) shells of masonry out to the size's radius: shell count and thickness vary by size, and the
     // chunk budget is spread over the shells' circumferences, so chunks stay slab-sized at every depth
     const chunks = [], shells = [];
@@ -97,13 +101,14 @@ export class World {
         const split = th > baseTh && rand() < 0.3;                 // thick shells split into stacked towers
         const bands = split ? [[rr, mid], [mid, r1]] : [[rr, r1]];
         for (const [b0, b1] of bands) {
-          const wsum = C.wSoft + C.wNormal + C.wDense + C.wUltra + C.wBed; let dv = rand() * wsum, d = 0;
-          for (const [i2, w] of [C.wSoft, C.wNormal, C.wDense, C.wUltra, C.wBed].entries()) { dv -= w; if (dv <= 0) { d = i2; break; } }
+          const wsum = C.wSoft + C.wNormal + C.wDense + C.wUltra + bedW; let dv = rand() * wsum, d = 0;
+          for (const [i2, w] of [C.wSoft, C.wNormal, C.wDense, C.wUltra, bedW].entries()) { dv -= w; if (dv <= 0) { d = i2; break; } }
           const c = { i: chunks.length, sh: shellIdx, r0: b0, r1: b1, a0, a1, d, ore: null, u: 0, broken: false, scanned: false, adj: [] };
-          if (c.d === 4 && spanHas(c, freeA)) c.d = 1;             // the guaranteed bore line
-          if (c.d !== 4 && rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.u = 1 + (c.d === 2 ? C.denseOre : c.d === 3 ? C.ultraOre : 0); }
+          if (c.d === 4 && freeLine && spanHas(c, freeA)) c.d = 1;   // the guaranteed bore line
+          if (c.d === 4) { c.ore = types[Math.floor(rand() * types.length)]; c.u = 1 + C.bedOre; }   // bedrock is rich — but only a boosted laser banks it
+          else if (rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.u = 1 + (c.d === 2 ? C.denseOre : c.d === 3 ? C.ultraOre : 0); }
           const span = normA(c.a1 - c.a0) || TAU / nSeg, area = span * ((c.r0 + c.r1) / 2) * (c.r1 - c.r0);
-          c.maxHp = Math.max(8, area * C.hpK * [C.soft, 1, C.dense, C.ultra, 1][c.d]); c.hp = c.maxHp;
+          c.maxHp = Math.max(8, area * C.hpK * [C.soft, 1, C.dense, C.ultra, C.bed || 5][c.d]); c.hp = c.maxHp;
           segs.push(c.i); chunks.push(c);
         }
       }
@@ -167,7 +172,7 @@ export class World {
     const [sx, sy] = W.station;
     p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, fuel: R.ECON.startFuel, ship: R.START.ship,
       credits: R.ECON.startCredits, hold: [], cans: [], rate: 0, payer: null, hire: null, tow: null, boostTo: null, pumpTo: null,
-      scanRock: null, scanChunk: -1, scanT: 0, laserLen: 0, laserOn: false, laserRock: null, laserChunk: -1, docked: false, party: null,
+      drill: null, laserLen: 0, laserOn: false, laserRock: null, laserChunk: -1, docked: false, party: null,
       fuelBy: {}, dirty: true, hAt: 0, zone: "" };
     if (r) {
       if (r.fuel_by && typeof r.fuel_by === "object") for (const [k, v] of Object.entries(r.fuel_by)) if (SHIPS[k] && Number.isFinite(+v)) p.fuelBy[k] = Math.max(0, +v);
@@ -195,6 +200,7 @@ export class World {
     const p = this.players.get(String(id)); if (!p || !Number.isFinite(x) || !Number.isFinite(y)) return null;
     if (hyp(x, y) < W.saturnR + 60) { const a = Math.atan2(y, x); x = Math.cos(a) * (W.saturnR + 80); y = Math.sin(a) * (W.saturnR + 80); }
     if (p.tow) { const r = this.rocks.get(p.tow); if (r) r.tow = null; p.tow = null; }
+    p.drill = null;
     p.x = x; p.y = y; p.vx = p.vy = 0; p.zone = zoneOf(x, y); p.dirty = true;
     this.msgs.push({ to: p.id, m: { t: "teleport", x, y } }); return p;
   }
@@ -226,7 +232,7 @@ export class World {
     }
     return null;
   }
-  dmgStage(c) { return Math.min(3, Math.max(0, Math.floor((c.d === 4 ? (c.wear || 0) / c.maxHp : 1 - Math.max(0, c.hp) / c.maxHp) * 4))); }
+  dmgStage(c) { return Math.min(3, Math.max(0, Math.floor(Math.max(c.d === 4 ? (c.wear || 0) / c.maxHp : 0, 1 - Math.max(0, c.hp) / c.maxHp) * 4))); }
   usedSpace(p) { return p.hold.reduce((s, e) => s + unitSpace(e), 0) + p.cans.reduce((s, cid) => { const c = this.cans.get(cid); return s + (c ? this.spaceOf(c) : 0); }, 0); }
   chunkAt(rock, rr, ang) {
     const a = normA(ang);
@@ -242,7 +248,8 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p), empty = p.fuel <= 0.0001, rock = p.tow && this.rocks.get(p.tow);
       const towK = rock ? Math.max(0.2, 60 / (60 + rock.r)) : 1;
-      const k = empty ? FLY.crawl : 1, spd = S.speed * k * towK, push = hyp(p.fx, p.fy);
+      if (p.drill) { p.vx = 0; p.vy = 0; }     // drilled in: anchored to the rock
+      const k = empty ? FLY.crawl : 1, spd = S.speed * k * towK, push = p.drill ? 0 : hyp(p.fx, p.fy);
       const a = (push > 0.01 ? FLY.accel : FLY.brake) * (push > 0.01 ? k : 1) * dt;
       let ex = p.fx * spd - p.vx, ey = p.fy * spd - p.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
       p.vx += ex; p.vy += ey;
@@ -261,10 +268,10 @@ export class World {
       const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < R.ECON.dockR;
       if (dock && !p.docked) this.deliver(p);
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
-      if (dock) { p.tow = null; p.pumpTo = null; p.boostTo = null; p.scanRock = null; }
+      if (dock) { p.tow = null; p.pumpTo = null; p.boostTo = null; p.drill = null; }
       // the miner's laser: cut the first chunk on the line (a boosted miner cuts faster); down a bore, the core itself
       p.laserOn = false; p.laserLen = 0; p.laserRock = null; p.laserChunk = -1;
-      if (!p.firing) { p.lockTgt = null; p.scanTgt = null; }
+      if (!p.firing) p.lockTgt = null;
       if (p.firing && !dock && S.laserDps) {
         const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.laserRange;
         for (const r of this.rocksNear(p.x, p.y, S.laserRange + 300)) {
@@ -272,8 +279,8 @@ export class World {
           if (hit && hit.t <= S.laserRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
         }
         if (best) {
-          let dps = S.laserDps;
-          for (const q of this.players.values()) if (q.boostTo === p.id && this.shipOf(q).boost && q.fuel > 0 && !q.docked && hyp(q.x - p.x, q.y - p.y) <= this.shipOf(q).boostRange) dps *= this.shipOf(q).boost;
+          let dps = S.laserDps, boosted = !!S.boost;   // a Booster's own laser counts as boosted (it cuts bedrock, just slowly)
+          for (const q of this.players.values()) if (q.boostTo === p.id && this.shipOf(q).boost && q.fuel > 0 && !q.docked && hyp(q.x - p.x, q.y - p.y) <= this.shipOf(q).boostRange) { dps *= this.shipOf(q).boost; boosted = true; }
           this.burn(p, S.burn / 60 * dt);
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = best.r.id;
           best.r.touched = t; best.r.home = false;
@@ -284,8 +291,10 @@ export class World {
             if (prev && prev !== ch && !prev.broken && prev.d !== undefined && prev.adj.includes(ch.i)) ch = prev;
             p.lockTgt = { rock: best.r.id, i: ch.i };
             p.laserChunk = ch.i; const st0 = this.dmgStage(ch);
-            if (ch.d !== 4) { ch.hp -= dps * dt; if (ch.hp <= 0) this.breakChunk(best.r, ch, p); else if (this.dmgStage(ch) !== st0) best.r.v++; }
-            else {                             // bedrock holds: the cracks spread, then it turns dark red
+            if (ch.d !== 4 || boosted) {       // (owner, 2026-10-18) only a boosted laser — or a Booster's own — cuts bedrock, and banks its rich ore
+              ch.hp -= dps * dt;
+              if (ch.hp <= 0) this.breakChunk(best.r, ch, p); else if (this.dmgStage(ch) !== st0) best.r.v++;
+            } else {                           // an unboosted laser: bedrock holds — the cracks spread, then it turns dark red
               ch.wear = (ch.wear || 0) + dps * dt;
               if (!ch.scanned && ch.wear >= ch.maxHp) { ch.scanned = true; best.r.v++; }
               else if (this.dmgStage(ch) !== st0) best.r.v++;
@@ -293,28 +302,33 @@ export class World {
           }
         } else p.laserLen = S.laserRange;
       }
-      // the scanner: hold the beam and it maps chunk after chunk; scanned ones are glass to it
-      if (p.firing && !dock && S.scanTime) {
-        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.scanRange;
-        for (const r of this.rocksNear(p.x, p.y, S.scanRange + 300)) {
-          const hit = this.castRock(r, p.x, p.y, ux, uy, true);
-          if (hit && !hit.core && hit.t <= S.scanRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
-        }
-        if (best) {
-          let ch = best.hit.chunk;               // sticky, as the laser: a wiggle onto a touching chunk keeps the scan going
-          const prev = p.scanTgt && p.scanTgt.rock === best.r.id ? best.r.chunks[p.scanTgt.i] : null;
-          if (prev && prev !== ch && !prev.broken && !prev.scanned && prev.adj.includes(ch.i)) ch = prev;
-          p.scanTgt = { rock: best.r.id, i: ch.i };
-          const key = best.r.id + ":" + ch.i;
-          if (p.scanChunk !== key) { p.scanChunk = key; p.scanT = 0; }
-          p.scanT += dt; p.scanRock = best.r.id; p.laserLen = best.hit.t; p.laserOn = true;
-          if (p.scanT >= S.scanTime) {
-            ch.scanned = true; best.r.v++; best.r.touched = t; best.r.home = false;
-            p.scanT = 0; p.scanChunk = -1; p.scanTgt = null;
-            this.fx.push({ k: "scan", x: best.r.x + Math.cos((ch.a0 + normA(ch.a1 - ch.a0) / 2)) * (ch.r0 + ch.r1) / 2, y: best.r.y + Math.sin((ch.a0 + normA(ch.a1 - ch.a0) / 2)) * (ch.r0 + ch.r1) / 2 });
+      // the drill (owner, 2026-10-18: the Scanner is the core driller): anchored to a rock, it bores a straight radial
+      // line toward the core, revealing each chunk the head passes. It takes no ore. Boring through bedrock is slow and
+      // shocks the chunks touching it — anything that collateral breaks loses its ore. The ship can't move while
+      // drilled in; to survey another column it withdraws and re-anchors there.
+      if (p.drill) {
+        const rk = this.rocks.get(p.drill.rock), DR = S.drillSpeed;
+        if (!rk || rk.core.popped || dock || !DR || p.fuel <= 0.0001 || rk.tow) p.drill = null;
+        else {
+          this.burn(p, S.burn / 60 * dt);
+          rk.touched = t; rk.home = false;
+          const ang = p.drill.ang, head = rk.r - p.drill.depth;
+          const ch = this.chunkAt(rk, Math.max(rk.core.r0 + 1.2, head), ang);
+          let speed = DR;
+          if (ch && !ch.scanned) { ch.scanned = true; rk.v++; this.fx.push({ k: "scan", x: rk.x + Math.cos(ang) * head, y: rk.y + Math.sin(ang) * head }); }
+          if (ch && ch.d === 4 && !ch.broken) {
+            speed = DR * (S.drillBed || 0.2);
+            for (const ni of ch.adj) {         // grinding bedrock shocks its neighbors; what breaks this way loses its ore
+              const n = rk.chunks[ni]; if (n.broken || n.d === 4) continue;
+              const st0 = this.dmgStage(n);
+              n.hp -= n.maxHp * (S.drillShock || 0.08) * dt;
+              if (n.hp <= 0) this.breakChunk(rk, n, p, true); else if (this.dmgStage(n) !== st0) rk.v++;
+            }
           }
-        } else { p.scanRock = null; p.scanChunk = -1; p.scanT = 0; if (!p.laserOn) p.laserLen = S.scanRange; }   // (the light laser may still be cutting: keep its beam)
-      } else if (S.scanTime) { p.scanRock = null; p.scanChunk = -1; p.scanT = 0; }
+          p.drill.depth += speed * dt;
+          if (rk.r - p.drill.depth <= rk.core.r0 + 1) p.drill = null;   // reached the core: the drill withdraws
+        }
+      }
       if (rock) {                              // the scanner's tow (the old tractor): the rock follows on a leash
         if (rock.core.popped || p.fuel <= 0 || !S.towRange) { p.tow = null; rock.tow = null; }
         else {
@@ -343,7 +357,7 @@ export class World {
       if (p.rate > 0 && p.payer) {
         const q = this.players.get(p.payer);
         const active = q && !q.docked && hyp(q.x - p.x, q.y - p.y) <= R.SERVICES.range &&
-          ((S.boost && p.boostTo === q.id && q.laserOn) || (S.pump && p.pumpTo === q.id) || (S.scanTime && p.scanRock));
+          ((S.boost && p.boostTo === q.id && q.laserOn) || (S.pump && p.pumpTo === q.id) || (S.drillSpeed && p.drill));
         if (!q) p.payer = null;
         else if (active && !(q.party && q.party === p.party)) {
           const pay = Math.min(q.credits, p.rate * dt);
@@ -351,28 +365,30 @@ export class World {
           else { q.credits -= pay; p.credits += pay; q.meDirty = p.meDirty = true; q.dirty = p.dirty = true; }
         }
       }
-      if (p.firing || p.pumpTo || p.boostTo || p.tow || p.scanRock) p.meDirty = true;
+      if (p.firing || p.pumpTo || p.boostTo || p.tow || p.drill) p.meDirty = true;
       p.sos = p.fuel <= 0.0001 && !p.docked;
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
 
-  // breaking a chunk banks its ore into the core and shocks every touching chunk; chains cascade (bedrock and the core ignore them)
-  breakChunk(rock, ch, breaker) {
-    const queue = [ch];
+  // breaking a chunk banks its ore into the core and shocks every touching chunk; chains cascade. Shocks never reach
+  // bedrock or the core (a direct boosted break is the only way bedrock goes). A lossy break — the drill's collateral —
+  // banks nothing, and its whole cascade loses the ore too.
+  breakChunk(rock, ch, breaker, lossy) {
+    const queue = [{ c: ch, direct: true }];
     while (queue.length) {
-      const c = queue.shift(); if (c.broken || c.d === 4) continue;
+      const { c, direct } = queue.shift(); if (c.broken || (c.d === 4 && !direct)) continue;
       c.broken = true; rock.v++;
-      if (c.u > 0 && c.ore) {
+      if (!lossy && c.u > 0 && c.ore) {
         const b = rock.core.banked[breaker.id] || (rock.core.banked[breaker.id] = {});
         b[c.ore] = (b[c.ore] || 0) + c.u; rock.core.bankedTotal += c.u;
       }
       const mid = (c.r0 + c.r1) / 2, ang = c.a0 + normA(c.a1 - c.a0) / 2;
-      this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: c.u, ore: c.ore || 0 });
+      this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: lossy ? 0 : c.u, ore: c.ore || 0 });
       for (const ni of c.adj) {
         const n = rock.chunks[ni]; if (n.broken || n.d === 4) continue;
         n.hp -= n.maxHp * R.CHUNK.burst;
-        if (n.hp <= 0) queue.push(n);
+        if (n.hp <= 0) queue.push({ c: n });
       }
     }
     rock.touched = now(); rock.home = false;
@@ -462,12 +478,24 @@ export class World {
   act(id, m) {
     const p = this.players.get(String(id)); if (!p || !m) return;
     const S = this.shipOf(p), say = (text) => this.msgs.push({ to: p.id, m: { t: "chat", ch: "sys", text } });
-    if (typeof m.rock === "string" && S.towRange) {   // the scanner's tow
+    if (typeof m.rock === "string" && (S.towRange || S.drillSpeed)) {   // the scanner's drill and tow
       const r = this.rocks.get(m.rock); if (!r) return;
-      if (p.tow === r.id) { p.tow = null; r.tow = null; }
-      else if (!r.core.popped && (!r.tow || !this.players.has(r.tow)) && hyp(r.x - p.x, r.y - p.y) - r.r <= S.towRange && p.fuel > 0) {
-        if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; }
-        p.tow = r.id; r.tow = p.id; r.touched = now(); r.home = false;
+      if (m.op === "drill" && S.drillSpeed) {
+        if (p.drill && p.drill.rock === r.id) p.drill = null;      // undrill: free to move to the next column
+        else if (!r.core.popped && !r.tow && p.fuel > 0) {
+          const d = hyp(p.x - r.x, p.y - r.y);
+          if (d - r.r <= S.drillRange && d > r.core.r0 + 4) {
+            if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; p.tow = null; }
+            p.drill = { rock: r.id, ang: Math.atan2(p.y - r.y, p.x - r.x), depth: 0 };
+            r.touched = now(); r.home = false;
+          }
+        }
+      } else if (m.op === "tow" && S.towRange) {
+        if (p.tow === r.id) { p.tow = null; r.tow = null; }
+        else if (!r.core.popped && (!r.tow || !this.players.has(r.tow)) && hyp(r.x - p.x, r.y - p.y) - r.r <= S.towRange && p.fuel > 0) {
+          if (p.tow) { const o = this.rocks.get(p.tow); if (o) o.tow = null; }
+          p.drill = null; p.tow = r.id; r.tow = p.id; r.touched = now(); r.home = false;
+        }
       }
     } else if (typeof m.ship === "string") {
       const q = this.players.get(m.ship); if (!q || q === p || q.docked) return; const d = hyp(q.x - p.x, q.y - p.y);
@@ -517,7 +545,7 @@ export class World {
       if (!SHIPS[m.k] || p.ship === m.k) return false;
       if (p.cans.length || p.hold.length) return false;            // (cargo was just delivered on docking; belt and braces)
       p.fuelBy[p.ship] = p.fuel;                                   // (owner, 2026-10-18) each ship keeps its own tank
-      p.ship = m.k; p.tow = null; p.pumpTo = null; p.boostTo = null; p.scanRock = null; p.rate = 0;
+      p.ship = m.k; p.tow = null; p.pumpTo = null; p.boostTo = null; p.drill = null; p.rate = 0;
       const T = this.shipOf(p).tank;
       p.fuel = Math.min(T, p.fuelBy[m.k] !== undefined ? p.fuelBy[m.k] : R.ECON.startFuel);
     } else if (m.op === "fuel") {
@@ -609,9 +637,9 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p), used = this.usedSpace(p);
       out.push({ p, key: "", row: [p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.SHIP_KINDS.indexOf(p.ship),
-        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.sos ? 4 : 0) | (p.docked ? 8 : 0),
-        Math.round(p.aim * 1000), Math.round(p.laserLen), p.tow || 0, p.boostTo || 0, p.pumpTo || 0,
-        Math.round(used / S.hold * 100), Math.round(p.fuel / S.tank * 100), Math.round((p.rate || 0) * 10)] });
+        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.sos ? 4 : 0) | (p.docked ? 8 : 0) | (p.drill ? 16 : 0),
+        Math.round(p.aim * 1000), Math.round(p.laserLen), p.drill ? p.drill.rock : (p.tow || 0), p.boostTo || 0, p.pumpTo || 0,
+        Math.round(used / S.hold * 100), Math.round(p.fuel / S.tank * 100), Math.round((p.rate || 0) * 10), Math.round(p.drill ? p.drill.depth : 0)] });
     }
     for (const e of out) e.key = JSON.stringify(e.row);
     return out;
@@ -653,7 +681,7 @@ export class World {
     const cans = p.cans.map((cid) => { const c = this.cans.get(cid); return c ? { id: c.id, crate: c.kind === "crate" ? 1 : 0, u: this.spaceOf(c), v: Math.round(this.valueOf(c.contents)) } : null; }).filter(Boolean);
     const myCrates = [...this.cans.values()].filter((c) => c.kind === "crate" && c.owner === p.id && !c.heldBy).map((c) => ({ id: c.id, u: this.spaceOf(c), share: c.share }));
     return { t: "me", fuel: Math.round(p.fuel * 10) / 10, tank: S.tank, cap: S.hold, hold, cans, myCrates, credits: Math.floor(p.credits), docked: p.docked ? 1 : 0,
-      ship: p.ship, tow: p.tow || 0, boost: p.boostTo || 0, pump: p.pumpTo || 0, hire: p.hire || 0, rate: p.rate || 0, sos: p.sos ? 1 : 0, zone: p.zone };
+      ship: p.ship, tow: p.tow || 0, drill: p.drill ? p.drill.rock : 0, boost: p.boostTo || 0, pump: p.pumpTo || 0, hire: p.hire || 0, rate: p.rate || 0, sos: p.sos ? 1 : 0, zone: p.zone };
   }
   socMsg(p) {
     const party = this.partyOf(p);

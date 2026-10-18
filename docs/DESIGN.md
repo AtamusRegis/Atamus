@@ -7,7 +7,7 @@
 - **A cooperative gather-and-craft MMO, like Palia. No PvP.** The cooperation lives inside the act of mining — how the rock is built, who maps it, who cuts where, when to pop — not in a payout table.
 - **Ore is physical.** It banks in cores, pays at the pop, rides in holds, cans and crates, and only becomes money when it's delivered. A party shares everything evenly.
 - **Bore or strip:** a bore reaches the core's ore fast; stripping the whole rock pays far more.
-- **Each role is its own ship** (owner, 2026-10-18): Miner, Scanner (scanner + tractor), Hauler (hauler + refinery), Booster (command), Fueler. Kept from the old design: Saturn, the two rings, sectors, fog of war, movement.
+- **Each role is its own ship** (owner, 2026-10-18): Miner, Scanner (the core driller, + tractor), Hauler (hauler + refinery), Booster (command; boosted lasers are the only clean cut through bedrock, which is rich), Fueler. Every ship has a light laser. Kept from the old design: Saturn, the rings (three now), sectors, fog of war, movement.
 - **No risk in transit for now**: only time takes ore.
 
 ## In the document but not built yet

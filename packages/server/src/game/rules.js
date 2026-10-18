@@ -7,20 +7,21 @@ export const WORLD = {
   saturnR: 1200,            // the planet: nothing flies inside it
   station: [0, -1900],      // the one station, north of the planet
   safeR: 2600,              // around Saturn and the station, outside any sector
-  rings: [[3000, 9000], [12000, 18000]],  // ring 1 and ring 2 (inner, outer radius)
-  lockedR: 19000,           // the red dashed line: nobody flies past it
+  rings: [[3000, 9000], [12000, 18000], [21000, 28000]],  // the rings (inner, outer radius); ring 3 (owner, 2026-10-18)
+  lockedR: 29000,           // the red dashed line: nobody flies past it
   cell: 700,                // the asteroid grid: one seeded rock slot per cell
   loadR: 3200,              // the hard cap on what a player can ever be sent
 };
 
 // (owner, 2026-10-18) each role is its own ship: the old hull with that module's section is how it looks and behaves.
-// Only the Miner cuts rock. The Scanner also tows (the old tractor). The Hauler has the refinery aboard. The Booster
-// speeds up one player's mining at a time. vision: the fog of war (the Scanner sees furthest).
-// (owner, 2026-10-18) every ship can mine — a light laser on each; the Miner just does a far better job of it
+// Every ship has a light laser (the Miner's is the strong one). The Scanner is the core driller (its drill surveys a
+// straight line to the core) and also tows (the old tractor). The Hauler has the refinery aboard. The Booster speeds up
+// one player's mining at a time, and boosted lasers (or a Booster's own, slowly) are the only thing that cuts bedrock
+// cleanly. vision: the fog of war (the Scanner sees furthest).
 export const SHIPS = {
   miner:   { name: "Miner",   art: ["miner"],               hold: 12, tank: 100, speed: 80, laserDps: 15, laserRange: 220, burn: 4, vision: 1000 },
   scanner: { name: "Scanner", art: ["scanner", "tractor"],  hold: 6,  tank: 120, speed: 85, laserDps: 5, laserRange: 180, burn: 4,
-             scanTime: 0.35, scanRange: 600, vision: 1500,
+             drillSpeed: 9, drillBed: 0.2, drillShock: 0.08, drillRange: 250, vision: 1500,   // the drill: m/s into the rock; x through bedrock; collateral a second on chunks touching drilled bedrock; engage reach
              towRange: 250, towBurn: 6, towPull: 2.5, towLeash: 12 },   // towing: fuel a minute x (1 + rock radius / 60)
   booster: { name: "Booster", art: ["command"],             hold: 6,  tank: 140, speed: 85, laserDps: 5, laserRange: 180, boost: 1.6, boostRange: 350, burn: 4, vision: 1000 },
   fueler:  { name: "Fueler",  art: ["fueler"],              hold: 6,  tank: 700, speed: 75, laserDps: 5, laserRange: 180, burn: 4, pump: 20, pumpRange: 200, vision: 1000 },
@@ -35,8 +36,9 @@ export const CHUNK = {
   burst: 0.25,              // breaking a chunk shocks every touching chunk for this share of its max health; chains cascade
   hpK: 0.11,                // health = chunk area (m^2) x this x density (chunks got bigger with the 2026-10-18 rocks)
   wSoft: 14, wNormal: 46, wDense: 18, wUltra: 8, wBed: 14,   // density weights, %
-  soft: 0.55, dense: 2.3, ultra: 4,               // health x (normal is 1; bedrock never breaks)
+  soft: 0.55, dense: 2.3, ultra: 4, bed: 5,       // health x (normal is 1; bedrock only breaks for boosted lasers)
   denseOre: 1, ultraOre: 2, // extra ore units in a dense / ultra ore chunk (base is 1)
+  bedOre: 2,                // (owner, 2026-10-18) bedrock is rich: always ore, base + this — but only a boosted laser banks it
   barren: 0.5,              // share of breakable chunks with no ore
 };
 // rock sizes (owner, 2026-10-18: bigger, varied by shells and size): chunks on average, shells of masonry (plus tower
@@ -49,9 +51,14 @@ export const ROCKS = [
 ];
 export const CORE = { grow: 0.5, fastBreak: 4, rarePrice: 50 };   // swells up to +50% full; breaks up to x4 faster full; the rare ore's price
 export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
-// which rings hold which sizes (indexes into ROCKS) and which ores (rarer outward)
-export const RING_SIZES = [[0, 1], [1, 2]];
-export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"]];
+// which rings hold which sizes (indexes into ROCKS) and which ores (rarer outward); per-ring bedrock weight x, rock
+// chance x, and whether a bedrock-free line to the core is guaranteed (owner, 2026-10-18: ring 3's cores can roll
+// bedrock-encapsulated, and its bedrock-heavy rocks need boosters or a driller to fully mine)
+export const RING_SIZES = [[0, 1], [1, 2], [2, 2]];
+export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"], ["cobalt", "platinum"]];
+export const RING_BED = [1, 1.6, 2.4];
+export const RING_SPAWN = [1, 1, 0.7];
+export const RING_FREELINE = [1, 1, 0];
 
 // ores: credits a unit, delivered
 export const ORES = {

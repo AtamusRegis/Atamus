@@ -101,11 +101,16 @@ cv.addEventListener("mousedown", (e) => {
     const o = canAt(e.clientX, e.clientY); if (o && hyp(o.dx - mine.x, o.dy - mine.y) <= G.fly.interactR) { send({ t: "act", can: o.id }); return; }
     firing = true;
   }
-  if (e.button === 2) {                        // another ship: its menu; an asteroid: tow; a can: pick up / unlock
+  if (e.button === 2) {                        // another ship: its menu; an asteroid: drill / tow; a can: pick up / unlock
     const s = shipAt(e.clientX, e.clientY); if (s) { shipMenu(s, e.clientX, e.clientY); return; }
     const o = canAt(e.clientX, e.clientY); if (o) { canMenu(o, e.clientX, e.clientY); return; }
-    const r = rockAt(e.clientX, e.clientY);
-    if (r && myShip().towRange) send({ t: "act", rock: r.id, op: "tow" });
+    const r = rockAt(e.clientX, e.clientY), S = myShip();
+    if (!r) return;
+    const items = [];
+    if (S.drillSpeed) items.push([ME.drill === r.id ? "Undrill" : "Drill", () => send({ t: "act", rock: r.id, op: "drill" })]);
+    if (S.towRange) items.push([ME.tow === r.id ? "Release" : "Tow", () => send({ t: "act", rock: r.id, op: "tow" })]);
+    if (items.length === 1) items[0][1]();
+    else if (items.length) showMenu(e.clientX, e.clientY, items);
   }
 });
 addEventListener("mouseup", (e) => { if (e.button === 0) firing = false; });
@@ -235,6 +240,7 @@ function onSnap(m) {
 function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + G.fly.shipR && r <= G.world.lockedR; }
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, empty = ME.fuel <= 0.0001, rock = ME.tow && rocks.get(ME.tow);
+  if (ME.drill) { mine.vx = 0; mine.vy = 0; inp = { x: 0, y: 0, turn: inp.turn, stick: inp.stick }; }   // drilled in: anchored
   const k = empty ? F.crawl : 1, spd = S.speed * k * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
   const a = (push > 0.01 ? F.accel * k : F.brake) * dt;
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > a) { ex *= a / el; ey *= a / el; }
@@ -455,29 +461,38 @@ function shipFx(s, ts, under) {
     }
     return;
   }
-  // the beam, from the nose along the aim: every ship's light laser in thin red, the Miner's fat, the Scanner's survey
-  // in dashed ice. My own is predicted locally (aim and endpoint from what I see), so it doesn't lag the mouse.
+  // the beam, from the nose along the aim: every ship's light laser in thin red, the Miner's fat. My own is predicted
+  // locally (aim and endpoint from what I see), so it doesn't lag the mouse.
   const isMe = s.id === myId, S2 = G.ships[kind] || {}, fireNow = isMe ? firing && !ME.docked : !!(fl & 2);
-  if (fireNow && (S2.laserDps || S2.scanTime)) {
-    const scan = kind === "scanner", big = kind === "miner";
+  if (fireNow && S2.laserDps) {
+    const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
-    if (isMe) {
-      a = aimAngle();
-      let c2 = scan ? castLocal(mine.x, mine.y, a, true, S2.scanRange) : castLocal(mine.x, mine.y, a, false, S2.laserRange);
-      if (scan && !c2.hit && S2.laserDps) c2 = castLocal(mine.x, mine.y, a, false, S2.laserRange);   // (nothing left to map: the light laser's cut shows)
-      len = c2.len; hitF = !!c2.hit;
-    }
+    if (isMe) { a = aimAngle(); const c2 = castLocal(mine.x, mine.y, a, false, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
     if (len > 0) {
       const nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose, x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
-      cx.strokeStyle = scan ? C.ice : C.signal; cx.lineCap = "round";
-      if (scan) cx.setLineDash([lw(8), lw(7)]);
-      cx.globalAlpha = 0.25; cx.lineWidth = lw(scan ? 6 : big ? 8 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
-      cx.globalAlpha = 1; cx.lineWidth = lw(scan ? 1.4 : big ? 2.6 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke(); cx.setLineDash([]);
+      cx.strokeStyle = C.signal; cx.lineCap = "round";
+      cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
+      cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       if (hitF) {
-        cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(scan ? 4 : big ? 5 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1;
-        if (!scan && Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : (Math.random() < 0.5 ? C.signal : C.heat), drag: 4 }); }
+        cx.fillStyle = "#fff"; cx.globalAlpha = 0.6 + 0.4 * Math.sin(ts * 50); cx.beginPath(); cx.arc(x1, y1, lw(big ? 5 : 4), 0, TAU); cx.fill(); cx.globalAlpha = 1;
+        if (Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : (Math.random() < 0.5 ? C.signal : C.heat), drag: 4 }); }
         for (const rk of rocks.values()) if (hyp(rk.dx - x1, rk.dy - y1) < rk.r + 8) { rk.hitT = performance.now(); break; }
       }
+    }
+  }
+  // the drill (owner, 2026-10-18): anchored into the rock, the bore runs a straight line toward the core
+  if (fl & 16 && r[8]) {
+    const rk = rocks.get(r[8]);
+    if (rk) {
+      const ang = Math.atan2(s.y - rk.dy, s.x - rk.dx), depth = r[14] || 0;
+      const sx = rk.dx + Math.cos(ang) * rk.r, sy = rk.dy + Math.sin(ang) * rk.r;
+      const hx = rk.dx + Math.cos(ang) * Math.max(4, rk.r - depth), hy = rk.dy + Math.sin(ang) * Math.max(4, rk.r - depth);
+      cx.strokeStyle = C.ice; cx.lineCap = "round";
+      cx.lineWidth = lw(4); cx.globalAlpha = 0.9; cx.beginPath(); cx.moveTo(s.x, s.y); cx.lineTo(sx, sy); cx.stroke();   // the shaft, ship to surface
+      cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9); cx.lineWidth = lw(2.4); cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(hx, hy); cx.stroke();   // the bore
+      cx.globalAlpha = 1; cx.fillStyle = "#fff"; cx.beginPath(); cx.arc(hx, hy, lw(3.5), 0, TAU); cx.fill();
+      if (Math.random() < 0.35) spawnPart(hx, hy, { vx: Math.cos(ang) * 25 + (Math.random() - 0.5) * 20, vy: Math.sin(ang) * 25 + (Math.random() - 0.5) * 20, life: 0.3 + Math.random() * 0.3, size: 1.6 + Math.random() * 1.6, color: Math.random() < 0.6 ? C.ice : "#fff", drag: 3 });
+      if (Math.random() < 0.15) rk.hitT = performance.now();   // (a gentle tremble, not a constant shake)
     }
   }
   const at = (lx, ly) => { const c = Math.cos(s.h), sn = Math.sin(s.h); return [s.x + lx * c - ly * sn, s.y + lx * sn + ly * c]; };
@@ -658,7 +673,7 @@ function drawHudLive(now) {
 const stEl = $("station");
 const SHIP_STATS = {                           // what each ship's row shows, from its live numbers (every ship has a laser)
   miner: [["Laser", "laserDps", (v) => v + " / s"], ["Reach", "laserRange", (v) => v + " m"]],
-  scanner: [["Laser", "laserDps", (v) => v + " / s"], ["Scan", "scanTime", (v) => v + " s"], ["Scan reach", "scanRange", (v) => v + " m"], ["Vision", "vision", (v) => fmt(v) + " m"], ["Tow reach", "towRange", (v) => v + " m"]],
+  scanner: [["Laser", "laserDps", (v) => v + " / s"], ["Drill", "drillSpeed", (v) => v + " m/s"], ["Drill reach", "drillRange", (v) => v + " m"], ["Vision", "vision", (v) => fmt(v) + " m"], ["Tow reach", "towRange", (v) => v + " m"]],
   booster: [["Laser", "laserDps", (v) => v + " / s"], ["Boost", "boost", (v) => "×" + v], ["Reach", "boostRange", (v) => v + " m"]],
   fueler: [["Laser", "laserDps", (v) => v + " / s"], ["Pump", "pump", (v) => v + " / s"], ["Reach", "pumpRange", (v) => v + " m"]],
   hauler: [["Laser", "laserDps", (v) => v + " / s"], ["Refines", "refineUnit", (v) => "1 / " + v + " s"]],
@@ -725,7 +740,9 @@ let mmNext = 0, mmView = null;
 // (owner, 2026-10-16) hovering the minimap names the zone under the pointer
 function zoneAt(x, y) {
   const W = G.world, r = hyp(x, y); if (r < W.safeR) return "Station"; if (r > W.lockedR) return "";
-  return "Ring " + (r < (W.rings[0][1] + W.rings[1][0]) / 2 ? 1 : 2) + " · " + G.sectorNames[G.sectors[sectorOf(x, y)]];
+  let ring = W.rings.length;                   // the nearest ring band (the gaps split halfway), as the server
+  for (let i = 0; i < W.rings.length; i++) { const next = W.rings[i + 1]; if (!next || r < (W.rings[i][1] + next[0]) / 2) { ring = i + 1; break; } }
+  return "Ring " + ring + " · " + G.sectorNames[G.sectors[sectorOf(x, y)]];
 }
 mm.addEventListener("mousemove", (e) => {
   if (!mmView || !G) return; const b = mm.getBoundingClientRect(), x = mmView.ox + (e.clientX - b.left - mmView.cx) / mmView.k, y = mmView.oy + (e.clientY - b.top - mmView.cy) / mmView.k, z = zoneAt(x, y);
@@ -883,11 +900,12 @@ const devEl = $("dev"); let devTab = "world", devArmed = 0, devShipK = "miner", 
 const DEV_TABS = [["world", "World"], ["ships", "Ships"], ["rocks", "Rocks"], ["ores", "Ores"], ["economy", "Economy"]];
 const DEV_LABELS = { saturnR: "Saturn radius", safeR: "Safe zone radius", lockedR: "Locked line radius", loadR: "Load circle", cell: "Asteroid cell",
   hold: "Hold", tank: "Tank", speed: "Speed", laserDps: "Laser / s", laserRange: "Laser reach", burn: "Fuel / min working", vision: "Vision",
-  scanTime: "Seconds a scan", scanRange: "Scan reach", towRange: "Tow reach", towBurn: "Tow fuel / min", towPull: "Tow pull", towLeash: "Tow leash",
+  drillSpeed: "Drill speed", drillBed: "Drill bedrock ×", drillShock: "Drill collateral / s", drillRange: "Drill reach",
+  towRange: "Tow reach", towBurn: "Tow fuel / min", towPull: "Tow pull", towLeash: "Tow leash",
   boost: "Boost ×", boostRange: "Boost reach", pump: "Pump / s", pumpRange: "Pump reach", refineUnit: "Seconds a refined unit",
   accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", interactR: "Reach", shipR: "Bump radius",
   burst: "Burst share", hpK: "Health per area", wSoft: "Soft %", wNormal: "Normal %", wDense: "Dense %", wUltra: "Ultra %", wBed: "Bedrock %",
-  soft: "Soft health ×", dense: "Dense health ×", ultra: "Ultra health ×", denseOre: "Dense extra ore", ultraOre: "Ultra extra ore", barren: "Barren share",
+  soft: "Soft health ×", dense: "Dense health ×", ultra: "Ultra health ×", bed: "Bedrock health ×", denseOre: "Dense extra ore", ultraOre: "Ultra extra ore", bedOre: "Bedrock extra ore", barren: "Barren share",
   chunks: "Chunks", shells: "Shells", radius: "Radius", coreR: "Core radius", rareMax: "Rare ore at full strip", coreHp: "Core health", oreTypes: "Ore types",
   grow: "Core swell share", fastBreak: "Full-core break ×", rarePrice: "Rare ore price",
   linger: "Lasts after last touch s", respawn: "Respawn s", reseed: "Reseed s", spawnChance: "Rock chance per cell",
@@ -907,7 +925,10 @@ const DEV_HELP = {
   "ships.hold": "Cargo units this ship's hold carries (a refined unit takes a fifth of the room).", "ships.tank": "Fuel this ship's tank holds.", "ships.speed": "This ship's top speed in m/s.",
   "ships.laserDps": "Chunk damage a second from this ship's laser — every ship has one; the Miner's is the strong one.", "ships.laserRange": "How far this ship's laser reaches, in meters.", "ships.burn": "Fuel used a minute while this ship's gear works.",
   "ships.vision": "How far this ship sees, in meters: nothing beyond it is sent or shown (the fog of war).",
-  "ships.scanTime": "Seconds the Scanner's beam must hold on a chunk to map it.", "ships.scanRange": "How far the survey beam reaches, in meters.",
+  "ships.drillSpeed": "Meters a second the drill bores into the rock, revealing each chunk the head passes (it takes no ore; the ship can't move while drilled in).",
+  "ships.drillBed": "The drill's speed through bedrock, as a share of its normal speed.",
+  "ships.drillShock": "While the drill grinds bedrock, every chunk touching that bedrock loses this share of its maximum health a second — and anything broken that way loses its ore.",
+  "ships.drillRange": "How near the rock's surface the ship must be to drill in.",
   "ships.towRange": "How far the Scanner can latch onto an asteroid to tow it.", "ships.towBurn": "Towing fuel a minute, before the size cost (× (1 + radius / 60)).",
   "ships.towPull": "How quickly a towed asteroid catches up to its place behind the ship.", "ships.towLeash": "Gap in meters between the ship and the towed asteroid.",
   "ships.boost": "The boosted player's mining is multiplied by this.", "ships.boostRange": "How far the boost reaches, in meters (one player at a time).",
@@ -917,7 +938,9 @@ const DEV_HELP = {
   "chunk.hpK": "A chunk's health is its area in m² times this, times its density multiplier.",
   "chunk.wSoft": "Weight of soft chunks when a rock is built (against the other weights).", "chunk.wNormal": "Weight of normal chunks.", "chunk.wDense": "Weight of dense chunks.", "chunk.wUltra": "Weight of ultra chunks.", "chunk.wBed": "Weight of bedrock, which never breaks (about one in seven at 14).",
   "chunk.soft": "A soft chunk's health multiplier.", "chunk.dense": "A dense chunk's health multiplier (it also holds extra ore).", "chunk.ultra": "An ultra chunk's health multiplier (it also holds extra ore).",
+  "chunk.bed": "Bedrock's health multiplier, for the lasers that can cut it: a boosted miner's, or a Booster's own (slowly). Everyone else's laser just wears it bare.",
   "chunk.denseOre": "Extra ore units in a dense ore chunk (the base is 1).", "chunk.ultraOre": "Extra ore units in an ultra ore chunk.",
+  "chunk.bedOre": "Extra ore units in a bedrock chunk (always ore, base + this) — banked only when a boosted laser breaks it; broken any other way, it's lost.",
   "chunk.barren": "Share of breakable chunks with no ore: plain stone that still has to be cleared.",
   "rockSizes.chunks": "Chunks this size of rock is built from, on average (spread over the shells' circumferences).",
   "rockSizes.shells": "Shells of masonry around the core; thick shells split into stacked towers, so the depth at one angle runs a little past this.",
@@ -929,6 +952,9 @@ const DEV_HELP = {
   "rock.linger": "Seconds a part-mined rock lasts after it was last touched, however far out it is.", "rock.respawn": "Seconds before a popped rock's slot re-rolls somewhere else.",
   "rock.reseed": "Seconds between reshuffles of the untouched field.", "rock.spawnChance": "The chance each grid cell holds a rock.",
   "ringSizes": "The smallest and largest rock size in this ring (0 small, 1 medium, 2 large).",
+  "ringBed": "This ring's bedrock weight multiplier: deeper rings run heavier with bedrock.",
+  "ringSpawn": "This ring's rock chance multiplier on the cell spawn chance: deeper rings roll rocks rarer.",
+  "ringFree": "1: every rock in this ring keeps a bedrock-free line to the core. 0: no guarantee — cores can roll bedrock-encapsulated.",
   "ores.price": "Credits one unit pays when it's delivered.",
   "cans.lock": "Seconds a can stays locked to its owner before it turns public.", "cans.public": "Seconds a public can sits before it's gone.",
   "crateShare": "The unlock slider's ends: the share of a crate's value a deliverer outside the party keeps (locked at pickup).",
@@ -943,7 +969,7 @@ function devHelp(path) {
   if (root === "ships") return DEV_HELP["ships." + b];
   if (root === "rockSizes") return DEV_HELP["rockSizes." + b];
   if (root === "ores") return DEV_HELP["ores." + b];
-  if (root === "ringSizes" || root === "crateShare") return DEV_HELP[root];
+  if (root === "ringSizes" || root === "ringBed" || root === "ringSpawn" || root === "ringFree" || root === "crateShare") return DEV_HELP[root];
   return DEV_HELP[root + "." + a];
 }
 const devGet = (path) => path.reduce((o, k) => (o == null ? o : o[k]), G);
@@ -974,8 +1000,7 @@ function devDraw() {
   if (devTab === "world") {
     out.push(devGroup("The map", [
       devRow("Saturn radius", devInput(["world", "saturnR"])), devRow("Safe zone radius", devInput(["world", "safeR"])),
-      devRow("Ring 1 (inner · outer)", devInput(["world", "rings", 0, 0]), devInput(["world", "rings", 0, 1])),
-      devRow("Ring 2 (inner · outer)", devInput(["world", "rings", 1, 0]), devInput(["world", "rings", 1, 1])),
+      ...G.world.rings.map((pair, i) => devRow("Ring " + (i + 1) + " (inner · outer)", devInput(["world", "rings", i, 0]), devInput(["world", "rings", i, 1]))),
       devRow("Locked line radius", devInput(["world", "lockedR"])), devRow("Load circle", devInput(["world", "loadR"])), devRow("Asteroid cell", devInput(["world", "cell"])),
     ]));
     out.push(devGroup("Flying (every ship)", devNumbers("fly", G.fly)));
@@ -990,7 +1015,12 @@ function devDraw() {
     const g = devGroup(SZ.name + " rocks", rows); g.insertBefore(pick, g.children[1]); out.push(g);
     out.push(devGroup("The core", devNumbers("core", G.core)));
     out.push(devGroup("The field", devNumbers("rock", G.rock)));
-    out.push(devGroup("Rings", G.ringSizes.map((pair, i) => devRow("Ring " + (i + 1) + " sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])))));
+    out.push(devGroup("Rings", G.ringSizes.flatMap((pair, i) => [
+      devRow("Ring " + (i + 1) + " sizes (min · max)", devInput(["ringSizes", i, 0]), devInput(["ringSizes", i, 1])),
+      devRow("Ring " + (i + 1) + " bedrock ×", devInput(["ringBed", i])),
+      devRow("Ring " + (i + 1) + " rock chance ×", devInput(["ringSpawn", i])),
+      devRow("Ring " + (i + 1) + " clear line (0 · 1)", devInput(["ringFree", i])),
+    ])));
   } else if (devTab === "ores") {
     for (const o of ORE_KEYS) out.push(devGroup(G.ores[o].name, Object.keys(G.ores[o]).filter((k) => typeof G.ores[o][k] === "number").map((k) => devRow(devLabel(k), devInput(["ores", o, k])))));
     out.push(devGroup("Cans", devNumbers("cans", G.cans)));
@@ -1024,6 +1054,6 @@ window.Atamus = {
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, size: r.size, r: r.r, fill: r.fill, hp: r.hp, tow: r.tow })); },
   chunks: (id) => details.get(id) || null,
   get cans() { return [...cans.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, crate: o.crate, st: o.st })); },
-  get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], rate: (s.row[13] || 0) / 10 })); },
+  get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], rate: (s.row[13] || 0) / 10, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[14] || 0 } : null })); },
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = zoomT = z; },
 };

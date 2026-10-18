@@ -49,7 +49,7 @@ packages/server/src/
     rules.js      every fixed number: world, ships, flying, chunks, rock sizes, the core, ores, pieces, cans, crates,
                   downtime, fuel, economy, services, limits
     tuning.js     the developer panel's server side: the editable groups of rules.js, checked, kept in ring_tuning
-                  (_v: 3), reset; which changes regrow the asteroids
+                  (_v: 4), reset; which changes regrow the asteroids
     world.js      the world: seeded rock slots, chunk generation (shells, seams, densities, the bedrock-free line),
                   laser / scan ray-walks, burst cascades, core banking and the pop, holds / cans / crates with tags,
                   delivery and even party splits (offline paid in the DB), the daily downtime, services (/rate, hire),
