@@ -20,6 +20,7 @@ const ORE_KEYS = ["iron", "nickel", "ice", "titanium", "cobalt", "platinum"];
 const kindBit = (k) => 1 << G.kinds.indexOf(k);
 const lvlOf = (k) => (ME.upgrades && ME.upgrades[k]) || 0;
 const myHull = () => G.hulls[Math.max(0, Math.min(G.hulls.length - 1, ME.hull || 0))];   // (owner, 2026-10-17: every flying number is the hull's)
+const myVision = () => Math.min(G.world.loadR, Math.max(myHull().vision, (ME.mods || []).includes("scanner") ? mval("scanner", "range") : 0));   // (the fog: as the server)
 const mySpeedMul = () => (ME.mods || []).reduce((m, k) => m * (G.modules[k] ? mval(k, "speed") : 1), 1);
 const mval = (k, stat, lv = lvlOf(k)) => { const v = G.modules[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, lv)] : v; };
 const oreName = (k, ref) => (ref ? "Refined " : "") + (G && G.ores[k] ? G.ores[k].name : k);   // (owner, 2026-10-17: "Refined Beta")
@@ -292,6 +293,10 @@ function drawWorld(t) {
   // (owner, 2026-10-17) my reach: claiming ore, the laser, fueling, refining, trading
   cx.strokeStyle = C.ink; cx.globalAlpha = 0.14; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(9)]); cx.beginPath(); cx.arc(mine.x, mine.y, myHull().interactR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawFx(t);
+  // (owner, 2026-10-17) the fog of war: the world fades out past my vision (the server stops sending there too)
+  { const V = myVision(), fog = cx.createRadialGradient(mine.x, mine.y, V * 0.78, mine.x, mine.y, V * 1.06);
+    fog.addColorStop(0, "rgba(11,14,21,0)"); fog.addColorStop(1, "rgba(11,14,21,0.84)");
+    cx.fillStyle = fog; const fr = Math.max(VW, VH) / zoom; cx.fillRect(cam.x - fr, cam.y - fr, fr * 2, fr * 2); }
   cx.restore();
 }
 // a ship's fitted modules, from the row's bits (the art orders them: see shipLayout)
@@ -775,7 +780,7 @@ const devEl = $("dev"); let devTab = "hulls", devArmed = 0;
 const DEV_TABS = [["world", "World"], ["hulls", "Hulls"], ["modules", "Modules"], ["asteroids", "Asteroids"], ["economy", "Economy"]];
 let devHull = 0; const devLv = {};             // (owner, 2026-10-17) the hull and each module's level being edited
 const DEV_LABELS = { hold: "Hold", tank: "Tank", speed: "Speed (× for modules)", accel: "Acceleration", brake: "Braking", turn: "Turn rate", crawl: "Crawl share", flyBurn: "Fuel / min flying", laserDps: "Laser damage / s",
-  interactR: "Reach", shipR: "Bump radius", price: "Price", slots: "Slots", laserDps: "Mining / s", yield: "Ore per crack", pay: "Pay / unit", fuel: "Fuel / scan", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
+  interactR: "Reach", vision: "Vision", shipR: "Bump radius", price: "Price", slots: "Slots", laserDps: "Mining / s", yield: "Ore per crack", pay: "Pay / unit", fuel: "Fuel / scan", burn: "Fuel / min", pump: "Pump / s", boost: "Boost", radius: "Reach", range: "Reach", tow: "Tow speed", unit: "Seconds / unit",
   activation: "Fuel / use", sizeBurn: "Fuel × per size", pull: "Pull / s", leash: "Leash gap", dropGap: "Ore drop gap", dropSpread: "Ore drop spread", radiusBase: "Radius base", radiusPer: "Radius per size", crackHpBase: "Crack health base", crackHpPer: "Crack health per size", towBase: "Tow share base", towPer: "Tow share per size",
   respawn: "Respawn s", despawn: "Despawn s", reseed: "Reseed s", stationPrice: "Station fuel price", pumpPay: "Pay / unit pumped", blockFuel: "Fuel per block", blockTime: "Seconds per block",
   refinedPrice: "Refined price", refinedSpace: "Refined space", refineTime: "Station refine s", hardness: "Hardness (crack health ×)", startCredits: "Starting credits", startFuel: "Starting fuel", dockR: "Docking radius", tradeWait: "Trade answer s", offlineGrace: "Offline grace s",
@@ -790,6 +795,7 @@ const DEV_HELP = {
   "hull.brake": "How fast the ship slows down when no key is held, in m/s each second.", "hull.turn": "How fast the ship turns with A and D, in radians a second (about 57° each).",
   "hull.crawl": "With an empty tank the ship still moves at this share of its speed and thrust (0.2 = a fifth).", "hull.flyBurn": "Fuel used a minute while thrusting at full power (less when thrusting part way).",
   "hull.laserDps": "Crack damage a second from the free laser every ship has (a switched-on Miner replaces it).", "hull.interactR": "Reach in meters for the free laser, clicking ore to claim it and asking a hauler to trade. Shown as the dotted circle.",
+  "hull.vision": "How far the ship sees, in meters: ships, asteroids and ore beyond it aren't sent or shown (the fog of war). A fitted scanner's reach extends it when longer.",
   "hull.shipR": "The ship's size for bumping into asteroids, in meters.",
   "module.price": "Level I: credits to buy the module. Levels II to IV: credits to upgrade to that level.", "module.speed": "The ship's top speed is multiplied by this while the module is fitted (1 = no change, 0.8 = 20% slower).",
   "miner.laserDps": "Crack damage a second while the Miner is switched on and firing.", "miner.burn": "Fuel used a minute while the switched-on Miner is firing.",
@@ -920,7 +926,7 @@ function nearestOre() { let b = null, bd = Infinity; for (const o of ores.values
 const STATION_PT = () => ({ x: G.world.station[0], y: G.world.station[1] });
 const TUT = [
   { text: "Fly with W and S and turn with A and D. Q and E slide sideways.", start: (s) => { s.x = mine.x; s.y = mine.y; }, done: (s) => hyp(mine.x - s.x, mine.y - s.y) > 150 },
-  { text: "Fly to an asteroid. Follow the arrow.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, done: () => { const r = nearestRock(); return !!r && hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n) < myHull().interactR - 30; } },
+  { text: "Fly to an asteroid. Follow the arrow.", target: () => { const r = nearestRock(); if (r) return { x: r.dx, y: r.dy, r: rockR(r.n) }; const d = hyp(mine.x, mine.y) || 1, k = (G.world.rings[0][0] + 400) / d; return d < G.world.rings[0][0] + 200 ? { x: mine.x * k, y: mine.y * k, r: 60 } : null; }, done: () => { const r = nearestRock(); return !!r && hyp(r.dx - mine.x, r.dy - mine.y) - rockR(r.n) < myHull().interactR - 30; } },
   { text: "Aim at it with the mouse and hold the left button to mine. Every crack you break drops ore.", target: () => { const r = nearestRock(); return r && { x: r.dx, y: r.dy, r: rockR(r.n) }; }, start: (s) => { s.cracked = false; }, done: (s) => s.cracked },
   { text: "Your Miner module mines faster but burns fuel. Press F, or click its button, to switch it.", glow: ".mod-chip", start: (s) => { s.on = JSON.stringify(ME.on); }, done: (s) => JSON.stringify(ME.on) !== s.on },
   { text: "Click the ore beside the asteroid to claim it. You can reach anything inside the dotted circle.", target: () => { const o = nearestOre(); return o && { x: o.dx, y: o.dy, r: 8 }; }, start: (s) => { s.h = holdN(); }, done: (s) => holdN() > s.h, skip: () => !ores.size && holdN() > 0 },

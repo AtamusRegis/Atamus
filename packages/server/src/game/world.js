@@ -69,6 +69,9 @@ export class World {
   val(p, k, stat) { const v = MODULES[k][stat]; return Array.isArray(v) ? v[Math.min(v.length - 1, p.upgrades[k] || 0)] : v; }
   isOn(p, k) { return this.has(p, k) && p.on.has(k); }
   hullOf(p) { return R.HULLS[Math.max(0, Math.min(R.HULLS.length - 1, p.hull | 0))]; }
+  // (owner, 2026-10-17) the fog of war: how far this ship sees. Nothing beyond it is sent (ships, asteroids, ore, effects),
+  // so it can't be read out of the traffic. A fitted scanner's reach extends it; the load circle is the hard cap.
+  visionOf(p) { return Math.min(W.loadR, Math.max(this.hullOf(p).vision, this.has(p, "scanner") ? this.val(p, "scanner", "range") : 0)); }
   stats(p) {
     const H = this.hullOf(p); let speedMul = 1; for (const k of p.mods) speedMul *= this.val(p, k, "speed");
     return { hold: this.has(p, "hauler") ? this.val(p, "hauler", "hold") : H.hold, tank: this.has(p, "fueler") ? this.val(p, "fueler", "tank") : H.tank, slots: H.slots, speedMul };
@@ -664,8 +667,9 @@ export class World {
     for (const e of out) e.key = JSON.stringify(e.row);
     return out;
   }
-  shipRows(viewer, cache = this.shipRowCache()) {   // the rows a player sees: its own, and its copy's within the load circle
-    return cache.filter((e) => e.p === viewer || (e.p.layer === viewer.layer && hyp(e.p.x - viewer.x, e.p.y - viewer.y) <= W.loadR));
+  shipRows(viewer, cache = this.shipRowCache()) {   // the rows a player sees: its own, and its copy's within its vision
+    const V = this.visionOf(viewer);
+    return cache.filter((e) => e.p === viewer || (e.p.layer === viewer.layer && hyp(e.p.x - viewer.x, e.p.y - viewer.y) <= V));
   }
   // (2026-10-17) which copies each zone has in use, worked out once per update instead of per player
   indexZones() { const z = new Map(); for (const p of this.players.values()) { let s = z.get(p.zone); if (!s) z.set(p.zone, (s = new Set())); s.add(p.layer); } this.zoneLayers = z; }
@@ -673,23 +677,24 @@ export class World {
   // client builds them with ringgen.js and names them "layer:cx,cy:seed"), and the ones someone has worked on (lasered,
   // scanned, towed) as rows: [id, x, y, size, cracks left, crack health %, ore (once scanned) | 0, towed 0 / 1]
   rockView(viewer) {
-    const cells = {}, rows = [], L = viewer.layer, R2 = W.loadR + W.cell * 0.71;
+    const cells = {}, rows = [], L = viewer.layer, V = this.visionOf(viewer), R2 = V + W.cell * 0.71;
     const c0 = Math.floor((viewer.x - R2) / W.cell), c1 = Math.floor((viewer.x + R2) / W.cell), d0 = Math.floor((viewer.y - R2) / W.cell), d1 = Math.floor((viewer.y + R2) / W.cell);
     for (let cx = c0; cx <= c1; cx++) for (let cy = d0; cy <= d1; cy++) {
       if (hyp((cx + 0.5) * W.cell - viewer.x, (cy + 0.5) * W.cell - viewer.y) > R2) continue;
       const key = this.cellKey(L, cx, cy); if (!this.cells.has(key)) continue;
-      const seeds = []; for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && r.home && !r.touched) seeds.push(r.seed); }
+      const seeds = []; for (let s = 0; s < 3; s++) { const r = this.slots.get(key + "," + s); if (r && r.home && !r.touched && hyp(r.x - viewer.x, r.y - viewer.y) <= V) seeds.push(r.seed); }
       if (seeds.length) cells[key] = seeds;
     }
     for (const r of this.rocksNear(viewer.x, viewer.y, W.loadR, L)) {
-      if ((r.home && !r.touched) || hyp(r.x - viewer.x, r.y - viewer.y) > W.loadR) continue;
+      if ((r.home && !r.touched) || hyp(r.x - viewer.x, r.y - viewer.y) > V) continue;
       rows.push([r.id, Math.round(r.x), Math.round(r.y), r.n, r.cracks, Math.max(0, Math.round(r.hp / rockHp(r) * 100)), r.scanned ? r.ore : 0, r.tow ? 1 : 0]);
     }
     return { cells, rows };
   }
   oreRows(viewer) {                            // [id, x, y, ore index, refined 0 / 1]
     const out = [];
-    for (const o of this.ores.values()) if (o.layer === viewer.layer && hyp(o.x - viewer.x, o.y - viewer.y) <= W.loadR) out.push([o.id, Math.round(o.x), Math.round(o.y), ORE_KEYS.indexOf(o.ore), o.r]);
+    const V = this.visionOf(viewer);
+    for (const o of this.ores.values()) if (o.layer === viewer.layer && hyp(o.x - viewer.x, o.y - viewer.y) <= V) out.push([o.id, Math.round(o.x), Math.round(o.y), ORE_KEYS.indexOf(o.ore), o.r]);
     return out;
   }
   meMsg(p) {

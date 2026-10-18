@@ -47,10 +47,11 @@ function copyInto(dst, src) {                    // numbers only, where the shap
 export function resetAll() { copyInto(ROOTS, DEFAULTS); }
 export async function loadTuning() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ring_tuning (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
-  const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`); if (rows[0]) copyInto(ROOTS, rows[0].data);
+  const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`);
+  if (rows[0]) { const d = rows[0].data; if (!d._v || d._v < 2) delete d.world; copyInto(ROOTS, d); }   // (_v < 2: saved before the 2026-10-17 ring resize; its world shape would undo it)
 }
 export async function saveTuning() {
-  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify(ROOTS)]);
+  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 2, ...ROOTS })]);
 }
 // which changes rebuild the untouched asteroids (their sizes and ores come from these)
 export const reshapes = (path) => ["ringSizes", "ringSlots", "ringOres"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell"));

@@ -7,8 +7,8 @@ export const WORLD = {
   saturnR: 1200,            // the planet: nothing flies inside it
   station: [0, -1900],      // the one station, north of the planet
   safeR: 2600,              // around Saturn and the station every sector is open
-  rings: [[3000, 6000], [9000, 14000]],   // ring 1 and ring 2 (inner, outer radius)
-  lockedR: 15000,           // the red dashed line: nobody flies past it
+  rings: [[3000, 9000], [12000, 18000]],  // ring 1 and ring 2 (inner, outer radius; owner, 2026-10-17: both 6 km wide)
+  lockedR: 19000,           // the red dashed line: nobody flies past it
   cell: 400,                // the asteroid grid (seeded per cell)
   loadR: 3200,              // what each player is sent
 };
@@ -17,9 +17,10 @@ export const WORLD = {
 // groups are plain objects whose numbers are edited in place, and the changes are kept in the database (ring_tuning)
 // (owner, 2026-10-17) every number a ship flies with belongs to its hull: each size up costs four times the last, adds a
 // module slot, and can be tuned on its own
-const HULL_BASE = { hold: 5, tank: 100, speed: 80, accel: 45, brake: 30, turn: 2.4, crawl: 0.2, flyBurn: 6, laserDps: 10, interactR: 200, shipR: 24 };
+const HULL_BASE = { hold: 5, tank: 100, speed: 80, accel: 45, brake: 30, turn: 2.4, crawl: 0.2, flyBurn: 6, laserDps: 10, interactR: 200, vision: 1000, shipR: 24 };
 // hold, tank (units); speed m/s, accel / brake m/s^2, turn rad/s; crawl: speed share with an empty tank; flyBurn: fuel a
-// minute at full thrust; laserDps: the free laser; interactR: the reach for the laser, claiming ore and trading; shipR: bumping
+// minute at full thrust; laserDps: the free laser; interactR: the reach for the laser, claiming ore and trading (the
+// dotted circle); vision: how far the ship sees (owner, 2026-10-17: the fog; a fitted scanner's reach extends it); shipR: bumping
 
 // (owner, 2026-10-16) every price but the ores' starts at 20% for prototype testing
 export const PRICE_SCALE = 0.2;

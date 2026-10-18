@@ -173,7 +173,7 @@ export function attachGameServer(httpServer) {
     if (world.fx.length) {
       for (const [pid, ws] of socks) {
         const p = world.players.get(pid); if (!p || !ws.ready) continue;
-        const near = world.fx.filter((f) => (f.l === undefined || f.l === p.layer) && Math.hypot(f.x - p.x, f.y - p.y) <= R.WORLD.loadR + 200).map(({ l, ...f }) => ({ t: "fx", ...f }));
+        const near = world.fx.filter((f) => (f.l === undefined || f.l === p.layer) && Math.hypot(f.x - p.x, f.y - p.y) <= world.visionOf(p) + 200).map(({ l, ...f }) => ({ t: "fx", ...f }));
         if (near.length) send(ws, near.length === 1 ? near[0] : { t: "batch", m: near });
       }
       world.fx.length = 0;
