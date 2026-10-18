@@ -25,20 +25,19 @@ const ORE_KEYS = Object.keys(R.ORES);
 const normA = (a) => ((a % TAU) + TAU) % TAU;
 const spanHas = (c, a) => { const d = normA(a - c.a0); return d >= 0 && d <= normA(c.a1 - c.a0); };
 const unitSpace = (e) => e.u * (e.raw ? 1 : R.REFINED_SPACE);
-// (owner, 2026-10-18: "make each chunk have an exact hitbox") every chunk is one jittered rock-shaped polygon, built
-// here once; clients draw exactly these points and the laser hits exactly these edges
+// (owner, 2026-10-18: "make each chunk have an exact hitbox") every chunk is one polygon, built here once; clients draw
+// exactly these points and the laser hits exactly these edges. The chunk sheet's shape: a clean slab of its layer's
+// ring, a half-gap in from every side, edges roughened by a fraction of a meter.
 const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
 function chunkPoly(c) {
-  const b0 = c.a0; let b1 = c.a1; if (b1 <= b0) b1 += TAU;
-  const span = b1 - b0, th = c.r1 - c.r0, i = c.i;
-  const pts = [], nO = Math.max(2, Math.round(span * c.r1 / 8)), nI = Math.max(2, Math.round(span * c.r0 / 10));
-  for (let k = 0; k <= nO; k++) { const edge = k === 0 || k === nO;
-    const a = b0 + span * (k / nO) + (edge ? 0 : (h01(i, k) - 0.5) * span / nO * 0.9);
-    const r = c.r1 + (h01(i, k + 40) - 0.5) * th * (edge ? 0.22 : 0.42);
+  const g = (R.LAYOUT.gap || 0) / 2, r0 = c.r0 + g, r1 = c.r1 - g, i = c.i;
+  let a0 = c.a0, a1 = c.a1; if (a1 <= a0) a1 += TAU;
+  const mid = (r0 + r1) / 2, ga = g / mid; a0 += ga; a1 -= ga;
+  const span = a1 - a0, pts = [], nO = Math.max(2, Math.round(span * r1 / 4)), nI = Math.max(2, Math.round(span * r0 / 4));
+  const rough = (k, edge) => edge ? 0 : (h01(i, k) - 0.5) * 0.5;
+  for (let k = 0; k <= nO; k++) { const a = a0 + span * k / nO, r = r1 + rough(k + 40, k === 0 || k === nO);
     pts.push([Math.round(Math.cos(a) * r * 10) / 10, Math.round(Math.sin(a) * r * 10) / 10]); }
-  for (let k = nI; k >= 0; k--) { const edge = k === 0 || k === nI;
-    const a = b0 + span * (k / nI) + (edge ? 0 : (h01(i, k + 80) - 0.5) * span / nI * 0.9);
-    const r = Math.max(2, c.r0 + (h01(i, k + 120) - 0.5) * th * (edge ? 0.2 : 0.34));
+  for (let k = nI; k >= 0; k--) { const a = a0 + span * k / nI, r = Math.max(1, r0 + rough(k + 120, k === 0 || k === nI));
     pts.push([Math.round(Math.cos(a) * r * 10) / 10, Math.round(Math.sin(a) * r * 10) / 10]); }
   let cx = 0, cy = 0; for (const [x, y] of pts) { cx += x; cy += y; } cx /= pts.length; cy /= pts.length;
   let br = 0; for (const [x, y] of pts) br = Math.max(br, hyp(x - cx, y - cy));
@@ -109,30 +108,31 @@ export class World {
     const nSh = shMin + Math.floor(rand() * (shMax - shMin + 1)), SZ = R.ROCK_SIZE(nSh);
     const pool_ = [...R.RING_ORES[ring]]; const types = [];
     for (let i = 0; i < SZ.oreTypes && pool_.length; i++) types.push(pool_.splice(Math.floor(rand() * pool_.length), 1)[0]);
-    const C = R.CHUNK, ws = [C.wSoft, C.wNormal, C.wDense, C.wUltra], wsum = ws.reduce((a, b) => a + b, 0);
+    // (owner, 2026-10-18) the chunk sheet: layers of equal thickness around the core; each layer's slots are its arc
+    // wide; a slot is one chunk, or split across its width (inner / outer halves) and/or along its length (two halves).
+    // Each chunk rolls a density (D1 light .. D3 dark: denser takes longer) and, if it has ore, 1-3 bits.
+    const C = R.CHUNK, L = R.LAYOUT, ws = [C.wD1, C.wD2, C.wD3], bw = [C.b1, C.b2, C.b3];
+    const pick = (w) => { let v = rand() * w.reduce((a, b) => a + b, 0); for (let k = 0; k < w.length; k++) { v -= w[k]; if (v <= 0) return k; } return w.length - 1; };
     const chunks = [], shells = [];
-    const baseTh = Math.max(3, ((SZ.radius || 90) - SZ.coreR - 2) / nSh);
-    let circ = 0; { let r2 = SZ.coreR + 2; for (let i2 = 0; i2 < nSh; i2++) { circ += TAU * (r2 + baseTh / 2); r2 += baseTh; } }
-    const targetArc = Math.max(6, circ / Math.max(8, SZ.chunks));
-    let rr = SZ.coreR + 2;
+    let rr = SZ.coreR;
     for (let shellIdx = 0; shellIdx < nSh; shellIdx++) {
-      const th = baseTh * (0.7 + rand() * 0.6), r1 = rr + th, mid = (rr + r1) / 2;
-      const nSeg = Math.max(4, Math.round((TAU * mid) / (targetArc * (0.85 + rand() * 0.3)))), off = rand() * TAU, segs = [];
-      for (let i = 0; i < nSeg; i++) {
-        const a0 = normA(off + (i / nSeg) * TAU), a1 = normA(off + ((i + 1) / nSeg) * TAU);
-        const split = th > baseTh && rand() < 0.3;                 // thick shells split into stacked towers
-        const bands = split ? [[rr, mid], [mid, r1]] : [[rr, r1]];
-        for (const [b0, b1] of bands) {
-          let dv = rand() * wsum, d = 0;
-          for (let i2 = 0; i2 < ws.length; i2++) { dv -= ws[i2]; if (dv <= 0) { d = i2; break; } }
-          const c = { i: chunks.length, sh: shellIdx, r0: b0, r1: b1, a0, a1, d, ore: null, u: 0, broken: false };
-          if (rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.u = (C.oreUnit || 100) + (d === 2 ? C.denseOre : d === 3 ? C.ultraOre : 0); }
-          const span = normA(c.a1 - c.a0) || TAU / nSeg, area = span * ((c.r0 + c.r1) / 2) * (c.r1 - c.r0);
-          c.maxHp = Math.max(8, area * C.hpK * [C.soft, 1, C.dense, C.ultra][d]); c.hp = c.maxHp;
-          segs.push(c.i); chunks.push(c);
+      const r0 = rr + L.gap, r1 = r0 + L.layer, mid = (r0 + r1) / 2, segs = [];
+      const arc = L.arcs[Math.min(shellIdx, L.arcs.length - 1)] || 12, nSlot = Math.max(3, Math.round(360 / arc)), off = rand() * TAU;
+      for (let s0 = 0; s0 < nSlot; s0++) {
+        const b0 = off + (s0 / nSlot) * TAU, b1 = off + ((s0 + 1) / nSlot) * TAU, bm = (b0 + b1) / 2;
+        const bands = rand() < L.splitW ? [[r0, mid], [mid, r1]] : [[r0, r1]];
+        for (const [q0, q1] of bands) {
+          const spans = rand() < L.splitL ? [[b0, bm], [bm, b1]] : [[b0, b1]];
+          for (const [e0, e1] of spans) {
+            const d = pick(ws), c = { i: chunks.length, sh: shellIdx, r0: q0, r1: q1, a0: normA(e0), a1: normA(e1), d, ore: null, u: 0, n: 0, broken: false };
+            if (rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.n = 1 + pick(bw); c.u = c.n * (C.oreUnit || 100); }
+            const area = (e1 - e0) * ((q0 + q1) / 2) * (q1 - q0);
+            c.maxHp = Math.max(8, area * C.hpK * [C.d1, C.d2, C.d3][d]); c.hp = c.maxHp;
+            segs.push(c.i); chunks.push(c);
+          }
         }
       }
-      shells.push({ r0: rr, r1, segs }); rr = r1;
+      shells.push({ r0, r1, segs }); rr = r1;
     }
     const total = chunks.reduce((s, c) => s + c.u, 0);
     let reach = rr; for (const c of chunks) { c.poly = chunkPoly(c); reach = Math.max(reach, hyp(c.poly.cx, c.poly.cy) + c.poly.br); }
@@ -447,7 +447,7 @@ export class World {
   // (first sight per socket): g = each chunk's exact polygon as [i, nO, x0, y0, x1, y1, ...] — the hitbox clients draw.
   rockDetail(r, geo) {
     const m = { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
-      c.broken ? 1 : 0, c.d, c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c)]) };
+      c.broken ? 1 : 0, c.d, c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c), c.n || 0]) };
     if (geo) m.g = r.chunks.map((c) => [c.i, c.poly.nO, ...c.poly.pts.flat()]);
     return m;
   }

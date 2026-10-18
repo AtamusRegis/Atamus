@@ -49,11 +49,11 @@ packages/server/src/
                   (4003), admin hooks kept server-side (kick 4005 / ban 4006 scatters the hold), input / act / st /
                   tune in; 20 Hz sim, 15 Hz ship snapshots (beam temp + charge in the rows), 5 Hz rock summaries +
                   per-socket chunk layouts by version + drops / me diffs
-    rules.js      every fixed number: world, the four ships, flying, chunks, ROCK_SIZE(shells) + per-ring shell bands,
+    rules.js      every fixed number: world, the four ships, flying, the chunk-sheet LAYOUT (layer arcs), chunks (3 densities, 1-3 ore bits), ROCK_SIZE(layers) + per-ring layer bands,
                   the core, heat (+ chunkBreak), the beam stages, the charge shot, ores, drops, econ
     tuning.js     live tuning server-side (no game UI): the editable groups of rules.js, checked, kept in ring_tuning
                   (_v: 6), reset; which changes regrow the asteroids
-    world.js      the world: seeded rock slots, chunk generation (shells per ring, seams, densities, the bedrock-free
+    world.js      the world: seeded rock slots, chunk generation (the chunk sheet: rotated layers of slots, width / length halves, densities, ore bits; older notes: the bedrock-free
                   line), laser ray-walks with beam temp stages and hot-chunk fast-cut, the Miner's charge blast, burst
                   cascades, core banking / weakening / the pop, the Booster's one-ship boost beam and coolant, the
                   Hauler's refine, free-for-all ore drops (flyover pickup), delivery into own storage, towing, marks,

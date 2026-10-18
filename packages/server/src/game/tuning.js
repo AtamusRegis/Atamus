@@ -6,7 +6,7 @@
 import { pool } from "../db.js";
 import * as R from "./rules.js";
 
-export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
+export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, layout: R.LAYOUT, core: R.CORE,
   rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, drops: R.DROPS, econ: R.ECON };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // each number's limits: [low, high, whole]
@@ -15,7 +15,8 @@ function limitsFor(path) {
   if (root === "world") return a === "cell" ? [100, 5000, true] : [50, 1e6, true];
   if (root === "ringShells") return [2, 24, true];
   if (root === "ringSpawn") return [0, 3, false];
-  if (root === "chunk") return last === "burst" || last === "barren" ? [0, 1, false] : last.startsWith("w") ? [0, 100, true] : [0.01, 100, false];
+  if (root === "chunk") return last === "barren" ? [0, 1, false] : /^[wb]\d$/.test(last) ? [0, 100, true] : [0.01, 100, false];
+  if (root === "layout") return a === "arcs" ? [6, 180, false] : a === "splitW" || a === "splitL" ? [0, 1, false] : [0.5, 200, false];
   if (root === "ships" && last === "hold") return [1, 1e6, false];
   return [0, 1e6, false];
 }
@@ -45,10 +46,10 @@ export function resetAll() { copyInto(ROOTS, DEFAULTS); }
 export async function loadTuning() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ring_tuning (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`);
-  if (rows[0]) { const d = rows[0].data; if (d._v >= 7) copyInto(ROOTS, d); }   // (_v < 7: saved before the back-to-basics build; its numbers mean other things)
+  if (rows[0]) { const d = rows[0].data; if (d._v >= 8) copyInto(ROOTS, d); }   // (_v < 8: saved before the chunk-sheet layout; its numbers mean other things)
 }
 export async function saveTuning() {
-  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 7, ...ROOTS })]);
+  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 8, ...ROOTS })]);
 }
 // which changes regrow the asteroids (their places, sizes and layouts come from these)
-export const reshapes = (path) => ["ringShells", "ringSpawn"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || (path[0] === "chunk" && ["wSoft", "wNormal", "wDense", "wUltra", "barren"].includes(path[1]));
+export const reshapes = (path) => ["ringShells", "ringSpawn"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || path[0] === "layout" || (path[0] === "chunk" && /^([wb]\d|barren)$/.test(path[1]));

@@ -32,33 +32,37 @@ export const LASER = { waveGap: 34, waveSpeed: 90, kick: 7.3 };
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };
 
 // ---- the asteroid: masonry around a core ----
+// (owner, 2026-10-18) the chunk sheet: a core, then layers of masonry, every layer the same thickness with a gap between.
+// Each layer splits into equal full-length slots (its arc, from the sheet); a slot holds one full chunk, or splits
+// across its width (inner + outer halves) and/or along its length (two halves side by side).
+export const LAYOUT = { coreR: 22.5, layer: 10, gap: 1, arcs: [60, 45, 36, 30, 24, 20, 18, 15, 15, 12], splitW: 0.3, splitL: 0.35 };
 export const CHUNK = {
   hpK: 0.11,                // health = chunk area (m^2) x this x density
-  wSoft: 18, wNormal: 50, wDense: 22, wUltra: 10,   // density weights, %
-  soft: 0.55, dense: 2.3, ultra: 4,               // health x (normal is 1): denser takes longer to mine
+  wD1: 40, wD2: 38, wD3: 22, // density weights, % (D1 lightest .. D3 darkest)
+  d1: 0.8, d2: 1.6, d3: 3,  // health x per density: denser takes longer to mine
   oreUnit: 100,             // units in one ore bit
-  denseOre: 100, ultraOre: 200, // extra units in a dense / ultra ore chunk (base is oreUnit): denser holds more
   barren: 0.5,              // share of chunks with no ore
+  b1: 45, b2: 35, b3: 20,   // an ore chunk's bits, 1 / 2 / 3, weights %
 };
-// rock size from its shell count: 2 shells up to 10 — budget, radius and core all scale with the layers; deeper rings
-// roll thicker rocks. Returns { chunks, shells, radius, coreR, coreHp, oreTypes }.
+// rock size from its layer count (2 up to 10; deeper rings roll thicker rocks). Returns { shells, radius, coreR, coreHp, oreTypes }.
 export const ROCK_SIZE = (n) => ({
-  chunks: 18 + n * 7, shells: n, radius: 46 + n * 11, coreR: Math.round(10 + n * 0.7),
+  shells: n, radius: LAYOUT.coreR + n * (LAYOUT.layer + LAYOUT.gap), coreR: LAYOUT.coreR,
   coreHp: Math.round(110 + n * 30), oreTypes: n <= 4 ? 1 : n <= 7 ? 2 : 3,
 });
-export const RING_SHELLS = [[2, 5], [4, 8], [7, 10]];   // shells rolled per ring (min, max): thicker asteroids deeper
-export const CORE = { grow: 1.5 };                      // the core swells up to x2.5 as ore bits bank into it
+export const RING_SHELLS = [[2, 5], [4, 8], [7, 10]];   // layers rolled per ring (min, max): thicker asteroids deeper
+export const CORE = { grow: 1.5 };                      // the core swells up to x2.5 as ore bits bank into it (drawn beneath the masonry)
 export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
 // which ores each ring holds (rarer outward) and its rock chance x
 export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"], ["cobalt", "platinum"]];
 export const RING_SPAWN = [1, 1, 0.7];
 
+// (owner, 2026-10-18) ore colors from the owner's chunk mockup: bright bits that read on grey masonry
 export const ORES = {
-  iron: { name: "Iron", color: "#aab3c2" },
-  ice: { name: "Ice", color: "#9fdcef" },
-  titanium: { name: "Titanium", color: "#e3ddc9" },
-  cobalt: { name: "Cobalt", color: "#6f8fe0" },
-  platinum: { name: "Platinum", color: "#b98cf0" },
+  iron: { name: "Iron", color: "#ff9a4a" },
+  ice: { name: "Ice", color: "#78dcff" },
+  titanium: { name: "Titanium", color: "#ffc446" },
+  cobalt: { name: "Cobalt", color: "#78f08c" },
+  platinum: { name: "Platinum", color: "#f06ec8" },
   core: { name: "Core", color: "#e89a3c" },           // (no longer mined; kept so players' stored core ore survives)
 };
 export const REFINED_SPACE = 0.2;              // (kept for old refined cargo still in holds)

@@ -70,7 +70,7 @@ function spawnChunkShards(rk, c0) {
     const oa = am + (Math.random() - 0.5) * 0.8, v = 26 + Math.random() * 40;
     shardsArr.push({ x: px + (Math.random() - 0.5) * sz, y: py + (Math.random() - 0.5) * sz,
       vx: Math.cos(oa) * v, vy: Math.sin(oa) * v, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 5,
-      s: sz * (0.4 + Math.random() * 0.6), color: UNSCANNED, age: 0, life: 0.7 + Math.random() * 0.6 });
+      s: sz * (0.4 + Math.random() * 0.6), color: (DSHADE[c0[6]] || DSHADE[1])[0], age: 0, life: 0.7 + Math.random() * 0.6 });
   }
 }
 function drawShards(wdt) {
@@ -395,7 +395,8 @@ function drawBackground(t) {
 // that grows as chunks are stripped, runs orange with heat, and cracks with the mining it has taken) ----
 const hex2n = (h) => { if (h.startsWith("rgb")) { const m = h.match(/\d+/g); return (+m[0] << 16) | (+m[1] << 8) | +m[2]; } return parseInt(h.slice(1), 16); };
 const mix = (h1, h2, k) => { const a = hex2n(h1), b = hex2n(h2), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
-const DGREY = ["#9aa1b0", "#8f96a5", "#6e737f", "#50555f"];      // soft (paler), normal, dense (darker), ultra (darkest)
+// (owner, 2026-10-18) the chunk sheet's densities, D1 lightest .. D3 darkest: [fill, lit edge, shadow edge, speckle]
+const DSHADE = [["#8fa8b7", "#b0c7d4", "#79909e", "#62768a"], ["#8a91a0", "#a3aab9", "#747a88", "#5f6573"], ["#4f545e", "#656b77", "#40444d", "#31343c"]];
 const UNSCANNED = "#838999", BEDROCK = "#17090d", OUTLINE = "#05070c";
 const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
 function polyBounds(pts) { let cx2 = 0, cy2 = 0; for (const [x, y] of pts) { cx2 += x; cy2 += y; } cx2 /= pts.length; cy2 /= pts.length; let br = 0; for (const [x, y] of pts) br = Math.max(br, hyp(x - cx2, y - cy2)); pts.cx = cx2; pts.cy = cy2; pts.br = br; }
@@ -430,16 +431,6 @@ function chunkPoly(det, c0) {                  // the server's exact polygon (a 
   polyBounds(pts); det.polys.set(i, pts); return pts;
 }
 function chunkPath(det, c0) { const p = chunkPoly(det, c0); cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); }
-function edgeStroke(det, c0) {                 // a lit outer edge and a shadowed inner one: chunks read with depth
-  const p = chunkPoly(det, c0), nO = p.nO;
-  cx.save(); chunkPath(det, c0); cx.clip();
-  cx.lineWidth = 2.6; cx.strokeStyle = "rgba(255,255,255,.1)"; cx.beginPath();
-  for (let k = 0; k <= nO; k++) k ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[0][0], p[0][1]);
-  cx.stroke();
-  cx.strokeStyle = "rgba(0,0,0,.32)"; cx.beginPath();
-  for (let k = nO + 1; k < p.length; k++) k > nO + 1 ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[k][0], p[k][1]);
-  cx.stroke(); cx.restore();
-}
 function drawChunkRock(r, det, ts) {
   const lw = (px) => px / zoom;
   cx.save(); cx.translate(r.dx, r.dy);
@@ -453,55 +444,9 @@ function drawChunkRock(r, det, ts) {
       bI = r.hitI; bx = Math.cos(am) * k; by = Math.sin(am) * k; }
   }
   if (!det) { cx.fillStyle = UNSCANNED; cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.restore(); return; }
-  cx.fillStyle = "#464c58"; cx.beginPath(); cx.arc(0, 0, det.coreR + 4, 0, TAU); cx.fill();   // deep-rock plug behind the core pocket
-  // unscanned first, filled and edged in the same mottled color with rounded joins: one soft craggy mass
-  cx.lineWidth = 3; cx.lineJoin = "round";
-  for (const c0 of det.c) { const bits = c0[5]; if (bits & 1 || bits & 2) continue;
-    const hq = c0[9] || 0; let col0 = mix(UNSCANNED, "#05070c", h01(c0[0], 3) * 0.16);
-    if (hq) col0 = mix(col0, "#ff7a28", hq / 4 * 0.6);
-    cx.fillStyle = cx.strokeStyle = col0; chunkPath(det, c0); cx.fill(); cx.stroke(); }
-  cx.lineJoin = "round";
-  // scanned: density greys tinted toward the ore, a pip per ore unit, speckles on dense and ultra, bedrock near-black
-  for (const c0 of det.c) {
-    const [i, r0, r1, a0, a1, bits, d, ore] = c0, hq = c0[9] || 0;
-    if (bits & 1 || !(bits & 2)) continue;
-    const bnc = i === bI; if (bnc) { cx.save(); cx.translate(bx, by); }
-    const bed = d === 4, oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
-    let fillCol = bed ? BEDROCK : oc ? mix(DGREY[d] || DGREY[1], oc, 0.35) : DGREY[d] || DGREY[1];
-    fillCol = mix(fillCol, "#05070c", h01(i, 7) * 0.14);
-    if (hq) fillCol = mix(fillCol, "#ff7a28", hq / 4 * 0.6);
-    cx.fillStyle = fillCol;
-    chunkPath(det, c0); cx.fill();
-    cx.strokeStyle = OUTLINE; cx.lineWidth = Math.min(1.2, lw(2)); cx.stroke();
-    edgeStroke(det, c0);
-    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000;
-    if (!bed) {
-      if (d >= 2) {                            // speckles
-        cx.fillStyle = "rgba(0,0,0,.45)";
-        for (let j = 0, nj = d === 2 ? 4 : 8; j < nj; j++) { const aa = am + Math.sin(i * 13.7 + j * 5.1) * 0.4, rr = r0 + 1 + ((Math.sin(i * 7.3 + j * 3.9) + 1) / 2) * (r1 - r0 - 2); cx.fillRect(Math.cos(aa) * rr - 0.7, Math.sin(aa) * rr - 0.7, 1.4, 1.4); }
-      }
-      if (oc) {                                // a pip per ore unit (1, +1 dense, +2 ultra)
-        cx.fillStyle = oc;
-        const u = 1 + (d === 2 ? 1 : d === 3 ? 2 : 0);
-        for (let j = 0; j < u; j++) { const aa = am + Math.sin(i * 5.9 + j * 2.3) * 0.25, rr = Math.max(r0 + 2, Math.min(r1 - 2, mid + Math.cos(i * 3.1 + j * 4.7) * (r1 - r0) * 0.28)); cx.fillRect(Math.cos(aa) * rr - 1.3, Math.sin(aa) * rr - 1.3, 2.6, 2.6); }
-      }
-    }
-    if (bnc) cx.restore();
-  }
-  // crack lines on part-cut chunks
-  cx.strokeStyle = "#11151d"; cx.lineWidth = lw(1.6); cx.lineCap = "round";
-  for (const c0 of det.c) {
-    const [i, r0, r1, a0, a1, bits, , , st] = c0;
-    if (bits & 1 || !st) continue;
-    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000, ox2 = i === bI ? bx : 0, oy2 = i === bI ? by : 0;
-    cx.beginPath();
-    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = (r1 - r0) * (0.3 + 0.2 * j); const px = Math.cos(am) * mid + ox2, py = Math.sin(am) * mid + oy2; cx.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); cx.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
-    cx.stroke();
-  }
-  if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
-  // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken
+  // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken — always in view, beneath the
+  // masonry (owner, 2026-10-18: the chunk sheet), so its swelling shows as the layers around it come away
   const frac = (r.fill || 0) / 100, heat = 0, hot = 0;
-  if (!det.worked && frac <= 0 && heat <= 0) { cx.restore(); return; }
   const gk = r.gulpT ? (performance.now() - r.gulpT) / 300 : 2;
   const cr = det.coreR * (1 + (G.core.grow || 1.5) * frac) * (gk < 1 ? 1 + 0.22 * Math.sin(gk * Math.PI) : 1);
   const over = heat >= 1 ? 0.5 + 0.5 * Math.sin(ts * 14) : 0;
@@ -513,7 +458,7 @@ function drawChunkRock(r, det, ts) {
   g.addColorStop(0, "rgba(" + gc + "," + (0.28 + hot * 0.55 + over * 0.15).toFixed(2) + ")");
   g.addColorStop(1, "rgba(" + gc + ",0)");
   cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, glowR, 0, TAU); cx.fill();
-  if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.2 / zoom, (Math.random() - 0.5) * 2.2 / zoom);   // and the core itself shudders harder
+  cx.save(); if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.2 / zoom, (Math.random() - 0.5) * 2.2 / zoom);   // and the core itself shudders harder
   cx.fillStyle = col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
   cx.strokeStyle = mix("#2b5a74", "#7a4a1e", hot); cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
   cx.fillStyle = "rgba(255,255,255,.4)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
@@ -529,6 +474,47 @@ function drawChunkRock(r, det, ts) {
     }
     cx.stroke();
   }
+  cx.restore();
+  // (owner, 2026-10-18) the chunk sheet: each chunk a slab in its density's grey with a dark outline, a lit outer edge
+  // and a shadowed inner one, a few speckles, and its ore bits (1-3) as small squares in the ore's color
+  cx.lineJoin = "round";
+  for (const c0 of det.c) {
+    const [i, r0, r1, a0, a1, bits, d, ore] = c0, nb = c0[9] || 0;
+    if (bits & 1) continue;
+    const bnc = i === bI; if (bnc) { cx.save(); cx.translate(bx, by); }
+    const sh = DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
+    cx.fillStyle = sh[0]; chunkPath(det, c0); cx.fill();
+    { const p = chunkPoly(det, c0), nO = p.nO; cx.save(); chunkPath(det, c0); cx.clip(); cx.lineWidth = 2.2;
+      cx.strokeStyle = sh[1]; cx.beginPath(); for (let k = 0; k <= nO; k++) k ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[0][0], p[0][1]); cx.stroke();
+      cx.strokeStyle = sh[2]; cx.beginPath(); for (let k = nO + 1; k < p.length; k++) k > nO + 1 ? cx.lineTo(p[k][0], p[k][1]) : cx.moveTo(p[k][0], p[k][1]); cx.stroke();
+      cx.restore(); }
+    cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.6, Math.min(1.3, lw(1.6))); chunkPath(det, c0); cx.stroke();
+    let b0 = a0 / 1000, b1 = a1 / 1000; if (b1 < b0) b1 += TAU;
+    const mid = (r0 + r1) / 2, span = b1 - b0, th = r1 - r0;
+    cx.fillStyle = sh[3];                      // speckles
+    for (let j = 0, nj = 2 + Math.floor(span * mid / 12); j < nj; j++) { const aa = b0 + span * (0.12 + 0.76 * h01(i, 200 + j)), rr = r0 + th * (0.25 + 0.5 * h01(i, 260 + j)); cx.fillRect(Math.cos(aa) * rr - 0.45, Math.sin(aa) * rr - 0.45, 0.9, 0.9); }
+    if (oc && nb > 0) {                        // ore bits: spread along the chunk, a darker lower corner on each
+      const dk = mix(oc, "#05070c", 0.3), q = Math.min(2.8, th * 0.42);
+      for (let j = 0; j < nb; j++) {
+        const aa = b0 + span * ((j + 0.5) / nb + (h01(i, 300 + j) - 0.5) * 0.5 / nb), rr = mid + (h01(i, 340 + j) - 0.5) * Math.max(0, th - q * 2) * 0.8;
+        const x = Math.cos(aa) * rr, y = Math.sin(aa) * rr;
+        cx.fillStyle = oc; cx.fillRect(x - q / 2, y - q / 2, q, q);
+        cx.fillStyle = dk; cx.fillRect(x - q / 2 + q * 0.5, y - q / 2 + q * 0.5, q * 0.5, q * 0.5);
+      }
+    }
+    if (bnc) cx.restore();
+  }
+  // crack lines on part-cut chunks
+  cx.strokeStyle = "#11151d"; cx.lineWidth = lw(1.6); cx.lineCap = "round";
+  for (const c0 of det.c) {
+    const [i, r0, r1, a0, a1, bits, , , st] = c0;
+    if (bits & 1 || !st) continue;
+    const mid = (r0 + r1) / 2, am = (a0 + (a1 < a0 ? a1 + TAU * 1000 : a1)) / 2000, ox2 = i === bI ? bx : 0, oy2 = i === bI ? by : 0;
+    cx.beginPath();
+    for (let j = 0; j < st; j++) { const b = am + Math.sin(i * 9.1 + j * 7.7) * 0.9, L0 = (r1 - r0) * (0.3 + 0.2 * j); const px = Math.cos(am) * mid + ox2, py = Math.sin(am) * mid + oy2; cx.moveTo(px - Math.cos(b) * L0, py - Math.sin(b) * L0); cx.lineTo(px + Math.cos(b) * L0, py + Math.sin(b) * L0); }
+    cx.stroke();
+  }
+  if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
   cx.restore();
 }
 // the beam's local ray, exactly as the server's: the first unbroken chunk polygon or the core it meets (my own beam is
