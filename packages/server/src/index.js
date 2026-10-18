@@ -5,6 +5,7 @@ import cors from "cors";
 import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { auth } from "./auth.js";
+import { guest, guestMigrate } from "./guest.js";
 import { game } from "./gamehttp.js";
 import { admin } from "./admin.js";
 import { attachGameServer } from "./game/net.js";
@@ -40,6 +41,7 @@ if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../web
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
 app.use("/auth", auth);
+app.use("/auth", guest);                       // (owner, 2026-10-18) no login: create a name and play
 app.use("/game/admin", admin);   // (owner) the admin panel (under /game: the path the live proxy already passes on)
 app.use("/game", game);
 
@@ -54,6 +56,7 @@ async function main() {
   // (owner, 2026-10-13) IP geolocation is gone: delete the location databases and VPN lists it downloaded (data/ held only those)
   try { fs.rmSync(new URL("../data/", import.meta.url), { recursive: true, force: true }); } catch (e) { console.error("geo data cleanup", e.message); }
   await migrate();
+  await guestMigrate();
   await loadNameData();
   await cleanupExpired();
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();

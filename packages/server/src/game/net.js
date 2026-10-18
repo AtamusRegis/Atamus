@@ -1,54 +1,47 @@
-// The game socket (owner, 2026-10-12; the mining redesign 2026-10-18). One shared world; one session per account (a new
-// tab replaces the old: 4002), one account per device (4003). The client sends commands; the server simulates at 20 Hz
-// and sends each player only what's in its vision (the fog of war is server-side). Rocks travel as summaries at 5 Hz;
-// each rock's chunk layout goes separately, re-sent when its version changes. Deploy countdowns and website reloads
-// reach every client here.
+// The game socket (owner, 2026-10-12; the mining redesign 2026-10-18; the sandbox build 2026-10-18). One shared world;
+// one session per pilot (a new tab replaces the old: 4002), one pilot per device (4003). No chat and no parties: the
+// socket carries inputs, acts, station ops and the world's state. The client sends commands; the server simulates at
+// 20 Hz and sends each player only what's in its vision (the fog of war is server-side). Rocks travel as summaries at
+// 5 Hz; each rock's chunk layout goes separately, re-sent when its version changes. Deploy countdowns and website
+// reloads reach every client here. The admin hooks stay server-side (kick, ban, respawn); the game shows no admin UI.
 import { WebSocketServer } from "ws";
 import { readCookie, getSessionUser } from "../sessions.js";
+import { getGuestUser } from "../guest.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
 import { World } from "./world.js";
 import * as R from "./rules.js";
 import { PTR, ptrAs } from "../ptr.js";
 import { setGameHooks } from "../admin.js";
 import { deviceOf } from "../security.js";
-import { pool } from "../db.js";
-import { safeText } from "../textsafe.js";
 
 import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.js";
 
-// the game's numbers, for the clients (drawing, prediction, the station panel, the developer panel); sent again whenever
-// the developer panel changes one
-const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, rockSizes: R.ROCKS, core: R.CORE,
-  rock: R.ROCK, heat: R.HEAT, ringSizes: R.RING_SIZES, ringOres: R.RING_ORES, ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
-  ores: R.ORES, refinedSpace: R.REFINED_SPACE,
-  cans: R.CANS, crateShare: R.CRATE_SHARE, downtime: R.DOWNTIME, fuel: R.FUEL, econ: R.ECON, services: R.SERVICES,
-  sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES, limits: R.LIMITS });
-const DEV_ROLES = ["head", "admin"];           // (owner, 2026-10-17) who gets the developer panel
+// the game's numbers, for the clients (drawing, prediction, the station panel); sent again whenever tuning changes one
+const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
+  rock: R.ROCK, heat: R.HEAT, beam: R.BEAM, charge: R.CHARGE, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES,
+  ringBed: R.RING_BED, ringSpawn: R.RING_SPAWN, ringFree: R.RING_FREELINE,
+  ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, econ: R.ECON,
+  sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
+const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff sessions — the game client has no dev UI)
 
 export function attachGameServer(httpServer) {
   const world = new World();
   world.ready = Promise.all([world.ready, loadTuning().catch((e) => console.error("tuning", e))]);
-  const socks = new Map();                     // account id -> ws
-  const devs = new Map();                      // device id -> account id
-  const mutes = new Map();                     // account id -> { perm, until }
-  const roles = new Map(), badge = (pid) => { const r = roles.get(pid); return r === "mod" ? "m" : r === "head" || r === "admin" ? "a" : undefined; };
+  const socks = new Map();                     // pilot id -> ws
+  const devs = new Map();                      // device id -> pilot id
+  const roles = new Map();
   const tell = (pid, obj) => { const w = socks.get(pid); if (w && w.readyState === w.OPEN) w.send(JSON.stringify(obj)); };
-  const sys = (pid, text) => tell(pid, { t: "chat", ch: "sys", text });
-  const muted = (pid) => { const m = mutes.get(pid); return !!m && (m.perm || (m.until && m.until > Date.now())); };
-  setGameHooks({                               // the admin panel's hooks into the world
-    staffChanged: (pid, role) => { roles.set(pid, role || null); tell(pid, { t: "staff" }); },   // the client reloads so its menus follow
+  setGameHooks({                               // the admin panel's hooks into the world (server-side only now)
+    staffChanged: (pid, role) => { roles.set(pid, role || null); tell(pid, { t: "staff" }); },
     online: () => { const m = new Map(); for (const [pid] of socks) m.set(pid, { side: null }); return m; },
     kick: (pid, code, reason) => { if (code === 4006) world.banned(pid).catch((e) => console.error("ban hold", e)); const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
-    mute: (pid, m) => { if (m) mutes.set(pid, m); else mutes.delete(pid); },
+    mute: () => {},
     respawn: (pid) => !!world.respawn(pid),
     teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80); },
     inWorld: (pid) => world.players.has(pid),
-    note: (pid, text) => sys(pid, text),
+    note: (pid, text) => tell(pid, { t: "note", text }),
     deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
   });
-  const recent = [], remember = (line) => { recent.push(line); if (recent.length > 500) recent.shift(); };   // chat lines, to go with reports
-  const reports = new Map(), reportOk = (pid) => { const now = Date.now(), l = (reports.get(pid) || []).filter((t) => now - t < 600_000); if (l.length >= 5) return false; l.push(now); reports.set(pid, l); return true; };
-  const byName = (name) => { const want = String(name || "").trim().toLowerCase().slice(0, 40); for (const [qid, q] of world.players) if (socks.has(qid) && String(q.name).toLowerCase() === want) return qid; return null; };
 
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
   const broadcast = (obj) => { const msg = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); };
@@ -58,18 +51,18 @@ export function attachGameServer(httpServer) {
   wss.on("connection", async (ws, req) => {
     let user = null;
     try { user = await getSessionUser(readCookie(req)); } catch (e) { console.error("ws auth", e); }
+    try { if (!user) user = await getGuestUser(req); } catch (e) { console.error("ws guest", e); }   // (owner, 2026-10-18) name-and-play
     if (PTR) { const as = new URL(req.url, "http://x").searchParams.get("as"); if (as) user = await ptrAs(as).catch(() => null) || user; }
-    if (!user) { ws.close(4001, "Not logged in"); return; }
+    if (!user) { ws.close(4001, "No name yet"); return; }
     if (user.frozen) { ws.close(4001, "Not available"); return; }
     const pid = String(user.id), device = deviceOf(new URL(req.url, "http://x").searchParams.get("d"));
-    if (device && devs.has(device) && devs.get(device) !== pid && socks.has(devs.get(device))) { ws.close(4003, "Another account is playing on this device."); return; }
+    if (device && devs.has(device) && devs.get(device) !== pid && socks.has(devs.get(device))) { ws.close(4003, "Another pilot is playing on this device."); return; }
     if (device) devs.set(device, pid);
-    if (user.mute_perm || (user.mute_until && new Date(user.mute_until) > new Date())) mutes.set(pid, { perm: !!user.mute_perm, until: user.mute_until ? new Date(user.mute_until).getTime() : 0 });
     const old = socks.get(pid); if (old && old !== ws) { try { old.close(4002, "Replaced"); } catch {} }
     socks.set(pid, ws); roles.set(pid, user.role || null);
     let joined = false, cmds = 0;
     const cmdReset = setInterval(() => { cmds = 0; }, 1000);
-    const drop = () => { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); mutes.delete(pid); roles.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } };
+    const drop = () => { clearInterval(cmdReset); if (socks.get(pid) === ws) { socks.delete(pid); roles.delete(pid); if (device && devs.get(device) === pid) devs.delete(device); } };
     ws.on("close", () => {
       if (socks.get(pid) !== ws) { clearInterval(cmdReset); return; }
       drop();
@@ -82,7 +75,7 @@ export function attachGameServer(httpServer) {
     joined = true;
     ws.send(JSON.stringify({
       t: "hello", build: SERVER_BUILD, countdown: activeCountdown(), updating: updateStatus(), now: Date.now(), game: gameInfo(),
-      you: { id: pid, name: user.username, staff: ["head", "admin", "mod"].includes(user.role), dev: DEV_ROLES.includes(roles.get(pid)) }, spawn: { x: me.x, y: me.y, h: me.h },
+      you: { id: pid, name: user.username, dev: DEV_ROLES.includes(roles.get(pid)) }, spawn: { x: me.x, y: me.y, h: me.h },
       online: world.players.size, roster: world.roster(),
     }));
     ws.ready = true;                           // (the loops below send nothing to a socket before its hello)
@@ -95,20 +88,10 @@ export function attachGameServer(httpServer) {
       if (m.t === "in") world.setInput(pid, m);
       else if (m.t === "act") world.act(pid, m);
       else if (m.t === "st") world.station(pid, m);
-      else if (m.t === "party") social(m).catch((e) => console.error("social", e));
-      else if (m.t === "chat") chat(m);
-      else if (m.t === "report") {             // a player reports another: kept for the admin panel with their recent lines
-        if (!reportOk(pid) || typeof m.i !== "string" || m.i === pid || !/^[0-9]{1,15}$/.test(m.i)) return;
-        const text = safeText(m.text, 1000); if (!text) return;
-        const lines = recent.filter((l) => l.i === m.i).slice(-30).map((l) => ({ at: l.at, ch: l.ch, text: l.text }));
-        pool.query(`INSERT INTO reports (reporter, target, target_name, category, text, chat) SELECT $1, id, username, 'player', $3, $4 FROM users WHERE id = $2`, [pid, m.i, text, JSON.stringify(lines)])
-          .then(() => ws.send(JSON.stringify({ t: "reported" }))).catch((e) => console.error("report", e));
-      }
       else if (m.t === "tune") tune(m);
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
-    // (owner, 2026-10-17) the developer panel: one number at a time, or everything back to the defaults; kept, and sent to
-    // everyone at once (changes to the rings, the cell, rock sizes or ores regrow the asteroids)
+    // tuning: one number at a time, or everything back to the defaults — staff sessions only (no in-game UI anymore)
     function tune(m) {
       if (!DEV_ROLES.includes(roles.get(pid))) return;
       let field = false;
@@ -118,38 +101,6 @@ export function attachGameServer(httpServer) {
       saveTuning().catch((e) => console.error("tuning save", e));
       if (field) { world.resetField(); for (const c of wss.clients) { c.knownRocks = null; c.rockVers = null; } }
       broadcast({ t: "game", game: gameInfo(), field: field ? 1 : 0 });
-    }
-    // parties, from chat commands and the name menu
-    async function social(m) {
-      const target = typeof m.to === "string" && /^[0-9]{1,15}$/.test(m.to) ? m.to : typeof m.name === "string" ? byName(m.name) : null;
-      let say = null;
-      if (m.op === "invite") say = target ? world.invite(pid, target) : "That player isn't online.";
-      else if (m.op === "accept") say = world.acceptParty(pid);
-      else if (m.op === "decline") say = world.declineParty(pid);
-      else if (m.op === "kick") say = target ? world.kickParty(pid, target) : "That player isn't online.";
-      else if (m.op === "leave") { const p = world.players.get(pid); if (p && p.party) { world.leaveParty(p, false); say = "You left the party."; } else say = "You're not in a party."; }
-      if (say) sys(pid, say);
-    }
-    // chat: World (everyone), Zone (my ring and sector, or the station), Party, Whisper
-    function chat(m) {
-      const p = world.players.get(pid); if (!p || typeof m.text !== "string" || muted(pid)) return;
-      const text = m.text.slice(0, 240); if (!text.trim()) return;
-      const ch = ["zone", "party", "whisper"].includes(m.ch) ? m.ch : "global";
-      if (ch === "whisper") {
-        const to = typeof m.to === "string" ? m.to : byName(m.toName);
-        const tws = to && socks.get(to), tp = to && world.players.get(to);
-        if (!tws || !tp || to === pid) { ws.send(JSON.stringify({ t: "chat", ch, sys: 1, with: to || undefined, withName: typeof m.toName === "string" ? m.toName.trim().slice(0, 40) : undefined, text: "offline" })); return; }
-        const line = { t: "chat", ch, i: pid, n: user.username, r: badge(pid), text };
-        tws.send(JSON.stringify({ ...line, with: pid, withName: user.username })); ws.send(JSON.stringify({ ...line, with: to, withName: tp.name }));
-        remember({ at: Date.now(), i: pid, n: user.username, ch, text }); return;
-      }
-      if (ch === "party" && !p.party) { sys(pid, "You're not in a party."); return; }
-      const zone = p.zone, msg = JSON.stringify({ t: "chat", ch, i: pid, n: user.username, r: badge(pid), text, ...(ch === "zone" ? { z: zone } : {}) });
-      for (const [qid, qws] of socks) {
-        const q = world.players.get(qid); if (!q || qws.readyState !== qws.OPEN) continue;
-        if (ch === "global" || (ch === "zone" && q.zone === zone) || (ch === "party" && q.party === p.party)) qws.send(msg);
-      }
-      remember({ at: Date.now(), i: pid, n: user.username, ch, text });
     }
   });
 
@@ -183,7 +134,7 @@ export function attachGameServer(httpServer) {
     }
   }, 66);
   // 5 Hz: what changed near each player — rock summaries (and each visible rock's chunk layout when its version moves),
-  // cans, my own state, my party
+  // ore drops, my own state
   const diff = (ws, field, rows) => {
     const known = ws[field] || (ws[field] = new Map()), seen = new Set(), add = [], gone = [];
     for (const r of rows) { const key = JSON.stringify(r); seen.add(r[0]); if (known.get(r[0]) !== key) { known.set(r[0], key); add.push(r); } }
@@ -202,19 +153,9 @@ export function attachGameServer(httpServer) {
         if (vers.get(r.id) !== r.v) { vers.set(r.id, r.v); send(ws, world.rockDetail(r)); }
       }
       for (const id of [...vers.keys()]) if (!seen.has(id)) vers.delete(id);   // out of vision: sent fresh on return
-      const cn = diff(ws, "knownCans", world.canRows(p)); if (cn) send(ws, { t: "cans", ...cn });
+      const dr = diff(ws, "knownDrops", world.dropRows(p)); if (dr) send(ws, { t: "drops", ...dr });
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
-      if (p.socDirty || !ws.socSent) { p.socDirty = false; ws.socSent = 1; send(ws, world.socMsg(p)); }
     }
   }, 200);
-  // 1 Hz: every distress beacon (a "!" every player sees, wherever it is) and my party mates' places for the minimap
-  setInterval(() => {
-    const all = world.sosList();
-    for (const [pid, ws] of socks) {
-      const p = world.players.get(pid); if (!p || !ws.ready) continue;
-      const mj = JSON.stringify([world.mates(p), world.marksOf(p)]); if (mj !== (ws.lastMates ?? "")) { ws.lastMates = mj; const [mm2, mk2] = JSON.parse(mj); send(ws, { t: "mates", m: mm2, marks: mk2 }); }
-      const j = JSON.stringify(all); if (j !== (ws.lastSos ?? "[]")) { ws.lastSos = j; send(ws, { t: "sos", s: JSON.parse(j) }); }
-    }
-  }, 1000);
   console.log("Saturn ring world attached at /ws");
 }

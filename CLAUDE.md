@@ -7,7 +7,8 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. `docs/DESIGN.md` holds the agreed direction; the design document itself is `docs/Atamus_Ring_Mining.html` ("Crack, Bank and Haul", draft 9).
-4. **The mining redesign (owner, 2026-10-18):** the game was rebuilt from that document alone — a cooperative 2D gather-and-craft MMO like Palia, no PvP. Asteroids are hidden chunk masonry around a core; ore banks into the core and pays at the pop; it's physical cargo (holds, cans, party crates) until delivery; each role is its own ship (Miner, Scanner, Booster, Fueler, Hauler). Kept from before: Saturn, two rings, sectors, fog of war, movement, parties, chat, admin tools, the developer panel, live updates. **All old branches were deleted (owner: "delete all old branches, stop reading from them")** — older versions live only in git history and `reference/`. **Old database data stays untouched for reference.** Use the design document's look (`website/theme.css`) for the game and the website; the ship art artifact is linked from `docs/DESIGN.md`. Every number is in `rules.js`.
+4. **The mining redesign (owner, 2026-10-18):** the game was rebuilt from that document alone — a cooperative 2D gather-and-craft MMO like Palia, no PvP. Asteroids are hidden chunk masonry around a core; ore banks into the core and pays at the pop. **All old branches were deleted (owner: "delete all old branches, stop reading from them")** — older versions live only in git history and `reference/`. **Old database data stays untouched for reference.** Use the design document's look (`website/theme.css`) for the game and the website; the ship art artifact is linked from `docs/DESIGN.md`. Every number is in `rules.js`.
+5. **The sandbox build (owner, 2026-10-18, same day, later): "make the sandbox the atamus live server."** The owner iterated a single-player sandbox artifact and it replaced the live game: **no login (create a name and play), no chat, no parties, no fuel, no money, no in-game admin or developer UI.** Four ships — Miner (charge shot), Scanner (drill, tow), Booster (one-ship boost beam + coolant spray, no laser), Hauler (refine beam) — beam heat stages (blue/yellow/red), free-for-all ore drops instead of cans, three rings with thicker bedrock-heavier rocks deeper, per-ship optional tutorials. FEATURES.md has the full rules.
 
 **In the same commit as any change to behavior:**
 
@@ -32,7 +33,8 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 packages/server/src/
   index.js        Express + ws bootstrap, /healthz {build}; in the PTR it also serves website/
   build.js        SERVER_BUILD, website build polling, update countdown (announceUpdate)
-  auth.js         signup / login / logout / password recovery (cookie sessions)
+  auth.js         signup / login / logout / password recovery (staff accounts only now; unlinked pages)
+  guest.js        (owner, 2026-10-18) no login: POST /auth/guest claims a pilot name on a token cookie (guests table)
   sessions.js     getSessionUser (always returns the "PTR" user in PTR mode)
   db.js           schema for the tables in use; every old game's tables stay in the database untouched, unused
   ptr.js, config.js, hash.js, ratelimit.js   the local test copy, settings, password hashing, rate limits
@@ -42,33 +44,35 @@ packages/server/src/
   appeals.js      ban appeals (written from the login page, answered in the admin panel)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
   game/
-    net.js        the game socket at /ws: cookie auth, one session per account (4002), one account per device (4003),
-                  admin hooks (kick 4005 / ban 4006 pays out the tags / mute), input / act / st / party / chat (World,
-                  Zone, Party, Whisper) in; 20 Hz sim, 15 Hz ship snapshots, 5 Hz rock summaries + per-socket chunk
-                  layouts by version + cans / me / soc diffs, 1 Hz distress + party mates
-    rules.js      every fixed number: world, ships, flying, chunks, rock sizes, the core, ores, pieces, cans, crates,
-                  downtime, fuel, economy, services, limits
-    tuning.js     the developer panel's server side: the editable groups of rules.js, checked, kept in ring_tuning
-                  (_v: 5), reset; which changes regrow the asteroids
-    world.js      the world: seeded rock slots, chunk generation (shells, seams, densities, the bedrock-free line),
-                  laser / scan ray-walks, burst cascades, core banking and the pop, holds / cans / crates with tags,
-                  delivery and even party splits (offline paid in the DB), the daily downtime, services (/rate, hire),
-                  towing, fuel / crawl / distress, fog-of-war vision gating, parties, saving
-                  (ring_players, ring_cans, ring_meta)
+    net.js        the game socket at /ws: guest or session auth, one session per pilot (4002), one pilot per device
+                  (4003), admin hooks kept server-side (kick 4005 / ban 4006 scatters the hold), input / act / st /
+                  tune in; 20 Hz sim, 15 Hz ship snapshots (beam temp + charge in the rows), 5 Hz rock summaries +
+                  per-socket chunk layouts by version + drops / me diffs
+    rules.js      every fixed number: world, the four ships, flying, chunks, ROCK_SIZE(shells) + per-ring shell bands,
+                  the core, heat (+ chunkBreak), the beam stages, the charge shot, ores, drops, econ
+    tuning.js     live tuning server-side (no game UI): the editable groups of rules.js, checked, kept in ring_tuning
+                  (_v: 6), reset; which changes regrow the asteroids
+    world.js      the world: seeded rock slots, chunk generation (shells per ring, seams, densities, the bedrock-free
+                  line), laser ray-walks with beam temp stages and hot-chunk fast-cut, the Miner's charge blast, burst
+                  cascades, core banking / weakening / the pop, the Booster's one-ship boost beam and coolant, the
+                  Hauler's refine, free-for-all ore drops (flyover pickup), delivery into own storage, towing, marks,
+                  fog-of-war vision gating, saving (ring_players, ring_drops, ring_meta)
 website/          GitHub Pages site (atamus.io) and the game client
-  game.html       the game page (canvas, HUD, station panel, chat, minimap, overlays, __BUILD__ marker)
-  game.js         the 2D canvas client: input (WASD + mouse; twin sticks on touch), my ship predicted, others
-                  interpolated, camera and zoom, rings / Saturn / station, chunk rocks (unscanned solid, scanned
-                  densities and ores, bedrock hatched, crack stages, the swelling core), beams, cans and crates, HUD
-                  (hold pieces 25/5/1), station panel (ships + fuel), party list, minimap, chat, menus, prompts,
-                  the developer panel, countdown and reconnect handling
+  game.html       the game page (canvas, HUD with the mode switch and tutorial chip, station panel, minimap,
+                  overlays, __BUILD__ marker; no chat / admin / dev UI)
+  game.js         the 2D canvas client: input (WASD + mouse; twin sticks on touch; F flips the mode switch), my ship
+                  predicted, others interpolated, camera and zoom, rings / Saturn / station, chunk rocks (jittered
+                  slabs, near-black bedrock, the blue swelling core with damage cracks), the staged beam colors,
+                  charge / lance / coolant spray / boost pluses / refine beams, ore drops, HUD (one square per ore),
+                  station panel (storage + the four ships), minimap, menus, per-ship tutorials, countdown and
+                  reconnect handling
   shipart.js      the art from the ship sheet: shipLayout / drawShip (a section per role, animated), drawStation,
                   drawSaturn
   theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
-  admin.css       the admin and disciplinary panels' styles
-  adminpanel.js   the Admin button and panel (staff accounts only)
+  admin.css, adminpanel.js   the old in-game admin UI (no longer loaded by the game page; kept on disk)
   index/login/signup/recover/eula/play.html (+ their .js), api.js, style.css, front-updates.js
-                  the website, as before; play.html goes straight to Enter System
+                  the website; play.html is the name-and-play door (and the update-wait page); login/signup are
+                  unlinked (staff by URL)
 reference/        old snapshots, for reference only (never deployed)
 scripts/
   check.sh        syntax-check every JS file (run before every push)

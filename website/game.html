@@ -13,77 +13,69 @@
   <link rel="preload" href="fonts/big-shoulders-display-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/atkinson-hyperlegible-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/jetbrains-mono-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="modulepreload" href="shipart.js?v=1792300005">
-  <link rel="stylesheet" href="admin.css?v=1792300002">
+  <link rel="modulepreload" href="shipart.js?v=1792500001">
   <style>
-    /* (owner, 2026-10-18) the mining redesign — Crack, Bank and Haul — in the design document's look */
+    /* (owner, 2026-10-18) the sandbox build live: no chat, no panels beyond the station, the mode switch by the hold bar */
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--void); color: var(--ink); font: 14px/1.45 var(--f-body); touch-action: none; }
     #view { display: block; width: 100%; height: 100%; cursor: crosshair; }
     button { font-family: var(--f-body); }
     .overlay { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 20; padding: 7px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; font: 600 13px var(--f-mono); color: var(--ink); user-select: none; }
     .overlay[hidden] { display: none; }
     #countdown { color: var(--gold); border-color: rgba(216,176,106,.5); }
-    /* the HUD: the ship, the hold and fuel bars, credits */
-    #hud { position: fixed; left: calc((204px + 100vw - 414px) / 2); bottom: 16px; transform: translateX(-50%); z-index: 5; display: grid; grid-template-columns: auto 190px 190px auto; gap: 8px; align-items: end; user-select: none; pointer-events: none; }
-    .bar { position: relative; height: 22px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); overflow: hidden; display: flex; }
+    /* the HUD: the ship chip, the mode switch, the hold bar */
+    #hud { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 5; display: grid; gap: 6px; justify-items: center; user-select: none; pointer-events: none; }
+    #modes { display: flex; gap: 6px; min-height: 28px; }
+    .chip { pointer-events: auto; height: 28px; display: flex; align-items: center; padding: 0 12px; gap: 8px; border-radius: 5px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); color: var(--dim); font: 800 13px var(--f-display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+    .chip:active { transform: scale(.96); }
+    #mode-sw { gap: 0; padding: 0; overflow: hidden; }
+    #mode-sw b { padding: 0 11px; height: 100%; display: flex; align-items: center; color: var(--dim); font-weight: 800; }
+    #mode-sw b.on { color: var(--ice); background: rgba(124,195,214,.16); }
+    #mode-sw b + b { border-left: 1px solid var(--rule); }
+    #mode-sw[hidden] { display: none; }
+    #tut-chip.on { color: var(--gold); border-color: rgba(216,176,106,.6); }
+    .hud-row { display: flex; gap: 8px; align-items: end; }
+    #ship-chip { height: 24px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
+    .bar { position: relative; width: 210px; height: 24px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); overflow: hidden; display: flex; }
     .bar i { display: block; height: 100%; transition: width .25s cubic-bezier(.3,.8,.4,1); }
-    #hold-raw { background: var(--brown); } #hold-ref { background: var(--ore); } #fuel-fill { background: var(--ice); } #fuel-fill.low { background: var(--signal); }
+    #hold-raw { background: var(--brown); } #hold-ref { background: var(--ore); }
     .bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 600 11px var(--f-mono); color: #fff; text-shadow: 0 0 3px #000; letter-spacing: .04em; }
     .bar span b { font-weight: 600; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
-    #ship-chip { height: 22px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
-    #ship-chip.switch { pointer-events: auto; cursor: pointer; } #ship-chip.switch:hover { background: rgba(216,176,106,.15); }
-    #ability-btn { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(190px + env(safe-area-inset-bottom, 0px)); z-index: 6; width: 54px; height: 54px; border-radius: 50%; background: rgba(18,24,36,.94); border: 2px solid var(--ice); color: var(--ice); font: 800 13px var(--f-display); letter-spacing: .04em; cursor: pointer; }
-    #ability-btn:hover:not(:disabled) { background: rgba(124,195,214,.18); } #ability-btn:disabled { opacity: .45; cursor: default; } #ability-btn[hidden] { display: none; }
-    .st-empty { margin: 0; color: var(--dim); font-size: 13px; }
+    /* the hold above its bar: one square per ore type with that square's own count; refined squares edged white */
+    #hold-wrap { position: relative; }
+    #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 210px; display: flex; flex-wrap: wrap-reverse; gap: 3px; align-items: flex-end; pointer-events: auto; }
+    #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); cursor: context-menu; }
+    #cargo i.slot { width: 22px; height: 20px; }
+    #cargo i b.n { position: absolute; right: 2px; bottom: 0; font: 600 10px var(--f-mono); font-style: normal; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
+    #cargo i.ref { box-shadow: inset 0 0 0 1.5px #fff; }
+    #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
+    #tip[hidden] { display: none; }
+    #zone { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 4; font: 800 18px var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .75; pointer-events: none; text-shadow: 0 0 6px #000; }
+    /* the optional tutorial, under the zone name */
+    #tut { position: fixed; left: 50%; transform: translateX(-50%); top: calc(48px + env(safe-area-inset-top, 0px)); z-index: 6; display: flex; align-items: center; gap: 9px; max-width: min(86vw, 520px); padding: 7px 6px 7px 14px; background: rgba(18,24,36,.95); border: 1px solid rgba(216,176,106,.5); border-radius: 6px; font: 400 13px var(--f-body); color: var(--ink); }
+    #tut[hidden] { display: none; }
+    #tut b { font: 800 13px var(--f-display); color: var(--gold); letter-spacing: .05em; white-space: nowrap; }
+    #tut button { background: none; border: 0; color: var(--dim); font: 700 14px var(--f-body); cursor: pointer; padding: 2px 8px; }
+    #note { position: fixed; left: 50%; transform: translateX(-50%); top: calc(96px + env(safe-area-inset-top, 0px)); z-index: 6; padding: 6px 14px; background: rgba(18,24,36,.95); border: 1px solid var(--rule); border-radius: 6px; font: 600 12px var(--f-mono); color: var(--gold); opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 86vw; text-align: center; }
     #zoom-col { display: none; }
     body.touch #zoom-col { position: fixed; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(126px + env(safe-area-inset-bottom, 0px)); z-index: 6; display: grid; gap: 5px; }
     body.touch #zoom-col button { width: 38px; height: 38px; border-radius: 7px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); color: var(--ink); font: 800 19px var(--f-mono); cursor: pointer; padding: 0; }
-    body.touch #ability-btn { bottom: calc(64px + env(safe-area-inset-bottom, 0px)); right: calc(62px + env(safe-area-inset-right, 0px)); }
-    /* the hold above its bar (owner, 2026-10-18): one square per ore type with that square's own count; refined squares
-       edged white; party ore dotted gold; aboard cans and crates their own containers. Right-click: Drop cargo. */
-    #hold-wrap { position: relative; }
-    #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 190px; display: flex; flex-wrap: wrap-reverse; gap: 3px; align-items: flex-end; pointer-events: auto; }
-    #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); cursor: context-menu; }
-    #cargo i.slot { width: 22px; height: 20px; }
-    #cargo i b.n, #cargo i.can b.n { position: absolute; right: 2px; bottom: 0; font: 600 10px var(--f-mono); font-style: normal; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
-    #cargo i.ref { box-shadow: inset 0 0 0 1.5px #fff; }
-    #cargo i.party::after { content: ""; position: absolute; right: -1px; top: -1px; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 1px #000; }
-    #cargo i.can { width: 24px; height: 18px; border-radius: 3px; background: #3a4458; border: 1px solid var(--gold); box-shadow: none; }
-    #cargo i.can.crate { border-color: var(--ore); }
-    #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
-    #tip[hidden] { display: none; }
-    #tip.wrap { white-space: normal; max-width: 300px; font: 13px var(--f-body); line-height: 1.45; padding: 8px 11px; }   /* (the developer panel's descriptions: wrapped, not one long line) */
-    .dev-l.has-help { cursor: help; text-decoration: underline dotted rgba(156,152,136,.5); text-underline-offset: 3px; }
-    #prompt-box { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 10px; padding: 8px 10px 8px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); font: 13px var(--f-body); color: var(--ink); animation: dropin .25s cubic-bezier(.2,.9,.35,1.15); }
-    #prompt-box[hidden] { display: none; }
-    #prompt-box button { padding: 4px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
-    #prompt-box button.gold { background: var(--gold); border-color: var(--gold); color: var(--void); }
-    #credits { height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); font: 600 13px var(--f-mono); color: var(--gold); }
-    #credits::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
-    #zone { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 4; font: 800 18px var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink); opacity: .75; pointer-events: none; text-shadow: 0 0 6px #000; }
-    /* my party */
-    #party { position: fixed; left: 14px; top: 14px; z-index: 5; display: grid; gap: 6px; min-width: 150px; pointer-events: none; }
-    #party[hidden] { display: none; }
-    .pt-list { padding: 8px 10px; background: rgba(18,24,36,.88); border: 1px solid var(--rule); border-radius: 6px; display: grid; gap: 2px; }
-    .pt-head { font: 600 10px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin-bottom: 2px; }
-    .pt-mem { font: 13px var(--f-body); color: var(--ink); pointer-events: auto; cursor: context-menu; } .pt-mem.lead::after { content: " ★"; color: var(--gold); }
     /* the minimap */
     #minimap { position: fixed; left: 14px; bottom: 14px; width: 190px; height: 190px; z-index: 5; }
-    /* the station panel (docked): the ships, one to board, and fuel */
-    #station { position: fixed; right: 14px; top: 14px; bottom: 270px; width: 360px; max-width: calc(100vw - 28px); z-index: 7; overflow-y: auto; padding: 12px 14px 14px; background: rgba(18,24,36,.96); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); animation: panelin .18s ease-out; }
+    /* the station panel (docked): the ships, one to board, and storage */
+    #station { position: fixed; right: 14px; top: 14px; bottom: 60px; width: 360px; max-width: calc(100vw - 28px); z-index: 7; overflow-y: auto; padding: 12px 14px 14px; background: rgba(18,24,36,.96); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); animation: panelin .18s ease-out; }
     #station[hidden] { display: none; }
     .st-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .st-title { font: 800 28px var(--f-display); letter-spacing: .04em; text-transform: uppercase; }
-    .st-cr { display: flex; align-items: center; gap: 6px; font: 600 14px var(--f-mono); color: var(--gold); } .st-cr::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
     #station section { margin-top: 12px; }
     #station h3 { margin: 0 0 6px; font: 600 11px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+    .st-empty { margin: 0; color: var(--dim); font-size: 13px; }
     .st-ship { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); margin-bottom: 8px; transition: border-color .15s ease; }
     .st-ship:hover { border-color: var(--dim); } .st-ship.aboard { border-color: rgba(216,176,106,.55); }
     .st-ship-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .st-ship-name { font: 800 18px var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
     .st-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font: 12px var(--f-mono); color: var(--dim); margin-top: 4px; } .st-stats b { font-weight: 600; color: var(--ink); text-align: right; }
     .st-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
-    .st-sw { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--ice); }
+    .st-sw { flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--ice); }
     .st-name { flex: 1; min-width: 0; font-size: 14px; }
     .st-n { font: 600 13px var(--f-mono); color: var(--dim); font-variant-numeric: tabular-nums; }
     .st-tag { font: 600 10.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); padding: 3px 8px; border: 1px solid rgba(216,176,106,.5); border-radius: 10px; }
@@ -92,103 +84,36 @@
     #station button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
     #station button.gold:hover:not(:disabled) { filter: brightness(1.08); }
     #station button:disabled { opacity: .4; cursor: default; }
-    /* (owner, 2026-10-17) the developer panel */
-    #dev-btn { width: 30px; height: 30px; padding: 0; display: grid; place-items: center; background: var(--plate); border: 1px solid var(--rule); border-radius: 5px; color: var(--ice); font: 800 15px var(--f-display); cursor: pointer; }
-    #dev-btn:hover, #dev-btn.on { background: var(--ice); color: var(--void); }
-    #dev { position: fixed; left: 14px; top: 14px; bottom: 220px; width: 430px; max-width: calc(100vw - 28px); z-index: 21; display: flex; flex-direction: column; padding: 12px 14px 14px; background: rgba(18,24,36,.97); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 20px 55px rgba(0,0,0,.55); animation: panelin .18s ease-out; }
-    #dev[hidden] { display: none; }
-    #dev button { padding: 4px 10px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
-    #dev button.on { background: var(--ice); color: var(--void); border-color: transparent; }
-    .dev-tabs { display: flex; gap: 4px; margin: 8px 0; flex-wrap: wrap; }
-    .dev-body { flex: 1; min-height: 0; overflow-y: auto; display: grid; gap: 8px; align-content: start; padding-right: 4px; }
-    .dev-group { padding: 8px 10px; border: 1px solid var(--rule); border-radius: 6px; background: rgba(11,14,21,.55); display: grid; gap: 4px; }
-    .dev-h { font: 800 15px var(--f-display); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 2px; }
-    .dev-pick { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 4px; }
-    .dev-pick button { padding: 2px 9px !important; font: 600 11px var(--f-mono) !important; }
-    .dev-row { display: flex; align-items: center; gap: 4px; } .dev-l { flex: 1; min-width: 0; font: 12px var(--f-mono); color: var(--dim); }
-    .dev-row input { width: 62px; padding: 3px 5px; background: var(--void); border: 1px solid var(--rule); border-radius: 3px; color: var(--ink); font: 12px var(--f-mono); text-align: right; }
-    .dev-row input:focus { outline: none; border-color: var(--ice); }
-    /* the crate unlock slider (the deliverer's share) */
-    #amount-box { position: fixed; left: 50%; top: 120px; transform: translateX(-50%); z-index: 12; width: 280px; padding: 12px 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 16px 40px rgba(0,0,0,.55); display: grid; gap: 10px; animation: panelin .18s ease-out; }
-    #amount-box[hidden] { display: none; }
-    #amount-title { font: 800 18px var(--f-display); letter-spacing: .05em; text-transform: uppercase; }
-    #amount-range { width: 100%; accent-color: var(--gold); }
-    .amount-row { display: flex; justify-content: space-between; font: 600 13px var(--f-mono); color: var(--ink); } #amount-worth { color: var(--gold); }
-    .amount-acts { display: flex; gap: 6px; justify-content: flex-end; }
-    #amount-box button { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 12px var(--f-body); cursor: pointer; }
-    #amount-box button.gold { background: var(--gold); color: #1a1205; border-color: transparent; }
-    /* chat, bottom right */
-    #chat { position: fixed; right: 14px; bottom: 14px; width: 400px; max-width: calc(100vw - 28px); z-index: 6; display: grid; gap: 4px; }
-    #chat-tabs { display: flex; gap: 3px; }
-    #chat-tabs button { padding: 2px 9px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(18,24,36,.85); color: var(--dim); font: 600 11px var(--f-mono); letter-spacing: .04em; cursor: pointer; }
-    #chat-tabs button.on { color: var(--ink); border-color: var(--gold); } #chat-tabs button.new { color: var(--gold); animation: unreadpulse 1.4s ease-in-out infinite; }
-    #chat-panel { background: rgba(18,24,36,.82); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-    #chat-log { height: 140px; overflow-y: auto; padding: 6px 8px; font: 13px/1.4 var(--f-body); display: flex; flex-direction: column; }
-    #chat-log > :first-child { margin-top: auto; }
-    .chat-line { overflow-wrap: anywhere; animation: linein .18s ease-out; } .chat-line.sys { color: var(--dim); font-style: italic; }
-    .chat-ch { font: 600 11px var(--f-mono); } .chat-ch.global { color: var(--dim); } .chat-ch.zone { color: var(--ink); } .chat-ch.party { color: var(--gold); } .chat-ch.whisper { color: var(--ore); }
-    .chat-who { font-weight: 700; color: var(--ink); cursor: context-menu; }
-    #chat-form { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--rule); background: rgba(11,14,21,.6); }
-    #chat-pre { flex: none; white-space: nowrap; }
-    #chat-in { flex: 1; min-width: 0; padding: 3px 0; border: none; background: transparent; color: var(--ink); font: 13px var(--f-body); outline: none; }
     #ctx-menu { position: fixed; z-index: 30; display: grid; min-width: 160px; padding: 4px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); animation: menuin .12s ease-out; transform-origin: 12px 10px; }
     #ctx-menu[hidden] { display: none; }
     #ctx-menu button { padding: 6px 10px; border: none; border-radius: 4px; background: none; color: var(--ink); text-align: left; font: 13px var(--f-body); cursor: pointer; } #ctx-menu button:hover { background: rgba(255,255,255,.07); }
-    #report-box { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(0,0,0,.45); } #report-box[hidden] { display: none; }
-    #report-box .box { display: grid; gap: 8px; width: 340px; padding: 14px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; animation: panelin .18s ease-out; }
-    #report-box textarea { height: 90px; padding: 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--void); color: var(--ink); font: 13px var(--f-body); resize: none; }
-    #report-box .row { display: flex; justify-content: flex-end; gap: 6px; }
-    #report-box button { padding: 5px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); cursor: pointer; } #report-box #report-send { background: var(--gold); color: #1a1205; border: none; font-weight: 700; }
-    #staff-col { position: fixed; right: 14px; top: 50%; transform: translateY(-50%); z-index: 6; display: flex; flex-direction: column; gap: 4px; }
-    body:has(#station:not([hidden])) #staff-col { right: 412px; }   /* (clear of the station panel) */
-    @media (max-width: 1199px) and (min-width: 901px) { #hud { left: 50%; bottom: 236px; } }   /* (too narrow to sit between the minimap and the chat: above them) */
-    @media (max-width: 900px) { #hud { grid-template-columns: 1fr 1fr; bottom: 220px; } #chat { width: calc(100vw - 230px); } }
-    /* ---- (owner, 2026-10-17) motion: panels slide in, buttons press, bars and chips react ---- */
+    @media (max-width: 900px) { #hud { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); } }
+    /* ---- motion ---- */
     @keyframes panelin { from { opacity: 0; transform: translateY(10px) scale(.985); } }
-    @keyframes dropin { from { opacity: 0; transform: translateX(-50%) translateY(-14px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
     @keyframes menuin { from { opacity: 0; transform: scale(.9); } }
-    @keyframes linein { from { opacity: 0; transform: translateX(8px); } }
-    @keyframes fuelpulse { 50% { filter: brightness(1.7); } }
-    @keyframes unreadpulse { 50% { border-color: rgba(216,176,106,.8); filter: brightness(1.3); } }
     @keyframes barpop { 35% { transform: scaleY(1.25) scaleX(1.015); } }
-    @keyframes crflash { 25% { background: rgba(216,176,106,.4); transform: scale(1.07); } }
     @keyframes zonein { from { opacity: 0; letter-spacing: .3em; } to { opacity: .75; } }
     @keyframes popin { from { transform: scale(.2); } 70% { transform: scale(1.25); } }
     #tip { animation: menuin .1s ease-out; }
-    #fuel-fill.low { animation: fuelpulse 0.9s ease-in-out infinite; }
     #hold-wrap.pop .bar { animation: barpop .28s ease-out; }
-    #credits.flash { animation: crflash .55s ease-out; }
     #zone.zswap { animation: zonein .5s ease-out; }
     .ore-fly { position: fixed; z-index: 18; width: 11px; height: 11px; margin: -5px 0 0 -5px; border-radius: 2px; background: var(--gold); box-shadow: 0 0 8px rgba(216,176,106,.8); pointer-events: none; transition: transform .42s cubic-bezier(.35,.65,.3,1), opacity .42s ease-in; }
-    #station button, #dev button, #ctx-menu button, #chat-tabs button, #amount-box button, #prompt-box button, #dev-btn, #admin-btn { transition: transform .07s ease, background .14s ease, border-color .14s ease, color .14s ease, filter .14s ease; }
-    #station button:active:not(:disabled), #dev button:active:not(:disabled), #ctx-menu button:active, #chat-tabs button:active, #amount-box button:active, #prompt-box button:active { transform: scale(.94); }
-    @media (prefers-reduced-motion: reduce) { #station, #dev, #amount-box, #prompt-box, #ctx-menu, #tip, .chat-line, #cargo i, #report-box .box { animation: none !important; } #fuel-fill.low, #chat-tabs button.new { animation: none !important; } }
-    /* ---- (owner, 2026-10-18) touch screens, landscape: a compact layout with big tap targets. Sticks fly and aim;
-       tap picks up; hold = right-click; pinch zooms; chat folds behind a bubble so the aim half stays clear. ---- */
-    #chat-toggle { display: none; }
-    body.touch #chat-toggle { position: fixed; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 7; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; background: rgba(18,24,36,.92); border: 1px solid var(--rule); border-radius: 8px; color: var(--dim); font: 800 15px var(--f-display); cursor: pointer; }
-    body.touch #chat-toggle.new { color: var(--gold); animation: unreadpulse 1.4s ease-in-out infinite; }
-    body.touch #chat { display: none; }
-    body.touch.chat-open #chat { display: grid; right: calc(10px + env(safe-area-inset-right, 0px)); bottom: calc(58px + env(safe-area-inset-bottom, 0px)); width: min(340px, calc(100vw - 120px)); z-index: 8; }
-    body.touch #chat-in { font-size: 16px; }
+    #station button, #ctx-menu button, .chip { transition: transform .07s ease, background .14s ease, border-color .14s ease, color .14s ease, filter .14s ease; }
+    #station button:active:not(:disabled), #ctx-menu button:active { transform: scale(.94); }
+    @media (prefers-reduced-motion: reduce) { #station, #ctx-menu, #tip, #cargo i { animation: none !important; } }
+    /* ---- touch screens, landscape: compact, big tap targets; sticks fly and aim; hold = right-click; pinch zooms ---- */
     body.touch #ctx-menu button { padding: 11px 14px; font-size: 15px; }
-    body.touch #station button, body.touch #prompt-box button, body.touch #amount-box button { padding: 9px 14px; font-size: 14px; }
+    body.touch #station button { padding: 9px 14px; font-size: 14px; }
     body.touch #station { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); right: calc(8px + env(safe-area-inset-right, 0px)); width: min(340px, 60vw); }
-    body.touch #staff-col { right: calc(10px + env(safe-area-inset-right, 0px)); top: 40%; }
-    body.touch:has(#station:not([hidden])) #staff-col { right: calc(356px + env(safe-area-inset-right, 0px)); }
     @media (pointer: coarse) and (max-height: 620px) {
       #minimap { width: 108px; height: 108px; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
       #zone { font-size: 14px; top: calc(6px + env(safe-area-inset-top, 0px)); }
-      #party { left: calc(8px + env(safe-area-inset-left, 0px)); top: calc(8px + env(safe-area-inset-top, 0px)); min-width: 0; }
-      .pt-list { padding: 5px 8px; } .pt-mem { font-size: 11.5px; } .pt-head { font-size: 9px; }
-      #hud { left: 50%; transform: translateX(-50%); bottom: calc(8px + env(safe-area-inset-bottom, 0px)); grid-template-columns: auto 128px 128px auto; gap: 5px; }
-      .bar { height: 19px; } .bar span { padding: 0 5px; font-size: 9.5px; }
-      #ship-chip { height: 19px; font-size: 12px; padding: 0 7px; } #credits { height: 19px; font-size: 11px; padding: 0 7px; }
-      #cargo { width: 128px; gap: 2px; }
-      #chat-log { height: 110px; }
-      #prompt-box { top: calc(40px + env(safe-area-inset-top, 0px)); font-size: 12.5px; }
-      #amount-box { top: 56px; width: 250px; }
-      #dev { bottom: 8px; width: min(400px, calc(100vw - 16px)); }
+      #tut { top: calc(32px + env(safe-area-inset-top, 0px)); font-size: 12px; }
+      #hud { bottom: calc(6px + env(safe-area-inset-bottom, 0px)); gap: 4px; }
+      .bar { width: 150px; height: 20px; } .bar span { padding: 0 5px; font-size: 9.5px; }
+      .chip { height: 24px; font-size: 11.5px; padding: 0 9px; } #mode-sw b { padding: 0 9px; }
+      #ship-chip { height: 20px; font-size: 12px; padding: 0 7px; }
+      #cargo { width: 150px; gap: 2px; }
       .overlay { top: calc(6px + env(safe-area-inset-top, 0px)); padding: 5px 10px; font-size: 11px; }
     }
   </style>
@@ -196,30 +121,23 @@
 <body>
   <canvas id="view"></canvas>
   <div id="zone"></div>
-  <div id="party" hidden></div>
+  <div id="tut" hidden><b id="tut-n"></b><span id="tut-text"></span><button id="tut-skip" type="button">✕</button></div>
+  <div id="note"></div>
   <div id="hud">
-    <div id="ship-chip"></div>
-    <div id="hold-wrap"><div id="cargo"></div><div class="bar"><i id="hold-raw"></i><i id="hold-ref"></i><span><b>Hold</b><em id="hold-num" style="font-style:normal"></em></span></div></div>
-    <div class="bar"><i id="fuel-fill"></i><span><b>Fuel</b><em id="fuel-num" style="font-style:normal"></em></span></div>
-    <div id="credits"></div>
+    <div id="modes"></div>
+    <div class="hud-row">
+      <div id="ship-chip"></div>
+      <div id="hold-wrap"><div id="cargo"></div><div class="bar"><i id="hold-raw"></i><i id="hold-ref"></i><span><b>Hold</b><em id="hold-num" style="font-style:normal"></em></span></div></div>
+    </div>
   </div>
   <canvas id="minimap"></canvas>
   <div id="zoom-col"><button id="zoom-in" type="button">+</button><button id="zoom-out" type="button">−</button></div>
-  <button id="ability-btn" type="button" hidden>BOOST</button>
   <div id="station" hidden></div>
-  <div id="dev" hidden></div>
-  <div id="amount-box" hidden><b id="amount-title"></b><input id="amount-range" type="range" min="1" max="1" step="1"><div class="amount-row"><span id="amount-n"></span><span id="amount-worth"></span></div><div class="amount-acts"><button id="amount-cancel" type="button">Cancel</button><button id="amount-go" class="gold" type="button"></button></div></div>
-  <div id="staff-col"></div>
-  <div id="chat"><div id="chat-tabs"></div><div id="chat-panel"><div id="chat-log"></div><form id="chat-form"><span id="chat-pre"></span><input id="chat-in" type="text" maxlength="240" autocomplete="off" enterkeyhint="send"></form></div></div>
-  <button id="chat-toggle" type="button">Chat</button>
   <div id="ctx-menu" hidden></div>
   <div id="tip" hidden></div>
-  <div id="prompt-box" hidden><span id="prompt-text"></span><button id="prompt-yes" class="gold" type="button">Accept</button><button id="prompt-no" type="button">Decline</button></div>
-  <div id="report-box" hidden><div class="box"><b id="report-title"></b><textarea id="report-text" maxlength="1000"></textarea><div class="row"><button id="report-cancel" type="button">Cancel</button><button id="report-send" type="button">Send</button></div></div></div>
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
-  <script src="api.js?v=1791945557"></script>
-  <script src="adminpanel.js?v=1792300002"></script>
-  <script type="module" src="game.js?v=1792400007"></script>
+  <script src="api.js?v=1792500001"></script>
+  <script type="module" src="game.js?v=1792500001"></script>
 </body>
 </html>
