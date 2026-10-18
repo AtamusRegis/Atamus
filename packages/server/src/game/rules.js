@@ -25,6 +25,9 @@ export const SHIPS = {
   hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000, len: 311.6, r: 93 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
+// (owner, 2026-10-18) the laser's waves run emitter to tip; each one that lands on rock pushes the ship back: a kick of
+// this many m/s that the ship's braking eases out, fast to slow (~0.9 m at brake 30). Timed on the server's clock.
+export const LASER = { waveGap: 34, waveSpeed: 90, kick: 7.3 };
 // shared flying numbers (every hull)
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };
 

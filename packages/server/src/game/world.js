@@ -299,6 +299,9 @@ export class World {
         if (best) {
           const rock = best.r, dmg = S.laserDps * dt;
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
+          { const LZ = R.LASER, wv = Math.floor((t / 1000 * LZ.waveSpeed - best.hit.t) / LZ.waveGap);   // a wave landing at the tip pushes the ship back
+            if (p.lastWave !== undefined && wv !== p.lastWave) { p.vx -= ux * LZ.kick; p.vy -= uy * LZ.kick; }
+            p.lastWave = wv; }
           rock.touched = t; rock.home = false;
           if (best.hit.core) this.hitCore(rock, dmg);
           else {
@@ -308,8 +311,8 @@ export class World {
             ch.hp -= dmg;
             if (ch.hp <= 0) this.breakChunk(rock, ch); else if (this.dmgStage(ch) !== st0) rock.v++;
           }
-        } else p.laserLen = S.laserRange;
-      }
+        } else { p.laserLen = S.laserRange; p.lastWave = undefined; }
+      } else p.lastWave = undefined;
       if (p.firing) p.meDirty = true;
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
