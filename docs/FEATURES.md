@@ -59,7 +59,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## Map and HUD
 
-- **The minimap** (bottom left): Saturn, the station, the three rings, the locked line, your ship, ships near you, **your marked rock** (gold diamond; right-click / hold a rock → Mark). An off-screen mark gets a gold arrow at the screen's edge.
+- **The minimap** (bottom left): Saturn, the station, the three rings, the locked line, your ship, ships near you, **your marked rock** (gold diamond; right-click / hold a rock → Mark). A gold arrow circles your ship pointing at the mark, on or off screen, and stays until the rock is unmarked or mined out (owner, 2026-10-18).
 - **The HUD** (bottom center): the Tutorial chip, the ship's name chip and the hold bar, with **one square per ore type above it** (ore color, its count). Names over other ships (dim, bright under the pointer).
 
 ## Live updates (kept)

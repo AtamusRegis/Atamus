@@ -789,16 +789,14 @@ function drawOverlay(t) {
     const SPn = G.ships[G.kinds[s.row[4]]] || {}, up = Math.max(24, (Math.max(SPn.r || 24, (SPn.len || 0) / 2) + 12) * zoom);   // (above the ship, whatever its size)
     cx.fillText(names.get(s.id) || "", sx, sy - up - 6); cx.globalAlpha = 1;
   }
-  if (ME.mark) {                               // a gold diamond arrow toward my marked rock
-    let [sx2, sy2] = toScreen(ME.mark[0], ME.mark[1]);
-    const off2 = sx2 < 30 || sy2 < 30 || sx2 > VW - 30 || sy2 > VH - 30, bob = Math.sin(t / 180) * 5;
-    if (off2) {
-      const a2 = Math.atan2(sy2 - VH / 2, sx2 - VW / 2), k2 = Math.min((VW / 2 - 46) / Math.abs(Math.cos(a2) || 1e-6), (VH / 2 - 46) / Math.abs(Math.sin(a2) || 1e-6));
-      cx.save(); cx.fillStyle = C.gold; cx.strokeStyle = C.void; cx.lineWidth = 2;
-      cx.translate(VW / 2 + Math.cos(a2) * (k2 + bob), VH / 2 + Math.sin(a2) * (k2 + bob)); cx.rotate(a2);
-      cx.beginPath(); cx.moveTo(14, 0); cx.lineTo(-9, -10); cx.lineTo(-4, 0); cx.lineTo(-9, 10); cx.closePath(); cx.fill(); cx.stroke();
-      cx.restore();
-    }
+  if (ME.mark && mine) {                       // (owner, 2026-10-18) a gold arrow circling my ship, pointing at my marked rock;
+    const [sx2, sy2] = toScreen(ME.mark[0], ME.mark[1]), [mx2, my2] = toScreen(mine.x, mine.y);   // stays until unmarked or mined out
+    const SPm = myShip() || {}, a2 = Math.atan2(sy2 - my2, sx2 - mx2), bob = Math.sin(t / 180) * 4;
+    const ring = Math.max(SPm.r || 24, (SPm.len || 0) / 2) * zoom + 34 + bob;
+    cx.save(); cx.fillStyle = C.gold; cx.strokeStyle = C.void; cx.lineWidth = 2;
+    cx.translate(mx2 + Math.cos(a2) * ring, my2 + Math.sin(a2) * ring); cx.rotate(a2);
+    cx.beginPath(); cx.moveTo(14, 0); cx.lineTo(-9, -10); cx.lineTo(-4, 0); cx.lineTo(-9, 10); cx.closePath(); cx.fill(); cx.stroke();
+    cx.restore();
   }
   if (sticks.move || sticks.aim) {
     for (const side of ["move", "aim"]) { const s = sticks[side]; if (!s) continue;

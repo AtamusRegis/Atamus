@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Mark arrow by the ship (owner):** the gold mark arrow now circles your own ship instead of riding the screen's edge, and it no longer vanishes when the mark comes on screen — only when the rock is unmarked or mined out.
 - **Fix — sweeping pushed harder (owner report):** moving the beam's tip toward you made waves "land" more often, so sweeping pushed the ship away faster. Waves now count forward only, at most one push per wave period.
 - **A glowing laser (owner):** the beam is drawn with soft glow halos, a red body and a warm hot core with a faint flicker instead of a flat color, and each wave is a smooth red-to-orange gradient.
 - **A real push (owner):** each laser wave landing on rock now actually moves the ship back — half the old visual bounce, eased fast to slow by the ship's braking — instead of a visual jolt. Server-applied, predicted in step on the client (waves timed on the server's clock).
