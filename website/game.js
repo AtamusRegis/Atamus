@@ -37,6 +37,14 @@ const fx = [];
 const parts = [];
 // (owner, 2026-10-18) the ship sheet's sprites, one per kind (drawn crisp; the vector art stands in until one loads)
 const SPRITES = {};
+// (owner, 2026-10-18) marked on the ship sheet: each ship turns around its pivot (pink) — [along from the stern, across
+// from the top] as fractions of the sprite — and exhausts from its engines (red), each a fraction across the stern
+const SPRITE_META = {
+  miner:   { pivot: [0.408, 0.483], engines: [0.191, 0.483, 0.775] },
+  scanner: { pivot: [0.343, 0.496], engines: [0.368, 0.617] },
+  booster: { pivot: [0.423, 0.488], engines: [0.468, 0.548] },
+  hauler:  { pivot: [0.405, 0.504], engines: [0.147, 0.368, 0.500, 0.635, 0.868] },
+};
 for (const k of ["miner", "scanner", "booster", "hauler"]) { const im = new Image(); im.src = "assets/ships/" + k + ".png?v=1"; SPRITES[k] = im; }
 function spawnPart(x, y, o) { if (parts.length > 360) parts.splice(0, 40); parts.push({ x, y, vx: o.vx || 0, vy: o.vy || 0, life: o.life || 0.6, age: 0, size: o.size || 3, color: o.color || "#fff", drag: o.drag ?? 2.5, plus: o.plus }); }
 function burst(x, y, n, colors, speed) { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = speed * (0.4 + Math.random()); spawnPart(x, y, { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.5, size: 2 + Math.random() * 3.5, color: colors[(Math.random() * colors.length) | 0], drag: 3 }); } }
@@ -579,15 +587,20 @@ function drawWorld(t) {
       on: { miner: !!(fl & 2) }, busy: {},
       thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (st.thrust > 0.15) {
-      s.exA = (s.exA || 0) + wdt * 15 * st.thrust;
-      const rear = SP.len ? SP.len / 2 : shipLayout(mods).yc * ART, bx = s.x - Math.sin(s.h) * rear, by = s.y + Math.cos(s.h) * rear;
-      while (s.exA >= 1) { s.exA--; spawnPart(bx + (Math.random() - 0.5) * 5, by + (Math.random() - 0.5) * 5, { vx: -Math.sin(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, vy: Math.cos(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, life: 0.45 + Math.random() * 0.35, size: 2.4 + Math.random() * 2, color: Math.random() < 0.75 ? C.heat : "#6b7382", drag: 2 }); }
+      const meta = SPRITE_META[kind], spr2 = SPRITES[kind];
+      const len2 = SP.len || shipLayout(mods).yc * 2 * ART, wid2 = spr2 && spr2.naturalWidth ? spr2.naturalHeight * len2 / spr2.naturalWidth : 0;
+      const fwX = Math.sin(s.h), fwY = -Math.cos(s.h), sdX = Math.cos(s.h), sdY = Math.sin(s.h);
+      const nozzles = meta && wid2 ? meta.engines.map((fy) => { const ax = -meta.pivot[0] * len2, ay = (fy - meta.pivot[1]) * wid2; return [s.x + fwX * ax + sdX * ay, s.y + fwY * ax + sdY * ay]; })
+        : [[s.x - fwX * len2 / 2, s.y - fwY * len2 / 2]];
+      s.exA = (s.exA || 0) + wdt * 9 * st.thrust * nozzles.length;   // (more engines, more exhaust)
+      while (s.exA >= 1) { s.exA--; const [bx, by] = nozzles[(Math.random() * nozzles.length) | 0]; spawnPart(bx + (Math.random() - 0.5) * 3, by + (Math.random() - 0.5) * 3, { vx: -Math.sin(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, vy: Math.cos(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, life: 0.45 + Math.random() * 0.35, size: 2.4 + Math.random() * 2, color: Math.random() < 0.75 ? C.heat : "#6b7382", drag: 2 }); }
     }
     const spr = SPRITES[kind];
     if (spr && spr.complete && spr.naturalWidth) {   // (owner, 2026-10-18) the pixel-art ship sheet: nose right in the sheet, up in the game
       const len = SP.len || shipLayout(mods).yc * 2 * ART, k = len / spr.naturalWidth;   // (proportional to the ship sheet)
+      const pv = (SPRITE_META[kind] || { pivot: [0.5, 0.5] }).pivot, hgt = spr.naturalHeight * k;   // drawn around its pivot: it turns there
       cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h - Math.PI / 2); cx.imageSmoothingEnabled = false;
-      cx.drawImage(spr, -len / 2, -spr.naturalHeight * k / 2, len, spr.naturalHeight * k); cx.restore();
+      cx.drawImage(spr, -pv[0] * len, -pv[1] * hgt, len, hgt); cx.restore();
     } else { cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore(); }
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
