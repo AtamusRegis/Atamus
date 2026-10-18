@@ -16,7 +16,7 @@ export const WORLD = {
 
 // (owner, 2026-10-18) just the Miner for now
 export const SHIPS = {
-  miner: { name: "Miner", art: ["miner"], hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000 },
+  miner: { name: "Miner", art: ["miner"], hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 8.3 },   // muzzle: m ahead of center the beam starts (the sprite's red dot)
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // shared flying numbers (every hull)

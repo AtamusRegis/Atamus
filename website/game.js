@@ -219,7 +219,9 @@ function pushInput() {
   const h = mine.h; let x = Math.sin(h) * f + Math.cos(h) * s, y = -Math.cos(h) * f + Math.sin(h) * s; const L = hyp(x, y); if (L > 1) { x /= L; y /= L; }
   return { x, y, turn: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) };
 }
-const aimAngle = () => { if (sticks.aim && touchAim !== null) return touchAim; const [sx, sy] = toScreen(mine.x, mine.y); return Math.atan2(mouse.y - sy, mouse.x - sx); };
+// (owner, 2026-10-18) abilities originate from the red dot on each ship's sprite: the muzzle, m ahead of center
+const muzzleOf = (x, y, h, S) => { const m = (S && S.muzzle) || 0; return [x + Math.sin(h) * m, y - Math.cos(h) * m]; };
+const aimAngle = () => { if (sticks.aim && touchAim !== null) return touchAim; const [mx2, my2] = muzzleOf(mine.x, mine.y, mine.h, G && myShip()); const [sx, sy] = toScreen(mx2, my2); return Math.atan2(mouse.y - sy, mouse.x - sx); };
 
 // ---- the socket ----
 let ws = null, srvBuild = "", closedForGood = false, rtt = 80, srvOff = null, pingTimer = 0;
@@ -610,19 +612,19 @@ function shipFx(s, ts, under) {
   const isMe = s.id === myId, S2 = G.ships[kind] || {}, fireNow = isMe ? firing && !ME.docked : !!(fl & 2);
   const alt = isMe ? modeIdx === 1 && hasAlt() : !!(fl & 64);
   const drillMode = S2.drillSpeed && alt, coolMode = S2.boost && alt, boostMode = S2.boost && !alt, refineMode = S2.refineUnit && alt;
-  const nose = (yc - 30) * ART, x0 = s.x + Math.sin(s.h) * nose, y0 = s.y - Math.cos(s.h) * nose;
+  const [x0, y0] = muzzleOf(s.x, s.y, s.h, S2);   // the beam leaves the sprite's red dot
   const wdt2 = 1 / 60;
   // the cutting laser: blue runs yellow then red as its temperature builds; a winding charge pushes it white
   if (fireNow && S2.laserDps && !drillMode && !coolMode && !boostMode && !refineMode) {
     const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
     let c2 = null;
-    if (isMe) { a = aimAngle(); c2 = castLocal(mine.x, mine.y, a, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
-    else if (hitF) c2 = castLocal(s.x, s.y, a, len + 3);
+    if (isMe) { a = aimAngle(); c2 = castLocal(x0, y0, a, S2.laserRange); len = c2.len; hitF = !!c2.hit; }
+    else if (hitF) c2 = castLocal(x0, y0, a, len + 3);
     if (hitF && c2 && c2.rock) { c2.rock.hitT = performance.now(); c2.rock.hitI = c2.chunk; }
     const ck = 0, bc = C.signal;                 // (back to basics: one laser, signal red)
     if (len > 0) {
-      const x1 = s.x + Math.cos(a) * len, y1 = s.y + Math.sin(a) * len;
+      const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
       cx.strokeStyle = bc; cx.lineCap = "round";
       cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5) * (1 + ck * 0.9); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6) * (1 + ck); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
@@ -998,7 +1000,7 @@ window.Atamus = {
   chunks: (id) => details.get(id) || null,
   get drops() { return [...dropsM.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, ore: ORE_KEYS[o.ore], units: o.units })); },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], bt: (s.row[11] || 0) / 100, ck: (s.row[12] || 0) / 100, beamTgt: s.row[9] || 0, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[13] || 0 } : null })); },
-  cast: (a) => castLocal(mine.x, mine.y, a, myShip().laserRange),
+  cast: (a) => { const [mx2, my2] = muzzleOf(mine.x, mine.y, mine.h, myShip()); return castLocal(mx2, my2, a, myShip().laserRange); },
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = zoomT = z; },
   get mode() { return modeIdx; }, set mode(v) { modeIdx = v ? 1 : 0; drawHud(); },
 };

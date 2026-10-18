@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Beams from the red dot (owner):** the laser now originates at the emitter the owner marked in red on the ship sheet (the Miner's, 8.3 m ahead of center) — the server's ray, the aim and the drawn beam all start there.
 - **New ship art (owner):** ships are drawn from the owner's pixel-art ship sheet — the Miner live now; the Scanner, Booster and Hauler sprites saved in `website/assets/ships/` for when they return. Same in-game size and hitbox.
 - **Chunk bounce (owner):** the chunk under a laser bounces slightly outward while it's being cut, instead of the whole asteroid shaking.
 - **Exact hitboxes, no lock-on (owner):** the laser no longer anchors to the chunk it started on — it hits exactly what it points at. Each chunk's rock-shaped polygon is built once on the server and sent to clients with the rock's first chunk layout (`rockd.g`); clients draw exactly those points, and the server's and client's laser rays test exactly those edges plus the core's circle (verified: client and server beam endpoints agree to a meter across a rock's face).

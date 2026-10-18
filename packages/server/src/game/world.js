@@ -291,8 +291,9 @@ export class World {
       p.laserOn = false; p.laserLen = 0; p.laserRock = null; p.laserChunk = -1;
       if (p.firing && !dock && S.laserDps) {
         const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.laserRange;
-        for (const r of this.rocksNear(p.x, p.y, S.laserRange + 360)) {
-          const hit = this.castRock(r, p.x, p.y, ux, uy);
+        const mz = S.muzzle || 0, mx0 = p.x + Math.sin(p.h) * mz, my0 = p.y - Math.cos(p.h) * mz;   // (owner, 2026-10-18) the beam starts at the ship's red dot
+        for (const r of this.rocksNear(mx0, my0, S.laserRange + 360)) {
+          const hit = this.castRock(r, mx0, my0, ux, uy);
           if (hit && hit.t <= S.laserRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
         }
         if (best) {
