@@ -266,6 +266,14 @@ export class World {
     }
     return null;
   }
+  nearChunk(rock, c, x, y, tol) {              // is this world point within tol meters of the chunk's footprint?
+    const rr = hyp(x - rock.x, y - rock.y);
+    if (rr < c.r0 - tol || rr > c.r1 + tol) return false;
+    const a = normA(Math.atan2(y - rock.y, x - rock.x));
+    if (spanHas(c, a)) return true;
+    const off = Math.min(normA(a - c.a1), normA(c.a0 - a));   // angular gap past either edge
+    return off * Math.max(rr, 1) <= tol;
+  }
 
   step(dt) {
     const t = now();
@@ -313,9 +321,10 @@ export class World {
             best.r.touched = t; best.r.home = false;
             if (best.hit.core) { this.hitCore(best.r, dps * dt, p); p.lockTgt = null; }
             else {
-              let ch = best.hit.chunk;             // sticky: a wiggle onto a touching chunk keeps cutting the one under way
+              let ch = best.hit.chunk;             // sticky: a wiggle onto a touching chunk keeps cutting the one under way,
               const prev = p.lockTgt && p.lockTgt.rock === best.r.id ? best.r.chunks[p.lockTgt.i] : null;
-              if (prev && prev !== ch && !prev.broken && prev.adj.includes(ch.i)) ch = prev;
+              if (prev && prev !== ch && !prev.broken && prev.adj.includes(ch.i)
+                && this.nearChunk(best.r, prev, p.x + ux * best.hit.t, p.y + uy * best.hit.t, 3)) ch = prev;   // but only while the aim stays by its edge
               p.lockTgt = { rock: best.r.id, i: ch.i };
               p.laserChunk = ch.i; const st0 = this.dmgStage(ch);
               // (owner, 2026-10-18) heat: the mined chunk runs orange (denser and bedrock hotter, a boosted beam hotter
