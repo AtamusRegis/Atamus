@@ -25,9 +25,9 @@ export const SHIPS = {
   hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000, len: 311.6, r: 93 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
-// (owner, 2026-10-18) the laser's waves run emitter to tip; each one that lands on rock pushes the ship back: a kick of
-// this many m/s that the ship's braking eases out, fast to slow (~0.9 m at brake 30). Timed on the server's clock.
-export const LASER = { waveGap: 34, waveSpeed: 90, kick: 7.3 };
+// (owner, 2026-10-18) no push: waves run only when a chunk with ore bits is cut — each bit leaves the chunk as the cut
+// passes its share of the chunk's health and rides a wave back down the beam into the ship's hold at this speed (m/s)
+export const LASER = { bitSpeed: 140 };
 // shared flying numbers (every hull)
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };
 
@@ -50,7 +50,10 @@ export const ROCK_SIZE = (n) => ({
   coreHp: Math.round(110 + n * 30), oreTypes: n <= 4 ? 1 : n <= 7 ? 2 : 3,
 });
 export const RING_SHELLS = [[2, 5], [4, 8], [7, 10]];   // layers rolled per ring (min, max): thicker asteroids deeper
-export const CORE = { grow: 1.5 };                      // the core swells up to x2.5 as ore bits bank into it (drawn beneath the masonry)
+export const CORE = { grow: 1.5 };                      // the core swells up to x2.5 as the masonry around it comes away (drawn beneath it)
+// (owner, 2026-10-18) the core's corium: deeper asteroids and asteroids with more layers drop more. Units = perLayer x
+// layers x the ring's factor (rounded to whole lumps); all of it piñatas out as drops when the core breaks.
+export const CORIUM = { perLayer: 100, ring: [1, 1.5, 2] };
 export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
 // which ores each ring holds (rarer outward) and its rock chance x
 export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"], ["cobalt", "platinum"]];
@@ -63,6 +66,7 @@ export const ORES = {
   titanium: { name: "Titanium", color: "#ffc446" },
   cobalt: { name: "Cobalt", color: "#78f08c" },
   platinum: { name: "Platinum", color: "#f06ec8" },
+  corium: { name: "Corium", color: "#a98bff" },       // (owner, 2026-10-18) the core's own ore: only the piñata drops it
   core: { name: "Core", color: "#e89a3c" },           // (no longer mined; kept so players' stored core ore survives)
 };
 export const REFINED_SPACE = 0.2;              // (kept for old refined cargo still in holds)

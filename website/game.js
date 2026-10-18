@@ -297,6 +297,7 @@ function onMsg(m) {
   }
   else if (m.t === "note") note(m.text);
   else if (m.t === "fx") {
+    if (m.k === "bit") { bitWaves.push({ i: m.i, x: m.x, y: m.y, ore: m.ore, ts: m.ts, dur: m.dur }); return; }
     fx.push({ ...m, t0: performance.now() });
     const d = hyp(m.x - mine.x, m.y - mine.y);
     if (m.k === "crack") { burst(m.x, m.y, 8 + Math.min(10, (m.u || 0) / 50), [C.rock, "#fff", C.dim], 60); addShake(1.6 * Math.max(0, 1 - d / 700)); tutEv.cut = tutEv.cut || d < 320; }
@@ -598,10 +599,13 @@ function drawWorld(t) {
       const len = SP.len || shipLayout(mods).yc * 2 * ART, k = len / spr.naturalWidth;   // (proportional to the ship sheet)
       const pv = (SPRITE_META[kind] || { pivot: [0.5, 0.5] }).pivot, hgt = spr.naturalHeight * k;   // drawn around its pivot: it turns there
       cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h - Math.PI / 2); cx.imageSmoothingEnabled = false;
+      { const pk = s.pulseT ? (performance.now() - s.pulseT) / 1000 : 2;   // (owner, 2026-10-18) a bit arrived: the ship swells for a second
+        if (pk < 1) { const sc = 1 + 0.14 * (pk < 0.12 ? pk / 0.12 : Math.pow(1 - (pk - 0.12) / 0.88, 2)); cx.scale(sc, sc); } }
       cx.drawImage(spr, -pv[0] * len, -pv[1] * hgt, len, hgt); cx.restore();
     } else { cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore(); }
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
+  drawBitWaves();
   drawFx(t);
   drawShards(wdt);
   drawParts(wdt);
@@ -609,6 +613,26 @@ function drawWorld(t) {
     fog.addColorStop(0, "rgba(11,14,21,0)"); fog.addColorStop(1, "rgba(11,14,21,0.84)");
     cx.fillStyle = fog; const fr = Math.max(VW, VH) / zoom; cx.fillRect(cam.x - fr, cam.y - fr, fr * 2, fr * 2); }
   cx.restore();
+}
+// (owner, 2026-10-18) an ore bit riding a wave back down the beam: it leaves the chunk at the tip and runs to the ship's
+// emitter — a warm red-to-orange swell carrying the bit in the ore's color; when it arrives the bit is in the hold and the
+// ship swells for a second. Timed on the server's clock, so it lands as the server banks it.
+const bitWaves = [];
+function drawBitWaves() {
+  const now = Date.now() - (srvOff || 0), lw = (px) => px / zoom;
+  for (let k = bitWaves.length - 1; k >= 0; k--) {
+    const b = bitWaves[k], s = ships.get(b.i);
+    if (!s || !s.row || now - b.ts > b.dur + 2000) { bitWaves.splice(k, 1); continue; }
+    const S2 = G.ships[G.kinds[s.row[4]]] || {}, [mx, my] = muzzleOf(s.x, s.y, s.h, S2), f = Math.max(0, (now - b.ts) / b.dur);
+    const oc = G.ores[ORE_KEYS[b.ore]] ? G.ores[ORE_KEYS[b.ore]].color : "#fff";
+    if (f >= 1) { s.pulseT = performance.now(); burst(mx, my, 5, [oc, "#fff"], 40); if (b.i === myId) addShake(0.4); bitWaves.splice(k, 1); continue; }
+    const L = hyp(mx - b.x, my - b.y) || 1, ux = (mx - b.x) / L, uy = (my - b.y) / L, px = b.x + ux * L * f, py = b.y + uy * L * f, half = 7;
+    const g5 = cx.createLinearGradient(px - ux * half, py - uy * half, px + ux * half, py + uy * half);
+    g5.addColorStop(0, "rgba(229,96,79,0)"); g5.addColorStop(0.3, "rgba(240,112,88,0.6)"); g5.addColorStop(0.5, "rgba(255,150,105,0.95)"); g5.addColorStop(0.7, "rgba(240,112,88,0.6)"); g5.addColorStop(1, "rgba(229,96,79,0)");
+    cx.lineCap = "butt"; cx.strokeStyle = g5; cx.lineWidth = lw(6); cx.beginPath(); cx.moveTo(px - ux * half, py - uy * half); cx.lineTo(px + ux * half, py + uy * half); cx.stroke(); cx.lineCap = "round";
+    const q = 2.6; cx.save(); cx.translate(px, py); cx.rotate(Math.atan2(uy, ux));
+    cx.fillStyle = oc; cx.fillRect(-q / 2, -q / 2, q, q); cx.fillStyle = mix(oc, "#05070c", 0.3); cx.fillRect(0, 0, q / 2, q / 2); cx.restore();
+  }
 }
 // a ship's gear at work: the boost glow under it; over it, the beams — the cutting laser blue-yellow-red by its own
 // temperature (white as a Miner's charge winds up), the Booster's boost beam as green pluses, its coolant as a blue
@@ -646,32 +670,6 @@ function shipFx(s, ts, under) {
       beamLine(bw * 7, bc, 0.07 * flick); beamLine(bw * 4.2, bc, 0.13 * flick); beamLine(bw * 2.2, bc, 0.3);
       beamLine(bw, bc, 1); beamLine(bw * 0.45, "#ffb08f", 0.85);
       cx.globalAlpha = 1;
-      { // (owner, 2026-10-18) small waves running from the emitter to the tip
-        const L5 = hyp(x1 - x0, y1 - y0), ux5 = (x1 - x0) / (L5 || 1), uy5 = (y1 - y0) / (L5 || 1), LZ = G.laser || { waveGap: 34, waveSpeed: 90, kick: 0 }, gap = LZ.waveGap, spd = LZ.waveSpeed;
-        const tsS = (Date.now() - (srvOff || 0)) / 1000;   // (the server's clock: waves land, and push, when the server says)
-        cx.lineCap = "butt";                          // each wave a smooth gradient: beam red at its ends, warm orange at its crest
-        for (let d5 = (tsS * spd) % gap; d5 < L5; d5 += gap) {
-          const f5 = Math.sin(Math.PI * d5 / L5), w5 = lw(big ? 5 : 3.2) * (0.6 + 0.4 * f5), half = 6;
-          const ax = x0 + ux5 * Math.max(0, d5 - half), ay = y0 + uy5 * Math.max(0, d5 - half), bx2 = x0 + ux5 * Math.min(L5, d5 + half), by2 = y0 + uy5 * Math.min(L5, d5 + half);
-          const g5 = cx.createLinearGradient(x0 + ux5 * (d5 - half), y0 + uy5 * (d5 - half), x0 + ux5 * (d5 + half), y0 + uy5 * (d5 + half));
-          g5.addColorStop(0, "rgba(229,96,79,0)"); g5.addColorStop(0.3, "rgba(240,112,88,0.55)"); g5.addColorStop(0.5, "rgba(255,150,105,0.95)"); g5.addColorStop(0.7, "rgba(240,112,88,0.55)"); g5.addColorStop(1, "rgba(229,96,79,0)");
-          cx.strokeStyle = g5; cx.globalAlpha = 0.45 + 0.5 * f5; cx.lineWidth = w5;
-          cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx2, by2); cx.stroke();
-        }
-        cx.globalAlpha = 1; cx.lineCap = "round";
-        // (owner, 2026-10-18) each wave that lands at the tip pushes the ship back — a real kick the braking eases out,
-        // fast to slow; my own ship predicts it as the server applies it, with a little shake
-        if (hitF) {
-          const wv = Math.floor((tsS * spd - L5) / gap);
-          const nowK = tsS * 1000;                     // (forward only, one per wave period: sweeping never pushes harder)
-          if (s.lastWave !== undefined && wv > s.lastWave && nowK - (s.lastKick || 0) >= 900 * gap / spd) {
-            s.lastKick = nowK;
-            if (isMe) { mine.vx -= ux5 * LZ.kick; mine.vy -= uy5 * LZ.kick; addShake(0.45); }
-            for (let j = 0; j < 3; j++) { const na = Math.atan2(-uy5, -ux5) + (Math.random() - 0.5) * 1.6, v = 50 + Math.random() * 50; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.2, size: 2 + Math.random() * 1.5, color: Math.random() < 0.5 ? "#ff8a72" : "#fff", drag: 4 }); }
-          }
-          if (s.lastWave === undefined || wv > s.lastWave) s.lastWave = wv;
-        } else s.lastWave = undefined;
-      }
       if (hitF) {
         cx.fillStyle = "#fff"; cx.globalAlpha = (0.6 + 0.4 * Math.sin(ts * 50)) * (0.6 + ck); cx.beginPath(); cx.arc(x1, y1, lw(big ? 5 : 4) * (1 + ck * 1.6), 0, TAU); cx.fill(); cx.globalAlpha = 1;
         if (Math.random() < (big ? 0.6 : 0.3)) { const na = a + Math.PI + (Math.random() - 0.5) * 2.2, v = 40 + Math.random() * 60; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.3, size: 1.8 + Math.random() * 2, color: Math.random() < 0.5 ? "#fff" : bc, drag: 4 }); }
@@ -991,8 +989,9 @@ const TUT = {
   miner: [
     ["Fly out to a ring and up to an asteroid", nearRock],
     ["Hold fire to cut through the masonry — darker chunks are denser and take longer", () => tutEv.cut],
-    ["Chunks with ore send their bits into the core — cut a path to it and break it open", () => tutEv.popped],
-    ["Fly over the scattered ore to scoop it up", () => (ME.hold || []).length > 0],
+    ["Cut a chunk with ore bits — each bit rides the beam back into your hold", () => (ME.hold || []).length > 0],
+    ["Cut a path to the core and break it open", () => tutEv.popped],
+    ["Fly over the scattered corium to scoop it up", () => (ME.hold || []).some((e) => e.o === "corium")],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
   flight: [

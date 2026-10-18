@@ -66,7 +66,7 @@ export class World {
     this.players = new Map();
     this.rocks = new Map();                    // id -> rock (chunks, core)
     this.slots = new Map(); this.cells = new Map(); this.grid = new Map();
-    this.drops = new Map(); this.dropSeq = 1;  // ore adrift: free for anyone, picked up by flying over
+    this.drops = new Map(); this.dropSeq = 1; this.bits = [];  // ore adrift: free for anyone, picked up by flying over
     this.msgs = []; this.fx = [];
     this.offline = new Map();                  // player id -> promise chain (ore paid to offline players)
     this.ready = this._load();
@@ -134,10 +134,11 @@ export class World {
       }
       shells.push({ r0, r1, segs }); rr = r1;
     }
-    const total = chunks.reduce((s, c) => s + c.u, 0);
+    const CO = R.CORIUM, lump = R.DROPS.lump || 100;   // (owner, 2026-10-18) the core's own corium: more layers, deeper rings, more
+    const corium = Math.max(lump, Math.round((CO.perLayer * nSh * (CO.ring[ring] ?? 1)) / lump) * lump);
     let reach = rr; for (const c of chunks) { c.poly = chunkPoly(c); reach = Math.max(reach, hyp(c.poly.cx, c.poly.cy) + c.poly.br); }
     return { id: key + ":" + gen + ":" + epoch, key, cell: key, gen, x, y, ring, shellsN: nSh, r: rr, reach, chunks, shells, nBroken: 0,
-      core: { r0: SZ.coreR, hp: SZ.coreHp, maxHp: SZ.coreHp, banked: {}, bankedTotal: 0, total: Math.max(1, total), popped: false },
+      core: { r0: SZ.coreR, hp: SZ.coreHp, maxHp: SZ.coreHp, banked: { corium }, bankedTotal: corium, total: corium, popped: false },
       v: 1, touched: 0, home: true };
   }
   wakeCell(cx, cy, t) {
@@ -299,11 +300,6 @@ export class World {
         if (best) {
           const rock = best.r, dmg = S.laserDps * dt;
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
-          { const LZ = R.LASER, wv = Math.floor((t / 1000 * LZ.waveSpeed - best.hit.t) / LZ.waveGap);   // a wave landing at the tip pushes the ship back
-            // (owner, 2026-10-18) sweeping the beam must not push harder: waves only count forward, at most one per
-            // wave period, so the push rate stays the wave rate however the tip moves
-            if (p.lastWave !== undefined && wv > p.lastWave && t - (p.lastKick || 0) >= 900 * LZ.waveGap / LZ.waveSpeed) { p.vx -= ux * LZ.kick; p.vy -= uy * LZ.kick; p.lastKick = t; }
-            if (p.lastWave === undefined || wv > p.lastWave) p.lastWave = wv; }
           rock.touched = t; rock.home = false;
           if (best.hit.core) this.hitCore(rock, dmg);
           else {
@@ -311,22 +307,45 @@ export class World {
             p.laserChunk = ch.i;
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
+            // (owner, 2026-10-18) each ore bit leaves as the cut passes its share of the chunk (the last at the break)
+            // and rides a wave back down the beam into my hold
+            if (ch.n > 0 && ch.ore) {
+              const due = ch.hp <= 0 ? ch.n : Math.min(ch.n, Math.floor((1 - ch.hp / ch.maxHp) * ch.n + 1e-6));
+              while ((ch.out || 0) < due) { ch.out = (ch.out || 0) + 1; this.sendBit(p, ch.ore, Math.round(ch.u / ch.n), mx0 + ux * best.hit.t, my0 + uy * best.hit.t, best.hit.t, t); }
+            }
             if (ch.hp <= 0) this.breakChunk(rock, ch); else if (this.dmgStage(ch) !== st0) rock.v++;
           }
-        } else { p.laserLen = S.laserRange; p.lastWave = undefined; }
-      } else p.lastWave = undefined;
+        } else p.laserLen = S.laserRange;
+      }
       if (p.firing) p.meDirty = true;
+    }
+    if (this.bits.length) {                    // ore bits arriving down the beam: into the hold, any overflow adrift by the ship
+      const keep = [];
+      for (const b of this.bits) {
+        if (b.due > t) { keep.push(b); continue; }
+        const p = this.players.get(b.pid);
+        if (!p) { this.spawnDrops(b.ore, b.u, b.x, b.y, 20); continue; }
+        const room = Math.max(0, Math.floor(this.shipOf(p).hold - this.usedSpace(p))), take = Math.min(b.u, room);
+        if (take > 0) { let e = p.hold.find((e2) => e2.raw && e2.o === b.ore); if (!e) { e = { o: b.ore, u: 0, raw: 1 }; p.hold.push(e); } e.u += take; p.meDirty = true; p.dirty = true; }
+        if (b.u - take > 0) this.spawnDrops(b.ore, b.u - take, p.x, p.y, 30);
+      }
+      this.bits = keep;
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
+  // a bit leaves the chunk at the beam's tip and rides a wave back to the ship: in the hold when it arrives
+  sendBit(p, ore, u, x, y, dist, t) {
+    const dur = Math.max(0.15, (dist + (this.shipOf(p).muzzle || 0)) / (R.LASER.bitSpeed || 140));
+    this.bits.push({ pid: p.id, ore, u, x, y, due: t + dur * 1000 });
+    this.fx.push({ k: "bit", i: p.id, x: Math.round(x), y: Math.round(y), ore: ORE_KEYS.indexOf(ore), ts: t, dur: Math.round(dur * 1000) });
+  }
 
-  // a broken chunk's ore bits fly into the core and bank there
+  // a broken chunk (its ore bits already sent down the beam)
   breakChunk(rock, c) {
     if (c.broken) return;
     c.broken = true; rock.v++; rock.nBroken++;
-    if (c.u > 0 && c.ore) { rock.core.banked[c.ore] = (rock.core.banked[c.ore] || 0) + c.u; rock.core.bankedTotal += c.u; }
     const mid = (c.r0 + c.r1) / 2, ang = c.a0 + normA(c.a1 - c.a0) / 2;
-    this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: c.u, ore: c.ore || 0 });
+    this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: 0, ore: 0 });
     rock.touched = now(); rock.home = false;
   }
   hitCore(rock, dmg) {
@@ -334,7 +353,7 @@ export class World {
     rock.touched = now(); rock.home = false;
     if (rock.core.hp <= 0 && !rock.core.popped) this.popCore(rock);
   }
-  // the piñata: every stored ore bit bursts out around the rock as drops, free for anyone; the rest of the rock shatters
+  // the piñata: the core's corium bursts out around the rock as drops, free for anyone; the rest of the rock shatters
   popCore(rock) {
     rock.core.popped = true;
     for (const [o, u] of Object.entries(rock.core.banked)) this.spawnDrops(o, u, rock.x, rock.y, rock.r * (R.DROPS.spread || 1.4));
@@ -439,7 +458,7 @@ export class World {
       if (hyp(r.x - viewer.x, r.y - viewer.y) > V + r.r) continue;
       out.push([r.id, Math.round(r.x), Math.round(r.y), r.shellsN, Math.round(r.r),
         Math.round(Math.min(1, r.nBroken / r.chunks.length) * 100), Math.round(Math.max(0, r.core.hp / r.core.maxHp) * 100),
-        Math.round(Math.min(1, r.core.bankedTotal / r.core.total) * 100)]);
+        Math.round(Math.min(1, r.nBroken / Math.max(1, r.chunks.length)) * 100)]);   // fill: how much masonry is gone (the core swells with it)
     }
     return out;
   }
