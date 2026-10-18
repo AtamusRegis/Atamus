@@ -333,7 +333,7 @@ function onSnap(m) {
 }
 
 // ---- my ship, predicted as the server integrates it ----
-function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + G.fly.shipR && r <= G.world.lockedR; }
+function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + (myShip().r || G.fly.shipR) && r <= G.world.lockedR; }
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, rock = ME.tow && rocks.get(ME.tow);
   const spd = S.speed * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
@@ -344,7 +344,7 @@ function stepMe(dt, inp) {
     const nx = mine.x + mine.vx * dt, ny = mine.y + mine.vy * dt;
     if (allowedMe(nx, ny)) { mine.x = nx; mine.y = ny; } else if (allowedMe(nx, mine.y)) { mine.x = nx; mine.vy = 0; } else if (allowedMe(mine.x, ny)) { mine.y = ny; mine.vx = 0; } else mine.vx = mine.vy = 0;
     for (const r of rocks.values()) {
-      if (r.id === ME.tow) continue; const d = hyp(mine.x - r.dx, mine.y - r.dy), min = r.r + F.shipR;
+      if (r.id === ME.tow) continue; const d = hyp(mine.x - r.dx, mine.y - r.dy), min = r.r + (S.r || F.shipR);
       if (d < min && d > 0.01) {
         const ux = (mine.x - r.dx) / d, uy = (mine.y - r.dy) / d; mine.x = r.dx + ux * min; mine.y = r.dy + uy * min;
         const vn = mine.vx * ux + mine.vy * uy;
@@ -580,12 +580,12 @@ function drawWorld(t) {
       thrust: s.id === myId ? hyp(lastInp.x, lastInp.y) : Math.min(1, (s.spd || 0) / 40) };
     if (st.thrust > 0.15) {
       s.exA = (s.exA || 0) + wdt * 15 * st.thrust;
-      const rear = shipLayout(mods).yc * ART, bx = s.x - Math.sin(s.h) * rear, by = s.y + Math.cos(s.h) * rear;
+      const rear = SP.len ? SP.len / 2 : shipLayout(mods).yc * ART, bx = s.x - Math.sin(s.h) * rear, by = s.y + Math.cos(s.h) * rear;
       while (s.exA >= 1) { s.exA--; spawnPart(bx + (Math.random() - 0.5) * 5, by + (Math.random() - 0.5) * 5, { vx: -Math.sin(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, vy: Math.cos(s.h) * (26 + Math.random() * 18) + (Math.random() - 0.5) * 12, life: 0.45 + Math.random() * 0.35, size: 2.4 + Math.random() * 2, color: Math.random() < 0.75 ? C.heat : "#6b7382", drag: 2 }); }
     }
     const spr = SPRITES[kind];
     if (spr && spr.complete && spr.naturalWidth) {   // (owner, 2026-10-18) the pixel-art ship sheet: nose right in the sheet, up in the game
-      const len = shipLayout(mods).yc * 2 * ART, k = len / spr.naturalWidth;
+      const len = SP.len || shipLayout(mods).yc * 2 * ART, k = len / spr.naturalWidth;   // (proportional to the ship sheet)
       cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h - Math.PI / 2); cx.imageSmoothingEnabled = false;
       cx.drawImage(spr, -len / 2, -spr.naturalHeight * k / 2, len, spr.naturalHeight * k); cx.restore();
     } else { cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore(); }
@@ -753,7 +753,8 @@ function drawOverlay(t) {
     if (!s.row || s.id === myId || !s.near) continue;
     const [sx, sy] = toScreen(s.x, s.y); if (sx < -50 || sy < -50 || sx > VW + 50 || sy > VH + 50) continue;
     cx.fillStyle = C.ink; cx.globalAlpha = s === hov ? 1 : 0.35;
-    cx.fillText(names.get(s.id) || "", sx, sy - 40 * Math.max(0.6, zoom) - 6); cx.globalAlpha = 1;
+    const SPn = G.ships[G.kinds[s.row[4]]] || {}, up = Math.max(24, (Math.max(SPn.r || 24, (SPn.len || 0) / 2) + 12) * zoom);   // (above the ship, whatever its size)
+    cx.fillText(names.get(s.id) || "", sx, sy - up - 6); cx.globalAlpha = 1;
   }
   if (ME.mark) {                               // a gold diamond arrow toward my marked rock
     let [sx2, sy2] = toScreen(ME.mark[0], ME.mark[1]);

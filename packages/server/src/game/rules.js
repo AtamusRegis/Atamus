@@ -16,11 +16,13 @@ export const WORLD = {
 
 // (owner, 2026-10-18) the Miner mines; the Scanner, Booster and Hauler fly (and scoop drops into their holds) but have
 // no abilities yet
+// len: drawn length in m, proportional to the ship sheet (owner, 2026-10-18: the Miner keeps its size, 0.403 m per
+// sheet pixel — 200 / 215 / 458 / 773 px); r: the bump radius, scaled the same way from the Miner's 24 m
 export const SHIPS = {
-  miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 8.3 },   // muzzle: m ahead of center the beam starts (the sprite's red dot)
-  scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, vision: 1500 },
-  booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 85, vision: 1000 },
-  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000 },
+  miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 8.3, len: 80.6, r: 24 },   // muzzle: m ahead of center the beam starts (the sprite's red dot)
+  scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, vision: 1500, len: 86.7,  r: 26 },
+  booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 85, vision: 1000, len: 184.6, r: 55 },
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000, len: 311.6, r: 93 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // shared flying numbers (every hull)

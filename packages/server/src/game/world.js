@@ -170,7 +170,7 @@ export class World {
     for (const r of [...this.rocks.values()]) if (r.touched && t - r.touched > R.ROCK.linger * 1000) this.dropRock(r, R.ROCK.respawn);
     for (const d of [...this.drops.values()]) if (t - d.born > R.DROPS.linger * 1000) this.deleteDrop(d);
   }
-  allowed(p, x, y) { const r = hyp(x, y); return r >= W.saturnR + FLY.shipR && r <= W.lockedR; }
+  allowed(p, x, y) { const r = hyp(x, y); return r >= W.saturnR + (this.shipOf(p).r || FLY.shipR) && r <= W.lockedR; }
   resetField() {                               // (the world's shape changed: every rock regrows)
     for (const r of [...this.rocks.values()]) this.gridDel(r);
     this.rocks.clear(); this.slots.clear(); this.cells.clear();
@@ -267,8 +267,8 @@ export class World {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
         if (this.allowed(p, nx, ny)) { p.x = nx; p.y = ny; }
         else if (this.allowed(p, nx, p.y)) { p.x = nx; p.vy = 0; } else if (this.allowed(p, p.x, ny)) { p.y = ny; p.vx = 0; } else { p.vx = p.vy = 0; }
-        for (const r of this.rocksNear(p.x, p.y, 220)) {
-          const d = hyp(p.x - r.x, p.y - r.y), min = r.r + FLY.shipR;
+        for (const r of this.rocksNear(p.x, p.y, 220 + (S.r || 0))) {
+          const d = hyp(p.x - r.x, p.y - r.y), min = r.r + (S.r || FLY.shipR);   // (each ship bumps at its own size)
           if (d < min && d > 0.01) { const ux = (p.x - r.x) / d, uy = (p.y - r.y) / d; p.x = r.x + ux * min; p.y = r.y + uy * min; const vn = p.vx * ux + p.vy * uy; if (vn < 0) { p.vx -= vn * ux; p.vy -= vn * uy; } }
         }
         const z = zoneOf(p.x, p.y); if (z !== p.zone) { p.zone = z; p.meDirty = true; }
