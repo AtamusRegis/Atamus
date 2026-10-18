@@ -599,8 +599,10 @@ function drawWorld(t) {
     if (spr && spr.complete && spr.naturalWidth) {   // (owner, 2026-10-18) the pixel-art ship sheet: nose right in the sheet, up in the game
       const len = SP.len || shipLayout(mods).yc * 2 * ART, k = len / spr.naturalWidth;   // (proportional to the ship sheet)
       const pv = (SPRITE_META[kind] || { pivot: [0.5, 0.5] }).pivot, hgt = spr.naturalHeight * k;   // drawn around its pivot: it turns there
-      cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h - Math.PI / 2); cx.imageSmoothingEnabled = false;
+      const rk2 = s.recoil || 0, rcx = rk2 > 0.01 ? (s.rcx || 0) * rk2 * 1.8 : 0, rcy = rk2 > 0.01 ? (s.rcy || 0) * rk2 * 1.8 : 0;   // the kick from a wave landing, easing out
+      cx.save(); cx.translate(s.x + rcx, s.y + rcy); cx.rotate(s.h - Math.PI / 2); cx.imageSmoothingEnabled = false;
       cx.drawImage(spr, -pv[0] * len, -pv[1] * hgt, len, hgt); cx.restore();
+      if (rk2 > 0) s.recoil = Math.max(0, rk2 - wdt * 7);
     } else { cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore(); }
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
@@ -645,14 +647,24 @@ function shipFx(s, ts, under) {
       cx.globalAlpha = 0.25; cx.lineWidth = lw(big ? 8 : 5) * (1 + ck * 0.9); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       cx.globalAlpha = 1; cx.lineWidth = lw(big ? 2.6 : 1.6) * (1 + ck); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(x1, y1); cx.stroke();
       { // (owner, 2026-10-18) small waves running from the emitter to the tip
-        const L5 = hyp(x1 - x0, y1 - y0), ux5 = (x1 - x0) / (L5 || 1), uy5 = (y1 - y0) / (L5 || 1), gap = 14, spd = 90;
-        cx.strokeStyle = "#ffd2c8"; cx.lineCap = "round";
+        const L5 = hyp(x1 - x0, y1 - y0), ux5 = (x1 - x0) / (L5 || 1), uy5 = (y1 - y0) / (L5 || 1), gap = 34, spd = 90;
+        cx.strokeStyle = "#ff8a72"; cx.lineCap = "round";   // (closer to the beam's red than white: soft, not contrasty)
         for (let d5 = (ts * spd) % gap; d5 < L5; d5 += gap) {
           const f5 = Math.sin(Math.PI * d5 / L5), w5 = lw(big ? 5.5 : 3.5) * (0.6 + 0.4 * f5), half = 2.2;
           cx.globalAlpha = 0.35 + 0.5 * f5; cx.lineWidth = w5;
           cx.beginPath(); cx.moveTo(x0 + ux5 * (d5 - half), y0 + uy5 * (d5 - half)); cx.lineTo(x0 + ux5 * (d5 + half), y0 + uy5 * (d5 + half)); cx.stroke();
         }
         cx.globalAlpha = 1;
+        // (owner, 2026-10-18) each wave that lands at the tip kicks the ship back a touch, with a little shake: weight
+        if (hitF) {
+          const wv = Math.floor((ts * spd - L5) / gap);
+          if (s.lastWave !== undefined && wv !== s.lastWave) {
+            s.recoil = 1; s.rcx = -ux5; s.rcy = -uy5;
+            if (isMe) addShake(0.55);
+            for (let j = 0; j < 3; j++) { const na = Math.atan2(-uy5, -ux5) + (Math.random() - 0.5) * 1.6, v = 50 + Math.random() * 50; spawnPart(x1, y1, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.25 + Math.random() * 0.2, size: 2 + Math.random() * 1.5, color: Math.random() < 0.5 ? "#ff8a72" : "#fff", drag: 4 }); }
+          }
+          s.lastWave = wv;
+        } else s.lastWave = undefined;
       }
       if (hitF) {
         cx.fillStyle = "#fff"; cx.globalAlpha = (0.6 + 0.4 * Math.sin(ts * 50)) * (0.6 + ck); cx.beginPath(); cx.arc(x1, y1, lw(big ? 5 : 4) * (1 + ck * 1.6), 0, TAU); cx.fill(); cx.globalAlpha = 1;
