@@ -263,7 +263,15 @@ function onMsg(m) {
       let n = 0;
       for (const c0 of cl) { const was = prev.c[c0[0]] || prev.c.find((x) => x[0] === c0[0]); if (was && !(was[5] & 1) && (c0[5] & 1) && n++ < 10) spawnChunkShards(rk0, c0); }
     }
-    details.set(m.id, { v: m.v, coreR: m.coreR, c: cl, worked: cl.some((x) => x[5] & 3), polys: prev ? prev.polys : new Map() });
+    let polys = prev ? prev.polys : new Map();
+    if (Array.isArray(m.g)) {                  // the exact polygons from the server: drawn as-is, and the laser's hitbox
+      polys = new Map();
+      for (const g of m.g) {
+        const pts = []; for (let k = 2; k + 1 < g.length; k += 2) pts.push([g[k], g[k + 1]]);
+        pts.nO = g[1]; polyBounds(pts); polys.set(g[0], pts);
+      }
+    }
+    details.set(m.id, { v: m.v, coreR: m.coreR, c: cl, worked: cl.some((x) => x[5] & 1), polys });
   }
   else if (m.t === "drops") {
     for (const row of m.a || []) { const [id, x, y, ore, units] = row; const o = dropsM.get(id); if (o) Object.assign(o, { x, y, ore, units }); else dropsM.set(id, { id, x, y, ore, units, ph: (id * 2.39) % TAU, dx: x, dy: y }); }
@@ -377,7 +385,21 @@ const mix = (h1, h2, k) => { const a = hex2n(h1), b = hex2n(h2), c = (i) => Math
 const DGREY = ["#9aa1b0", "#8f96a5", "#6e737f", "#50555f"];      // soft (paler), normal, dense (darker), ultra (darkest)
 const UNSCANNED = "#838999", BEDROCK = "#17090d", OUTLINE = "#05070c";
 const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
-function chunkPoly(det, c0) {                  // a jittered polygon per chunk, cached: masonry reads as rock, not arcs
+function polyBounds(pts) { let cx2 = 0, cy2 = 0; for (const [x, y] of pts) { cx2 += x; cy2 += y; } cx2 /= pts.length; cy2 /= pts.length; let br = 0; for (const [x, y] of pts) br = Math.max(br, hyp(x - cx2, y - cy2)); pts.cx = cx2; pts.cy = cy2; pts.br = br; }
+// the ray against a chunk's polygon, exactly as the server's world.js: 0 inside, the nearest edge crossed, or Infinity
+function rayPoly(ox, oy, ux, uy, pts) {
+  { const dx = pts.cx - ox, dy = pts.cy - oy, along = dx * ux + dy * uy, perp = Math.abs(dx * uy - dy * ux); if (perp > pts.br || along < -pts.br) return Infinity; }
+  let inside = false, best = Infinity;
+  for (let k = 0, j = pts.length - 1; k < pts.length; j = k++) {
+    const [xa, ya] = pts[j], [xb, yb] = pts[k];
+    if ((ya > oy) !== (yb > oy) && ox < ((xb - xa) * (oy - ya)) / (yb - ya) + xa) inside = !inside;
+    const ex = xb - xa, ey = yb - ya, den = ux * ey - uy * ex; if (Math.abs(den) < 1e-9) continue;
+    const wx = xa - ox, wy = ya - oy, t = (wx * ey - wy * ex) / den, s = (wx * uy - wy * ux) / den;
+    if (t >= 0 && s >= 0 && s <= 1 && t < best) best = t;
+  }
+  return inside ? 0 : best;
+}
+function chunkPoly(det, c0) {                  // the server's exact polygon (a local stand-in only until it arrives)
   let p = det.polys.get(c0[0]); if (p) return p;
   const i = c0[0], r0 = c0[1], r1 = c0[2];
   const b0 = c0[3] / 1000; let b1 = c0[4] / 1000; if (b1 < b0) b1 += TAU;
@@ -392,7 +414,7 @@ function chunkPoly(det, c0) {                  // a jittered polygon per chunk, 
     const a = b0 + span * (k / nI) + (edge ? 0 : (h01(i, k + 80) - 0.5) * span / nI * 0.9);
     const r = Math.max(2, r0 + (h01(i, k + 120) - 0.5) * th * (edge ? 0.2 : 0.34));
     pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
-  det.polys.set(i, pts); return pts;
+  polyBounds(pts); det.polys.set(i, pts); return pts;
 }
 function chunkPath(det, c0) { const p = chunkPoly(det, c0); cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); }
 function edgeStroke(det, c0) {                 // a lit outer edge and a shadowed inner one: chunks read with depth
@@ -485,31 +507,23 @@ function drawChunkRock(r, det, ts) {
   }
   cx.restore();
 }
-// the beam's local ray-walk, as the server's (my own beam is drawn from it so it doesn't lag the mouse)
+// the beam's local ray, exactly as the server's: the first unbroken chunk polygon or the core it meets (my own beam is
+// drawn from it so it doesn't lag the mouse)
 function castLocal(px, py, ang, range) {
   const ux = Math.cos(ang), uy = Math.sin(ang);
   let bestT = range || 0, hit = 0;
   for (const r of rocks.values()) {
-    const dx = px - r.dx, dy = py - r.dy;
-    const b = dx * ux + dy * uy, c0 = dx * dx + dy * dy - r.r * r.r;
-    const disc = b * b - c0; if (disc < 0) continue;
-    const t1 = -b + Math.sqrt(disc); if (t1 < 0) continue;
-    const t0 = Math.max(0, -b - Math.sqrt(disc));
-    if (t0 > bestT) continue;
-    const det = details.get(r.id);
-    if (!det) { bestT = t0; hit = 1; continue; }
-    for (let t = t0; t <= Math.min(t1, bestT); t += 1.2) {
-      const x = px + ux * t - r.dx, y = py + uy * t - r.dy, rr = hyp(x, y);
-      if (rr <= det.coreR + 1) { bestT = t; hit = 1; break; }
-      let found = null;
-      const a = ((Math.atan2(y, x) % TAU) + TAU) % TAU;
-      for (const cc of det.c) {
-        if (rr < cc[1] || rr > cc[2]) continue;
-        const b0 = cc[3] / 1000, span = (((cc[4] - cc[3]) / 1000) % TAU + TAU) % TAU, d2 = ((a - b0) % TAU + TAU) % TAU;
-        if (d2 <= (span || 0.001)) { found = cc; break; }
-      }
-      if (found && !(found[5] & 1)) { bestT = t; hit = 1; break; }
+    const det = details.get(r.id), ox = px - r.dx, oy = py - r.dy, reach = r.r * 1.3;
+    const along = -(ox * ux + oy * uy), perp = Math.abs(ox * uy - oy * ux);
+    if (perp > reach || along < -reach || along - reach > bestT) continue;
+    if (!det) { const disc = r.r * r.r - perp * perp, t0 = Math.max(0, along - Math.sqrt(Math.max(0, disc))); if (t0 < bestT) { bestT = t0; hit = 1; } continue; }
+    for (const c0 of det.c) {
+      if (c0[5] & 1) continue;
+      const t = rayPoly(ox, oy, ux, uy, chunkPoly(det, c0));
+      if (t < bestT) { bestT = t; hit = 1; }
     }
+    { const b = ox * ux + oy * uy, cr = det.coreR, disc = b * b - (ox * ox + oy * oy - cr * cr);
+      if (disc >= 0) { const t = -b - Math.sqrt(disc); if (t >= 0 && t < bestT) { bestT = t; hit = 1; } } }
   }
   return { len: bestT, hit };
 }
@@ -967,6 +981,7 @@ window.Atamus = {
   chunks: (id) => details.get(id) || null,
   get drops() { return [...dropsM.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, ore: ORE_KEYS[o.ore], units: o.units })); },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], bt: (s.row[11] || 0) / 100, ck: (s.row[12] || 0) / 100, beamTgt: s.row[9] || 0, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[13] || 0 } : null })); },
+  cast: (a) => castLocal(mine.x, mine.y, a, myShip().laserRange),
   screenOf: (x, y) => { const [sx, sy] = toScreen(x, y); return { x: sx, y: sy }; }, send: (o) => send(o), get zoom() { return zoom; }, set zoom(z) { zoom = zoomT = z; },
   get mode() { return modeIdx; }, set mode(v) { modeIdx = v ? 1 : 0; drawHud(); },
 };

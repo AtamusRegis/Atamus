@@ -25,6 +25,42 @@ const ORE_KEYS = Object.keys(R.ORES);
 const normA = (a) => ((a % TAU) + TAU) % TAU;
 const spanHas = (c, a) => { const d = normA(a - c.a0); return d >= 0 && d <= normA(c.a1 - c.a0); };
 const unitSpace = (e) => e.u * (e.raw ? 1 : R.REFINED_SPACE);
+// (owner, 2026-10-18: "make each chunk have an exact hitbox") every chunk is one jittered rock-shaped polygon, built
+// here once; clients draw exactly these points and the laser hits exactly these edges
+const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
+function chunkPoly(c) {
+  const b0 = c.a0; let b1 = c.a1; if (b1 <= b0) b1 += TAU;
+  const span = b1 - b0, th = c.r1 - c.r0, i = c.i;
+  const pts = [], nO = Math.max(2, Math.round(span * c.r1 / 8)), nI = Math.max(2, Math.round(span * c.r0 / 10));
+  for (let k = 0; k <= nO; k++) { const edge = k === 0 || k === nO;
+    const a = b0 + span * (k / nO) + (edge ? 0 : (h01(i, k) - 0.5) * span / nO * 0.9);
+    const r = c.r1 + (h01(i, k + 40) - 0.5) * th * (edge ? 0.22 : 0.42);
+    pts.push([Math.round(Math.cos(a) * r * 10) / 10, Math.round(Math.sin(a) * r * 10) / 10]); }
+  for (let k = nI; k >= 0; k--) { const edge = k === 0 || k === nI;
+    const a = b0 + span * (k / nI) + (edge ? 0 : (h01(i, k + 80) - 0.5) * span / nI * 0.9);
+    const r = Math.max(2, c.r0 + (h01(i, k + 120) - 0.5) * th * (edge ? 0.2 : 0.34));
+    pts.push([Math.round(Math.cos(a) * r * 10) / 10, Math.round(Math.sin(a) * r * 10) / 10]); }
+  let cx = 0, cy = 0; for (const [x, y] of pts) { cx += x; cy += y; } cx /= pts.length; cy /= pts.length;
+  let br = 0; for (const [x, y] of pts) br = Math.max(br, hyp(x - cx, y - cy));
+  return { pts, nO, cx, cy, br };
+}
+// the ray (origin ox, oy in the rock's frame, unit direction ux, uy) against a polygon: 0 if the origin is inside, the
+// distance to the nearest edge it crosses, or Infinity
+function rayPoly(ox, oy, ux, uy, P) {
+  const pts = P.pts, n = pts.length;
+  { const dx = P.cx - ox, dy = P.cy - oy, along = dx * ux + dy * uy, perp = Math.abs(dx * uy - dy * ux);
+    if (perp > P.br || along < -P.br) return Infinity; }        // (the chunk's bounding circle is off the line)
+  let inside = false, best = Infinity;
+  for (let k = 0, j = n - 1; k < n; j = k++) {
+    const [xa, ya] = pts[j], [xb, yb] = pts[k];
+    if ((ya > oy) !== (yb > oy) && ox < ((xb - xa) * (oy - ya)) / (yb - ya) + xa) inside = !inside;
+    const ex = xb - xa, ey = yb - ya, den = ux * ey - uy * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const wx = xa - ox, wy = ya - oy, t = (wx * ey - wy * ex) / den, s = (wx * uy - wy * ux) / den;
+    if (t >= 0 && s >= 0 && s <= 1 && t < best) best = t;
+  }
+  return inside ? 0 : best;
+}
 
 export class World {
   constructor() {
@@ -99,7 +135,8 @@ export class World {
       shells.push({ r0: rr, r1, segs }); rr = r1;
     }
     const total = chunks.reduce((s, c) => s + c.u, 0);
-    return { id: key + ":" + gen + ":" + epoch, key, cell: key, gen, x, y, ring, shellsN: nSh, r: rr, chunks, shells, nBroken: 0,
+    let reach = rr; for (const c of chunks) { c.poly = chunkPoly(c); reach = Math.max(reach, hyp(c.poly.cx, c.poly.cy) + c.poly.br); }
+    return { id: key + ":" + gen + ":" + epoch, key, cell: key, gen, x, y, ring, shellsN: nSh, r: rr, reach, chunks, shells, nBroken: 0,
       core: { r0: SZ.coreR, hp: SZ.coreHp, maxHp: SZ.coreHp, banked: {}, bankedTotal: 0, total: Math.max(1, total), popped: false },
       v: 1, touched: 0, home: true };
   }
@@ -185,19 +222,20 @@ export class World {
     p.aim = n(m.a); p.firing = m.f === 1;
   }
 
-  // walk a ray into a rock: the first unbroken chunk, or the core down an open bore
+  // the laser's ray into a rock: whatever it meets first — an unbroken chunk's exact polygon, or the core's circle
   castRock(rock, px, py, ux, uy) {
-    const dx = px - rock.x, dy = py - rock.y;
-    const b = dx * ux + dy * uy, c0 = dx * dx + dy * dy - rock.r * rock.r;
-    const disc = b * b - c0; if (disc < 0) return null;             // the line misses the rock
-    const t1 = -b + Math.sqrt(disc); if (t1 < 0) return null;       // the rock is behind
-    for (let t = Math.max(0, -b - Math.sqrt(disc)); t <= t1; t += 1.2) {
-      const x = px + ux * t - rock.x, y = py + uy * t - rock.y, rr = hyp(x, y);
-      if (rr <= rock.core.r0 + 1) return { core: true, t };
-      const ch = this.chunkAt(rock, rr, Math.atan2(y, x));
-      if (ch && !ch.broken) return { chunk: ch, t };
+    const ox = px - rock.x, oy = py - rock.y;
+    { const along = -(ox * ux + oy * uy), perp = Math.abs(ox * uy - oy * ux);
+      if (perp > rock.reach || along < -rock.reach) return null; }   // the line misses the rock entirely
+    let best = Infinity, hit = null;
+    for (const c of rock.chunks) {
+      if (c.broken) continue;
+      const t = rayPoly(ox, oy, ux, uy, c.poly);
+      if (t < best) { best = t; hit = c; }
     }
-    return null;
+    { const b = ox * ux + oy * uy, cr = rock.core.r0, disc = b * b - (ox * ox + oy * oy - cr * cr);   // the core
+      if (disc >= 0) { const t = -b - Math.sqrt(disc); if (t >= 0 && t < best) return { core: true, t }; } }
+    return hit ? { chunk: hit, t: best } : null;
   }
   dmgStage(c) { return Math.min(3, Math.max(0, Math.floor((1 - Math.max(0, c.hp) / c.maxHp) * 4))); }
   usedSpace(p) { return p.hold.reduce((s, e) => s + unitSpace(e), 0); }
@@ -251,10 +289,9 @@ export class World {
       }
       // the laser: cuts the first chunk on its line (denser takes longer), or the core down an open bore
       p.laserOn = false; p.laserLen = 0; p.laserRock = null; p.laserChunk = -1;
-      if (!p.firing) p.lockTgt = null;
       if (p.firing && !dock && S.laserDps) {
         const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.laserRange;
-        for (const r of this.rocksNear(p.x, p.y, S.laserRange + 300)) {
+        for (const r of this.rocksNear(p.x, p.y, S.laserRange + 360)) {
           const hit = this.castRock(r, p.x, p.y, ux, uy);
           if (hit && hit.t <= S.laserRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
         }
@@ -262,12 +299,10 @@ export class World {
           const rock = best.r, dmg = S.laserDps * dt;
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
           rock.touched = t; rock.home = false;
-          if (best.hit.core) { this.hitCore(rock, dmg); p.lockTgt = null; }
+          if (best.hit.core) this.hitCore(rock, dmg);
           else {
-            let ch = best.hit.chunk;             // sticky: a wiggle onto a touching chunk keeps cutting the one under way,
-            const prev = p.lockTgt && p.lockTgt.rock === rock.id ? rock.chunks[p.lockTgt.i] : null;
-            if (prev && prev !== ch && !prev.broken && this.nearChunk(rock, prev, p.x + ux * best.hit.t, p.y + uy * best.hit.t, 3)) ch = prev;   // but only while the aim stays by its edge
-            p.lockTgt = { rock: rock.id, i: ch.i }; p.laserChunk = ch.i;
+            const ch = best.hit.chunk;           // (owner, 2026-10-18) no anchoring: the laser cuts exactly what it points at
+            p.laserChunk = ch.i;
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
             if (ch.hp <= 0) this.breakChunk(rock, ch); else if (this.dmgStage(ch) !== st0) rock.v++;
@@ -402,10 +437,13 @@ export class World {
     }
     return out;
   }
-  // a chunk: [i, r0, r1, a0 mrad, a1 mrad, broken 0/1, density, ore idx | -1, crack stage] — all visible
-  rockDetail(r) {
-    return { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
+  // a chunk: [i, r0, r1, a0 mrad, a1 mrad, broken 0/1, density, ore idx | -1, crack stage] — all visible. With geo
+  // (first sight per socket): g = each chunk's exact polygon as [i, nO, x0, y0, x1, y1, ...] — the hitbox clients draw.
+  rockDetail(r, geo) {
+    const m = { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
       c.broken ? 1 : 0, c.d, c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c)]) };
+    if (geo) m.g = r.chunks.map((c) => [c.i, c.poly.nO, ...c.poly.pts.flat()]);
+    return m;
   }
   dropRows(viewer) {                           // [id, x, y, ore idx, units]
     const out = [], V = this.visionOf(viewer);

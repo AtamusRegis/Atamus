@@ -149,7 +149,7 @@ export function attachGameServer(httpServer) {
       const seen = new Set();
       for (const row of rows) {
         const r = world.rocks.get(row[0]); if (!r) continue; seen.add(r.id);
-        if (vers.get(r.id) !== r.v) { vers.set(r.id, r.v); send(ws, world.rockDetail(r)); }
+        if (vers.get(r.id) !== r.v) { const first = !vers.has(r.id); vers.set(r.id, r.v); send(ws, world.rockDetail(r, first)); }   // (the exact polygons ride the first one)
       }
       for (const id of [...vers.keys()]) if (!seen.has(id)) vers.delete(id);   // out of vision: sent fresh on return
       const dr = diff(ws, "knownDrops", world.dropRows(p)); if (dr) send(ws, { t: "drops", ...dr });

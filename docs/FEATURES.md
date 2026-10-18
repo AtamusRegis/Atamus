@@ -33,9 +33,8 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## Mining
 
-- **The Miner's laser (15 / s at 220 m) cuts the first chunk on its line**; getting deeper means cutting a way there. Cracks spread across a chunk as it's cut.
+- **The Miner's laser (15 / s at 220 m) hits exactly what it points at (owner, 2026-10-18):** the first unbroken chunk — or the core — its line meets, with **no anchoring or lock-on**. **Every chunk has an exact hitbox**: the server builds each chunk's rock-shaped polygon once, sends the points to clients, which draw exactly those, and the laser ray tests exactly those edges (and the core's circle) on both sides. Getting deeper means cutting a way there. Cracks spread across a chunk as it's cut. Your own beam is drawn from your own aim with the same ray, so it doesn't lag.
 - **When a chunk breaks, its ore bits fly into the core and bank there.** No shocks, no chain breaks, no heat — every chunk is broken by the laser, one at a time.
-- **The beam sticks:** an aim wobble onto a touching chunk keeps cutting the one under way while the aim stays within 3 m of it; aiming squarely at another chunk retargets. Your own beam is drawn from your own aim, so it doesn't lag.
 - **The core** sits in the middle: blue, **swelling as ore bits bank into it** (up to ×2.5 radius, `CORE.grow`, with a gulp per swallow), **cracking as the laser damages it**. The laser reaches it only down a path you've cut.
 
 ## The piñata (owner, 2026-10-18)
@@ -74,6 +73,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## Rejected / removed (don't reintroduce)
 
+- **The laser anchoring to chunks** (the "sticky beam" that kept cutting a chunk while the aim wobbled near it; owner, 2026-10-18: "stop the laser anchoring to chunks"), and **arc-shaped hit tests under jittered drawings** (the hitbox is the drawn polygon now).
 - **Removed going back to basics (owner, 2026-10-18: "lets start from the bottom … just miner for now"):** **heat** (chunk heat, core heat, overheated cores burning down, cooling, heat seep, hot chunks cutting faster); **the beam's blue/yellow/red temperature stages**; **the Miner's charge shot**; **bursts / chain breaks**; **bedrock** (and per-ring bedrock weight, bedrock-free lines, boosted-only cutting); **hidden masonry and scanning** (every chunk is visible); **the Scanner (drill, tow), the Booster (boost beam, coolant), the Hauler (refine beam)** and their mode switches and hotkeys; **core weakening from stripped chunks**; **the core's rare ore**; **pop payouts into holds** (the core piñatas everything as drops now); **pop banks credited per miner**.
 - **Removed with the sandbox build (owner, 2026-10-18):** accounts as the way in; chat entirely; parties and splits, party crates, the daily downtime; cans and crates; fuel and the Fueler; money (credits, prices, selling); the in-game admin button/panel and the developer panel (the server keeps the admin hooks and the tune op); services for hire; tow claims.
 - **The pre-redesign ring game (owner, 2026-10-18)**: crack-count asteroids and client-built rocks (`ringgen.js`); loose ore; names on ore units; modules, upgrades, the Shop; trading; refine queues; Greek ore names; the first tutorial; shards; corporations.
