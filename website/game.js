@@ -514,6 +514,8 @@ function rockBitmap(det) {
   for (const c0 of hid) { chunkPath(det, c0, g); g.stroke(); }
   g.fillStyle = g.strokeStyle = DUNSCAN[0]; g.lineWidth = gap;
   for (const c0 of hid) { chunkPath(det, c0, g); g.fill(); g.stroke(); }
+  // (owner, 2026-10-18) an unscanned chunk the laser has touched shows its border (and its cracks) — still no density or bits
+  for (const c0 of hid) if (c0[10]) drawChunk(g, det, c0, sc / DPR);
   for (const c0 of det.c) if (!(c0[5] & 1) && c0[6] >= 0) drawChunk(g, det, c0, sc / DPR);
   det.bm = { cv: cvs, R: n / 2 / sc }; det.bmS = sc; return det.bm;
 }
@@ -526,10 +528,10 @@ function drawChunkRock(r, det, ts) {
   if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.6 / zoom, (Math.random() - 0.5) * 2.6 / zoom);   // the core under the laser: the whole asteroid shakes
   if (det && hitNow && r.hitI >= 0) {
     const cb = det.c.find((x) => x[0] === r.hitI);
-    if (cb && !(cb[5] & 1) && cb[6] >= 0) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
+    if (cb && !(cb[5] & 1) && (cb[6] >= 0 || cb[10])) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
       bI = r.hitI; bx = Math.cos(am) * k; by = Math.sin(am) * k; }
   }
-  if (!det) { cx.fillStyle = DUNSCAN[0]; cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.8, 1.6 / zoom); cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.stroke(); cx.restore(); return; }   // (far off: the same unscanned mass)
+  if (!det) { cx.fillStyle = mix(DUNSCAN[0], "#ff7a28", Math.min(0.6, (r.heat || 0) * 0.7)); cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.8, 1.6 / zoom); cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.stroke(); cx.restore(); return; }   // (far off: the same unscanned mass, warmed by its core's heat)
   // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken — always in view, beneath the
   // masonry (owner, 2026-10-18: the chunk sheet), so its swelling shows as the layers around it come away
   const frac = (r.fill || 0) / 100, heat = r.heat || 0, hot = Math.min(1, heat * 1.15);   // (owner, 2026-10-18) the core runs blue → orange as it heats
@@ -781,11 +783,13 @@ function shipFx(s, ts, under) {
         cx.strokeStyle = C.ice; cx.globalAlpha = 0.18; cx.lineWidth = lw(3.2); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(bx, by); cx.stroke();
         cx.globalAlpha = 0.8; cx.lineWidth = lw(1.1); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(bx, by); cx.stroke();
       }
-      const nC = 4;
+      // (owner, 2026-10-18) slower, narrower crescents; each one that reaches the chunk bounces back toward the ship as an echo
+      const nC = 3, per = Math.max(0.6, len / 45);   // (s per leg: ~45 m/s)
       for (let k = 0; k < nC; k++) {
-        const rad = (ts * 110 + k * len / nC) % len, f = rad / len, end = Math.max(0, (f - 0.82) / 0.18);   // (near the chunk they spread and fade out)
-        const half = 0.14 + end * 0.22; cx.strokeStyle = C.ice; cx.globalAlpha = (0.25 + 0.5 * Math.sin(Math.PI * Math.min(1, f * 1.2))) * (1 - end); cx.lineWidth = lw(1.6);
-        cx.beginPath(); cx.arc(x0, y0, Math.max(1, rad), a - half, a + half); cx.stroke();
+        const ph = ((ts / per + k / nC) % (hitF ? 2 : 1));
+        cx.strokeStyle = C.ice; cx.lineWidth = lw(1.4);
+        if (ph < 1) { const rad = ph * len; cx.globalAlpha = 0.25 + 0.5 * Math.sin(Math.PI * Math.min(1, ph * 1.3)); cx.beginPath(); cx.arc(x0, y0, Math.max(1, rad), a - 0.07, a + 0.07); cx.stroke(); }
+        else { const e = ph - 1, rad = e * len; cx.globalAlpha = 0.55 * (1 - e); cx.beginPath(); cx.arc(ex, ey, Math.max(1, rad), a + Math.PI - 0.09, a + Math.PI + 0.09); cx.stroke(); }
       }
       if (hitF) {                               // the dissipation at the chunk
         cx.globalAlpha = 0.35 + 0.25 * Math.sin(ts * 23); cx.fillStyle = C.ice; cx.beginPath(); cx.arc(ex, ey, lw(5) + Math.sin(ts * 11) * lw(1.5), 0, TAU); cx.fill();
@@ -834,7 +838,19 @@ function shipFx(s, ts, under) {
           life: 0.55 + Math.random() * 0.55, size: 2 + Math.random() * 2.5, color: Math.random() < 0.5 ? "#9fdcef" : "#7cc3d6", drag: 2.2 }); } }
   }
   // the targeted ship beams: the Booster's boost (green pluses) and the Hauler's refine (purple squares)
-  if (fireNow && (boostMode || refineMode) && r[9]) {
+  // (owner, 2026-10-18) the boost beam is a stream of green pluses: to the ship it's locked on, or out along the aim
+  if (fireNow && boostMode) {
+    const q = r[9] ? (r[9] === myId ? { x: mine.x, y: mine.y } : ships.get(r[9])) : null, a6 = isMe ? aimAngle() : r[6] / 1000;
+    const tx6 = q ? q.x : x0 + Math.cos(a6) * (S2.boostRange || 320) * 0.9, ty6 = q ? q.y : y0 + Math.sin(a6) * (S2.boostRange || 320) * 0.9;
+    { const dx3 = tx6 - x0, dy3 = ty6 - y0, L4 = hyp(dx3, dy3) || 1, ux4 = dx3 / L4, uy4 = dy3 / L4;
+      for (let j = 0; j < 4; j++) {
+        const v = 210 + Math.random() * 70, adv = v * wdt2 * (j / 4), side = (Math.random() - 0.5) * 14;
+        spawnPart(x0 + ux4 * adv, y0 + uy4 * adv, { vx: ux4 * v - uy4 * side, vy: uy4 * v + ux4 * side,
+          life: Math.max(0.15, (L4 - adv) / v), size: 4.4 + Math.random() * 2, color: Math.random() < 0.7 ? "#7ddc8f" : "#b7f0c3", drag: 0.05, plus: true });
+      }
+    }
+  }
+  if (fireNow && refineMode && r[9]) {
     const q = r[9] === myId ? { x: mine.x, y: mine.y } : ships.get(r[9]);
     if (q && (r[9] === myId || q.near)) {
       const dx3 = q.x - s.x, dy3 = q.y - s.y, L4 = hyp(dx3, dy3) || 1, ux4 = dx3 / L4, uy4 = dy3 / L4;

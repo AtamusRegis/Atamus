@@ -454,6 +454,7 @@ export class World {
             this.hotRocks.add(rock);
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
+            if (!ch.hit) { ch.hit = true; rock.v++; }   // (owner, 2026-10-18) a chunk the laser has touched shows its border, scanned or not
             // (owner, 2026-10-18) each ore bit leaves as the cut passes its share of the chunk (the last at the break)
             // and rides a wave back down the beam into my hold
             if (ch.n > 0 && ch.ore) {
@@ -715,7 +716,11 @@ export class World {
     else if (["invite", "inviteReply", "kick", "leave"].includes(m.op)) this.partyAct(p, m);
     else if (m.op === "refine") { if (this.shipOf(p).refineRate) p.refining = !p.refining; }   // (owner, 2026-10-18) the Hauler's R
     else if (m.op === "respawn") { this.respawn(p.id); p.cargo = 0; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
-    else if (m.op === "cargo" || m.op === "tractor") { if (this.shipOf(p).tractor) p.cargo = ((p.cargo || 0) + 1) % 3; }   // (owner, 2026-10-18) F: deposit → withdraw → off
+    else if (m.op === "cargo" || m.op === "tractor") {   // (owner, 2026-10-18) F cycles the field: the Miner opens on deposit (output) first, the Hauler on withdraw (intake)
+      const S0 = this.shipOf(p); if (!S0.tractor) return;
+      const order = S0.cargoFirst === "in" ? [0, 2, 1] : [0, 1, 2], i = order.indexOf(p.cargo || 0);
+      p.cargo = order[(i + 1) % 3];
+    }
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
       if (p.docked || !p.hold.some((e) => !e.sp)) return;
       for (const e of p.hold) if (!e.sp) this.spawnDrops(e.o, e.u, p.x, p.y, 60);
@@ -781,7 +786,7 @@ export class World {
   // (first sight per socket): g = each chunk's exact polygon as [i, nO, x0, y0, x1, y1, ...] — the hitbox clients draw.
   rockDetail(r, geo) {
     const m = { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
-      c.broken ? 1 : 0, c.scanned ? c.d : -1, c.scanned && c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c), c.scanned ? c.n || 0 : 0]) };   // (owner, 2026-10-18) density and bits only once scanned
+      c.broken ? 1 : 0, c.scanned ? c.d : -1, c.scanned && c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c), c.scanned ? c.n || 0 : 0, c.hit ? 1 : 0]) };   // (owner, 2026-10-18) density and bits only once scanned
     if (geo) m.g = r.chunks.map((c) => [c.i, c.poly.nO, ...c.poly.pts.flat()]);
     return m;
   }

@@ -27,7 +27,7 @@ export const SHIPS = {
     scanDps: 30, scanRange: 260, muzzle: 15.3 },   // (owner, 2026-10-18) the scan beam: scanDps scan points / s, out from the sheet's red dot
   booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 110, accel: 28, turn: 1.4, vision: 1000, len: 184.6, r: 55,
     boost: 1, coolRate: 0.15, coolRange: 220, boostRange: 320 },   // (owner, 2026-10-18) coolant beam (default) / boost beam, F switches
-  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, refineRate: 400, speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, refineRate: 400, cargoFirst: "in", speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
     tractor: { span: [0.26, 0.72], depth: 0.2 }, xfer: 2000 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
