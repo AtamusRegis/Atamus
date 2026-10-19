@@ -26,7 +26,7 @@ const towFactor = (r) => Math.max(0.2, 60 / (60 + r));             // (as the se
 // ---- state ----
 let myId = null, myName = "", haveMe = false;
 const mine = { x: 0, y: 0, vx: 0, vy: 0, h: 0 };
-const corr = { x: 0, y: 0 };
+const corr = { x: 0, y: 0 }, errS = { x: 0, y: 0 };
 let ME = { cap: 1200, hold: [], docked: 0, ship: "miner", tow: 0, drill: 0, zone: "", storage: {}, boost: 0, mark: 0 };
 const ships = new Map();                       // id -> { id, buf, row, x, y, h, near }
 const rocks = new Map();                       // id -> { id, x, y, shells, r, broken, hp, tow, heat, fill, dx, dy }
@@ -123,7 +123,7 @@ function toggleMode() { if (!hasAlt()) return; modeIdx = (modeIdx + 1) % 2; draw
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Escape") hideMenu();
-  if (e.code === "KeyF" && !e.repeat) { toggleMode(); e.preventDefault(); }
+  if (e.code === "KeyF" && !e.repeat) { if (G && myShip().tractor) send({ t: "act", op: "tractor" }); else toggleMode(); e.preventDefault(); }   // (owner, 2026-10-18) F: the tractor fields
   const mn = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];          // 1 / 2 pick the mode switch's segments directly
   if (mn !== undefined) { const labels = modeLabels(); if (labels && mn < labels.length) { modeIdx = mn; drawHud(); e.preventDefault(); } }
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
@@ -338,8 +338,12 @@ function onSnap(m) {
     let s = ships.get(id); if (!s) { s = { id, buf: [], x, y, h, near: false }; ships.set(id, s); }
     s.row = r;
     if (id === myId) {                         // soft-correct my prediction toward where the server will be once it has my input
-      const lead = (rtt / 2 + 50) / 1000, tx = x + mine.vx * lead, ty = y + mine.vy * lead, err = hyp(tx - mine.x, ty - mine.y);
-      if (err > 60) { mine.x = tx; mine.y = ty; corr.x = corr.y = 0; } else { corr.x = tx - mine.x; corr.y = ty - mine.y; }
+      // (2026-10-18: zoomed in, the ship visibly skipped) lead from the sim step the position is actually from (not a
+      // fixed guess), and the error low-passed with a small dead zone, so snapshot timing noise doesn't tug the ship
+      const age = m.st ? Math.max(0, Math.min(200, Date.now() - (srvOff || 0) - m.st)) : 50;
+      const lead = (rtt / 2 + age) / 1000, tx = x + mine.vx * lead, ty = y + mine.vy * lead, ex = tx - mine.x, ey = ty - mine.y, err = hyp(ex, ey);
+      if (err > 60) { mine.x = tx; mine.y = ty; corr.x = corr.y = 0; errS.x = errS.y = 0; }
+      else { errS.x += (ex - errS.x) * 0.3; errS.y += (ey - errS.y) * 0.3; const es = hyp(errS.x, errS.y); if (es > 0.8) { corr.x = errS.x; corr.y = errS.y; } else corr.x = corr.y = 0; }
       continue;
     }
     if (!s.near) { s.near = true; s.buf = []; s.x = x; s.y = y; s.h = h; }
@@ -446,10 +450,10 @@ function drawChunk(g, det, c0, zl) {
   const [i, r0, r1, a0, a1, , d, ore, st] = c0, nb = c0[9] || 0;
   const sh = DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
   g.fillStyle = sh[0]; chunkPath(det, c0, g); g.fill();
-  { const p = chunkPoly(det, c0), nO = p.nO; g.save(); chunkPath(det, c0, g); g.clip(); g.lineWidth = 2.2;
-    g.strokeStyle = sh[1]; g.beginPath(); for (let k = 0; k <= nO; k++) k ? g.lineTo(p[k][0], p[k][1]) : g.moveTo(p[0][0], p[0][1]); g.stroke();
-    g.strokeStyle = sh[2]; g.beginPath(); for (let k = nO + 1; k < p.length; k++) k > nO + 1 ? g.lineTo(p[k][0], p[k][1]) : g.moveTo(p[k][0], p[k][1]); g.stroke();
-    g.restore(); }
+  { const p = chunkPoly(det, c0), nO = p.nO, ins = (k, d) => { const x = p[k][0], y = p[k][1], r = hyp(x, y) || 1, f = (r + d) / r; return [x * f, y * f]; };
+    g.lineWidth = 1.1;                         // the lit outer edge and shadowed inner one, drawn just inside (no clip: it's slow)
+    g.strokeStyle = sh[1]; g.beginPath(); for (let k = 0; k <= nO; k++) { const [x, y] = ins(k, -0.55); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+    g.strokeStyle = sh[2]; g.beginPath(); for (let k = nO + 1; k < p.length; k++) { const [x, y] = ins(k, 0.55); k > nO + 1 ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
   g.strokeStyle = OUTLINE; g.lineWidth = Math.max(0.6, Math.min(1.3, 1.6 / zl)); chunkPath(det, c0, g); g.stroke();
   let b0 = a0 / 1000, b1 = a1 / 1000; if (b1 < b0) b1 += TAU;
   const mid = (r0 + r1) / 2, span = b1 - b0, th = r1 - r0;
@@ -472,12 +476,16 @@ function drawChunk(g, det, c0, zl) {
 }
 // (2026-10-18: big rocks hold hundreds of chunks) a rock's masonry is drawn once into its own bitmap, redrawn only when
 // its layout changes (a new rockd) or the zoom moves a half-octave; every frame just stamps the bitmap
-const CACHE_PX = 1536;
+const CACHE_PX = 1536; let bmBudget = 1;
 function rockBitmap(det) {
   let R0 = det.R0;
   if (!R0) { R0 = 0; for (const c0 of det.c) { const p = chunkPoly(det, c0); R0 = Math.max(R0, hyp(p.cx, p.cy) + p.br); } R0 = det.R0 = Math.ceil(R0 + 2); }
   const want = Math.pow(2, Math.ceil(Math.log2(Math.max(0.05, zoom * DPR)) * 2) / 2), sc = Math.min(want, CACHE_PX / (2 * R0));
   if (det.bm && det.bmS === sc) return det.bm;
+  // (2026-10-18: zooming lagged) while the zoom is easing, or once this frame already rebuilt a rock, keep the old bitmap
+  // (stretched) — it's redrawn once the zoom settles, one rock per frame
+  if (det.bm && (zoom !== zoomT || bmBudget <= 0)) return det.bm;
+  bmBudget--;
   const n = Math.max(2, Math.ceil(2 * R0 * sc)), cvs = det.bm && det.bm.cv.width === n ? det.bm.cv : document.createElement("canvas");
   cvs.width = cvs.height = n;
   const g = cvs.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n);
@@ -654,12 +662,33 @@ function drawBitWaves() {
     cx.fillStyle = oc; cx.fillRect(-q / 2, -q / 2, q, q); cx.fillStyle = mix(oc, "#05070c", 0.3); cx.fillRect(0, 0, q / 2, q / 2); cx.restore();
   }
 }
+// (owner, 2026-10-18) the tractor fields: holographic areas out of both sides of the hull — a faint ice fill fading
+// outward, scan lines drifting out from the hull, a flickering edge (shape from the ship's rules; same test as the server)
+function drawTractor(s, S, ts) {
+  const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom;
+  cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is across
+  for (const sd of [-1, 1]) {
+    const pt = (al, sideOut) => [sd * (hw + sideOut) * L, -(al - pv) * L];
+    const q = [pt(T.near[0], 0), pt(T.near[1], 0), pt(T.far[1], T.depth), pt(T.far[0], T.depth)];
+    const g = cx.createLinearGradient(sd * hw * L, 0, sd * (hw + T.depth) * L, 0);
+    g.addColorStop(0, "rgba(124,195,214,0.22)"); g.addColorStop(1, "rgba(124,195,214,0.04)");
+    cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath();
+    cx.fillStyle = g; cx.fill();
+    cx.save(); cx.clip(); cx.strokeStyle = "rgba(160,225,240,0.28)"; cx.lineWidth = lw(1);
+    for (let j = 0; j < 4; j++) { const kk = ((ts * 0.6 + j / 4) % 1), xo = sd * (hw + T.depth * kk) * L; cx.globalAlpha = 1 - kk; cx.beginPath(); cx.moveTo(xo, -L); cx.lineTo(xo, L); cx.stroke(); }
+    cx.restore(); cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9 + sd);
+    cx.strokeStyle = "#9fe3f2"; cx.lineWidth = lw(1.3); cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath(); cx.stroke();
+    cx.globalAlpha = 1;
+  }
+  cx.restore();
+}
 // a ship's gear at work: the boost glow under it; over it, the beams — the cutting laser blue-yellow-red by its own
 // temperature (white as a Miner's charge winds up), the Booster's boost beam as green pluses, its coolant as a blue
 // spray, the Hauler's refine beam purple, the Scanner's drill ice
 function shipFx(s, ts, under) {
   const r = s.row, kind = G.kinds[r[4]] || "miner", fl = r[5], lw = (px) => px / zoom, lay = shipLayout(G.ships[kind].art), yc = lay.yc;
   if (under) {
+    if (fl & 128 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts);
     if (fl & 32) {                             // boosted: the ship glows blue
       const gr = 48 + Math.sin(ts * 5) * 4, g2 = cx.createRadialGradient(s.x, s.y, 10, s.x, s.y, gr);
       g2.addColorStop(0, "rgba(124,195,214,.5)"); g2.addColorStop(1, "rgba(124,195,214,0)");
@@ -829,7 +858,7 @@ function frame(now) {
   if (G && haveMe) {
     const inp = typing() ? { x: 0, y: 0, turn: 0 } : pushInput(); lastInp = inp;
     stepMe(dt, inp);
-    if (corr.x || corr.y) { const k = 1 - Math.exp(-dt * 10), dx = corr.x * k, dy = corr.y * k; if (allowedMe(mine.x + dx, mine.y + dy)) { mine.x += dx; mine.y += dy; } corr.x -= dx; corr.y -= dy; if (hyp(corr.x, corr.y) < 0.05) corr.x = corr.y = 0; }
+    if (corr.x || corr.y) { const k = 1 - Math.exp(-dt * 5), dx = corr.x * k, dy = corr.y * k; if (allowedMe(mine.x + dx, mine.y + dy)) { mine.x += dx; mine.y += dy; } corr.x -= dx; corr.y -= dy; if (hyp(corr.x, corr.y) < 0.05) corr.x = corr.y = 0; }
     sendInput(inp, now);
     const me = ships.get(myId); if (me) { me.x = mine.x; me.y = mine.y; me.h = mine.h; }
     const rt = Date.now() - (srvOff || 0) - 120;
@@ -846,6 +875,7 @@ function frame(now) {
     tutTick(now);
   }
   zoom += (zoomT - zoom) * Math.min(1, dt * 11); if (Math.abs(zoomT - zoom) < 0.002) zoom = zoomT;
+  bmBudget = 1;
   shk.a *= Math.exp(-dt * 5.5); if (shk.a < 0.05) shk.a = 0; shk.x = (Math.random() * 2 - 1) * shk.a; shk.y = (Math.random() * 2 - 1) * shk.a;
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawBackground(now);

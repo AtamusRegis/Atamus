@@ -191,7 +191,7 @@ export class World {
   deleteCan(c) { this.cans.delete(c.id); pool.query(`DELETE FROM ring_jetcans WHERE id = $1`, [c.id]).catch(() => {}); }
   async saveCan(c) {
     await pool.query(`INSERT INTO ring_jetcans (id, owner, party, x, y, h, hold, born, public_at) VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0), $9)
-      ON CONFLICT (id) DO UPDATE SET hold = $7, public_at = $9`, [c.id, c.owner, c.party, c.x, c.y, c.h, JSON.stringify(c.hold), c.born, c.publicAt ? new Date(c.publicAt) : null])
+      ON CONFLICT (id) DO UPDATE SET hold = $7, public_at = $9, x = $4, y = $5`, [c.id, c.owner, c.party, c.x, c.y, c.h, JSON.stringify(c.hold), c.born, c.publicAt ? new Date(c.publicAt) : null])
       .catch((e) => console.error("ring jetcan", e));
   }
   // (owner, 2026-10-18) send out a jetcan: the hold pours into a new can behind the ship (or tops up my own can nearby),
@@ -298,7 +298,7 @@ export class World {
   }
 
   step(dt) {
-    const t = now();
+    const t = now(); this.simT = t;
     for (const p of this.players.values()) {
       const S = this.shipOf(p), push = hyp(p.fx, p.fy);
       const a = (push > 0.01 ? FLY.accel : FLY.brake) * dt;
@@ -327,6 +327,13 @@ export class World {
         e.u += take; d.units -= take; d.dirty = true; p.meDirty = true; p.dirty = true;
         this.fx.push({ k: "take", x: d.x, y: d.y, i: p.id, ore: ORE_KEYS.indexOf(d.ore) });
         if (d.units <= 0) this.deleteDrop(d);
+      }
+      // (owner, 2026-10-18) the tractor fields: drops and haulable jetcans inside either side's area drift in to be scooped
+      if (p.tractor && S.tractor && !dock && this.usedSpace(p) < S.hold - 0.5) {
+        const pull = (R.TRACTOR.pull || 45) * dt, reach = S.len * (1 + S.tractor.depth + (S.hw || 0.2));
+        const drag = (o) => { const dx = p.x - o.x, dy = p.y - o.y, L = hyp(dx, dy); if (L < 1) return false; const k = Math.min(L, pull) / L; o.x += dx * k; o.y += dy * k; return true; };
+        for (const d of this.drops.values()) if (Math.abs(d.x - p.x) < reach && Math.abs(d.y - p.y) < reach && this.inTractor(p, S, d.x, d.y) && drag(d)) d.dirty = true;
+        for (const c of this.cans.values()) if ((c.owner !== p.id || c.armed) && this.canHaul(p, c) && Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < reach && this.inTractor(p, S, c.x, c.y) && drag(c)) c.dirty = true;
       }
       // jetcans: fly up to one you may haul from and it pours in up to the room aboard (your own only once you've flown off)
       for (const c of [...this.cans.values()]) {
@@ -388,6 +395,15 @@ export class World {
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
+  // is a world point inside one of this ship's two tractor areas? (the ship's frame: along = toward the nose from the
+  // pivot, side = across; each area a trapezoid from the hull's side out to depth)
+  inTractor(p, S, x, y) {
+    const T = S.tractor, L = S.len, fx = Math.sin(p.h), fy = -Math.cos(p.h), dx = x - p.x, dy = y - p.y;
+    const along = (dx * fx + dy * fy) / L + (S.pivot ?? 0.5), side = Math.abs(dx * fy - dy * fx) / L - (S.hw || 0.2);
+    if (side < 0 || side > T.depth) return false;
+    const k = side / T.depth, a0 = T.near[0] + (T.far[0] - T.near[0]) * k, a1 = T.near[1] + (T.far[1] - T.near[1]) * k;
+    return along >= a0 && along <= a1;
+  }
   // a bit leaves the chunk at the beam's tip and rides a wave back to the ship: in the hold when it arrives
   sendBit(p, ore, u, x, y, dist, t) {
     const dur = Math.max(0.15, (dist + (this.shipOf(p).muzzle || 0)) / (R.LASER.bitSpeed || 140));
@@ -427,10 +443,10 @@ export class World {
   deleteDrop(d) { this.drops.delete(d.id); pool.query(`DELETE FROM ring_drops WHERE id = $1`, [d.id]).catch(() => {}); }
   async saveDrop(d) {
     if (d.fresh) { d.fresh = false;
-      await pool.query(`INSERT INTO ring_drops (id, x, y, ore, units, created_at) VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0)) ON CONFLICT (id) DO UPDATE SET units = $5`,
+      await pool.query(`INSERT INTO ring_drops (id, x, y, ore, units, created_at) VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0)) ON CONFLICT (id) DO UPDATE SET units = $5, x = $2, y = $3`,
         [d.id, d.x, d.y, d.ore, d.units, d.born]).catch((e) => console.error("ring drop", e));
       await pool.query(`SELECT setval(pg_get_serial_sequence('ring_drops','id'), GREATEST($1, (SELECT COALESCE(MAX(id),1) FROM ring_drops)))`, [this.dropSeq]).catch(() => {});
-    } else await pool.query(`UPDATE ring_drops SET units = $2 WHERE id = $1`, [d.id, d.units]).catch((e) => console.error("ring drop", e));
+    } else await pool.query(`UPDATE ring_drops SET units = $2, x = $3, y = $4 WHERE id = $1`, [d.id, d.units, d.x, d.y]).catch((e) => console.error("ring drop", e));
   }
 
   // ---- delivery: the hold pays straight into the deliverer's station storage ----
@@ -463,6 +479,7 @@ export class World {
       const r = this.rocks.get(m.rock); if (!r) return;
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
     } else if (m.op === "jetcan") this.sendJetcan(p);
+    else if (m.op === "tractor") { if (this.shipOf(p).tractor) p.tractor = !p.tractor; }
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
       if (p.docked || !p.hold.length) return;
       for (const e of p.hold) this.spawnDrops(e.o, e.u, p.x, p.y, 60);
@@ -474,7 +491,7 @@ export class World {
     const p = this.players.get(String(id)); if (!p || !p.docked || !m || typeof m.op !== "string") return false;
     if (m.op === "ship") {
       if (!SHIPS[m.k] || p.ship === m.k || p.hold.length) return false;
-      p.ship = m.k;
+      p.ship = m.k; p.tractor = false;
     } else return false;
     p.meDirty = true; p.dirty = true; return true;
   }
@@ -498,7 +515,7 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p);
       out.push({ p, key: "", row: [p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.SHIP_KINDS.indexOf(p.ship),
-        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0),
+        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0) | (p.tractor && !p.docked ? 128 : 0),
         Math.round(p.aim * 1000), Math.round(p.laserLen), Math.round(this.usedSpace(p) / S.hold * 100)] });
     }
     for (const e of out) e.key = JSON.stringify(e.row);
@@ -547,7 +564,7 @@ export class World {
     const S = this.shipOf(p);
     return { t: "me", cap: S.hold, hold: p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0 })), docked: p.docked ? 1 : 0,
       ship: p.ship, zone: p.zone, storage: Object.fromEntries(Object.entries(p.storage).map(([o, u]) => [o, Math.round(u)])),
-      mark: p.mark ? [p.mark.x, p.mark.y] : 0 };
+      mark: p.mark ? [p.mark.x, p.mark.y] : 0, tractor: p.tractor ? 1 : 0 };
   }
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }

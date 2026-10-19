@@ -42,6 +42,10 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 - **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for **5 minutes**, then it's gone; **a small ring around it sweeps away over those 5 minutes** as its despawn timer (owner, 2026-10-18). Drops survive restarts (`ring_drops`).
 - **Drop cargo:** right-click (or hold) the cargo squares to jettison the hold as drops where you sit.
 
+## Tractor fields (owner, 2026-10-18)
+
+- **The Miner and the Hauler press F to switch on holographic tractor areas out of both sides of the hull** (the owner's marked ship sheet): a trapezoid on each side, narrow at the hull and flaring outward — Miner: 36–70% of the hull's length at the hull, 12–76% at its outer edge, reaching half a ship length (~40 m) out; Hauler: 42–56% at the hull, 22–76% outside, a fifth of its length (~62 m) out (`SHIPS.*.tractor`, with each hull's `pivot` and half-width `hw`). **Any ore drop or jetcan you may haul inside an area is pulled toward the ship** (45 m/s, `TRACTOR.pull`) and scooped when it arrives; nothing is pulled while the hold is full, and your own jetcan only once you've flown off from it. F again switches it off; boarding another ship switches it off. Drawn as a faint ice hologram fading outward, scan lines drifting out from the hull, and a flickering edge — visible to everyone nearby.
+
 ## Jetcans (owner, 2026-10-18)
 
 - **Send out a jetcan:** right-click (or hold) the cargo squares → **Jetcan**. The hold pours into a new can just behind the ship, **up to 100 ore bits** (10,000 units; the rest stays aboard). **One at a time:** sending again with your can within 200 m tops it up; farther off, the note says it's already out. Once your can turns public it's no longer yours, and you can send another.

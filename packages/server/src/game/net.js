@@ -19,7 +19,7 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 // the game's numbers, for the clients (drawing, prediction, the station panel); sent again whenever tuning changes one
 const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
   laser: R.LASER, rock: R.ROCK, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES, ringSpawn: R.RING_SPAWN,
-  ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, jetcan: R.JETCAN, econ: R.ECON,
+  ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, jetcan: R.JETCAN, tractor: R.TRACTOR, econ: R.ECON,
   sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
 const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff sessions — the game client has no dev UI)
 
@@ -129,7 +129,7 @@ export function attachGameServer(httpServer) {
       const rows = world.shipRows(p, cache), last = ws.lastSnap || new Map(), now = new Map(), ch = [], un = [];
       for (const { row: r, key } of rows) { now.set(r[0], key); if (last.get(r[0]) === key) un.push(r[0]); else ch.push(r); }
       ws.lastSnap = now;
-      send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, same: 1 } : { t: "snap", ts, p: ch, u: un });
+      send(ws, !ch.length && un.length === last.size ? { t: "snap", ts, st: world.simT, same: 1 } : { t: "snap", ts, st: world.simT, p: ch, u: un });   // st: the sim step the positions are from
     }
   }, 66);
   // 5 Hz: what changed near each player — rock summaries (and each visible rock's chunk layout when its version moves),

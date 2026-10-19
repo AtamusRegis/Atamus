@@ -7,7 +7,7 @@ import { pool } from "../db.js";
 import * as R from "./rules.js";
 
 export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, layout: R.LAYOUT, core: R.CORE, corium: R.CORIUM, laser: R.LASER,
-  rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, drops: R.DROPS, jetcan: R.JETCAN, econ: R.ECON };
+  rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, drops: R.DROPS, jetcan: R.JETCAN, tractor: R.TRACTOR, econ: R.ECON };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // each number's limits: [low, high, whole]
 function limitsFor(path) {

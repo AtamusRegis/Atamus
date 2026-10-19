@@ -19,15 +19,23 @@ export const WORLD = {
 // len: drawn length in m, proportional to the ship sheet (owner, 2026-10-18: the Miner keeps its size, 0.403 m per
 // sheet pixel — 200 / 215 / 458 / 773 px); r: the bump radius, scaled the same way from the Miner's 24 m
 export const SHIPS = {
-  miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 15.8, len: 80.6, r: 24 },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
+  miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 15.8, len: 80.6, r: 24, pivot: 0.408, hw: 0.178,
+    tractor: { near: [0.36, 0.70], far: [0.12, 0.76], depth: 0.5 } },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
   scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, vision: 1500, len: 86.7,  r: 26 },
   booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 85, vision: 1000, len: 184.6, r: 55 },
-  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000, len: 311.6, r: 93 },
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 6000, speed: 70, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
+    tractor: { near: [0.42, 0.56], far: [0.22, 0.76], depth: 0.2 } },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // (owner, 2026-10-18) no push: waves run only when a chunk with ore bits is cut — each bit leaves the chunk as the cut
 // passes its share of the chunk's health and rides a wave back down the beam into the ship's hold at this speed (m/s)
 export const LASER = { bitSpeed: 140 };
+// (owner, 2026-10-18) the Miner's and Hauler's tractor fields: F switches on holographic areas out of both sides (the
+// owner's marked sheet); any ore drop or jetcan the pilot may haul inside one is pulled toward the ship at pull m/s and
+// scooped when it arrives. Per ship: pivot = the pivot's place along the hull from the stern, hw = the hull's half-width,
+// both as fractions of len; tractor.near / far = each area's edge at the hull and at its outer side, as spans along
+// the hull from the stern; depth = how far out it reaches past the hull, x len.
+export const TRACTOR = { pull: 45 };
 // shared flying numbers (every hull)
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };
 
