@@ -571,7 +571,7 @@ function drawChunkRock(r, det, ts) {
   for (const [hi, hp2] of r.hot || []) {         // (owner, 2026-10-18) heated chunks glow orange
     const p = det.polys.get(hi); if (!p) continue; const hk = hp2 / 100, ox = hi === bI ? bx : 0, oy = hi === bI ? by : 0;   // (the chunk under the laser glows too, bouncing with it)
     // (more orange the hotter)
-    cx.save(); cx.translate(ox, oy); cx.fillStyle = "rgba(255," + Math.round(150 - 50 * hk) + ",40," + (0.08 + 0.72 * hk).toFixed(3) + ")";
+    cx.save(); cx.translate(ox, oy); cx.fillStyle = "rgba(255," + Math.round(160 - 70 * hk) + ",30," + (0.22 + 0.73 * hk).toFixed(3) + ")";
     cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill(); cx.restore();
   }
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
