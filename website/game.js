@@ -566,7 +566,9 @@ function drawChunkRock(r, det, ts) {
   { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
   for (const [hi, hp2] of r.hot || []) {         // (owner, 2026-10-18) heated chunks glow orange
     const p = det.polys.get(hi); if (!p) continue; const hk = hp2 / 100, ox = hi === bI ? bx : 0, oy = hi === bI ? by : 0;   // (the chunk under the laser glows too, bouncing with it)
-    cx.save(); cx.translate(ox, oy); cx.fillStyle = "rgba(255," + Math.round(150 - 50 * hk) + ",40," + (0.08 + 0.72 * hk).toFixed(3) + ")";   // (more orange the hotter) cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill(); cx.restore();
+    // (more orange the hotter)
+    cx.save(); cx.translate(ox, oy); cx.fillStyle = "rgba(255," + Math.round(150 - 50 * hk) + ",40," + (0.08 + 0.72 * hk).toFixed(3) + ")";
+    cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill(); cx.restore();
   }
   if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted
     const cb = det.c.find((x) => x[0] === bI);
@@ -601,7 +603,7 @@ let lastWT = 0;
 const drawErrs = new Set();
 function safeDraw(fn, tag) {
   const m = cx.getTransform(), a = cx.globalAlpha;
-  try { fn(); } catch (e) { const k = tag + ": " + (e && e.message); if (!drawErrs.has(k)) { drawErrs.add(k); console.error("[draw " + tag + "]", e); send({ t: "clientErr", m: k.slice(0, 200) }); } cx.setTransform(m); cx.globalAlpha = a; cx.lineCap = "round"; }
+  try { fn(); cx.setTransform(m); cx.globalAlpha = a; } catch (e) { const k = tag + ": " + (e && e.message); if (!drawErrs.has(k)) { drawErrs.add(k); console.error("[draw " + tag + "]", e); send({ t: "clientErr", m: k.slice(0, 200) }); } cx.setTransform(m); cx.globalAlpha = a; cx.lineCap = "round"; }
 }
 function drawWorld(t) {
   const W = G.world, ts = t / 1000, wdt = Math.min(0.05, Math.max(0, (t - lastWT) / 1000)); lastWT = t;
