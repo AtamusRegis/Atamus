@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Bedrock heats (owner report):** the Miner's laser still can't cut bedrock, but the bedrock now heats, glows and shows its border under it like any chunk (and its heat feeds the core).
 - **Fix — ship and loot vanishing while mining; no chunk glow (owner report):** a comment had swallowed the end of the heated-chunk glow line, so each warm chunk left the canvas shifted to the rock — everything drawn after the rocks (drops, ships) landed off-screen while chunks were warm, and the glow itself never drew. Fixed; each guarded draw now also puts the canvas transform back afterwards.
 - **Hardening (owner report: the ship vanished when mining started):** each rock, ship and ship effect now draws in its own guard — if one fails, the canvas state is restored and the rest of the frame still draws; the error is logged once in the browser console and sent to the server log (`clientErr`). (Not reproduced locally.)
 - **Fix — mining made no heat (owner report):** the chunk under the laser was skipped by the heat glow (it's the bouncing one), so the chunk you were cutting never looked hot; and a stale saved tuning blob was overriding the heat numbers with weaker ones, so the core barely warmed. The glow now bounces with the chunk, the tuning blob drops once (`_v: 10`), and heat runs stronger: chunks heat in ~3 s (`chunkUp` 0.45), the core takes 0.045 × Σheat² and cools 0.015 / s — non-stop mining overheats a core in ~25 s.

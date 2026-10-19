@@ -448,7 +448,10 @@ export class World {
           else {
             const ch = best.hit.chunk;           // (owner, 2026-10-18) no anchoring: the laser cuts exactly what it points at
             p.laserChunk = ch.i;
-            if (ch.d === 3) { /* bedrock: the Miner's laser stops on it, uncut */ } else {
+            if (ch.d === 3) {                    // bedrock: the Miner's laser stops on it, uncut — but it still heats and glows (owner, 2026-10-18)
+              ch.heat = Math.min(1, (ch.heat || 0) + R.HEAT.chunkUp * dt); this.hotRocks.add(rock);
+              if (!ch.hit) { ch.hit = true; rock.v++; }
+            } else {
             // (owner, 2026-10-18) heat: the cut heats the chunk, a hot chunk cuts faster, and its heat seeps into the core
             ch.heat = Math.min(1, (ch.heat || 0) + H.chunkUp * dt); dmg *= 1 + H.speed * ch.heat;
             this.hotRocks.add(rock);
