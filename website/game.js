@@ -506,7 +506,14 @@ function rockBitmap(det) {
   cvs.width = cvs.height = n;
   const g = cvs.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n);
   g.setTransform(sc, 0, 0, sc, n / 2, n / 2); g.lineJoin = "round";
-  for (const c0 of det.c) if (!(c0[5] & 1)) drawChunk(g, det, c0, sc / DPR);
+  // (owner, 2026-10-18) chunks show only once scanned or mined out: everything unscanned is one solid mass — filled and
+  // edged in one flat stone color over the gaps, with a single dark outline around it all — and scanned chunks on top
+  const hid = det.c.filter((c0) => !(c0[5] & 1) && c0[6] < 0), gap = 2.4;
+  g.lineJoin = "round"; g.strokeStyle = OUTLINE; g.lineWidth = gap + 2 * Math.max(0.6, Math.min(1.3, 1.6 / (sc / DPR)));
+  for (const c0 of hid) { chunkPath(det, c0, g); g.stroke(); }
+  g.fillStyle = g.strokeStyle = DUNSCAN[0]; g.lineWidth = gap;
+  for (const c0 of hid) { chunkPath(det, c0, g); g.fill(); g.stroke(); }
+  for (const c0 of det.c) if (!(c0[5] & 1) && c0[6] >= 0) drawChunk(g, det, c0, sc / DPR);
   det.bm = { cv: cvs, R: n / 2 / sc }; det.bmS = sc; return det.bm;
 }
 function drawChunkRock(r, det, ts) {
@@ -518,10 +525,10 @@ function drawChunkRock(r, det, ts) {
   if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.6 / zoom, (Math.random() - 0.5) * 2.6 / zoom);   // the core under the laser: the whole asteroid shakes
   if (det && hitNow && r.hitI >= 0) {
     const cb = det.c.find((x) => x[0] === r.hitI);
-    if (cb && !(cb[5] & 1)) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
+    if (cb && !(cb[5] & 1) && cb[6] >= 0) { const am = (cb[3] + (cb[4] < cb[3] ? cb[4] + TAU * 1000 : cb[4])) / 2000, k = Math.abs(Math.sin(ts * 38)) * Math.max(1.4, 2.4 / zoom);
       bI = r.hitI; bx = Math.cos(am) * k; by = Math.sin(am) * k; }
   }
-  if (!det) { cx.fillStyle = UNSCANNED; cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.restore(); return; }
+  if (!det) { cx.fillStyle = DUNSCAN[0]; cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.8, 1.6 / zoom); cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.stroke(); cx.restore(); return; }   // (far off: the same unscanned mass)
   // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken — always in view, beneath the
   // masonry (owner, 2026-10-18: the chunk sheet), so its swelling shows as the layers around it come away
   const frac = (r.fill || 0) / 100, heat = 0, hot = 0;
