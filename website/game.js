@@ -234,9 +234,10 @@ for (const [bid, f2] of [["zoom-in", 1.3], ["zoom-out", 1 / 1.3]]) $(bid).addEve
 function pushInput() {
   const m = sticks.move;
   if (m) { let x = (m.x - m.ox) / 60, y = (m.y - m.oy) / 60; const L = hyp(x, y); if (L > 1) { x /= L; y /= L; } else if (L < 0.15) x = y = 0; return { x, y, turn: 0, stick: true }; }
-  let f = 0, s = 0; if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1; if (keys.has("KeyE")) s += 1; if (keys.has("KeyQ")) s -= 1;
-  const h = mine.h; let x = Math.sin(h) * f + Math.cos(h) * s, y = -Math.cos(h) * f + Math.sin(h) * s; const L = hyp(x, y); if (L > 1) { x /= L; y /= L; }
-  return { x, y, turn: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) };
+  // (owner, 2026-10-18) WASD flies the way it points on screen (W up, A left, S down, D right) and the ship turns toward
+  // that way at its own turn rate, as the left stick does
+  let x = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0), y = (keys.has("KeyS") ? 1 : 0) - (keys.has("KeyW") ? 1 : 0); const L = hyp(x, y); if (L > 1) { x /= L; y /= L; }
+  return { x, y, turn: 0, stick: true };
 }
 // (owner, 2026-10-18) abilities originate from the red dot on each ship's sprite: the muzzle, m ahead of center
 const muzzleOf = (x, y, h, S) => { const m = (S && S.muzzle) || 0; return [x + Math.sin(h) * m, y - Math.cos(h) * m]; };
@@ -564,7 +565,7 @@ function drawChunkRock(r, det, ts) {
   { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
   for (const [hi, hp2] of r.hot || []) {         // (owner, 2026-10-18) heated chunks glow orange
     const p = det.polys.get(hi); if (!p || hi === bI) continue; const hk = hp2 / 100;
-    cx.fillStyle = "rgba(255,122,40," + (0.12 + 0.5 * hk).toFixed(3) + ")"; cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill();
+    cx.fillStyle = "rgba(255," + Math.round(150 - 50 * hk) + ",40," + (0.08 + 0.72 * hk).toFixed(3) + ")";   // (more orange the hotter) cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill();
   }
   if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted
     const cb = det.c.find((x) => x[0] === bI);

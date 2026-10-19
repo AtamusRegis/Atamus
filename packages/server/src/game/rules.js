@@ -41,11 +41,11 @@ export const LASER = { bitSpeed: 140 };
 // belongs to its destination — nobody else can pull it in. Per ship: pivot = the pivot's place along the hull from the
 // stern, hw = the hull's half-width, both x len; tractor.span = the field's stretch along the hull (from the stern, x
 // len), depth = how far out it reaches past the hull (x len) — a rectangle, straight-sided (owner).
-// (owner, 2026-10-18) heat: cutting a chunk heats it (chunkUp / s less its cooling, to 1) and a hotter chunk cuts faster (x 1 + speed x
-// heat). The heat seeps into the core while it's cut — slowly at first, more the hotter the chunk: coreIn x (base + (1 -
-// base) x heat^2) per second (coreDirect / s while the laser is on the core itself). Chunks cool chunkCool / s, the core
-// coreCool / s. A core that reaches 1 overheats: the asteroid shatters, its corium and unmined chunks lost.
-export const HEAT = { chunkUp: 0.3, chunkCool: 0.1, speed: 1.5, coreIn: 0.12, base: 0.15, coreDirect: 0.08, coreCool: 0.006 };
+// (owner, 2026-10-18) heat: cutting a chunk heats it (chunkUp / s less its cooling, to 1) and a hotter chunk cuts faster
+// (x 1 + speed x heat); chunks cool chunkCool / s when not cut. The core heats from all its warm chunks together: coreIn x
+// the sum of their heat^2 per second (coreDirect / s while the laser is on the core itself); it cools coreCool / s. A core
+// that reaches 1 overheats: the asteroid shatters, its corium and unmined chunks lost.
+export const HEAT = { chunkUp: 0.3, chunkCool: 0.1, speed: 1.5, coreIn: 0.06, coreDirect: 0.08, coreCool: 0.006 };
 // (owner, 2026-10-18) a Booster's boost: Miners cut, Boosters cool, Scanners scan and Haulers refine this much faster
 export const BOOST = { mult: 1.6, hold: 400 };   // hold: ms a boost lasts after the beam leaves
 // (owner, 2026-10-18) a Hauler's refining (R): raw ore in the hold turns refined at refineRate units / s; refined ore

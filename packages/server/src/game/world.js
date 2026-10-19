@@ -451,7 +451,7 @@ export class World {
             if (ch.d === 3) { /* bedrock: the Miner's laser stops on it, uncut */ } else {
             // (owner, 2026-10-18) heat: the cut heats the chunk, a hot chunk cuts faster, and its heat seeps into the core
             ch.heat = Math.min(1, (ch.heat || 0) + H.chunkUp * dt); dmg *= 1 + H.speed * ch.heat;
-            this.heatCore(rock, H.coreIn * (H.base + (1 - H.base) * ch.heat * ch.heat) * dt); this.hotRocks.add(rock);
+            this.hotRocks.add(rock);
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
             // (owner, 2026-10-18) each ore bit leaves as the cut passes its share of the chunk (the last at the break)
@@ -528,6 +528,9 @@ export class World {
     // heat cools: every rock still warm loses a little each tick
     if (this.hotRocks.size) for (const rock of [...this.hotRocks]) {
       const H = R.HEAT; let warm = false;
+      // (owner, 2026-10-18) the core heats from all its warm chunks together: the more of them and the hotter, the faster
+      { let sum = 0; for (const c of rock.chunks) if (c.heat > 0 && !c.broken) sum += c.heat * c.heat; if (sum > 0) rock.core.heat = Math.min(1, (rock.core.heat || 0) + H.coreIn * sum * dt); }
+      if (rock.core.heat >= 1 && !rock.core.popped) { this.overheat(rock); continue; }
       if (rock.core.heat > 0) { rock.core.heat = Math.max(0, rock.core.heat - H.coreCool * dt); warm = warm || rock.core.heat > 0; }
       for (const c of rock.chunks) if (c.heat > 0) { c.heat = c.broken ? 0 : Math.max(0, c.heat - H.chunkCool * dt); warm = warm || c.heat > 0; }
       if (!warm || !this.rocks.has(rock.id)) this.hotRocks.delete(rock);
