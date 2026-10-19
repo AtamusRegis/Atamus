@@ -234,10 +234,9 @@ for (const [bid, f2] of [["zoom-in", 1.3], ["zoom-out", 1 / 1.3]]) $(bid).addEve
 function pushInput() {
   const m = sticks.move;
   if (m) { let x = (m.x - m.ox) / 60, y = (m.y - m.oy) / 60; const L = hyp(x, y); if (L > 1) { x /= L; y /= L; } else if (L < 0.15) x = y = 0; return { x, y, turn: 0, stick: true }; }
-  // (owner, 2026-10-18) WASD flies the way it points on screen (W up, A left, S down, D right) and the ship turns toward
-  // that way at its own turn rate, as the left stick does
-  let x = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0), y = (keys.has("KeyS") ? 1 : 0) - (keys.has("KeyW") ? 1 : 0); const L = hyp(x, y); if (L > 1) { x /= L; y /= L; }
-  return { x, y, turn: 0, stick: true };
+  let f = 0, s = 0; if (keys.has("KeyW")) f += 1; if (keys.has("KeyS")) f -= 1; if (keys.has("KeyE")) s += 1; if (keys.has("KeyQ")) s -= 1;
+  const h = mine.h; let x = Math.sin(h) * f + Math.cos(h) * s, y = -Math.cos(h) * f + Math.sin(h) * s; const L = hyp(x, y); if (L > 1) { x /= L; y /= L; }
+  return { x, y, turn: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) };
 }
 // (owner, 2026-10-18) abilities originate from the red dot on each ship's sprite: the muzzle, m ahead of center
 const muzzleOf = (x, y, h, S) => { const m = (S && S.muzzle) || 0; return [x + Math.sin(h) * m, y - Math.cos(h) * m]; };
@@ -979,6 +978,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // ---- the HUD: the mode switch by the hold bar, the ship chip, the hold as a square per ore type ----
+$("refine-btn").addEventListener("click", (e) => { send({ t: "act", op: "refine" }); e.currentTarget.blur(); });
 const hud = { holdRaw: $("hold-raw"), holdRef: $("hold-ref"), holdNum: $("hold-num"), ship: $("ship-chip"), cargo: $("cargo"), zone: $("zone"), modes: $("modes") };
 const elx = (tag, cls, text) => { const d = document.createElement(tag); if (cls) d.className = cls; if (text !== undefined) d.textContent = text; return d; };
 let hudKey = "";
@@ -990,6 +990,7 @@ function drawHud() {
   hud.holdNum.textContent = Math.round(raw + ref) + " / " + cap;
   if (hud.zone.textContent !== (ME.zone || "")) { hud.zone.textContent = ME.zone || ""; hud.zone.classList.remove("zswap"); void hud.zone.offsetWidth; hud.zone.classList.add("zswap"); }
   hud.ship.textContent = myShip().name;
+  { const rb = $("refine-btn"); rb.hidden = !myShip().refineRate; rb.classList.toggle("on", !!ME.refining); }   // (owner, 2026-10-18) the Hauler's Refine button
   const key = JSON.stringify([ME.ship, ME.hold, modeIdx, tut.on]); if (key === hudKey) return; hudKey = key;
   drawModes(); drawCargo();
 }

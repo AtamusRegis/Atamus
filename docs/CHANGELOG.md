@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Flying reverted; Refine button (owner):** back to W / S thrust, A / D turn, Q / E strafe (the screen-direction WASD felt wrong). Haulers get a Refine button beside the ship chip (lit while refining), as well as R.
 - **WASD steering; heat from every chunk (owner):** WASD now flies in its screen direction and the ship turns toward it at its turn rate (Q / E strafe retired). Chunks glow more orange the hotter they are and cool when not cut; the core heats from the sum of all warm chunks' heat² instead of only the one being cut.
 - **Heat, the Booster, refining (owner):** cutting heats chunks (hot chunks cut faster, glow orange) and the heat seeps into the core faster the hotter the chunk; an overheated core shatters the asteroid (corium and unmined chunks lost). The Booster's coolant beam (default) cools cores; F switches to a boost beam on one ship — boosted Miners cut, Boosters cool, Scanners scan, Haulers refine ×1.6. Haulers press R to refine their hold (a fifth of the room). `HEAT`, `BOOST`, `SHIPS.booster.coolRate/coolRange/boostRange`, `SHIPS.hauler.refineRate`.
 - **Hidden layers (owner):** unscanned chunks no longer show their outlines — the unscanned part of a rock is one solid mass (the same far off and up close); chunks appear as they're scanned or mined out.

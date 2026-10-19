@@ -805,7 +805,7 @@ export class World {
     const S = this.shipOf(p);
     return { t: "me", cap: S.hold, hold: p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0, pt: e.sp ? 1 : 0 })), docked: p.docked ? 1 : 0,
       ship: p.ship, zone: p.zone, storage: Object.fromEntries(Object.entries(p.storage).map(([o, u]) => [o, Math.round(u)])),
-      mark: p.mark ? [p.mark.x, p.mark.y] : 0, cargo: p.cargo || 0 };
+      mark: p.mark ? [p.mark.x, p.mark.y] : 0, cargo: p.cargo || 0, refining: p.refining ? 1 : 0 };
   }
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }

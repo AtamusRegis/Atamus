@@ -34,6 +34,7 @@
     #mode-sw[hidden] { display: none; }
     #tut-chip.on { color: var(--gold); border-color: rgba(216,176,106,.6); }
     .hud-row { display: flex; gap: 8px; align-items: end; }
+    #refine-btn { height: 24px; } #refine-btn.on { color: #1a1205; background: var(--ore); border-color: transparent; }
     #ship-chip { height: 24px; white-space: nowrap; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid rgba(216,176,106,.55); font: 800 15px var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--gold); user-select: none; }
     .bar { position: relative; width: 210px; height: 24px; border-radius: 4px; background: rgba(18,24,36,.92); border: 1px solid var(--rule); overflow: hidden; display: flex; }
     .bar i { display: block; height: 100%; transition: width .25s cubic-bezier(.3,.8,.4,1); }
@@ -152,6 +153,7 @@
     <div id="modes"></div>
     <div class="hud-row">
       <div id="ship-chip"></div>
+      <button id="refine-btn" class="chip" type="button" hidden>Refine</button>
       <div id="hold-wrap"><div id="cargo"></div><div class="bar"><i id="hold-raw"></i><i id="hold-ref"></i><span><b>Hold</b><em id="hold-num" style="font-style:normal"></em></span></div></div>
     </div>
   </div>
@@ -168,6 +170,6 @@
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1792500001"></script>
-  <script type="module" src="game.js?v=1792500038"></script>
+  <script type="module" src="game.js?v=1792500039"></script>
 </body>
 </html>
