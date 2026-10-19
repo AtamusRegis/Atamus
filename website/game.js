@@ -123,7 +123,7 @@ function toggleMode() { if (!hasAlt()) return; modeIdx = (modeIdx + 1) % 2; draw
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Escape") hideMenu();
-  if (e.code === "KeyF" && !e.repeat) { if (G && myShip().tractor) send({ t: "act", op: "tractor" }); else toggleMode(); e.preventDefault(); }   // (owner, 2026-10-18) F: the tractor fields
+  if (e.code === "KeyF" && !e.repeat) { if (G && myShip().tractor) send({ t: "act", op: "cargo" }); else toggleMode(); e.preventDefault(); }   // (owner, 2026-10-18) F: deposit field → withdraw field → off
   const mn = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];          // 1 / 2 pick the mode switch's segments directly
   if (mn !== undefined) { const labels = modeLabels(); if (labels && mn < labels.length) { modeIdx = mn; drawHud(); e.preventDefault(); } }
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
@@ -313,6 +313,7 @@ function onMsg(m) {
   else if (m.t === "invite") askConfirm((m.n || "A pilot") + " invites you to their party.", () => send({ t: "act", op: "inviteReply", from: m.from, yes: true }), { yes: "Accept", no: "Decline", calm: true, onNo: () => send({ t: "act", op: "inviteReply", from: m.from, yes: false }) });
   else if (m.t === "canFull") askConfirm("Destroy your oldest jetcan and the ore in it?", () => send({ t: "act", op: "jetcan", replace: true }));   // (owner, 2026-10-18) past 3 cans
   else if (m.t === "fx") {
+    if (m.k === "xfer") { xferFx.push({ to: m.to, ore: m.ore, x: m.x, y: m.y, x1: m.x1, y1: m.y1, ts: m.ts, dur: m.dur }); return; }
     if (m.k === "bit") { bitWaves.push({ i: m.i, x: m.x, y: m.y, ore: m.ore, ts: m.ts, dur: m.dur }); return; }
     fx.push({ ...m, t0: performance.now() });
     const d = hyp(m.x - mine.x, m.y - mine.y);
@@ -589,6 +590,7 @@ function drawWorld(t) {
   cx.save(); cx.translate(W.station[0], W.station[1]);
   cx.strokeStyle = C.gold; cx.globalAlpha = ME.docked ? 0.42 + 0.16 * Math.sin(ts * 3) : 0.35; cx.lineWidth = lw(1.5); cx.setLineDash([lw(3), lw(8)]); cx.beginPath(); cx.arc(0, 0, G.econ.dockR, 0, TAU); cx.stroke(); cx.setLineDash([]); cx.globalAlpha = 1;
   drawStation(cx, ts); cx.restore();
+  drawStationBeams(ts);
   const vr = Math.max(VW, VH) / zoom;
   for (const r of rocks.values()) {
     r.dx += (r.x - r.dx) * 0.2; r.dy += (r.y - r.dy) * 0.2;
@@ -645,6 +647,7 @@ function drawWorld(t) {
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
   drawBitWaves();
+  drawXfers();
   drawFx(t);
   drawShards(wdt);
   drawParts(wdt);
@@ -673,25 +676,47 @@ function drawBitWaves() {
     cx.fillStyle = oc; cx.fillRect(-q / 2, -q / 2, q, q); cx.fillStyle = mix(oc, "#05070c", 0.3); cx.fillRect(0, 0, q / 2, q / 2); cx.restore();
   }
 }
-// (owner, 2026-10-18) the tractor fields: holographic areas out of both sides of the hull — a faint ice fill fading
-// outward, scan lines drifting in toward the hull (owner, 2026-10-18), a flickering edge (shape from the ship's rules; same test as the server)
-function drawTractor(s, S, ts) {
-  const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom;
-  cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is across
-  for (const sd of [-1, 1]) {
-    const pt = (al, sideOut) => [sd * (hw + sideOut) * L, -(al - pv) * L];
-    const q = [pt(T.near[0], 0), pt(T.near[1], 0), pt(T.far[1], T.depth), pt(T.far[0], T.depth)];
-    const g = cx.createLinearGradient(sd * hw * L, 0, sd * (hw + T.depth) * L, 0);
-    g.addColorStop(0, "rgba(124,195,214,0.22)"); g.addColorStop(1, "rgba(124,195,214,0.04)");
-    cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath();
-    cx.fillStyle = g; cx.fill();
-    cx.save(); cx.clip(); cx.strokeStyle = "rgba(160,225,240,0.28)"; cx.lineWidth = lw(1);
-    for (let j = 0; j < 4; j++) { const kk = 1 - ((ts * 0.6 + j / 4) % 1), xo = sd * (hw + T.depth * kk) * L; cx.globalAlpha = Math.min(1, (1 - kk) * 4) * (0.35 + 0.65 * (1 - kk)); cx.beginPath(); cx.moveTo(xo, -L); cx.lineTo(xo, L); cx.stroke(); }
-    cx.restore(); cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9 + sd);
-    cx.strokeStyle = "#9fe3f2"; cx.lineWidth = lw(1.3); cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath(); cx.stroke();
+// (owner, 2026-10-18) the cargo fields: a holographic rectangle out of one side of the hull — faint fill fading outward,
+// scan lines moving the way the cargo goes, a flickering edge (shape from the ship's rules; same test as the server)
+function drawTractor(s, S, ts, sd) {
+  // sd -1: the deposit field (left, gold, lines drifting out); 1: the withdraw field (right, ice, lines drifting in)
+  const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom, dep = sd < 0;
+  const rgb = dep ? "216,176,106" : "124,195,214", edge = dep ? "#f0cd8a" : "#9fe3f2";
+  cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is to starboard
+  const x0 = sd * hw * L, x1 = sd * (hw + T.depth) * L, y0 = -(T.span[1] - pv) * L, y1 = -(T.span[0] - pv) * L;
+  const g = cx.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, "rgba(" + rgb + ",0.22)"); g.addColorStop(1, "rgba(" + rgb + ",0.04)");
+  cx.beginPath(); cx.rect(Math.min(x0, x1), y0, Math.abs(x1 - x0), y1 - y0); cx.fillStyle = g; cx.fill();
+  cx.save(); cx.clip(); cx.strokeStyle = "rgba(" + rgb + ",0.5)"; cx.lineWidth = lw(1);
+  for (let j = 0; j < 4; j++) { const ph = (ts * 0.6 + j / 4) % 1, kk = dep ? ph : 1 - ph, xo = sd * (hw + T.depth * kk) * L;
+    cx.globalAlpha = Math.min(1, ph * 4) * (0.35 + 0.65 * (1 - ph)); cx.beginPath(); cx.moveTo(xo, y0); cx.lineTo(xo, y1); cx.stroke(); }
+  cx.restore(); cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9 + sd);
+  cx.strokeStyle = edge; cx.lineWidth = lw(1.3); cx.strokeRect(Math.min(x0, x1), y0, Math.abs(x1 - x0), y1 - y0);
+  cx.globalAlpha = 1; cx.restore();
+}
+// (owner, 2026-10-18) the station's continuous deposit beams: gold lines out of the station, motes running inward
+function drawStationBeams(ts) {
+  const B = G.beams; if (!B) return; const [sx, sy] = G.world.station, lw = (px) => px / zoom;
+  for (let k = 0; k < B.n; k++) {
+    const a = (B.a0 + k * 360 / B.n) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
+    const ax = sx + ux * B.r0, ay = sy + uy * B.r0, bx = sx + ux * B.r1, by = sy + uy * B.r1;
+    cx.lineCap = "round";
+    for (const [w, al] of [[lw(9), 0.07], [lw(4), 0.16], [lw(1.6), 0.8]]) { cx.strokeStyle = C.gold; cx.globalAlpha = al; cx.lineWidth = w; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx, by); cx.stroke(); }
+    cx.fillStyle = "#fff3d6";
+    for (let j = 0; j < 6; j++) { const f = 1 - ((ts * 0.35 + j / 6) % 1), r = B.r0 + (B.r1 - B.r0) * f; cx.globalAlpha = 0.7 * Math.sin(Math.PI * f); cx.fillRect(sx + ux * r - 2, sy + uy * r - 2, 4, 4); }
     cx.globalAlpha = 1;
   }
-  cx.restore();
+}
+// cargo in transit (deposits): a lump flying from the deposit field to the station beam or the receiving ship
+const xferFx = [];
+function drawXfers() {
+  const now = Date.now() - (srvOff || 0);
+  for (let k = xferFx.length - 1; k >= 0; k--) {
+    const f = xferFx[k], q = (now - f.ts) / f.dur;
+    if (q >= 1 || q > 3) { xferFx.splice(k, 1); continue; } if (q < 0) continue;
+    const tgt = f.to ? ships.get(f.to) : null, ex = tgt ? tgt.x : f.x1, ey = tgt ? tgt.y : f.y1, e2 = q * q * (3 - 2 * q);
+    const px = f.x + (ex - f.x) * e2, py = f.y + (ey - f.y) * e2, oc = G.ores[ORE_KEYS[f.ore]] ? G.ores[ORE_KEYS[f.ore]].color : "#fff";
+    cx.fillStyle = oc; cx.globalAlpha = 0.25; cx.fillRect(px - 5, py - 5, 10, 10); cx.globalAlpha = 1; cx.fillRect(px - 2.5, py - 2.5, 5, 5);
+  }
 }
 // a ship's gear at work: the boost glow under it; over it, the beams — the cutting laser blue-yellow-red by its own
 // temperature (white as a Miner's charge winds up), the Booster's boost beam as green pluses, its coolant as a blue
@@ -699,7 +724,8 @@ function drawTractor(s, S, ts) {
 function shipFx(s, ts, under) {
   const r = s.row, kind = G.kinds[r[4]] || "miner", fl = r[5], lw = (px) => px / zoom, lay = shipLayout(G.ships[kind].art), yc = lay.yc;
   if (under) {
-    if (fl & 128 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts);
+    if (fl & 128 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, -1);
+    if (fl & 256 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, 1);
     if (fl & 32) {                             // boosted: the ship glows blue
       const gr = 48 + Math.sin(ts * 5) * 4, g2 = cx.createRadialGradient(s.x, s.y, 10, s.x, s.y, gr);
       g2.addColorStop(0, "rgba(124,195,214,.5)"); g2.addColorStop(1, "rgba(124,195,214,0)");
@@ -1082,7 +1108,7 @@ const TUT = {
     ["Hold fire to cut through the masonry — darker chunks are denser and take longer", () => tutEv.cut],
     ["Cut a chunk with ore bits — each bit rides the beam back into your hold", () => (ME.hold || []).length > 0],
     ["Cut a path to the core and break it open", () => tutEv.popped],
-    ["Press F for the tractor field and pull in the scattered corium", () => (ME.hold || []).some((e) => e.o === "corium")],
+    ["Press F twice for the withdraw field and pull in the scattered corium", () => (ME.hold || []).some((e) => e.o === "corium")],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
   flight: [

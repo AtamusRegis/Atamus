@@ -66,7 +66,7 @@ export class World {
     this.players = new Map();
     this.rocks = new Map();                    // id -> rock (chunks, core)
     this.slots = new Map(); this.cells = new Map(); this.grid = new Map();
-    this.drops = new Map(); this.dropSeq = 1; this.bits = [];
+    this.drops = new Map(); this.dropSeq = 1; this.bits = []; this.xfers = [];
     this.cans = new Map(); this.canSeq = 1;   // (owner, 2026-10-18) jetcans
     this.parties = new Map(); this.memberParty = new Map(); this.invites = new Map();   // (owner, 2026-10-18) parties: id -> { id, leader, members [{ i, n }] }; pilot -> party; invitee -> { from, at }  // ore adrift: free for anyone, picked up by flying over
     this.msgs = []; this.fx = [];
@@ -380,7 +380,7 @@ export class World {
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
       // ore drops: only with the tractor field on (owner, 2026-10-18: running over them doesn't pick them up) — one that
       // reaches the ship pours in up to the room aboard; the rest waits for another trip
-      if (!dock && p.tractor && S.tractor) for (const d of this.drops.values()) {
+      if (!dock && p.cargo === 2 && S.tractor) for (const d of this.drops.values()) {
         if (hyp(d.x - p.x, d.y - p.y) > Math.max(42, S.r || 0)) continue;   // (a big hull scoops what reaches its hull)
         const room = Math.max(0, Math.floor(S.hold - this.usedSpace(p))); if (room <= 0) break;
         const take = Math.min(d.units, room);
@@ -389,13 +389,27 @@ export class World {
         this.fx.push({ k: "take", x: d.x, y: d.y, i: p.id, ore: ORE_KEYS.indexOf(d.ore) });
         if (d.units <= 0) this.deleteDrop(d);
       }
-      // (owner, 2026-10-18) the tractor fields: drops and haulable jetcans inside either side's area drift in to be scooped
-      if (p.tractor && S.tractor && !dock && this.usedSpace(p) < S.hold - 0.5) {
+      // (owner, 2026-10-18) the withdraw field: drops and haulable jetcans inside it drift in to be scooped
+      if (p.cargo === 2 && S.tractor && !dock && this.usedSpace(p) < S.hold - 0.5) {
         const pull = (R.TRACTOR.pull || 45) * dt, reach = S.len * (1 + S.tractor.depth + (S.hw || 0.2));
         const drag = (o) => { const dx = p.x - o.x, dy = p.y - o.y, L = hyp(dx, dy); if (L < 1) return false; const k = Math.min(L, pull) / L; o.x += dx * k; o.y += dy * k; return true; };
-        for (const d of this.drops.values()) if (Math.abs(d.x - p.x) < reach && Math.abs(d.y - p.y) < reach && this.inTractor(p, S, d.x, d.y) && drag(d)) d.dirty = true;
-        for (const c of this.cans.values()) if ((c.owner !== p.id || c.armed) && this.canHaul(p, c) && Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < reach && this.inTractor(p, S, c.x, c.y) && drag(c)) c.dirty = true;
+        for (const d of this.drops.values()) if (Math.abs(d.x - p.x) < reach && Math.abs(d.y - p.y) < reach && this.inTractor(p, S, d.x, d.y, 1) && drag(d)) d.dirty = true;
+        for (const c of this.cans.values()) if ((c.owner !== p.id || c.armed) && this.canHaul(p, c) && Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < reach && this.inTractor(p, S, c.x, c.y, 1) && drag(c)) c.dirty = true;
       }
+      // (owner, 2026-10-18) the deposit field: the hold streams out into a station beam it touches, or into another ship's
+      // withdraw field it overlaps
+      if (p.cargo === 1 && S.tractor && !dock && p.hold.length) {
+        p.xferAcc = Math.min(1000, (p.xferAcc || 0) + (S.xfer || 500) * dt);
+        const lump = R.DROPS.lump || 100;
+        while (p.xferAcc >= lump && p.hold.length) {
+          const to = this.depositTarget(p, S, lump); if (!to) { p.xferAcc = 0; break; }
+          const e = p.hold[0], u = Math.min(lump, e.u); e.u -= u; if (e.u <= 0) p.hold.shift(); p.xferAcc -= lump;
+          const [ox, oy] = this.fieldMid(p, S, -1), dist = hyp(to.x - ox, to.y - oy), dur = Math.max(0.2, dist / (R.TRACTOR.xferSpeed || 160));
+          this.xfers.push({ from: p.id, to: to.id, ore: e.o, u, sp: e.sp || null, due: t + dur * 1000, x: to.x, y: to.y });
+          this.fx.push({ k: "xfer", i: p.id, to: to.id === "st" ? 0 : to.id, ore: ORE_KEYS.indexOf(e.o), x: Math.round(ox), y: Math.round(oy), x1: Math.round(to.x), y1: Math.round(to.y), ts: t, dur: Math.round(dur * 1000) });
+          p.meDirty = true; p.dirty = true;
+        }
+      } else p.xferAcc = 0;
       // jetcans: fly up to one you may haul from and it pours in up to the room aboard (your own only once you've flown off)
       for (const c of [...this.cans.values()]) {
         const dc = hyp(c.x - p.x, c.y - p.y);
@@ -457,16 +471,52 @@ export class World {
       }
       this.bits = keep;
     }
+    if (this.xfers.length) {                   // cargo in transit: into station storage, or the receiving ship's hold
+      const keep = [];
+      for (const x of this.xfers) {
+        if (x.due > t) { keep.push(x); continue; }
+        const from = this.players.get(x.from);
+        if (x.to === "st") { this.deliverEntries(from || { id: x.from }, [{ o: x.ore, u: x.u, sp: x.sp }], true); continue; }
+        const q = this.players.get(x.to), Q = q && this.shipOf(q);
+        const back = from || null, dest = q && this.usedSpace(q) + x.u <= Q.hold ? q : back && this.usedSpace(back) + x.u <= this.shipOf(back).hold ? back : null;
+        if (!dest) { if (!x.sp) this.spawnDrops(x.ore, x.u, x.x, x.y, 20); else if (back) back.hold.push({ o: x.ore, u: x.u, raw: 1, sp: x.sp }); continue; }
+        const key = x.sp ? x.sp.join(",") : "";
+        let e = dest.hold.find((e2) => e2.raw && e2.o === x.ore && (e2.sp ? e2.sp.join(",") : "") === key); if (!e) { e = { o: x.ore, u: 0, raw: 1 }; if (x.sp) e.sp = [...x.sp]; dest.hold.push(e); }
+        e.u += x.u; dest.meDirty = true; dest.dirty = true;
+      }
+      this.xfers = keep;
+    }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
-  // is a world point inside one of this ship's two tractor areas? (the ship's frame: along = toward the nose from the
-  // pivot, side = across; each area a trapezoid from the hull's side out to depth)
-  inTractor(p, S, x, y) {
+  // is a world point inside this ship's cargo field on side sd (-1 left: deposit, 1 right: withdraw)? The ship's frame:
+  // along = toward the nose, side = to starboard; the field a rectangle from the hull's side out to depth
+  inTractor(p, S, x, y, sd) {
     const T = S.tractor, L = S.len, fx = Math.sin(p.h), fy = -Math.cos(p.h), dx = x - p.x, dy = y - p.y;
-    const along = (dx * fx + dy * fy) / L + (S.pivot ?? 0.5), side = Math.abs(dx * fy - dy * fx) / L - (S.hw || 0.2);
-    if (side < 0 || side > T.depth) return false;
-    const k = side / T.depth, a0 = T.near[0] + (T.far[0] - T.near[0]) * k, a1 = T.near[1] + (T.far[1] - T.near[1]) * k;
-    return along >= a0 && along <= a1;
+    const along = (dx * fx + dy * fy) / L + (S.pivot ?? 0.5), side = sd * (dy * fx - dx * fy) / L - (S.hw || 0.2);
+    return side >= 0 && side <= T.depth && along >= T.span[0] && along <= T.span[1];
+  }
+  fieldMid(p, S, sd) {                         // the middle of a side's field, in the world
+    const T = S.tractor, L = S.len, fx = Math.sin(p.h), fy = -Math.cos(p.h), al = ((T.span[0] + T.span[1]) / 2 - (S.pivot ?? 0.5)) * L, sdist = sd * ((S.hw || 0.2) + T.depth / 2) * L;
+    return [p.x + fx * al - fy * sdist, p.y + fy * al + fx * sdist];
+  }
+  // where a deposit goes: a station beam the deposit field touches (into storage), else a ship whose withdraw field
+  // overlaps mine and has room (counting what's already on its way)
+  depositTarget(p, S, u) {
+    const B = R.STATION_BEAMS, [sx, sy] = W.station;
+    if (hyp(p.x - sx, p.y - sy) < B.r1 + S.len * 2) for (let k = 0; k < B.n; k++) {
+      const a = (B.a0 + k * 360 / B.n) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
+      for (let r = B.r0; r <= B.r1; r += 8) { const x = sx + ux * r, y = sy + uy * r; if (this.inTractor(p, S, x, y, -1)) return { id: "st", x, y }; }
+    }
+    const [mx, my] = this.fieldMid(p, S, -1);
+    for (const q of this.players.values()) {
+      if (q === p || q.cargo !== 2 || q.docked) continue; const Q = this.shipOf(q); if (!Q.tractor || hyp(q.x - p.x, q.y - p.y) > (S.len + Q.len) * 1.5) continue;
+      const [qx, qy] = this.fieldMid(q, Q, 1);
+      if (!this.inTractor(q, Q, mx, my, 1) && !this.inTractor(p, S, qx, qy, -1)) continue;
+      const coming = this.xfers.reduce((a, x) => a + (x.to === q.id ? x.u : 0), 0);
+      if (this.usedSpace(q) + coming + u > Q.hold) continue;
+      return { id: q.id, x: qx, y: qy };
+    }
+    return null;
   }
   // a bit leaves the chunk at the beam's tip and rides a wave back to the ship: in the hold when it arrives
   sendBit(p, ore, u, x, y, dist, t) {
@@ -535,8 +585,15 @@ export class World {
     this.offline.set(pid, next);
   }
   deliver(p) {
+    this.deliverEntries(p, p.hold, false);
+    p.hold = []; p.meDirty = true; p.dirty = true;
+    this.fx.push({ k: "deliver", x: p.x, y: p.y, i: p.id });
+  }
+  // hold entries into station storage: plain ore to the deliverer, party ore split among its can's members (quiet: no
+  // notes — the deposit beams stream it in lump by lump)
+  deliverEntries(p, entries, quiet) {
     const ores = {}, split = new Map();
-    for (const e of p.hold) {
+    for (const e of entries) {
       if (e.sp) { const k = e.sp.join(","); if (!split.has(k)) split.set(k, { ids: e.sp, ores: {} }); const so = split.get(k).ores; so[e.o] = (so[e.o] || 0) + e.u; continue; }
       ores[e.o] = (ores[e.o] || 0) + e.u;
     }
@@ -546,13 +603,10 @@ export class World {
       const shares = ids.map(() => ({})), n = ids.length;
       for (const [o, u] of Object.entries(so)) { const per = Math.floor(u / n), start = Math.floor(Math.random() * n);
         for (let k = 0; k < n; k++) shares[k][o] = per + (((k - start + n) % n) < u - per * n ? 1 : 0); }
-      ids.forEach((id, k) => this.storageAddAny(id, shares[k], "Party share:"));
-      if (!ids.includes(p.id)) this.msgs.push({ to: p.id, m: { t: "note", text: "Delivered " + this.sumText(so) + " to a party (" + n + " ways)." } });
+      ids.forEach((id, k) => this.storageAddAny(id, shares[k], quiet ? null : "Party share:"));
+      if (!quiet && !ids.includes(p.id)) this.msgs.push({ to: p.id, m: { t: "note", text: "Delivered " + this.sumText(so) + " to a party (" + n + " ways)." } });
     }
-    p.hold = [];
-    if (Object.keys(ores).length) this.storageAdd(p.id, ores, "Delivered");
-    p.meDirty = true; p.dirty = true;
-    this.fx.push({ k: "deliver", x: p.x, y: p.y, i: p.id });
+    if (Object.keys(ores).length) this.storageAddAny(p.id, ores, quiet ? null : "Delivered");
   }
   async banned(id) {                           // (admin) a banned pilot's hold scatters where they were
     const p = this.players.get(String(id)); if (!p) return;
@@ -568,8 +622,8 @@ export class World {
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
     } else if (m.op === "jetcan") this.sendJetcan(p, m.replace === true);
     else if (["invite", "inviteReply", "kick", "leave"].includes(m.op)) this.partyAct(p, m);
-    else if (m.op === "respawn") { this.respawn(p.id); p.tractor = false; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
-    else if (m.op === "tractor") { if (this.shipOf(p).tractor) p.tractor = !p.tractor; }
+    else if (m.op === "respawn") { this.respawn(p.id); p.cargo = 0; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
+    else if (m.op === "cargo" || m.op === "tractor") { if (this.shipOf(p).tractor) p.cargo = ((p.cargo || 0) + 1) % 3; }   // (owner, 2026-10-18) F: deposit → withdraw → off
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
       if (p.docked || !p.hold.some((e) => !e.sp)) return;
       for (const e of p.hold) if (!e.sp) this.spawnDrops(e.o, e.u, p.x, p.y, 60);
@@ -581,7 +635,7 @@ export class World {
     const p = this.players.get(String(id)); if (!p || !p.docked || !m || typeof m.op !== "string") return false;
     if (m.op === "ship") {
       if (!SHIPS[m.k] || p.ship === m.k || p.hold.length) return false;
-      p.ship = m.k; p.tractor = false;
+      p.ship = m.k; p.cargo = 0;
     } else return false;
     p.meDirty = true; p.dirty = true; return true;
   }
@@ -609,7 +663,7 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p);
       out.push({ p, key: "", row: [p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.SHIP_KINDS.indexOf(p.ship),
-        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0) | (p.tractor && !p.docked ? 128 : 0),
+        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0) | (p.cargo === 1 && !p.docked ? 128 : 0) | (p.cargo === 2 && !p.docked ? 256 : 0),
         Math.round(p.aim * 1000), Math.round(p.laserLen), Math.round(this.usedSpace(p) / S.hold * 100)] });
     }
     for (const e of out) e.key = JSON.stringify(e.row);
@@ -658,7 +712,7 @@ export class World {
     const S = this.shipOf(p);
     return { t: "me", cap: S.hold, hold: p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0, pt: e.sp ? 1 : 0 })), docked: p.docked ? 1 : 0,
       ship: p.ship, zone: p.zone, storage: Object.fromEntries(Object.entries(p.storage).map(([o, u]) => [o, Math.round(u)])),
-      mark: p.mark ? [p.mark.x, p.mark.y] : 0, tractor: p.tractor ? 1 : 0 };
+      mark: p.mark ? [p.mark.x, p.mark.y] : 0, cargo: p.cargo || 0 };
   }
   roster() { return [...this.players.values()].map((p) => ({ i: p.id, n: p.name })); }
 }

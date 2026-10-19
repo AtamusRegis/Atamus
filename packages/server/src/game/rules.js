@@ -22,22 +22,26 @@ export const WORLD = {
 // top out faster (speed, m/s). The Hauler is a barge: its hold takes four full jetcans.
 export const SHIPS = {
   miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, accel: 45, turn: 2.4, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 15.8, len: 80.6, r: 24, pivot: 0.408, hw: 0.178,
-    tractor: { near: [0.36, 0.70], far: [0.12, 0.76], depth: 0.5 } },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
+    tractor: { span: [0.24, 0.74], depth: 0.5 }, xfer: 500 },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
   scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, accel: 43, turn: 2.3, vision: 1500, len: 86.7,  r: 26 },
   booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 110, accel: 28, turn: 1.4, vision: 1000, len: 184.6, r: 55 },
   hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
-    tractor: { near: [0.42, 0.56], far: [0.22, 0.76], depth: 0.2 } },
+    tractor: { span: [0.26, 0.72], depth: 0.2 }, xfer: 2000 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
 // (owner, 2026-10-18) no push: waves run only when a chunk with ore bits is cut — each bit leaves the chunk as the cut
 // passes its share of the chunk's health and rides a wave back down the beam into the ship's hold at this speed (m/s)
 export const LASER = { bitSpeed: 140 };
-// (owner, 2026-10-18) the Miner's and Hauler's tractor fields: F switches on holographic areas out of both sides (the
-// owner's marked sheet); any ore drop or jetcan the pilot may haul inside one is pulled toward the ship at pull m/s and
-// scooped when it arrives. Per ship: pivot = the pivot's place along the hull from the stern, hw = the hull's half-width,
-// both as fractions of len; tractor.near / far = each area's edge at the hull and at its outer side, as spans along
-// the hull from the stern; depth = how far out it reaches past the hull, x len.
-export const TRACTOR = { pull: 45 };
+// (owner, 2026-10-18) the Miner's and Hauler's cargo fields: F once opens the deposit field (left side), again swaps to
+// the withdraw field (right side), a third time closes both. Withdraw pulls any ore drop or jetcan the pilot may haul
+// toward the ship at pull m/s, scooped when it arrives. Deposit streams the hold out, xfer units / s, into a station
+// beam the field touches (straight into storage) or into another ship's withdraw field it overlaps. Ore in transit
+// belongs to its destination — nobody else can pull it in. Per ship: pivot = the pivot's place along the hull from the
+// stern, hw = the hull's half-width, both x len; tractor.span = the field's stretch along the hull (from the stern, x
+// len), depth = how far out it reaches past the hull (x len) — a rectangle, straight-sided (owner).
+export const TRACTOR = { pull: 45, xferSpeed: 160 };
+// the station's 4 continuous deposit beams, from r0 to r1 m out of the station's center at angles a0 + k x 90° (deg)
+export const STATION_BEAMS = { n: 4, r0: 260, r1: 760, a0: 45 };
 // shared flying numbers (every hull)
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };   // (the defaults: each ship's own accel / turn win)
 
