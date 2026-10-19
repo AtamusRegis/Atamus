@@ -23,7 +23,8 @@ export const WORLD = {
 export const SHIPS = {
   miner:   { name: "Miner",   art: ["miner"],              hold: 1200, speed: 80, accel: 45, turn: 2.4, laserDps: 15, laserRange: 220, vision: 1000, muzzle: 15.8, len: 80.6, r: 24, pivot: 0.408, hw: 0.178,
     tractor: { span: [0.24, 0.74], depth: 0.5 }, xfer: 500 },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
-  scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, accel: 43, turn: 2.3, vision: 1500, len: 86.7,  r: 26 },
+  scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, accel: 43, turn: 2.3, vision: 1500, len: 86.7,  r: 26,
+    scanDps: 30, scanRange: 260, muzzle: 15.3 },   // (owner, 2026-10-18) the scan beam: scanDps scan points / s, out from the sheet's red dot
   booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 110, accel: 28, turn: 1.4, vision: 1000, len: 184.6, r: 55 },
   hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
     tractor: { span: [0.26, 0.72], depth: 0.2 }, xfer: 2000 },
@@ -58,7 +59,13 @@ export const CHUNK = {
   oreUnit: 100,             // units in one ore bit
   barren: 0.5,              // share of chunks with no ore
   b1: 45, b2: 35, b3: 20,   // an ore chunk's bits, 1 / 2 / 3, weights %
+  // (owner, 2026-10-18) scanning: a chunk hides its density and bits until scanned; its scan takes area x scanK x its
+  // density's factor scan points (denser takes longer; bedrock very long)
+  scanK: 0.1, s1: 0.6, s2: 1, s3: 1.6, sBed: 8,
 };
+// (owner, 2026-10-18) bedrock: a chunk the Miner can't cut (its laser stops on it), no ore, near-black once scanned;
+// the share of chunks that are bedrock per ring, more deeper out
+export const RING_BEDROCK = [0.06, 0.12, 0.2];
 // rock size from its layer count (2 up to 10; deeper rings roll thicker rocks). Returns { shells, radius, coreR, coreHp, oreTypes }.
 export const ROCK_SIZE = (n) => ({
   shells: n, radius: LAYOUT.coreR + n * (LAYOUT.layer + LAYOUT.gap), coreR: LAYOUT.coreR,
@@ -69,7 +76,7 @@ export const CORE = { grow: 1.5 };                      // the core swells up to
 // (owner, 2026-10-18) the core's corium: deeper asteroids and asteroids with more layers drop more. Units = perLayer x
 // layers x the ring's factor (rounded to whole lumps); all of it piñatas out as drops when the core breaks.
 export const CORIUM = { perLayer: 100, ring: [1, 1.5, 2] };
-export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6 };   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
+export const ROCK = { linger: 1800, respawn: 45, reseed: 6 * 3600, spawnChance: 0.6, detailR: 300 };   // detailR (owner, 2026-10-18): a rock's layers show only to pilots within this of its edge   // s: a part-mined rock lasts after its last touch; a popped slot re-rolls elsewhere; seeds rotate; share of cells with a rock
 // which ores each ring holds (rarer outward) and its rock chance x
 export const RING_ORES = [["iron", "ice", "titanium"], ["titanium", "cobalt", "platinum"], ["cobalt", "platinum"]];
 export const RING_SPAWN = [1, 1, 0.7];

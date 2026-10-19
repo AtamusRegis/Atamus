@@ -280,6 +280,7 @@ function onMsg(m) {
     for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, fill] = row; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, fill }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, fill, dx: x, dy: y }); }
     for (const id of m.x || []) { rocks.delete(id); details.delete(id); }
   } else if (m.t === "rockd") {
+    if (m.far) { details.delete(m.id); return; }   // (owner, 2026-10-18) out of range: the layers hide again
     const cl = m.c || [], prev = details.get(m.id), rk0 = rocks.get(m.id);
     for (const c0 of cl) c0[5] = c0[5] ? 1 : 2;  // (every chunk shows its density and ore: drawn as the scanned look)
     if (prev && rk0) {                         // chunks that just broke shatter into drifting shards
@@ -330,7 +331,7 @@ function onMsg(m) {
     else if (m.k === "can") { burst(m.x, m.y, 8, [C.gold, "#fff"], 50); if (m.i === myId) addShake(0.8); }
     else if (m.k === "take") { const oc = G.ores[ORE_KEYS[m.ore]]; burst(m.x, m.y, 5, [oc ? oc.color : "#fff", "#fff"], 45); }
     else if (m.k === "refine") { burst(m.x, m.y, 7, [C.ore, "#fff"], 45); if (m.i === myId) tutEv.refined = true; }
-    else if (m.k === "scan") burst(m.x, m.y, 5, [C.ice, "#fff"], 35);
+    else if (m.k === "scan") { burst(m.x, m.y, 6, [C.ice, "#fff"], 35); if (m.i === myId) tutEv.scanned = true; }
   }
   else if (m.t === "join") names.set(m.i, m.n);
   else if (m.t === "leave") { ships.delete(m.i); }
@@ -420,7 +421,9 @@ function drawBackground(t) {
 const hex2n = (h) => { if (h.startsWith("rgb")) { const m = h.match(/\d+/g); return (+m[0] << 16) | (+m[1] << 8) | +m[2]; } return parseInt(h.slice(1), 16); };
 const mix = (h1, h2, k) => { const a = hex2n(h1), b = hex2n(h2), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 // (owner, 2026-10-18) the chunk sheet's densities, D1 lightest .. D3 darkest: [fill, lit edge, shadow edge, speckle]
-const DSHADE = [["#8fa8b7", "#b0c7d4", "#79909e", "#62768a"], ["#8a91a0", "#a3aab9", "#747a88", "#5f6573"], ["#4f545e", "#656b77", "#40444d", "#31343c"]];
+const DSHADE = [["#8fa8b7", "#b0c7d4", "#79909e", "#62768a"], ["#8a91a0", "#a3aab9", "#747a88", "#5f6573"], ["#4f545e", "#656b77", "#40444d", "#31343c"],
+  ["#1d1e24", "#2e3038", "#121318", "#3a3c45"]];   // [3]: bedrock (owner, 2026-10-18), near-black
+const DUNSCAN = ["#6e6a64", "#837e77", "#5d5953", "#66625c"];   // (owner, 2026-10-18) unscanned: one flat stone grey, no density, no bits
 const UNSCANNED = "#838999", BEDROCK = "#17090d", OUTLINE = "#05070c";
 const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
 function polyBounds(pts) { let cx2 = 0, cy2 = 0; for (const [x, y] of pts) { cx2 += x; cy2 += y; } cx2 /= pts.length; cy2 /= pts.length; let br = 0; for (const [x, y] of pts) br = Math.max(br, hyp(x - cx2, y - cy2)); pts.cx = cx2; pts.cy = cy2; pts.br = br; }
@@ -460,8 +463,8 @@ function chunkPath(det, c0, g = cx) { const p = chunkPoly(det, c0); g.beginPath(
 // g: the context to draw on; zl: the zoom its line widths are for
 function drawChunk(g, det, c0, zl) {
   const [i, r0, r1, a0, a1, , d, ore, st] = c0, nb = c0[9] || 0;
-  const sh = DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
-  g.fillStyle = sh[0]; chunkPath(det, c0, g); g.fill();
+  const sh = d < 0 ? DUNSCAN : DSHADE[d] || DSHADE[1], oc = ore >= 0 && G.ores[ORE_KEYS[ore]] ? G.ores[ORE_KEYS[ore]].color : null;
+  g.fillStyle = d < 0 ? mix(sh[0], "#05070c", h01(i, 7) * 0.12) : sh[0]; chunkPath(det, c0, g); g.fill();
   { const p = chunkPoly(det, c0), nO = p.nO, ins = (k, d) => { const x = p[k][0], y = p[k][1], r = hyp(x, y) || 1, f = (r + d) / r; return [x * f, y * f]; };
     g.lineWidth = 1.1;                         // the lit outer edge and shadowed inner one, drawn just inside (no clip: it's slow)
     g.strokeStyle = sh[1]; g.beginPath(); for (let k = 0; k <= nO; k++) { const [x, y] = ins(k, -0.55); k ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
@@ -470,7 +473,7 @@ function drawChunk(g, det, c0, zl) {
   let b0 = a0 / 1000, b1 = a1 / 1000; if (b1 < b0) b1 += TAU;
   const mid = (r0 + r1) / 2, span = b1 - b0, th = r1 - r0;
   g.fillStyle = sh[3];                         // speckles
-  for (let j = 0, nj = 2 + Math.floor(span * mid / 12); j < nj; j++) { const aa = b0 + span * (0.12 + 0.76 * h01(i, 200 + j)), rr = r0 + th * (0.25 + 0.5 * h01(i, 260 + j)); g.fillRect(Math.cos(aa) * rr - 0.45, Math.sin(aa) * rr - 0.45, 0.9, 0.9); }
+  if (d >= 0) for (let j = 0, nj = 2 + Math.floor(span * mid / 12); j < nj; j++) { const aa = b0 + span * (0.12 + 0.76 * h01(i, 200 + j)), rr = r0 + th * (0.25 + 0.5 * h01(i, 260 + j)); g.fillRect(Math.cos(aa) * rr - 0.45, Math.sin(aa) * rr - 0.45, 0.9, 0.9); }
   if (oc && nb > 0) {                          // ore bits: spread along the chunk, a darker lower corner on each
     const dk = mix(oc, "#05070c", 0.3), q = Math.min(2.8, th * 0.42);
     for (let j = 0; j < nb; j++) {
@@ -559,7 +562,7 @@ function drawChunkRock(r, det, ts) {
 }
 // the beam's local ray, exactly as the server's: the first unbroken chunk polygon or the core it meets (my own beam is
 // drawn from it so it doesn't lag the mouse)
-function castLocal(px, py, ang, range) {
+function castLocal(px, py, ang, range, scan) {   // scan: the scan beam passes through chunks already scanned
   const ux = Math.cos(ang), uy = Math.sin(ang);
   let bestT = range || 0, hit = 0, hitRock = null, hitI = -1;
   for (const r of rocks.values()) {
@@ -568,7 +571,7 @@ function castLocal(px, py, ang, range) {
     if (perp > reach || along < -reach || along - reach > bestT) continue;
     if (!det) { const disc = r.r * r.r - perp * perp, t0 = Math.max(0, along - Math.sqrt(Math.max(0, disc))); if (t0 < bestT) { bestT = t0; hit = 1; } continue; }
     for (const c0 of det.c) {
-      if (c0[5] & 1) continue;
+      if (c0[5] & 1 || (scan && c0[6] >= 0)) continue;
       const t = rayPoly(ox, oy, ux, uy, chunkPoly(det, c0));
       if (t < bestT) { bestT = t; hit = 1; hitRock = r; hitI = c0[0]; }
     }
@@ -747,6 +750,33 @@ function shipFx(s, ts, under) {
   const [x0, y0] = muzzleOf(s.x, s.y, s.h, S2);   // the beam leaves the sprite's red dot
   const wdt2 = 1 / 60;
   // the cutting laser: blue runs yellow then red as its temperature builds; a winding charge pushes it white
+  // (owner, 2026-10-18) the Scanner's scan beam: three thin beams sweeping at random within a small angle and radar
+  // crescents running out from the ship toward the cursor — all of them meet, and dissipate, at the chunk being scanned
+  if (fireNow && S2.scanDps) {
+    let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
+    if (isMe) { a = aimAngle(); const c3 = castLocal(x0, y0, a, S2.scanRange, true); len = c3.len; hitF = !!c3.hit; }
+    if (len > 0) {
+      const ex = x0 + Math.cos(a) * len, ey = y0 + Math.sin(a) * len, sid = (s.id || "").length;
+      cx.lineCap = "round";
+      for (let j = 0; j < 3; j++) {
+        const sw = (Math.sin(ts * (2.1 + j * 0.9) + j * 2.3 + sid) + 0.5 * Math.sin(ts * (5.3 + j * 1.7) + j)) * 0.06;
+        const aj = a + sw, bx = x0 + Math.cos(aj) * len, by = y0 + Math.sin(aj) * len;
+        cx.strokeStyle = C.ice; cx.globalAlpha = 0.18; cx.lineWidth = lw(3.2); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(bx, by); cx.stroke();
+        cx.globalAlpha = 0.8; cx.lineWidth = lw(1.1); cx.beginPath(); cx.moveTo(x0, y0); cx.lineTo(bx, by); cx.stroke();
+      }
+      const nC = 4;
+      for (let k = 0; k < nC; k++) {
+        const rad = (ts * 110 + k * len / nC) % len, f = rad / len, end = Math.max(0, (f - 0.82) / 0.18);   // (near the chunk they spread and fade out)
+        const half = 0.14 + end * 0.22; cx.strokeStyle = C.ice; cx.globalAlpha = (0.25 + 0.5 * Math.sin(Math.PI * Math.min(1, f * 1.2))) * (1 - end); cx.lineWidth = lw(1.6);
+        cx.beginPath(); cx.arc(x0, y0, Math.max(1, rad), a - half, a + half); cx.stroke();
+      }
+      if (hitF) {                               // the dissipation at the chunk
+        cx.globalAlpha = 0.35 + 0.25 * Math.sin(ts * 23); cx.fillStyle = C.ice; cx.beginPath(); cx.arc(ex, ey, lw(5) + Math.sin(ts * 11) * lw(1.5), 0, TAU); cx.fill();
+        if (Math.random() < 0.35) { const na = a + Math.PI + (Math.random() - 0.5) * 2.4, v = 20 + Math.random() * 30; spawnPart(ex, ey, { vx: Math.cos(na) * v, vy: Math.sin(na) * v, life: 0.3 + Math.random() * 0.3, size: 1.4 + Math.random() * 1.2, color: Math.random() < 0.5 ? C.ice : "#fff", drag: 3 }); }
+      }
+      cx.globalAlpha = 1;
+    }
+  }
   if (fireNow && S2.laserDps && !drillMode && !coolMode && !boostMode && !refineMode) {
     const big = kind === "miner";
     let a = r[6] / 1000, len = r[7], hitF = !!(fl & 1);
@@ -1119,6 +1149,10 @@ const TUT = {
     ["Press F twice for the withdraw field and pull in the scattered corium", () => (ME.hold || []).some((e) => e.o === "corium")],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
+  scanner: [                                   // (owner, 2026-10-18) the scan beam
+    ["Fly out to a ring and up to an asteroid", nearRock],
+    ["Hold fire to scan — the beam works toward the core a chunk at a time, revealing density, ore and bedrock for everyone", () => tutEv.scanned],
+  ],
   flight: [
     ["Fly out to a ring and up to an asteroid", nearRock],
     ["This ship has no tools yet — fly over a jetcan you may haul from to load up", () => (ME.hold || []).length > 0],
@@ -1133,7 +1167,7 @@ function tutStart() {
   tutShow(); hudKey = ""; drawHud();
 }
 function tutStop() { tut.on = false; $("tut").hidden = true; hudKey = ""; drawHud(); }
-const tutSteps = () => (G && G.ships[tutShipK] && G.ships[tutShipK].laserDps ? TUT.miner : TUT.flight);
+const tutSteps = () => { const S0 = G && G.ships[tutShipK]; return S0 && S0.laserDps ? TUT.miner : S0 && S0.scanDps ? TUT.scanner : TUT.flight; };
 function tutShow() { const steps = tutSteps(); $("tut").hidden = false; $("tut-n").textContent = (tut.idx + 1) + "/" + steps.length; $("tut-text").textContent = steps[tut.idx][0]; }
 function tutTick(now) {
   if (!tut.on) return;
@@ -1153,6 +1187,7 @@ window.Atamus = {
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, shells: r.shells, r: r.r, broken: r.broken, hp: r.hp, tow: r.tow, heat: r.heat || 0, fill: r.fill || 0 })); },
   chunks: (id) => details.get(id) || null,
   get cans() { return [...cansM.values()]; },
+  detail: (id) => { const d = details.get(id); return d ? d.c.map((c0) => ({ i: c0[0], broken: c0[5] & 1, d: c0[6], ore: c0[7], n: c0[9] })) : null; },
   get drops() { return [...dropsM.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, ore: ORE_KEYS[o.ore], units: o.units })); },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], bt: (s.row[11] || 0) / 100, ck: (s.row[12] || 0) / 100, beamTgt: s.row[9] || 0, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[13] || 0 } : null })); },
   cast: (a) => { const [mx2, my2] = muzzleOf(mine.x, mine.y, mine.h, myShip()); return castLocal(mx2, my2, a, myShip().laserRange); },

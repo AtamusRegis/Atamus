@@ -7,7 +7,7 @@ import { pool } from "../db.js";
 import * as R from "./rules.js";
 
 export const ROOTS = { world: R.WORLD, ships: R.SHIPS, fly: R.FLY, chunk: R.CHUNK, layout: R.LAYOUT, core: R.CORE, corium: R.CORIUM, laser: R.LASER,
-  rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, drops: R.DROPS, jetcan: R.JETCAN, tractor: R.TRACTOR, beams: R.STATION_BEAMS, econ: R.ECON };
+  rock: R.ROCK, ringShells: R.RING_SHELLS, ringSpawn: R.RING_SPAWN, ringBedrock: R.RING_BEDROCK, drops: R.DROPS, jetcan: R.JETCAN, tractor: R.TRACTOR, beams: R.STATION_BEAMS, econ: R.ECON };
 const DEFAULTS = JSON.parse(JSON.stringify(ROOTS));
 // each number's limits: [low, high, whole]
 function limitsFor(path) {
@@ -15,6 +15,7 @@ function limitsFor(path) {
   if (root === "world") return a === "cell" ? [100, 5000, true] : [50, 1e6, true];
   if (root === "ringShells") return [2, 24, true];
   if (root === "ringSpawn") return [0, 3, false];
+  if (root === "ringBedrock") return [0, 0.9, false];
   if (root === "chunk") return last === "barren" ? [0, 1, false] : /^[wb]\d$/.test(last) ? [0, 100, true] : [0.01, 100, false];
   if (root === "layout") return a === "arcs" ? [6, 180, false] : a === "splitW" || a === "splitL" ? [0, 1, false] : [0.5, 200, false];
   if (root === "ships" && last === "hold") return [1, 1e6, false];
@@ -52,4 +53,4 @@ export async function saveTuning() {
   await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 9, ...ROOTS })]);
 }
 // which changes regrow the asteroids (their places, sizes and layouts come from these)
-export const reshapes = (path) => ["ringShells", "ringSpawn"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || path[0] === "layout" || (path[0] === "chunk" && /^([wb]\d|barren)$/.test(path[1]));
+export const reshapes = (path) => ["ringShells", "ringSpawn", "ringBedrock"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || path[0] === "layout" || (path[0] === "chunk" && /^([wb]\d|barren)$/.test(path[1]));

@@ -18,7 +18,7 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 
 // the game's numbers, for the clients (drawing, prediction, the station panel); sent again whenever tuning changes one
 const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
-  laser: R.LASER, rock: R.ROCK, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES, ringSpawn: R.RING_SPAWN,
+  laser: R.LASER, rock: R.ROCK, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES, ringSpawn: R.RING_SPAWN, ringBedrock: R.RING_BEDROCK,
   ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, jetcan: R.JETCAN, tractor: R.TRACTOR, beams: R.STATION_BEAMS, econ: R.ECON,
   sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
 const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff sessions — the game client has no dev UI)
@@ -148,10 +148,13 @@ export function attachGameServer(httpServer) {
       const vers = ws.rockVers || (ws.rockVers = new Map());       // the chunk layouts, one message per rock that changed
       const seen = new Set();
       for (const row of rows) {
-        const r = world.rocks.get(row[0]); if (!r) continue; seen.add(r.id);
+        const r = world.rocks.get(row[0]); if (!r) continue;
+        // (owner, 2026-10-18) the layers show only near the rock: farther off it's a plain mass
+        if (Math.hypot(r.x - p.x, r.y - p.y) - r.r > R.ROCK.detailR) continue;
+        seen.add(r.id);
         if (vers.get(r.id) !== r.v) { const first = !vers.has(r.id); vers.set(r.id, r.v); send(ws, world.rockDetail(r, first)); }   // (the exact polygons ride the first one)
       }
-      for (const id of [...vers.keys()]) if (!seen.has(id)) vers.delete(id);   // out of vision: sent fresh on return
+      for (const id of [...vers.keys()]) if (!seen.has(id)) { vers.delete(id); send(ws, { t: "rockd", id, far: 1 }); }   // out of range: hidden, sent fresh on return
       const dr = diff(ws, "knownDrops", world.dropRows(p)); if (dr) send(ws, { t: "drops", ...dr });
       const cn = diff(ws, "knownCans", world.canRows(p)); if (cn) send(ws, { t: "cans", ...cn });
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }

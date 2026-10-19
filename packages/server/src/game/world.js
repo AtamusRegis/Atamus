@@ -148,10 +148,12 @@ export class World {
         for (const [q0, q1] of bands) {
           const spans = rand() < L.splitL ? [[b0, bm], [bm, b1]] : [[b0, b1]];
           for (const [e0, e1] of spans) {
-            const d = pick(ws), c = { i: chunks.length, sh: shellIdx, r0: q0, r1: q1, a0: normA(e0), a1: normA(e1), d, ore: null, u: 0, n: 0, broken: false };
-            if (rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.n = 1 + pick(bw); c.u = c.n * (C.oreUnit || 100); }
+            const bed = rand() < (R.RING_BEDROCK[ring] ?? 0.1);   // (owner, 2026-10-18) bedrock: d 3, no ore, the Miner can't cut it
+            const d = bed ? 3 : pick(ws), c = { i: chunks.length, sh: shellIdx, r0: q0, r1: q1, a0: normA(e0), a1: normA(e1), d, ore: null, u: 0, n: 0, broken: false, scanned: false };
+            if (!bed && rand() >= C.barren) { c.ore = types[Math.floor(rand() * types.length)]; c.n = 1 + pick(bw); c.u = c.n * (C.oreUnit || 100); }
             const area = (e1 - e0) * ((q0 + q1) / 2) * (q1 - q0);
-            c.maxHp = Math.max(8, area * C.hpK * [C.d1, C.d2, C.d3][d]); c.hp = c.maxHp;
+            c.maxHp = Math.max(8, area * C.hpK * [C.d1, C.d2, C.d3, 99][d]); c.hp = c.maxHp;
+            c.scanHp = Math.max(4, area * C.scanK * [C.s1, C.s2, C.s3, C.sBed][d]);
             segs.push(c.i); chunks.push(c);
           }
         }
@@ -324,13 +326,13 @@ export class World {
   }
 
   // the laser's ray into a rock: whatever it meets first — an unbroken chunk's exact polygon, or the core's circle
-  castRock(rock, px, py, ux, uy) {
+  castRock(rock, px, py, ux, uy, scan) {   // scan: pass through chunks already scanned (the scan beam goes on inward)
     const ox = px - rock.x, oy = py - rock.y;
     { const along = -(ox * ux + oy * uy), perp = Math.abs(ox * uy - oy * ux);
       if (perp > rock.reach || along < -rock.reach) return null; }   // the line misses the rock entirely
     let best = Infinity, hit = null;
     for (const c of rock.chunks) {
-      if (c.broken) continue;
+      if (c.broken || (scan && c.scanned)) continue;
       const t = rayPoly(ox, oy, ux, uy, c.poly);
       if (t < best) { best = t; hit = c; }
     }
@@ -446,6 +448,7 @@ export class World {
           else {
             const ch = best.hit.chunk;           // (owner, 2026-10-18) no anchoring: the laser cuts exactly what it points at
             p.laserChunk = ch.i;
+            if (ch.d === 3) { /* bedrock: the Miner's laser stops on it, uncut */ } else {
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
             // (owner, 2026-10-18) each ore bit leaves as the cut passes its share of the chunk (the last at the break)
@@ -455,8 +458,29 @@ export class World {
               while ((ch.out || 0) < due) { ch.out = (ch.out || 0) + 1; this.sendBit(p, ch.ore, Math.round(ch.u / ch.n), mx0 + ux * best.hit.t, my0 + uy * best.hit.t, best.hit.t, t); }
             }
             if (ch.hp <= 0) this.breakChunk(rock, ch); else if (this.dmgStage(ch) !== st0) rock.v++;
+            }
           }
         } else p.laserLen = S.laserRange;
+      }
+      // (owner, 2026-10-18) the Scanner's scan beam: through the chunks already scanned, onto the first unscanned one on its
+      // line, toward the core one chunk at a time; denser takes longer, bedrock much longer. Scans are shared by everyone.
+      if (p.firing && !dock && S.scanDps) {
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim); let best = null, bd = S.scanRange;
+        const mz = S.muzzle || 0, mx0 = p.x + Math.sin(p.h) * mz, my0 = p.y - Math.cos(p.h) * mz;
+        for (const r of this.rocksNear(mx0, my0, S.scanRange + 360)) {
+          const hit = this.castRock(r, mx0, my0, ux, uy, true);
+          if (hit && hit.t <= S.scanRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
+        }
+        p.laserLen = best ? best.hit.t : S.scanRange;
+        if (best && !best.hit.core) {
+          const rock = best.r, ch = best.hit.chunk; p.laserOn = true; p.laserRock = rock.id; p.laserChunk = ch.i; rock.touched = t; rock.home = false;
+          ch.scanHp -= S.scanDps * dt;
+          if (ch.scanHp <= 0 && !ch.scanned) {
+            ch.scanned = true; rock.v++;
+            const mid = (ch.r0 + ch.r1) / 2, ang = ch.a0 + normA(ch.a1 - ch.a0) / 2;
+            this.fx.push({ k: "scan", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, i: p.id });
+          }
+        }
       }
       if (p.firing) p.meDirty = true;
     }
@@ -696,7 +720,7 @@ export class World {
   // (first sight per socket): g = each chunk's exact polygon as [i, nO, x0, y0, x1, y1, ...] — the hitbox clients draw.
   rockDetail(r, geo) {
     const m = { t: "rockd", id: r.id, v: r.v, coreR: r.core.r0, c: r.chunks.map((c) => [c.i, Math.round(c.r0 * 10) / 10, Math.round(c.r1 * 10) / 10, Math.round(normA(c.a0) * 1000), Math.round(normA(c.a1) * 1000),
-      c.broken ? 1 : 0, c.d, c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c), c.n || 0]) };
+      c.broken ? 1 : 0, c.scanned ? c.d : -1, c.scanned && c.ore ? ORE_KEYS.indexOf(c.ore) : -1, c.broken ? 0 : this.dmgStage(c), c.scanned ? c.n || 0 : 0]) };   // (owner, 2026-10-18) density and bits only once scanned
     if (geo) m.g = r.chunks.map((c) => [c.i, c.poly.nO, ...c.poly.pts.flat()]);
     return m;
   }
