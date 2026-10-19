@@ -445,7 +445,7 @@ export class World {
           const rock = best.r, H = R.HEAT; let dmg = S.laserDps * dt * this.boostOf(p, t);
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
           rock.touched = t; rock.home = false;
-          if (best.hit.core) { this.heatCore(rock, H.coreDirect * dt); this.hitCore(rock, dmg); }
+          if (best.hit.core) this.hitCore(rock, dmg);   // (owner, 2026-10-18) cutting the core itself makes no heat — only the chunks around it do
           else {
             const ch = best.hit.chunk;           // (owner, 2026-10-18) no anchoring: the laser cuts exactly what it points at
             p.laserChunk = ch.i;
