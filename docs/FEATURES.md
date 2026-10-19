@@ -70,6 +70,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 ## Map and HUD
 
 - **The minimap** (bottom left): Saturn, the station, the three rings, the locked line, your ship, ships near you, **your marked rock** (gold diamond; right-click / hold a rock → Mark). A gold arrow circles your ship pointing at the mark, on or off screen, and stays until the rock is unmarked or mined out (owner, 2026-10-18).
+- **The hamburger** (top left, owner, 2026-10-18): its menu says **Settings**; the Settings panel offers **Respawn at station** (the ship reappears just south of the station, hold kept aboard). ✕ or Esc closes it.
 - **The HUD** (bottom center): the Tutorial chip, the ship's name chip and the hold bar, with **one square per ore type above it** (ore color, its count). Names over other ships (dim, bright under the pointer).
 
 ## Live updates (kept)
@@ -79,7 +80,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## The look
 
-- **The design document's style** (`theme.css`): the void, plates with hairline borders, warm ink, Saturn gold for actions, signal red for the laser and the locked line. **Big Shoulders Display**, **Atkinson Hyperlegible**, **JetBrains Mono**, self-hosted. **Ships are pixel-art sprites from the owner's ship sheet** (owner, 2026-10-18: `website/assets/ships/` — Miner, Scanner, Booster, Hauler, cut from the sheet; drawn crisp at the ship's existing size, nose forward; the vector `shipart.js` art stands in only until a sprite loads); the station and Saturn from `shipart.js`; rocks chunk by chunk from the server's geometry in the chunk sheet's style (outlined slabs in three density greys, ore-colored bits, the blue swelling core); each rock's masonry is cached as one bitmap, redrawn when its layout or the zoom changes.
+- **The design document's style** (`theme.css`): the void, plates with hairline borders, warm ink, Saturn gold for actions, signal red for the laser and the locked line. **Big Shoulders Display**, **Atkinson Hyperlegible**, **JetBrains Mono**, self-hosted. **Ships are pixel-art sprites from the owner's ship sheet** (updated 2026-10-18 with doubled linework on the bigger ships; same sizes) (owner, 2026-10-18: `website/assets/ships/` — Miner, Scanner, Booster, Hauler, cut from the sheet; drawn crisp at the ship's existing size, nose forward; the vector `shipart.js` art stands in only until a sprite loads); the station and Saturn from `shipart.js`; rocks chunk by chunk from the server's geometry in the chunk sheet's style (outlined slabs in three density greys, ore-colored bits, the blue swelling core); each rock's masonry is cached as one bitmap, redrawn when its layout or the zoom changes.
 - **Motion:** exhaust trails, laser sparks, **the chunk under a laser bouncing slightly outward while it's cut — the rest of the asteroid holds still** (owner, 2026-10-18: no more whole-rock shake), crack debris, ore bits riding the beam home and the ship swelling as each lands, the piñata's burst rings, shards and screen shake, eased zoom, a camera that looks slightly ahead, a pulsing dock circle — skipped for reduced-motion browsers.
 
 ## Rejected / removed (don't reintroduce)

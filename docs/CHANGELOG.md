@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Hamburger menu and Settings (owner):** a hamburger button top left opens a menu with Settings; Settings has Respawn at station (`act` op `respawn`, hold kept). **Updated ship art:** the owner's new sheet with doubled linework on the bigger ships (same pixel sizes, so pivots and engines carry over).
 - **Tractor fields (owner):** F on the Miner and Hauler switches on holographic areas out of both sides of the hull (shaped from the owner's marks, reach scaled up to be useful: Miner ~40 m, Hauler ~62 m past the hull); haulable drops and jetcans inside are pulled in and scooped. Server-tested geometry; tuning gains `tractor`.
 - **Fix — zoom lag (owner report):** while the zoom eases, rocks keep their bitmaps (stretched) instead of re-rendering at each half-octave; once it settles they're redrawn one rock per frame. The chunk edges no longer use a clip (slow), drawn as inset lines instead.
 - **Fix — ship skipping when zoomed in (owner report):** my ship's correction toward the server used a fixed guess of how old each snapshot's position was; snapshots now carry the sim step's time (`st`), the error is low-passed with a small dead zone, and corrections ease in half as fast — snapshot timing noise no longer tugs the ship back and forth.

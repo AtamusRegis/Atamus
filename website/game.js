@@ -45,7 +45,7 @@ const SPRITE_META = {
   booster: { pivot: [0.423, 0.488], engines: [0.468, 0.548] },
   hauler:  { pivot: [0.405, 0.504], engines: [0.147, 0.368, 0.500, 0.635, 0.868] },
 };
-for (const k of ["miner", "scanner", "booster", "hauler"]) { const im = new Image(); im.src = "assets/ships/" + k + ".png?v=1"; SPRITES[k] = im; }
+for (const k of ["miner", "scanner", "booster", "hauler"]) { const im = new Image(); im.src = "assets/ships/" + k + ".png?v=2"; SPRITES[k] = im; }
 // (owner, 2026-10-18) the jetcan sheet's 66 x 35 sprites, base / party / public, each with its blink frame
 const CAN_SPR = ["base", "party", "public"].map((k) => [k, k + "_blink"].map((n) => { const im = new Image(); im.src = "assets/jetcan/" + n + ".png?v=1"; return im; }));
 const cansM = new Map();                       // id -> { id, x, y, h, kind, units, mine, haul }
@@ -1031,6 +1031,12 @@ function showMenu(x, y, items) {
   ctxMenu.hidden = false; ctxMenu.style.left = Math.min(x, innerWidth - 180) + "px"; ctxMenu.style.top = Math.min(y, innerHeight - ctxMenu.offsetHeight - 8) + "px";
 }
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
+// (owner, 2026-10-18) the hamburger: a menu with Settings; Settings offers a respawn at the station
+{ const bg = $("burger"), sp = $("settings");
+  bg.addEventListener("click", (e) => { e.stopPropagation(); const r = bg.getBoundingClientRect(); showMenu(r.left, r.bottom + 6, [["Settings", () => { sp.hidden = false; }]]); });
+  $("settings-x").addEventListener("click", () => { sp.hidden = true; });
+  $("respawn").addEventListener("click", () => { send({ t: "act", op: "respawn" }); sp.hidden = true; });
+  addEventListener("keydown", (e) => { if (e.code === "Escape") sp.hidden = true; }); }
 
 // ---- the optional per-ship tutorial (owner, 2026-10-18): each step completes when you actually do it ----
 const tutEv = { cut: false, popped: false, delivered: false, blast: false, refined: false };

@@ -479,6 +479,7 @@ export class World {
       const r = this.rocks.get(m.rock); if (!r) return;
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
     } else if (m.op === "jetcan") this.sendJetcan(p);
+    else if (m.op === "respawn") { this.respawn(p.id); p.tractor = false; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
     else if (m.op === "tractor") { if (this.shipOf(p).tractor) p.tractor = !p.tractor; }
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
       if (p.docked || !p.hold.length) return;
