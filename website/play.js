@@ -5,7 +5,7 @@ const updateStep = document.getElementById("update-step");
 const nameForm = document.getElementById("name-form"), nameIn = document.getElementById("name-in"), nameMsg = document.getElementById("name-msg");
 
 async function showEntry() {
-  try { const u = await Api.get("/auth/guest"); if (u && u.name) nameIn.value = u.name; } catch {}
+  try { const u = await Api.get("/auth/guest"); if (u && u.name) { nameIn.value = u.name; document.getElementById("title").textContent = "Welcome back"; } } catch {}
   nameForm.hidden = false;
   if (!nameIn.value) nameIn.focus();
 }

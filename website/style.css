@@ -449,3 +449,12 @@ html, body { background: var(--void); font-family: var(--f-body); }
 .update h3 { font-family: var(--f-display); font-weight: 600; font-size: 17px; letter-spacing: .03em; }
 .front-lead { font-size: 17px; }
 .update-title { font-family: var(--f-display); color: var(--gold); text-shadow: none; }
+
+/* (owner, 2026-10-18) the logo centered above the page instead of a header bar */
+.site-head { justify-content: center; padding: 34px 16px 18px; }
+.site-logo img { height: 54px; }
+@media (max-width: 420px) { .site-logo img { height: 40px; } }
+/* single-card pages: the logo and the card sit together in the middle of the screen */
+body:not(.front) { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; }
+body:not(.front) main { min-height: auto; padding-top: 8px; }
+body:not(.front) .site-head { padding-bottom: 6px; }
