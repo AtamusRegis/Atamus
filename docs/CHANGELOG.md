@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **One side for both fields (owner):** the withdraw field now comes out of the left side too — F switches the same field between deposit (red, out) and withdraw (blue, in), then off. Ship-to-ship transfers line up left side to left side.
 - **Field colors swapped on ships (owner: blue is intake, red is output):** a ship's withdraw field is blue, its deposit field red; the station's intake fields stay blue.
 - **Station deposit fields; field colors (owner):** the station's beams are now long blue holographic fields out of its 4 corner pods (161–760 m, 64 m wide), and deposited lumps ride them all the way in to the pod instead of vanishing at the line. Deposit fields are blue, withdraw red. Tuning blob drops once (`_v: 9`).
 - **Deposit and withdraw fields; station deposit beams (owner):** F now cycles deposit (left side) → withdraw (right side) → off; the fields are straight-sided rectangles. Withdraw does what the tractor did. Deposit streams the hold into a station deposit beam it touches (into storage) or into another ship's overlapping withdraw field; ore in transit is the destination's alone. The station has 4 continuous gold deposit beams (260–760 m out, diagonals). `SHIPS.*.tractor.span`, `xfer`, `TRACTOR.xferSpeed`, `STATION_BEAMS`.

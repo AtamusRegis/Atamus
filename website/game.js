@@ -679,9 +679,9 @@ function drawBitWaves() {
 // (owner, 2026-10-18) the cargo fields: a holographic rectangle out of one side of the hull — faint fill fading outward,
 // scan lines moving the way the cargo goes, a flickering edge (shape from the ship's rules; same test as the server)
 const FIELD_IN = "70,196,226", FIELD_OUT = "232,98,82";   // (owner, 2026-10-18) blue takes in, red puts out
-function drawTractor(s, S, ts, sd) {
-  // sd -1: the deposit field (left, red, lines drifting out); 1: the withdraw field (right, blue, lines drifting in)
-  const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom, dep = sd < 0;
+function drawTractor(s, S, ts, dep) {
+  // (owner, 2026-10-18) both fields out of the left side: deposit red with lines drifting out, withdraw blue drifting in
+  const sd = -1, T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom;
   const rgb = dep ? FIELD_OUT : FIELD_IN, edge = "rgb(" + rgb + ")";   // (owner, 2026-10-18) a ship's deposit puts out (red), its withdraw takes in (blue)
   cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is to starboard
   const x0 = sd * hw * L, x1 = sd * (hw + T.depth) * L, y0 = -(T.span[1] - pv) * L, y1 = -(T.span[0] - pv) * L;
@@ -732,8 +732,8 @@ function drawXfers() {
 function shipFx(s, ts, under) {
   const r = s.row, kind = G.kinds[r[4]] || "miner", fl = r[5], lw = (px) => px / zoom, lay = shipLayout(G.ships[kind].art), yc = lay.yc;
   if (under) {
-    if (fl & 128 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, -1);
-    if (fl & 256 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, 1);
+    if (fl & 128 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, true);
+    if (fl & 256 && G.ships[kind].tractor) drawTractor(s, G.ships[kind], ts, false);
     if (fl & 32) {                             // boosted: the ship glows blue
       const gr = 48 + Math.sin(ts * 5) * 4, g2 = cx.createRadialGradient(s.x, s.y, 10, s.x, s.y, gr);
       g2.addColorStop(0, "rgba(124,195,214,.5)"); g2.addColorStop(1, "rgba(124,195,214,0)");

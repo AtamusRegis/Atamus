@@ -393,8 +393,8 @@ export class World {
       if (p.cargo === 2 && S.tractor && !dock && this.usedSpace(p) < S.hold - 0.5) {
         const pull = (R.TRACTOR.pull || 45) * dt, reach = S.len * (1 + S.tractor.depth + (S.hw || 0.2));
         const drag = (o) => { const dx = p.x - o.x, dy = p.y - o.y, L = hyp(dx, dy); if (L < 1) return false; const k = Math.min(L, pull) / L; o.x += dx * k; o.y += dy * k; return true; };
-        for (const d of this.drops.values()) if (Math.abs(d.x - p.x) < reach && Math.abs(d.y - p.y) < reach && this.inTractor(p, S, d.x, d.y, 1) && drag(d)) d.dirty = true;
-        for (const c of this.cans.values()) if ((c.owner !== p.id || c.armed) && this.canHaul(p, c) && Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < reach && this.inTractor(p, S, c.x, c.y, 1) && drag(c)) c.dirty = true;
+        for (const d of this.drops.values()) if (Math.abs(d.x - p.x) < reach && Math.abs(d.y - p.y) < reach && this.inTractor(p, S, d.x, d.y, -1) && drag(d)) d.dirty = true;
+        for (const c of this.cans.values()) if ((c.owner !== p.id || c.armed) && this.canHaul(p, c) && Math.abs(c.x - p.x) < reach && Math.abs(c.y - p.y) < reach && this.inTractor(p, S, c.x, c.y, -1) && drag(c)) c.dirty = true;
       }
       // (owner, 2026-10-18) the deposit field: the hold streams out into a station beam it touches, or into another ship's
       // withdraw field it overlaps
@@ -489,7 +489,7 @@ export class World {
     }
     for (const p of this.players.values()) if (p.meDirty) { p.dirty = true; }
   }
-  // is a world point inside this ship's cargo field on side sd (-1 left: deposit, 1 right: withdraw)? The ship's frame:
+  // is a world point inside this ship's cargo field on side sd (-1 left — both fields now, owner 2026-10-18; 1 right)? The ship's frame:
   // along = toward the nose, side = to starboard; the field a rectangle from the hull's side out to depth
   inTractor(p, S, x, y, sd) {
     const T = S.tractor, L = S.len, fx = Math.sin(p.h), fy = -Math.cos(p.h), dx = x - p.x, dy = y - p.y;
@@ -518,8 +518,8 @@ export class World {
     const [mx, my] = this.fieldMid(p, S, -1);
     for (const q of this.players.values()) {
       if (q === p || q.cargo !== 2 || q.docked) continue; const Q = this.shipOf(q); if (!Q.tractor || hyp(q.x - p.x, q.y - p.y) > (S.len + Q.len) * 1.5) continue;
-      const [qx, qy] = this.fieldMid(q, Q, 1);
-      if (!this.inTractor(q, Q, mx, my, 1) && !this.inTractor(p, S, qx, qy, -1)) continue;
+      const [qx, qy] = this.fieldMid(q, Q, -1);
+      if (!this.inTractor(q, Q, mx, my, -1) && !this.inTractor(p, S, qx, qy, -1)) continue;
       const coming = this.xfers.reduce((a, x) => a + (x.to === q.id ? x.u : 0), 0);
       if (this.usedSpace(q) + coming + u > Q.hold) continue;
       return { id: q.id, x: qx, y: qy };
