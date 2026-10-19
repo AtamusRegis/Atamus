@@ -678,11 +678,11 @@ function drawBitWaves() {
 }
 // (owner, 2026-10-18) the cargo fields: a holographic rectangle out of one side of the hull — faint fill fading outward,
 // scan lines moving the way the cargo goes, a flickering edge (shape from the ship's rules; same test as the server)
-const FIELD_DEP = "70,196,226", FIELD_WD = "232,98,82";   // (owner, 2026-10-18) deposit blue, withdraw red
+const FIELD_IN = "70,196,226", FIELD_OUT = "232,98,82";   // (owner, 2026-10-18) blue takes in, red puts out
 function drawTractor(s, S, ts, sd) {
-  // sd -1: the deposit field (left, blue, lines drifting out); 1: the withdraw field (right, red, lines drifting in)
+  // sd -1: the deposit field (left, red, lines drifting out); 1: the withdraw field (right, blue, lines drifting in)
   const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom, dep = sd < 0;
-  const rgb = dep ? FIELD_DEP : FIELD_WD, edge = "rgb(" + rgb + ")";   // (owner, 2026-10-18) blue deposits, red withdraws
+  const rgb = dep ? FIELD_OUT : FIELD_IN, edge = "rgb(" + rgb + ")";   // (owner, 2026-10-18) a ship's deposit puts out (red), its withdraw takes in (blue)
   cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is to starboard
   const x0 = sd * hw * L, x1 = sd * (hw + T.depth) * L, y0 = -(T.span[1] - pv) * L, y1 = -(T.span[0] - pv) * L;
   const g = cx.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, "rgba(" + rgb + ",0.22)"); g.addColorStop(1, "rgba(" + rgb + ",0.04)");
@@ -700,11 +700,11 @@ function drawStationBeams(ts) {
   for (let k = 0; k < B.n; k++) {
     const a = (B.a0 + k * 360 / B.n) * Math.PI / 180;
     cx.save(); cx.translate(sx, sy); cx.rotate(a);              // +x runs out along the field
-    const g = cx.createLinearGradient(B.r0, 0, B.r1, 0); g.addColorStop(0, "rgba(" + FIELD_DEP + ",0.24)"); g.addColorStop(1, "rgba(" + FIELD_DEP + ",0.05)");
+    const g = cx.createLinearGradient(B.r0, 0, B.r1, 0); g.addColorStop(0, "rgba(" + FIELD_IN + ",0.24)"); g.addColorStop(1, "rgba(" + FIELD_IN + ",0.05)");
     cx.fillStyle = g; cx.fillRect(B.r0, -B.w / 2, B.r1 - B.r0, B.w);
-    cx.strokeStyle = "rgba(" + FIELD_DEP + ",0.6)"; cx.lineWidth = lw(1);
+    cx.strokeStyle = "rgba(" + FIELD_IN + ",0.6)"; cx.lineWidth = lw(1);
     for (let j = 0; j < 5; j++) { const ph = (ts * 0.5 + j / 5) % 1, x = B.r1 - (B.r1 - B.r0) * ph; cx.globalAlpha = Math.min(1, ph * 4) * (0.35 + 0.65 * (1 - ph)); cx.beginPath(); cx.moveTo(x, -B.w / 2); cx.lineTo(x, B.w / 2); cx.stroke(); }
-    cx.globalAlpha = 0.6 + 0.2 * Math.sin(ts * 7 + k); cx.strokeStyle = "rgb(" + FIELD_DEP + ")"; cx.lineWidth = lw(1.4);
+    cx.globalAlpha = 0.6 + 0.2 * Math.sin(ts * 7 + k); cx.strokeStyle = "rgb(" + FIELD_IN + ")"; cx.lineWidth = lw(1.4);
     cx.beginPath(); cx.moveTo(B.r0, -B.w / 2); cx.lineTo(B.r1, -B.w / 2); cx.moveTo(B.r0, B.w / 2); cx.lineTo(B.r1, B.w / 2); cx.moveTo(B.r1, -B.w / 2); cx.lineTo(B.r1, B.w / 2); cx.stroke();
     cx.globalAlpha = 1; cx.restore();
   }
