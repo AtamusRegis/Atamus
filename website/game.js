@@ -421,8 +421,9 @@ function drawBackground(t) {
 const hex2n = (h) => { if (h.startsWith("rgb")) { const m = h.match(/\d+/g); return (+m[0] << 16) | (+m[1] << 8) | +m[2]; } return parseInt(h.slice(1), 16); };
 const mix = (h1, h2, k) => { const a = hex2n(h1), b = hex2n(h2), c = (i) => Math.round(((a >> i) & 255) + ((((b >> i) & 255) - ((a >> i) & 255)) * k)); return `rgb(${c(16)},${c(8)},${c(0)})`; };
 // (owner, 2026-10-18) the chunk sheet's densities, D1 lightest .. D3 darkest: [fill, lit edge, shadow edge, speckle]
-const DSHADE = [["#8fa8b7", "#b0c7d4", "#79909e", "#62768a"], ["#8a91a0", "#a3aab9", "#747a88", "#5f6573"], ["#4f545e", "#656b77", "#40444d", "#31343c"],
-  ["#1d1e24", "#2e3038", "#121318", "#3a3c45"]];   // [3]: bedrock (owner, 2026-10-18), near-black
+// (owner, 2026-10-18) grayscale, darker = denser
+const DSHADE = [["#a6a6a6", "#c0c0c0", "#8c8c8c", "#7a7a7a"], ["#7e7e7e", "#969696", "#686868", "#5a5a5a"], ["#535353", "#666666", "#424242", "#343434"],
+  ["#1e1e1e", "#2e2e2e", "#131313", "#3a3a3a"]];   // [3]: bedrock (owner, 2026-10-18), near-black
 const DUNSCAN = ["#6e6a64", "#837e77", "#5d5953", "#66625c"];   // (owner, 2026-10-18) unscanned: one flat stone grey, no density, no bits
 const UNSCANNED = "#838999", BEDROCK = "#17090d", OUTLINE = "#05070c";
 const h01 = (i, k) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };

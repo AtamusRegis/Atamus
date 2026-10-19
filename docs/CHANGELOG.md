@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Grayscale chunks (owner):** scanned chunks are neutral greys instead of bluish — light, mid, dark by density, bedrock near-black.
 - **Scanning and bedrock (owner):** a rock's layers show only to pilots within 300 m of it; chunks hide density and bits until scanned (shared). The Scanner's scan beam scans through to the first unscanned chunk on its line, toward the core a chunk at a time, denser slower, bedrock ×8 — drawn as three sweeping beams plus radar crescents that dissipate at the chunk. Bedrock is back as a fourth chunk kind (6 / 12 / 20% by ring) the Miner can't cut. Scanner tutorial. `RING_BEDROCK`, `CHUNK.scanK`/`s1`–`sBed`, `SHIPS.scanner.scanDps`/`scanRange`, `ROCK.detailR`.
 - **One side for both fields (owner):** the withdraw field now comes out of the left side too — F switches the same field between deposit (red, out) and withdraw (blue, in), then off. Ship-to-ship transfers line up left side to left side.
 - **Field colors swapped on ships (owner: blue is intake, red is output):** a ship's withdraw field is blue, its deposit field red; the station's intake fields stay blue.
