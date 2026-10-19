@@ -196,6 +196,7 @@ export class World {
     }
     for (const r of [...this.rocks.values()]) if (r.touched && t - r.touched > R.ROCK.linger * 1000) this.dropRock(r, R.ROCK.respawn);
     for (const d of [...this.drops.values()]) if (t - d.born > R.DROPS.linger * 1000) this.deleteDrop(d);
+    this.mergeDrops(t);
     const J = R.JETCAN;                        // jetcans: private ones turn public on time (a party's also when it disbands); public ones expire
     for (const c of [...this.cans.values()]) {
       if (!c.publicAt && (t - c.born > J.privateFor * 1000 || (c.party && !this.partyAlive(c.party)))) { c.publicAt = t; c.dirty = true; }
@@ -650,13 +651,28 @@ export class World {
       this.drops.set(d.id, d);
     }
   }
+  // (owner, 2026-10-18) loose ore of one type lying close together combines into one bigger drop, and every combination
+  // restarts its 5-minute clock
+  mergeDrops(t) {
+    const R0 = R.DROPS.mergeR || 20, grid = new Map(), key = (x, y) => Math.floor(x / R0) + "," + Math.floor(y / R0);
+    for (const d of this.drops.values()) { const k = key(d.x, d.y); let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(d); }
+    for (const d of [...this.drops.values()]) {
+      if (!this.drops.has(d.id)) continue;
+      const cx0 = Math.floor(d.x / R0), cy0 = Math.floor(d.y / R0);
+      for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) for (const e of grid.get((cx0 + ix) + "," + (cy0 + iy)) || []) {
+        if (e === d || e.ore !== d.ore || !this.drops.has(e.id) || hyp(e.x - d.x, e.y - d.y) > R0) continue;
+        const u = d.units + e.units; d.x = (d.x * d.units + e.x * e.units) / u; d.y = (d.y * d.units + e.y * e.units) / u;
+        d.units = u; d.born = t; d.dirty = true; this.deleteDrop(e);
+      }
+    }
+  }
   deleteDrop(d) { this.drops.delete(d.id); pool.query(`DELETE FROM ring_drops WHERE id = $1`, [d.id]).catch(() => {}); }
   async saveDrop(d) {
     if (d.fresh) { d.fresh = false;
       await pool.query(`INSERT INTO ring_drops (id, x, y, ore, units, created_at) VALUES ($1, $2, $3, $4, $5, to_timestamp($6 / 1000.0)) ON CONFLICT (id) DO UPDATE SET units = $5, x = $2, y = $3`,
         [d.id, d.x, d.y, d.ore, d.units, d.born]).catch((e) => console.error("ring drop", e));
       await pool.query(`SELECT setval(pg_get_serial_sequence('ring_drops','id'), GREATEST($1, (SELECT COALESCE(MAX(id),1) FROM ring_drops)))`, [this.dropSeq]).catch(() => {});
-    } else await pool.query(`UPDATE ring_drops SET units = $2, x = $3, y = $4 WHERE id = $1`, [d.id, d.units, d.x, d.y]).catch((e) => console.error("ring drop", e));
+    } else await pool.query(`UPDATE ring_drops SET units = $2, x = $3, y = $4, created_at = to_timestamp($5 / 1000.0) WHERE id = $1`, [d.id, d.units, d.x, d.y, d.born]).catch((e) => console.error("ring drop", e));
   }
 
   // ---- delivery: the hold pays straight into the deliverer's station storage ----

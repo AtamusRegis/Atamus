@@ -631,14 +631,15 @@ function drawWorld(t) {
     o.dx += (o.x - o.dx) * 0.25; o.dy += (o.y - o.dy) * 0.25;
     const bob = Math.sin(ts * 1.6 + o.ph) * 1.5, oc2 = G.ores[ORE_KEYS[o.ore]] ? G.ores[ORE_KEYS[o.ore]].color : "#fff";
     cx.save(); cx.translate(o.dx, o.dy + bob); cx.rotate(o.ph + ts * 0.3);
+    const ds = Math.min(3, Math.sqrt((o.units || 100) / 100)); cx.scale(ds, ds);   // (owner, 2026-10-18) combined drops are bigger
     cx.fillStyle = oc2; cx.globalAlpha = 0.22; cx.fillRect(-7, -7, 14, 14); cx.globalAlpha = 1;
     cx.fillRect(-4, -4, 8, 8);
-    cx.strokeStyle = "#05070c"; cx.lineWidth = 1; cx.strokeRect(-4, -4, 8, 8);
+    cx.strokeStyle = "#05070c"; cx.lineWidth = 1 / ds; cx.strokeRect(-4, -4, 8, 8);
     cx.restore();
     if (o.gone) {                              // (owner, 2026-10-18) the despawn timer: a small ring that sweeps away over its 5 minutes
       const left = Math.max(0, Math.min(1, (o.gone - (Date.now() - (srvOff || 0))) / ((G.drops.linger || 300) * 1000)));
-      cx.strokeStyle = oc2; cx.lineWidth = lw(1.5); cx.globalAlpha = 0.18; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10, 0, TAU); cx.stroke();
-      cx.globalAlpha = 0.75; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10, -Math.PI / 2, -Math.PI / 2 + TAU * left); cx.stroke(); cx.globalAlpha = 1;
+      cx.strokeStyle = oc2; cx.lineWidth = lw(1.5); cx.globalAlpha = 0.18; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10 * ds, 0, TAU); cx.stroke();
+      cx.globalAlpha = 0.75; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10 * ds, -Math.PI / 2, -Math.PI / 2 + TAU * left); cx.stroke(); cx.globalAlpha = 1;
     }
   }
   // (owner, 2026-10-18) jetcans: the sheet's sprite by kind (base / party / public), its light blinking
