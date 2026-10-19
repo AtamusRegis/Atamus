@@ -19,7 +19,7 @@ import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.j
 // the game's numbers, for the clients (drawing, prediction, the station panel); sent again whenever tuning changes one
 const gameInfo = () => ({ world: R.WORLD, ships: R.SHIPS, kinds: R.SHIP_KINDS, fly: R.FLY, chunk: R.CHUNK, core: R.CORE,
   laser: R.LASER, rock: R.ROCK, ringShells: R.RING_SHELLS, ringOres: R.RING_ORES, ringSpawn: R.RING_SPAWN,
-  ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, econ: R.ECON,
+  ores: R.ORES, refinedSpace: R.REFINED_SPACE, drops: R.DROPS, jetcan: R.JETCAN, econ: R.ECON,
   sectors: R.SECTORS, sectorNames: R.SECTOR_NAMES });
 const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff sessions — the game client has no dev UI)
 
@@ -153,6 +153,7 @@ export function attachGameServer(httpServer) {
       }
       for (const id of [...vers.keys()]) if (!seen.has(id)) vers.delete(id);   // out of vision: sent fresh on return
       const dr = diff(ws, "knownDrops", world.dropRows(p)); if (dr) send(ws, { t: "drops", ...dr });
+      const cn = diff(ws, "knownCans", world.canRows(p)); if (cn) send(ws, { t: "cans", ...cn });
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
     }
   }, 200);

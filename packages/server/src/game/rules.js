@@ -72,7 +72,14 @@ export const ORES = {
 export const REFINED_SPACE = 0.2;              // (kept for old refined cargo still in holds)
 
 // ---- ore drops: the core's piñata, free for anyone, picked up by flying over ----
-export const DROPS = { linger: 1800, lump: 100, spread: 1.4 };   // s a drop drifts; units per lump; how far out they scatter (x rock radius)
+export const DROPS = { linger: 300, lump: 100, spread: 1.4 };   // s a drop drifts (owner, 2026-10-18: 5 minutes, a shrinking ring shows it); units per lump; how far out they scatter (x rock radius)
+// (owner, 2026-10-18) jetcans: a pilot sends one out from the hold — up to 100 ore bits, one at a time. Solo pilots make
+// base cans (only they can haul from them), party members party cans (only that party); either turns public (anyone)
+// after privateFor s, a party can also when its party disbands. A public can lasts publicFor s, then it's gone.
+// len: drawn length (m, the sheet's 66 px at the ships' 0.403 m/px); pickR: fly within this to haul from it; ownerAway:
+// the owner hauls from their own can only after flying this far from it (no re-scooping it on the spot); topUpR: an
+// owner's second send tops up their can when within this.
+export const JETCAN = { bits: 100, privateFor: 1800, publicFor: 900, len: 26.6, pickR: 40, ownerAway: 100, topUpR: 200 };
 
 export const ECON = { dockR: 220 };
 export const START = { ship: "miner" };

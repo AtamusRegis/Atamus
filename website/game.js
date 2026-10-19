@@ -46,6 +46,9 @@ const SPRITE_META = {
   hauler:  { pivot: [0.405, 0.504], engines: [0.147, 0.368, 0.500, 0.635, 0.868] },
 };
 for (const k of ["miner", "scanner", "booster", "hauler"]) { const im = new Image(); im.src = "assets/ships/" + k + ".png?v=1"; SPRITES[k] = im; }
+// (owner, 2026-10-18) the jetcan sheet's 66 x 35 sprites, base / party / public, each with its blink frame
+const CAN_SPR = ["base", "party", "public"].map((k) => [k, k + "_blink"].map((n) => { const im = new Image(); im.src = "assets/jetcan/" + n + ".png?v=1"; return im; }));
+const cansM = new Map();                       // id -> { id, x, y, h, kind, units, mine, haul }
 function spawnPart(x, y, o) { if (parts.length > 360) parts.splice(0, 40); parts.push({ x, y, vx: o.vx || 0, vy: o.vy || 0, life: o.life || 0.6, age: 0, size: o.size || 3, color: o.color || "#fff", drag: o.drag ?? 2.5, plus: o.plus }); }
 function burst(x, y, n, colors, speed) { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = speed * (0.4 + Math.random()); spawnPart(x, y, { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.5, size: 2 + Math.random() * 3.5, color: colors[(Math.random() * colors.length) | 0], drag: 3 }); } }
 function drawParts(wdt) {
@@ -287,8 +290,11 @@ function onMsg(m) {
     details.set(m.id, { v: m.v, coreR: m.coreR, c: cl, worked: cl.some((x) => x[5] & 1), polys });
   }
   else if (m.t === "drops") {
-    for (const row of m.a || []) { const [id, x, y, ore, units] = row; const o = dropsM.get(id); if (o) Object.assign(o, { x, y, ore, units }); else dropsM.set(id, { id, x, y, ore, units, ph: (id * 2.39) % TAU, dx: x, dy: y }); }
+    for (const row of m.a || []) { const [id, x, y, ore, units, gone] = row; const o = dropsM.get(id); if (o) Object.assign(o, { x, y, ore, units, gone }); else dropsM.set(id, { id, x, y, ore, units, gone, ph: (id * 2.39) % TAU, dx: x, dy: y }); }
     for (const id of m.x || []) dropsM.delete(id);
+  } else if (m.t === "cans") {
+    for (const row of m.a || []) { const [id, x, y, h, kind, units, mine, haul] = row; cansM.set(id, { id, x, y, h: h / 1000, kind, units, mine, haul }); }
+    for (const id of m.x || []) cansM.delete(id);
   } else if (m.t === "me") { const wasDocked = ME.docked, wasShip = ME.ship; ME = m; if (ME.ship !== wasShip) modeIdx = 0; if (!wasDocked && ME.docked) addShake(2.2); drawStation_(); drawHud(); refreshTip(); }
   else if (m.t === "game") {
     G = m.game; ORE_KEYS = Object.keys(G.ores); hudKey = ""; stKey = "";
@@ -309,6 +315,7 @@ function onMsg(m) {
     }
     else if (m.k === "deliver") { burst(m.x, m.y, 14, [C.gold, "#fff"], 65); if (m.i === myId) { addShake(1); tutEv.delivered = true; } }
     else if (m.k === "lance") { addShake(2.5 * Math.max(0, 1 - d / 700)); if (d < 420) tutEv.blast = true; }
+    else if (m.k === "can") { burst(m.x, m.y, 8, [C.gold, "#fff"], 50); if (m.i === myId) addShake(0.8); }
     else if (m.k === "take") { const oc = G.ores[ORE_KEYS[m.ore]]; burst(m.x, m.y, 5, [oc ? oc.color : "#fff", "#fff"], 45); }
     else if (m.k === "refine") { burst(m.x, m.y, 7, [C.ore, "#fff"], 45); if (m.i === myId) tutEv.refined = true; }
     else if (m.k === "scan") burst(m.x, m.y, 5, [C.ice, "#fff"], 35);
@@ -578,6 +585,19 @@ function drawWorld(t) {
     cx.fillRect(-4, -4, 8, 8);
     cx.strokeStyle = "#05070c"; cx.lineWidth = 1; cx.strokeRect(-4, -4, 8, 8);
     cx.restore();
+    if (o.gone) {                              // (owner, 2026-10-18) the despawn timer: a small ring that sweeps away over its 5 minutes
+      const left = Math.max(0, Math.min(1, (o.gone - (Date.now() - (srvOff || 0))) / ((G.drops.linger || 300) * 1000)));
+      cx.strokeStyle = oc2; cx.lineWidth = lw(1.5); cx.globalAlpha = 0.18; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10, 0, TAU); cx.stroke();
+      cx.globalAlpha = 0.75; cx.beginPath(); cx.arc(o.dx, o.dy + bob, 10, -Math.PI / 2, -Math.PI / 2 + TAU * left); cx.stroke(); cx.globalAlpha = 1;
+    }
+  }
+  // (owner, 2026-10-18) jetcans: the sheet's sprite by kind (base / party / public), its light blinking
+  for (const c of cansM.values()) {
+    const sp = CAN_SPR[c.kind] || CAN_SPR[0], im = sp[(ts + c.id * 0.37) % 1.4 > 1.15 ? 1 : 0];
+    if (!im.complete || !im.naturalWidth) continue;
+    const len = (G.jetcan && G.jetcan.len) || 26.6, hgt = len * im.naturalHeight / im.naturalWidth, bob = Math.sin(ts * 1.1 + c.id) * 0.8;
+    cx.save(); cx.translate(c.x, c.y + bob); cx.rotate(c.h - Math.PI / 2 + Math.sin(ts * 0.4 + c.id) * 0.05); cx.imageSmoothingEnabled = false;
+    cx.drawImage(im, -len / 2, -hgt / 2, len, hgt); cx.restore();
   }
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, true);
   for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) {
@@ -875,7 +895,7 @@ function drawCargo() {
 }
 hud.cargo.addEventListener("contextmenu", (e) => {
   e.preventDefault(); if (!G || myShip().refineUnit || !(ME.hold || []).length) return;
-  hideTip(); showMenu(e.clientX, e.clientY, [["Drop cargo", () => send({ t: "act", op: "drop" })]]);
+  hideTip(); showMenu(e.clientX, e.clientY, [["Jetcan", () => send({ t: "act", op: "jetcan" })], ["Drop cargo", () => send({ t: "act", op: "drop" })]]);
 });
 // the tooltip: one at a time, following the pointer
 const tipEl = $("tip"); let tipFn = null, tipX = 0, tipY = 0;
@@ -1027,6 +1047,7 @@ window.Atamus = {
   get me() { return { ...mine, id: myId, name: myName }; }, get state() { return ME; }, get game() { return G; },
   get rocks() { return [...rocks.values()].map((r) => ({ id: r.id, x: r.x, y: r.y, shells: r.shells, r: r.r, broken: r.broken, hp: r.hp, tow: r.tow, heat: r.heat || 0, fill: r.fill || 0 })); },
   chunks: (id) => details.get(id) || null,
+  get cans() { return [...cansM.values()]; },
   get drops() { return [...dropsM.values()].map((o) => ({ id: o.id, x: o.x, y: o.y, ore: ORE_KEYS[o.ore], units: o.units })); },
   get ships() { return [...ships.values()].filter((s) => s.row).map((s) => ({ id: s.id, x: s.x, y: s.y, near: s.near, ship: G && G.kinds[s.row[4]], fl: s.row[5], len: s.row[7], bt: (s.row[11] || 0) / 100, ck: (s.row[12] || 0) / 100, beamTgt: s.row[9] || 0, drill: s.row[5] & 16 ? { rock: s.row[8], depth: s.row[13] || 0 } : null })); },
   cast: (a) => { const [mx2, my2] = muzzleOf(mine.x, mine.y, mine.h, myShip()); return castLocal(mx2, my2, a, myShip().laserRange); },

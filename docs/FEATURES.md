@@ -39,8 +39,15 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 ## The piñata (owner, 2026-10-18)
 
 - **The core holds its own corium (owner, 2026-10-18): deeper asteroids and asteroids with more layers drop more** — 100 × layers × the ring's factor (1, 1.5, 2) units, in whole lumps (`CORIUM`). Corium is a new ore (violet), found only in cores.
-- **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for 30 minutes, then it's gone. Drops survive restarts (`ring_drops`).
+- **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for **5 minutes**, then it's gone; **a small ring around it sweeps away over those 5 minutes** as its despawn timer (owner, 2026-10-18). Drops survive restarts (`ring_drops`).
 - **Drop cargo:** right-click (or hold) the cargo squares to jettison the hold as drops where you sit.
+
+## Jetcans (owner, 2026-10-18)
+
+- **Send out a jetcan:** right-click (or hold) the cargo squares → **Jetcan**. The hold pours into a new can just behind the ship, **up to 100 ore bits** (10,000 units; the rest stays aboard). **One at a time:** sending again with your can within 200 m tops it up; farther off, the note says it's already out. Once your can turns public it's no longer yours, and you can send another.
+- **Who can haul from it:** a **base** can only its owner; a **party** can only that party's members; a **public** can anyone. Haul by flying within 40 m — it pours in up to the room aboard, in as many trips as it takes; an empty can is gone. **The owner can haul from their own can only after flying 100 m away from it** (no re-scooping it on the spot; a top-up re-arms that).
+- **Solo pilots make base cans; party members make party cans.** Either **turns public after 30 minutes**; a party can also **when its party disbands**. **A public can lasts 15 minutes**, then it's gone with whatever is left in it. (There are no parties in the game right now, so every can starts as a base can; the party rules are wired for when parties return.)
+- Drawn from the owner's jetcan sheet: the 66 × 35 sprites (base, party with a purple outline, public with a white one), each blinking its light, 26.6 m long (the ships' 0.403 m per sheet pixel), lying along the heading it was sent on (`website/assets/jetcan/`, `JETCAN` in rules.js). Cans survive restarts (`ring_jetcans`).
 - **Delivery** (flying into the station circle) empties the hold **into the deliverer's own station storage**.
 
 ## The ships
