@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Space brakes (owner):** holding Space stops the ship hard (2.5× its acceleration, overriding thrust; server-applied, predicted on the client). `FLY.hardBrake`.
 - **Drops combine (owner):** loose ore of one type within 20 m combines into one bigger drop (checked each second; drawn larger by its size), and each combination restarts its 5-minute timer. `DROPS.mergeR`.
 - **Core colors (owner):** cores are yellow when cool and run orange, then red as they heat (were blue → orange).
 - **Fix — mining layers non-stop left the core cold (owner report):** chunks break in a second or two, and a broken chunk's heat simply vanished, so the core only ever saw the one chunk under the laser and cooled faster than that warmed it. A chunk broken hot now dumps its heat into the core (`breakIn` 0.06 × heat), and the core cools slower (0.01 / s). Verified on a fresh local copy: a small ring-1 core went 0 → 86% in 21 s of non-stop mining and overheated.

@@ -56,7 +56,7 @@ export const TRACTOR = { pull: 45, xferSpeed: 260 };
 // from r0 (the pods' outer edge) to r1 m from the station's center, at angles a0 + k x 90° (deg)
 export const STATION_BEAMS = { n: 4, r0: 161, r1: 760, w: 64, a0: 45 };   // (owner: long, like beams)
 // shared flying numbers (every hull)
-export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };   // (the defaults: each ship's own accel / turn win)
+export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24, hardBrake: 2.5 };   // hardBrake (owner, 2026-10-18): Space stops a ship at its accel x this   // (the defaults: each ship's own accel / turn win)
 
 // ---- the asteroid: masonry around a core ----
 // (owner, 2026-10-18) the chunk sheet: a core, then layers of masonry, every layer the same thickness with a gap between.

@@ -127,7 +127,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyF" && !e.repeat) { if (G && myShip().tractor) send({ t: "act", op: "cargo" }); else toggleMode(); e.preventDefault(); }   // (owner, 2026-10-18) F: deposit field → withdraw field → off
   const mn = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];          // 1 / 2 pick the mode switch's segments directly
   if (mn !== undefined) { const labels = modeLabels(); if (labels && mn < labels.length) { modeIdx = mn; drawHud(); e.preventDefault(); } }
-  if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }
+  if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "Space"].includes(e.code)) { keys.add(e.code); e.preventDefault(); }   // (Space: the brakes, owner 2026-10-18)
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); firing = false; });
@@ -370,9 +370,9 @@ function onSnap(m) {
 function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + (myShip().r || G.fly.shipR) && r <= G.world.lockedR; }
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, rock = ME.tow && rocks.get(ME.tow);
-  const spd = S.speed * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
-  const acc = S.accel || F.accel, a = (push > 0.01 ? acc : acc * F.brake / F.accel) * dt;   // (per ship, as the server)
-  let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
+  const brk = keys.has("Space") && !typing(), spd = S.speed * (rock ? towFactor(rock.r) : 1), push = brk ? 0 : hyp(inp.x, inp.y);
+  const acc = S.accel || F.accel, a = (brk ? acc * (F.hardBrake || 2.5) : push > 0.01 ? acc : acc * F.brake / F.accel) * dt;   // (per ship, as the server; Space brakes hard)
+  let ex = (brk ? 0 : inp.x * spd) - mine.vx, ey = (brk ? 0 : inp.y * spd) - mine.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
   mine.vx += ex; mine.vy += ey;
   if (mine.vx || mine.vy) {
     const nx = mine.x + mine.vx * dt, ny = mine.y + mine.vy * dt;
@@ -399,7 +399,7 @@ function stepMe(dt, inp) {
 let lastSent = 0, lastKey = "", heartbeat = 0;
 function sendInput(inp, t) {
   const a = Math.round(aimAngle() * 100) / 100, f = firing ? 1 : 0;
-  const msg = { t: "in", x: Math.round(inp.x * 100) / 100, y: Math.round(inp.y * 100) / 100, h: Math.round(mine.h * 100) / 100, a, f, md: modeIdx === 1 && hasAlt() ? 1 : 0 };
+  const msg = { t: "in", x: Math.round(inp.x * 100) / 100, y: Math.round(inp.y * 100) / 100, h: Math.round(mine.h * 100) / 100, a, f, md: modeIdx === 1 && hasAlt() ? 1 : 0, b: keys.has("Space") && !typing() ? 1 : 0 };
   const key = JSON.stringify(msg);
   if ((key !== lastKey && t - lastSent >= 50) || t - heartbeat > 500) { send(msg); lastKey = key; lastSent = heartbeat = t; }
 }

@@ -323,7 +323,7 @@ export class World {
       const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = (this.shipOf(p).turn || FLY.turn) * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
       p.h = p.h + Math.max(-mx, Math.min(mx, d)); p.h = Math.atan2(Math.sin(p.h), Math.cos(p.h)); p.hAt = t;
     }
-    p.aim = n(m.a); p.firing = m.f === 1; p.alt = m.md === 1;   // alt: the Booster's boost beam (else its coolant)
+    p.aim = n(m.a); p.firing = m.f === 1; p.alt = m.md === 1; p.brk = m.b === 1;   // alt: the Booster's boost beam (else its coolant)
   }
 
   // the laser's ray into a rock: whatever it meets first — an unbroken chunk's exact polygon, or the core's circle
@@ -363,9 +363,9 @@ export class World {
   step(dt) {
     const t = now(); this.simT = t;
     for (const p of this.players.values()) {
-      const S = this.shipOf(p), push = hyp(p.fx, p.fy);
-      const acc = S.accel || FLY.accel, a = (push > 0.01 ? acc : acc * FLY.brake / FLY.accel) * dt;   // (per ship: bigger is slower to speed up)
-      let ex = p.fx * S.speed - p.vx, ey = p.fy * S.speed - p.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
+      const S = this.shipOf(p), brk = !!p.brk, push = brk ? 0 : hyp(p.fx, p.fy);
+      const acc = S.accel || FLY.accel, a = (brk ? acc * (FLY.hardBrake || 2.5) : push > 0.01 ? acc : acc * FLY.brake / FLY.accel) * dt;   // (per ship: bigger is slower to speed up; Space brakes hard)
+      let ex = (brk ? 0 : p.fx * S.speed) - p.vx, ey = (brk ? 0 : p.fy * S.speed) - p.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
       p.vx += ex; p.vy += ey;
       if (p.vx || p.vy) {
         const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
