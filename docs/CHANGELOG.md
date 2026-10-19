@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Fix — breaking a core gave no corium (owner report):** the laser on the core heated it 0.08 / s, so cutting a core open (13 s or more) always overheated it first — and an overheated core shatters with its corium lost. The laser on the core now heats it only 0.01 / s; and when a core does overheat, pilots nearby get a note that the corium was lost.
 - **Space brakes (owner):** holding Space stops the ship hard (2.5× its acceleration, overriding thrust; server-applied, predicted on the client). `FLY.hardBrake`.
 - **Drops combine (owner):** loose ore of one type within 20 m combines into one bigger drop (checked each second; drawn larger by its size), and each combination restarts its 5-minute timer. `DROPS.mergeR`.
 - **Core colors (owner):** cores are yellow when cool and run orange, then red as they heat (were blue → orange).

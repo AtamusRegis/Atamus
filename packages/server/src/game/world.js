@@ -628,6 +628,7 @@ export class World {
   overheat(rock) {
     rock.core.popped = true;
     this.fx.push({ k: "pop", x: rock.x, y: rock.y, r: rock.r, hot: 1 });
+    for (const q of this.players.values()) if (hyp(q.x - rock.x, q.y - rock.y) < rock.r + 600) this.msgs.push({ to: q.id, m: { t: "note", text: "The core overheated and the asteroid shattered — its corium is lost." } });
     this.dropRock(rock, R.ROCK.respawn); this.hotRocks.delete(rock);
   }
   hitCore(rock, dmg) {
