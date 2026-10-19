@@ -313,7 +313,7 @@ function onMsg(m) {
   else if (m.t === "invite") askConfirm((m.n || "A pilot") + " invites you to their party.", () => send({ t: "act", op: "inviteReply", from: m.from, yes: true }), { yes: "Accept", no: "Decline", calm: true, onNo: () => send({ t: "act", op: "inviteReply", from: m.from, yes: false }) });
   else if (m.t === "canFull") askConfirm("Destroy your oldest jetcan and the ore in it?", () => send({ t: "act", op: "jetcan", replace: true }));   // (owner, 2026-10-18) past 3 cans
   else if (m.t === "fx") {
-    if (m.k === "xfer") { xferFx.push({ to: m.to, ore: m.ore, x: m.x, y: m.y, x1: m.x1, y1: m.y1, ts: m.ts, dur: m.dur }); return; }
+    if (m.k === "xfer") { xferFx.push({ to: m.to, ore: m.ore, x: m.x, y: m.y, x1: m.x1, y1: m.y1, x2: m.x2, y2: m.y2, ts: m.ts, dur: m.dur }); return; }
     if (m.k === "bit") { bitWaves.push({ i: m.i, x: m.x, y: m.y, ore: m.ore, ts: m.ts, dur: m.dur }); return; }
     fx.push({ ...m, t0: performance.now() });
     const d = hyp(m.x - mine.x, m.y - mine.y);
@@ -678,10 +678,11 @@ function drawBitWaves() {
 }
 // (owner, 2026-10-18) the cargo fields: a holographic rectangle out of one side of the hull — faint fill fading outward,
 // scan lines moving the way the cargo goes, a flickering edge (shape from the ship's rules; same test as the server)
+const FIELD_DEP = "70,196,226", FIELD_WD = "232,98,82";   // (owner, 2026-10-18) deposit blue, withdraw red
 function drawTractor(s, S, ts, sd) {
-  // sd -1: the deposit field (left, gold, lines drifting out); 1: the withdraw field (right, ice, lines drifting in)
+  // sd -1: the deposit field (left, blue, lines drifting out); 1: the withdraw field (right, red, lines drifting in)
   const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom, dep = sd < 0;
-  const rgb = dep ? "216,176,106" : "124,195,214", edge = dep ? "#f0cd8a" : "#9fe3f2";
+  const rgb = dep ? FIELD_DEP : FIELD_WD, edge = "rgb(" + rgb + ")";   // (owner, 2026-10-18) blue deposits, red withdraws
   cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is to starboard
   const x0 = sd * hw * L, x1 = sd * (hw + T.depth) * L, y0 = -(T.span[1] - pv) * L, y1 = -(T.span[0] - pv) * L;
   const g = cx.createLinearGradient(x0, 0, x1, 0); g.addColorStop(0, "rgba(" + rgb + ",0.22)"); g.addColorStop(1, "rgba(" + rgb + ",0.04)");
@@ -693,17 +694,19 @@ function drawTractor(s, S, ts, sd) {
   cx.strokeStyle = edge; cx.lineWidth = lw(1.3); cx.strokeRect(Math.min(x0, x1), y0, Math.abs(x1 - x0), y1 - y0);
   cx.globalAlpha = 1; cx.restore();
 }
-// (owner, 2026-10-18) the station's continuous deposit beams: gold lines out of the station, motes running inward
+// (owner, 2026-10-18) the station's deposit fields: blue holographic rectangles out of its 4 corner pods, lines drifting in
 function drawStationBeams(ts) {
   const B = G.beams; if (!B) return; const [sx, sy] = G.world.station, lw = (px) => px / zoom;
   for (let k = 0; k < B.n; k++) {
-    const a = (B.a0 + k * 360 / B.n) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
-    const ax = sx + ux * B.r0, ay = sy + uy * B.r0, bx = sx + ux * B.r1, by = sy + uy * B.r1;
-    cx.lineCap = "round";
-    for (const [w, al] of [[lw(9), 0.07], [lw(4), 0.16], [lw(1.6), 0.8]]) { cx.strokeStyle = C.gold; cx.globalAlpha = al; cx.lineWidth = w; cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx, by); cx.stroke(); }
-    cx.fillStyle = "#fff3d6";
-    for (let j = 0; j < 6; j++) { const f = 1 - ((ts * 0.35 + j / 6) % 1), r = B.r0 + (B.r1 - B.r0) * f; cx.globalAlpha = 0.7 * Math.sin(Math.PI * f); cx.fillRect(sx + ux * r - 2, sy + uy * r - 2, 4, 4); }
-    cx.globalAlpha = 1;
+    const a = (B.a0 + k * 360 / B.n) * Math.PI / 180;
+    cx.save(); cx.translate(sx, sy); cx.rotate(a);              // +x runs out along the field
+    const g = cx.createLinearGradient(B.r0, 0, B.r1, 0); g.addColorStop(0, "rgba(" + FIELD_DEP + ",0.24)"); g.addColorStop(1, "rgba(" + FIELD_DEP + ",0.05)");
+    cx.fillStyle = g; cx.fillRect(B.r0, -B.w / 2, B.r1 - B.r0, B.w);
+    cx.strokeStyle = "rgba(" + FIELD_DEP + ",0.6)"; cx.lineWidth = lw(1);
+    for (let j = 0; j < 5; j++) { const ph = (ts * 0.5 + j / 5) % 1, x = B.r1 - (B.r1 - B.r0) * ph; cx.globalAlpha = Math.min(1, ph * 4) * (0.35 + 0.65 * (1 - ph)); cx.beginPath(); cx.moveTo(x, -B.w / 2); cx.lineTo(x, B.w / 2); cx.stroke(); }
+    cx.globalAlpha = 0.6 + 0.2 * Math.sin(ts * 7 + k); cx.strokeStyle = "rgb(" + FIELD_DEP + ")"; cx.lineWidth = lw(1.4);
+    cx.beginPath(); cx.moveTo(B.r0, -B.w / 2); cx.lineTo(B.r1, -B.w / 2); cx.moveTo(B.r0, B.w / 2); cx.lineTo(B.r1, B.w / 2); cx.moveTo(B.r1, -B.w / 2); cx.lineTo(B.r1, B.w / 2); cx.stroke();
+    cx.globalAlpha = 1; cx.restore();
   }
 }
 // cargo in transit (deposits): a lump flying from the deposit field to the station beam or the receiving ship
@@ -713,8 +716,13 @@ function drawXfers() {
   for (let k = xferFx.length - 1; k >= 0; k--) {
     const f = xferFx[k], q = (now - f.ts) / f.dur;
     if (q >= 1 || q > 3) { xferFx.splice(k, 1); continue; } if (q < 0) continue;
-    const tgt = f.to ? ships.get(f.to) : null, ex = tgt ? tgt.x : f.x1, ey = tgt ? tgt.y : f.y1, e2 = q * q * (3 - 2 * q);
-    const px = f.x + (ex - f.x) * e2, py = f.y + (ey - f.y) * e2, oc = G.ores[ORE_KEYS[f.ore]] ? G.ores[ORE_KEYS[f.ore]].color : "#fff";
+    const tgt = f.to ? ships.get(f.to) : null, ex = tgt ? tgt.x : f.x1, ey = tgt ? tgt.y : f.y1;
+    let px, py;
+    if (f.x2 !== undefined) {                  // into a station field: across to it, then along it all the way in to the pod
+      const d1 = hyp(f.x1 - f.x, f.y1 - f.y), d2 = hyp(f.x2 - f.x1, f.y2 - f.y1), k1 = d1 / Math.max(1, d1 + d2);
+      if (q < k1) { const u = q / k1; px = f.x + (f.x1 - f.x) * u; py = f.y + (f.y1 - f.y) * u; } else { const u = (q - k1) / Math.max(1e-6, 1 - k1); px = f.x1 + (f.x2 - f.x1) * u; py = f.y1 + (f.y2 - f.y1) * u; }
+    } else { const e2 = q * q * (3 - 2 * q); px = f.x + (ex - f.x) * e2; py = f.y + (ey - f.y) * e2; }
+    const oc = G.ores[ORE_KEYS[f.ore]] ? G.ores[ORE_KEYS[f.ore]].color : "#fff";
     cx.fillStyle = oc; cx.globalAlpha = 0.25; cx.fillRect(px - 5, py - 5, 10, 10); cx.globalAlpha = 1; cx.fillRect(px - 2.5, py - 2.5, 5, 5);
   }
 }

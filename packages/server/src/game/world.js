@@ -404,9 +404,10 @@ export class World {
         while (p.xferAcc >= lump && p.hold.length) {
           const to = this.depositTarget(p, S, lump); if (!to) { p.xferAcc = 0; break; }
           const e = p.hold[0], u = Math.min(lump, e.u); e.u -= u; if (e.u <= 0) p.hold.shift(); p.xferAcc -= lump;
-          const [ox, oy] = this.fieldMid(p, S, -1), dist = hyp(to.x - ox, to.y - oy), dur = Math.max(0.2, dist / (R.TRACTOR.xferSpeed || 160));
+          // (owner, 2026-10-18) into a station field, the lump rides it all the way in to the station's pod
+          const [ox, oy] = this.fieldMid(p, S, -1), dist = hyp(to.x - ox, to.y - oy) + (to.px !== undefined ? hyp(to.px - to.x, to.py - to.y) : 0), dur = Math.max(0.2, dist / (R.TRACTOR.xferSpeed || 260));
           this.xfers.push({ from: p.id, to: to.id, ore: e.o, u, sp: e.sp || null, due: t + dur * 1000, x: to.x, y: to.y });
-          this.fx.push({ k: "xfer", i: p.id, to: to.id === "st" ? 0 : to.id, ore: ORE_KEYS.indexOf(e.o), x: Math.round(ox), y: Math.round(oy), x1: Math.round(to.x), y1: Math.round(to.y), ts: t, dur: Math.round(dur * 1000) });
+          this.fx.push({ k: "xfer", i: p.id, to: to.id === "st" ? 0 : to.id, ore: ORE_KEYS.indexOf(e.o), x: Math.round(ox), y: Math.round(oy), x1: Math.round(to.x), y1: Math.round(to.y), ...(to.px !== undefined ? { x2: Math.round(to.px), y2: Math.round(to.py) } : {}), ts: t, dur: Math.round(dur * 1000) });
           p.meDirty = true; p.dirty = true;
         }
       } else p.xferAcc = 0;
@@ -502,10 +503,17 @@ export class World {
   // where a deposit goes: a station beam the deposit field touches (into storage), else a ship whose withdraw field
   // overlaps mine and has room (counting what's already on its way)
   depositTarget(p, S, u) {
-    const B = R.STATION_BEAMS, [sx, sy] = W.station;
-    if (hyp(p.x - sx, p.y - sy) < B.r1 + S.len * 2) for (let k = 0; k < B.n; k++) {
-      const a = (B.a0 + k * 360 / B.n) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
-      for (let r = B.r0; r <= B.r1; r += 8) { const x = sx + ux * r, y = sy + uy * r; if (this.inTractor(p, S, x, y, -1)) return { id: "st", x, y }; }
+    const B = R.STATION_BEAMS, [sx, sy] = W.station;   // a station deposit field: any of a grid of its points inside my deposit field, or my field's middle inside it
+    if (hyp(p.x - sx, p.y - sy) < B.r1 + S.len * 2) {
+      const [fx, fy] = this.fieldMid(p, S, -1);
+      for (let k = 0; k < B.n; k++) {
+        const a = (B.a0 + k * 360 / B.n) * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a), vx = -uy, vy = ux;
+        const ra = (fx - sx) * ux + (fy - sy) * uy, rb = (fx - sx) * vx + (fy - sy) * vy;
+        if (ra >= B.r0 && ra <= B.r1 && Math.abs(rb) <= B.w / 2) return { id: "st", x: sx + ux * ra, y: sy + uy * ra, px: sx + ux * B.r0, py: sy + uy * B.r0 };
+        for (let r = B.r0; r <= B.r1; r += 10) for (const o of [-B.w / 2, 0, B.w / 2]) {
+          const x = sx + ux * r + vx * o, y = sy + uy * r + vy * o; if (this.inTractor(p, S, x, y, -1)) return { id: "st", x: sx + ux * r, y: sy + uy * r, px: sx + ux * B.r0, py: sy + uy * B.r0 };
+        }
+      }
     }
     const [mx, my] = this.fieldMid(p, S, -1);
     for (const q of this.players.values()) {

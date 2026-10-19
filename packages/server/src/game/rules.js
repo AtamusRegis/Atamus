@@ -39,9 +39,10 @@ export const LASER = { bitSpeed: 140 };
 // belongs to its destination — nobody else can pull it in. Per ship: pivot = the pivot's place along the hull from the
 // stern, hw = the hull's half-width, both x len; tractor.span = the field's stretch along the hull (from the stern, x
 // len), depth = how far out it reaches past the hull (x len) — a rectangle, straight-sided (owner).
-export const TRACTOR = { pull: 45, xferSpeed: 160 };
-// the station's 4 continuous deposit beams, from r0 to r1 m out of the station's center at angles a0 + k x 90° (deg)
-export const STATION_BEAMS = { n: 4, r0: 260, r1: 760, a0: 45 };
+export const TRACTOR = { pull: 45, xferSpeed: 260 };
+// (owner, 2026-10-18) the station's 4 deposit fields: rectangles out of its 4 corner pods (the owner's sketch), w m wide,
+// from r0 (the pods' outer edge) to r1 m from the station's center, at angles a0 + k x 90° (deg)
+export const STATION_BEAMS = { n: 4, r0: 161, r1: 760, w: 64, a0: 45 };   // (owner: long, like beams)
 // shared flying numbers (every hull)
 export const FLY = { accel: 45, brake: 30, turn: 2.4, interactR: 200, shipR: 24 };   // (the defaults: each ship's own accel / turn win)
 

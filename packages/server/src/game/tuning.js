@@ -46,10 +46,10 @@ export function resetAll() { copyInto(ROOTS, DEFAULTS); }
 export async function loadTuning() {
   await pool.query(`CREATE TABLE IF NOT EXISTS ring_tuning (id INTEGER PRIMARY KEY, data JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
   const { rows } = await pool.query(`SELECT data FROM ring_tuning WHERE id = 1`);
-  if (rows[0]) { const d = rows[0].data; if (d._v >= 8) copyInto(ROOTS, d); }   // (_v < 8: saved before the chunk-sheet layout; its numbers mean other things)
+  if (rows[0]) { const d = rows[0].data; if (d._v >= 9) copyInto(ROOTS, d); }   // (_v < 9: saved before the station deposit fields; its numbers mean other things)
 }
 export async function saveTuning() {
-  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 8, ...ROOTS })]);
+  await pool.query(`INSERT INTO ring_tuning (id, data) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = now()`, [JSON.stringify({ _v: 9, ...ROOTS })]);
 }
 // which changes regrow the asteroids (their places, sizes and layouts come from these)
 export const reshapes = (path) => ["ringShells", "ringSpawn"].includes(path[0]) || (path[0] === "world" && (path[1] === "rings" || path[1] === "cell")) || (path[0] === "rock" && path[1] === "spawnChance") || path[0] === "layout" || (path[0] === "chunk" && /^([wb]\d|barren)$/.test(path[1]));
