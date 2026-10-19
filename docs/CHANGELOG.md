@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Heat, the Booster, refining (owner):** cutting heats chunks (hot chunks cut faster, glow orange) and the heat seeps into the core faster the hotter the chunk; an overheated core shatters the asteroid (corium and unmined chunks lost). The Booster's coolant beam (default) cools cores; F switches to a boost beam on one ship — boosted Miners cut, Boosters cool, Scanners scan, Haulers refine ×1.6. Haulers press R to refine their hold (a fifth of the room). `HEAT`, `BOOST`, `SHIPS.booster.coolRate/coolRange/boostRange`, `SHIPS.hauler.refineRate`.
 - **Hidden layers (owner):** unscanned chunks no longer show their outlines — the unscanned part of a rock is one solid mass (the same far off and up close); chunks appear as they're scanned or mined out.
 - **Website look (owner):** the Atamus logo is centered above the page instead of sitting in a header bar (bigger); on single-card pages (play, login) the logo and card sit together mid-screen. The play card's title no longer repeats "Atamus": it says Welcome, or Welcome back when the browser already has a pilot.
 - **Grayscale chunks (owner):** scanned chunks are neutral greys instead of bluish — light, mid, dark by density, bedrock near-black.

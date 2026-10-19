@@ -117,12 +117,13 @@ let firing = false;
 const typing = () => { const el = document.activeElement; return !!el && ((el.tagName === "INPUT" && !["range", "checkbox", "button"].includes(el.type)) || el.tagName === "TEXTAREA" || el.tagName === "SELECT"); };
 // (owner, 2026-10-18) the mode switch by the hold bar: Mine | Drill (Scanner), Boost | Cool (Booster), Mine | Refine (Hauler)
 let modeIdx = 0;
-const modeLabels = () => { const S = G && G.ships[ME.ship]; return !S ? null : S.drillSpeed ? ["Mine", "Drill"] : S.boost ? ["Boost", "Cool"] : S.refineUnit ? ["Mine", "Refine"] : null; };
+const modeLabels = () => { const S = G && G.ships[ME.ship]; return !S ? null : S.drillSpeed ? ["Mine", "Drill"] : S.boost ? ["Cool", "Boost"] : S.refineUnit ? ["Mine", "Refine"] : null; };
 const hasAlt = () => !!modeLabels();
 function toggleMode() { if (!hasAlt()) return; modeIdx = (modeIdx + 1) % 2; drawHud(); }
 addEventListener("keydown", (e) => {
   if (typing()) return;
   if (e.code === "Escape") hideMenu();
+  if (e.code === "KeyR" && !e.repeat && G && myShip().refineRate) { send({ t: "act", op: "refine" }); e.preventDefault(); }   // (owner, 2026-10-18) the Hauler refines
   if (e.code === "KeyF" && !e.repeat) { if (G && myShip().tractor) send({ t: "act", op: "cargo" }); else toggleMode(); e.preventDefault(); }   // (owner, 2026-10-18) F: deposit field → withdraw field → off
   const mn = { Digit1: 0, Digit2: 1, Digit3: 2 }[e.code];          // 1 / 2 pick the mode switch's segments directly
   if (mn !== undefined) { const labels = modeLabels(); if (labels && mn < labels.length) { modeIdx = mn; drawHud(); e.preventDefault(); } }
@@ -277,7 +278,7 @@ function onMsg(m) {
     drawHud();
   } else if (m.t === "snap") onSnap(m);
   else if (m.t === "rocks") {
-    for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, fill] = row; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, fill }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, fill, dx: x, dy: y }); }
+    for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, fill, ht, hotL] = row, heat = (ht || 0) / 100, hot = hotL || []; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, fill, heat, hot }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, fill, heat, hot, dx: x, dy: y }); }
     for (const id of m.x || []) { rocks.delete(id); details.delete(id); }
   } else if (m.t === "rockd") {
     if (m.far) { details.delete(m.id); return; }   // (owner, 2026-10-18) out of range: the layers hide again
@@ -320,7 +321,7 @@ function onMsg(m) {
     const d = hyp(m.x - mine.x, m.y - mine.y);
     if (m.k === "crack") { burst(m.x, m.y, 8 + Math.min(10, (m.u || 0) / 50), [C.rock, "#fff", C.dim], 60); addShake(1.6 * Math.max(0, 1 - d / 700)); tutEv.cut = tutEv.cut || d < 320; }
     else if (m.k === "pop") {
-      burst(m.x, m.y, 30, [C.gold, C.heat, "#fff"], 140); addShake(5 * Math.max(0, 1 - d / 1400)); tutEv.popped = tutEv.popped || d < 900;
+      burst(m.x, m.y, m.hot ? 46 : 30, m.hot ? ["#ff7a28", "#ff2e18", C.heat, "#fff"] : [C.gold, C.heat, "#fff"], m.hot ? 180 : 140); addShake(5 * Math.max(0, 1 - d / 1400)); tutEv.popped = tutEv.popped || d < 900;
       let popRk = null; for (const r of rocks.values()) if (hyp(r.x - m.x, r.y - m.y) < 20) { popRk = r; break; }
       const popDet = popRk && details.get(popRk.id);
       if (popDet) { let n = 0; for (const c0 of popDet.c) if (!(c0[5] & 1) && n++ < 26) spawnChunkShards(popRk, c0); }
@@ -531,10 +532,10 @@ function drawChunkRock(r, det, ts) {
   if (!det) { cx.fillStyle = DUNSCAN[0]; cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.8, 1.6 / zoom); cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.stroke(); cx.restore(); return; }   // (far off: the same unscanned mass)
   // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken — always in view, beneath the
   // masonry (owner, 2026-10-18: the chunk sheet), so its swelling shows as the layers around it come away
-  const frac = (r.fill || 0) / 100, heat = 0, hot = 0;
+  const frac = (r.fill || 0) / 100, heat = r.heat || 0, hot = Math.min(1, heat * 1.15);   // (owner, 2026-10-18) the core runs blue → orange as it heats
   const gk = r.gulpT ? (performance.now() - r.gulpT) / 300 : 2;
   const cr = det.coreR * (1 + (G.core.grow || 1.5) * frac) * (gk < 1 ? 1 + 0.22 * Math.sin(gk * Math.PI) : 1);
-  const over = heat >= 1 ? 0.5 + 0.5 * Math.sin(ts * 14) : 0;
+  const over = heat >= 0.8 ? (0.5 + 0.5 * Math.sin(ts * (10 + 30 * (heat - 0.8)))) * (heat - 0.7) * 3 : 0;   // (near overheating it throbs, faster and faster)
   let col = mix("#6fb7d8", "#ff7a28", hot);
   if (over) col = mix(col, "#ff2e18", over * 0.6);
   const gc = mix("#6fb7d8", "#ff7a28", hot).match(/\d+/g).join(",");
@@ -561,6 +562,10 @@ function drawChunkRock(r, det, ts) {
   }
   cx.restore();
   { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
+  for (const [hi, hp2] of r.hot || []) {         // (owner, 2026-10-18) heated chunks glow orange
+    const p = det.polys.get(hi); if (!p || hi === bI) continue; const hk = hp2 / 100;
+    cx.fillStyle = "rgba(255,122,40," + (0.12 + 0.5 * hk).toFixed(3) + ")"; cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill();
+  }
   if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted
     const cb = det.c.find((x) => x[0] === bI);
     if (cb) { cx.fillStyle = C.void; chunkPath(det, cb); cx.fill(); cx.save(); cx.translate(bx, by); cx.lineJoin = "round"; drawChunk(cx, det, cb, zoom); cx.restore(); }
@@ -753,8 +758,12 @@ function shipFx(s, ts, under) {
     return;
   }
   const isMe = s.id === myId, S2 = G.ships[kind] || {}, fireNow = isMe ? firing && !ME.docked : !!(fl & 2);
+  if (fl & 512 && Math.random() < 0.5) {         // (owner, 2026-10-18) refining: purple motes drawn in toward the hull's middle
+    const L5 = S2.len || 100, a5 = Math.random() * TAU, d5 = L5 * (0.35 + Math.random() * 0.25), px5 = s.x + Math.cos(a5) * d5, py5 = s.y + Math.sin(a5) * d5;
+    spawnPart(px5, py5, { vx: (s.x - px5) * 1.4, vy: (s.y - py5) * 1.4, life: 0.6, size: 2.6 + Math.random() * 1.6, color: Math.random() < 0.7 ? C.ore : "#e8d6ff", drag: 0.2 });
+  }
   const alt = isMe ? modeIdx === 1 && hasAlt() : !!(fl & 64);
-  const drillMode = S2.drillSpeed && alt, coolMode = S2.boost && alt, boostMode = S2.boost && !alt, refineMode = S2.refineUnit && alt;
+  const drillMode = S2.drillSpeed && alt, coolMode = S2.boost && !alt, boostMode = S2.boost && alt,   /* (owner, 2026-10-18) coolant first, F to boost */ refineMode = S2.refineUnit && alt;
   const [x0, y0] = muzzleOf(s.x, s.y, s.h, S2);   // the beam leaves the sprite's red dot
   const wdt2 = 1 / 60;
   // the cutting laser: blue runs yellow then red as its temperature builds; a winding charge pushes it white

@@ -45,6 +45,21 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 - **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for **5 minutes**, then it's gone; **a small ring around it sweeps away over those 5 minutes** as its despawn timer (owner, 2026-10-18). Drops survive restarts (`ring_drops`). **Picking up loose ore needs the withdraw field (F twice)** (owner, 2026-10-18): flying over a drop doesn't pick it up. Ships without cargo fields can't pick up loose ore.
 - **Drop cargo:** right-click (or hold) the cargo squares to jettison the hold as drops where you sit.
 
+## Heat (owner, 2026-10-18)
+
+- **Cutting a chunk heats it** (to full in ~5 s of cutting; it cools 0.1 / s), and **a hotter chunk cuts faster** (up to ×2.5). Heated chunks glow orange.
+- **The heat seeps into the core while a chunk is cut — slowly at first, more the hotter the chunk**: 0.12 × (0.15 + 0.85 × heat²) a second (0.08 / s while the laser is on the core itself); the core cools 0.006 / s (`HEAT`). The core runs blue → orange as it heats and throbs, faster and faster, past 80%.
+- **A core that overheats shatters the asteroid**: its corium and unmined chunks are lost (a bigger, hotter burst).
+
+## The Booster (owner, 2026-10-18)
+
+- **Coolant (default):** holding fire sprays coolant (220 m) at the rock it meets, cooling its core 0.15 / s (and the chunk it lands on faster), so it won't overheat.
+- **F switches to boosting** (the Cool | Boost switch by the hold bar shows which; 1 / 2 pick directly): the beam (320 m) locks onto the one ship it points at — green pluses stream to it and it glows blue — and **while boosted, Miners cut, Boosters cool, Scanners scan and Haulers refine ×1.6** (`BOOST`; it lingers 0.4 s after the beam leaves).
+
+## Refining (owner, 2026-10-18)
+
+- **A Hauler presses R to refine**: raw ore in its hold turns refined at 400 units / s (×1.6 boosted) — refined ore takes a fifth of the room. Purple motes stream into the hull while it runs; R again stops it. Refined ore delivers unit for unit; party ore stays party ore.
+
 ## The Scanner's scan beam (owner, 2026-10-18)
 
 - **Holding fire on the Scanner scans** (260 m, from the sheet's red dot): the beam passes through chunks already scanned and works on the first unscanned chunk on its line — toward the core one chunk at a time. A chunk's scan takes its area × 0.1 × its density's factor (D1 ×0.6, D2 ×1, D3 ×1.6, **bedrock ×8**) at 30 a second (`scanDps`, `CHUNK.scanK`, `s1`–`sBed`). A finished scan flashes ice and reveals the chunk to everyone.

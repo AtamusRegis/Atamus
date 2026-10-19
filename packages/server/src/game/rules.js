@@ -25,8 +25,9 @@ export const SHIPS = {
     tractor: { span: [0.24, 0.74], depth: 0.5 }, xfer: 500 },   // muzzle: m ahead of the pivot the beam starts (the sheet's red dot)
   scanner: { name: "Scanner", art: ["scanner", "tractor"], hold: 600,  speed: 85, accel: 43, turn: 2.3, vision: 1500, len: 86.7,  r: 26,
     scanDps: 30, scanRange: 260, muzzle: 15.3 },   // (owner, 2026-10-18) the scan beam: scanDps scan points / s, out from the sheet's red dot
-  booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 110, accel: 28, turn: 1.4, vision: 1000, len: 184.6, r: 55 },
-  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
+  booster: { name: "Booster", art: ["command"],            hold: 600,  speed: 110, accel: 28, turn: 1.4, vision: 1000, len: 184.6, r: 55,
+    boost: 1, coolRate: 0.15, coolRange: 220, boostRange: 320 },   // (owner, 2026-10-18) coolant beam (default) / boost beam, F switches
+  hauler:  { name: "Hauler",  art: ["refinery", "hauler"], hold: 40000, refineRate: 400, speed: 140, accel: 16, turn: 0.8, vision: 1000, len: 311.6, r: 93, pivot: 0.405, hw: 0.138,
     tractor: { span: [0.26, 0.72], depth: 0.2 }, xfer: 2000 },
 };
 export const SHIP_KINDS = Object.keys(SHIPS);
@@ -40,6 +41,15 @@ export const LASER = { bitSpeed: 140 };
 // belongs to its destination — nobody else can pull it in. Per ship: pivot = the pivot's place along the hull from the
 // stern, hw = the hull's half-width, both x len; tractor.span = the field's stretch along the hull (from the stern, x
 // len), depth = how far out it reaches past the hull (x len) — a rectangle, straight-sided (owner).
+// (owner, 2026-10-18) heat: cutting a chunk heats it (chunkUp / s less its cooling, to 1) and a hotter chunk cuts faster (x 1 + speed x
+// heat). The heat seeps into the core while it's cut — slowly at first, more the hotter the chunk: coreIn x (base + (1 -
+// base) x heat^2) per second (coreDirect / s while the laser is on the core itself). Chunks cool chunkCool / s, the core
+// coreCool / s. A core that reaches 1 overheats: the asteroid shatters, its corium and unmined chunks lost.
+export const HEAT = { chunkUp: 0.3, chunkCool: 0.1, speed: 1.5, coreIn: 0.12, base: 0.15, coreDirect: 0.08, coreCool: 0.006 };
+// (owner, 2026-10-18) a Booster's boost: Miners cut, Boosters cool, Scanners scan and Haulers refine this much faster
+export const BOOST = { mult: 1.6, hold: 400 };   // hold: ms a boost lasts after the beam leaves
+// (owner, 2026-10-18) a Hauler's refining (R): raw ore in the hold turns refined at refineRate units / s; refined ore
+// takes REFINED_SPACE of the room
 export const TRACTOR = { pull: 45, xferSpeed: 260 };
 // (owner, 2026-10-18) the station's 4 deposit fields: rectangles out of its 4 corner pods (the owner's sketch), w m wide,
 // from r0 (the pods' outer edge) to r1 m from the station's center, at angles a0 + k x 90° (deg)

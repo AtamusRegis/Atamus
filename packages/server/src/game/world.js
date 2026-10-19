@@ -66,7 +66,7 @@ export class World {
     this.players = new Map();
     this.rocks = new Map();                    // id -> rock (chunks, core)
     this.slots = new Map(); this.cells = new Map(); this.grid = new Map();
-    this.drops = new Map(); this.dropSeq = 1; this.bits = []; this.xfers = [];
+    this.drops = new Map(); this.dropSeq = 1; this.bits = []; this.xfers = []; this.hotRocks = new Set();
     this.cans = new Map(); this.canSeq = 1;   // (owner, 2026-10-18) jetcans
     this.parties = new Map(); this.memberParty = new Map(); this.invites = new Map();   // (owner, 2026-10-18) parties: id -> { id, leader, members [{ i, n }] }; pilot -> party; invitee -> { from, at }  // ore adrift: free for anyone, picked up by flying over
     this.msgs = []; this.fx = [];
@@ -322,7 +322,7 @@ export class World {
       const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = (this.shipOf(p).turn || FLY.turn) * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
       p.h = p.h + Math.max(-mx, Math.min(mx, d)); p.h = Math.atan2(Math.sin(p.h), Math.cos(p.h)); p.hAt = t;
     }
-    p.aim = n(m.a); p.firing = m.f === 1;
+    p.aim = n(m.a); p.firing = m.f === 1; p.alt = m.md === 1;   // alt: the Booster's boost beam (else its coolant)
   }
 
   // the laser's ray into a rock: whatever it meets first — an unbroken chunk's exact polygon, or the core's circle
@@ -441,14 +441,17 @@ export class World {
           if (hit && hit.t <= S.laserRange && hit.t < bd) { bd = hit.t; best = { r, hit }; }
         }
         if (best) {
-          const rock = best.r, dmg = S.laserDps * dt;
+          const rock = best.r, H = R.HEAT; let dmg = S.laserDps * dt * this.boostOf(p, t);
           p.laserOn = true; p.laserLen = best.hit.t; p.laserRock = rock.id;
           rock.touched = t; rock.home = false;
-          if (best.hit.core) this.hitCore(rock, dmg);
+          if (best.hit.core) { this.heatCore(rock, H.coreDirect * dt); this.hitCore(rock, dmg); }
           else {
             const ch = best.hit.chunk;           // (owner, 2026-10-18) no anchoring: the laser cuts exactly what it points at
             p.laserChunk = ch.i;
             if (ch.d === 3) { /* bedrock: the Miner's laser stops on it, uncut */ } else {
+            // (owner, 2026-10-18) heat: the cut heats the chunk, a hot chunk cuts faster, and its heat seeps into the core
+            ch.heat = Math.min(1, (ch.heat || 0) + H.chunkUp * dt); dmg *= 1 + H.speed * ch.heat;
+            this.heatCore(rock, H.coreIn * (H.base + (1 - H.base) * ch.heat * ch.heat) * dt); this.hotRocks.add(rock);
             const st0 = this.dmgStage(ch);
             ch.hp -= dmg;
             // (owner, 2026-10-18) each ore bit leaves as the cut passes its share of the chunk (the last at the break)
@@ -459,6 +462,7 @@ export class World {
             }
             if (ch.hp <= 0) this.breakChunk(rock, ch); else if (this.dmgStage(ch) !== st0) rock.v++;
             }
+            if (rock.core.heat >= 1 && !rock.core.popped) this.overheat(rock);
           }
         } else p.laserLen = S.laserRange;
       }
@@ -474,7 +478,7 @@ export class World {
         p.laserLen = best ? best.hit.t : S.scanRange;
         if (best && !best.hit.core) {
           const rock = best.r, ch = best.hit.chunk; p.laserOn = true; p.laserRock = rock.id; p.laserChunk = ch.i; rock.touched = t; rock.home = false;
-          ch.scanHp -= S.scanDps * dt;
+          ch.scanHp -= S.scanDps * dt * this.boostOf(p, t);
           if (ch.scanHp <= 0 && !ch.scanned) {
             ch.scanned = true; rock.v++;
             const mid = (ch.r0 + ch.r1) / 2, ang = ch.a0 + normA(ch.a1 - ch.a0) / 2;
@@ -482,7 +486,51 @@ export class World {
           }
         }
       }
+      // (owner, 2026-10-18) the Booster: its coolant beam (default) cools the core of the rock it meets (and the chunk it
+      // lands on); F switches to the boost beam — one ship it points at cuts / cools / scans / refines faster
+      p.beamTgt = null;
+      if (p.firing && !dock && S.boost) {
+        const ux = Math.cos(p.aim), uy = Math.sin(p.aim), mz = S.muzzle || 0, mx0 = p.x + Math.sin(p.h) * mz, my0 = p.y - Math.cos(p.h) * mz;
+        if (!p.alt) {
+          let best = null, bd = S.coolRange;
+          for (const r of this.rocksNear(mx0, my0, S.coolRange + 360)) { const hit = this.castRock(r, mx0, my0, ux, uy); if (hit && hit.t <= S.coolRange && hit.t < bd) { bd = hit.t; best = { r, hit }; } }
+          p.laserLen = best ? best.hit.t : S.coolRange;
+          if (best) {
+            const rock = best.r, k = S.coolRate * dt * this.boostOf(p, t); p.laserOn = true; p.laserRock = rock.id; rock.touched = t;
+            rock.core.heat = Math.max(0, (rock.core.heat || 0) - k);
+            if (best.hit.chunk) best.hit.chunk.heat = Math.max(0, (best.hit.chunk.heat || 0) - k * 3);
+          }
+        } else {
+          let best = null, bd = Infinity;
+          for (const q of this.players.values()) {
+            if (q === p || q.docked) continue; const dx = q.x - mx0, dy = q.y - my0, along = dx * ux + dy * uy;
+            if (along < 0 || along > S.boostRange) continue; const perp = Math.abs(dx * uy - dy * ux), QS = this.shipOf(q);
+            if (perp > (QS.r || 24) + 30) continue; if (along < bd) { bd = along; best = q; }
+          }
+          p.laserLen = best ? bd : S.boostRange;
+          if (best) { p.beamTgt = best.id; p.laserOn = true; best.boostUntil = t + (R.BOOST.hold || 400); }
+        }
+      }
+      // (owner, 2026-10-18) the Hauler's refining (R): raw ore turns refined, taking less room
+      if (p.refining && S.refineRate && !dock) {
+        let left = S.refineRate * dt * this.boostOf(p, t);
+        for (const e of [...p.hold]) {
+          if (left <= 0) break; if (!e.raw || e.u <= 0) continue;
+          const u = Math.min(e.u, left); e.u -= u; left -= u;
+          const key = e.sp ? e.sp.join(",") : "";
+          let f = p.hold.find((e2) => !e2.raw && e2.o === e.o && (e2.sp ? e2.sp.join(",") : "") === key); if (!f) { f = { o: e.o, u: 0, raw: 0 }; if (e.sp) f.sp = [...e.sp]; p.hold.push(f); }
+          f.u += u; p.meDirty = true; p.dirty = true;
+        }
+        if (p.meDirty) { p.hold = p.hold.filter((e) => e.u > 0.001); for (const e of p.hold) e.u = Math.round(e.u * 1000) / 1000; }
+      }
       if (p.firing) p.meDirty = true;
+    }
+    // heat cools: every rock still warm loses a little each tick
+    if (this.hotRocks.size) for (const rock of [...this.hotRocks]) {
+      const H = R.HEAT; let warm = false;
+      if (rock.core.heat > 0) { rock.core.heat = Math.max(0, rock.core.heat - H.coreCool * dt); warm = warm || rock.core.heat > 0; }
+      for (const c of rock.chunks) if (c.heat > 0) { c.heat = c.broken ? 0 : Math.max(0, c.heat - H.chunkCool * dt); warm = warm || c.heat > 0; }
+      if (!warm || !this.rocks.has(rock.id)) this.hotRocks.delete(rock);
     }
     if (this.bits.length) {                    // ore bits arriving down the beam: into the hold, any overflow adrift by the ship
       const keep = [];
@@ -564,6 +612,14 @@ export class World {
     const mid = (c.r0 + c.r1) / 2, ang = c.a0 + normA(c.a1 - c.a0) / 2;
     this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: 0, ore: 0 });
     rock.touched = now(); rock.home = false;
+  }
+  boostOf(p, t) { return p.boostUntil > t ? R.BOOST.mult || 1.6 : 1; }
+  heatCore(rock, k) { rock.core.heat = Math.min(1, (rock.core.heat || 0) + k); this.hotRocks.add(rock); }
+  // (owner, 2026-10-18) an overheated core: the asteroid shatters — its corium and its unmined chunks are lost
+  overheat(rock) {
+    rock.core.popped = true;
+    this.fx.push({ k: "pop", x: rock.x, y: rock.y, r: rock.r, hot: 1 });
+    this.dropRock(rock, R.ROCK.respawn); this.hotRocks.delete(rock);
   }
   hitCore(rock, dmg) {
     rock.core.hp -= dmg;
@@ -654,6 +710,7 @@ export class World {
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
     } else if (m.op === "jetcan") this.sendJetcan(p, m.replace === true);
     else if (["invite", "inviteReply", "kick", "leave"].includes(m.op)) this.partyAct(p, m);
+    else if (m.op === "refine") { if (this.shipOf(p).refineRate) p.refining = !p.refining; }   // (owner, 2026-10-18) the Hauler's R
     else if (m.op === "respawn") { this.respawn(p.id); p.cargo = 0; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
     else if (m.op === "cargo" || m.op === "tractor") { if (this.shipOf(p).tractor) p.cargo = ((p.cargo || 0) + 1) % 3; }   // (owner, 2026-10-18) F: deposit → withdraw → off
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
@@ -667,7 +724,7 @@ export class World {
     const p = this.players.get(String(id)); if (!p || !p.docked || !m || typeof m.op !== "string") return false;
     if (m.op === "ship") {
       if (!SHIPS[m.k] || p.ship === m.k || p.hold.length) return false;
-      p.ship = m.k; p.cargo = 0;
+      p.ship = m.k; p.cargo = 0; p.refining = false;
     } else return false;
     p.meDirty = true; p.dirty = true; return true;
   }
@@ -695,8 +752,8 @@ export class World {
     for (const p of this.players.values()) {
       const S = this.shipOf(p);
       out.push({ p, key: "", row: [p.id, Math.round(p.x * 10), Math.round(p.y * 10), Math.round(p.h * 1000), R.SHIP_KINDS.indexOf(p.ship),
-        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0) | (p.cargo === 1 && !p.docked ? 128 : 0) | (p.cargo === 2 && !p.docked ? 256 : 0),
-        Math.round(p.aim * 1000), Math.round(p.laserLen), Math.round(this.usedSpace(p) / S.hold * 100)] });
+        (p.laserOn ? 1 : 0) | (p.firing && !p.docked ? 2 : 0) | (p.docked ? 8 : 0) | (p.cargo === 1 && !p.docked ? 128 : 0) | (p.cargo === 2 && !p.docked ? 256 : 0) | (p.boostUntil > now() ? 32 : 0) | (p.alt ? 64 : 0) | (p.refining && !p.docked ? 512 : 0),
+        Math.round(p.aim * 1000), Math.round(p.laserLen), Math.round(this.usedSpace(p) / S.hold * 100), p.beamTgt || 0] });
     }
     for (const e of out) e.key = JSON.stringify(e.row);
     return out;
@@ -712,7 +769,8 @@ export class World {
       if (hyp(r.x - viewer.x, r.y - viewer.y) > V + r.r) continue;
       out.push([r.id, Math.round(r.x), Math.round(r.y), r.shellsN, Math.round(r.r),
         Math.round(Math.min(1, r.nBroken / r.chunks.length) * 100), Math.round(Math.max(0, r.core.hp / r.core.maxHp) * 100),
-        Math.round(Math.min(1, r.nBroken / Math.max(1, r.chunks.length)) * 100)]);   // fill: how much masonry is gone (the core swells with it)
+        Math.round(Math.min(1, r.nBroken / Math.max(1, r.chunks.length)) * 100),   // fill: how much masonry is gone (the core swells with it)
+        Math.round((r.core.heat || 0) * 100), r.chunks.filter((c) => c.heat > 0.03 && !c.broken).map((c) => [c.i, Math.round(c.heat * 100)])]);   // core heat %, the warm chunks [i, heat %]
     }
     return out;
   }
