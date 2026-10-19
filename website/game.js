@@ -665,7 +665,7 @@ function drawBitWaves() {
   }
 }
 // (owner, 2026-10-18) the tractor fields: holographic areas out of both sides of the hull — a faint ice fill fading
-// outward, scan lines drifting out from the hull, a flickering edge (shape from the ship's rules; same test as the server)
+// outward, scan lines drifting in toward the hull (owner, 2026-10-18), a flickering edge (shape from the ship's rules; same test as the server)
 function drawTractor(s, S, ts) {
   const T = S.tractor, L = S.len, pv = S.pivot ?? 0.5, hw = S.hw || 0.2, lw = (px) => px / zoom;
   cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h);          // ship frame: -y is the nose, x is across
@@ -677,7 +677,7 @@ function drawTractor(s, S, ts) {
     cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath();
     cx.fillStyle = g; cx.fill();
     cx.save(); cx.clip(); cx.strokeStyle = "rgba(160,225,240,0.28)"; cx.lineWidth = lw(1);
-    for (let j = 0; j < 4; j++) { const kk = ((ts * 0.6 + j / 4) % 1), xo = sd * (hw + T.depth * kk) * L; cx.globalAlpha = 1 - kk; cx.beginPath(); cx.moveTo(xo, -L); cx.lineTo(xo, L); cx.stroke(); }
+    for (let j = 0; j < 4; j++) { const kk = 1 - ((ts * 0.6 + j / 4) % 1), xo = sd * (hw + T.depth * kk) * L; cx.globalAlpha = Math.min(1, (1 - kk) * 4) * (0.35 + 0.65 * (1 - kk)); cx.beginPath(); cx.moveTo(xo, -L); cx.lineTo(xo, L); cx.stroke(); }
     cx.restore(); cx.globalAlpha = 0.55 + 0.25 * Math.sin(ts * 9 + sd);
     cx.strokeStyle = "#9fe3f2"; cx.lineWidth = lw(1.3); cx.beginPath(); cx.moveTo(q[0][0], q[0][1]); for (let k = 1; k < 4; k++) cx.lineTo(q[k][0], q[k][1]); cx.closePath(); cx.stroke();
     cx.globalAlpha = 1;
@@ -1054,12 +1054,12 @@ const TUT = {
     ["Hold fire to cut through the masonry — darker chunks are denser and take longer", () => tutEv.cut],
     ["Cut a chunk with ore bits — each bit rides the beam back into your hold", () => (ME.hold || []).length > 0],
     ["Cut a path to the core and break it open", () => tutEv.popped],
-    ["Fly over the scattered corium to scoop it up", () => (ME.hold || []).some((e) => e.o === "corium")],
+    ["Press F for the tractor field and pull in the scattered corium", () => (ME.hold || []).some((e) => e.o === "corium")],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
   flight: [
     ["Fly out to a ring and up to an asteroid", nearRock],
-    ["This ship has no tools yet — fly over ore drops to scoop them into your hold", () => (ME.hold || []).length > 0],
+    ["This ship has no tools yet — fly over a jetcan you may haul from to load up", () => (ME.hold || []).length > 0],
     ["Haul it to the station to deliver", () => tutEv.delivered],
   ],
 };

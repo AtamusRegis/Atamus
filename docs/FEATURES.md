@@ -39,12 +39,12 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 ## The piñata (owner, 2026-10-18)
 
 - **The core holds its own corium (owner, 2026-10-18): deeper asteroids and asteroids with more layers drop more** — 100 × layers × the ring's factor (1, 1.5, 2) units, in whole lumps (`CORIUM`). Corium is a new ore (violet), found only in cores.
-- **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for **5 minutes**, then it's gone; **a small ring around it sweeps away over those 5 minutes** as its despawn timer (owner, 2026-10-18). Drops survive restarts (`ring_drops`).
+- **Breaking the core bursts all its corium out around the rock as drops** (100-unit lumps, scattered out to ~1.4 × the rock's radius), **free for anyone, picked up by flying over them** — they pour in up to the room aboard; **the rest waits for more trips**. The rest of the rock shatters (unmined chunks are gone, with any ore bits still in them). A drop drifts for **5 minutes**, then it's gone; **a small ring around it sweeps away over those 5 minutes** as its despawn timer (owner, 2026-10-18). Drops survive restarts (`ring_drops`). **Picking up loose ore needs the tractor field (F)** (owner, 2026-10-18): flying over a drop doesn't pick it up; with the field on, drops it pulls in (or that you fly onto) pour in. Ships without a tractor field can't pick up loose ore.
 - **Drop cargo:** right-click (or hold) the cargo squares to jettison the hold as drops where you sit.
 
 ## Tractor fields (owner, 2026-10-18)
 
-- **The Miner and the Hauler press F to switch on holographic tractor areas out of both sides of the hull** (the owner's marked ship sheet): a trapezoid on each side, narrow at the hull and flaring outward — Miner: 36–70% of the hull's length at the hull, 12–76% at its outer edge, reaching half a ship length (~40 m) out; Hauler: 42–56% at the hull, 22–76% outside, a fifth of its length (~62 m) out (`SHIPS.*.tractor`, with each hull's `pivot` and half-width `hw`). **Any ore drop or jetcan you may haul inside an area is pulled toward the ship** (45 m/s, `TRACTOR.pull`) and scooped when it arrives; nothing is pulled while the hold is full, and your own jetcan only once you've flown off from it. F again switches it off; boarding another ship switches it off. Drawn as a faint ice hologram fading outward, scan lines drifting out from the hull, and a flickering edge — visible to everyone nearby.
+- **The Miner and the Hauler press F to switch on holographic tractor areas out of both sides of the hull** (the owner's marked ship sheet): a trapezoid on each side, narrow at the hull and flaring outward — Miner: 36–70% of the hull's length at the hull, 12–76% at its outer edge, reaching half a ship length (~40 m) out; Hauler: 42–56% at the hull, 22–76% outside, a fifth of its length (~62 m) out (`SHIPS.*.tractor`, with each hull's `pivot` and half-width `hw`). **Any ore drop or jetcan you may haul inside an area is pulled toward the ship** (45 m/s, `TRACTOR.pull`) and scooped when it arrives; nothing is pulled while the hold is full, and your own jetcan only once you've flown off from it. F again switches it off; boarding another ship switches it off. Drawn as a faint ice hologram fading outward, scan lines drifting in toward the hull (owner, 2026-10-18), and a flickering edge — visible to everyone nearby.
 
 ## Jetcans (owner, 2026-10-18)
 
@@ -52,6 +52,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 - **Who can haul from it:** a **base** can only its owner; a **party** can only that party's members; a **public** can anyone. Haul by flying within 40 m — it pours in up to the room aboard, in as many trips as it takes; an empty can is gone. **The owner can haul from their own can only after flying 100 m away from it** (no re-scooping it on the spot; a top-up re-arms that).
 - **Solo pilots make base cans; party members make party cans.** Either **turns public after 30 minutes**; a party can also **when its party disbands**. **A public can lasts 15 minutes**, then it's gone with whatever is left in it. (There are no parties in the game right now, so every can starts as a base can; the party rules are wired for when parties return.)
 - Drawn from the owner's jetcan sheet: the 66 × 35 sprites (base, party with a purple outline, public with a white one), each blinking its light, 26.6 m long (the ships' 0.403 m per sheet pixel), lying along the heading it was sent on (`website/assets/jetcan/`, `JETCAN` in rules.js). Cans survive restarts (`ring_jetcans`).
+- **Loot and jetcans persist through updates and restarts (owner, 2026-10-18):** the server saves drops, cans and pilots when a deploy stops it, and **every timer pauses while it's down** — drop and can clocks are pushed forward by the downtime (a heartbeat in `ring_meta` every 10 s), so nothing expires during an update.
 - **Delivery** (flying into the station circle) empties the hold **into the deliverer's own station storage**.
 
 ## The ships
@@ -65,7 +66,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 
 ## The optional tutorial (owner, 2026-10-18)
 
-- A **Tutorial chip** by the hold bar starts a 6-step walkthrough (fly to a rock, cut through the masonry, cut an ore chunk so its bits ride back into the hold, break the core, scoop the corium, deliver); **steps advance as the player actually does them**; ✕ dismisses it. The owner-requested exception to "no helper text."
+- A **Tutorial chip** by the hold bar starts a 6-step walkthrough (fly to a rock, cut through the masonry, cut an ore chunk so its bits ride back into the hold, break the core, press F to pull in the corium, deliver); **steps advance as the player actually does them**; ✕ dismisses it. The owner-requested exception to "no helper text."
 
 ## Map and HUD
 

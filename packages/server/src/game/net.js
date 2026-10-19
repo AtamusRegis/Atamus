@@ -157,5 +157,12 @@ export function attachGameServer(httpServer) {
       const mm = JSON.stringify(world.meMsg(p)); if (mm !== ws.lastMe) { ws.lastMe = mm; ws.send(mm); }
     }
   }, 200);
+  // (owner, 2026-10-18) a deploy restarts the service (SIGTERM): save drops, jetcans and pilots first
+  let closing = false;
+  for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => {
+    if (closing) return; closing = true;
+    const done = () => process.exit(0); setTimeout(done, 4000).unref();
+    world.flush().then(() => console.log("[ring] saved on " + sig)).catch((e) => console.error("ring flush", e)).finally(done);
+  });
   console.log("Saturn ring world attached at /ws");
 }

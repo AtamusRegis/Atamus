@@ -84,11 +84,19 @@ export class World {
     await pool.query(`CREATE TABLE IF NOT EXISTS ring_drops (id SERIAL PRIMARY KEY, x DOUBLE PRECISION NOT NULL, y DOUBLE PRECISION NOT NULL,
       ore TEXT NOT NULL, units INTEGER NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now())`);
     await pool.query(`CREATE TABLE IF NOT EXISTS ring_meta (k TEXT PRIMARY KEY, v JSONB NOT NULL)`);
+    // (owner, 2026-10-18: loot and jetcans persist updates and restarts) the clocks stop while the server is down: every
+    // timer is pushed forward by the downtime (the last heartbeat saved in ring_meta), so nothing expires during an update
+    let down = 0;
+    { const hb = await pool.query(`SELECT v FROM ring_meta WHERE k = 'alive'`); const at = hb.rows[0] && +hb.rows[0].v; if (at > 0) down = Math.max(0, Math.min(7 * 86400e3, Date.now() - at)); }
+    this.downMs = down;
+    if (down > 0) await pool.query(`UPDATE ring_drops SET created_at = created_at + $1 * interval '1 millisecond'`, [down]);
     const { rows } = await pool.query(`SELECT * FROM ring_drops`);
     for (const r of rows) if (R.ORES[r.ore]) this.drops.set(r.id, { id: r.id, x: +r.x, y: +r.y, ore: r.ore, units: +r.units, born: new Date(r.created_at).getTime(), dirty: false });
     this.dropSeq = Math.max(1, ...[...this.drops.keys()].map((k) => k + 1));
     await pool.query(`CREATE TABLE IF NOT EXISTS ring_jetcans (id INTEGER PRIMARY KEY, owner TEXT NOT NULL, party TEXT, x DOUBLE PRECISION NOT NULL,
       y DOUBLE PRECISION NOT NULL, h DOUBLE PRECISION NOT NULL DEFAULT 0, hold JSONB NOT NULL DEFAULT '{}', born TIMESTAMPTZ NOT NULL DEFAULT now(), public_at TIMESTAMPTZ)`);
+    if (down > 0) await pool.query(`UPDATE ring_jetcans SET born = born + $1 * interval '1 millisecond', public_at = public_at + $1 * interval '1 millisecond'`, [down]);
+    await this.heartbeat();
     const jc = await pool.query(`SELECT * FROM ring_jetcans`);
     for (const r of jc.rows) this.cans.set(r.id, { id: r.id, owner: r.owner, party: r.party || null, x: +r.x, y: +r.y, h: +r.h, hold: r.hold || {},
       born: new Date(r.born).getTime(), publicAt: r.public_at ? new Date(r.public_at).getTime() : 0, armed: true, dirty: false });
@@ -319,8 +327,9 @@ export class World {
       const dock = hyp(p.x - W.station[0], p.y - W.station[1]) < R.ECON.dockR;
       if (dock && !p.docked) this.deliver(p);
       if (dock !== p.docked) { p.docked = dock; p.meDirty = true; }
-      // ore drops: fly over one and it pours in up to the room aboard; the rest waits for another trip
-      if (!dock) for (const d of this.drops.values()) {
+      // ore drops: only with the tractor field on (owner, 2026-10-18: running over them doesn't pick them up) — one that
+      // reaches the ship pours in up to the room aboard; the rest waits for another trip
+      if (!dock && p.tractor && S.tractor) for (const d of this.drops.values()) {
         if (hyp(d.x - p.x, d.y - p.y) > 42) continue;
         const room = Math.max(0, Math.floor(S.hold - this.usedSpace(p))); if (room <= 0) break;
         const take = Math.min(d.units, room);
@@ -504,7 +513,11 @@ export class World {
       [p.id, p.x, p.y, p.h, p.ship, JSON.stringify(p.hold), JSON.stringify(p.storage || {})]);
     p.dirty = false;
   }
+  async heartbeat() { await pool.query(`INSERT INTO ring_meta (k, v) VALUES ('alive', $1) ON CONFLICT (k) DO UPDATE SET v = $1`, [JSON.stringify(Date.now())]); }
+  // everything unsaved, now (the shutdown on a deploy calls this, so the last seconds of loot and cans aren't lost)
+  async flush() { await this.ready; await this.saveDirty(); await this.heartbeat(); }
   async saveDirty() {
+    this.heartbeat().catch(() => {});
     for (const p of this.players.values()) if (p.dirty) await this._save(p);
     for (const d of [...this.drops.values()]) if (d.dirty) { d.dirty = false; await this.saveDrop(d); }
     for (const c of [...this.cans.values()]) if (c.dirty) { c.dirty = false; await this.saveCan(c); }
