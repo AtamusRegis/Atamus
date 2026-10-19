@@ -534,13 +534,15 @@ function drawChunkRock(r, det, ts) {
   if (!det) { cx.fillStyle = mix(DUNSCAN[0], "#ff7a28", Math.min(0.6, (r.heat || 0) * 0.7)); cx.strokeStyle = OUTLINE; cx.lineWidth = Math.max(0.8, 1.6 / zoom); cx.beginPath(); cx.arc(0, 0, r.r, 0, TAU); cx.fill(); cx.stroke(); cx.restore(); return; }   // (far off: the same unscanned mass, warmed by its core's heat)
   // the core: blue, swelling as ore bits bank into it, cracking with the mining it has taken — always in view, beneath the
   // masonry (owner, 2026-10-18: the chunk sheet), so its swelling shows as the layers around it come away
-  const frac = (r.fill || 0) / 100, heat = r.heat || 0, hot = Math.min(1, heat * 1.15);   // (owner, 2026-10-18) the core runs blue → orange as it heats
+  const frac = (r.fill || 0) / 100, heat = r.heat || 0, hot = Math.min(1, heat * 1.1);
   const gk = r.gulpT ? (performance.now() - r.gulpT) / 300 : 2;
   const cr = det.coreR * (1 + (G.core.grow || 1.5) * frac) * (gk < 1 ? 1 + 0.22 * Math.sin(gk * Math.PI) : 1);
   const over = heat >= 0.8 ? (0.5 + 0.5 * Math.sin(ts * (10 + 30 * (heat - 0.8)))) * (heat - 0.7) * 3 : 0;   // (near overheating it throbs, faster and faster)
-  let col = mix("#6fb7d8", "#ff7a28", hot);
-  if (over) col = mix(col, "#ff2e18", over * 0.6);
-  const gc = mix("#6fb7d8", "#ff7a28", hot).match(/\d+/g).join(",");
+  // (owner, 2026-10-18) the core runs yellow → orange → red as it heats
+  const ramp = (k) => k < 0.5 ? mix("#f2c94c", "#ff8a2a", k * 2) : mix("#ff8a2a", "#e8321e", (k - 0.5) * 2);
+  let col = ramp(hot);
+  if (over) col = mix(col, "#ff1a0a", over * 0.5);
+  const gc = ramp(hot).match(/\d+/g).join(",");
   const glowR = cr * (2 + hot * 2) + Math.sin(ts * 3) * 2;
   const g = cx.createRadialGradient(0, 0, cr * 0.4, 0, 0, glowR);
   g.addColorStop(0, "rgba(" + gc + "," + (0.28 + hot * 0.55 + over * 0.15).toFixed(2) + ")");
@@ -548,7 +550,7 @@ function drawChunkRock(r, det, ts) {
   cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, glowR, 0, TAU); cx.fill();
   cx.save(); if (hitNow && r.hitI === -1) cx.translate((Math.random() - 0.5) * 2.2 / zoom, (Math.random() - 0.5) * 2.2 / zoom);   // and the core itself shudders harder
   cx.fillStyle = col; cx.beginPath(); cx.arc(0, 0, cr, 0, TAU); cx.fill();
-  cx.strokeStyle = mix("#2b5a74", "#7a4a1e", hot); cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
+  cx.strokeStyle = mix(col, "#05070c", 0.55); cx.lineWidth = Math.min(1.6, lw(2)); cx.stroke();
   cx.fillStyle = "rgba(255,255,255,.4)"; cx.beginPath(); cx.arc(-cr * 0.3, -cr * 0.3, cr * 0.32, 0, TAU); cx.fill();
   const dmg = Math.min(1, Math.max(0, 1 - (r.hp || 100) / 100));
   if (dmg > 0.03) {                            // cracks show how mined the core is — stripped chunks and the laser both
