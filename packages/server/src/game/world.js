@@ -194,22 +194,23 @@ export class World {
       ON CONFLICT (id) DO UPDATE SET hold = $7, public_at = $9, x = $4, y = $5`, [c.id, c.owner, c.party, c.x, c.y, c.h, JSON.stringify(c.hold), c.born, c.publicAt ? new Date(c.publicAt) : null])
       .catch((e) => console.error("ring jetcan", e));
   }
-  // (owner, 2026-10-18) send out a jetcan: the hold pours into a new can behind the ship (or tops up my own can nearby),
-  // up to 100 ore bits; one private can per pilot at a time
-  sendJetcan(p) {
+  // (owner, 2026-10-18) send out a jetcan: the hold pours into a new can behind the ship, up to 100 ore bits. Up to 3
+  // private cans per pilot; past that the pilot is asked first, and replace: true destroys the oldest (ore and all)
+  sendJetcan(p, replace) {
     if (p.docked || !p.hold.length) return;
     const J = R.JETCAN, cap = J.bits * (R.CHUNK.oreUnit || 100);
-    let c = [...this.cans.values()].find((c2) => c2.owner === p.id && !c2.publicAt);
-    if (c && hyp(c.x - p.x, c.y - p.y) > J.topUpR) { this.msgs.push({ to: p.id, m: { t: "note", text: "Your jetcan is already out." } }); return; }
-    if (!c) {
-      const back = (this.shipOf(p).len || 60) * 0.6;
-      c = { id: this.canSeq++, owner: p.id, party: this.partyOf(p.id), x: p.x - Math.sin(p.h) * back, y: p.y + Math.cos(p.h) * back, h: p.h, hold: {}, born: now(), publicAt: 0, armed: false, dirty: true };
-      this.cans.set(c.id, c);
+    const mine = [...this.cans.values()].filter((c2) => c2.owner === p.id && !c2.publicAt).sort((a, b) => a.born - b.born);
+    if (mine.length >= J.max) {
+      if (!replace) { this.msgs.push({ to: p.id, m: { t: "canFull", n: mine.length } }); return; }
+      for (const old of mine.slice(0, mine.length - J.max + 1)) { this.fx.push({ k: "canGone", x: old.x, y: old.y }); this.deleteCan(old); }
     }
-    let room = cap - this.canUnits(c), moved = 0;
-    for (const e of p.hold) { if (room <= 0) break; const u = Math.min(e.u, room); c.hold[e.o] = (c.hold[e.o] || 0) + u; e.u -= u; room -= u; moved += u; }
+    const back = (this.shipOf(p).len || 60) * 0.6;
+    const c = { id: this.canSeq++, owner: p.id, party: this.partyOf(p.id), x: p.x - Math.sin(p.h) * back, y: p.y + Math.cos(p.h) * back, h: p.h, hold: {}, born: now(), publicAt: 0, armed: false, dirty: true };
+    let room = cap;
+    for (const e of p.hold) { if (room <= 0) break; const u = Math.min(e.u, room); c.hold[e.o] = (c.hold[e.o] || 0) + u; e.u -= u; room -= u; }
     p.hold = p.hold.filter((e) => e.u > 0);
-    if (moved) { c.armed = false; c.dirty = true; p.meDirty = true; p.dirty = true; this.fx.push({ k: "can", x: c.x, y: c.y, i: p.id }); }
+    this.cans.set(c.id, c); p.meDirty = true; p.dirty = true;
+    this.fx.push({ k: "can", x: c.x, y: c.y, i: p.id });
   }
   allowed(p, x, y) { const r = hyp(x, y); return r >= W.saturnR + (this.shipOf(p).r || FLY.shipR) && r <= W.lockedR; }
   resetField() {                               // (the world's shape changed: every rock regrows)
@@ -478,7 +479,7 @@ export class World {
     if (typeof m.rock === "string" && m.op === "mark") {   // a marked rock rides my minimap until it's gone
       const r = this.rocks.get(m.rock); if (!r) return;
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
-    } else if (m.op === "jetcan") this.sendJetcan(p);
+    } else if (m.op === "jetcan") this.sendJetcan(p, m.replace === true);
     else if (m.op === "respawn") { this.respawn(p.id); p.tractor = false; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
     else if (m.op === "tractor") { if (this.shipOf(p).tractor) p.tractor = !p.tractor; }
     else if (m.op === "drop") {              // jettison the hold as drops where I sit

@@ -302,6 +302,7 @@ function onMsg(m) {
     drawHud(); drawStation_();
   }
   else if (m.t === "note") note(m.text);
+  else if (m.t === "canFull") askConfirm("Destroy your oldest jetcan and the ore in it?", () => send({ t: "act", op: "jetcan", replace: true }));   // (owner, 2026-10-18) past 3 cans
   else if (m.t === "fx") {
     if (m.k === "bit") { bitWaves.push({ i: m.i, x: m.x, y: m.y, ore: m.ore, ts: m.ts, dur: m.dur }); return; }
     fx.push({ ...m, t0: performance.now() });
@@ -315,6 +316,7 @@ function onMsg(m) {
     }
     else if (m.k === "deliver") { burst(m.x, m.y, 14, [C.gold, "#fff"], 65); if (m.i === myId) { addShake(1); tutEv.delivered = true; } }
     else if (m.k === "lance") { addShake(2.5 * Math.max(0, 1 - d / 700)); if (d < 420) tutEv.blast = true; }
+    else if (m.k === "canGone") burst(m.x, m.y, 12, [C.signal, "#fff", C.dim], 70);
     else if (m.k === "can") { burst(m.x, m.y, 8, [C.gold, "#fff"], 50); if (m.i === myId) addShake(0.8); }
     else if (m.k === "take") { const oc = G.ores[ORE_KEYS[m.ore]]; burst(m.x, m.y, 5, [oc ? oc.color : "#fff", "#fff"], 45); }
     else if (m.k === "refine") { burst(m.x, m.y, 7, [C.ore, "#fff"], 45); if (m.i === myId) tutEv.refined = true; }
@@ -1031,6 +1033,11 @@ function showMenu(x, y, items) {
   ctxMenu.hidden = false; ctxMenu.style.left = Math.min(x, innerWidth - 180) + "px"; ctxMenu.style.top = Math.min(y, innerHeight - ctxMenu.offsetHeight - 8) + "px";
 }
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
+// an in-game yes / no (the page's own confirm dialogs aren't used)
+function askConfirm(text, yes) {
+  const box = $("confirm"); $("confirm-text").textContent = text; box.hidden = false;
+  $("confirm-yes").onclick = () => { box.hidden = true; yes(); }; $("confirm-no").onclick = () => { box.hidden = true; };
+}
 // (owner, 2026-10-18) the hamburger: a menu with Settings; Settings offers a respawn at the station
 { const bg = $("burger"), sp = $("settings");
   bg.addEventListener("click", (e) => { e.stopPropagation(); const r = bg.getBoundingClientRect(); showMenu(r.left, r.bottom + 6, [["Settings", () => { sp.hidden = false; }]]); });
