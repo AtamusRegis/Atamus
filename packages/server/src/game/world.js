@@ -616,6 +616,7 @@ export class World {
   breakChunk(rock, c) {
     if (c.broken) return;
     c.broken = true; rock.v++; rock.nBroken++;
+    if (c.heat > 0) { this.heatCore(rock, (R.HEAT.breakIn || 0) * c.heat); c.heat = 0; }   // (owner, 2026-10-18) a chunk broken hot dumps its heat into the core
     const mid = (c.r0 + c.r1) / 2, ang = c.a0 + normA(c.a1 - c.a0) / 2;
     this.fx.push({ k: "crack", x: rock.x + Math.cos(ang) * mid, y: rock.y + Math.sin(ang) * mid, rx: rock.x, ry: rock.y, u: 0, ore: 0 });
     rock.touched = now(); rock.home = false;

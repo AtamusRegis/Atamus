@@ -48,7 +48,7 @@ Every number is in `packages/server/src/game/rules.js` and is sent to the client
 ## Heat (owner, 2026-10-18)
 
 - **Cutting a chunk heats it** (to full in ~3 s of cutting) **and it cools when not being cut** (0.1 / s); **a hotter chunk cuts faster** (up to ×2.5). **A chunk glows more orange the hotter it is.**
-- **The core heats from all its warm chunks together** (owner, 2026-10-18): 0.045 × the sum of their heat² a second — the more chunks are hot and the hotter, the faster (0.08 / s while the laser is on the core itself); the core cools 0.015 / s (`HEAT`). Non-stop mining overheats a core in roughly 25 s. The core runs blue → orange as it heats and throbs, faster and faster, past 80%.
+- **The core heats from all its warm chunks together** (owner, 2026-10-18): 0.045 × the sum of their heat² a second — the more chunks are hot and the hotter, the faster (0.08 / s while the laser is on the core itself) — **and a chunk broken while hot dumps 0.06 × its heat into the core at once** (owner, 2026-10-18: mining layers non-stop must heat the core); the core cools 0.01 / s (`HEAT`). Non-stop mining overheats a small ring-1 core in roughly 20–25 s. The core runs blue → orange as it heats and throbs, faster and faster, past 80%.
 - **A core that overheats shatters the asteroid**: its corium and unmined chunks are lost (a bigger, hotter burst).
 
 ## The Booster (owner, 2026-10-18)

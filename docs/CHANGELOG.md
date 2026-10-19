@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Fix — mining layers non-stop left the core cold (owner report):** chunks break in a second or two, and a broken chunk's heat simply vanished, so the core only ever saw the one chunk under the laser and cooled faster than that warmed it. A chunk broken hot now dumps its heat into the core (`breakIn` 0.06 × heat), and the core cools slower (0.01 / s). Verified on a fresh local copy: a small ring-1 core went 0 → 86% in 21 s of non-stop mining and overheated.
 - **Fix — the chunk under the laser never glowed (owner report):** its bounce redraw was painted over its own heat glow, so the chunk you were cutting (scanned or not) never looked hot; the glow now draws on top of it.
 - **Bedrock heats (owner report):** the Miner's laser still can't cut bedrock, but the bedrock now heats, glows and shows its border under it like any chunk (and its heat feeds the core).
 - **Fix — ship and loot vanishing while mining; no chunk glow (owner report):** a comment had swallowed the end of the heated-chunk glow line, so each warm chunk left the canvas shifted to the rock — everything drawn after the rocks (drops, ships) landed off-screen while chunks were warm, and the glow itself never drew. Fixed; each guarded draw now also puts the canvas transform back afterwards.
