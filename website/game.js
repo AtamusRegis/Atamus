@@ -564,15 +564,15 @@ function drawChunkRock(r, det, ts) {
   }
   cx.restore();
   { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
+  if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted (before the glow, so it glows too)
+    const cb = det.c.find((x) => x[0] === bI);
+    if (cb) { cx.fillStyle = C.void; chunkPath(det, cb); cx.fill(); cx.save(); cx.translate(bx, by); cx.lineJoin = "round"; drawChunk(cx, det, cb, zoom); cx.restore(); }
+  }
   for (const [hi, hp2] of r.hot || []) {         // (owner, 2026-10-18) heated chunks glow orange
     const p = det.polys.get(hi); if (!p) continue; const hk = hp2 / 100, ox = hi === bI ? bx : 0, oy = hi === bI ? by : 0;   // (the chunk under the laser glows too, bouncing with it)
     // (more orange the hotter)
     cx.save(); cx.translate(ox, oy); cx.fillStyle = "rgba(255," + Math.round(150 - 50 * hk) + ",40," + (0.08 + 0.72 * hk).toFixed(3) + ")";
     cx.beginPath(); cx.moveTo(p[0][0], p[0][1]); for (let k = 1; k < p.length; k++) cx.lineTo(p[k][0], p[k][1]); cx.closePath(); cx.fill(); cx.restore();
-  }
-  if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted
-    const cb = det.c.find((x) => x[0] === bI);
-    if (cb) { cx.fillStyle = C.void; chunkPath(det, cb); cx.fill(); cx.save(); cx.translate(bx, by); cx.lineJoin = "round"; drawChunk(cx, det, cb, zoom); cx.restore(); }
   }
   if (r.tow) { cx.strokeStyle = C.ice; cx.lineWidth = lw(2); cx.setLineDash([lw(4), lw(4)]); cx.beginPath(); cx.arc(0, 0, r.r + lw(5), 0, TAU); cx.stroke(); cx.setLineDash([]); }
   cx.restore();
