@@ -279,9 +279,9 @@ function onMsg(m) {
   } else if (m.t === "snap") onSnap(m);
   else if (m.t === "rocks") {
     for (const row of m.a || []) { const [id, x, y, shells, r, broken, hp, fill, ht, hotL] = row, heat = (ht || 0) / 100, hot = hotL || []; const o = rocks.get(id); if (o) { if (fill > (o.fill || 0)) o.gulpT = performance.now(); Object.assign(o, { x, y, shells, r, broken, hp, fill, heat, hot }); } else rocks.set(id, { id, x, y, shells, r, broken, hp, fill, heat, hot, dx: x, dy: y }); }
-    for (const id of m.x || []) { rocks.delete(id); details.delete(id); }
+    for (const id of m.x || []) { rocks.delete(id); details.delete(id); dropBitmap(id); }
   } else if (m.t === "rockd") {
-    if (m.far) { details.delete(m.id); return; }   // (owner, 2026-10-18) out of range: the layers hide again
+    if (m.far) { details.delete(m.id); dropBitmap(m.id); return; }   // (owner, 2026-10-18) out of range: the layers hide again
     const cl = m.c || [], prev = details.get(m.id), rk0 = rocks.get(m.id);
     for (const c0 of cl) c0[5] = c0[5] ? 1 : 2;  // (every chunk shows its density and ore: drawn as the scanned look)
     if (prev && rk0) {                         // chunks that just broke shatter into drifting shards
@@ -493,18 +493,24 @@ function drawChunk(g, det, c0, zl) {
 }
 // (2026-10-18: big rocks hold hundreds of chunks) a rock's masonry is drawn once into its own bitmap, redrawn only when
 // its layout changes (a new rockd) or the zoom moves a half-octave; every frame just stamps the bitmap
-const CACHE_PX = 1536; let bmBudget = 1;
-function rockBitmap(det) {
+// (2026-10-18: "a gridded tear through the screen", now and then) one bitmap canvas per rock, kept and redrawn in place —
+// not a fresh full-size canvas on every layout update — and emptied (width 0) the moment the rock leaves view, so the
+// GPU isn't left holding dozens of big orphaned textures
+const CACHE_PX = 1024; let bmBudget = 1;
+const rockBms = new Map();                     // rock id -> { cv, R, s, v }
+function dropBitmap(id) { const e = rockBms.get(id); if (e) { e.cv.width = e.cv.height = 0; rockBms.delete(id); } }
+function rockBitmap(det, id) {
   let R0 = det.R0;
   if (!R0) { R0 = 0; for (const c0 of det.c) { const p = chunkPoly(det, c0); R0 = Math.max(R0, hyp(p.cx, p.cy) + p.br); } R0 = det.R0 = Math.ceil(R0 + 2); }
   const want = Math.pow(2, Math.ceil(Math.log2(Math.max(0.05, zoom * DPR)) * 2) / 2), sc = Math.min(want, CACHE_PX / (2 * R0));
-  if (det.bm && det.bmS === sc) return det.bm;
+  const e = rockBms.get(id);
+  if (e && e.det === det && e.s === sc) return e;
   // (2026-10-18: zooming lagged) while the zoom is easing, or once this frame already rebuilt a rock, keep the old bitmap
-  // (stretched) — it's redrawn once the zoom settles, one rock per frame
-  if (det.bm && (zoom !== zoomT || bmBudget <= 0)) return det.bm;
+  // (stretched) — it's redrawn once the zoom settles (or the layout changes), one rock per frame
+  if (e && ((e.det === det && zoom !== zoomT) || bmBudget <= 0)) return e;
   bmBudget--;
-  const n = Math.max(2, Math.ceil(2 * R0 * sc)), cvs = det.bm && det.bm.cv.width === n ? det.bm.cv : document.createElement("canvas");
-  cvs.width = cvs.height = n;
+  const n = Math.max(2, Math.ceil(2 * R0 * sc)), cvs = e ? e.cv : document.createElement("canvas");
+  if (cvs.width !== n) { cvs.width = cvs.height = n; }
   const g = cvs.getContext("2d"); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, n, n);
   g.setTransform(sc, 0, 0, sc, n / 2, n / 2); g.lineJoin = "round";
   // (owner, 2026-10-18) chunks show only once scanned or mined out: everything unscanned is one solid mass — filled and
@@ -517,7 +523,7 @@ function rockBitmap(det) {
   // (owner, 2026-10-18) an unscanned chunk the laser has touched shows its border (and its cracks) — still no density or bits
   for (const c0 of hid) if (c0[10]) drawChunk(g, det, c0, sc / DPR);
   for (const c0 of det.c) if (!(c0[5] & 1) && c0[6] >= 0) drawChunk(g, det, c0, sc / DPR);
-  det.bm = { cv: cvs, R: n / 2 / sc }; det.bmS = sc; return det.bm;
+  const out = { cv: cvs, R: n / 2 / sc, s: sc, det }; rockBms.set(id, out); return out;
 }
 function drawChunkRock(r, det, ts) {
   const lw = (px) => px / zoom;
@@ -565,7 +571,7 @@ function drawChunkRock(r, det, ts) {
     cx.stroke();
   }
   cx.restore();
-  { const bm = rockBitmap(det); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
+  { const bm = rockBitmap(det, r.id); cx.drawImage(bm.cv, -bm.R, -bm.R, bm.R * 2, bm.R * 2); }
   if (bI >= 0) {                               // the bouncing chunk: its place left as a gap, the chunk drawn shifted (before the glow, so it glows too)
     const cb = det.c.find((x) => x[0] === bI);
     if (cb) { cx.fillStyle = C.void; chunkPath(det, cb); cx.fill(); cx.save(); cx.translate(bx, by); cx.lineJoin = "round"; drawChunk(cx, det, cb, zoom); cx.restore(); }
@@ -623,7 +629,7 @@ function drawWorld(t) {
   const vr = Math.max(VW, VH) / zoom;
   for (const r of rocks.values()) {
     r.dx += (r.x - r.dx) * 0.2; r.dy += (r.y - r.dy) * 0.2;
-    if (Math.abs(r.dx - cam.x) > VW / 2 / zoom + r.r * 1.2 + 40 || Math.abs(r.dy - cam.y) > VH / 2 / zoom + r.r * 1.2 + 40) { const d0 = details.get(r.id); if (d0 && d0.bm) { d0.bm = null; d0.bmS = 0; } continue; }
+    if (Math.abs(r.dx - cam.x) > VW / 2 / zoom + r.r * 1.2 + 40 || Math.abs(r.dy - cam.y) > VH / 2 / zoom + r.r * 1.2 + 40) { dropBitmap(r.id); continue; }
     safeDraw(() => drawChunkRock(r, details.get(r.id), ts), "rock");
   }
   // ore drops adrift: free for anyone — fly over one and it pours in

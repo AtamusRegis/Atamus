@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-18
 
+- **Fix (likely) — an occasional gridded tear across the screen (owner report):** every rock layout update (each crack stage, scan, break, hit) made a brand-new full-size bitmap canvas for that rock, leaving the old ones for the garbage collector — a pile of large orphaned GPU textures, the classic cause of tiled corruption in Chrome. Each rock now keeps one canvas, redrawn in place, emptied as soon as the rock leaves view or the game; the bitmap cap dropped from 1536 to 1024 px.
 - **Core cutting makes no heat (owner):** only the chunks around a core heat it; the laser on the core itself adds none (`coreDirect` removed).
 - **Fix — breaking a core gave no corium (owner report):** the laser on the core heated it 0.08 / s, so cutting a core open (13 s or more) always overheated it first — and an overheated core shatters with its corium lost. The laser on the core now heats it only 0.01 / s; and when a core does overheat, pilots nearby get a note that the corium was lost.
 - **Space brakes (owner):** holding Space stops the ship hard (2.5× its acceleration, overriding thrust; server-applied, predicted on the client). `FLY.hardBrake`.
