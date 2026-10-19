@@ -143,7 +143,8 @@ function rockMenuItems(r) {
 cv.addEventListener("mousedown", (e) => {
   mouse.x = e.clientX; mouse.y = e.clientY;
   if (e.button === 0) firing = true;
-  if (e.button === 2) {                        // an asteroid: mark / tow
+  if (e.button === 2) {                        // a pilot: party (invite / kick / leave); an asteroid: mark / tow
+    const sh = shipMenuAt(e.clientX, e.clientY); if (sh) { showMenu(e.clientX, e.clientY, sh); return; }
     const r = rockAt(e.clientX, e.clientY);
     if (r) showMenu(e.clientX, e.clientY, rockMenuItems(r));
   }
@@ -157,8 +158,14 @@ if (TOUCH) document.body.classList.add("touch");
 const sticks = { move: null, aim: null };
 let touchAim = null, pinch = null;
 const touches = new Map();
+function shipMenuAt(sx, sy) {               // the party items for the ship under the pointer (mine included)
+  const s = shipAt(sx, sy); let id = s ? s.id : null;
+  if (!id) { const [wx, wy] = toWorld(sx, sy), S = myShip(); if (hyp(mine.x - wx, mine.y - wy) < Math.max(S.r || 24, 30 / zoom)) id = myId; }
+  if (!id) return null; const it = partyItems(id); return it.length ? it : null;
+}
 function touchMenuAt(x, y) {
   if (!G) return false;
+  { const sh = shipMenuAt(x, y); if (sh) { showMenu(x, y, sh); return true; } }
   const r = rockAt(x, y);
   if (!r) return false;
   showMenu(x, y, rockMenuItems(r)); return true;
@@ -302,6 +309,8 @@ function onMsg(m) {
     drawHud(); drawStation_();
   }
   else if (m.t === "note") note(m.text);
+  else if (m.t === "party") { PARTY = m.id ? m : null; drawParty(); }
+  else if (m.t === "invite") askConfirm((m.n || "A pilot") + " invites you to their party.", () => send({ t: "act", op: "inviteReply", from: m.from, yes: true }), { yes: "Accept", no: "Decline", calm: true, onNo: () => send({ t: "act", op: "inviteReply", from: m.from, yes: false }) });
   else if (m.t === "canFull") askConfirm("Destroy your oldest jetcan and the ore in it?", () => send({ t: "act", op: "jetcan", replace: true }));   // (owner, 2026-10-18) past 3 cans
   else if (m.t === "fx") {
     if (m.k === "bit") { bitWaves.push({ i: m.i, x: m.x, y: m.y, ore: m.ore, ts: m.ts, dur: m.dur }); return; }
@@ -359,7 +368,7 @@ function allowedMe(x, y) { const r = hyp(x, y); return r >= G.world.saturnR + (m
 function stepMe(dt, inp) {
   const S = myShip(), F = G.fly, rock = ME.tow && rocks.get(ME.tow);
   const spd = S.speed * (rock ? towFactor(rock.r) : 1), push = hyp(inp.x, inp.y);
-  const a = (push > 0.01 ? F.accel : F.brake) * dt;
+  const acc = S.accel || F.accel, a = (push > 0.01 ? acc : acc * F.brake / F.accel) * dt;   // (per ship, as the server)
   let ex = inp.x * spd - mine.vx, ey = inp.y * spd - mine.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
   mine.vx += ex; mine.vy += ey;
   if (mine.vx || mine.vy) {
@@ -381,8 +390,8 @@ function stepMe(dt, inp) {
   if (inp.stick) {
     const want = firing && touchAim !== null ? touchAim + Math.PI / 2 : (hyp(inp.x, inp.y) > 0.1 ? Math.atan2(inp.x, -inp.y) : mine.h);
     const d = Math.atan2(Math.sin(want - mine.h), Math.cos(want - mine.h));
-    mine.h = Math.atan2(Math.sin(mine.h + Math.max(-F.turn * dt, Math.min(F.turn * dt, d))), Math.cos(mine.h + Math.max(-F.turn * dt, Math.min(F.turn * dt, d))));
-  } else mine.h = Math.atan2(Math.sin(mine.h + inp.turn * F.turn * dt), Math.cos(mine.h + inp.turn * F.turn * dt));
+    { const tr = S.turn || F.turn; mine.h = Math.atan2(Math.sin(mine.h + Math.max(-tr * dt, Math.min(tr * dt, d))), Math.cos(mine.h + Math.max(-tr * dt, Math.min(tr * dt, d)))); }
+  } else { const tr = S.turn || F.turn; mine.h = Math.atan2(Math.sin(mine.h + inp.turn * tr * dt), Math.cos(mine.h + inp.turn * tr * dt)); }
 }
 let lastSent = 0, lastKey = "", heartbeat = 0;
 function sendInput(inp, t) {
@@ -917,10 +926,10 @@ function drawModes() {
 function drawCargo() {
   hud.cargo.replaceChildren(
     ...(ME.hold || []).map((e) => {
-      const sq = elx("i", "slot" + (e.raw ? "" : " ref"));
+      const sq = elx("i", "slot" + (e.raw ? "" : " ref") + (e.pt ? " pty" : ""));   // (party ore: outlined, can't be dropped or jetcanned)
       sq.style.background = G.ores[e.o] ? G.ores[e.o].color : "#888";
       sq.appendChild(elx("b", "n", e.u > 9999 ? "9999+" : String(e.u)));
-      sq.addEventListener("mouseenter", (ev) => showTip(ev, () => oreName(e.o) + (e.raw ? "" : " · refined") + "\n" + fmt(e.u) + (e.u === 1 ? " unit" : " units")));
+      sq.addEventListener("mouseenter", (ev) => showTip(ev, () => oreName(e.o) + (e.raw ? "" : " · refined") + (e.pt ? " · party" : "") + "\n" + fmt(e.u) + (e.u === 1 ? " unit" : " units")));
       sq.addEventListener("mousemove", moveTip); sq.addEventListener("mouseleave", hideTip);
       return sq;
     }));
@@ -1034,9 +1043,28 @@ function showMenu(x, y, items) {
 }
 addEventListener("pointerdown", (e) => { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) hideMenu(); }, true);
 // an in-game yes / no (the page's own confirm dialogs aren't used)
-function askConfirm(text, yes) {
-  const box = $("confirm"); $("confirm-text").textContent = text; box.hidden = false;
-  $("confirm-yes").onclick = () => { box.hidden = true; yes(); }; $("confirm-no").onclick = () => { box.hidden = true; };
+function askConfirm(text, yes, opt = {}) {
+  const box = $("confirm"), by = $("confirm-yes"), bn = $("confirm-no"); $("confirm-text").textContent = text; box.hidden = false;
+  by.textContent = opt.yes || "Destroy"; bn.textContent = opt.no || "Cancel"; by.className = opt.calm ? "gold" : "warn";
+  by.onclick = () => { box.hidden = true; yes(); }; bn.onclick = () => { box.hidden = true; if (opt.onNo) opt.onNo(); };
+}
+// ---- parties (owner, 2026-10-18): right-click a pilot to invite; the party window shows to everyone in it; the leader
+// right-clicks a member to kick; you right-click yourself to leave ----
+let PARTY = null;                              // { id, leader, members: [{ i, n, on }] } or null
+const inMyParty = (id) => !!PARTY && PARTY.members.some((m2) => m2.i === id);
+function partyItems(id) {
+  if (id === myId) return PARTY ? [["Leave party", () => send({ t: "act", op: "leave" })]] : [];
+  if (inMyParty(id)) return PARTY.leader === myId ? [["Kick from party", () => send({ t: "act", op: "kick", who: id })]] : [];
+  return !PARTY || PARTY.members.length < 8 ? [["Invite to party", () => send({ t: "act", op: "invite", to: id })]] : [];
+}
+function drawParty() {
+  const el = $("party"); el.hidden = !PARTY; if (!PARTY) return;
+  el.replaceChildren(elx("h3", null, "Party"), ...PARTY.members.map((m2) => {
+    const row = elx("div", "pm" + (m2.on ? "" : " off") + (m2.i === myId ? " me" : ""));
+    row.append(elx("span", "pm-n", m2.n || "?")); if (m2.i === PARTY.leader) row.append(elx("span", "pm-l", "Leader"));
+    row.addEventListener("contextmenu", (e) => { e.preventDefault(); const it = partyItems(m2.i); if (it.length) showMenu(e.clientX, e.clientY, it); });
+    return row;
+  }));
 }
 // (owner, 2026-10-18) the hamburger: a menu with Settings; Settings offers a respawn at the station
 { const bg = $("burger"), sp = $("settings");

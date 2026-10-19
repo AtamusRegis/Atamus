@@ -45,6 +45,14 @@
     #cargo { position: absolute; left: 0; bottom: calc(100% + 6px); width: 210px; display: flex; flex-wrap: wrap-reverse; gap: 3px; align-items: flex-end; pointer-events: auto; }
     #cargo i { border-radius: 2px; position: relative; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); animation: popin .3s cubic-bezier(.3,1.2,.4,1); cursor: context-menu; }
     #cargo i.slot { width: 22px; height: 20px; }
+    #cargo i.slot.pty { outline: 2px solid var(--ore); outline-offset: 1px; }
+    /* (owner, 2026-10-18) the party window: everyone in it, the leader marked; right-click a name for its party items */
+    #party { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(60px + env(safe-area-inset-top, 0px)); z-index: 6; min-width: 160px; max-width: 220px; padding: 8px 10px; background: rgba(18,24,36,.9); border: 1px solid var(--rule); border-radius: 6px; }
+    #party[hidden] { display: none; }
+    #party h3 { margin: 0 0 4px; font: 600 11px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ore); }
+    #party .pm { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; font: 13px var(--f-body); color: var(--ink); cursor: default; }
+    #party .pm.off { opacity: .45; } #party .pm.me .pm-n { font-weight: 700; }
+    #party .pm-l { font: 600 9.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
     #cargo i b.n { position: absolute; right: 2px; bottom: 0; font: 600 10px var(--f-mono); font-style: normal; color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; }
     #cargo i.ref { box-shadow: inset 0 0 0 1.5px #fff; }
     #tip { position: fixed; z-index: 40; pointer-events: none; padding: 5px 8px; border-radius: 4px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--f-mono); color: var(--ink); white-space: pre; box-shadow: 0 8px 20px rgba(0,0,0,.45); }
@@ -99,6 +107,7 @@
     #confirm p { margin: 0 0 12px; font: 15px var(--f-body); color: var(--ink); }
     #confirm div { display: flex; gap: 8px; justify-content: flex-end; }
     #confirm button { padding: 6px 12px; border: 1px solid var(--rule); border-radius: 4px; background: rgba(255,255,255,.05); color: var(--ink); font: 600 13px var(--f-body); cursor: pointer; }
+    #confirm button.gold { background: var(--gold); border-color: transparent; color: #1a1205; }
     #confirm button.warn { background: var(--signal); border-color: transparent; color: #fff; }
     #ctx-menu { position: fixed; z-index: 30; display: grid; min-width: 160px; padding: 4px; background: var(--plate); border: 1px solid var(--rule); border-radius: 6px; box-shadow: 0 12px 30px rgba(0,0,0,.5); animation: menuin .12s ease-out; transform-origin: 12px 10px; }
     #ctx-menu[hidden] { display: none; }
@@ -150,6 +159,7 @@
   <div id="zoom-col"><button id="zoom-in" type="button">+</button><button id="zoom-out" type="button">−</button></div>
   <div id="station" hidden></div>
   <div id="confirm" hidden><p id="confirm-text"></p><div><button id="confirm-no" type="button">Cancel</button><button id="confirm-yes" class="warn" type="button">Destroy</button></div></div>
+  <div id="party" hidden></div>
   <button id="burger" type="button" aria-label="Menu"><i></i><i></i><i></i></button>
   <div id="settings" hidden><div class="st-head"><span class="st-title">Settings</span><button class="st-x" id="settings-x" type="button" aria-label="Close">✕</button></div>
     <section><button id="respawn" type="button">Respawn at station</button></section></div>
@@ -158,6 +168,6 @@
   <div id="status" class="overlay">Connecting…</div>
   <div id="countdown" class="overlay" hidden></div>
   <script src="api.js?v=1792500001"></script>
-  <script type="module" src="game.js?v=1792500024"></script>
+  <script type="module" src="game.js?v=1792500026"></script>
 </body>
 </html>

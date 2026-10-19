@@ -67,7 +67,8 @@ export class World {
     this.rocks = new Map();                    // id -> rock (chunks, core)
     this.slots = new Map(); this.cells = new Map(); this.grid = new Map();
     this.drops = new Map(); this.dropSeq = 1; this.bits = [];
-    this.cans = new Map(); this.canSeq = 1;   // (owner, 2026-10-18) jetcans  // ore adrift: free for anyone, picked up by flying over
+    this.cans = new Map(); this.canSeq = 1;   // (owner, 2026-10-18) jetcans
+    this.parties = new Map(); this.memberParty = new Map(); this.invites = new Map();   // (owner, 2026-10-18) parties: id -> { id, leader, members [{ i, n }] }; pilot -> party; invitee -> { from, at }  // ore adrift: free for anyone, picked up by flying over
     this.msgs = []; this.fx = [];
     this.offline = new Map();                  // player id -> promise chain (ore paid to offline players)
     this.ready = this._load();
@@ -97,8 +98,16 @@ export class World {
       y DOUBLE PRECISION NOT NULL, h DOUBLE PRECISION NOT NULL DEFAULT 0, hold JSONB NOT NULL DEFAULT '{}', born TIMESTAMPTZ NOT NULL DEFAULT now(), public_at TIMESTAMPTZ)`);
     if (down > 0) await pool.query(`UPDATE ring_jetcans SET born = born + $1 * interval '1 millisecond', public_at = public_at + $1 * interval '1 millisecond'`, [down]);
     await this.heartbeat();
+    await pool.query(`ALTER TABLE ring_jetcans ADD COLUMN IF NOT EXISTS split JSONB`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS ring_parties (id TEXT PRIMARY KEY, leader TEXT NOT NULL, members JSONB NOT NULL DEFAULT '[]')`);
+    for (const r of (await pool.query(`SELECT * FROM ring_parties`)).rows) {
+      const members = (Array.isArray(r.members) ? r.members : []).filter((m2) => m2 && typeof m2.i === "string").map((m2) => ({ i: m2.i, n: String(m2.n || "") }));
+      if (members.length < 2) { pool.query(`DELETE FROM ring_parties WHERE id = $1`, [r.id]).catch(() => {}); continue; }
+      this.parties.set(r.id, { id: r.id, leader: members.some((m2) => m2.i === r.leader) ? r.leader : members[0].i, members });
+      for (const m2 of members) this.memberParty.set(m2.i, r.id);
+    }
     const jc = await pool.query(`SELECT * FROM ring_jetcans`);
-    for (const r of jc.rows) this.cans.set(r.id, { id: r.id, owner: r.owner, party: r.party || null, x: +r.x, y: +r.y, h: +r.h, hold: r.hold || {},
+    for (const r of jc.rows) this.cans.set(r.id, { id: r.id, owner: r.owner, party: r.party || null, split: Array.isArray(r.split) ? r.split.map(String) : null, x: +r.x, y: +r.y, h: +r.h, hold: r.hold || {},
       born: new Date(r.born).getTime(), publicAt: r.public_at ? new Date(r.public_at).getTime() : 0, armed: true, dirty: false });
     this.canSeq = Math.max(1, ...[...this.cans.keys()].map((k) => k + 1));
   }
@@ -191,21 +200,21 @@ export class World {
       if (c.publicAt && t - c.publicAt > J.publicFor * 1000) this.deleteCan(c);
     }
   }
-  partyOf() { return null; }                   // (no parties in the game right now: every can starts as a base can)
-  partyAlive() { return false; }
+  partyOf(pid) { return this.memberParty.get(String(pid)) || null; }
+  partyAlive(id) { return this.parties.has(id); }
   canUnits(c) { return Object.values(c.hold).reduce((a, u) => a + u, 0); }
   canKind(c) { return c.publicAt ? 2 : c.party ? 1 : 0; }
-  canHaul(p, c) { return c.publicAt ? true : c.party ? this.partyOf(p.id) === c.party : c.owner === p.id; }
+  canHaul(p, c) { return c.publicAt ? true : c.party ? this.partyOf(p.id) === c.party || p.ship === "hauler" : c.owner === p.id; }   // (any Hauler can carry a party's can: its ore still goes to the party)
   deleteCan(c) { this.cans.delete(c.id); pool.query(`DELETE FROM ring_jetcans WHERE id = $1`, [c.id]).catch(() => {}); }
   async saveCan(c) {
-    await pool.query(`INSERT INTO ring_jetcans (id, owner, party, x, y, h, hold, born, public_at) VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0), $9)
-      ON CONFLICT (id) DO UPDATE SET hold = $7, public_at = $9, x = $4, y = $5`, [c.id, c.owner, c.party, c.x, c.y, c.h, JSON.stringify(c.hold), c.born, c.publicAt ? new Date(c.publicAt) : null])
+    await pool.query(`INSERT INTO ring_jetcans (id, owner, party, x, y, h, hold, born, public_at, split) VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8 / 1000.0), $9, $10)
+      ON CONFLICT (id) DO UPDATE SET hold = $7, public_at = $9, x = $4, y = $5`, [c.id, c.owner, c.party, c.x, c.y, c.h, JSON.stringify(c.hold), c.born, c.publicAt ? new Date(c.publicAt) : null, c.split ? JSON.stringify(c.split) : null])
       .catch((e) => console.error("ring jetcan", e));
   }
   // (owner, 2026-10-18) send out a jetcan: the hold pours into a new can behind the ship, up to 100 ore bits. Up to 3
   // private cans per pilot; past that the pilot is asked first, and replace: true destroys the oldest (ore and all)
   sendJetcan(p, replace) {
-    if (p.docked || !p.hold.length) return;
+    if (p.docked || !p.hold.some((e) => !e.sp)) return;   // (party ore can't be jetcanned)
     const J = R.JETCAN, cap = J.bits * (R.CHUNK.oreUnit || 100);
     const mine = [...this.cans.values()].filter((c2) => c2.owner === p.id && !c2.publicAt).sort((a, b) => a.born - b.born);
     if (mine.length >= J.max) {
@@ -213,12 +222,52 @@ export class World {
       for (const old of mine.slice(0, mine.length - J.max + 1)) { this.fx.push({ k: "canGone", x: old.x, y: old.y }); this.deleteCan(old); }
     }
     const back = (this.shipOf(p).len || 60) * 0.6;
-    const c = { id: this.canSeq++, owner: p.id, party: this.partyOf(p.id), x: p.x - Math.sin(p.h) * back, y: p.y + Math.cos(p.h) * back, h: p.h, hold: {}, born: now(), publicAt: 0, armed: false, dirty: true };
+    const pty = this.partyOf(p.id), c = { id: this.canSeq++, owner: p.id, party: pty, split: pty && this.parties.get(pty) ? this.parties.get(pty).members.map((m2) => m2.i) : null, x: p.x - Math.sin(p.h) * back, y: p.y + Math.cos(p.h) * back, h: p.h, hold: {}, born: now(), publicAt: 0, armed: false, dirty: true };
     let room = cap;
-    for (const e of p.hold) { if (room <= 0) break; const u = Math.min(e.u, room); c.hold[e.o] = (c.hold[e.o] || 0) + u; e.u -= u; room -= u; }
+    for (const e of p.hold) { if (room <= 0) break; if (e.sp) continue; const u = Math.min(e.u, room); c.hold[e.o] = (c.hold[e.o] || 0) + u; e.u -= u; room -= u; }
     p.hold = p.hold.filter((e) => e.u > 0);
     this.cans.set(c.id, c); p.meDirty = true; p.dirty = true;
     this.fx.push({ k: "can", x: c.x, y: c.y, i: p.id });
+  }
+  // ---- parties (owner, 2026-10-18): right-click a pilot to invite (they accept or decline); the leader right-clicks a
+  // member to kick; a member right-clicks themselves to leave. A party of one disbands (its cans turn public). ----
+  partyTell(pt) {
+    const view = { t: "party", id: pt.id, leader: pt.leader, members: pt.members.map((m2) => ({ i: m2.i, n: m2.n, on: this.players.has(m2.i) ? 1 : 0 })) };
+    for (const m2 of pt.members) if (this.players.has(m2.i)) this.msgs.push({ to: m2.i, m: view });
+  }
+  partySave(pt) { pool.query(`INSERT INTO ring_parties (id, leader, members) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET leader = $2, members = $3`, [pt.id, pt.leader, JSON.stringify(pt.members)]).catch((e) => console.error("party save", e)); }
+  partyRemove(pt, pid) {
+    pt.members = pt.members.filter((m2) => m2.i !== pid); this.memberParty.delete(pid);
+    this.msgs.push({ to: pid, m: { t: "party", id: null } });
+    if (pt.members.length < 2) {               // disbanded: the last one out too; its private cans turn public on the next tick
+      for (const m2 of pt.members) { this.memberParty.delete(m2.i); this.msgs.push({ to: m2.i, m: { t: "party", id: null } }); }
+      this.parties.delete(pt.id); pool.query(`DELETE FROM ring_parties WHERE id = $1`, [pt.id]).catch(() => {});
+      return;
+    }
+    if (pt.leader === pid) pt.leader = pt.members[0].i;
+    this.partySave(pt); this.partyTell(pt);
+  }
+  partyAct(p, m) {
+    const t = now();
+    if (m.op === "invite" && typeof m.to === "string") {
+      const q = this.players.get(m.to); if (!q || q.id === p.id || this.partyOf(q.id)) return;
+      const mine = this.parties.get(this.partyOf(p.id)); if (mine && mine.members.length >= 8) return;
+      this.invites.set(q.id, { from: p.id, at: t });
+      this.msgs.push({ to: q.id, m: { t: "invite", from: p.id, n: p.name } });
+    } else if (m.op === "inviteReply" && typeof m.from === "string") {
+      const inv = this.invites.get(p.id); this.invites.delete(p.id);
+      if (!inv || inv.from !== m.from || t - inv.at > 60000 || m.yes !== true || this.partyOf(p.id)) return;
+      const q = this.players.get(m.from); let pt = this.parties.get(this.partyOf(m.from));
+      if (!pt) { if (!q) return; pt = { id: "p" + t.toString(36) + Math.floor(Math.random() * 1e6).toString(36), leader: q.id, members: [{ i: q.id, n: q.name }] }; this.parties.set(pt.id, pt); this.memberParty.set(q.id, pt.id); }
+      if (pt.members.length >= 8) return;
+      pt.members.push({ i: p.id, n: p.name }); this.memberParty.set(p.id, pt.id);
+      this.partySave(pt); this.partyTell(pt);
+    } else if (m.op === "kick" && typeof m.who === "string") {
+      const pt = this.parties.get(this.partyOf(p.id)); if (!pt || pt.leader !== p.id || m.who === p.id || !pt.members.some((m2) => m2.i === m.who)) return;
+      this.partyRemove(pt, m.who);
+    } else if (m.op === "leave") {
+      const pt = this.parties.get(this.partyOf(p.id)); if (pt) this.partyRemove(pt, p.id);
+    }
   }
   allowed(p, x, y) { const r = hyp(x, y); return r >= W.saturnR + (this.shipOf(p).r || FLY.shipR) && r <= W.lockedR; }
   resetField() {                               // (the world's shape changed: every rock regrows)
@@ -239,11 +288,12 @@ export class World {
     if (r) {
       if (r.storage && typeof r.storage === "object") for (const [o, v] of Object.entries(r.storage)) if (R.ORES[o] && Number.isFinite(+v) && +v > 0) p.storage[o] = Math.round(+v);
       Object.assign(p, { x: r.x, y: r.y, h: r.h, ship: SHIPS[r.module] ? r.module : R.START.ship,
-        hold: Array.isArray(r.hold) ? r.hold.filter((e) => e && R.ORES[e.o] && Number.isFinite(e.u)).map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0 })) : [] });
+        hold: Array.isArray(r.hold) ? r.hold.filter((e) => e && R.ORES[e.o] && Number.isFinite(e.u)).map((e) => { const e2 = { o: e.o, u: e.u, raw: e.raw ? 1 : 0 }; if (Array.isArray(e.sp) && e.sp.length) e2.sp = e.sp.map(String); return e2; }) : [] });
       if (!this.allowed(p, p.x, p.y)) { p.x = sx; p.y = sy + 120; }
     }
     p.zone = zoneOf(p.x, p.y);
     this.players.set(id, p);
+    { const pt = this.parties.get(this.partyOf(id)); if (pt) { const m2 = pt.members.find((x) => x.i === id); if (m2) m2.n = name; this.partyTell(pt); } }
     await pool.query(`INSERT INTO ring_players (user_id, x, y, h, fuel, module, modules) VALUES ($1, $2, $3, $4, 0, $5, '[]')
       ON CONFLICT (user_id) DO UPDATE SET logout_at = NULL`, [id, p.x, p.y, p.h, p.ship]);
     return p;
@@ -251,6 +301,7 @@ export class World {
   async leave(id) {
     const p = this.players.get(String(id)); if (!p) return;
     this.players.delete(p.id);
+    { const pt = this.parties.get(this.partyOf(p.id)); if (pt) this.partyTell(pt); }
     await this._save(p); await pool.query(`UPDATE ring_players SET logout_at = now() WHERE user_id = $1`, [p.id]);
   }
   respawn(id) { const p = this.players.get(String(id)); if (!p) return null; const [sx, sy] = W.station; return this.teleport(id, sx, sy + 120); }
@@ -266,7 +317,7 @@ export class World {
     let fx = n(m.x), fy = n(m.y); const L = hyp(fx, fy); if (L > 1) { fx /= L; fy /= L; }
     p.fx = fx; p.fy = fy;
     if (typeof m.h === "number" && Number.isFinite(m.h)) {
-      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = FLY.turn * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
+      const t = now(), dt = Math.min(0.5, (t - (p.hAt || t)) / 1000) + 0.1, mx = (this.shipOf(p).turn || FLY.turn) * dt * 1.3, d = Math.atan2(Math.sin(m.h - p.h), Math.cos(m.h - p.h));
       p.h = p.h + Math.max(-mx, Math.min(mx, d)); p.h = Math.atan2(Math.sin(p.h), Math.cos(p.h)); p.hAt = t;
     }
     p.aim = n(m.a); p.firing = m.f === 1;
@@ -310,7 +361,7 @@ export class World {
     const t = now(); this.simT = t;
     for (const p of this.players.values()) {
       const S = this.shipOf(p), push = hyp(p.fx, p.fy);
-      const a = (push > 0.01 ? FLY.accel : FLY.brake) * dt;
+      const acc = S.accel || FLY.accel, a = (push > 0.01 ? acc : acc * FLY.brake / FLY.accel) * dt;   // (per ship: bigger is slower to speed up)
       let ex = p.fx * S.speed - p.vx, ey = p.fy * S.speed - p.vy; const el = hyp(ex, ey); if (el > 1e-9 && el > a) { ex *= a / el; ey *= a / el; }
       p.vx += ex; p.vy += ey;
       if (p.vx || p.vy) {
@@ -330,10 +381,10 @@ export class World {
       // ore drops: only with the tractor field on (owner, 2026-10-18: running over them doesn't pick them up) — one that
       // reaches the ship pours in up to the room aboard; the rest waits for another trip
       if (!dock && p.tractor && S.tractor) for (const d of this.drops.values()) {
-        if (hyp(d.x - p.x, d.y - p.y) > 42) continue;
+        if (hyp(d.x - p.x, d.y - p.y) > Math.max(42, S.r || 0)) continue;   // (a big hull scoops what reaches its hull)
         const room = Math.max(0, Math.floor(S.hold - this.usedSpace(p))); if (room <= 0) break;
         const take = Math.min(d.units, room);
-        let e = p.hold.find((e2) => e2.raw && e2.o === d.ore); if (!e) { e = { o: d.ore, u: 0, raw: 1 }; p.hold.push(e); }
+        let e = p.hold.find((e2) => e2.raw && !e2.sp && e2.o === d.ore); if (!e) { e = { o: d.ore, u: 0, raw: 1 }; p.hold.push(e); }
         e.u += take; d.units -= take; d.dirty = true; p.meDirty = true; p.dirty = true;
         this.fx.push({ k: "take", x: d.x, y: d.y, i: p.id, ore: ORE_KEYS.indexOf(d.ore) });
         if (d.units <= 0) this.deleteDrop(d);
@@ -349,11 +400,14 @@ export class World {
       for (const c of [...this.cans.values()]) {
         const dc = hyp(c.x - p.x, c.y - p.y);
         if (c.owner === p.id && !c.armed) { if (dc > R.JETCAN.ownerAway) c.armed = true; continue; }
-        if (dock || dc > R.JETCAN.pickR || !this.canHaul(p, c)) continue;
+        if (dock || dc > Math.max(R.JETCAN.pickR, S.r || 0) || !this.canHaul(p, c)) continue;
         let room = Math.max(0, Math.floor(S.hold - this.usedSpace(p))); if (room <= 0) break;
         for (const [o, u] of Object.entries(c.hold)) {
           if (room <= 0) break; const take = Math.min(u, room); if (take <= 0) continue;
-          let e = p.hold.find((e2) => e2.raw && e2.o === o); if (!e) { e = { o, u: 0, raw: 1 }; p.hold.push(e); }
+          // a party can's ore stays the party's: tagged with who was in the party when the can was made, it can't be
+          // dropped or jetcanned, and its delivery is split evenly among them (owner, 2026-10-18)
+          const sp = c.party && !c.publicAt && Array.isArray(c.split) && c.split.length ? c.split : null, key = sp ? sp.join(",") : "";
+          let e = p.hold.find((e2) => e2.raw && e2.o === o && (e2.sp ? e2.sp.join(",") : "") === key); if (!e) { e = { o, u: 0, raw: 1 }; if (sp) e.sp = [...sp]; p.hold.push(e); }
           e.u += take; room -= take; c.hold[o] = u - take; if (c.hold[o] <= 0) delete c.hold[o];
           p.meDirty = true; p.dirty = true; c.dirty = true;
         }
@@ -398,7 +452,7 @@ export class World {
         const p = this.players.get(b.pid);
         if (!p) { this.spawnDrops(b.ore, b.u, b.x, b.y, 20); continue; }
         const room = Math.max(0, Math.floor(this.shipOf(p).hold - this.usedSpace(p))), take = Math.min(b.u, room);
-        if (take > 0) { let e = p.hold.find((e2) => e2.raw && e2.o === b.ore); if (!e) { e = { o: b.ore, u: 0, raw: 1 }; p.hold.push(e); } e.u += take; p.meDirty = true; p.dirty = true; }
+        if (take > 0) { let e = p.hold.find((e2) => e2.raw && !e2.sp && e2.o === b.ore); if (!e) { e = { o: b.ore, u: 0, raw: 1 }; p.hold.push(e); } e.u += take; p.meDirty = true; p.dirty = true; }
         if (b.u - take > 0) this.spawnDrops(b.ore, b.u - take, p.x, p.y, 30);
       }
       this.bits = keep;
@@ -468,9 +522,33 @@ export class World {
     q.meDirty = true; q.dirty = true;
     if (note) this.msgs.push({ to: pid, m: { t: "note", text: note + " " + this.sumText(ores) + " into storage." } });
   }
+  // credit any pilot's station storage, online or not (offline: queued straight into their saved row)
+  storageAddAny(pid, ores, note) {
+    if (this.players.has(pid)) return this.storageAdd(pid, ores, note);
+    const prev = this.offline.get(pid) || Promise.resolve();
+    const next = prev.then(async () => {
+      const { rows } = await pool.query(`SELECT storage FROM ring_players WHERE user_id = $1`, [pid]); if (!rows[0]) return;
+      const st = rows[0].storage && typeof rows[0].storage === "object" ? rows[0].storage : {};
+      for (const [o, u] of Object.entries(ores)) if (u > 0 && R.ORES[o]) st[o] = Math.round((+st[o] || 0) + u);
+      await pool.query(`UPDATE ring_players SET storage = $2 WHERE user_id = $1`, [pid, JSON.stringify(st)]);
+    }).catch((e) => console.error("offline storage", e));
+    this.offline.set(pid, next);
+  }
   deliver(p) {
-    const ores = {};
-    for (const e of p.hold) ores[e.o] = (ores[e.o] || 0) + e.u;
+    const ores = {}, split = new Map();
+    for (const e of p.hold) {
+      if (e.sp) { const k = e.sp.join(","); if (!split.has(k)) split.set(k, { ids: e.sp, ores: {} }); const so = split.get(k).ores; so[e.o] = (so[e.o] || 0) + e.u; continue; }
+      ores[e.o] = (ores[e.o] || 0) + e.u;
+    }
+    // (owner, 2026-10-18) party ore: split evenly among everyone who was in the party when its can was made (remainders a
+    // unit at a time, from a random member)
+    for (const { ids, ores: so } of split.values()) {
+      const shares = ids.map(() => ({})), n = ids.length;
+      for (const [o, u] of Object.entries(so)) { const per = Math.floor(u / n), start = Math.floor(Math.random() * n);
+        for (let k = 0; k < n; k++) shares[k][o] = per + (((k - start + n) % n) < u - per * n ? 1 : 0); }
+      ids.forEach((id, k) => this.storageAddAny(id, shares[k], "Party share:"));
+      if (!ids.includes(p.id)) this.msgs.push({ to: p.id, m: { t: "note", text: "Delivered " + this.sumText(so) + " to a party (" + n + " ways)." } });
+    }
     p.hold = [];
     if (Object.keys(ores).length) this.storageAdd(p.id, ores, "Delivered");
     p.meDirty = true; p.dirty = true;
@@ -489,12 +567,13 @@ export class World {
       const r = this.rocks.get(m.rock); if (!r) return;
       p.mark = p.mark && p.mark.rock === r.id ? null : { rock: r.id, x: Math.round(r.x), y: Math.round(r.y) };
     } else if (m.op === "jetcan") this.sendJetcan(p, m.replace === true);
+    else if (["invite", "inviteReply", "kick", "leave"].includes(m.op)) this.partyAct(p, m);
     else if (m.op === "respawn") { this.respawn(p.id); p.tractor = false; }   // (owner, 2026-10-18) Settings → respawn at the station (the hold stays aboard)
     else if (m.op === "tractor") { if (this.shipOf(p).tractor) p.tractor = !p.tractor; }
     else if (m.op === "drop") {              // jettison the hold as drops where I sit
-      if (p.docked || !p.hold.length) return;
-      for (const e of p.hold) this.spawnDrops(e.o, e.u, p.x, p.y, 60);
-      p.hold = []; p.dirty = true;
+      if (p.docked || !p.hold.some((e) => !e.sp)) return;
+      for (const e of p.hold) if (!e.sp) this.spawnDrops(e.o, e.u, p.x, p.y, 60);
+      p.hold = p.hold.filter((e) => e.sp); p.dirty = true;   // (party ore can't be dropped)
     }
     p.meDirty = true;
   }
@@ -577,7 +656,7 @@ export class World {
   }
   meMsg(p) {
     const S = this.shipOf(p);
-    return { t: "me", cap: S.hold, hold: p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0 })), docked: p.docked ? 1 : 0,
+    return { t: "me", cap: S.hold, hold: p.hold.map((e) => ({ o: e.o, u: e.u, raw: e.raw ? 1 : 0, pt: e.sp ? 1 : 0 })), docked: p.docked ? 1 : 0,
       ship: p.ship, zone: p.zone, storage: Object.fromEntries(Object.entries(p.storage).map(([o, u]) => [o, Math.round(u)])),
       mark: p.mark ? [p.mark.x, p.mark.y] : 0, tractor: p.tractor ? 1 : 0 };
   }
