@@ -88,6 +88,7 @@ export function attachGameServer(httpServer) {
       else if (m.t === "act") world.act(pid, m);
       else if (m.t === "st") world.station(pid, m);
       else if (m.t === "tune") tune(m);
+      else if (m.t === "clientErr" && typeof m.m === "string") console.error("[client draw error]", pid, m.m.slice(0, 200));   // (a client's drawing failure, logged once per kind)
       else if (m.t === "ping") { try { ws.send(JSON.stringify({ t: "pong", ts: m.ts })); } catch {} }
     });
     // tuning: one number at a time, or everything back to the defaults — staff sessions only (no in-game UI anymore)

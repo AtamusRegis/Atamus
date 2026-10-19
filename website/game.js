@@ -596,6 +596,13 @@ function castLocal(px, py, ang, range, scan) {   // scan: the scan beam passes t
   return { len: bestT, hit, rock: hitRock, chunk: hitI };
 }
 let lastWT = 0;
+// (2026-10-18: a ship vanished mid-mining) one thing failing to draw must not take the rest of the frame with it: the
+// canvas state is put back and the error logged once
+const drawErrs = new Set();
+function safeDraw(fn, tag) {
+  const m = cx.getTransform(), a = cx.globalAlpha;
+  try { fn(); } catch (e) { const k = tag + ": " + (e && e.message); if (!drawErrs.has(k)) { drawErrs.add(k); console.error("[draw " + tag + "]", e); send({ t: "clientErr", m: k.slice(0, 200) }); } cx.setTransform(m); cx.globalAlpha = a; cx.lineCap = "round"; }
+}
 function drawWorld(t) {
   const W = G.world, ts = t / 1000, wdt = Math.min(0.05, Math.max(0, (t - lastWT) / 1000)); lastWT = t;
   cx.save(); cx.translate(VW / 2 + shk.x, VH / 2 + shk.y); cx.scale(zoom, zoom); cx.translate(-cam.x, -cam.y);
@@ -613,7 +620,7 @@ function drawWorld(t) {
   for (const r of rocks.values()) {
     r.dx += (r.x - r.dx) * 0.2; r.dy += (r.y - r.dy) * 0.2;
     if (Math.abs(r.dx - cam.x) > VW / 2 / zoom + r.r * 1.2 + 40 || Math.abs(r.dy - cam.y) > VH / 2 / zoom + r.r * 1.2 + 40) { const d0 = details.get(r.id); if (d0 && d0.bm) { d0.bm = null; d0.bmS = 0; } continue; }
-    drawChunkRock(r, details.get(r.id), ts);
+    safeDraw(() => drawChunkRock(r, details.get(r.id), ts), "rock");
   }
   // ore drops adrift: free for anyone — fly over one and it pours in
   for (const o of dropsM.values()) {
@@ -638,8 +645,8 @@ function drawWorld(t) {
     cx.save(); cx.translate(c.x, c.y + bob); cx.rotate(c.h - Math.PI / 2 + Math.sin(ts * 0.4 + c.id) * 0.05); cx.imageSmoothingEnabled = false;
     cx.drawImage(im, -len / 2, -hgt / 2, len, hgt); cx.restore();
   }
-  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, true);
-  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) {
+  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) safeDraw(() => shipFx(s, ts, true), "fx-under");
+  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) safeDraw(() => {
     const r = s.row, kind = G.kinds[r[4]] || "miner", SP = G.ships[kind], fl = r[5], mods = SP.art;
     const st = { t: ts, raw: (r[8] || 0) / 100, ref: 0, fuel: 1, firing: !!(fl & 2),
       on: { miner: !!(fl & 2) }, busy: {},
@@ -662,8 +669,8 @@ function drawWorld(t) {
         if (pk < 1) { const sc = 1 + 0.14 * (pk < 0.12 ? pk / 0.12 : Math.pow(1 - (pk - 0.12) / 0.88, 2)); cx.scale(sc, sc); } }
       cx.drawImage(spr, -pv[0] * len, -pv[1] * hgt, len, hgt); cx.restore();
     } else { cx.save(); cx.translate(s.x, s.y); cx.rotate(s.h); cx.scale(ART, ART); drawShip(cx, mods, st); cx.restore(); }
-  }
-  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) shipFx(s, ts, false);
+  }, "ship");
+  for (const s of ships.values()) if (s.row && (s.id === myId || s.near)) safeDraw(() => shipFx(s, ts, false), "fx");
   drawBitWaves();
   drawXfers();
   drawFx(t);
