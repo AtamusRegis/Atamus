@@ -30,13 +30,13 @@
 
   <main>
     <section class="card" id="play-card" aria-labelledby="title">
-      <h1 id="title" class="brand">Welcome</h1>   <!-- (owner, 2026-10-18) not "Atamus" again under the logo -->
+      <h1 id="title" class="brand">Welcome</h1>
       <div class="form">
         <div id="update-step" hidden>
           <p class="update-title">Atamus is updating</p>
           <p class="hint" id="update-msg">Back in a moment…</p>
         </div>
-        <!-- (owner, 2026-10-18) no login: create a name and play -->
+        <!-- (owner, 2026-10-19) name and play: no accounts, nothing remembered -->
         <form id="name-form" hidden>
           <label class="field"><span>Pilot name</span>
             <input id="name-in" name="name" type="text" minlength="3" maxlength="20" autocomplete="nickname" required placeholder="3–20 letters or numbers">
@@ -49,6 +49,6 @@
   </main>
 
   <script src="api.js?v=1792500001"></script>
-  <script src="play.js?v=1792500002" defer></script>
+  <script src="play.js?v=1792500003" defer></script>
 </body>
 </html>

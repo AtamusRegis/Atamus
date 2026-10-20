@@ -8,16 +8,17 @@ After a day of layering systems (heat, beam stages, the charge shot, bursts, bed
 
 > asteroids are cores surrounded by masonry. mine through masonry to get to core. some masonry has ore bits that get sent to the core. the core breaking piñatas all stored ore bits to be picked up by players. chunks have density, and higher density takes longer to mine. just miner for now.
 
-Kept from the sandbox build: **no login (create a name and play), no chat, no parties, no fuel, no money, no in-game admin or developer UI**, the three rings, sectors, fog of war, movement, marks, the minimap, live updates, the server-authoritative core.
+Kept from the sandbox build: **no login (name and play — later no accounts at all), no chat, no parties, no fuel, no money, no in-game admin or developer UI**, the three rings, sectors, fog of war, movement, marks, the minimap, live updates, the server-authoritative core.
 
-**Old data is kept (owner):** every old table stays untouched. The game uses `ring_players`, `ring_drops`, `ring_meta`, `ring_tuning`, `guests`.
+**Old data is kept (owner):** every old table stays untouched. The game uses `ring_drops`, `ring_jetcans`, `ring_parties`, `ring_meta`, `ring_tuning` (pilots aren't saved anymore: `ring_players` and `guests` stay untouched, unused).
 
 Every number is in `packages/server/src/game/rules.js` and is sent to the client in the hello. Staff sessions can still tune them over the socket (`t: "tune"`, `_v: 7`); there is no in-game UI for it.
 
-## Names and sessions (owner, 2026-10-18: no login)
+## Name and play (owner, 2026-10-19: "like a regular io game")
 
-- **Create a name and play:** `play.html` asks for a pilot name (3–20 letters, numbers, spaces, `-` or `_`; the name filter and banned names apply) and sets a year-long token cookie that owns the pilot (`guests` table; `POST /auth/guest`). The same browser resumes its pilot and can rename at the door; names are not unique.
-- The game socket accepts the guest cookie (or an account session, which still exists for staff; the login/signup pages are unlinked but reachable by URL). **One session per pilot** (4002), **one pilot per device** (4003).
+- **No accounts of any kind — no sign-up, no login, no passwords, no staff accounts.** `play.html` asks for a name (3–20 letters, numbers, spaces, `-` or `_`; the name filter and banned names apply) and you play as it. **A name can't be one already in play.** The browser gets a session cookie that the server holds only in memory (`POST /auth/guest`).
+- **The server remembers nothing:** every pilot starts fresh at the station (Miner, empty hold, empty storage). A dropped pilot is kept for a minute so a reload picks it back up, then it's forgotten — its party place, hold and storage with it. A server restart (every update) forgets everyone; the update-wait page leads back to the name form, with this tab's last name filled in. (Party shares owed to a forgotten pilot are lost; jetcans stay in space and go public on their clock.)
+- The login, sign-up, password-recovery and terms pages, the account and admin APIs, and the old admin panel files are gone. The game socket takes only the name cookie (the local test copy also takes `?as=Name`). **One session per pilot** (4002), **one pilot per device** (4003).
 
 ## The world
 

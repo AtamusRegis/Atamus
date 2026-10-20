@@ -9,7 +9,7 @@ Atamus is a browser-based multiplayer game. Claude writes all the code and runs 
 3. `docs/DESIGN.md` holds the agreed direction; the design document itself is `docs/Atamus_Ring_Mining.html` ("Crack, Bank and Haul", draft 9).
 4. **The mining redesign (owner, 2026-10-18):** the game was rebuilt from that document alone — a cooperative 2D gather-and-craft MMO like Palia, no PvP. Asteroids are hidden chunk masonry around a core; ore banks into the core and pays at the pop. **All old branches were deleted (owner: "delete all old branches, stop reading from them")** — older versions live only in git history and `reference/`. **Old database data stays untouched for reference.** Use the design document's look (`website/theme.css`) for the game and the website; the ship art artifact is linked from `docs/DESIGN.md`. Every number is in `rules.js`.
 6. **Back to basics (owner, 2026-10-18, latest): "lets start from the bottom."** Cores surrounded by visible masonry; the Miner cuts through; ore chunks bank their bits into the core; denser takes longer; breaking the core piñatas every bit out as free drops. **Miner only.** Heat, beam stages, the charge shot, bursts, bedrock, scanning and the other ships are gone (FEATURES.md, Rejected / removed). Build back up from here only as the owner asks.
-5. **The sandbox build (owner, 2026-10-18, same day, later): "make the sandbox the atamus live server."** The owner iterated a single-player sandbox artifact and it replaced the live game: **no login (create a name and play), no chat, no parties, no fuel, no money, no in-game admin or developer UI.** Four ships — Miner (charge shot), Scanner (drill, tow), Booster (one-ship boost beam + coolant spray, no laser), Hauler (refine beam) — beam heat stages (blue/yellow/red), free-for-all ore drops instead of cans, three rings with thicker bedrock-heavier rocks deeper, per-ship optional tutorials. FEATURES.md has the full rules.
+5. **The sandbox build (owner, 2026-10-18, same day, later): "make the sandbox the atamus live server."** The owner iterated a single-player sandbox artifact and it replaced the live game: **no login (create a name and play; owner 2026-10-19: no accounts at all, nothing remembered, like an .io game), no chat, no parties, no fuel, no money, no in-game admin or developer UI.** Four ships — Miner (charge shot), Scanner (drill, tow), Booster (one-ship boost beam + coolant spray, no laser), Hauler (refine beam) — beam heat stages (blue/yellow/red), free-for-all ore drops instead of cans, three rings with thicker bedrock-heavier rocks deeper, per-ship optional tutorials. FEATURES.md has the full rules.
 
 **In the same commit as any change to behavior:**
 
@@ -34,19 +34,15 @@ These docs are the project's memory between sessions; DESIGN.md is the plan, FEA
 packages/server/src/
   index.js        Express + ws bootstrap, /healthz {build}; in the PTR it also serves website/
   build.js        SERVER_BUILD, website build polling, update countdown (announceUpdate)
-  auth.js         signup / login / logout / password recovery (staff accounts only now; unlinked pages)
-  guest.js        (owner, 2026-10-18) no login: POST /auth/guest claims a pilot name on a token cookie (guests table)
-  sessions.js     getSessionUser (always returns the "PTR" user in PTR mode)
+  guest.js        (owner, 2026-10-19) name and play, no accounts: POST /auth/guest hands out an in-memory session token for a name
   db.js           schema for the tables in use; every old game's tables stay in the database untouched, unused
   ptr.js, config.js, hash.js, ratelimit.js   the local test copy, settings, password hashing, rate limits
   security.js     failed-login backoff, device ids, account unlock (no login records)
   names.js, namefilter.js, textsafe.js   the name filter and banned names (sign-up), text cleaning
-  admin.js        the small admin panel's API (players: kick / ban / mute; ban appeals) and the game hooks (gameHook)
-  appeals.js      ban appeals (written from the login page, answered in the admin panel)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
   game/
-    net.js        the game socket at /ws: guest or session auth, one session per pilot (4002), one pilot per device
-                  (4003), admin hooks kept server-side (kick 4005 / ban 4006 scatters the hold), input / act / st /
+    net.js        the game socket at /ws: the name cookie only (no accounts), one session per pilot (4002), one pilot per
+                  device (4003), input / act / st /
                   tune in; 20 Hz sim, 15 Hz ship snapshots (beam temp + charge in the rows), 5 Hz rock summaries +
                   per-socket chunk layouts by version + drops / me diffs
     rules.js      every fixed number: world, the four ships, flying, the chunk-sheet LAYOUT (layer arcs), chunks (3 densities, 1-3 ore bits), ROCK_SIZE(layers) + per-ring layer bands,
@@ -70,10 +66,8 @@ website/          GitHub Pages site (atamus.io) and the game client
   shipart.js      the art from the ship sheet: shipLayout / drawShip (a section per role, animated), drawStation,
                   drawSaturn
   theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
-  admin.css, adminpanel.js   the old in-game admin UI (no longer loaded by the game page; kept on disk)
-  index/login/signup/recover/eula/play.html (+ their .js), api.js, style.css, front-updates.js
-                  the website; play.html is the name-and-play door (and the update-wait page); login/signup are
-                  unlinked (staff by URL)
+  index/play.html (+ play.js), api.js, style.css, front-updates.js
+                  the website; play.html is the name-and-play door (and the update-wait page); no account pages
 reference/        old snapshots, for reference only (never deployed)
 scripts/
   check.sh        syntax-check every JS file (run before every push)
@@ -97,7 +91,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
    - each one first calls `/game/update-countdown`, which starts the countdown in every client;
    - it then sleeps and switches the live build;
    - clients are sent to `play.html?updating=1`, which waits for the new build.
-6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode is always signed in as the PTR user; `?as=Name`, 3+ characters, plays as another account).
+6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode with no name cookie plays as the PTR tester, who may tune numbers; `?as=Name`, 3+ characters, plays as another pilot; play.html's name form works too).
 
 ## Code conventions
 

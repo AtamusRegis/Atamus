@@ -1,13 +1,13 @@
-// (owner, 2026-10-18) No login: create a name and play. A token cookie owns the pilot; returning browsers find their
-// name filled in. The update-wait flow stays: a live push sends every client here until the new build is up.
+// (owner, 2026-10-19) Name and play, like an .io game: type a name, play as it; nothing is remembered. The update-wait
+// flow stays: a live push sends every client here until the new build is up.
 const params = new URLSearchParams(location.search);
 const updateStep = document.getElementById("update-step");
 const nameForm = document.getElementById("name-form"), nameIn = document.getElementById("name-in"), nameMsg = document.getElementById("name-msg");
 
 async function showEntry() {
-  try { const u = await Api.get("/auth/guest"); if (u && u.name) { nameIn.value = u.name; document.getElementById("title").textContent = "Welcome back"; } } catch {}
   nameForm.hidden = false;
-  if (!nameIn.value) nameIn.focus();
+  try { const last = sessionStorage.getItem("atamus.name"); if (last && !nameIn.value) nameIn.value = last; } catch {}   // (this tab's last name, for a quick return after an update)
+  nameIn.focus();
 }
 
 // Sent here by an update countdown: wait until the new version is live, then let them back in. (owner, 2026-10-14) Not a
@@ -44,6 +44,7 @@ nameForm.addEventListener("submit", async (e) => {
   const btn = document.getElementById("enter-btn"); btn.disabled = true;
   try {
     await Api.post("/auth/guest", { name });
+    try { sessionStorage.setItem("atamus.name", name); } catch {}
     location.href = "game.html?cb=" + Date.now();
   } catch (err) {
     nameMsg.textContent = err.message || "Try again."; nameMsg.hidden = false; btn.disabled = false;

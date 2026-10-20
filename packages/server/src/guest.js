@@ -1,18 +1,18 @@
-// (owner, 2026-10-18) No login: create a name and play. A random token cookie owns the pilot; the name rides on it and
-// can be changed at the door. The name filter and banned names still apply. Old account rows stay untouched.
+// (owner, 2026-10-19) Name and play, like an .io game: no accounts, no passwords, nothing remembered. Entering a name
+// hands the browser a session token (a cookie that dies with the browser session, held only in the server's memory);
+// the pilot exists while they play (and a minute after they drop, for a reload), then it's gone. A server restart forgets
+// everyone. Names must pass the name filter and can't be one already in play. (The old guests and accounts tables stay
+// in the database, untouched and unused.)
 import crypto from "node:crypto";
 import express from "express";
-import { pool } from "./db.js";
 import { checkName } from "./names.js";
 import { allow } from "./ratelimit.js";
 
-const COOKIE = "atamus_guest";
-const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
-
-export async function guestMigrate() {
-  await pool.query(`CREATE TABLE IF NOT EXISTS guests (id SERIAL PRIMARY KEY, token_hash TEXT UNIQUE NOT NULL,
-    name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_seen TIMESTAMPTZ NOT NULL DEFAULT now())`);
-}
+const COOKIE = "atamus_pilot";
+const tokens = new Map();                      // token -> { id, name, at }
+let inUse = () => new Set();                   // the game's names in play (set by the game server)
+export function setNamesInUse(fn) { inUse = fn; }
+export function forgetPilot(id) { for (const [t, v] of tokens) if (v.id === id) tokens.delete(t); }
 
 export function readGuestCookie(req) {
   const header = req.headers.cookie; if (!header) return null;
@@ -23,34 +23,26 @@ export function readGuestCookie(req) {
   return null;
 }
 export async function getGuestUser(req) {
-  const token = readGuestCookie(req); if (!token) return null;
-  const { rows } = await pool.query(`SELECT id, name FROM guests WHERE token_hash = $1`, [sha256(token)]);
-  if (!rows[0]) return null;
-  pool.query(`UPDATE guests SET last_seen = now() WHERE id = $1`, [rows[0].id]).catch(() => {});
-  return { id: "g" + rows[0].id, username: rows[0].name, role: null, guest: true };
+  const t = readGuestCookie(req), v = t && tokens.get(t); if (!v) return null;
+  v.at = Date.now();
+  return { id: v.id, username: v.name, role: null, guest: true };
 }
 
 export const guest = express.Router();
-guest.get("/guest", async (req, res) => {
-  try { const u = await getGuestUser(req); res.json(u ? { name: u.username } : {}); }
-  catch (e) { console.error("guest who", e); res.status(500).json({ error: "Try again." }); }
-});
 guest.post("/guest", async (req, res) => {
   try {
-    if (!allow("guest", req.ip, 20, 600_000)) return res.status(429).json({ error: "Too many tries; wait a moment." });
+    if (!allow("guest", req.ip, 30, 600_000)) return res.status(429).json({ error: "Too many tries; wait a moment." });
     const name = String((req.body && req.body.name) || "").trim();
     if (!/^[A-Za-z0-9][A-Za-z0-9_ -]{1,18}[A-Za-z0-9]$/.test(name)) return res.status(400).json({ error: "3 to 20 letters, numbers, spaces, - or _." });
     const bad = await checkName(name); if (bad) return res.status(400).json({ error: bad });
-    let token = readGuestCookie(req);
-    if (token) {
-      const { rowCount } = await pool.query(`UPDATE guests SET name = $2, last_seen = now() WHERE token_hash = $1`, [sha256(token), name]);
-      if (!rowCount) token = null;
-    }
-    if (!token) {
-      token = crypto.randomBytes(32).toString("base64url");
-      await pool.query(`INSERT INTO guests (token_hash, name) VALUES ($1, $2)`, [sha256(token), name]);
-    }
-    res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${365 * 86400}`);
+    const lower = name.toLowerCase(), now = Date.now(), mine = readGuestCookie(req);
+    for (const [t, v] of tokens) if (now - v.at > 10 * 60_000 && !inUse().has(v.name.toLowerCase())) tokens.delete(t);   // (stale, never joined)
+    const taken = inUse().has(lower) || [...tokens.entries()].some(([t, v]) => t !== mine && v.name.toLowerCase() === lower);
+    if (taken) return res.status(409).json({ error: "That name is in play right now." });
+    if (mine) tokens.delete(mine);
+    const token = crypto.randomBytes(24).toString("base64url");
+    tokens.set(token, { id: "p_" + crypto.randomBytes(6).toString("hex"), name, at: now });
+    res.setHeader("Set-Cookie", `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Lax; Path=/`);   // (no Max-Age: gone with the browser session)
     res.json({ ok: true, name });
   } catch (e) { console.error("guest", e); res.status(500).json({ error: "Try again." }); }
 });

@@ -71,6 +71,7 @@ export class World {
     this.parties = new Map(); this.memberParty = new Map(); this.invites = new Map();   // (owner, 2026-10-18) parties: id -> { id, leader, members [{ i, n }] }; pilot -> party; invitee -> { from, at }  // ore adrift: free for anyone, picked up by flying over
     this.msgs = []; this.fx = [];
     this.offline = new Map();                  // player id -> promise chain (ore paid to offline players)
+    this.parked = new Map();                   // (owner, 2026-10-19) pilots who dropped: id -> { p, timer }, forgotten after a minute
     this.ready = this._load();
     const t = setInterval(() => this.saveDirty().catch((e) => console.error("ring save", e)), 10_000); t.unref && t.unref();
   }
@@ -279,11 +280,15 @@ export class World {
   }
 
   // ---- players ----
+  // (owner, 2026-10-19) name and play: nothing is remembered — a pilot starts fresh at the station, and after a drop is
+  // kept a minute (a reload picks it back up), then forgotten: its party place goes, its hold and storage with it
   async join(id, name) {
     id = String(id); let p = this.players.get(id);
     if (p) { p.name = name; return p; }
-    await this.ready; await (this.offline.get(id) || Promise.resolve());
-    const { rows } = await pool.query(`SELECT * FROM ring_players WHERE user_id = $1`, [id]), r = rows[0];
+    await this.ready;
+    const park = this.parked.get(id);
+    if (park) { clearTimeout(park.timer); this.parked.delete(id); p = park.p; p.name = name; this.players.set(id, p); const pt = this.parties.get(this.partyOf(id)); if (pt) this.partyTell(pt); return p; }
+    const r = null;
     const [sx, sy] = W.station;
     p = { id, name, x: sx, y: sy + 120, h: 0, vx: 0, vy: 0, fx: 0, fy: 0, aim: 0, firing: false, ship: R.START.ship,
       hold: [], mark: null, storage: {}, laserLen: 0, laserOn: false, laserRock: null, laserChunk: -1,
@@ -297,15 +302,20 @@ export class World {
     p.zone = zoneOf(p.x, p.y);
     this.players.set(id, p);
     { const pt = this.parties.get(this.partyOf(id)); if (pt) { const m2 = pt.members.find((x) => x.i === id); if (m2) m2.n = name; this.partyTell(pt); } }
-    await pool.query(`INSERT INTO ring_players (user_id, x, y, h, fuel, module, modules) VALUES ($1, $2, $3, $4, 0, $5, '[]')
-      ON CONFLICT (user_id) DO UPDATE SET logout_at = NULL`, [id, p.x, p.y, p.h, p.ship]);
     return p;
   }
   async leave(id) {
     const p = this.players.get(String(id)); if (!p) return;
     this.players.delete(p.id);
     { const pt = this.parties.get(this.partyOf(p.id)); if (pt) this.partyTell(pt); }
-    await this._save(p); await pool.query(`UPDATE ring_players SET logout_at = now() WHERE user_id = $1`, [p.id]);
+    const timer = setTimeout(() => this.forget(p.id), 60_000); timer.unref && timer.unref();
+    this.parked.set(p.id, { p, timer });
+  }
+  forget(id) {
+    const park = this.parked.get(id); if (!park) return; this.parked.delete(id);
+    const pt = this.parties.get(this.partyOf(id)); if (pt) this.partyRemove(pt, id);
+    this.invites.delete(id);
+    if (this.onForget) this.onForget(id);
   }
   respawn(id) { const p = this.players.get(String(id)); if (!p) return null; const [sx, sy] = W.station; return this.teleport(id, sx, sy + 120); }
   teleport(id, x, y) {
@@ -688,6 +698,7 @@ export class World {
   // credit any pilot's station storage, online or not (offline: queued straight into their saved row)
   storageAddAny(pid, ores, note) {
     if (this.players.has(pid)) return this.storageAdd(pid, ores, note);
+    { const park = this.parked.get(pid); if (park) { for (const [o, u] of Object.entries(ores)) if (u > 0 && R.ORES[o]) park.p.storage[o] = (park.p.storage[o] || 0) + Math.round(u); } return; }   // (owner, 2026-10-19) nothing is remembered: a pilot who's gone gets nothing
     const prev = this.offline.get(pid) || Promise.resolve();
     const next = prev.then(async () => {
       const { rows } = await pool.query(`SELECT storage FROM ring_players WHERE user_id = $1`, [pid]); if (!rows[0]) return;
@@ -759,6 +770,7 @@ export class World {
   }
 
   async _save(p) {
+    p.dirty = false; return;                   // (owner, 2026-10-19) nothing about a pilot is remembered
     await this.ready;
     await pool.query(`UPDATE ring_players SET x = $2, y = $3, h = $4, module = $5, hold = $6, storage = $7, updated_at = now() WHERE user_id = $1`,
       [p.id, p.x, p.y, p.h, p.ship, JSON.stringify(p.hold), JSON.stringify(p.storage || {})]);

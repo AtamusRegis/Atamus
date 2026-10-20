@@ -5,13 +5,11 @@
 // 5 Hz; each rock's chunk layout goes separately, re-sent when its version changes. Deploy countdowns and website
 // reloads reach every client here. The admin hooks stay server-side (kick, ban, respawn); the game shows no admin UI.
 import { WebSocketServer } from "ws";
-import { readCookie, getSessionUser } from "../sessions.js";
-import { getGuestUser } from "../guest.js";
+import { getGuestUser, setNamesInUse, forgetPilot } from "../guest.js";
 import { SERVER_BUILD, onWebsiteUpdate, onCountdown, activeCountdown, updateStatus } from "../build.js";
 import { World } from "./world.js";
 import * as R from "./rules.js";
-import { PTR, ptrAs } from "../ptr.js";
-import { setGameHooks } from "../admin.js";
+import { PTR } from "../ptr.js";
 import { deviceOf } from "../security.js";
 
 import { setValue, resetAll, loadTuning, saveTuning, reshapes } from "./tuning.js";
@@ -25,22 +23,14 @@ const DEV_ROLES = ["head", "admin"];           // (tuning still answers to staff
 
 export function attachGameServer(httpServer) {
   const world = new World();
+  setNamesInUse(() => new Set([...world.players.values(), ...[...world.parked.values()].map((x) => x.p)].map((p) => String(p.name || "").toLowerCase())));
+  world.onForget = (id) => forgetPilot(id);
   world.ready = Promise.all([world.ready, loadTuning().catch((e) => console.error("tuning", e))]);
   const socks = new Map();                     // pilot id -> ws
   const devs = new Map();                      // device id -> pilot id
   const roles = new Map();
   const tell = (pid, obj) => { const w = socks.get(pid); if (w && w.readyState === w.OPEN) w.send(JSON.stringify(obj)); };
-  setGameHooks({                               // the admin panel's hooks into the world (server-side only now)
-    staffChanged: (pid, role) => { roles.set(pid, role || null); tell(pid, { t: "staff" }); },
-    online: () => { const m = new Map(); for (const [pid] of socks) m.set(pid, { side: null }); return m; },
-    kick: (pid, code, reason) => { if (code === 4006) world.banned(pid).catch((e) => console.error("ban hold", e)); const w = socks.get(pid); if (w) { try { w.close(code, String(reason || "").slice(0, 100)); } catch {} } },
-    mute: () => {},
-    respawn: (pid) => !!world.respawn(pid),
-    teleportTo: (pid, toPid) => { const q = world.players.get(toPid); if (!q || !world.players.get(pid)) return false; const a = Math.random() * Math.PI * 2; return !!world.teleport(pid, q.x + Math.cos(a) * 80, q.y + Math.sin(a) * 80); },
-    inWorld: (pid) => world.players.has(pid),
-    note: (pid, text) => tell(pid, { t: "note", text }),
-    deviceBusy: (device, uid) => { const o = devs.get(device); return !!o && o !== String(uid) && socks.has(o); },
-  });
+
 
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 16 * 1024, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 3 }, serverMaxWindowBits: 13, concurrencyLimit: 4 } });
   const broadcast = (obj) => { const msg = JSON.stringify(obj); for (const c of wss.clients) if (c.readyState === c.OPEN) c.send(msg); };
@@ -48,10 +38,11 @@ export function attachGameServer(httpServer) {
   onWebsiteUpdate((v) => { broadcast({ t: "update", web: v }); console.log("[build] website " + v.slice(0, 7) + " live, clients told to reload"); });
 
   wss.on("connection", async (ws, req) => {
+    // (owner, 2026-10-19) name and play: the only way in is a name entered at the door (no accounts). The local test copy
+    // (PTR) also lets ?as=Name in, and its default tester may tune numbers.
     let user = null;
-    try { user = await getSessionUser(readCookie(req)); } catch (e) { console.error("ws auth", e); }
-    try { if (!user) user = await getGuestUser(req); } catch (e) { console.error("ws guest", e); }   // (owner, 2026-10-18) name-and-play
-    if (PTR) { const as = new URL(req.url, "http://x").searchParams.get("as"); if (as) user = await ptrAs(as).catch(() => null) || user; }
+    try { user = await getGuestUser(req); } catch (e) { console.error("ws guest", e); }
+    if (PTR && !user) { const as = new URL(req.url, "http://x").searchParams.get("as"); user = as && /^[A-Za-z0-9_]{3,24}$/.test(as) ? { id: "ptr_" + as.toLowerCase(), username: as } : { id: "ptr", username: "PTR", role: "head" }; }
     if (!user) { ws.close(4001, "No name yet"); return; }
     if (user.frozen) { ws.close(4001, "Not available"); return; }
     const pid = String(user.id), device = deviceOf(new URL(req.url, "http://x").searchParams.get("d"));

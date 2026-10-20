@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-19
+
+- **Name and play, like an .io game (owner):** all accounts removed — no sign-up, login, passwords or staff accounts. Enter a name (not one already in play) and play; nothing is remembered: pilots start fresh, are kept a minute after a drop for reloads, then forgotten; restarts forget everyone. Deleted: `auth.js`, `sessions.js`, `admin.js`, `appeals.js` (and the socket's admin hooks), the login / sign-up / recover / terms pages, the old admin panel files. `guest.js` now hands out in-memory session tokens. Old tables (`users`, `guests`, `ring_players`, …) stay untouched. Tuning answers only to the local test copy's tester.
+
 ## 2026-10-18
 
 - **Fix (likely) — an occasional gridded tear across the screen (owner report):** every rock layout update (each crack stage, scan, break, hit) made a brand-new full-size bitmap canvas for that rock, leaving the old ones for the garbage collector — a pile of large orphaned GPU textures, the classic cause of tiled corruption in Chrome. Each rock now keeps one canvas, redrawn in place, emptied as soon as the rock leaves view or the game; the bitmap cap dropped from 1536 to 1024 px.
