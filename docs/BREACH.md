@@ -21,5 +21,5 @@ breach.js), live at atamus.io/breach/. Nothing on the server.
 - **Winning:** kill the whole red team and secure the payload (hold E beside the case for 3 s). Dying ends the run. The
   end screen shows time, kills, accuracy and the payload.
 - **Controls (owner, 2026-10-20):** WASD move (Shift walks: a little steadier), **left mouse fires, right mouse aims down
-  sights** (tight spread, slower movement, the view reaches further toward the cursor, a faint sight line), **R reloads,
+  sights** (tight spread, slower movement, the view reaches further toward the cursor — and further up / down than sideways, so a wide window sees as far vertically as horizontally, a faint sight line), **R reloads,
   F throws a grenade** at the cursor, 1 / 2 / Q / wheel swap weapons, E for doors and the payload. Desktop only for now.

@@ -453,7 +453,11 @@ function draw(t) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0); cx.fillStyle = "#0c0f12"; cx.fillRect(0, 0, VW, VH);
   if (!P) return;
   const [wx, wy] = toWorld(mouse.x, mouse.y);
-  const look = mouse.aim && P.hp > 0 ? 0.45 : 0.22, tx = P.x + (wx - P.x) * look, ty = P.y + (wy - P.y) * look;
+  // (owner, 2026-10-20) the view leans toward the cursor by where it sits on the screen, not by world distance — and
+  // further up / down than sideways, since a wide window shows less vertically: the reach evens out what you can see
+  const ads = mouse.aim && P.hp > 0, nx = clamp((mouse.x - VW / 2) / (VW / 2), -1, 1), ny = clamp((mouse.y - VH / 2) / (VH / 2), -1, 1);
+  const reach = ads ? 0.5 : 0.18, rx = VW / 2 / ZOOM * reach, ry = VH / 2 / ZOOM * reach + Math.max(0, VW - VH) / 2 / ZOOM * (ads ? 0.75 : 0.3);
+  const tx = P.x + nx * rx, ty = P.y + ny * ry;
   cam.x += (tx - cam.x) * 0.12; cam.y += (ty - cam.y) * 0.12;
   const shake = booms.reduce((a, b) => a + (b.kind === "frag" ? Math.max(0, 1 - b.t / b.life) * 8 : 0), 0) + P.kick * 1.5;
   cx.save(); cx.translate(VW / 2 + (rnd() - 0.5) * shake, VH / 2 + (rnd() - 0.5) * shake); cx.scale(ZOOM, ZOOM); cx.translate(-cam.x, -cam.y);
