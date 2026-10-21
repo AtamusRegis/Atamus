@@ -243,14 +243,15 @@ addEventListener("keydown", (e) => {
   if (e.code === "Digit1") switchGun(0);
   if (e.code === "Digit2") switchGun(1);
   if (e.code === "KeyQ") switchGun(1 - P.gi);
-  if (e.code === "KeyG") throwNade();
+  if (e.code === "KeyF") throwNade();   // (owner, 2026-10-20) F throws, right mouse aims
   if (e.code === "KeyE") useKey();
   if (["Space", "Tab"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 cv.addEventListener("mousemove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-cv.addEventListener("mousedown", (e) => { if (e.button === 0) { mouse.down = true; mouse.fresh = true; } if (e.button === 2) throwNade(); });
-addEventListener("mouseup", (e) => { if (e.button === 0) mouse.down = false; });
+cv.addEventListener("mousedown", (e) => { if (e.button === 0) { mouse.down = true; mouse.fresh = true; } if (e.button === 2) mouse.aim = true; });
+addEventListener("mouseup", (e) => { if (e.button === 0) mouse.down = false; if (e.button === 2) mouse.aim = false; });
+addEventListener("blur", () => { mouse.down = mouse.aim = false; keys.clear(); });
 cv.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (playing) switchGun(1 - P.gi); }, { passive: true });
 const toWorld = (sx, sy) => [cam.x + (sx - VW / 2) / ZOOM, cam.y + (sy - VH / 2) / ZOOM];
@@ -273,7 +274,7 @@ function throwNade() {
 // ---------- shooting ----------
 function shoot(from, g, ang, isPlayer) {
   for (let k = 0; k < g.pellets; k++) {
-    const a = ang + (rnd() - 0.5) * 2 * g.spread * (isPlayer && keys.has("ShiftLeft") ? 0.5 : 1);
+    const a = ang + (rnd() - 0.5) * 2 * g.spread * (isPlayer ? (mouse.aim ? 0.35 : 1) * (keys.has("ShiftLeft") ? 0.7 : 1) : 1);   // (aiming down sights tightens the spread)
     const dx = Math.cos(a), dy = Math.sin(a), ox = from.x + dx * 16, oy = from.y + dy * 16;
     let maxT = g.range, hitWall = null;
     for (const w of walls) { const t = rayRect(ox, oy, dx, dy, w, maxT); if (t < maxT) { maxT = t; hitWall = w; } }
@@ -316,7 +317,7 @@ function step(dt) {
   const g = gun();
   // move
   let mx = 0, my = 0; if (keys.has("KeyW")) my--; if (keys.has("KeyS")) my++; if (keys.has("KeyA")) mx--; if (keys.has("KeyD")) mx++;
-  const ml = hyp(mx, my), walk = keys.has("ShiftLeft") || keys.has("ShiftRight"), sp = (walk ? 105 : 200) * (g.speed || 1);
+  const ml = hyp(mx, my), walk = keys.has("ShiftLeft") || keys.has("ShiftRight"), sp = (walk ? 105 : 200) * (g.speed || 1) * (mouse.aim ? 0.6 : 1);   // (aiming slows you)
   if (ml && P.hp > 0) moveAgent(P, mx / ml * sp, my / ml * sp, dt);
   const [wx, wy] = toWorld(mouse.x, mouse.y); P.h = Math.atan2(wy - P.y, wx - P.x);
   // fire / reload
@@ -452,7 +453,7 @@ function draw(t) {
   cx.setTransform(DPR, 0, 0, DPR, 0, 0); cx.fillStyle = "#0c0f12"; cx.fillRect(0, 0, VW, VH);
   if (!P) return;
   const [wx, wy] = toWorld(mouse.x, mouse.y);
-  const look = 0.22, tx = P.x + (wx - P.x) * look, ty = P.y + (wy - P.y) * look;
+  const look = mouse.aim && P.hp > 0 ? 0.45 : 0.22, tx = P.x + (wx - P.x) * look, ty = P.y + (wy - P.y) * look;
   cam.x += (tx - cam.x) * 0.12; cam.y += (ty - cam.y) * 0.12;
   const shake = booms.reduce((a, b) => a + (b.kind === "frag" ? Math.max(0, 1 - b.t / b.life) * 8 : 0), 0) + P.kick * 1.5;
   cx.save(); cx.translate(VW / 2 + (rnd() - 0.5) * shake, VH / 2 + (rnd() - 0.5) * shake); cx.scale(ZOOM, ZOOM); cx.translate(-cam.x, -cam.y);
@@ -495,6 +496,10 @@ function draw(t) {
   // grenades in flight
   for (const n of nades) { cx.save(); cx.translate(n.x, n.y); cx.rotate(n.rot); cx.drawImage(SPR[n.kind], -8, -8, 16, 16); cx.restore(); }
   // me
+  if (P.hp > 0 && mouse.aim) {                  // aiming down sights: a faint sight line out to what it meets
+    const dx = Math.cos(P.h), dy = Math.sin(P.h), ox = P.x + dx * 16, oy = P.y + dy * 16, t = castSight(ox, oy, dx, dy, gun().range, [...sightList(P.x, P.y, gun().range), ...walls.filter((w) => w.kind === "glass")]);
+    cx.strokeStyle = "rgba(255,80,60,.35)"; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(ox, oy); cx.lineTo(ox + dx * t, oy + dy * t); cx.stroke();
+  }
   if (P.hp > 0) drawOp(P, SPR.blue, gun());
   // tracers, sparks, blasts
   cx.lineCap = "round";
@@ -514,7 +519,7 @@ function draw(t) {
   if (P.flash > 0) { cx.fillStyle = "rgba(255,255,255," + Math.min(1, P.flash / 1.6) + ")"; cx.fillRect(0, 0, cv.width, cv.height); }
   // the crosshair
   cx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const sp = 6 + gun().spread * 120 + P.kick * 6; cx.strokeStyle = "#e8e4da"; cx.lineWidth = 1.5; cx.beginPath();
+  const sp = 6 + gun().spread * 120 * (mouse.aim ? 0.35 : 1) + P.kick * 6; cx.strokeStyle = "#e8e4da"; cx.lineWidth = 1.5; cx.beginPath();
   cx.moveTo(mouse.x - sp - 6, mouse.y); cx.lineTo(mouse.x - sp, mouse.y); cx.moveTo(mouse.x + sp, mouse.y); cx.lineTo(mouse.x + sp + 6, mouse.y);
   cx.moveTo(mouse.x, mouse.y - sp - 6); cx.lineTo(mouse.x, mouse.y - sp); cx.moveTo(mouse.x, mouse.y + sp); cx.lineTo(mouse.x, mouse.y + sp + 6); cx.stroke();
   if (P.reloading) { cx.strokeStyle = "#f1c04a"; cx.beginPath(); cx.arc(mouse.x, mouse.y, sp + 10, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - P.reloading / gun().reload)); cx.stroke(); }

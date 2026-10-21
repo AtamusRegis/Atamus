@@ -20,5 +20,6 @@ breach.js), live at atamus.io/breach/. Nothing on the server.
   walls and draw them in. Flashbangs blind them; frags hurt everyone in the blast with a clear line, you included.
 - **Winning:** kill the whole red team and secure the payload (hold E beside the case for 3 s). Dying ends the run. The
   end screen shows time, kills, accuracy and the payload.
-- **Controls:** WASD move (Shift walks: steadier aim), mouse aims and fires, R reloads, 1 / 2 / Q / wheel swap weapons,
-  G or right-click throws a grenade at the cursor, E for doors and the payload. Desktop only for now.
+- **Controls (owner, 2026-10-20):** WASD move (Shift walks: a little steadier), **left mouse fires, right mouse aims down
+  sights** (tight spread, slower movement, the view reaches further toward the cursor, a faint sight line), **R reloads,
+  F throws a grenade** at the cursor, 1 / 2 / Q / wheel swap weapons, E for doors and the payload. Desktop only for now.

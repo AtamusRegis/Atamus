@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-20
 
+- **Breach.io controls (owner):** right mouse aims down sights (tighter spread, slower move, longer view, sight line), left fires, F throws a grenade, R reloads.
 - **Breach.io (owner):** a new game on the site, `website/breach/` (atamus.io/breach/): top-down breach-and-clear, single player for now — callsign + loadout, a procedural house, 10–30 red AI, breach, clear, secure the payload. Rules in `docs/BREACH.md`. Atamus itself is unchanged.
 
 ## 2026-10-19
