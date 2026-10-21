@@ -381,7 +381,8 @@ function think(e, dt) {
   e.flash = Math.max(0, e.flash - dt); e.cool -= dt;
   const blind = e.flash > 0.3, d = hyp(P.x - e.x, P.y - e.y), toP = Math.atan2(P.y - e.y, P.x - e.x);
   const facing = Math.abs(Math.atan2(Math.sin(toP - e.h), Math.cos(toP - e.h)));
-  const sees = P.hp > 0 && !blind && d < (e.state === "combat" ? 850 : 620) && (facing < 1.15 || d < 140 || e.state === "combat") && los(e.x, e.y, P.x, P.y);
+  const onScreen = Math.abs(e.x - cam.x) < VW / 2 / ZOOM - 10 && Math.abs(e.y - cam.y) < VH / 2 / ZOOM - 10;   // (owner, 2026-10-20) they can't see you from anywhere you can't see them
+  const sees = P.hp > 0 && !blind && onScreen && d < (e.state === "combat" ? 650 : 450) && (facing < 1.15 || d < 140 || e.state === "combat") && los(e.x, e.y, P.x, P.y);
   if (sees) {
     if (e.state !== "combat") { e.react = 0.35 + rnd() * 0.35; e.alert = 0; }
     e.state = "combat"; e.seen = { x: P.x, y: P.y }; e.lastSeenT = 0; e.path = null;

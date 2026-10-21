@@ -14,8 +14,8 @@ breach.js), live at atamus.io/breach/. Nothing on the server.
 - **Doors:** E opens / closes the nearest; shooting a door wears it down until it breaks; frags blow doors and windows in.
   Glass blocks movement but not sight; bullets shatter it. The red team shoves doors open as they walk.
 - **Vision:** line of sight — everything outside it is darkened, and red operators show only when in sight.
-- **The red team:** spread through the rooms (two guard the payload). They wander room to room, see in a cone (620 m;
-  850 once in a fight), react after a beat, fire in bursts (more accurate the longer they track you, less when you move),
+- **The red team:** spread through the rooms (two guard the payload). They wander room to room, see in a cone (450 m;
+  650 once in a fight) and **never from off your screen — they can't see you from anywhere you can't see them** (owner, 2026-10-20), react after a beat, fire in bursts (more accurate the longer they track you, less when you move),
   sidestep while fighting, hunt your last-seen spot, then search. Gunfire, doors, glass and blasts are heard through
   walls and draw them in. Flashbangs blind them; frags hurt everyone in the blast with a clear line, you included.
 - **Winning:** kill the whole red team and secure the payload (hold E beside the case for 3 s). Dying ends the run. The
