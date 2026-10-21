@@ -70,6 +70,8 @@ website/          GitHub Pages site (atamus.io) and the game client
                   the website; play.html is the name-and-play door (and the update-wait page); no account pages
   breach/         (owner, 2026-10-20) Breach.io, a second game: top-down breach-and-clear, single player in the browser
                   for now (index.html + breach.js); rules in docs/BREACH.md
+  crew/           (owner, 2026-10-21) Skeleton Crew, a third demo: single-player tactical crew game, one ship with three
+                  decks (index.html + crew.js); rules in docs/CREW.md
 reference/        old snapshots, for reference only (never deployed)
 scripts/
   check.sh        syntax-check every JS file (run before every push)

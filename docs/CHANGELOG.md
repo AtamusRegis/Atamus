@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-21
+
+- **Skeleton Crew (owner):** a third demo on the site, `website/crew/` (atamus.io/crew/): single-player tactical crew game. One ship with three decks of rooms (bridge, weapons, point defense, shields, science, research, medical, comms, engines, galley, storage), a short crew in Star Trek division colors with rank chevrons, waypoint steering and targeting, fires and damage, timed missions, research upgrades, five sectors. Rules in `docs/CREW.md`.
+
 ## 2026-10-20
 
 - **Breach.io floors and bunkering (owner):** the house has 2–3 floors joined by stairs (E), the payload on the top floor. Most of the red team now hold posts watching their doorways instead of roaming; a noise sends only the nearest two to look while the rest turn and hold, so they no longer come in packs of 5–6. Sight, sound and shots stay on their own floor.

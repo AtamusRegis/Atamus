@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skeleton Crew</title>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <style>
+    /* Skeleton Crew (owner, 2026-10-21): a single-player tactical crew demo — one ship, three decks, a short crew. */
+    @font-face { font-family: "Big Shoulders Display"; font-weight: 800; font-display: swap; src: url("../fonts/big-shoulders-display-latin-800-normal.woff2") format("woff2"); }
+    @font-face { font-family: "JetBrains Mono"; font-weight: 600; font-display: swap; src: url("../fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+    :root { --bg: #070a12; --panel: rgba(14,19,30,.94); --rule: #26324a; --ink: #e9e6dc; --dim: #8a93a6; --gold: #f2b134; --red: #ff5a4a; --blue: #5fb0ff; --lav: #b9a3e3;
+      --f-display: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px var(--f-mono); overflow: hidden; user-select: none; -webkit-user-select: none; }
+    canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+    .screen { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10; background: radial-gradient(ellipse at center, rgba(7,10,18,.6), rgba(3,5,9,.95)); }
+    .screen[hidden], [hidden] { display: none !important; }
+    .card { width: min(560px, calc(100vw - 32px)); padding: 26px 28px; background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+    h1 { margin: 0 0 6px; font: 800 52px var(--f-display); letter-spacing: .04em; line-height: 1; }
+    h1 b { color: var(--gold); }
+    .go { margin-top: 22px; width: 100%; padding: 13px; border: 0; border-radius: 999px; background: var(--gold); color: #1a1204; font: 800 22px var(--f-display); letter-spacing: .08em; cursor: pointer; }
+    .go:hover { filter: brightness(1.08); }
+    .keys { margin-top: 14px; color: var(--dim); font-size: 11px; line-height: 1.8; }
+    .keys kbd { padding: 1px 5px; border: 1px solid var(--rule); border-radius: 3px; color: var(--ink); font: inherit; }
+    .stats { margin-top: 10px; display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; color: var(--dim); } .stats b { color: var(--ink); text-align: right; }
+    #hud { position: fixed; z-index: 5; pointer-events: none; }
+    #hud .tl { position: absolute; left: 14px; top: 12px; display: grid; gap: 5px; min-width: 210px; }
+    #hud .tr { position: absolute; right: 14px; top: 12px; display: grid; gap: 6px; justify-items: end; max-width: 46%; }
+    #hud .bl { position: absolute; left: 14px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-width: calc(100% - 28px); pointer-events: auto; }
+    #hud .br { position: absolute; right: 14px; bottom: 54px; display: grid; gap: 3px; justify-items: end; font-size: 11.5px; }
+    .tag { color: var(--dim); font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; }
+    .big { font: 800 26px var(--f-display); letter-spacing: .05em; }
+    .bar { height: 9px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 99px; transition: width .15s; }
+    .row { display: flex; align-items: center; gap: 8px; } .row .tag { width: 58px; } .row .bar { flex: 1; }
+    .mis { padding: 6px 10px; border-left: 4px solid var(--gold); border-radius: 0 8px 8px 0; background: rgba(14,19,30,.86); min-width: 200px; }
+    .mis b { display: block; font-weight: 600; } .mis span { color: var(--dim); font-size: 11px; } .mis .bar { margin-top: 4px; height: 5px; }
+    .mis.hazard { border-color: var(--red); }
+    .chip { padding: 7px 12px; border: 1px solid var(--rule); border-radius: 999px; background: rgba(14,19,30,.9); color: var(--ink); font: 600 12px var(--f-mono); cursor: pointer; }
+    .chip:disabled { opacity: .4; cursor: default; } .chip.bought { border-color: var(--lav); color: var(--lav); opacity: .7; cursor: default; }
+    .chip em { font-style: normal; color: var(--lav); margin-left: 6px; }
+    #jump { border-color: var(--gold); color: var(--gold); font-weight: 800; }
+    #feed div { animation: fade 5s forwards; text-shadow: 0 1px 2px #000; } @keyframes fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+    #sel { position: fixed; z-index: 5; pointer-events: none; font-size: 11.5px; color: var(--ink); text-shadow: 0 1px 2px #000; }
+    @media (max-width: 640px) {
+      #hud .tl { min-width: 0; width: 46%; gap: 3px; } #hud .tl .row .tag { width: 50px; } .big { font-size: 20px; } .tag { font-size: 9.5px; }
+      #hud .tr { max-width: 50%; } .mis { min-width: 0; padding: 4px 8px; } .mis b { font-size: 11.5px; } #feed { font-size: 10.5px; }
+      #hud .bl { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; } .chip { flex: none; padding: 6px 10px; font-size: 11px; }
+    }
+    #paused { position: absolute; left: 50%; top: 40%; transform: translateX(-50%); font: 800 44px var(--f-display); letter-spacing: .2em; color: var(--gold); opacity: .85; }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="hud" hidden>
+    <div class="tl">
+      <div><span class="tag">Sector</span> <span class="big" id="h-sector"></span></div>
+      <div class="row"><span class="tag">Hull</span><div class="bar"><i id="h-hull" style="background:#e9e6dc"></i></div></div>
+      <div class="row"><span class="tag">Shields</span><div class="bar"><i id="h-shield" style="background:#5fb0ff"></i></div></div>
+      <div class="row"><span class="tag">Jump</span><div class="bar"><i id="h-jump" style="background:#f2b134"></i></div></div>
+      <div class="tag" id="h-res"></div>
+    </div>
+    <div class="tr"><div id="missions" style="display:grid;gap:6px;justify-items:end"></div><div id="feed" style="display:grid;gap:2px;justify-items:end"></div></div>
+    <div class="br" id="h-sys"></div>
+    <div class="bl" id="upg"><button class="chip" id="pause" type="button">❚❚</button><button class="chip" id="jump" type="button" hidden>JUMP</button></div>
+    <div id="paused" hidden>PAUSED</div>
+  </div>
+  <div id="sel"></div>
+
+  <div class="screen" id="menu">
+    <div class="card">
+      <h1>SKELETON <b>CREW</b></h1>
+      <div class="tag">Three decks · not enough hands</div>
+      <button class="go" id="go" type="button">TAKE COMMAND</button>
+      <div class="keys"><kbd>Click</kbd> crew to select (drag to box, <kbd>Shift</kbd> adds) · <kbd>Click</kbd> a room to send them · <kbd>Click</kbd> space to move · <kbd>Click</kbd> a hostile to target · <kbd>Tab</kbd> next target · <kbd>Space</kbd> pause</div>
+    </div>
+  </div>
+  <div class="screen" id="end" hidden>
+    <div class="card">
+      <h1 id="end-title"></h1>
+      <div class="stats" id="end-stats"></div>
+      <button class="go" id="again" type="button">AGAIN</button>
+    </div>
+  </div>
+  <script src="crew.js?v=1"></script>
+</body>
+</html>
