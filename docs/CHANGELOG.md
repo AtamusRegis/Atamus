@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-21
 
+- **Skeleton Crew overhaul (owner: "very underwhelming"):** every room got its own furniture and working stations, the decks light and darken with crew, red/intruder alerts, sliding doors, flames, smoke, sparks and scorch marks; space got a nebula, a planet, detailed ships, glowing beams, shield ripples, shockwaves, debris and screen shake; synthesized sound. New: enemy boarders through weakened shields, fought room by room; a shield overload hazard; faster missions and jumps.
 - **Skeleton Crew (owner):** a third demo on the site, `website/crew/` (atamus.io/crew/): single-player tactical crew game. One ship with three decks of rooms (bridge, weapons, point defense, shields, science, research, medical, comms, engines, galley, storage), a short crew in Star Trek division colors with rank chevrons, waypoint steering and targeting, fires and damage, timed missions, research upgrades, five sectors. Rules in `docs/CREW.md`.
 
 ## 2026-10-20

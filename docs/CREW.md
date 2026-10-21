@@ -34,19 +34,29 @@ prototype: simple, a little progression, everything clickable.
   - **Comms:** missions.
 - **Space:** click space to set a waypoint; click a hostile (or Tab) to target it. Weapons fire only on your target.
   Raiders circle and fire missiles; frigates close in and fire lasers (evasion makes them miss).
+- **Boarders** (owner, 2026-10-21): a frigate in close range beams two boarders into a random room while your shields
+  are under half (each frigate every ~30 s, at most 6 aboard). They fight any crew in the room (Tactical hit hardest,
+  then Command); with nobody to fight they wreck the room, then move on to the next. Crew fighting boarders do nothing
+  else. JUMP waits until they're all down.
 - **Getting hit:** shields first, then the hull and a random room. The room is damaged, its crew are hurt, and it may
   catch fire. Fires grow, burn the room and the crew in it, and spread to the next room.
   - Crew die at 0 health.
   - The run ends when the hull reaches 0 or everyone is dead.
-- **Missions** (every ~30 s, up to 3): a room must be worked long enough before its timer runs out.
+- **Missions** (every ~25 s, up to 3): a room must be worked long enough before its timer runs out.
   - Distress call (Comms): a new crew member joins (up to 12).
   - Spatial anomaly (Science): +3 research.
   - Salvage (Storage): torpedoes.
   - Enemy chatter (Comms): every hostile scanned.
-  - Hazards (red) punish failure: a coolant leak (Engines) sets the engine room on fire; contagion (Medical) hurts all crew.
+  - Hazards (red) punish failure: a coolant leak (Engines) sets the engine room on fire; contagion (Medical) hurts all
+    crew; an emitter overload (Shields) drops the shields and wrecks the room.
 - **Progression:**
   - Crew rank up by working.
   - Research buys five one-time upgrades: Laser focus, Torpedo racks, Shield emitters, Hull plating, Auto-medic.
   - Missions recruit crew.
-  - Five sectors: clear the hostiles, press JUMP, and the bridge and engines spin it up (+15 hull). Jumping out of sector 5 wins.
+  - Five sectors: clear the hostiles, press JUMP, and the bridge and engines spin it up (4 s at full power) (+15 hull). Jumping out of sector 5 wins.
+- **Look and sound:** each room has its own furniture and stations (consoles light when worked; the torpedo tube shows
+  the load and the racks the count; the reactor glows with power; beds, crates, shield rings, server racks). Unworked
+  rooms go dark; red alert (intruder alert with boarders) pulses the decks; doors slide; fires flame and smoke; hits
+  scorch and spark. Space has a nebula, a planet, glowing beams, shield ripples, shockwaves, debris and screen shake.
+  Synthesized sound effects; M (or ♪) mutes.
 - **Space** pauses (also the ❚❚ button).
