@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-20
 
+- **Breach.io floors and bunkering (owner):** the house has 2–3 floors joined by stairs (E), the payload on the top floor. Most of the red team now hold posts watching their doorways instead of roaming; a noise sends only the nearest two to look while the rest turn and hold, so they no longer come in packs of 5–6. Sight, sound and shots stay on their own floor.
 - **Breach.io AI vision (owner):** red operators see shorter (450, 650 in a fight) and only when they're on your screen — they can't spot you from anywhere you can't see them.
 - **Breach.io view (owner):** the camera leans toward the cursor by its screen position, with more vertical reach on wide windows (aiming down sights reaches furthest), so you can see as far up and down as sideways.
 - **Breach.io controls (owner):** right mouse aims down sights (tighter spread, slower move, longer view, sight line), left fires, F throws a grenade, R reloads.
