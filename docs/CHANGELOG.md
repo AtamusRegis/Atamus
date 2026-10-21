@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-20
+
+- **Breach.io (owner):** a new game on the site, `website/breach/` (atamus.io/breach/): top-down breach-and-clear, single player for now — callsign + loadout, a procedural house, 10–30 red AI, breach, clear, secure the payload. Rules in `docs/BREACH.md`. Atamus itself is unchanged.
+
 ## 2026-10-19
 
 - **Name and play, like an .io game (owner):** all accounts removed — no sign-up, login, passwords or staff accounts. Enter a name (not one already in play) and play; nothing is remembered: pilots start fresh, are kept a minute after a drop for reloads, then forgotten; restarts forget everyone. Deleted: `auth.js`, `sessions.js`, `admin.js`, `appeals.js` (and the socket's admin hooks), the login / sign-up / recover / terms pages, the old admin panel files. `guest.js` now hands out in-memory session tokens. Old tables (`users`, `guests`, `ring_players`, …) stay untouched. Tuning answers only to the local test copy's tester.

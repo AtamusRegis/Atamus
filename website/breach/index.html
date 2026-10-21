@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breach.io</title>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <style>
+    /* Breach.io (owner, 2026-10-20): a top-down breach-and-clear, single player for now. Tactical night palette. */
+    @font-face { font-family: "Big Shoulders Display"; font-weight: 800; font-display: swap; src: url("../fonts/big-shoulders-display-latin-800-normal.woff2") format("woff2"); }
+    @font-face { font-family: "JetBrains Mono"; font-weight: 600; font-display: swap; src: url("../fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+    :root { --bg: #0c0f12; --panel: rgba(16,20,24,.94); --rule: #2a323a; --ink: #e8e4da; --dim: #8d918f; --blue: #4aa3ff; --red: #ff4d4d; --gold: #f1c04a;
+      --f-display: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 14px var(--f-mono); overflow: hidden; }
+    canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; cursor: none; }
+    .screen { position: fixed; inset: 0; display: grid; place-items: center; z-index: 10; background: radial-gradient(ellipse at center, rgba(12,15,18,.55), rgba(5,7,9,.94)); }
+    .screen[hidden] { display: none; }
+    .card { width: min(560px, calc(100vw - 32px)); padding: 26px 28px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+    h1 { margin: 0 0 4px; font: 800 54px var(--f-display); letter-spacing: .04em; line-height: 1; }
+    h1 b { color: var(--red); }
+    h2 { margin: 18px 0 8px; font: 600 11px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); }
+    input[type=text] { width: 100%; padding: 10px 12px; border-radius: 5px; border: 1px solid var(--rule); background: #0a0d10; color: var(--ink); font: 15px var(--f-mono); }
+    input[type=text]:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+    .opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; }
+    .opt { padding: 10px 8px; border: 1px solid var(--rule); border-radius: 5px; background: #0a0d10; color: var(--ink); font: 600 13px var(--f-mono); cursor: pointer; text-align: center; }
+    .opt small { display: block; margin-top: 3px; font-weight: 400; font-size: 10.5px; color: var(--dim); }
+    .opt.on { border-color: var(--blue); background: rgba(74,163,255,.12); }
+    .row { display: flex; align-items: center; gap: 12px; }
+    .row input[type=range] { flex: 1; accent-color: var(--red); }
+    .go { margin-top: 22px; width: 100%; padding: 13px; border: 0; border-radius: 5px; background: var(--red); color: #160606; font: 800 22px var(--f-display); letter-spacing: .08em; cursor: pointer; }
+    .go:hover { filter: brightness(1.08); }
+    .keys { margin-top: 14px; color: var(--dim); font-size: 11px; line-height: 1.7; }
+    .keys kbd { padding: 1px 5px; border: 1px solid var(--rule); border-radius: 3px; color: var(--ink); font: inherit; }
+    #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; font: 600 13px var(--f-mono); }
+    #hud[hidden] { display: none; }
+    .hud-tl { position: absolute; left: 16px; top: 14px; display: grid; gap: 6px; }
+    .hud-tr { position: absolute; right: 16px; top: 14px; text-align: right; display: grid; gap: 6px; }
+    .hud-bl { position: absolute; left: 16px; bottom: 16px; display: grid; gap: 6px; }
+    .hud-br { position: absolute; right: 16px; bottom: 16px; text-align: right; display: grid; gap: 4px; }
+    .big { font: 800 30px var(--f-display); letter-spacing: .04em; }
+    .hp { width: 220px; height: 12px; border: 1px solid var(--rule); border-radius: 3px; background: rgba(0,0,0,.5); overflow: hidden; }
+    .hp i { display: block; height: 100%; background: var(--blue); transition: width .15s; }
+    .tag { color: var(--dim); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+    .red { color: var(--red); } .gold { color: var(--gold); } .blue { color: var(--blue); }
+    #secure { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); width: 200px; height: 8px; border: 1px solid var(--gold); border-radius: 3px; background: rgba(0,0,0,.5); }
+    #secure[hidden] { display: none; } #secure i { display: block; height: 100%; width: 0; background: var(--gold); }
+    #feed { position: absolute; right: 16px; top: 92px; display: grid; gap: 3px; text-align: right; font-size: 12px; }
+    #feed div { animation: fade 4s forwards; } @keyframes fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+    .end h1 { font-size: 64px; } .stats { margin-top: 10px; display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; color: var(--dim); } .stats b { color: var(--ink); text-align: right; }
+    .btns { display: flex; gap: 10px; margin-top: 20px; } .btns button { flex: 1; } .btn2 { padding: 13px; border: 1px solid var(--rule); border-radius: 5px; background: transparent; color: var(--ink); font: 800 20px var(--f-display); letter-spacing: .06em; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div id="hud" hidden>
+    <div class="hud-tl"><div class="tag" id="h-name"></div><div class="hp"><i id="h-hp"></i></div></div>
+    <div class="hud-tr"><div><span class="tag">Red team</span> <span class="big red" id="h-red"></span></div><div><span class="tag">Payload</span> <span class="gold" id="h-pay"></span></div></div>
+    <div id="feed"></div>
+    <div class="hud-bl"><div class="tag" id="h-time"></div></div>
+    <div class="hud-br"><div class="tag" id="h-wpn"></div><div class="big" id="h-ammo"></div><div class="tag" id="h-nade"></div></div>
+    <div id="secure" hidden><i id="h-sec"></i></div>
+  </div>
+
+  <div class="screen" id="menu">
+    <div class="card">
+      <h1>BREACH<b>.IO</b></h1>
+      <h2>Callsign</h2>
+      <input type="text" id="name" maxlength="16" placeholder="Operator" autocomplete="nickname">
+      <h2>Primary</h2>
+      <div class="opts" id="o-primary"></div>
+      <h2>Grenade</h2>
+      <div class="opts" id="o-nade"></div>
+      <h2>Red team</h2>
+      <div class="row"><input type="range" id="count" min="10" max="30" value="16"><span class="big red" id="count-n">16</span></div>
+      <button class="go" id="go" type="button">BREACH</button>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Mouse</kbd> aim / fire · <kbd>R</kbd> reload · <kbd>1</kbd> <kbd>2</kbd> weapons · <kbd>G</kbd> grenade · <kbd>E</kbd> doors / secure · <kbd>Shift</kbd> walk</div>
+    </div>
+  </div>
+
+  <div class="screen end" id="end" hidden>
+    <div class="card">
+      <h1 id="end-title"></h1>
+      <div class="stats" id="end-stats"></div>
+      <div class="btns"><button class="go" id="again" type="button">AGAIN</button><button class="btn2" id="loadout" type="button">LOADOUT</button></div>
+    </div>
+  </div>
+  <script src="breach.js?v=1"></script>
+</body>
+</html>
