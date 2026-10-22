@@ -68,10 +68,9 @@ website/          GitHub Pages site (atamus.io) and the game client
   theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
   index/play.html (+ play.js), api.js, style.css, front-updates.js
                   the website; play.html is the name-and-play door (and the update-wait page); no account pages
-  breach/         (owner, 2026-10-20) Breach.io, a second game: top-down breach-and-clear, single player in the browser
-                  for now (index.html + breach.js); rules in docs/BREACH.md
-  crew/           (owner, 2026-10-21) Skeleton Crew, a third demo: single-player tactical crew game, one ship with three
-                  decks (index.html + crew.js); rules in docs/CREW.md
+  salvage/        (owner, 2026-10-21) Salvage, a side prototype: isometric pixel-art salvage sandbox, single player
+                  (index.html + salvage.js + branko.png, the owner's sprite); rules in docs/SALVAGE.md. (Breach.io and
+                  Skeleton Crew were scrapped the same day; git history only.)
 reference/        old snapshots, for reference only (never deployed)
 scripts/
   check.sh        syntax-check every JS file (run before every push)

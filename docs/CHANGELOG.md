@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-21
 
+- **Salvage (owner):** a new side prototype at `website/salvage/` (atamus.io/salvage/): an isometric pixel-art sandbox — one salvager (the owner's Branko sprite) on a tug docked to a derelict, taking it apart with hands, screwdriver, saw, blowtorch, cutters and charges, and hauling loot to the sell pad. Power, pressure, fire and wiring tie the parts together, so the wrong order shocks, scalds, decompresses or blows up. Rules in `docs/SALVAGE.md`.
+- **Breach.io and Skeleton Crew scrapped (owner: "scrap the two side projects"):** `website/breach/`, `website/crew/` and their docs removed; git history only.
 - **Skeleton Crew overhaul (owner: "very underwhelming"):** every room got its own furniture and working stations, the decks light and darken with crew, red/intruder alerts, sliding doors, flames, smoke, sparks and scorch marks; space got a nebula, a planet, detailed ships, glowing beams, shield ripples, shockwaves, debris and screen shake; synthesized sound. New: enemy boarders through weakened shields, fought room by room; a shield overload hazard; faster missions and jumps.
 - **Skeleton Crew (owner):** a third demo on the site, `website/crew/` (atamus.io/crew/): single-player tactical crew game. One ship with three decks of rooms (bridge, weapons, point defense, shields, science, research, medical, comms, engines, galley, storage), a short crew in Star Trek division colors with rank chevrons, waypoint steering and targeting, fires and damage, timed missions, research upgrades, five sectors. Rules in `docs/CREW.md`.
 

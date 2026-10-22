@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Salvage</title>
+  <link rel="icon" href="../favicon.png" type="image/png">
+  <style>
+    /* Salvage (owner, 2026-10-21): an isometric pixel-art salvage sandbox. */
+    @font-face { font-family: "Big Shoulders Display"; font-weight: 800; font-display: swap; src: url("../fonts/big-shoulders-display-latin-800-normal.woff2") format("woff2"); }
+    @font-face { font-family: "JetBrains Mono"; font-weight: 600; font-display: swap; src: url("../fonts/jetbrains-mono-latin-600-normal.woff2") format("woff2"); }
+    :root { --bg: #07080c; --panel: rgba(12,14,20,.9); --rule: #2b303c; --ink: #ece6d8; --dim: #8c8f98; --orange: #f08a24; --red: #ff5a4a; --blue: #6cb8ff; --green: #7fe08a;
+      --f-display: "Big Shoulders Display", Impact, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace; color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 12px var(--f-mono); overflow: hidden; user-select: none; -webkit-user-select: none; }
+    canvas { display: block; image-rendering: pixelated; }
+    #view { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    .hud { position: fixed; z-index: 5; pointer-events: none; }
+    #tl { left: 14px; top: 12px; display: grid; gap: 5px; width: 220px; }
+    #credits { font: 800 32px var(--f-display); letter-spacing: .04em; color: var(--orange); line-height: 1; }
+    .row { display: flex; align-items: center; gap: 8px; } .row .tag { width: 30px; }
+    .tag { color: var(--dim); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; }
+    .bar { flex: 1; height: 8px; background: rgba(255,255,255,.08); border: 1px solid #000; } .bar i { display: block; height: 100%; }
+    #tr { right: 14px; top: 12px; display: flex; gap: 6px; pointer-events: auto; }
+    .chip { padding: 7px 12px; border: 2px solid var(--rule); background: var(--panel); color: var(--ink); font: 600 11px var(--f-mono); letter-spacing: .08em; cursor: pointer; }
+    .chip:hover { border-color: var(--orange); }
+    #bar { left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 14px; align-items: flex-end; pointer-events: auto; }
+    .slots { display: flex; gap: 4px; }
+    .slot { position: relative; width: 46px; height: 46px; border: 2px solid var(--rule); background: var(--panel); display: grid; place-items: center; cursor: pointer; padding: 0; }
+    .slot canvas { width: 36px; height: 36px; }
+    .slot b { position: absolute; left: 3px; top: 1px; font-size: 10px; color: var(--dim); font-weight: 600; }
+    .slot.on { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange) inset; }
+    .slot.hands { width: 56px; height: 56px; } .slot.hands canvas { width: 44px; height: 44px; }
+    .slot.pack { width: 38px; height: 38px; cursor: default; } .slot.pack canvas { width: 30px; height: 30px; }
+    #feed { left: 14px; bottom: 14px; display: grid; gap: 2px; font-size: 11.5px; text-shadow: 0 1px 0 #000, 0 0 4px #000; }
+    #feed div { animation: fade 6s forwards; } @keyframes fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+    #prompt { padding: 3px 7px; background: rgba(8,9,13,.85); border: 1px solid var(--rule); font-size: 11.5px; white-space: nowrap; transform: translate(14px, 10px); }
+    #prompt.bad { color: var(--dim); } #prompt em { font-style: normal; color: var(--orange); }
+    #prompt:empty { display: none; }
+    #pops { left: 0; top: 0; }
+    .pop { position: fixed; font: 800 20px var(--f-display); color: var(--green); text-shadow: 0 2px 0 #000; animation: rise 1.4s forwards; pointer-events: none; }
+    @keyframes rise { to { transform: translateY(-40px); opacity: 0; } }
+    #dead { left: 50%; top: 40%; transform: translateX(-50%); font: 800 46px var(--f-display); letter-spacing: .14em; color: var(--red); text-shadow: 0 3px 0 #000; }
+    [hidden] { display: none !important; }
+    @media (max-width: 760px) { #bar { gap: 6px; } .slot { width: 38px; height: 38px; } .slot canvas { width: 28px; height: 28px; } .slot.hands { width: 44px; height: 44px; } .slot.pack { width: 30px; height: 30px; } .slot.pack canvas { width: 22px; height: 22px; } #bar { bottom: 8px; flex-wrap: wrap; justify-content: center; width: 100%; } #feed { bottom: 110px; } }
+  </style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="hud" id="tl">
+    <div id="credits">$0</div>
+    <div class="row"><span class="tag">HP</span><div class="bar"><i id="h-hp" style="background:#ff5a4a"></i></div></div>
+    <div class="row"><span class="tag">O₂</span><div class="bar"><i id="h-o2" style="background:#6cb8ff"></i></div></div>
+    <div class="tag" id="h-status"></div>
+  </div>
+  <div class="hud" id="tr"><button class="chip" id="reset" type="button">NEW DERELICT</button><button class="chip" id="mute" type="button">♪</button></div>
+  <div class="hud" id="bar"><div class="slots" id="tools"></div><div class="slot hands" id="hands"></div><div class="slots" id="pack"></div></div>
+  <div class="hud" id="feed"></div>
+  <div class="hud" id="prompt"></div>
+  <div class="hud" id="dead" hidden>SUIT FAILURE</div>
+  <script src="salvage.js?v=1"></script>
+</body>
+</html>
