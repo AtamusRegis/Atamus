@@ -1,6 +1,6 @@
 # Atamus
 
-A browser-based, EVE-inspired multiplayer mining semi-RTS set in the Expanse.
+A browser based game prototype sandbox
 
 - Website and client: https://atamus.io (GitHub Pages, from `website/`)
 - Game server: https://play.atamus.io (Node + ws + Postgres behind Caddy, from `packages/server/`)
