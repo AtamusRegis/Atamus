@@ -1050,6 +1050,20 @@ function click(sx, sy) {
   if (a) enqueue(selected, a); else if (sw) doSwap(selected, sw); else if (!targetAt(i, j)) selected = null; else bad = { i, j, t: 0.5 };
 }
 const pts = new Map(); let gesture = null;
+// (owner, 2026-11-01) press and hold a container the selected tractor has claimed on the ship to call that pickup off;
+// with several of its claims in one stack, the top one goes first. Its trip under way is called off too while the
+// crane hasn't started on it.
+function unclaimAt(sx, sy) {
+  const t = selected, s = DOCK.ship; if (!t || t.kind !== "yard" || !s) return false;
+  const pk = pickAt(sx, sy), [i, j] = pk && pk.slot !== undefined ? slotTile(pk.slot) : tileAtScreen(sx, sy), g = targetAt(i, j);
+  if (!g || g.slot === undefined) return false;
+  const st = s.bays[g.slot], mine = (t.cmd && t.cmd.kind === "sts" && !t.locked ? [t.cmd] : []).concat(t.queue).filter((a) => a.kind === "sts" && a.box && st.includes(a.box));
+  if (!mine.length) return false;
+  const a = mine.reduce((m, q) => (st.indexOf(q.box) > st.indexOf(m.box) ? q : m));
+  if (a === t.cmd) { claim(t, a, -1); leaveLane(t); t.cmd = null; t.path = t.next ? [t.next] : []; }
+  else unqueue(t, a);
+  return true;
+}
 // right click: take back the selected truck's last queued trip (not the one under way); with none left, deselect
 cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (touchy) return; if (!selected || !unqueueLast(selected)) selected = null; });   // a long press on a touch screen does nothing
 cv.addEventListener("pointerdown", (e) => {
@@ -1059,6 +1073,7 @@ cv.addEventListener("pointerdown", (e) => {
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pts.size === 2) { const [a, b] = [...pts.values()]; gesture = { pinch: hyp(a.x - b.x, a.y - b.y), zoom, moved: true }; return; }
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+  const g = gesture; setTimeout(() => { if (gesture === g && !g.moved && pts.size === 1 && unclaimAt(g.sx, g.sy)) g.held = true; }, 450);
 });
 cv.addEventListener("pointermove", (e) => {
   if (e.pointerType === "mouse") { touchy = false; const pk = pickAt(e.clientX, e.clientY); hover = { tile: pk && pk.slot !== undefined ? slotTile(pk.slot) : tileAtScreen(e.clientX, e.clientY), truck: pk && pk.truck }; } else hover = null;   // no hover on a touch screen
@@ -1068,7 +1083,7 @@ cv.addEventListener("pointermove", (e) => {
   const dx = e.clientX - gesture.sx, dy = e.clientY - gesture.sy; if (hyp(dx, dy) > (touchy ? 12 : 6)) gesture.moved = true;
   if (gesture.moved) { cam.x = gesture.cx - dx / zoom; cam.y = gesture.cy - dy / zoom; }
 });
-cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
+cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch && !gesture.held) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
 cv.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY); }, { passive: false });
 function setZoom(z, sx, sy) { const before = toWorld(sx, sy); zoom = clamp(z, 0.3, 3); const after = toWorld(sx, sy); cam.x += before.x - after.x; cam.y += before.y - after.y; }
 

@@ -308,7 +308,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   the cursor shows green or red.
 - **Taking back (owner, 2026-11-01: everything one tap):** tap (click) a numbered badge of the selected truck's queue to
   take that trip back, any of them but the one under way. Right click still removes the last one (with nothing left,
-  it deselects); a long press on a touch screen does nothing.
+  it deselects); a long press on a touch screen does nothing except on a claimed ship container (below).
+- **Hold to unclaim (owner, 2026-11-01):** press and hold (about half a second) a ship container the selected tractor
+  has claimed to call that pickup off. With several of its claims in one stack, each hold calls off the top one first.
+  Its trip under way goes too while the crane hasn't started on it.
 - **Bigger hit areas (owner, 2026-11-01):** trucks and the containers on the docked ship can be hit from a little way
   off (further on a touch screen), and where two overlap the one nearest the pointer wins (a truck measured to its cab
   and trailer, a ship container to the middle of its slot). A queue badge, drawn on top, comes first.
