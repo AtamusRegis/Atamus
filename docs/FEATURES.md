@@ -90,7 +90,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
   red at the bottom and green on top. Storage slots draw this way. **A ship's slots are 3 × 1, horizontal (owner)**, with
   the same three squares left to right (left the top). Stacks go up to 3 high.
-- **Shading (owner, 2026-11-01):** in every stack the bottom container is drawn darker and the top one lighter.
+- **Shading (owner, 2026-11-01):** in every stack the bottom container is drawn much darker, the middle a little darker
+  and the top one lighter.
 
 ## The ship and STS cranes
 
@@ -137,9 +138,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   way to it right now, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it
   straight away. An idle crane with a tractor on its way lifts a spare to hold ready; with none on its way it puts the
   spare back (owner: no holding one for no reason).
-- **Sorting the ship while idle (owner, 2026-11-01):** a crane with nothing else to do digs out buried containers that
-  customers want: it takes the top container off such a slot in its columns (the least buried first, never a slot a
-  tractor is coming for) and sets it on the nearest low slot of its columns with no exports and no wanted container.
+- **Sorting the ship while idle (owner, 2026-11-01):** a crane with no tractor to serve digs out buried containers that
+  customers want, before anything else (holding a spare, compressing): it takes the top container off such a slot in
+  its columns (the least buried first; a slot tractors are queued for only while enough is left there for them) and sets it on the nearest low slot of its columns with no exports and no wanted container.
 - **Compressing while idle (owner, 2026-11-01):** with nothing to sort, a crane packs the imports in its section toward
   the section's west end (one crane: the whole ship to the left; two: each its half; and so on). It moves the top
   container of the easternmost import slot to the westernmost slot with room (columns first, then the deck rows nearest

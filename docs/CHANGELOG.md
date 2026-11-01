@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Stronger stack shading; cranes dig out wanted containers first (owner):** the bottom of each stack is much darker and the top clearly lighter. An idle crane now digs out containers customers want before grabbing a spare or compressing, including in slots tractors are queued for.
+
 - **Cranes compress the ship, no idle spare (owner):** an idle STS crane with nothing to sort packs the containers in its section toward the section's west end. A crane now only holds a spare while a tractor is actually on its way to it, and puts it back otherwise.
 
 - **Cranes hold two and sort the ship (owner):** an STS crane can hold a second container, lifting one for each of two waiting tractors in one trip, or keeping a spare ready for the next tractor. Idle, it digs out buried containers customers want by moving what's on top to other slots.

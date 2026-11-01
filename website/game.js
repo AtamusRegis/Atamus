@@ -517,8 +517,9 @@ function stsStep(b, dt) {
     const [c0, c1] = craneCols(b), sx = (k) => (DOCK.x + shipSlot(k).c * CL + 1.5) * T, sy = (k) => (DOCK.top + shipSlot(k).r + 0.5) * T, inCols = (k) => k % DOCK.cols >= c0 && k % DOCK.cols < c1 && onDeck(s, k);
     const nearest = (ok) => { let best = -1, bd = 1e9; s.bays.forEach((st, k) => { if (!inCols(k) || !ok(st, k)) return; const d = Math.abs(sx(k) - cr.x) + Math.abs(sy(k) - cr.y); if (d < bd) { bd = d; best = k; } }); return best; };
     if (cr.hold2 && !coming(b)) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st))); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
+    else if (s.state === "docked" && sortShip(b)) { /* digging out a wanted container comes first (owner) */ }
     else if (!cr.hold2 && coming(b) && s.state === "docked") { const k = nearest((st, kk) => impCount(st) - s.claims[kk] > 0 && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk)); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: s.bays[k], second: true } }]; }
-    else if (s.state === "docked" && !sortShip(b)) compressShip(b);
+    else if (s.state === "docked") compressShip(b);
   }
   craneStep(cr, dt, () => {
     cr.slot = undefined; cr.slot2 = undefined; const t = cr.truck, t2 = cr.truck2; cr.truck = null; cr.truck2 = null;
@@ -529,14 +530,14 @@ function stsStep(b, dt) {
 // a tractor on its way to this crane right now that could take a spare (empty or bringing an export, not sent for a
 // particular slot), other than t
 const coming = (b, t) => trucks.some((q) => q !== t && q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && q.cmd.pick !== false && q.cmd.slot === undefined && !q.locked && (q.load === null || q.load.exp));
-// (owner) an idle STS crane sorts the ship: it takes the top container off a slot where a customer's container is buried
-// (the least buried first, not a slot a tractor is coming for) and sets it on the nearest low slot of its own columns
+// (owner) an idle STS crane sorts the ship, before anything else: it takes the top container off a slot where a
+// customer's container is buried (the least buried first; a slot tractors are queued for only while enough is left for them) and sets it on the nearest low slot of its own columns
 // that holds no exports and no wanted container
 function sortShip(b) {
   const s = DOCK.ship, cr = b.crane, [c0, c1] = craneCols(b), inCols = (k) => k % DOCK.cols >= c0 && k % DOCK.cols < c1 && onDeck(s, k);
   const busy = (k) => s.claims[k] > 0 || BERTHS.some((q) => q.crane.slot === k || q.crane.slot2 === k);
   let src = -1, sd = 1e9;
-  s.bays.forEach((st, k) => { if (!inCols(k) || !impCount(st) || busy(k)) return; const i = st.findIndex((x) => x.wantedBy); if (i < 0 || i === st.length - 1) return; if (st.length - 1 - i < sd) { sd = st.length - 1 - i; src = k; } });
+  s.bays.forEach((st, k) => { if (!inCols(k) || !impCount(st) || BERTHS.some((q) => q.crane.slot === k || q.crane.slot2 === k) || impCount(st) - 1 < s.claims[k]) return; const i = st.findIndex((x) => x.wantedBy); if (i < 0 || i === st.length - 1) return; if (st.length - 1 - i < sd) { sd = st.length - 1 - i; src = k; } });
   if (src < 0) return false;
   const qs = shipSlot(src); let dst = -1, dd = 1e9;
   s.bays.forEach((st, k) => { if (k === src || !inCols(k) || st.length >= 3 || (st.length && !impCount(st)) || st.some((x) => x.wantedBy) || busy(k)) return; const q = shipSlot(k), d = st.length * 3 + Math.abs(q.c - qs.c) * 2 + Math.abs(q.r - qs.r); if (d < dd) { dd = d; dst = k; } });
@@ -737,7 +738,7 @@ const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T
 const flashing = (x, slot, st) => { if (!x) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + BERTHS.reduce((n, b) => n + (b.crane.slot === slot ? 1 : 0) + (b.crane.slot2 === slot ? 1 : 0), 0); return have < need; };
 function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
 // (owner) the bottom container of a stack is drawn darker and the top one lighter
-const TIER_SHADE = ["rgba(0,0,0,.38)", "rgba(0,0,0,0)", "rgba(255,255,255,.22)"];
+const TIER_SHADE = ["rgba(0,0,0,.58)", "rgba(0,0,0,.18)", "rgba(255,255,255,.4)"];
 function drawStackH(x, y, st, frame, slot) {   // on the ship
   ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, CL * T - 4, T - 4);
   for (let k = 0; k < 3; k++) {
