@@ -232,13 +232,22 @@ function startCmd(t, a) {
   } else if (t.lane) { t.lane.claim = null; t.lane = null; }
   if (t.bay) { if (t.bay.claim === t) t.bay.claim = null; t.bay = null; }
   if (t.stall && t.stall.claim === t && !(a.kind === "park" && a.stall === t.stall)) t.stall.claim = null;
-  t.stall = null; t.cmd = a; goTo(t, targetKey(a)); return true;
+  t.stall = null; t.cmd = a; goTo(t, targetKey(a));
+  if (a.kind === "sts") t.lastSts = a.berth; else if (a.kind === "rtg" && t.kind === "yard") t.lastRtg = a.block;
+  return true;
+}
+// (owner) a tractor on loop goes back and forth on its own between the STS crane and the RTG it was last sent to
+function loopStep(t) {
+  if (!t.loop || t.cmd || t.next || t.queue.length || t.locked) return;
+  if (t.load && t.lastRtg && t.lastRtg.open && free(t.lastRtg) > 0) enqueue(t, { kind: "rtg", block: t.lastRtg });
+  else if (!t.load && t.lastSts && berthLeft(t.lastSts) > 0) enqueue(t, { kind: "sts", berth: t.lastSts });
 }
 
 function truckStep(t, dt) {
   if (t.locked) return;
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
+    loopStep(t);
     if (t.queue.length && startCmd(t, t.queue[0])) t.queue.shift();
   }
   // traffic: move into the next tile only when no other truck holds it
@@ -526,9 +535,20 @@ function drawLocked() {
 }
 // the money, and buying a tractor
 let hudTxt = "";
-function hud() { const p = tractorPrice(), txt = "$" + money.toLocaleString() + "|" + p + "|" + (money >= p); if (txt === hudTxt) return; hudTxt = txt; $("money").textContent = "$" + money.toLocaleString(); const b = $("buy-tractor"); b.textContent = "+ Tractor $" + p.toLocaleString(); b.disabled = money < p; }
+function hud() {
+  const lp = selected && selected.kind === "yard" ? (selected.loop ? 2 : 1) : 0, p = tractorPrice(), txt = "$" + money.toLocaleString() + "|" + p + "|" + (money >= p) + "|" + lp; if (txt === hudTxt) return; hudTxt = txt;
+  $("loop").hidden = !lp; $("loop").classList.toggle("on", lp === 2); $("loop").setAttribute("aria-checked", lp === 2 ? "true" : "false"); $("money").textContent = "$" + money.toLocaleString(); const b = $("buy-tractor"); b.textContent = "+ Tractor $" + p.toLocaleString(); b.disabled = money < p; }
 $("buy-tractor").onclick = () => addTractor();
+$("loop").onclick = () => { if (selected && selected.kind === "yard") selected.loop = !selected.loop; };
 function spotRect(a) { if (a.slot !== undefined) return slotRect(a.slot); if (a.lane) return [(a.berth.x + 5) * T, a.lane.r * T, TL * T, T]; if (a.kind === "sts" || a.kind === "wait") return [(a.berth.x + 5) * T, LINE * T, TL * T, 3 * T]; if (a.kind === "rtg") return a.bay ? [a.bay.i * T, BAY0 * T, T, TL * T] : [a.block.x * T, BAY0 * T, a.block.w * T, TL * T]; return [a.stall.i * T, LOT0 * T, T, TL * T]; }
+// where a container is on the map, if anywhere
+function boxAt(x) {
+  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const k = b.slots[c][r].indexOf(x); if (k >= 0) return [(b.x + c + 0.5) * T, (b.y + r * CL + 2 - k + 0.5) * T]; }
+  const s = DOCK.ship; if (s) for (let n = 0; n < s.bays.length; n++) { const k = s.bays[n].indexOf(x); if (k >= 0) { const q = shipSlot(n); return [(DOCK.x + q.c * CL + 2 - k + 0.5) * T + s.off, (DOCK.top + q.r + 0.5) * T]; } }
+  for (const t of trucks) if (t.load === x) { const tr = trailerOf(t); return [tr.x, tr.y]; }
+  for (const cr of [...BERTHS.map((b) => b.crane), ...BLOCKS.map((b) => b.rtg)]) if (cr.hold === x) return [cr.x, cr.y];
+  return null;
+}
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#0b1218"; ctx.fillRect(0, 0, VW, VH);
@@ -537,6 +557,11 @@ function draw() {
   if (DOCK.ship) drawShip();
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
   for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) drawStack((b.x + c) * T, (b.y + r * CL) * T, b.slots[c][r], "rgba(201,162,58,.35)");
+  // (owner) a selected customer truck: a white dotted line to where its container is
+  if (selected && selected.kind === "cust" && selected.load === null) {
+    const at = boxAt(selected.want);
+    if (at) { const tr = trailerOf(selected); ctx.setLineDash([2, 6]); ctx.lineCap = "round"; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(tr.x, tr.y); ctx.lineTo(at[0], at[1]); ctx.stroke(); ctx.setLineDash([]); ctx.lineCap = "butt"; }
+  }
   // the selected truck's queue: numbered spots joined in order
   if (selected) {
     const tr = trailerOf(selected); let px = tr.x, py = tr.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;

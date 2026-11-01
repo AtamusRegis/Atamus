@@ -130,13 +130,18 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
   it takes the container to; an unloaded one waits for you to pick the STS crane it goes to. Tractors never park. A
   tractor with nothing queued stays where it finished (in its STS lane or RTG bay, which it keeps until its next trip).
+- **Loop (owner, 2026-11-01: "a toggle switch for it to just go back and forth from a certain quay to a certain stack"):**
+  while a tractor is selected, a **Loop** switch shows beside the money. Switched on, the tractor keeps going back and
+  forth by itself between the STS crane and the RTG it was last sent to: loaded, it heads for that RTG (if its area has
+  room); empty, for that crane (if its half of the ship has a container nobody claimed). It still works through anything
+  you queue first. Switched off, it stops after its current trip.
 - **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
   and parks in the lot until you send it.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
   areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Most
   (4 in 5) want one already in storage, while there is one. Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
-  the ship, on a tractor or in a crane.
+  the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
@@ -165,7 +170,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
-- **The money** shows top left, beside **+ Tractor**, which buys another yard tractor into a free STS lane. Tractors cost
+- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor into a free STS lane. Tractors cost
   $400, then $50 more each time (owner, 2026-11-01).
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.

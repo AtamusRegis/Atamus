@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Loop and the line to the container (owner):** a selected tractor shows a Loop switch; on, it goes back and forth by itself between the crane and the RTG it was last sent to. A selected customer truck shows a white dotted line to its container.
+
 - **RTG bays are a queue of 5 (owner):** you send a truck to an RTG, not a bay. It takes whichever bay is free or waits in line on the RTG lane until one clears, first come first served. The same RTG can be queued any number of times.
 
 - **Fix: customers mostly wanted ship cargo.** Picked evenly, the ship's many slot tops crowded out stored containers, so most customers could not be sent to an RTG yet. Now 4 in 5 want a container already in storage.
