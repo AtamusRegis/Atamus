@@ -7,8 +7,8 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. **The redo (owner, 2026-10-31): Atamus is a single-player seaport management game** (first a spaceport, made a
-   seaport the same evening), in the browser with no server: boats dock at two berths with containers in seven colors and three walled storage areas in the yard;
-   you tell forklifts which container goes where (they need a way to reach both ends); trucks want a container matching
+   seaport the same evening), in the browser with no server: boats dock at two berths with containers in seven colors; containers go only in the storage (one long walled area,
+   one open 2 × 5 patch); you drive each forklift yourself (select it, then its target; it needs a way to reach it); trucks want a container matching
    their cab color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
@@ -36,8 +36,8 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 website/          GitHub Pages site (atamus.io) and the game
   game.html       the game page: just the canvas
   game.js         the whole game, single player: the tile map and its placeholder art (drawn once), berths and boats,
-                  containers, orders and the access check (4-way BFS), forklifts, truck bays and trucks, camera
-                  (pan / zoom / pinch), click-to-select / click-to-place; window.Atamus for tests
+                  containers, storage, the forklifts you drive (select, target, the access check: 4-way BFS), truck bays and trucks, camera
+                  (pan / zoom / pinch); window.Atamus for tests
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
   fonts/, assets/ self-hosted fonts and the logo

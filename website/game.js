@@ -1,6 +1,6 @@
-// Atamus (owner, 2026-10-31): a single-player seaport management game. Boats dock at two berths with containers in ten
-// colors; you tell the forklifts which container to move where (click it, then click its spot), and a forklift must be
-// able to drive up to both ends. Trucks pull into the bays with their cab colored like the container they want: bring
+// Atamus (owner, 2026-10-31): a single-player seaport management game. Boats dock at two berths with containers in seven
+// colors; you drive each forklift yourself (select it, then the container to pick up, then where to set it down), and a
+// forklift must be able to drive up to both ends. Containers live only in the storage areas. Trucks pull into the bays with their cab colored like the container they want: bring
 // them a match and they leave happy. A 32 x 32 tile grid with placeholder pixel art. Rules in docs/FEATURES.md.
 "use strict";
 (() => {
@@ -21,16 +21,20 @@ for (const b of BERTHS) { b.boat = null; b.wait = 1 + rnd() * 3; }
 const BAYS = [3, 9, 15, 21, 27].map((x, i) => ({ id: i, x, truck: null }));   // trailer at (x, ROAD), cab at (x + 1, ROAD)
 const DEPOT = [[31, 9], [32, 9], [33, 9]];
 
-// (owner, 2026-10-31) storage areas: walls on three sides (left, right, back) and the open side, toward the quay, 5 tiles wide
-const STORAGE = [4, 13, 22].map((x, k) => ({ id: k, x, y: 12, w: 5, h: 5 }));
+// (owner, 2026-10-31) storage: one long walled area — walls on three sides, open at its east end, 5 tiles wide — and a
+// 2 x 5 painted area with no walls. Containers can be set down only in these (or on a truck).
+const LONG = { x: 4, y: 12, w: 18, h: 5 }, PATCH = { x: 26, y: 13, w: 5, h: 2 };
 const WALL = new Set();
-for (const s of STORAGE) { for (let j = s.y; j <= s.y + s.h; j++) { WALL.add((j) * MW + s.x - 1); WALL.add(j * MW + s.x + s.w); } for (let i = s.x - 1; i <= s.x + s.w; i++) WALL.add((s.y + s.h) * MW + i); }
+for (let i = LONG.x - 1; i <= LONG.x + LONG.w - 1; i++) { WALL.add((LONG.y - 1) * MW + i); WALL.add((LONG.y + LONG.h) * MW + i); }
+for (let j = LONG.y - 1; j <= LONG.y + LONG.h; j++) WALL.add(j * MW + LONG.x - 1);
+const inArea = (a, i, j) => i >= a.x && i < a.x + a.w && j >= a.y && j < a.y + a.h;
+const isStorage = (i, j) => inArea(LONG, i, j) || inArea(PATCH, i, j);
 const isWall = (i, j) => WALL.has(j * MW + i);
 const isYard = (i, j) => i >= 1 && i <= MW - 2 && j >= QUAY && j <= APRON && !isWall(i, j);
-let containers = [], boats = [], trucks = [], forklifts = [], jobs = [], delivered = 0, clock = 0;
+let containers = [], boats = [], trucks = [], forklifts = [], delivered = 0, clock = 0;
 const contAt = (i, j) => containers.find((c) => !c.carried && c.i === i && c.j === j) || null;
 function deckBoat(i, j) { for (const b of boats) if (b.state === "docked" && j >= 5 && j <= 6 && i >= b.berth.x && i < b.berth.x + b.berth.w) return b; return null; }
-const reserved = new Set(), rk = (i, j) => j * MW + i;
+const rk = (i, j) => j * MW + i;
 // a forklift can drive over a tile: open yard, or the deck of a docked boat, with no container on it
 function drivable(i, j, ignore) { if (!(isYard(i, j) || deckBoat(i, j))) return false; const c = contAt(i, j); return !c || c === ignore; }
 
@@ -60,7 +64,7 @@ function newBoat(berth) {
 function boatStep(b, dt) {
   if (b.state === "arrive") { b.x += Math.max(30, (b.tx - b.x) * 1.4) * dt; if (b.x >= b.tx) { b.x = b.tx; b.state = "docked"; } }
   else if (b.state === "docked") {
-    const busy = containers.some((c) => c.boat === b) || forklifts.some((f) => f.i >= b.berth.x && f.i < b.berth.x + b.berth.w && f.j <= 6);
+    const busy = containers.some((c) => c.boat === b) || forklifts.some((f) => { const [i, j] = tileF(f); return i >= b.berth.x && i < b.berth.x + b.berth.w && j <= 6; });
     if (!busy) { b.idle = (b.idle || 0) + dt; if (b.idle > 2) b.state = "depart"; } else b.idle = 0;
   }
   else if (b.state === "depart") { b.x += (40 + (b.x - b.tx) * 0.8) * dt; if (b.x > (MW + 2) * T) { boats.splice(boats.indexOf(b), 1); b.berth.boat = null; b.berth.wait = 4 + rnd() * 6; } }
@@ -80,96 +84,90 @@ function truckStep(t, dt) {
   else if (t.state === "leave") { t.x -= (60 + (t.tx - t.x) * 1.2) * dt; if (t.x < -4 * T) trucks.splice(trucks.indexOf(t), 1); }
 }
 
-// ---- forklifts and orders: a container, and where it goes (a yard tile or a truck) ----
-forklifts = DEPOT.map(([i, j], k) => ({ id: k, i, j, x: i * T, y: j * T, dir: 3, path: [], job: null, stage: "idle", t: 0, home: [i, j], retry: 0 }));
+// ---- forklifts: driven by you, one at a time ----
+// select a forklift, then: a container (it drives up and lifts it), or — carrying — a storage tile or a matching truck
+// (it drives up and sets it down there), or an open tile (it just drives there). Nothing it can't reach is accepted.
+forklifts = DEPOT.map(([i, j], k) => ({ id: k, x: i * T, y: j * T, dir: 3, path: [], cmd: null, carry: null, stage: "idle", t: 0, wait: false, retry: 0 }));
 const tileF = (f) => [Math.round(f.x / T), Math.round(f.y / T)];
 const DIRS = { "1,0": 0, "0,1": 1, "-1,0": 2, "0,-1": 3 };
-function order(c, ti, tj, truck) {
-  if (c.job) { cancel(c.job); }
-  const job = { c, ti, tj, truck, f: null }; c.job = job; reserved.add(rk(ti, tj)); if (truck) truck.claimed = job; jobs.push(job); return job;
+const reserved = new Map();   // destination tile -> forklift
+function release(f) { const c = f.cmd; if (!c) return; if (c.type === "pick" && c.c.claim === f) c.c.claim = null; if (c.type === "drop") { reserved.delete(rk(c.ti, c.tj)); if (c.truck && c.truck.claimed === f) c.truck.claimed = null; } f.cmd = null; }
+// what clicking (i, j) would tell this forklift to do, or null when it can't
+function planFor(f, i, j) {
+  if (f.stage === "lift" || f.stage === "lower") return null;
+  const seen = reachFrom([tileF(f)], null), t = truckAt(i, j);
+  if (!f.carry) {
+    const c = contAt(i, j);
+    if (c) { if ((c.boat && c.boat.state !== "docked") || (c.claim && c.claim !== f)) return null; const acc = accessFrom(seen, c.i, c.j); return acc.length ? { type: "pick", c, acc, seen } : null; }
+  } else {
+    if (t) { if (t.state !== "wait" || (t.claimed && t.claimed !== f) || t.color !== f.carry.color) return null; const acc = accessFrom(seen, t.bay.x, ROAD); return acc.length ? { type: "drop", ti: t.bay.x, tj: ROAD, truck: t, acc, seen } : null; }
+    if (isStorage(i, j) && !contAt(i, j) && !(reserved.has(rk(i, j)) && reserved.get(rk(i, j)) !== f)) { const acc = accessFrom(seen, i, j).filter(([x, y]) => x !== i || y !== j); return acc.length ? { type: "drop", ti: i, tj: j, acc, seen } : null; }
+  }
+  if (drivable(i, j, null) && seen.has(rk(i, j))) return { type: "move", ti: i, tj: j, acc: [[i, j]], seen };
+  return null;
 }
-function cancel(job) { if (job.f) return false; jobs.splice(jobs.indexOf(job), 1); job.c.job = null; reserved.delete(rk(job.ti, job.tj)); if (job.truck) job.truck.claimed = null; return true; }
-function canOrder(c, ti, tj, truck) {
-  if (c.boat && c.boat.state !== "docked") return false;
-  if (truck) { if (truck.state !== "wait" || truck.claimed || truck.color !== c.color) return false; }
-  else { if (!isYard(ti, tj) || contAt(ti, tj) || reserved.has(rk(ti, tj))) return false; }
-  const seen = reachFrom(forklifts.map(tileF), c);
-  return accessFrom(seen, c.i, c.j).length > 0 && accessFrom(seen, ti, tj).length > 0;
+function command(f, plan) {
+  release(f);
+  f.cmd = plan; f.wait = false;
+  if (plan.type === "pick") plan.c.claim = f;
+  if (plan.type === "drop") { reserved.set(rk(plan.ti, plan.tj), f); if (plan.truck) plan.truck.claimed = f; }
+  route(f, plan.acc, plan.seen);
+}
+function route(f, acc, seen) {
+  acc = [...acc].sort((a, b) => hyp(a[0] - f.x / T, a[1] - f.y / T) - hyp(b[0] - f.x / T, b[1] - f.y / T));
+  const p = pathTo(seen, acc[0][0], acc[0][1]); f.path = p ? p.slice(1) : []; f.stage = "drive";
+}
+// a container put in the way: find another way to the same place, or wait (red "!") until one opens
+function replan(f) {
+  const c = f.cmd; if (!c) return;
+  const seen = reachFrom([tileF(f)], null), [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj];
+  const acc = c.type === "move" ? (seen.has(rk(ti, tj)) && drivable(ti, tj, null) ? [[ti, tj]] : []) : accessFrom(seen, ti, tj).filter(([x, y]) => x !== ti || y !== tj);
+  if (!acc.length) { f.wait = true; f.path = []; return; }
+  f.wait = false; route(f, acc, seen);
 }
 function forkStep(f, dt) {
-  // idle: take the oldest order this forklift can reach
-  if (!f.job) {
-    const seen = jobs.some((jb) => !jb.f) ? reachFrom([tileF(f)], null) : null;
-    for (const job of jobs) {
-      if (job.f) continue;
-      const acc = accessFrom(seen, job.c.i, job.c.j);
-      if (!acc.length) continue;
-      acc.sort((a, b) => hyp(a[0] - f.x / T, a[1] - f.y / T) - hyp(b[0] - f.x / T, b[1] - f.y / T));
-      job.f = f; f.job = job; f.stage = "toPick"; f.path = pathTo(seen, acc[0][0], acc[0][1]) || []; f.path.shift(); break;
-    }
-    if (!f.job && !f.path.length) { const [i, j] = tileF(f); if (i !== f.home[0] || j !== f.home[1]) { const seen = reachFrom([[i, j]], null), p = pathTo(seen, f.home[0], f.home[1]); if (p) { p.shift(); f.path = p; } } }
-  }
-  // drive tile to tile, re-pathing when something got in the way
+  if (f.wait) { f.retry += dt; if (f.retry > 0.5) { f.retry = 0; replan(f); } return; }
   if (f.path.length) {
     const [ni, nj] = f.path[0];
-    if (!drivable(ni, nj, f.job && f.stage === "toDrop" ? null : null)) { f.path = []; f.retry = 0; replan(f); return; }
-    const tx = ni * T, ty = nj * T, dx = tx - f.x, dy = ty - f.y, d = hyp(dx, dy), sp = (f.job && f.job.c.carried === f ? 110 : 130) * dt;
+    if (!drivable(ni, nj, null)) { replan(f); return; }
+    const tx = ni * T, ty = nj * T, dx = tx - f.x, dy = ty - f.y, d = hyp(dx, dy), sp = (f.carry ? 110 : 130) * dt;
     if (dx || dy) f.dir = DIRS[Math.sign(Math.round(dx)) + "," + Math.sign(Math.round(dy))] ?? f.dir;
     if (d <= sp) { f.x = tx; f.y = ty; f.path.shift(); } else { f.x += dx / d * sp; f.y += dy / d * sp; }
     return;
   }
-  if (!f.job) return;
-  const job = f.job, c = job.c, [fi, fj] = tileF(f);
-  const face = (i, j) => { f.dir = DIRS[Math.sign(i - fi) + "," + Math.sign(j - fj)] ?? f.dir; };
-  if (f.stage === "toPick") {
-    if (Math.abs(c.i - fi) + Math.abs(c.j - fj) !== 1) { replan(f); return; }
-    face(c.i, c.j); f.stage = "lift"; f.t = 0;
+  const c = f.cmd; if (!c) { f.stage = "idle"; return; }
+  const [fi, fj] = tileF(f), face = (i, j) => { f.dir = DIRS[Math.sign(i - fi) + "," + Math.sign(j - fj)] ?? f.dir; };
+  if (f.stage === "drive") {
+    if (c.type === "move") { f.cmd = null; f.stage = "idle"; return; }
+    const [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj];
+    if (Math.abs(ti - fi) + Math.abs(tj - fj) !== 1) { replan(f); return; }
+    face(ti, tj); f.stage = c.type === "pick" ? "lift" : "lower"; f.t = 0;
   } else if (f.stage === "lift") {
-    f.t += dt; if (f.t >= 0.45) { c.carried = f; c.boat = null; f.stage = "toDrop"; f.t = 0; replan(f); }
-  } else if (f.stage === "toDrop") {
-    if (Math.abs(job.ti - fi) + Math.abs(job.tj - fj) !== 1) { replan(f); return; }
-    face(job.ti, job.tj); f.stage = "lower"; f.t = 0;
+    f.t += dt; if (f.t >= 0.45) { const k = c.c; k.carried = f; k.boat = null; k.claim = null; f.carry = k; f.cmd = null; f.stage = "idle"; }
   } else if (f.stage === "lower") {
     f.t += dt;
     if (f.t >= 0.45) {
-      c.carried = null; c.i = job.ti; c.j = job.tj; c.job = null; reserved.delete(rk(job.ti, job.tj));
-      jobs.splice(jobs.indexOf(job), 1); f.job = null; f.stage = "idle";
-      if (job.truck) { const t = job.truck; containers.splice(containers.indexOf(c), 1); t.load = c.color; t.state = "happy"; t.t = 0; t.claimed = null; delivered++; }
-      if (selected === c) selected = null;
+      const k = f.carry; f.carry = null; k.carried = null; k.i = c.ti; k.j = c.tj; reserved.delete(rk(c.ti, c.tj)); f.cmd = null; f.stage = "idle";
+      if (c.truck) { containers.splice(containers.indexOf(k), 1); c.truck.load = k.color; c.truck.state = "happy"; c.truck.t = 0; c.truck.claimed = null; delivered++; }
     }
   }
 }
-// find a way to the next end of the job; when there's none yet, wait and try again
-function replan(f) {
-  const job = f.job; if (!job) return;
-  const c = job.c, [ti, tj] = f.stage === "toPick" ? [c.i, c.j] : [job.ti, job.tj];
-  const seen = reachFrom([tileF(f)], c.carried === f ? null : c), acc = accessFrom(seen, ti, tj);
-  if (!acc.length) { f.wait = true; return; }
-  f.wait = false; acc.sort((a, b) => hyp(a[0] - f.x / T, a[1] - f.y / T) - hyp(b[0] - f.x / T, b[1] - f.y / T));
-  const p = pathTo(seen, acc[0][0], acc[0][1]); if (p) { p.shift(); f.path = p; }
-}
 
-// ---- input: pan / zoom, click a container then its destination ----
+// ---- input: pan / zoom; select a forklift, then its target ----
 let VW = 0, VH = 0, DPR = 1, zoom = 1, cam = { x: MW * T / 2, y: MH * T / 2 }, selected = null, hover = null, bad = null;
 const keys = {};
-addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") selected = null; });
+addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") selected = null; if (/^Digit[1-9]$/.test(e.code) && forklifts[+e.code.slice(5) - 1]) selected = forklifts[+e.code.slice(5) - 1]; });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
 const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
 function truckAt(i, j) { return trucks.find((t) => t.state === "wait" && j === ROAD && (i === t.bay.x || i === t.bay.x + 1)) || null; }
+function forkAt(sx, sy) { const w = toWorld(sx, sy); let best = null, bd = 18; for (const f of forklifts) { const d = hyp(f.x + T / 2 - w.x, f.y + T / 2 - w.y); if (d < bd) { bd = d; best = f; } } return best; }
 function click(sx, sy) {
-  const [i, j] = tileAtScreen(sx, sy), c = contAt(i, j), t = truckAt(i, j);
-  if (c && !c.carried && !(c.boat && c.boat.state !== "docked")) {
-    if (selected === c) { if (c.job && !c.job.f) cancel(c.job); selected = null; return; }
-    if (!(c.job && c.job.f)) { selected = c; return; }
-  }
-  if (selected) {
-    const ok = t ? canOrder(selected, t.bay.x, ROAD, t) : canOrder(selected, i, j, null);
-    if (ok) { order(selected, t ? t.bay.x : i, t ? ROAD : j, t); selected = null; }
-    else bad = { i, j, t: 0.5 };
-    return;
-  }
+  const f = forkAt(sx, sy); if (f) { selected = selected === f ? null : f; return; }
+  if (!selected) return;
+  const [i, j] = tileAtScreen(sx, sy), plan = planFor(selected, i, j);
+  if (plan) command(selected, plan); else bad = { i, j, t: 0.5 };
 }
 const pts = new Map(); let gesture = null;
 cv.addEventListener("contextmenu", (e) => { e.preventDefault(); selected = null; });
@@ -181,7 +179,7 @@ cv.addEventListener("pointerdown", (e) => {
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener("pointermove", (e) => {
-  hover = tileAtScreen(e.clientX, e.clientY);
+  hover = { tile: tileAtScreen(e.clientX, e.clientY), f: forkAt(e.clientX, e.clientY) };
   if (!pts.has(e.pointerId) || !gesture) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (gesture.pinch && pts.size === 2) { const [a, b] = [...pts.values()]; setZoom(gesture.zoom * hyp(a.x - b.x, a.y - b.y) / gesture.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
   if (gesture.pinch) return;
@@ -214,7 +212,8 @@ function buildGround() {
   }
   for (const b of BAYS) { g.fillStyle = "rgba(255,255,255,.22)"; g.fillRect(b.x * T - 2, ROAD * T + 2, 2, T * 2 - 4); g.fillRect((b.x + 2) * T, ROAD * T + 2, 2, T * 2 - 4); g.fillStyle = "rgba(201,162,58,.35)"; g.fillRect(b.x * T + 4, APRON * T + 4, T - 8, T - 8); }
   for (const b of BERTHS) { g.fillStyle = "#e8e2d0"; g.font = "800 22px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.x + b.w / 2) * T, QUAY * T + 18); }
-  for (const st of STORAGE) for (let j = st.y; j < st.y + st.h; j++) for (let i = st.x; i < st.x + st.w; i++) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4); }
+  for (const a of [LONG, PATCH]) for (let j = a.y; j < a.y + a.h; j++) for (let i = a.x; i < a.x + a.w; i++) { g.fillStyle = "rgba(0,0,0,.14)"; g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4); g.fillStyle = "rgba(242,220,140,.35)"; g.fillRect(i * T + 2, j * T + 2, T - 4, 1); g.fillRect(i * T + 2, j * T + T - 3, T - 4, 1); g.fillRect(i * T + 2, j * T + 2, 1, T - 4); g.fillRect(i * T + T - 3, j * T + 2, 1, T - 4); }
+  g.strokeStyle = "#c9a23a"; g.lineWidth = 3; g.strokeRect(PATCH.x * T + 1.5, PATCH.y * T + 1.5, PATCH.w * T - 3, PATCH.h * T - 3);
   for (const k of WALL) { const i = k % MW, j = Math.floor(k / MW), x = i * T, y = j * T; noiseFill(g, x, y, T, T, "#8a8478", 14, k * 7); g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x, y, T, 3); g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x, y + T - 4, T, 4); g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(x + 15, y + 3, 2, T - 7); }
   for (const [i, j] of DEPOT) { g.strokeStyle = "rgba(242,169,59,.45)"; g.lineWidth = 2; g.strokeRect(i * T + 3, j * T + 3, T - 6, T - 6); }
 }
@@ -255,12 +254,13 @@ function drawTruck(t) {
   ctx.fillStyle = col; ctx.fillRect(x + T + 2, y + 6, T - 6, T - 12); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(x + 2 * T - 9, y + 9, 4, T - 18);
   ctx.fillStyle = "#2a2c30"; ctx.fillRect(x + T + 5, y + 3, 6, 3); ctx.fillRect(x + T + 5, y + T - 6, 6, 3);
   if (t.load !== null) drawContainer(t.load, x, y, false);
-  if (t.state === "wait") { const pulse = selected && selected.color === t.color && !t.claimed ? 0.5 + 0.5 * Math.sin(clock * 8) : 0; if (pulse) { ctx.strokeStyle = `rgba(127,216,138,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y + 1, 2 * T + 2, T - 2); } }
+  if (t.state === "wait") { const pulse = selected && selected.carry && selected.carry.color === t.color && !t.claimed ? 0.5 + 0.5 * Math.sin(clock * 8) : 0; if (pulse) { ctx.strokeStyle = `rgba(127,216,138,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y + 1, 2 * T + 2, T - 2); } }
   if (t.state === "happy") { const bx = x + T + 8, by = y - 22 - Math.min(6, t.t * 12); ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#2e9a4a"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 9, 2, 2); ctx.fillRect(bx + 13, by + 9, 2, 2); }
 }
 function drawForklift(f) {
   const x = Math.round(f.x) + T / 2, y = Math.round(f.y) + T / 2, a = [0, Math.PI / 2, Math.PI, -Math.PI / 2][f.dir];
-  const c = f.job && f.job.c.carried === f ? f.job.c : null, raise = f.stage === "lift" ? f.t / 0.45 : f.stage === "lower" ? 1 - f.t / 0.45 : c ? 1 : 0;
+  if (f === selected) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; const p = 1 + Math.sin(clock * 8); ctx.strokeRect(Math.round(f.x) - p, Math.round(f.y) - p, T + p * 2, T + p * 2); }
+  else if (hover && hover.f === f) { ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = 2; ctx.strokeRect(Math.round(f.x), Math.round(f.y), T, T); }
   ctx.save(); ctx.translate(x, y); ctx.rotate(a);
   ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(-10, -8, 20, 18);
   ctx.fillStyle = "#2a2c30"; ctx.fillRect(-9, -11, 6, 4); ctx.fillRect(3, -11, 6, 4); ctx.fillRect(-9, 7, 6, 4); ctx.fillRect(3, 7, 6, 4);
@@ -269,8 +269,9 @@ function drawForklift(f) {
   ctx.fillStyle = "#55585e"; ctx.fillRect(9, -9, 3, 18);
   ctx.fillStyle = "#9aa0a8"; ctx.fillRect(12, -7, 12, 2); ctx.fillRect(12, 5, 12, 2);
   ctx.restore();
-  if (c || (f.job && (f.stage === "lift"))) { const cc = c || f.job.c; if (c) { const off = [[1, 0], [0, 1], [-1, 0], [0, -1]][f.dir]; drawContainer(cc.color, Math.round(f.x) + off[0] * 22, Math.round(f.y) + off[1] * 22, raise > 0.5); } }
-  if (f.wait && f.job) { ctx.fillStyle = "#ff5a4a"; ctx.fillRect(x - 2, y - 22, 4, 8); ctx.fillRect(x - 2, y - 12, 4, 3); }
+  ctx.fillStyle = "#1e2024"; ctx.fillRect(x - 4, y - 4, 8, 8); ctx.fillStyle = "#ece7dc"; ctx.font = "800 9px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(f.id + 1), x, y + 0.5);
+  if (f.carry) { const off = [[1, 0], [0, 1], [-1, 0], [0, -1]][f.dir], lowering = f.stage === "lower" && f.t > 0.22; drawContainer(f.carry.color, Math.round(f.x) + off[0] * 22, Math.round(f.y) + off[1] * 22, !lowering); }
+  if (f.wait) { ctx.fillStyle = "#ff5a4a"; ctx.fillRect(x - 2, y - 24, 4, 8); ctx.fillRect(x - 2, y - 14, 4, 3); }
 }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
@@ -279,29 +280,22 @@ function draw() {
   drawWater();
   for (const b of boats) drawBoat(b);
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
-  // orders: where each container is headed
-  ctx.setLineDash([4, 4]);
-  for (const job of jobs) {
-    const col = COLORS[job.c.color].c; ctx.strokeStyle = col; ctx.lineWidth = 2;
-    ctx.strokeRect(job.ti * T + 3, job.tj * T + 3, T - 6, T - 6);
-    if (!job.c.carried) { ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(job.c.i * T + T / 2, job.c.j * T + T / 2); ctx.lineTo(job.ti * T + T / 2, job.tj * T + T / 2); ctx.stroke(); ctx.globalAlpha = 1; }
-  }
+  // where each forklift is headed
+  ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
+  for (const f of forklifts) { const c = f.cmd; if (!c) continue; const [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj]; ctx.strokeStyle = f.carry ? COLORS[f.carry.color].c : "rgba(255,255,255,.6)"; ctx.strokeRect(ti * T + 3, tj * T + 3, T - 6, T - 6); }
   ctx.setLineDash([]);
   for (const t of trucks) drawTruck(t);
   for (const c of containers) if (!c.carried) {
     const onBoat = c.boat && c.boat.state !== "docked", bx = onBoat ? c.boat.x - c.boat.berth.x * T : 0;
     drawContainer(c.color, c.i * T + bx, c.j * T, false);
-    if (c.job) { ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fillRect(c.i * T + bx + 12, c.j * T + 12, 8, 8); ctx.fillStyle = COLORS[c.color].c; ctx.fillRect(c.i * T + bx + 14, c.j * T + 14, 4, 4); }
   }
   for (const f of forklifts) drawForklift(f);
-  // the selection, and where it would go
-  if (selected) {
-    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; const p = 1 + Math.sin(clock * 8); ctx.strokeRect(selected.i * T - p, selected.j * T - p, T + p * 2, T + p * 2);
-    if (hover) {
-      const [i, j] = hover, t = truckAt(i, j), ok = t ? canOrder(selected, t.bay.x, ROAD, t) : canOrder(selected, i, j, null);
-      if (t) { ctx.strokeStyle = ok ? "#7fd88a" : "#ff5a4a"; ctx.strokeRect(t.bay.x * T, ROAD * T, 2 * T, T); }
-      else if (i !== selected.i || j !== selected.j) { if (ok) drawContainer(selected.color, i * T, j * T, false, true); ctx.strokeStyle = ok ? "#7fd88a" : "rgba(255,90,74,.8)"; ctx.strokeRect(i * T + 1, j * T + 1, T - 2, T - 2); }
-    }
+  // the selected forklift's target under the cursor: green if it can do it, red if not
+  if (selected && hover && !hover.f) {
+    const [i, j] = hover.tile, plan = planFor(selected, i, j), t = truckAt(i, j);
+    ctx.lineWidth = 2; ctx.strokeStyle = plan ? "#7fd88a" : "rgba(255,90,74,.8)";
+    if (t) ctx.strokeRect(t.bay.x * T, ROAD * T, 2 * T, T);
+    else { if (plan && plan.type === "drop" && !plan.truck) drawContainer(selected.carry.color, i * T, j * T, false, true); ctx.strokeRect(i * T + 1, j * T + 1, T - 2, T - 2); }
   }
   if (bad) { ctx.strokeStyle = `rgba(255,90,74,${bad.t * 2})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bad.i * T + 8, bad.j * T + 8); ctx.lineTo(bad.i * T + T - 8, bad.j * T + T - 8); ctx.moveTo(bad.i * T + T - 8, bad.j * T + 8); ctx.lineTo(bad.i * T + 8, bad.j * T + T - 8); ctx.stroke(); }
 }
@@ -316,9 +310,8 @@ function step(dt) {
   for (const b of [...boats]) boatStep(b, dt);
   truckWait -= dt; if (truckWait <= 0) { const free = BAYS.filter((b) => !b.truck); if (free.length && colorsInPort().length) newTruck(pick(free)); truckWait = 6 + rnd() * 8; }
   for (const t of [...trucks]) truckStep(t, dt);
-  for (const f of forklifts) { if (f.wait) { f.retry = (f.retry || 0) + dt; if (f.retry > 0.5) { f.retry = 0; replan(f); } } forkStep(f, dt); }
+  for (const f of forklifts) forkStep(f, dt);
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
-  if (selected && !containers.includes(selected)) selected = null;
 }
 function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); draw(); requestAnimationFrame(frame); }
 function resize() { DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR; zoom = clamp(Math.min(VW / (MW * T), VH / ((MH - 2) * T)), 0.5, 3); cam.y = (MH * T) / 2 + T; }
@@ -326,5 +319,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 22px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { get state() { return { containers, boats, trucks, forklifts, jobs, delivered, selected }; }, step, order, canOrder, click: (i, j) => { const s = { x: (i + 0.5) * T, y: (j + 0.5) * T }; click((s.x - cam.x) * zoom + VW / 2, (s.y - cam.y) * zoom + VH / 2); } };
+window.Atamus = { get state() { return { containers, boats, trucks, forklifts, delivered, selected }; }, step, planFor, command, select: (f) => (selected = f), click: (i, j) => { const s = { x: (i + 0.5) * T, y: (j + 0.5) * T }; click((s.x - cam.x) * zoom + VW / 2, (s.y - cam.y) * zoom + VH / 2); } };
 })();

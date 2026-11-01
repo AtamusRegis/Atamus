@@ -32,13 +32,14 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - water along the top, with two **berths**, A and B
   - the quay and the container yard
   - an apron along the yard's bottom edge
-  - three **storage areas** in the yard (owner, 2026-10-31: "make the storage have 3 walls and the open space 5 spaces
-    wide"): each is 5 × 5 inside, walled on the left, right and back, with the open 5-wide side facing the quay. Walls
-    block forklifts and can't hold containers, so a storage area fills from the back forward. Containers can still go
-    anywhere in the open yard too.
+  - **storage (owner, 2026-10-31):**
+    - **one long walled storage area**, 18 × 5 inside, walled on the north, south and west and open at its east end
+      (5 wide). A forklift drives in from that end, so it fills from the far end out.
+    - **a 2 × 5 painted storage area with no walls**, east of it.
+    - **Containers can be set down only in these two areas** (or on a truck).
   - the truck road with five **bays**
   - a fence around the land
-  - three forklift parking spots
+  - three forklift starting spots
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms between 0.5× and 3×
@@ -47,7 +48,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 ## Containers (owner)
 
 - **Seven colors (owner, 2026-10-31):** red, orange, yellow, green, blue, purple, white (lime, teal and pink dropped).
-- One container fills one tile for now. Containers block forklifts. They don't stack yet.
+- One container fills one tile for now. Containers block forklifts. They don't stack yet. Walls block forklifts too.
 
 ## Boats
 
@@ -57,23 +58,31 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   follows.
 - **The deck:** a docked boat's deck is drivable, so the back row can be reached once a front container is out of the way.
 
-## Moving containers: forklifts (owner)
+## Forklifts: driven by you (owner, 2026-10-31)
 
-- **Ordering:**
-  - Click a container to select it (it pulses). A container on a boat that's still arriving can't be picked.
-  - Click an empty yard tile to send it there; a green ghost shows a valid spot.
-  - Or click a waiting truck to deliver it.
-  - Clicking the container again, Escape or right click deselects. Clicking a waiting order's container cancels the order.
-- **Access (owner):** an order is only accepted when a forklift can drive to a free tile beside the container (side by
-  side, not diagonal) **and** to one beside the destination. Otherwise a red ✕ flashes.
-- **While it waits:** the order shows as a dashed outline in the container's color at the destination, with a dashed
-  line from the container. The destination is reserved.
-- **Doing the work:** three forklifts take the oldest order they can reach.
-  - A forklift drives up beside the container, lifts it, carries it on its forks to a tile beside the destination and
-    sets it down.
-  - If its way gets blocked (a container put in the path), it finds another way. With none, it waits with a red "!" and
-    keeps trying.
-  - Idle forklifts go back to their parking spots.
+> lets make the forklifts selectable and controllable individually instead of being AI. select forklift, select target,
+> if forklift has container, selecting target is selecting where to drop the container. cant select to drop somewhere
+> not accessible
+
+- **Three forklifts**, numbered 1–3. Select one by clicking it, or with keys 1–3. Escape or right click deselects.
+- **With the forklift empty, the target can be:**
+  - a container: it drives up beside it and lifts it.
+  - an open tile: it drives there.
+- **With the forklift carrying a container, the target can be:**
+  - an empty storage tile: it drives up beside it and sets the container down.
+  - a waiting truck of the container's color: it drives to the apron tile above the trailer and loads it.
+  - an open tile: it drives there, still carrying.
+- **Access (owner):** a target is accepted only when this forklift can drive to it. For a container or drop spot, that
+  means a free tile beside it (side by side, not diagonal). Anything else flashes a red ✕.
+- **Feedback:**
+  - While a forklift is selected, the tile under the cursor shows green or red, and a valid drop spot shows a ghost of
+    the container.
+  - A forklift's current target has a dashed outline.
+- **The forklift stays selected**, so you can chain its moves. A new target replaces the old one (not mid-lift).
+- **One forklift per target:** two forklifts can't pick the same container or claim the same drop spot or truck.
+- **Blocked on the way:** if a container blocks its way, it finds another route. With none, it waits with a red "!" and
+  keeps trying.
+- Forklifts don't block each other.
 
 ## Trucks (owner)
 
@@ -81,12 +90,17 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - Its cab is the color of the container it wants, picked from colors in the port (boats and yard), favoring ones no
     other truck wants.
 - **Delivering:**
-  - Select a container of that color and click the truck. Matching trucks pulse green while a container is selected.
+  - Have a forklift carry a container of that color and click the truck. Matching trucks pulse green while the
+    selected forklift carries one.
   - A forklift reaches the trailer from the apron tile above it, so keep that tile clear.
   - A wrong color is refused (red ✕).
 - **Leaving:** once its container is on the trailer, the truck shows a smiley and drives off.
 
 ## Rejected / removed
+
+- **Forklifts as AI, taking orders from a queue (2026-10-31, the same evening):** replaced by driving each forklift
+  yourself. The three separate walled storage areas and placing containers anywhere in the yard were replaced by the
+  long storage area and the 2 × 5 patch.
 
 - **The spaceport (2026-10-31, the same evening):** ships landing on two pads, cargo grids dragged to four storage units,
   and workers carrying one item at a time. Replaced by the seaport (owner: "lets do a seaport with boats instead").
