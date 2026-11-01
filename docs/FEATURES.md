@@ -183,18 +183,20 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   way to it right now, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it
   straight away. An idle crane with a tractor on its way lifts a spare to hold ready; with none on its way it puts the
   spare back (owner: no holding one for no reason).
-- **The next tractor first (owner, 2026-11-01):** a crane keeps an eye on the tractors on their way to it. With one coming
-  and its second slot free, it lifts that tractor's container ready (one a customer is waiting for, if one is on top in
-  reach). It only sorts with no tractor coming, or with the spare in hand while the nearest is still a good way off, and
-  only compresses with none coming: any tractor on its way counts, one sent for a claimed container too (owner,
-  2026-11-01). With the next one coming for a claimed container, the crane waits over that container.
+- **The next tractor first (owner, 2026-11-01):** a crane keeps an eye on the tractors on their way to it and works for
+  the nearest one before anything else. Coming for whatever the crane picks, with the second slot free, it lifts a
+  container ready (one a customer is waiting for, if one is on top in reach). **Coming for a claimed container** (owner),
+  it first sets aside anything left on top of it, then lifts it ready in its second slot, kept for that tractor alone,
+  and hands it straight over when the tractor arrives. It only sorts with no tractor coming (or with the spare in hand
+  while the nearest is still a good way off), and only evens the stacks out with none coming at all.
 - **Sorting the ship while idle (owner, 2026-11-01):** a crane with no tractor to serve digs out buried containers that
-  customers want: it takes the top container off such a slot in
-  its columns (the least buried first; a slot tractors are queued for only while enough is left there for them) and sets it on the nearest low slot of its columns with no exports and no wanted container.
-- **Compressing while idle (owner, 2026-11-01):** with nothing to sort, a crane packs the imports in its section toward
-  the section's west end (one crane: the whole ship to the left; two: each its half; and so on). It moves the top
-  container of the easternmost import slot to the westernmost slot with room (columns first, then the deck rows nearest
-  the quay), never onto exports, a wanted container, or a slot a tractor is coming for.
+  customers want, or (owner) that a tractor has been sent for: it takes the top container off such a slot in its columns
+  (the least buried first) and sets it on the nearest slot of its columns with no exports and no wanted or claimed
+  container, onto a single first (making a stack of two), then an empty slot.
+- **Stacks of two while idle (owner, 2026-11-01):** with nothing to sort, a crane evens its section out into stacks of
+  two: the top container of a stack of three goes onto a single (else an empty slot), and failing that a single goes
+  onto another single further west. It never buries a claimed or wanted container (and never moves one), and leaves
+  exports and slots a tractor is coming for alone.
 - **Exports onto the ship (owner):** a tractor carrying an export joins a crane's line (its kind's), and the crane puts
   it on the ship in a slot with no imports (nearest first; a slot never mixes imports and exports). **It pays $60
   then.** On the way back the crane takes an import for that same tractor, if its columns have one, so no trip is empty.
@@ -353,6 +355,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Picking and claiming a particular RTG bay when queuing (2026-11-01):** replaced by the 5 bays as one queue (owner).
 
+- **Packing the ship toward the west end while idle (2026-11-01):** replaced by evening it out into stacks of two (owner).
 - **The east-bound two-lane RTG lane, drive-through southbound bays and stalls, the southwest gate, the east-bound yard
   road out the east gate, the two north streets only after storage areas 2 and 4, and the concrete strips (2026-11-01):**
   replaced by the owner's layout: one lane each way above the bays, two-way bays, customers in at the east and

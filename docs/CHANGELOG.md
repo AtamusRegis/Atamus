@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Smarter quay cranes (owner):** idle cranes now even the ship out into stacks of two instead of packing it to one end, never bury a claimed or wanted container, and dig out containers a tractor has been sent for. The next tractor comes first: for a claimed container the crane clears anything on top of it and lifts it ready in its second slot, kept for that tractor, before any sorting.
+
 - **Bigger hit areas (owner):** trucks and ship containers are easier to click or tap, and when two are in reach the one nearest the pointer is picked.
 
 - **Always the live build:** a game page the browser kept from an older build (GitHub Pages lets browsers keep it for up to 10 minutes) now notices and loads the live one.
