@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: auto tractors parked instead of joining the cranes' waiting line (owner).** An auto tractor (or one holding an export) only picked a crane with room in its line, so with every line full it went to the parking. Now it heads for a crane anyway and waits in the shared line.
+
 - **Hold to unclaim (owner):** with a tractor selected, press and hold a ship container it claimed to call that pickup off; several claims in one stack go top to bottom.
 
 - **Smarter quay cranes (owner):** idle cranes now even the ship out into stacks of two instead of packing it to one end, never bury a claimed or wanted container, and dig out containers a tractor has been sent for. The next tractor comes first: for a claimed container the crane clears anything on top of it and lifts it ready in its second slot, kept for that tractor, before any sorting.

@@ -145,7 +145,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   two lanes north, entered off the tractors' lane; the other lane passes it). Room for 13. It leaves the street and lane
   after storage area 4 clear. The line goes by who is furthest along it; each moves up as ones ahead leave, and one
   leaves for its crane, front first, as soon as its crane line has room. Nobody else jumps it: a tractor whose crane
-  has a tractor waiting in the line joins the back. With the line full, a tractor waits in the tractor parking.
+  has a tractor waiting in the line joins the back. With the line full, a tractor waits in the tractor parking. Auto tractors and
+  loaded export tractors head for a crane even when every crane line is full (one with room first), so they wait in
+  this line too (bug fix, 2026-11-01).
   - **Other trucks go round it (owner):** trucks plan round the stretch of the line in use (and the next place in it),
     the long way if it stands across a shortcut. A new place at the back is only taken while no truck is already set
     to drive through it. Where the line stands across the top of the lane down to an RTG's line, a tractor only heads to

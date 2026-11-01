@@ -609,7 +609,9 @@ function autoStep(t) {
   const s = DOCK.ship, room = (b) => laneFor(b, t).q.length < LANE_DEEP;
   // assigned to the export area: fetch an export
   if (t.home.exp) { if (t.home.open && count(t.home) - expClaims(t.home) > 0 && shipTakesExports(t)) enqueue(t, { kind: "rtg", block: t.home, pickup: true }); return; }
-  const bs = BERTHS.filter((b) => berthLeft(b) > 0 && room(b)); if (!bs.length) return;
+  // (owner, 2026-11-01) a crane with room in its line first; with every line full it still goes, and waits in the
+  // cranes' waiting line
+  const left = BERTHS.filter((b) => berthLeft(b) > 0), roomy = left.filter(room), bs = roomy.length ? roomy : left; if (!bs.length) return;
   for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st.find((q) => q.wantedBy), c = k % DOCK.cols; if (x && !x.exp && c >= c0 && c < c1 && impCount(st) - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
   enqueue(t, { kind: "sts", berth: bs.reduce((m, b) => (berthLeft(b) > berthLeft(m) ? b : m)) });
 }
@@ -618,7 +620,7 @@ function autoStep(t) {
 // on the ship, preferring one that can hand back an import)
 // where a loaded tractor's container goes right now (pick: whether a crane taking an export may hand back an import)
 function deliverAction(t, pick) {
-  if (t.load.exp) { const bs = BERTHS.filter((b) => exportRoom(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (!bs.length) return null; const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; return { kind: "sts", berth: b, exp: true, pick: pick && berthLeft(b) > 0 }; }
+  if (t.load.exp) { const ok = BERTHS.filter((b) => exportRoom(b) > 0), roomy = ok.filter((b) => laneFor(b, t).q.length < LANE_DEEP), bs = roomy.length ? roomy : ok; if (!bs.length) return null; const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; return { kind: "sts", berth: b, exp: true, pick: pick && berthLeft(b) > 0 }; }
   const hx = headIJ(t)[0], own = t.auto && t.home && !t.home.exp && t.home.open && free(t.home) > 0 ? t.home : null;
   const dest = own || (t.auto && t.home && !t.home.exp ? null : BLOCKS.filter((b) => b.open && !b.exp && free(b) > 0 && !lineFull(b, t)).reduce((m, b) => (!m || Math.abs(b.x + 2 - hx) < Math.abs(m.x + 2 - hx) ? b : m), null));
   return dest ? { kind: "rtg", block: dest } : null;
