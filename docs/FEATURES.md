@@ -222,7 +222,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
   the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
   truck selected, a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to dig down
-  to it** (a crane already on its way to the slot counts as one)
+  to it** (a crane already on its way to the slot counts as one), and only while it can still be claimed: not once its
+  crane's containers are all spoken for, nor with its slot fully claimed
   (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**

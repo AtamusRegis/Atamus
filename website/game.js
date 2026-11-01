@@ -768,7 +768,11 @@ const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T
 // (owner) with no customer truck selected, the containers on the ship that a customer is waiting for flash instead
 // (owner) a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to
 // dig down to it (a crane on its way to the slot counts as one)
-const flashing = (x, slot, st) => { if (!x) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + BERTHS.reduce((n, b) => n + (b.crane.slot === slot ? 1 : 0) + (b.crane.slot2 === slot ? 1 : 0), 0); return have < need; };
+const flashing = (x, slot, st) => { if (!x) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + BERTHS.reduce((n, b) => n + (b.crane.slot === slot ? 1 : 0) + (b.crane.slot2 === slot ? 1 : 0), 0); if (have >= need) return false;
+  // (bug 2026-11-01) and only while you could still claim it: not once its crane's containers are all spoken for (it
+  // will be fetched anyway), nor with its slot fully claimed
+  const c = slot % DOCK.cols, b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]);
+  return !!b && berthLeft(b) > 0 && impCount(st) - DOCK.ship.claims[slot] > 0; };
 function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
 // (owner) the bottom container of a stack is drawn darker and the top one lighter
 const TIER_SHADE = ["rgba(0,0,0,.58)", "rgba(0,0,0,.18)", "rgba(255,255,255,.4)"];
