@@ -182,8 +182,10 @@ function closeShip(s) {
   s.state = "closing";
   for (const t of trucks) {
     if (t.kind === "yard") {
-      t.queue = t.queue.filter((a) => { if (a.kind !== "sts") return true; claim(t, a, -1); return false; });
       if (t.cmd && t.cmd.kind === "sts" && !t.locked) { claim(t, t.cmd, -1); t.cmd = null; t.path = t.next ? [t.next] : []; }
+      // drop the crane trips, and the RTG trips that would now have nothing to deliver
+      let loaded = t.load !== null || !!(t.cmd && t.cmd.kind === "sts");
+      t.queue = t.queue.filter((a) => { const keep = a.kind === "sts" ? false : a.kind === "rtg" ? loaded : true; if (a.kind === "rtg" && keep) loaded = false; if (!keep) claim(t, a, -1); return keep; });
     } else if (!t.exiting && t.load === null && s.bays.some((st) => st.includes(t.want))) {
       if (t.cmd && t.cmd.kind === "park") t.cmd.stall.claim = null;
       if (t.stall && t.stall.claim === t) t.stall.claim = null;
@@ -314,8 +316,15 @@ function loopStep(t) {
   else if (!t.load && t.lastSts && berthLeft(t.lastSts) > 0) enqueue(t, { kind: "sts", berth: t.lastSts });
 }
 
+// (bug 2026-11-01) a tractor's RTG trip is called off when it has nothing to deliver, or its storage area has filled up
+// meanwhile; it goes to park and takes new orders
+function dropTrip(t) {
+  if (t.cmd.bay && t.cmd.bay.claim === t) t.cmd.bay.claim = null;
+  t.cmd = null; t.path = t.next ? [t.next] : [];
+}
 function truckStep(t, dt) {
   if (t.locked) return;
+  if (t.kind === "yard" && t.cmd && t.cmd.kind === "rtg" && (t.load === null || free(t.cmd.block) <= 0)) dropTrip(t);
   custStep(t);
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
@@ -329,7 +338,11 @@ function truckStep(t, dt) {
   if (!t.next && t.path.length) {
     const n = t.path[0], o = occ.get(n), bs = CHG.get(head(t) + ">" + n), ob = bs && occ.get(bs);
     if ((!o || o === t) && (!ob || ob === t)) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
-    else if ((t.blocked = (t.blocked || 0) + dt) > 0.5) { t.blocked = 0; if (o && o !== t && !o.next) pass(t); }
+    else if ((t.blocked = (t.blocked || 0) + dt) > 0.5) {
+      t.blocked = 0;
+      if (o && o !== t) { if (!o.next) pass(t); }
+      else { const r = route(head(t), t.path[t.path.length - 1], (k) => k === n); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
+    }
   }
   if (t.next) {
     t.p += 4 * dt;

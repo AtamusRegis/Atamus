@@ -60,7 +60,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **One-way roads, two lanes each (owner, 2026-11-01: "each road should have 2 lanes so one can be used for passing"):**
   both lanes run the same way. Trucks keep to the right-hand lane; one held up by a stopped truck moves to the other lane
-  and passes it, then moves back. A lane change needs the tile beside it free too. A dashed line divides the lanes and
+  and passes it, then moves back. A lane change needs the tile beside it free too; a truck held up only by that (two
+  side by side, each changing into the other's lane) carries straight on and changes later. A dashed line divides the lanes and
   faint arrows show the direction.
 - **The road layout (owner, 2026-11-01: routes should make sense, no loop back past the lot first):**
   - The quay road runs west. The west side and the lanes between the storage areas run south from it to the RTG lane,
@@ -176,7 +177,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Only where it can be served (owner):**
   - an empty tractor → an STS crane whose half of the docked ship has a container no one has claimed, or a ship slot
     with a container no one has claimed
-  - a loaded tractor → an RTG with room in its area (if it fills up meanwhile, the tractor waits in its bay)
+  - a loaded tractor → an RTG with room in its area. If the area fills up meanwhile, or the tractor has nothing to
+    deliver after all (its crane trip was called off), the RTG trip is called off and the tractor goes to park.
   - a customer → the RTG of the storage area holding its container (just one trip). A container still
     on the ship has to be brought in first.
   - a customer → a free stall
