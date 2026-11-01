@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Auto and manual tractors, up to 4 cranes (owner):** buy manual tractors (you send them) or auto ones (assign an RTG and they shuttle between the ship and it by themselves, fetching wanted containers first); the Loop switch is gone. Up to 4 STS cranes (C and D are new); under each, an auto line, a manual line and a middle lane that loaded tractors leave by. The map is 73 × 42.
+
 - **A ship out of time finishes its assigned pickups (owner):** when the timer runs out, no new pickups can be assigned, but the ones already assigned (queued too) are finished before it sails.
 
 - **Customers want ship cargo 75% of the time (owner),** stored containers 25%. Fix: a wanted ship container no longer starts flashing again while the crane is on its way to lift it for the tractor that claimed it.

@@ -37,7 +37,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The port
 
-- **A 61 × 42 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
+- **A 73 × 42 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
   pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
   - water with **one berth** for one big ship
@@ -97,18 +97,20 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - **Arriving:** it sails in from the west and docks a few seconds after the last one leaves.
   - **Small, medium and large (owner, 2026-11-01):** 6 × 3, 10 × 4 or 14 × 5 horizontal slots (columns from the west
     end × deck rows nearest the quay), each a stack of 0–3 containers. About a third small, two fifths medium, a quarter
-    large. A small ship only reaches crane A's half.
+    large. A small ship only reaches the western cranes.
   - **The timer (owner, 2026-11-01):** once docked, a ship has 90 s plus 8 s per container aboard to be unloaded,
     counting down beside its bow (red in the last 30 s). When it runs out, no new pickups can be assigned (owner), but the
     ones already assigned, queued trips too, are finished first. Then it sails with whatever is left, and customer trucks
     waiting for a container still aboard leave without it (frowning, unpaid).
-- **Two STS cranes, A and B, split the ship:** A takes the west 7 slot columns, B the east 7. Each crane has its own lanes.
-- **Three lanes side by side (owner, 2026-10-31: "make the quay tractor line 3 tall instead of 3 wide"):** under each STS
-  crane are three parallel lanes, one tractor under the crane in each.
-- **A line of 3 behind each (owner, 2026-11-01):** behind the tractor under the crane each lane holds 3 more waiting, so
-  9 more per crane. A tractor takes the lane with the shortest line when its trip there starts (or keeps the one it's
-  already in) and moves up as the ones ahead leave; the line goes by who is furthest in. With every line full it waits
-  where it is.
+- **Up to 4 STS cranes, A–D (owner, 2026-11-01),** side by side along the quay. The open ones split the ship's slot
+  columns evenly, west to east (with only A, it works the whole ship).
+- **Three lanes under each crane, one truck wide (owner, 2026-11-01),** all running west from an entry column east of
+  the crane:
+  - **the top lane is for auto tractors and the bottom lane for manual ones:** each is a line ending under the crane,
+    the tractor being loaded plus 2 waiting behind it. A tractor joins its own kind's line when its trip there starts
+    and moves up as the ones ahead leave (the line goes by who is furthest in). With its line full it waits where it is.
+  - **the middle lane is the way out:** a tractor loaded under the crane pulls out into it and drives on to the exit
+    column west of the crane, so the next in line moves straight up.
 - **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
   spot (the nearest lane first). It runs along the quay to the slot, runs its trolley out, lifts the top container,
   brings it back and lowers it onto that tractor. Then it does the next.
@@ -140,21 +142,23 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Trucks: you send them (owner)
 
-- **Yard tractors** (yellow cabs, numbered) start with one, in the tractor parking. They can be empty or loaded.
+- **Yard tractors** (numbered) start with one manual one, in the tractor parking. They can be empty or loaded.
+- **Two kinds (owner, 2026-11-01):**
+  - **Manual** (yellow cab): you send it, a ship container (or a crane), then the RTG it goes to.
+  - **Auto** (teal cab): select it and click a storage area (or its bays) to assign it that RTG, outlined while it's
+    selected. It then shuttles by itself: loaded, it takes the container to its RTG (when the area has room); empty, it
+    fetches from the ship, a container a customer is waiting for if one is in reach and unclaimed, otherwise whatever its
+    crane takes (the crane with the most left, with room in its auto line). It works through anything you queue first,
+    and parks when there's nothing to do or no RTG assigned.
 - **The tractor parking (owner, 2026-11-01):** one column of 13 horizontal spots west of the storage areas, left of the
   dock. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
   west, then down to the RTG lane. **New tractors appear there, and a tractor with nothing to do drives there and
   parks** (loaded or empty), taking the free spot nearest the top. Sent somewhere on the way, it gives the spot up.
-- **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
-  it takes the container to; an unloaded one waits for you to pick the STS crane it goes to, in the tractor parking.
-- **Loop (owner, 2026-11-01: "a toggle switch for it to just go back and forth from a certain quay to a certain stack"):**
-  while a tractor is selected, a **Loop** switch shows beside the money. Switched on, the tractor keeps going back and
-  forth by itself between the STS crane and the RTG it was last sent to: loaded, it heads for that RTG (if its area has
-  room); empty, for that crane (if its half of the ship has a container nobody claimed). It still works through anything
-  you queue first. Switched off, it stops after its current trip.
-- **Fetching a slot while looping (owner):** click a ship slot with a looping tractor selected and it fetches that slot's
-  top container next. If it's already on its way to a crane (and the crane hasn't started on it), that pickup becomes
-  the slot's. It takes the container to its RTG and carries on looping.
+- **You drive every manual tractor trip (owner, 2026-10-31: "too automated"):** a loaded one waits for you to pick the
+  RTG it takes the container to; an unloaded one waits for you to pick what it fetches, in the tractor parking.
+- **Fetching a slot with an auto tractor (owner):** click a ship slot with an auto tractor selected and it fetches that
+  slot's top container next. If it's already on its way to a crane (and the crane hasn't started on it), that pickup
+  becomes the slot's. It takes the container to its RTG and carries on.
 - **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
   and parks in the lot until you send it.
 - **To its stack by itself (owner, 2026-11-01: "make trucks with a container in a stack automatically go to that stack"):**
@@ -197,19 +201,23 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
-- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor. It appears empty in the tractor parking or, with that full, in a free STS lane of an
-  open crane or a free RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
-  $400, then $50 more each time (owner, 2026-11-01).
+- **The money** shows top left, beside **+ Manual** and **+ Auto**, which buy another yard tractor of that kind. It
+  appears empty in the tractor parking or, with that full, at the front of an open crane's line for its kind or in a
+  free RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
+  $400, then $50 more each time (owner, 2026-11-01), the same for both kinds.
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.
   - storage areas 2–6 with their RTG cranes and bays: $600, $900, $1,300, $1,800, $2,400
-  - STS crane B with its lanes: $2,000
+  - STS cranes B, C, D with their lanes: $2,000, $3,500, $5,000
   - parking stalls, in groups of 4: $200, $300, $400, $500, $600
 - **Locked things can't be used:** no trucks go to them, and customer trucks only park in open stalls and want containers
   in open storage (or on the ship).
-- **With only crane A, it works the whole ship.** Once B is bought, they split it west and east.
+- **With only crane A, it works the whole ship.** Each crane bought takes its share.
 
 ## Rejected / removed
+
+- **The Loop switch, three identical lanes under each of two cranes (2026-11-01):** replaced by auto and manual tractors
+  (an auto one is assigned an RTG), and up to 4 cranes each with an auto line, a manual line and a way-out lane between.
 
 - **Idle tractors staying where they finished, keeping their STS lane or RTG bay (2026-11-01):** replaced by the tractor
   parking (owner).
