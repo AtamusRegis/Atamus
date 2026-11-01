@@ -885,7 +885,9 @@ function arrow(g, i, j, dx, dy) { const cx = (i + 0.5) * T, cy = (j + 0.5) * T; 
 // (art) painted once: asphalt with grain, oil stains and edge lines; concrete in slabs with joints; the quay edge with its
 // hazard stripe and bollards, crane rails along the quay; storage pads with painted slot outlines; a chain-link fence
 function buildGround() {
-  const g = GROUND.getContext("2d"), road = (i, j) => ROADSET.has(key(i, j)), fence = (i, j) => j === MH - 1 || i === 0 || i === MW - 1;
+  // (owner, 2026-11-01) no leftover concrete in the yard: any ground below the quay road that isn't a storage pad is paved
+  const g = GROUND.getContext("2d"), pad = (i, j) => BLOCKS.some((b) => i >= b.x && i < b.x + b.w && j >= b.y && j <= REST);
+  const road = (i, j) => ROADSET.has(key(i, j)) || (j >= QROAD && j < MH - 1 && i > 0 && i < MW - 1 && !pad(i, j)), fence = (i, j) => j === MH - 1 || i === 0 || i === MW - 1;
   for (let j = QUAY; j < MH; j++) for (let i = 0; i < MW; i++) {
     const x = i * T, y = j * T;
     if (road(i, j)) {

@@ -87,6 +87,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - The yard road runs west, from the east gate. The east side runs north from the tractors' lane to the quay road.
   - **A street north beside every storage area (owner),** one lane, from the yard road to the quay road, crossing both
     RTG lanes (where the concrete strips were; the empty ground east of the export area is gone too).
+  - **No leftover concrete (owner, 2026-11-01):** every bit of ground in the yard that isn't a storage pad is paved
+    asphalt, including the islands between groups of bays and the gaps in the lot.
   - **Don't block the crossing (stress test, 2026-11-01):** where roads cross, a truck only drives in with room beyond
     to clear it (and past any crossing just beyond), and keeps that room for itself until it's through, so a waiting
     line can't sit across a crossing. The same goes for a truck driving out of the top of a bay.
