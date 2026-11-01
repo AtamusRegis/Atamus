@@ -133,12 +133,17 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   top of a tall stack nearby (exports are all alike: no digging). Customers never want exports. Export containers have
   a dark center.
 - **Holding two (owner, 2026-11-01):** an STS crane can hold a second container. With empty tractors at the front of
-  both its lines it lifts one for each in a single trip; otherwise, while it's at the ship and more pickups are on their
-  way, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it straight away.
-  An idle crane with pickups on their way lifts a spare to hold ready; with none left on their way it puts it back.
+  both its lines it lifts one for each in a single trip; otherwise, while it's at the ship and another tractor is on its
+  way to it right now, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it
+  straight away. An idle crane with a tractor on its way lifts a spare to hold ready; with none on its way it puts the
+  spare back (owner: no holding one for no reason).
 - **Sorting the ship while idle (owner, 2026-11-01):** a crane with nothing else to do digs out buried containers that
   customers want: it takes the top container off such a slot in its columns (the least buried first, never a slot a
   tractor is coming for) and sets it on the nearest low slot of its columns with no exports and no wanted container.
+- **Compressing while idle (owner, 2026-11-01):** with nothing to sort, a crane packs the imports in its section toward
+  the section's west end (one crane: the whole ship to the left; two: each its half; and so on). It moves the top
+  container of the easternmost import slot to the westernmost slot with room (columns first, then the deck rows nearest
+  the quay), never onto exports, a wanted container, or a slot a tractor is coming for.
 - **Exports onto the ship (owner):** a tractor carrying an export joins a crane's line (its kind's), and the crane puts
   it on the ship in a slot with no imports (nearest first; a slot never mixes imports and exports). **It pays $60
   then.** On the way back the crane takes an import for that same tractor, if its columns have one, so no trip is empty.
