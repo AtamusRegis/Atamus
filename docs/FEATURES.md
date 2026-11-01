@@ -64,22 +64,26 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 > if forklift has container, selecting target is selecting where to drop the container. cant select to drop somewhere
 > not accessible
 
-- **Three forklifts**, numbered 1–3. Select one by clicking it, or with keys 1–3. Escape or right click deselects.
-- **With the forklift empty, the target can be:**
-  - a container: it drives up beside it and lifts it.
-  - an open tile: it drives there.
-- **With the forklift carrying a container, the target can be:**
-  - an empty storage tile: it drives up beside it and sets the container down.
-  - a waiting truck of the container's color: it drives to the apron tile above the trailer and loads it.
-  - an open tile: it drives there, still carrying.
-- **Access (owner):** a target is accepted only when this forklift can drive to it. For a container or drop spot, that
-  means a free tile beside it (side by side, not diagonal). Anything else flashes a red ✕.
-- **Feedback:**
-  - While a forklift is selected, the tile under the cursor shows green or red, and a valid drop spot shows a ghost of
-    the container.
-  - A forklift's current target has a dashed outline.
-- **The forklift stays selected**, so you can chain its moves. A new target replaces the old one (not mid-lift).
-- **One forklift per target:** two forklifts can't pick the same container or claim the same drop spot or truck.
+- **Three forklifts**, numbered 1–3. Select one by clicking it, or with keys 1–3. Escape deselects.
+- **Each forklift has a queue (owner, 2026-10-31):** every target you click is added to the end, and the forklift works
+  through them in order (e.g. a container, then a truck: it picks the container up, then delivers it). No limit for now.
+- **What a target can be** depends on what the forklift will be holding once its queue so far is done:
+  - holding nothing: a container (drive up beside it and lift it), or an open tile (drive there).
+  - holding a container: an empty storage tile (drive up beside it and set it down), a waiting truck of that
+    container's color (load it from the apron tile above the trailer), or an open tile (drive there, still carrying).
+- **Accepted only if it can still be done (owner):**
+  - The forklift must be able to drive to it: to a free tile beside it (side by side, not diagonal) for a container or
+    drop spot.
+  - The check counts its own queued pickups as already gone and every claimed drop tile as already full. Anything else
+    flashes a red ✕.
+- **Claims (owner):** a queued action claims its container, drop tile or truck at once, and no other forklift can target
+  it. A claim is released when the action is done or taken back.
+- **Taking back:** right click removes the selected forklift's last queued action (not the one under way). With nothing
+  left to take back, right click deselects.
+- **Showing the queues:**
+  - Every forklift's queued targets have dashed outlines: picks in the container's color, drops in the carried color.
+  - The selected forklift's targets are numbered in order and joined by a dashed line from the forklift.
+  - The tile under the cursor shows green or red, with a ghost of the container on a valid drop spot.
 - **Blocked on the way:** if a container blocks its way, it finds another route. With none, it waits with a red "!" and
   keeps trying.
 - Forklifts don't block each other.
@@ -98,6 +102,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Rejected / removed
 
+- **A forklift doing one thing at a time, a new target replacing the old (2026-10-31, the same evening):** replaced by
+  each forklift's own queue.
 - **Forklifts as AI, taking orders from a queue (2026-10-31, the same evening):** replaced by driving each forklift
   yourself. The three separate walled storage areas and placing containers anywhere in the yard were replaced by the
   long storage area and the 2 × 5 patch.

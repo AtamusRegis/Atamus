@@ -36,14 +36,15 @@ const contAt = (i, j) => containers.find((c) => !c.carried && c.i === i && c.j =
 function deckBoat(i, j) { for (const b of boats) if (b.state === "docked" && j >= 5 && j <= 6 && i >= b.berth.x && i < b.berth.x + b.berth.w) return b; return null; }
 const rk = (i, j) => j * MW + i;
 // a forklift can drive over a tile: open yard, or the deck of a docked boat, with no container on it
-function drivable(i, j, ignore) { if (!(isYard(i, j) || deckBoat(i, j))) return false; const c = contAt(i, j); return !c || c === ignore; }
+// ignore: a container (or a Set of them) treated as gone; blockRes: storage tiles already claimed for a drop count as full
+function drivable(i, j, ignore, blockRes) { if (!(isYard(i, j) || deckBoat(i, j))) return false; if (blockRes && reserved.has(rk(i, j))) return false; const c = contAt(i, j); return !c || c === ignore || !!(ignore && ignore.has && ignore.has(c)); }
 
 // ---- paths: 4-way BFS over drivable tiles ----
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-function reachFrom(starts, ignore) {
+function reachFrom(starts, ignore, blockRes) {
   const seen = new Map(), q = [];
   for (const [i, j] of starts) { const k = rk(i, j); if (!seen.has(k)) { seen.set(k, -1); q.push([i, j]); } }
-  while (q.length) { const [i, j] = q.shift(); for (const [a, b] of N4) { const ni = i + a, nj = j + b, k = rk(ni, nj); if (seen.has(k) || !drivable(ni, nj, ignore)) continue; seen.set(k, rk(i, j)); q.push([ni, nj]); } }
+  while (q.length) { const [i, j] = q.shift(); for (const [a, b] of N4) { const ni = i + a, nj = j + b, k = rk(ni, nj); if (seen.has(k) || !drivable(ni, nj, ignore, blockRes)) continue; seen.set(k, rk(i, j)); q.push([ni, nj]); } }
   return seen;
 }
 function pathTo(seen, i, j) { const out = []; let k = rk(i, j); if (!seen.has(k)) return null; while (k !== -1) { out.unshift([k % MW, Math.floor(k / MW)]); k = seen.get(k); } return out; }
@@ -84,48 +85,50 @@ function truckStep(t, dt) {
   else if (t.state === "leave") { t.x -= (60 + (t.tx - t.x) * 1.2) * dt; if (t.x < -4 * T) trucks.splice(trucks.indexOf(t), 1); }
 }
 
-// ---- forklifts: driven by you, one at a time ----
-// select a forklift, then: a container (it drives up and lifts it), or — carrying — a storage tile or a matching truck
-// (it drives up and sets it down there), or an open tile (it just drives there). Nothing it can't reach is accepted.
-forklifts = DEPOT.map(([i, j], k) => ({ id: k, x: i * T, y: j * T, dir: 3, path: [], cmd: null, carry: null, stage: "idle", t: 0, wait: false, retry: 0 }));
+// ---- forklifts: driven by you, each with its own queue of actions ----
+// (owner, 2026-10-31) select a forklift, then targets in order — a container to pick up, then (carrying) a storage tile
+// or a matching truck to set it down, or an open tile to drive to — and it works through them. A target is accepted only
+// if it can still be done after everything already queued; its container, drop tile or truck is claimed from the other
+// forklifts at once. No limit on the queue for now.
+forklifts = DEPOT.map(([i, j], k) => ({ id: k, x: i * T, y: j * T, dir: 3, path: [], cmd: null, queue: [], carry: null, stage: "idle", t: 0, wait: false, retry: 0 }));
 const tileF = (f) => [Math.round(f.x / T), Math.round(f.y / T)];
 const DIRS = { "1,0": 0, "0,1": 1, "-1,0": 2, "0,-1": 3 };
-const reserved = new Map();   // destination tile -> forklift
-function release(f) { const c = f.cmd; if (!c) return; if (c.type === "pick" && c.c.claim === f) c.c.claim = null; if (c.type === "drop") { reserved.delete(rk(c.ti, c.tj)); if (c.truck && c.truck.claimed === f) c.truck.claimed = null; } f.cmd = null; }
-// what clicking (i, j) would tell this forklift to do, or null when it can't
+const reserved = new Map();   // drop tile -> forklift
+const actsOf = (f) => (f.cmd ? [f.cmd, ...f.queue] : f.queue);
+function claim(f, a) { if (a.type === "pick") a.c.claim = f; if (a.type === "drop") { reserved.set(rk(a.ti, a.tj), f); if (a.truck) a.truck.claimed = f; } }
+function release(a) { if (a.type === "pick" && a.c.claim) a.c.claim = null; if (a.type === "drop") { reserved.delete(rk(a.ti, a.tj)); if (a.truck) a.truck.claimed = null; } }
+// what the forklift will be holding once its queue is done
+function heldAfter(f) { let carry = f.carry; for (const a of actsOf(f)) carry = a.type === "pick" ? a.c : a.type === "drop" ? null : carry; return carry; }
+// what clicking (i, j) would add to this forklift's queue, or null when it couldn't be done
 function planFor(f, i, j) {
-  if (f.stage === "lift" || f.stage === "lower") return null;
-  const seen = reachFrom([tileF(f)], null), t = truckAt(i, j);
-  if (!f.carry) {
+  const carry = heldAfter(f), going = new Set(actsOf(f).filter((a) => a.type === "pick").map((a) => a.c));
+  const seen = reachFrom([tileF(f)], going, true), t = truckAt(i, j);
+  const access = (x, y) => accessFrom(seen, x, y).length > 0;
+  if (!carry) {
     const c = contAt(i, j);
-    if (c) { if ((c.boat && c.boat.state !== "docked") || (c.claim && c.claim !== f)) return null; const acc = accessFrom(seen, c.i, c.j); return acc.length ? { type: "pick", c, acc, seen } : null; }
+    if (c) return !(c.boat && c.boat.state !== "docked") && !c.claim && !going.has(c) && access(c.i, c.j) ? { type: "pick", c } : null;
+    if (t) return null;
   } else {
-    if (t) { if (t.state !== "wait" || (t.claimed && t.claimed !== f) || t.color !== f.carry.color) return null; const acc = accessFrom(seen, t.bay.x, ROAD); return acc.length ? { type: "drop", ti: t.bay.x, tj: ROAD, truck: t, acc, seen } : null; }
-    if (isStorage(i, j) && !contAt(i, j) && !(reserved.has(rk(i, j)) && reserved.get(rk(i, j)) !== f)) { const acc = accessFrom(seen, i, j).filter(([x, y]) => x !== i || y !== j); return acc.length ? { type: "drop", ti: i, tj: j, acc, seen } : null; }
+    if (t) return t.state === "wait" && !t.claimed && t.color === carry.color && access(t.bay.x, ROAD) ? { type: "drop", ti: t.bay.x, tj: ROAD, truck: t } : null;
+    if (isStorage(i, j) && !contAt(i, j) && !reserved.has(rk(i, j)) && access(i, j)) return { type: "drop", ti: i, tj: j };
   }
-  if (drivable(i, j, null) && seen.has(rk(i, j))) return { type: "move", ti: i, tj: j, acc: [[i, j]], seen };
+  if (drivable(i, j, going, true) && seen.has(rk(i, j))) return { type: "move", ti: i, tj: j };
   return null;
 }
-function command(f, plan) {
-  release(f);
-  f.cmd = plan; f.wait = false;
-  if (plan.type === "pick") plan.c.claim = f;
-  if (plan.type === "drop") { reserved.set(rk(plan.ti, plan.tj), f); if (plan.truck) plan.truck.claimed = f; }
-  route(f, plan.acc, plan.seen);
-}
-function route(f, acc, seen) {
-  acc = [...acc].sort((a, b) => hyp(a[0] - f.x / T, a[1] - f.y / T) - hyp(b[0] - f.x / T, b[1] - f.y / T));
+function enqueue(f, a) { claim(f, a); f.queue.push(a); }
+function unqueueLast(f) { const a = f.queue.pop(); if (a) release(a); return !!a; }
+const targetOf = (a) => (a.type === "pick" ? [a.c.i, a.c.j] : [a.ti, a.tj]);
+// drive to the current action; a container put in the way means another route, or a wait (red "!") until one opens
+function replan(f) {
+  const a = f.cmd; if (!a) return;
+  const seen = reachFrom([tileF(f)], null), [ti, tj] = targetOf(a);
+  const acc = a.type === "move" ? (seen.has(rk(ti, tj)) && drivable(ti, tj, null) ? [[ti, tj]] : []) : accessFrom(seen, ti, tj).filter(([x, y]) => x !== ti || y !== tj);
+  if (!acc.length) { f.wait = true; f.path = []; return; }
+  f.wait = false; acc.sort((p, q) => hyp(p[0] - f.x / T, p[1] - f.y / T) - hyp(q[0] - f.x / T, q[1] - f.y / T));
   const p = pathTo(seen, acc[0][0], acc[0][1]); f.path = p ? p.slice(1) : []; f.stage = "drive";
 }
-// a container put in the way: find another way to the same place, or wait (red "!") until one opens
-function replan(f) {
-  const c = f.cmd; if (!c) return;
-  const seen = reachFrom([tileF(f)], null), [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj];
-  const acc = c.type === "move" ? (seen.has(rk(ti, tj)) && drivable(ti, tj, null) ? [[ti, tj]] : []) : accessFrom(seen, ti, tj).filter(([x, y]) => x !== ti || y !== tj);
-  if (!acc.length) { f.wait = true; f.path = []; return; }
-  f.wait = false; route(f, acc, seen);
-}
 function forkStep(f, dt) {
+  if (!f.cmd && f.queue.length && f.stage === "idle") { f.cmd = f.queue.shift(); replan(f); }
   if (f.wait) { f.retry += dt; if (f.retry > 0.5) { f.retry = 0; replan(f); } return; }
   if (f.path.length) {
     const [ni, nj] = f.path[0];
@@ -135,20 +138,20 @@ function forkStep(f, dt) {
     if (d <= sp) { f.x = tx; f.y = ty; f.path.shift(); } else { f.x += dx / d * sp; f.y += dy / d * sp; }
     return;
   }
-  const c = f.cmd; if (!c) { f.stage = "idle"; return; }
+  const a = f.cmd; if (!a) { f.stage = "idle"; return; }
   const [fi, fj] = tileF(f), face = (i, j) => { f.dir = DIRS[Math.sign(i - fi) + "," + Math.sign(j - fj)] ?? f.dir; };
   if (f.stage === "drive") {
-    if (c.type === "move") { f.cmd = null; f.stage = "idle"; return; }
-    const [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj];
+    if (a.type === "move") { f.cmd = null; f.stage = "idle"; return; }
+    const [ti, tj] = targetOf(a);
     if (Math.abs(ti - fi) + Math.abs(tj - fj) !== 1) { replan(f); return; }
-    face(ti, tj); f.stage = c.type === "pick" ? "lift" : "lower"; f.t = 0;
+    face(ti, tj); f.stage = a.type === "pick" ? "lift" : "lower"; f.t = 0;
   } else if (f.stage === "lift") {
-    f.t += dt; if (f.t >= 0.45) { const k = c.c; k.carried = f; k.boat = null; k.claim = null; f.carry = k; f.cmd = null; f.stage = "idle"; }
+    f.t += dt; if (f.t >= 0.45) { const k = a.c; k.carried = f; k.boat = null; release(a); f.carry = k; f.cmd = null; f.stage = "idle"; }
   } else if (f.stage === "lower") {
     f.t += dt;
     if (f.t >= 0.45) {
-      const k = f.carry; f.carry = null; k.carried = null; k.i = c.ti; k.j = c.tj; reserved.delete(rk(c.ti, c.tj)); f.cmd = null; f.stage = "idle";
-      if (c.truck) { containers.splice(containers.indexOf(k), 1); c.truck.load = k.color; c.truck.state = "happy"; c.truck.t = 0; c.truck.claimed = null; delivered++; }
+      const k = f.carry; f.carry = null; k.carried = null; k.i = a.ti; k.j = a.tj; release(a); f.cmd = null; f.stage = "idle";
+      if (a.truck) { containers.splice(containers.indexOf(k), 1); a.truck.load = k.color; a.truck.state = "happy"; a.truck.t = 0; delivered++; }
     }
   }
 }
@@ -167,10 +170,11 @@ function click(sx, sy) {
   const f = forkAt(sx, sy); if (f) { selected = selected === f ? null : f; return; }
   if (!selected) return;
   const [i, j] = tileAtScreen(sx, sy), plan = planFor(selected, i, j);
-  if (plan) command(selected, plan); else bad = { i, j, t: 0.5 };
+  if (plan) enqueue(selected, plan); else bad = { i, j, t: 0.5 };
 }
 const pts = new Map(); let gesture = null;
-cv.addEventListener("contextmenu", (e) => { e.preventDefault(); selected = null; });
+// right click: take back the selected forklift's last queued action (not the one under way); with none left, deselect
+cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!selected || !unqueueLast(selected)) selected = null; });
 cv.addEventListener("pointerdown", (e) => {
   if (e.button === 2) return;
   try { cv.setPointerCapture(e.pointerId); } catch (er) { /* fine */ }
@@ -254,7 +258,7 @@ function drawTruck(t) {
   ctx.fillStyle = col; ctx.fillRect(x + T + 2, y + 6, T - 6, T - 12); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(x + 2 * T - 9, y + 9, 4, T - 18);
   ctx.fillStyle = "#2a2c30"; ctx.fillRect(x + T + 5, y + 3, 6, 3); ctx.fillRect(x + T + 5, y + T - 6, 6, 3);
   if (t.load !== null) drawContainer(t.load, x, y, false);
-  if (t.state === "wait") { const pulse = selected && selected.carry && selected.carry.color === t.color && !t.claimed ? 0.5 + 0.5 * Math.sin(clock * 8) : 0; if (pulse) { ctx.strokeStyle = `rgba(127,216,138,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y + 1, 2 * T + 2, T - 2); } }
+  if (t.state === "wait") { const held = selected && heldAfter(selected), pulse = held && held.color === t.color && !t.claimed ? 0.5 + 0.5 * Math.sin(clock * 8) : 0; if (pulse) { ctx.strokeStyle = `rgba(127,216,138,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y + 1, 2 * T + 2, T - 2); } }
   if (t.state === "happy") { const bx = x + T + 8, by = y - 22 - Math.min(6, t.t * 12); ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#2e9a4a"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 9, 2, 2); ctx.fillRect(bx + 13, by + 9, 2, 2); }
 }
 function drawForklift(f) {
@@ -280,22 +284,34 @@ function draw() {
   drawWater();
   for (const b of boats) drawBoat(b);
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
-  // where each forklift is headed
-  ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
-  for (const f of forklifts) { const c = f.cmd; if (!c) continue; const [ti, tj] = c.type === "pick" ? [c.c.i, c.c.j] : [c.ti, c.tj]; ctx.strokeStyle = f.carry ? COLORS[f.carry.color].c : "rgba(255,255,255,.6)"; ctx.strokeRect(ti * T + 3, tj * T + 3, T - 6, T - 6); }
-  ctx.setLineDash([]);
   for (const t of trucks) drawTruck(t);
   for (const c of containers) if (!c.carried) {
     const onBoat = c.boat && c.boat.state !== "docked", bx = onBoat ? c.boat.x - c.boat.berth.x * T : 0;
     drawContainer(c.color, c.i * T + bx, c.j * T, false);
   }
+  // each forklift's queue: dashed outlines on its targets; the selected one's numbered and joined up in order
+  ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
+  for (const f of forklifts) {
+    let carry = f.carry, px = f.x + T / 2, py = f.y + T / 2, n = 0;
+    for (const a of actsOf(f)) {
+      const [ti, tj] = targetOf(a), col = a.type === "pick" ? COLORS[a.c.color].c : carry ? COLORS[carry.color].c : "rgba(255,255,255,.6)";
+      carry = a.type === "pick" ? a.c : a.type === "drop" ? null : carry; n++;
+      ctx.strokeStyle = col; ctx.globalAlpha = f === selected ? 1 : 0.45;
+      if (a.truck) ctx.strokeRect(ti * T + 2, tj * T + 2, 2 * T - 4, T - 4); else ctx.strokeRect(ti * T + 3, tj * T + 3, T - 6, T - 6);
+      if (f === selected) {
+        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ti * T + T / 2, tj * T + T / 2); ctx.stroke(); px = ti * T + T / 2; py = tj * T + T / 2;
+        ctx.setLineDash([]); ctx.fillStyle = "#1e2024"; ctx.fillRect(ti * T + 1, tj * T + 1, 11, 11); ctx.fillStyle = "#ece7dc"; ctx.font = "800 9px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), ti * T + 6.5, tj * T + 7); ctx.setLineDash([4, 4]);
+      }
+    }
+  }
+  ctx.globalAlpha = 1; ctx.setLineDash([]);
   for (const f of forklifts) drawForklift(f);
   // the selected forklift's target under the cursor: green if it can do it, red if not
   if (selected && hover && !hover.f) {
     const [i, j] = hover.tile, plan = planFor(selected, i, j), t = truckAt(i, j);
     ctx.lineWidth = 2; ctx.strokeStyle = plan ? "#7fd88a" : "rgba(255,90,74,.8)";
     if (t) ctx.strokeRect(t.bay.x * T, ROAD * T, 2 * T, T);
-    else { if (plan && plan.type === "drop" && !plan.truck) drawContainer(selected.carry.color, i * T, j * T, false, true); ctx.strokeRect(i * T + 1, j * T + 1, T - 2, T - 2); }
+    else { if (plan && plan.type === "drop" && !plan.truck) drawContainer(heldAfter(selected).color, i * T, j * T, false, true); ctx.strokeRect(i * T + 1, j * T + 1, T - 2, T - 2); }
   }
   if (bad) { ctx.strokeStyle = `rgba(255,90,74,${bad.t * 2})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bad.i * T + 8, bad.j * T + 8); ctx.lineTo(bad.i * T + T - 8, bad.j * T + T - 8); ctx.moveTo(bad.i * T + T - 8, bad.j * T + 8); ctx.lineTo(bad.i * T + 8, bad.j * T + T - 8); ctx.stroke(); }
 }
@@ -319,5 +335,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 22px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { get state() { return { containers, boats, trucks, forklifts, delivered, selected }; }, step, planFor, command, select: (f) => (selected = f), click: (i, j) => { const s = { x: (i + 0.5) * T, y: (j + 0.5) * T }; click((s.x - cam.x) * zoom + VW / 2, (s.y - cam.y) * zoom + VH / 2); } };
+window.Atamus = { get state() { return { containers, boats, trucks, forklifts, delivered, selected }; }, step, planFor, enqueue, select: (f) => (selected = f), click: (i, j) => { const s = { x: (i + 0.5) * T, y: (j + 0.5) * T }; click((s.x - cam.x) * zoom + VW / 2, (s.y - cam.y) * zoom + VH / 2); } };
 })();
