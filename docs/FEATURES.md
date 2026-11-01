@@ -65,6 +65,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   light at the tip; RTGs have tyred bogies, striped legs and a cab. Trucks have wheels, headlights and brake lights that
   glow when stopped. Ships have a bridge, hatch lines, foam along the waterline and a funnel puffing smoke that drifts
   away; foam laps at the quay.
+- **Always the live build (2026-11-01):** a game page the browser kept from an older build loads the live one.
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms

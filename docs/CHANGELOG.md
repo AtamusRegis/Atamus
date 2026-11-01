@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Always the live build:** a game page the browser kept from an older build (GitHub Pages lets browsers keep it for up to 10 minutes) now notices and loads the live one.
+
 - **Fix: tapping the road between a storage area and its bays didn't let go (owner).** Those two lanes counted as the storage area (sending a loaded tractor there, or showing ✕); now they're road like any other. On touch screens a tap on the road beside a truck no longer grabs that truck unless it's right next to it.
 
 - **Tap open ground to let go (owner):** tapping a road, concrete or water lets go of the selected truck; the bare quay concrete around a crane now counts too (only the crane and its lanes send a tractor there).

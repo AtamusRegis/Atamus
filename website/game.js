@@ -7,6 +7,10 @@
 "use strict";
 (() => {
 const $ = (id) => document.getElementById(id);
+// (2026-11-01) a page the browser kept from an older build loads the live one instead (the build id is stamped into
+// game.html and version.json on deploy)
+{ const mine = (document.querySelector('meta[name="build"]') || {}).content;
+  if (mine && mine !== "__BUILD__" && window.fetch) fetch("version.json", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j && j.v && j.v !== mine && !location.search.includes("b=" + j.v)) location.replace("game.html?b=" + j.v); }).catch(() => {}); }
 const cv = $("view"), mainCtx = cv.getContext("2d");
 let ctx = mainCtx;   // swapped to an offscreen canvas while a cached layer is drawn
 const TAU = Math.PI * 2, rnd = Math.random, hyp = Math.hypot, clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
