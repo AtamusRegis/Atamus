@@ -51,6 +51,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - the **parking lot** (48 stalls, for customer trucks)
   - the lot road
   - a fence, with a gate at its southwest corner (in) and one on the east side (out)
+- **Art and animation (2026-11-01, placeholder):** cranes speed up and brake; their spreader (a yellow frame) drops onto
+  a container and lifts it, the container drawn a little bigger with its shadow further off the higher it hangs, and
+  the grab or drop happens at the bottom of the motion. STS cranes have a lattice boom, a machinery house and a blinking
+  light at the tip; RTGs have tyred bogies, striped legs and a cab. Trucks have wheels, headlights and brake lights that
+  glow when stopped. Ships have a bridge, hatch lines, foam along the waterline and a funnel puffing smoke that drifts
+  away; foam laps at the quay.
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms

@@ -520,15 +520,27 @@ function shapeOf(t) { const p = chainOf(t); return { front: pointAt(p, -0.45), c
 function trailerOf(t) { const s = shapeOf(t); return { x: (s.trFront[0] + s.trBack[0]) / 2, y: (s.trFront[1] + s.trBack[1]) / 2, a: Math.atan2(s.trFront[1] - s.trBack[1], s.trFront[0] - s.trBack[0]) }; }
 
 // ---- cranes: a list of moves and lifts, played in order ----
-const CRANE_SP = 130, LIFT = 0.55;
+const CRANE_SP = 145, CRANE_ACC = 420, LIFT = 0.6;
 function craneStep(cr, dt, onDone) {
   const op = cr.ops[0]; if (!op) return;
-  if (op.to) { const [tx, ty] = typeof op.to === "function" ? op.to() : op.to, dx = tx - cr.x, dy = ty - cr.y, sp = CRANE_SP * dt; cr.x += clamp(dx, -sp, sp); cr.y += clamp(dy, -sp, sp); if (Math.abs(tx - cr.x) < 0.5 && Math.abs(ty - cr.y) < 0.5) { cr.x = tx; cr.y = ty; cr.ops.shift(); if (!cr.ops.length) onDone(); } return; }
-  op.t = (op.t || 0) + dt; if (op.t < LIFT) return;
-  // (owner) an STS crane can hold a second container (hold2)
-  if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; if (op.then) op.then(); }
-  else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
-  cr.ops.shift(); if (!cr.ops.length) onDone();
+  // (art) it speeds up and brakes instead of starting and stopping dead
+  if (op.to) {
+    const [tx, ty] = typeof op.to === "function" ? op.to() : op.to, dx = tx - cr.x, dy = ty - cr.y, d = hyp(dx, dy);
+    cr.v = Math.min(CRANE_SP, (cr.v || 0) + CRANE_ACC * dt, Math.sqrt(2 * CRANE_ACC * d) + 12); const sp = cr.v * dt;
+    if (d <= sp || d < 0.5) { cr.x = tx; cr.y = ty; cr.v = d < 0.5 ? cr.v : cr.v * 0.5; cr.ops.shift(); if (!cr.ops.length) { cr.v = 0; onDone(); } } else { cr.x += dx / d * sp; cr.y += dy / d * sp; }
+    return;
+  }
+  cr.v = 0;
+  // (art) the spreader goes down, grabs or lets go at the bottom, and comes back up
+  op.t = (op.t || 0) + dt; const ph = Math.min(1, op.t / LIFT); cr.hoist = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
+  if (ph >= 0.5 && !op.done) {
+    op.done = true;
+    // (owner) an STS crane can hold a second container (hold2)
+    if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; if (op.then) op.then(); }
+    else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
+  }
+  if (ph < 1) return;
+  cr.hoist = 0; cr.ops.shift(); if (!cr.ops.length) onDone();
 }
 // STS: the front-most empty tractor standing in its line gets the nearest container (two at once with two waiting)
 // (owner) a tractor bringing an export: the crane lifts it off onto the ship (a slot with no imports, nearest first; it
@@ -797,6 +809,9 @@ function drawWater() {
   ctx.fillStyle = "#1a4a6a"; ctx.fillRect(-30 * T, -10 * T, (MW + 60) * T, (QUAY + 10) * T);
   ctx.fillStyle = "rgba(255,255,255,.07)";
   for (let j = -6; j < QUAY; j++) for (let i = -20; i < MW + 20; i += 2) { const o = Math.round(((clock * 12 + j * 37) % 64)) - 32; ctx.fillRect(i * T + o + (j % 2) * 20, j * T + 14, 14, 2); }
+  // (art) glints and foam lapping at the quay
+  ctx.fillStyle = "rgba(255,255,255,.12)"; for (let i = -20; i < MW + 20; i++) { const a = Math.sin(clock * 1.7 + i * 1.3); if (a > 0.6) ctx.fillRect(i * T + ((i * 13) % 20), (QUAY - 1) * T + 6 + ((i * 7) % 14), 4, 2); }
+  ctx.fillStyle = "rgba(255,255,255,.22)"; for (let i = -20; i < MW + 20; i++) { const o = Math.sin(clock * 2.2 + i * 0.9) * 3; ctx.fillRect(i * T, QUAY * T - 5 + o, 20, 2); }
 }
 // (owner) a stack drawn as three squares down its 1 x 3 footprint: top square the top of the stack, bottom the bottom
 // a ship's slot: the same three squares, left to right (left the top of the stack, right the bottom)
@@ -842,9 +857,22 @@ function drawStack(x, y, st, frame) {
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, T - 3, CL * T - 3); }
 }
-function drawBox(c, cx, cy, ang, lifted) {
+// (art) a crane's spreader: a yellow frame the size of a container, hanging at height h
+function drawSpreader(cx, cy, ang, h) {
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
-  if (lifted) { ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(-CL * T / 2 + 6, -T / 2 + 8, CL * T - 4, T - 6); ctx.translate(-3, -5); }
+  ctx.fillStyle = "rgba(0,0,0,.18)"; ctx.fillRect(-CL * T / 2 + 4 + 7 * h, -T / 2 + 6 + 9 * h, CL * T - 8, T - 10);
+  ctx.translate(-3 * h, -5 * h); const sc = 1 + 0.1 * h; ctx.scale(sc, sc);
+  ctx.strokeStyle = "#e8b432"; ctx.lineWidth = 3; ctx.strokeRect(-CL * T / 2 + 4, -T / 2 + 6, CL * T - 8, T - 12);
+  ctx.fillStyle = "#3a3c40"; ctx.fillRect(-6, -T / 2 + 6, 12, T - 12);
+  ctx.fillStyle = "#e8b432"; for (const sx of [-CL * T / 2 + 3, CL * T / 2 - 7]) for (const sy of [-T / 2 + 5, T / 2 - 9]) ctx.fillRect(sx, sy, 4, 4);
+  ctx.restore();
+}
+// (art) h: how high it hangs (0 on the ground .. 1 up at the trolley): higher, it's drawn a little bigger with its shadow
+// further off
+function drawBox(c, cx, cy, ang, h) {
+  h = h === true ? 1 : h || 0;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+  if (h > 0) { ctx.fillStyle = `rgba(0,0,0,${0.18 + 0.14 * h})`; ctx.fillRect(-CL * T / 2 + 2 + 7 * h, -T / 2 + 4 + 9 * h, CL * T - 4, T - 6); ctx.translate(-3 * h, -5 * h); const sc = 1 + 0.1 * h; ctx.scale(sc, sc); }
   ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(-CL * T / 2 + 1, -T / 2 + 3, CL * T - 2, T - 6);
   ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
   ctx.fillStyle = "rgba(0,0,0,.2)"; for (let k = -CL * T / 2 + 6; k < CL * T / 2 - 4; k += 5) ctx.fillRect(k, -T / 2 + 5, 1, T - 10);
@@ -853,12 +881,25 @@ function drawBox(c, cx, cy, ang, lifted) {
   if (flashing(c)) flash(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
   ctx.restore();
 }
+// (art) smoke puffs from the ship's funnel, drifting off on the wind
+const SMOKE = [];
+let smokeClock = 0;
+function drawSmoke() {
+  const dt = Math.min(0.1, clock - smokeClock); smokeClock = clock;
+  for (let k = SMOKE.length - 1; k >= 0; k--) { const p = SMOKE[k]; p.t += dt; if (p.t > 4) { SMOKE.splice(k, 1); continue; } p.x += (-14 - (p.ship.state === "docked" ? 0 : 30)) * dt; p.y -= 9 * dt; p.r += 5 * dt; ctx.fillStyle = `rgba(190,196,204,${0.35 * (1 - p.t / 4)})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill(); }
+}
 function drawShip() {
   const s = DOCK.ship, x = DOCK.x * T + Math.round(s.off), y = (DOCK.top + DOCK.rows - s.rows - 1) * T + 14, w = s.cols * CL * T, h = (s.rows + 1) * T + 2;
   ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 10, y + 6, w + 50, h);
   ctx.fillStyle = s.hull; ctx.beginPath(); ctx.moveTo(x - 20, y); ctx.lineTo(x + w + 8, y); ctx.lineTo(x + w + 44, y + h / 2); ctx.lineTo(x + w + 8, y + h); ctx.lineTo(x - 20, y + h); ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#c8ccd0"; ctx.fillRect(x - 20, y, w + 28, 3); ctx.fillRect(x - 20, y + h - 3, w + 28, 3);
-  ctx.fillStyle = "#e8e2d0"; ctx.fillRect(x - 18, y + 10, 14, h - 20); ctx.fillStyle = "#6ab8e8"; ctx.fillRect(x - 15, y + 16, 8, 8);
+  // (art) foam along the waterline, hatch lines, the bridge with its windows, the funnel
+  ctx.fillStyle = "rgba(255,255,255,.18)"; for (let k = 0; k < w + 40; k += 10) { const o = Math.sin(clock * 2 + k * 0.3) * 2; ctx.fillRect(x - 20 + k, y + h + 1 + o, 6, 2); ctx.fillRect(x - 20 + k, y - 3 - o, 6, 2); }
+  ctx.fillStyle = "rgba(0,0,0,.18)"; for (let c = 1; c < s.cols; c++) ctx.fillRect(x + c * CL * T - 1, y + 6, 2, h - 12);
+  ctx.fillStyle = "#e8e2d0"; ctx.fillRect(x - 19, y + 8, 16, h - 16); ctx.fillStyle = "#c8c2b0"; ctx.fillRect(x - 19, y + 8, 3, h - 16);
+  ctx.fillStyle = "#6ab8e8"; for (let wy = y + 14; wy < y + h - 12; wy += 9) ctx.fillRect(x - 14, wy, 8, 4);
+  const fx = x - 30, fy = y + h / 2; ctx.fillStyle = "#2a2c30"; ctx.fillRect(fx - 6, fy - 9, 12, 18); ctx.fillStyle = "#c83a2e"; ctx.fillRect(fx - 6, fy - 9, 12, 5);
+  if (clock - (s.lastPuff || 0) > (s.state === "docked" ? 0.9 : 0.3)) { s.lastPuff = clock; SMOKE.push({ x: fx, y: fy, ship: s, r: 5, t: 0 }); }
   s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const q = shipSlot(k); drawStackH(x + q.c * CL * T, (DOCK.top + q.r) * T, st, "rgba(0,0,0,.4)", k); });
   // the time it has left
   if (s.state === "docked" || s.state === "closing") {
@@ -873,37 +914,60 @@ function rectBetween(a, b, w, fill) { const cx = (a[0] + b[0]) / 2, cy = (a[1] +
 function drawTruck(t) {
   const s = shapeOf(t), sel = t === selected, hov = hover && hover.truck === t;
   if (sel || hov) { ctx.strokeStyle = sel ? "#ffffff" : "rgba(255,255,255,.45)"; ctx.lineWidth = sel ? 28 + 2 * Math.sin(clock * 8) : 26; ctx.lineCap = "round"; ctx.globalAlpha = sel ? 0.5 : 0.25; ctx.beginPath(); ctx.moveTo(s.front[0], s.front[1]); ctx.lineTo(s.cabBack[0], s.cabBack[1]); ctx.lineTo(s.trBack[0], s.trBack[1]); ctx.stroke(); ctx.globalAlpha = 1; ctx.lineCap = "butt"; }
-  rectBetween([s.trFront[0] + 3, s.trFront[1] + 4], [s.trBack[0] + 3, s.trBack[1] + 4], 22, "rgba(0,0,0,.3)");
+  // (art) shadow, wheels, chassis
+  rectBetween([s.trFront[0] + 3, s.trFront[1] + 4], [s.trBack[0] + 3, s.trBack[1] + 4], 24, "rgba(0,0,0,.28)");
+  rectBetween([s.front[0] + 3, s.front[1] + 4], [s.cabBack[0] + 3, s.cabBack[1] + 4], 26, "rgba(0,0,0,.28)");
+  const tr0 = trailerOf(t), L = hyp(s.trFront[0] - s.trBack[0], s.trFront[1] - s.trBack[1]);
+  ctx.save(); ctx.translate(tr0.x, tr0.y); ctx.rotate(tr0.a); ctx.fillStyle = "#141518";
+  for (const wx of [-L / 2 + 6, -L / 2 + 16, L / 2 - 10]) { ctx.fillRect(wx, -12, 7, 4); ctx.fillRect(wx, 8, 7, 4); }
+  const stopped = !t.next; ctx.restore();
   rectBetween(s.trFront, s.trBack, 18, "#4a4e56");
+  ctx.save(); ctx.translate(tr0.x, tr0.y); ctx.rotate(tr0.a); ctx.fillStyle = "#3a3d44"; ctx.fillRect(-L / 2, -2, L, 4);
+  ctx.fillStyle = stopped ? "#ff3a2a" : "#7a2a22"; ctx.fillRect(-L / 2 - 1, -8, 3, 4); ctx.fillRect(-L / 2 - 1, 4, 3, 4); ctx.restore();   // brake lights glow when stopped
   rectBetween(s.front, s.cabBack, 24, "#1e2024");
   rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? (t.want ? COLORS[t.want.c].c : WAIT_CAB) : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
-  const an = Math.atan2(s.front[1] - s.cabBack[1], s.front[0] - s.cabBack[0]); ctx.save(); ctx.translate(s.front[0], s.front[1]); ctx.rotate(an); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(-9, -7, 4, 14); ctx.restore();
-  if (t.load !== null) { const tr = trailerOf(t); drawBox(t.load, tr.x, tr.y, tr.a, false); }
+  const an = Math.atan2(s.front[1] - s.cabBack[1], s.front[0] - s.cabBack[0]); ctx.save(); ctx.translate(s.front[0], s.front[1]); ctx.rotate(an);
+  ctx.fillStyle = "#9ad0f0"; ctx.fillRect(-9, -7, 4, 14); ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(-22, -8, 11, 2);   // windscreen, roof highlight
+  ctx.fillStyle = "#fff4c0"; ctx.fillRect(-2, -9, 2, 4); ctx.fillRect(-2, 5, 2, 4); ctx.fillStyle = "#141518"; ctx.fillRect(-14, -13, 7, 3); ctx.fillRect(-14, 10, 7, 3);   // headlights, front wheels
+  ctx.restore();
+  if (t.load !== null) drawBox(t.load, tr0.x, tr0.y, tr0.a, 0);
   if (t.num) { const m = [(s.front[0] + s.cabBack[0]) / 2, (s.front[1] + s.cabBack[1]) / 2]; ctx.fillStyle = "#1e2024"; ctx.fillRect(m[0] - 6, m[1] - 6, 12, 12); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(t.num), m[0], m[1] + 0.5); }
   if (t.sad > 0) { const bx = s.front[0] + 8, by = s.front[1] - 34; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#c83a2e"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 11, 2, 2); ctx.fillRect(bx + 13, by + 11, 2, 2); }
   if (t.happy > 0) { const bx = s.front[0] + 8, by = s.front[1] - 34; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#2e9a4a"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 9, 2, 2); ctx.fillRect(bx + 13, by + 9, 2, 2); }
 }
 function drawSTS(b) {
-  const cr = b.crane, x = Math.round(cr.x);
-  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 40, T, 88, 12 * T);
-  ctx.fillStyle = "#b8452a"; for (const lx of [x - 44, x + 36]) ctx.fillRect(lx, QUAY * T, 8, 5 * T);
+  const cr = b.crane, x = Math.round(cr.x), ty = Math.round(cr.y), h = 1 - (cr.hoist || 0);
+  // shadow, cast down-right
+  ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(x - 1, T + 10, 16, 11 * T); for (const lx of [x - 38, x + 42]) ctx.fillRect(lx, QUAY * T + 8, 8, 5 * T); ctx.fillRect(x - 38, QUAY * T + 4, 88, 8); ctx.fillRect(x - 38, 12 * T + 6, 88, 6);
+  // portal legs on the quay rails, with sill beams and wheel bogies
+  for (const lx of [x - 44, x + 36]) { ctx.fillStyle = "#9a3a22"; ctx.fillRect(lx, QUAY * T, 8, 5 * T); ctx.fillStyle = "#c8502c"; ctx.fillRect(lx + 1, QUAY * T, 3, 5 * T); }
+  ctx.fillStyle = "#1e2024"; for (const lx of [x - 48, x + 32]) for (const ly of [QUAY * T - 10, 12 * T - 2]) ctx.fillRect(lx, ly, 16, 6);
   ctx.fillStyle = "#d8552e"; ctx.fillRect(x - 44, QUAY * T - 6, 88, 10); ctx.fillRect(x - 44, 12 * T - 4, 88, 8);
-  ctx.fillStyle = "#e8653a"; ctx.fillRect(x - 6, T, 12, 11 * T); ctx.fillStyle = "#8a3a22"; for (let y = T + 4; y < 12 * T; y += 16) ctx.fillRect(x - 6, y, 12, 2);
-  const ty = Math.round(cr.y);
-  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x - 12, ty - 10, 24, 20);
-  if (cr.hold2) drawBox(cr.hold2, x + 5, ty + 7, 0, true);
-  if (cr.hold !== null) drawBox(cr.hold, x, ty, 0, true);
-  else { ctx.fillStyle = "#9aa0a8"; ctx.fillRect(x - 3, ty - 30, 6, 60); }
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 44, QUAY * T + 2, 88, 2); ctx.fillRect(x - 44, 12 * T + 2, 88, 2);
+  // the boom, a lattice girder out over the water, and its back reach
+  ctx.fillStyle = "#e8653a"; ctx.fillRect(x - 7, T, 14, 11 * T);
+  ctx.fillStyle = "#a8442a"; ctx.fillRect(x - 7, T, 2, 11 * T); ctx.fillRect(x + 5, T, 2, 11 * T);
+  ctx.strokeStyle = "rgba(120,40,20,.75)"; ctx.lineWidth = 1.5; ctx.beginPath(); for (let y = T; y < 12 * T; y += 14) { ctx.moveTo(x - 5, y); ctx.lineTo(x + 5, y + 7); ctx.lineTo(x - 5, y + 14); } ctx.stroke();
+  // machinery house at the back, warning light at the tip
+  ctx.fillStyle = "#4a4e56"; ctx.fillRect(x - 12, 12 * T - 2, 24, 18); ctx.fillStyle = "#e8653a"; ctx.fillRect(x - 12, 12 * T - 2, 24, 3); ctx.fillStyle = "#2a2c30"; ctx.fillRect(x - 8, 12 * T + 6, 16, 3);
+  ctx.fillStyle = Math.sin(clock * 4 + b.id) > 0.2 ? "#ff4a3a" : "#5a2018"; ctx.fillRect(x - 2, T - 2, 4, 4);
+  // trolley, spreader and what it holds
+  if (cr.hold2) drawBox(cr.hold2, x + 5, ty + 7, 0, h);
+  if (cr.hold !== null) drawBox(cr.hold, x, ty, 0, h); else drawSpreader(x, ty, 0, h);
+  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x - 10, ty - 8, 20, 16); ctx.fillStyle = "#e8b432"; ctx.fillRect(x - 10, ty - 8, 20, 2);
 }
 function drawRTG(b) {
-  const cr = b.rtg, gy = Math.round(cr.y), x0 = b.x * T - 6, x1 = (b.x + b.w) * T + 6;
-  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x0 + 6, gy - 12, x1 - x0, 30);
+  const cr = b.rtg, gy = Math.round(cr.y), x0 = b.x * T - 6, x1 = (b.x + b.w) * T + 6, tx = Math.round(cr.x), h = 1 - (cr.hoist || 0);
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x0 + 8, gy - 8, x1 - x0, 30);
+  // rubber-tyred bogies, legs with hazard stripes, the girder and the operator's cab
+  ctx.fillStyle = "#1e2024"; for (const lx of [x0 - 2, x1 - 12]) for (const ly of [gy - 20, gy + 12]) ctx.fillRect(lx, ly, 14, 8);
   ctx.fillStyle = "#3a6ab0"; ctx.fillRect(x0, gy - 14, 10, 28); ctx.fillRect(x1 - 10, gy - 14, 10, 28);
-  ctx.fillStyle = "#4a7ac8"; ctx.fillRect(x0, gy - 6, x1 - x0, 12); ctx.fillStyle = "#2a4a80"; ctx.fillRect(x0, gy + 4, x1 - x0, 2);
-  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x0 + 2, gy - 18, 6, 4); ctx.fillRect(x1 - 8, gy - 18, 6, 4); ctx.fillRect(x0 + 2, gy + 14, 6, 4); ctx.fillRect(x1 - 8, gy + 14, 6, 4);
-  const tx = Math.round(cr.x);
-  ctx.fillStyle = "#1e2024"; ctx.fillRect(tx - 9, gy - 9, 18, 18);
-  if (cr.hold !== null) drawBox(cr.hold, tx, gy, Math.PI / 2, true);
+  ctx.fillStyle = "#e8b432"; for (let k = 0; k < 28; k += 8) { ctx.fillRect(x0, gy - 14 + k, 10, 3); ctx.fillRect(x1 - 10, gy - 14 + k, 10, 3); }
+  ctx.fillStyle = "#4a7ac8"; ctx.fillRect(x0, gy - 6, x1 - x0, 12); ctx.fillStyle = "#2a4a80"; ctx.fillRect(x0, gy + 4, x1 - x0, 2); ctx.fillStyle = "#6a9ae0"; ctx.fillRect(x0, gy - 6, x1 - x0, 2);
+  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x1 - 22, gy - 13, 12, 10); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(x1 - 20, gy - 11, 8, 4);
+  // trolley, spreader and what it holds
+  if (cr.hold !== null) drawBox(cr.hold, tx, gy, Math.PI / 2, h); else drawSpreader(tx, gy, Math.PI / 2, h * 0.6);
+  ctx.fillStyle = "#1e2024"; ctx.fillRect(tx - 9, gy - 9, 18, 18); ctx.fillStyle = "#e8b432"; ctx.fillRect(tx - 9, gy - 9, 18, 2);
 }
 // locked things: dimmed, with their price
 function priceTag(x, y, price) { const ok = money >= price, txt = "$" + price.toLocaleString(); ctx.font = "800 18px 'Big Shoulders Display', Impact, sans-serif"; const w = ctx.measureText(txt).width + 14; ctx.fillStyle = "rgba(10,14,20,.85)"; ctx.fillRect(x - w / 2, y - 12, w, 24); ctx.strokeStyle = ok ? "#7fd88a" : "#6a7080"; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - 12, w, 24); ctx.fillStyle = ok ? "#ece7dc" : "#8b919b"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, x, y + 1); }
@@ -940,6 +1004,7 @@ function draw() {
   ctx.setTransform(DPR * zoom, 0, 0, DPR * zoom, Math.round(DPR * (VW / 2 - cam.x * zoom)), Math.round(DPR * (VH / 2 - cam.y * zoom)));
   drawWater();
   if (DOCK.ship) drawShip();
+  drawSmoke();
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
   for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) drawStack((b.x + c) * T, (b.y + r * CL) * T, b.slots[c][r], "rgba(201,162,58,.35)");
   // (owner) a selected customer truck: a white dotted line to where its container is
