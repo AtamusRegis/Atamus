@@ -338,32 +338,42 @@ function stsStep(b, dt) {
   craneStep(cr, dt, () => { const t = cr.truck; if (!t) return; cr.truck = null; b.promised = Math.max(0, b.promised - 1); doneServing(t); });
 }
 const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
-// RTG: serves the trucks standing in its bays, one at a time
+// RTG: serves the trucks standing in its bays, one at a time, moving as little as it can (owner): it stays where it
+// finished instead of going back to rest; at the bays it unloads a tractor next, out in the stacks it digs for a
+// customer next; and a tractor's container goes down near the container the next customer wants (never on it), so the
+// crane drops it on its way there
 function rtgStep(b, dt) {
   const cr = b.rtg;
   if (!cr.ops.length && !cr.truck) {
-    const t = trucks.find((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const srcOf = (t) => { let src = null, fewest = 1e9; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } } return src && { src, fewest }; };
+    const L = ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q)), U = free(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load !== null) : [];
+    const near = (list, f) => list.reduce((m, q) => (!m || f(q) < f(m) ? q : m), null);
+    const toTruck = (q) => Math.abs(trailerOf(q).x - cr.x) + Math.abs(trailerOf(q).y - cr.y), toSrc = (q) => { const [c, r] = srcOf(q).src, [x, y] = slotXY(b, c, r); return Math.abs(x - cr.x) + Math.abs(y - cr.y); };
+    const atBays = cr.y >= (REST + 0.5) * T - 1, nu = near(U, toTruck), nl = near(L, toSrc);
+    const t = atBays ? nu || nl : nl || nu;
     if (t) {
       const at = () => { const tr = trailerOf(t); return [tr.x, tr.y]; };
-      if (t.kind === "yard" && t.load !== null) {
+      if (t.kind === "yard") {
+        const next = near(L, (q) => Math.abs(trailerOf(q).x - trailerOf(t).x)), hint = next && srcOf(next).src, cc = clamp(Math.round(trailerOf(t).x / T - 0.5) - b.x, 0, b.cols - 1);
         let best = null, bs = 1e9;
-        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; if (st.length >= 3) continue; const sc = st.length * 10 + (b.rows - r) + (st.some((x) => x.wantedBy) ? 12 : 0); if (sc < bs) { bs = sc; best = [c, r]; } }
-        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t }, }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: () => { cr.truck = null; doneServing(t); } }, { to: [slotXY(b, best[0], best[1])[0], (REST + 0.5) * T] }]; }
-      } else if (t.kind === "cust" && t.load === null) {
-        let src = null, fewest = 1e9;
-        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; const k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } }
-        if (src) {
-          const ops = [], h = b.slots.map((col) => col.map((st) => st.length));
-          for (let n = 0; n < fewest; n++) {
-            let dst = null, ds = 1e9;
-            for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { if ((c === src[0] && r === src[1]) || h[c][r] >= 3) continue; const sc = h[c][r] * 4 + Math.abs(c - src[0]) + Math.abs(r - src[1]); if (sc < ds) { ds = sc; dst = [c, r]; } }
-            if (!dst) break;
-            h[src[0]][src[1]]--; h[dst[0]][dst[1]]++;
-            ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: slotXY(b, dst[0], dst[1]) }, { lower: { stack: b.slots[dst[0]][dst[1]] } });
-          }
-          ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: at }, { lower: { truck: t }, then: () => { cr.truck = null; doneServing(t); } }, { to: () => [cr.x, (REST + 0.5) * T] });
-          t.locked = true; cr.truck = t; cr.ops = ops;
+        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
+          const st = b.slots[c][r]; if (st.length >= 3 || (hint && c === hint[0] && r === hint[1])) continue;
+          const d = hint ? Math.abs(c - hint[0]) + Math.abs(r - hint[1]) * CL : Math.abs(c - cc) + (b.rows - 1 - r) * CL;
+          const sc = st.length * 4 + d + (st.some((x) => x.wantedBy) ? 12 : 0); if (sc < bs) { bs = sc; best = [c, r]; }
         }
+        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: () => { cr.truck = null; doneServing(t); } }]; }
+      } else {
+        const { src, fewest } = srcOf(t), ops = [], h = b.slots.map((col) => col.map((st) => st.length));
+        for (let n = 0; n < fewest; n++) {
+          let dst = null, ds = 1e9;
+          for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { if ((c === src[0] && r === src[1]) || h[c][r] >= 3) continue; const sc = h[c][r] * 4 + Math.abs(c - src[0]) + Math.abs(r - src[1]); if (sc < ds) { ds = sc; dst = [c, r]; } }
+          if (!dst) break;
+          h[src[0]][src[1]]--; h[dst[0]][dst[1]]++;
+          ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: slotXY(b, dst[0], dst[1]) }, { lower: { stack: b.slots[dst[0]][dst[1]] } });
+        }
+        ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: at }, { lower: { truck: t }, then: () => { cr.truck = null; doneServing(t); } });
+        t.locked = true; cr.truck = t; cr.ops = ops;
       }
     }
   }

@@ -117,10 +117,14 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
   whichever bay is free, or waits in line on the RTG lane at the area's west end until one clears, first come first
   served. Trucks behind it in line don't pass it. A tractor that finished there keeps its bay until its next trip.
-- **The RTG crane** rests at the area's south end. It serves the trucks standing in its bays one at a time, running its
-  gantry down over them, and goes back to rest after.
-- **A loaded yard tractor:** the RTG lifts the container off and stacks it on the lowest stack nearest the bays, avoiding
-  stacks holding a container a customer wants.
+- **The RTG crane** starts at the area's south end. It serves the trucks standing in its bays one at a time, running its
+  gantry down over them.
+- **It moves as little as it can (owner, 2026-11-01):** it stays where it finished instead of going back to rest. At the
+  bays (having just loaded a customer) it unloads a waiting tractor next; out in the stacks (having just set a container
+  down) it digs for a waiting customer next. A tractor's container goes down near the container the next waiting
+  customer wants (never on top of it), so the crane drops it on its way there.
+- **A loaded yard tractor:** the RTG lifts the container off and stacks it on a low stack near the next customer's
+  container (with no customer waiting, near the bays), avoiding stacks holding a container a customer wants.
 - **A customer truck:** the RTG finds the truck's container. It moves whatever is on top of it aside onto other stacks one
   by one, then lifts the container out and loads the truck.
 
