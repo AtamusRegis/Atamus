@@ -459,7 +459,7 @@ function craneStep(cr, dt, onDone) {
   if (op.to) { const [tx, ty] = typeof op.to === "function" ? op.to() : op.to, dx = tx - cr.x, dy = ty - cr.y, sp = CRANE_SP * dt; cr.x += clamp(dx, -sp, sp); cr.y += clamp(dy, -sp, sp); if (Math.abs(tx - cr.x) < 0.5 && Math.abs(ty - cr.y) < 0.5) { cr.x = tx; cr.y = ty; cr.ops.shift(); if (!cr.ops.length) onDone(); } return; }
   op.t = (op.t || 0) + dt; if (op.t < LIFT) return;
   // (owner) an STS crane can hold a second container (hold2)
-  if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; }
+  if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; if (op.then) op.then(); }
   else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
   cr.ops.shift(); if (!cr.ops.length) onDone();
 }
@@ -480,33 +480,35 @@ function stsStep(b, dt) {
       // with an import nobody has claimed (used: a slot already being taken from once in this lift)
       const slotFor = (q, refX, used) => { const sl = q.cmd.slot; if (sl !== undefined && impCount(s.bays[sl]) - (sl === used ? 1 : 0) > 0) return sl; let best = -1, bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (impCount(st) - s.claims[k] - (k === used ? 1 : 0) > 0 && c >= c0 && c < c1) { const d = Math.abs(sx(k) - refX) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; best = k; } } }); return best; };
       const take = (q) => { const sl = q.cmd.slot; if (sl !== undefined) { s.claims[sl] = Math.max(0, s.claims[sl] - 1); delete q.cmd.slot; } };
-      let refX = trailerOf(t).x, placed = !t.load;
+      // (owner) each tractor drives off the moment it's done with: loaded, or (an export with nothing to take back) lifted off
+      const rel = (q, picked) => () => { if (picked) b.promised = Math.max(0, b.promised - 1); if (cr.truck === q) cr.truck = null; if (cr.truck2 === q) cr.truck2 = null; doneServing(q); };
+      let refX = trailerOf(t).x, placed = !t.load, liftOff = null;
       if (t.load) {
         let es = -1, ed = 1e9;
         s.bays.forEach((st, k) => { const q = shipSlot(k); if (!onDeck(s, k) || q.c < c0 || q.c >= c1 || st.length >= 3 || impCount(st)) return; const d = Math.abs(sx(k) - refX) + (DOCK.rows - q.r) * 8; if (d < ed) { ed = d; es = k; } });
         if (a.exp) { b.expPromised = Math.max(0, b.expPromised - 1); a.exp = false; }
-        if (es >= 0) { placed = true; ops.push({ to: () => [trailerOf(t).x, ly] }, { lift: { truck: t } }, { to: [sx(es), sy(es)] }, { lower: { stack: s.bays[es] }, then: () => { money += INCOME; exported++; floats.push({ x: sx(es), y: sy(es) - 20, t: 1.6, text: "+$" + INCOME }); } }); refX = sx(es); }
+        if (es >= 0) { placed = true; liftOff = { lift: { truck: t } }; ops.push({ to: () => [trailerOf(t).x, ly] }, liftOff, { to: [sx(es), sy(es)] }, { lower: { stack: s.bays[es] }, then: () => { money += INCOME; exported++; floats.push({ x: sx(es), y: sy(es) - 20, t: 1.6, text: "+$" + INCOME }); } }); refX = sx(es); }
       }
       let best = -1, t2 = null, best2 = -1, spare = false, extra = -1;
       if (a.pick !== false) {
         if (placed && cr.hold2 && a.slot === undefined) spare = true;   // hand over the one it's holding
         else { if (placed) best = slotFor(t, refX, -1); take(t); if (best < 0) b.promised = Math.max(0, b.promised - 1); }
       }
-      if (spare) { cr.picked = 1; ops.push({ to: () => [trailerOf(t).x, ly] }, { lower: { truck: t, second: true } }); t.locked = true; cr.truck = t; cr.ops = ops; }
+      if (spare) { ops.push({ to: () => [trailerOf(t).x, ly] }, { lower: { truck: t, second: true }, then: rel(t, true) }); t.locked = true; cr.truck = t; cr.ops = ops; }
       // (owner) holding two: with an empty tractor at the front of the other line too, lift one for each in the same trip;
       // otherwise, with more pickups on their way, lift a spare to hold for the next tractor
       if (!spare && best >= 0 && !ops.length && !cr.hold2) {
         for (const q of waiting) { if (q === t || q.load !== null || q.cmd.pick === false) continue; const k = slotFor(q, sx(best), best); if (k >= 0) { t2 = q; best2 = k; take(q); break; } }
       }
       if (!spare && best >= 0 && !t2 && !cr.hold2 && coming(b, t)) { let bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (impCount(st) - s.claims[k] - (k === best ? 1 : 0) > 0 && c >= c0 && c < c1) { const d = Math.abs(sx(k) - sx(best)) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; extra = k; } } }); }
-      if (!spare) cr.picked = (best >= 0 ? 1 : 0) + (t2 ? 1 : 0);
+      if (!spare && best < 0 && liftOff) liftOff.then = rel(t, false);
       if (!spare && best >= 0) {
         cr.slot = best; cr.slot2 = t2 ? best2 : undefined;
         ops.push(...(ops.length ? [] : [{ to: [sx(best), cr.y] }]), { to: [sx(best), sy(best)] }, { lift: { stack: s.bays[best] } });
         if (t2) { if (best2 !== best) ops.push({ to: [sx(best2), sy(best2)] }); ops.push({ lift: { stack: s.bays[best2], second: true } }); }
         else if (extra >= 0) { if (extra !== best) ops.push({ to: [sx(extra), sy(extra)] }); ops.push({ lift: { stack: s.bays[extra], second: true } }); }
-        ops.push({ to: () => [cr.x, ly] }, { to: () => [trailerOf(t).x, ly] }, { lower: { truck: t } });
-        if (t2) { const ly2 = (t2.lane.r + 0.5) * T; ops.push({ to: () => [trailerOf(t2).x, ly2] }, { lower: { truck: t2, second: true } }); }
+        ops.push({ to: () => [cr.x, ly] }, { to: () => [trailerOf(t).x, ly] }, { lower: { truck: t }, then: rel(t, true) });
+        if (t2) { const ly2 = (t2.lane.r + 0.5) * T; ops.push({ to: () => [trailerOf(t2).x, ly2] }, { lower: { truck: t2, second: true }, then: rel(t2, true) }); }
       }
       if (spare) { /* under way */ } else if (ops.length) { t.locked = true; cr.truck = t; if (t2) { t2.locked = true; cr.truck2 = t2; } cr.ops = ops; } else doneServing(t);
     }
@@ -523,7 +525,6 @@ function stsStep(b, dt) {
   }
   craneStep(cr, dt, () => {
     cr.slot = undefined; cr.slot2 = undefined; const t = cr.truck, t2 = cr.truck2; cr.truck = null; cr.truck2 = null;
-    b.promised = Math.max(0, b.promised - (cr.picked || 0)); cr.picked = 0;
     if (t) doneServing(t); if (t2) doneServing(t2);
   });
 }
@@ -589,7 +590,7 @@ function rtgStep(b, dt) {
           const d = hint ? Math.abs(c - hint[0]) + Math.abs(r - hint[1]) * CL : Math.abs(c - cc) + (b.rows - 1 - r) * CL;
           const sc = st.length * 4 + d + (st.some((x) => x.wantedBy) ? 12 : 0); if (sc < bs) { bs = sc; best = [c, r]; }
         }
-        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: () => { cr.truck = null; doneServing(t); } }]; }
+        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t }, then: () => { cr.truck = null; doneServing(t); } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }]; }   // (owner) the tractor drives off once its container is lifted
       } else {
         const { src, fewest } = srcOf(t), ops = [], h = b.slots.map((col) => col.map((st) => st.length));
         for (let n = 0; n < fewest; n++) {
@@ -626,7 +627,7 @@ function exportRtgStep(b, dt) {
       }
       const done = () => { cr.truck = null; doneServing(t); };
       t.locked = true; cr.truck = t;
-      if (t.kind === "exp") cr.ops = [{ to: at }, { lift: { truck: t } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: done }];
+      if (t.kind === "exp") cr.ops = [{ to: at }, { lift: { truck: t }, then: done }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }];
       else { b.expClaims = Math.max(0, b.expClaims - 1); cr.ops = [{ to: slotXY(b, best[0], best[1]) }, { lift: { stack: b.slots[best[0]][best[1]] } }, { to: at }, { lower: { truck: t }, then: done }]; }
     }
   }

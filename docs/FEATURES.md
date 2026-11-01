@@ -133,6 +133,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   gate. Its RTG stacks them on low stacks near the bays and hands one to each empty tractor that comes for one, off the
   top of a tall stack nearby (exports are all alike: no digging). Customers never want exports. Export containers have
   a dark center.
+- **Tractors drive off at once (owner, 2026-11-01):** a tractor leaves an STS crane the moment its container is lowered
+  onto it (not once the crane's whole job is done), or, bringing an export with nothing to take back, the moment the
+  export is lifted off. At an RTG a tractor or export truck leaves the moment its container is lifted off, while the RTG
+  is still carrying it to the stack.
 - **Holding two (owner, 2026-11-01):** an STS crane can hold a second container. With empty tractors at the front of
   both its lines it lifts one for each in a single trip; otherwise, while it's at the ship and another tractor is on its
   way to it right now, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it
