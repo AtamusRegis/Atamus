@@ -20,7 +20,11 @@ const T = 32, OX = 7, EXX = 12, MW = 54 + OX + EXX, MH = 42, QUAY = 7, LINE = 9,
 const COLORS = [
   { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Green", c: "#3aa04a" },
   { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "White", c: "#d8dcdf" },
+  { name: "Gray", c: "#80858c" }, { name: "Black", c: "#3a3d43" },
 ];
+// (owner, 2026-11-01) white, gray and black are everyday cargo any grey truck takes; most containers are one of these
+const NEUTRAL = new Set([6, 7, 8]), NEUTRAL_SHARE = 0.6;
+const randColor = () => (rnd() < NEUTRAL_SHARE ? pick([6, 7, 8]) : Math.floor(rnd() * 6));
 // (perf) keys parsed once and kept
 const UNKEY = new Map();
 const key = (i, j) => i + "," + j, unkey = (k) => { let v = UNKEY.get(k); if (!v) { v = k.split(",").map(Number); UNKEY.set(k, v); } return v; };
@@ -209,7 +213,7 @@ const shipCount = (s) => s.bays.reduce((a, st) => a + impCount(st), 0);   // imp
 // a ship slot holds imports or exports, never both (exports only go into slots with no imports)
 const impCount = (st) => (st.length && !st[0].exp ? st.length : 0);
 let STACK_VER = 1;   // (perf) bumped whenever any stack changes, so cached drawings know to redraw
-for (const b of BLOCKS.slice(0, 1)) for (let n = 0; n < 14 + Math.floor(rnd() * 6); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(box(Math.floor(rnd() * COLORS.length))); }
+for (const b of BLOCKS.slice(0, 1)) for (let n = 0; n < 14 + Math.floor(rnd() * 6); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(box(randColor())); }
 
 // ---- ships ----
 const HULLS = ["#5a6a7a", "#7a3a3a", "#3a5a4a", "#4a4a6a", "#6a5a3a"];
@@ -220,7 +224,7 @@ const onDeck = (s, k) => { const q = shipSlot(k); return q.c < s.cols && q.r >= 
 function newShip() {
   let u = rnd(), z = SIZES[0]; for (const q of SIZES) { if (u < q.w) { z = q; break; } u -= q.w; }
   const s = { off: -60 * T, state: "arrive", size: z.name, cols: z.cols, rows: z.rows, hull: pick(HULLS), bays: Array.from({ length: DOCK.cols * DOCK.rows }, () => []), claims: Array(DOCK.cols * DOCK.rows).fill(0) };   // (owner) 3 x 1 horizontal slots
-  s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const n = Math.floor(rnd() * 4); for (let q = 0; q < n; q++) st.push(box(Math.floor(rnd() * COLORS.length))); });
+  s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const n = Math.floor(rnd() * 4); for (let q = 0; q < n; q++) st.push(box(randColor())); });
   s.time = SHIP_TIME_BASE + SHIP_TIME_PER * shipCount(s); STACK_VER++;
   DOCK.ship = s; return s;
 }
@@ -280,12 +284,13 @@ function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, n
 const head = (t) => t.tiles[0];
 const headIJ = (t) => unkey(t.tiles[0]);
 function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
-// (owner, 2026-11-01) most customer trucks come without a container picked (a grey cab) and park; now and then (every
-// 30–70 s with storage empty, much faster the more unclaimed containers are stored, a little faster with more stalls) one of them, the longest waiting, picks a container already in
-// storage that nobody wants yet, takes its color and goes for it. The rest (CLAIM_SHIP) come
-// for a container on the docked ship, anywhere in a slot's stack. So most ship cargo is stored unclaimed and the stacks
-// fill up.
-const CLAIM_SHIP = 0.3;
+// (owner, 2026-11-01) two kinds of customer truck. Grey ones (most) come for everyday cargo: any white, gray or black
+// container. They park, and now and then (every 30–70 s with storage empty, much faster the more unclaimed containers
+// are stored, a little faster with more stalls) the longest waiting takes the easiest-to-reach unclaimed one in storage;
+// the cab stays grey. Colored ones come for a particular container of their cab's color, on the docked ship (anywhere in
+// a slot's stack) or in storage: about a quarter of trucks, more the more of the unclaimed stored containers are colored,
+// so colored ones don't pile up.
+const coloredShare = () => { const st = storedFree(), c = st.filter((x) => !NEUTRAL.has(x.c)).length; return clamp(0.25 + 0.7 * c / (st.length + 1), 0.2, 0.8); };
 // (owner) dynamic: low stacks, few trucks (time to fill); high stacks, many trucks (to empty them). The fuller storage is
 // with containers nobody has claimed, the more customers come (a third of the base rate with none, over four times with
 // it full), the more of them come grey, and the sooner grey ones pick. 0 with none unclaimed, 1 with every open storage
@@ -296,16 +301,19 @@ const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "do
 function spawnCustomer() {
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;
   const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
-  const ship = rnd() < CLAIM_SHIP * (1 - unclaimedFill()) ? shipFree() : [], want = ship.length ? pick(ship) : null, t = mkTruck("cust", tiles, want);
-  if (want) want.wantedBy = t; else t.since = clock;
+  const pool = rnd() < coloredShare() ? shipFree().concat(storedFree()).filter((x) => !NEUTRAL.has(x.c)) : [], want = pool.length ? pick(pool) : null, t = mkTruck("cust", tiles, want);
+  if (want) want.wantedBy = t; else { t.generic = true; t.since = clock; }
   stall.claim = t; t.cmd = { kind: "park", stall }; goTo(t, key(stall.i, LOT0 + 3));
 }
 let claimWait = 20;
 function claimStep(dt) {
   if ((claimWait -= dt) > 0) return;
-  const t = trucks.filter((q) => q.kind === "cust" && !q.want && !q.exiting).sort((a, b) => a.since - b.since)[0], pool = storedFree();
-  if (!t || !pool.length) { claimWait = 4; return; }
-  t.want = pick(pool); t.want.wantedBy = t;
+  const t = trucks.filter((q) => q.kind === "cust" && !q.want && !q.exiting).sort((a, b) => a.since - b.since)[0];
+  // the easiest everyday container to reach: the fewest on top of it (ties at random)
+  let best = [], depth = 9;
+  for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) st.forEach((x, i) => { if (!NEUTRAL.has(x.c) || x.wantedBy) return; const d = st.length - 1 - i; if (d < depth) { depth = d; best = [x]; } else if (d === depth) best.push(x); });
+  if (!t || !best.length) { claimWait = 4; return; }
+  t.want = pick(best); t.want.wantedBy = t;
   claimWait = (30 + rnd() * 40) / (1 + (STALLS.filter((q) => q.open).length - 4) / 32) / (0.6 + 10 * unclaimedFill());
 }
 
@@ -317,7 +325,7 @@ function spawnExport() {
   const b = BLOCKS.find((q) => q.exp && q.open); if (!b) return;
   if (free(b) - trucks.filter((t) => t.kind === "exp" && t.load).length <= 0) return;
   const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
-  const t = mkTruck("exp", tiles, null); t.load = box(Math.floor(rnd() * COLORS.length)); t.load.exp = true;
+  const t = mkTruck("exp", tiles, null); t.load = box(randColor()); t.load.exp = true;
   startCmd(t, { kind: "rtg", block: b });
 }
 function targetAt(i, j) {
@@ -1006,7 +1014,7 @@ function drawTruck(t) {
   ctx.save(); ctx.translate(tr0.x, tr0.y); ctx.rotate(tr0.a); ctx.fillStyle = "#3a3d44"; ctx.fillRect(-L / 2, -2, L, 4);
   ctx.fillStyle = stopped ? "#ff3a2a" : "#7a2a22"; ctx.fillRect(-L / 2 - 1, -8, 3, 4); ctx.fillRect(-L / 2 - 1, 4, 3, 4); ctx.restore();   // brake lights glow when stopped
   rectBetween(s.front, s.cabBack, 24, "#1e2024");
-  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? (t.want ? COLORS[t.want.c].c : WAIT_CAB) : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
+  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? (t.generic || !t.want ? WAIT_CAB : COLORS[t.want.c].c) : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
   const an = Math.atan2(s.front[1] - s.cabBack[1], s.front[0] - s.cabBack[0]); ctx.save(); ctx.translate(s.front[0], s.front[1]); ctx.rotate(an);
   ctx.fillStyle = "#9ad0f0"; ctx.fillRect(-9, -7, 4, 14); ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(-22, -8, 11, 2);   // windscreen, roof highlight
   ctx.fillStyle = "#fff4c0"; ctx.fillRect(-2, -9, 2, 4); ctx.fillRect(-2, 5, 2, 4); ctx.fillStyle = "#141518"; ctx.fillRect(-14, -13, 7, 3); ctx.fillRect(-14, 10, 7, 3);   // headlights, front wheels

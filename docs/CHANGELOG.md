@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Everyday and colored cargo (owner):** gray and black containers join white as everyday cargo, most of what ships carry. Grey trucks take any everyday container and stay grey; colored trucks come for a matching colored container.
+
 - **Art rework and smarter cranes (owner):** containers now look like containers (ribs, rails, corner castings, door ends), the ship was redrawn (curved bow, accommodation block, hatch covers, mooring lines, wake) and the ground got real textures (asphalt, concrete slabs, quay edge with bollards, crane rails, painted pads). STS cranes now put the next incoming tractor's container first, holding it ready in their second slot, and only sort or compress when there's time.
 
 - **Faster drawing:** storage stacks and the ship's deck are drawn once into cached images and redrawn only when they change, the sea is painted once and slid, trucks off screen are skipped, and tile keys are parsed once.

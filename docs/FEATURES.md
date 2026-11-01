@@ -101,7 +101,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Containers (owner)
 
-- **Seven colors:** red, orange, yellow, green, blue, purple, white.
+- **Nine colors:** red, orange, yellow, green, blue, purple, and the everyday white, gray and black (owner, 2026-11-01).
 - **3 tiles long (owner).**
 - **Every container is its own (owner, 2026-11-01):** a customer truck comes for one particular container, not a color.
 - **A stack is drawn as three squares** down its 1 × 3 footprint (owner): the top square is the top of the stack and the
@@ -236,11 +236,13 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   a customer truck whose container is in a storage area goes to that RTG on its own. If it hasn't parked yet it skips
   the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
   there. Only a truck with something else queued waits for that first.
-- **Grey trucks and claimed ones (owner, 2026-11-01):** most customer trucks come without a container picked: a grey
-  cab, parked in the lot. Now and then the longest-waiting grey truck picks a container already in storage that nobody
-  wants yet, takes its color and goes for it. The rest (30%) come for a particular container on the docked ship,
-  anywhere in a slot's stack (owner: even at the bottom, so you may have to import the whole stack to reach it), never
-  one another customer wants. So most ship cargo is stored unclaimed and the stacks build up.
+- **Everyday and colored cargo (owner, 2026-11-01):** containers come in nine colors; white, gray and black are
+  everyday cargo, about 60% of all containers. **Grey trucks** (most customers) come for any everyday container: they
+  park, and now and then the longest-waiting one takes the easiest-to-reach unclaimed white, gray or black container in
+  storage (fewest on top of it); its cab stays grey. **Colored trucks** come for a particular container of their cab's
+  color, on the docked ship (anywhere in a slot's stack, even at the bottom, so you may have to import the whole stack
+  to reach it) or in storage: about a quarter of trucks, more the more of the unclaimed stored containers are colored
+  (so colored ones don't pile up). Never one another truck wants.
 - **Dynamic (owner: "lower stacks, less trucks, higher stacks, more trucks"):** the fuller storage is with unclaimed
   containers (out of the room in the open storage areas), the more customers come (about a third of the base rate with
   none, over four times with it full), the more of them come grey (fewer want ship cargo), and the sooner grey ones
@@ -296,6 +298,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **With only crane A, it works the whole ship.** Each crane bought takes its share.
 
 ## Rejected / removed
+
+- **Grey trucks taking any stored container and turning its color (2026-11-01):** replaced by grey trucks for everyday
+  white, gray and black cargo, and colored trucks for matching colored containers (owner: "feels weird").
 
 - **Picking the RTG for every loaded manual tractor (2026-11-01):** loaded tractors now deliver by themselves (owner).
 
