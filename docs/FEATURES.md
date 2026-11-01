@@ -114,6 +114,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   high. The first starts part full; the others start empty when bought.
 - **RTG bays (owner):** below each area are 5 vertical drive-through bays, one per column, so up to five trucks park side
   by side. Trucks drive in from the RTG lane and out onto the yard road (southbound).
+- **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
+  whichever bay is free, or waits in line on the RTG lane at the area's west end until one clears, first come first
+  served. Trucks behind it in line don't pass it. A tractor that finished there keeps its bay until its next trip.
 - **The RTG crane** rests at the area's south end. It serves the trucks standing in its bays one at a time, running its
   gantry down over them, and goes back to rest after.
 - **A loaded yard tractor:** the RTG lifts the container off and stacks it on the lowest stack nearest the bays, avoiding
@@ -137,18 +140,18 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
-  - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or one of its bays (a bay you click, if free; otherwise the
-    first free one), or (customers) a parking stall.
-  - Clicks queue up, with no limit for now.
+  - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or its bays (the RTG; the bay is
+    whichever clears first), or (customers) a parking stall.
+  - Clicks queue up, with no limit for now. The same RTG can be queued any number of times (owner).
 - **Only where it can be served (owner):**
   - an empty tractor → an STS crane whose half of the docked ship has a container no one has claimed, or a ship slot
     with a container no one has claimed
-  - a loaded tractor → an RTG with a free bay and room in its area
-  - a customer → the RTG of the storage area holding its container, with a free bay (just one trip). A container still
+  - a loaded tractor → an RTG with room in its area (if it fills up meanwhile, the tractor waits in its bay)
+  - a customer → the RTG of the storage area holding its container (just one trip). A container still
     on the ship has to be brought in first.
   - a customer → a free stall
-  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its bay, stall, container or
-    slot at once. Anything else flashes a red ✕.
+  - Whether a truck is empty or loaded counts its queued trips first. A queued trip claims its stall or ship slot at once; an RTG
+    bay is taken only when one clears for the truck. Anything else flashes a red ✕.
 - **Showing it:** the selected truck's queued spots are outlined, numbered and joined by a dashed line. The target under
   the cursor shows green or red.
 - **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
@@ -174,6 +177,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **With only crane A, it works the whole ship.** Once B is bought, they split it west and east.
 
 ## Rejected / removed
+
+- **Picking and claiming a particular RTG bay when queuing (2026-11-01):** replaced by the 5 bays as one queue (owner).
 
 - **Single-lane roads, northbound RTG bays and stalls, the gate road along the bottom (2026-11-01):** replaced by two-lane
   roads laid out so customers don't loop up past the quay first. Customers wanting any container of a color, and the

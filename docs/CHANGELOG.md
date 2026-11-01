@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **RTG bays are a queue of 5 (owner):** you send a truck to an RTG, not a bay. It takes whichever bay is free or waits in line on the RTG lane until one clears, first come first served. The same RTG can be queued any number of times.
+
 - **Fix: customers mostly wanted ship cargo.** Picked evenly, the ship's many slot tops crowded out stored containers, so most customers could not be sent to an RTG yet. Now 4 in 5 want a container already in storage.
 
 - **Two-lane roads, a new layout (owner):** every road has two lanes the same way, and a truck held up by a stopped one changes lanes and passes. The roads were reworked so trips go straight where they need to: customers come in at a southwest gate, park, go up the west side to the RTG lane, load and leave out an east gate; RTG bays and stalls are now entered from the north. The map is 54 × 42.

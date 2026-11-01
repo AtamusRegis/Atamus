@@ -32,7 +32,7 @@ const laneHead = (l) => key(l.berth.x + 5, l.r);   // tractors stand under the c
 const laneTiles = (b, r) => [0, 1, 2, 3].map((d) => key(b.x + 5 + d, r));
 // storage areas (owner): 5 wide, 12 long, vertical; 5 x 4 slots (1 x 3 each), stacked up to 3; 5 RTG bays below, one per column
 const BLOCKS = [4, 12, 20, 28, 36, 44].map((x, k) => {
-  const b = { id: k, x, y: 14, w: 5, h: 12, cols: 5, rows: 4, incoming: 0 };
+  const b = { id: k, x, y: 14, w: 5, h: 12, cols: 5, rows: 4 };
   b.slots = Array.from({ length: b.cols }, () => Array.from({ length: b.rows }, () => []));
   b.bays = Array.from({ length: 5 }, (_, c) => ({ i: x + c, claim: null }));
   b.rtg = { x: (x + 2.5) * T, y: (REST + 0.5) * T, hold: null, ops: [], truck: null };
@@ -130,7 +130,7 @@ const count = (b) => b.slots.reduce((a, col) => a + col.reduce((s, st) => s + st
 let boxSeq = 0;
 const box = (c) => ({ id: ++boxSeq, c, wantedBy: null });
 const holds = (b, x) => b.slots.some((col) => col.some((st) => st.includes(x)));
-const free = (b) => b.cols * b.rows * 3 - count(b) - b.incoming;
+const free = (b) => b.cols * b.rows * 3 - count(b);
 const shipCount = (s) => s.bays.reduce((a, st) => a + st.length, 0);
 for (const b of BLOCKS.slice(0, 1)) for (let n = 0; n < 14 + Math.floor(rnd() * 6); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(box(Math.floor(rnd() * COLORS.length))); }
 
@@ -180,14 +180,15 @@ function targetAt(i, j) {
   // (owner) a ship slot picks which one the crane takes from; the crane or its lanes leave it to the crane (the nearest)
   if (j >= DOCK.top && j < DOCK.top + DOCK.rows) { const c = Math.floor((i - DOCK.x) / CL); if (c < 0 || c >= DOCK.cols || !DOCK.ship || DOCK.ship.state !== "docked") return null; const b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]); return b ? { kind: "sts", berth: b, slot: (j - DOCK.top) * DOCK.cols + c } : null; }
   if (j >= QUAY && j <= 11) for (const b of BERTHS) if (i >= b.x + 2 && i < b.x + 10) return b.open ? { kind: "sts", berth: b } : null;
-  for (const b of BLOCKS) if (b.open && i >= b.x && i < b.x + b.w && j >= b.y && j < YROAD) return { kind: "rtg", block: b, col: j >= BAY0 ? i - b.x : -1 };
+  for (const b of BLOCKS) if (b.open && i >= b.x && i < b.x + b.w && j >= b.y && j < YROAD) return { kind: "rtg", block: b };
   if (j >= LOT0 && j < LROAD) { const s = STALLS.find((q) => q.i === i && q.open); if (s) return { kind: "park", stall: s }; }
   return null;
 }
-// (owner) a truck can only be sent where it can be served: an empty yard tractor to an STS with a ship to unload, a loaded
-// one to an RTG with a free bay and room (or to a ship slot with a container not yet claimed), a customer to an RTG with
-// a free bay holding its container, or (customers only) a free parking stall. Queued trips count first; each claims its bay, stall, container or slot at once (an STS lane is
-// taken when the trip starts).
+// (owner) a truck can only be sent where it can be served: an empty yard tractor to an STS with a ship to unload (or to
+// a ship slot with a container not yet claimed), a loaded one to an RTG with room, a customer to the RTG holding its
+// container, or (customers only) a free parking stall. Queued trips count first; a stall or ship slot is claimed at once,
+// an RTG bay when one clears for the truck, an STS lane when the trip starts. The same RTG can be queued any number of
+// times.
 function planFor(t, i, j) {
   if (t.gone || t.exiting) return null;
   const g = targetAt(i, j); if (!g) return null;
@@ -195,19 +196,32 @@ function planFor(t, i, j) {
   if (t.kind === "cust" && acts.some((a) => a.kind === "rtg")) return null;
   if (g.kind === "park") return t.kind === "cust" && !g.stall.claim ? { kind: "park", stall: g.stall } : null;
   if (g.kind === "sts") { const b = g.berth; if (t.kind !== "yard" || loaded || berthLeft(b) <= 0) return null; if (g.slot === undefined) return { kind: "sts", berth: b }; return DOCK.ship.bays[g.slot].length - DOCK.ship.claims[g.slot] > 0 ? { kind: "sts", berth: b, slot: g.slot } : null; }
-  const b = g.block, bay = (g.col >= 0 && !b.bays[g.col].claim) ? b.bays[g.col] : b.bays.find((q) => !q.claim);
-  if (!bay) return null;
-  if (t.kind === "yard") return loaded && free(b) > 0 ? { kind: "rtg", block: b, bay } : null;
-  return !loaded && holds(b, t.want) ? { kind: "rtg", block: b, bay } : null;
+  const b = g.block;
+  if (t.kind === "yard") return loaded && free(b) > 0 ? { kind: "rtg", block: b } : null;
+  return !loaded && holds(b, t.want) ? { kind: "rtg", block: b } : null;
 }
 function claim(t, a, d) {
   if (a.kind === "sts") { a.berth.promised += d; if (a.slot !== undefined && DOCK.ship) DOCK.ship.claims[a.slot] += d; }
-  else if (a.kind === "rtg") { a.bay.claim = d > 0 ? t : null; if (t.kind === "yard") a.block.incoming += d; }
   else if (a.kind === "park") a.stall.claim = d > 0 ? t : null;
 }
 function enqueue(t, a) { claim(t, a, 1); t.queue.push(a); }
 function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); return !!a; }
-const targetKey = (a) => (a.lane ? laneHead(a.lane) : a.kind === "rtg" ? key(a.bay.i, BAY0 + 3) : key(a.stall.i, LOT0 + 3));
+// (owner) an RTG's 5 bays are one queue: a truck heading there waits in line on the RTG lane at the area's west end
+// until a bay clears, first come first served, then takes it
+const lineKey = (b) => key(b.x, RLANE + 1);
+const targetKey = (a) => (a.lane ? laneHead(a.lane) : a.kind === "rtg" ? (a.bay ? key(a.bay.i, BAY0 + 3) : lineKey(a.block)) : key(a.stall.i, LOT0 + 3));
+const inLine = (t, b) => t.cmd && t.cmd.kind === "rtg" && !t.cmd.bay && (!b || t.cmd.block === b);
+function fillBays() {
+  for (const b of BLOCKS) {
+    if (!b.open) continue;
+    for (const bay of b.bays) {
+      if (bay.claim) continue;
+      let t = null; for (const q of trucks) if (inLine(q, b) && !q.locked && (!t || q.path.length < t.path.length)) t = q;
+      if (!t) break;
+      bay.claim = t; t.cmd.bay = bay; goTo(t, key(bay.i, BAY0 + 3));
+    }
+  }
+}
 // start a trip: an STS trip (or a wait at a berth) takes one of its free lanes — the one the tractor is already in, if any
 function startCmd(t, a) {
   if (a.kind === "sts" || a.kind === "wait") {
@@ -246,6 +260,7 @@ function truckStep(t, dt) {
 }
 // (owner) held up by a stopped truck: take the other lane round it, if that isn't much longer
 function pass(t) {
+  const o = occ.get(t.path[0]); if (o && inLine(o) && inLine(t, o.cmd.block)) return;   // no jumping the RTG line
   const goal = t.path[t.path.length - 1], now = route(head(t), goal); if (!now) return;
   const r = route(head(t), goal, (k) => { const o = occ.get(k); return o && o !== t && !o.next; });
   if (r && r.length && r[0] !== t.path[0] && r.cost <= now.cost + 8) { t.path = r; passes++; }
@@ -309,13 +324,13 @@ const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
 function rtgStep(b, dt) {
   const cr = b.rtg;
   if (!cr.ops.length && !cr.truck) {
-    const t = trucks.find((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const t = trucks.find((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
     if (t) {
       const at = () => { const tr = trailerOf(t); return [tr.x, tr.y]; };
       if (t.kind === "yard" && t.load !== null) {
         let best = null, bs = 1e9;
         for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; if (st.length >= 3) continue; const sc = st.length * 10 + (b.rows - r) + (st.some((x) => x.wantedBy) ? 12 : 0); if (sc < bs) { bs = sc; best = [c, r]; } }
-        if (best) { t.locked = true; cr.truck = t; b.incoming = Math.max(0, b.incoming - 1); cr.ops = [{ to: at }, { lift: { truck: t }, }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: () => { cr.truck = null; doneServing(t); } }, { to: [slotXY(b, best[0], best[1])[0], (REST + 0.5) * T] }]; }
+        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t }, }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: () => { cr.truck = null; doneServing(t); } }, { to: [slotXY(b, best[0], best[1])[0], (REST + 0.5) * T] }]; }
       } else if (t.kind === "cust" && t.load === null) {
         let src = null, fewest = 1e9;
         for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; const k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } }
@@ -513,7 +528,7 @@ function drawLocked() {
 let hudTxt = "";
 function hud() { const p = tractorPrice(), txt = "$" + money.toLocaleString() + "|" + p + "|" + (money >= p); if (txt === hudTxt) return; hudTxt = txt; $("money").textContent = "$" + money.toLocaleString(); const b = $("buy-tractor"); b.textContent = "+ Tractor $" + p.toLocaleString(); b.disabled = money < p; }
 $("buy-tractor").onclick = () => addTractor();
-function spotRect(a) { if (a.slot !== undefined) return slotRect(a.slot); if (a.lane) return [(a.berth.x + 5) * T, a.lane.r * T, TL * T, T]; if (a.kind === "sts" || a.kind === "wait") return [(a.berth.x + 5) * T, LINE * T, TL * T, 3 * T]; if (a.kind === "rtg") return [a.bay.i * T, BAY0 * T, T, TL * T]; return [a.stall.i * T, LOT0 * T, T, TL * T]; }
+function spotRect(a) { if (a.slot !== undefined) return slotRect(a.slot); if (a.lane) return [(a.berth.x + 5) * T, a.lane.r * T, TL * T, T]; if (a.kind === "sts" || a.kind === "wait") return [(a.berth.x + 5) * T, LINE * T, TL * T, 3 * T]; if (a.kind === "rtg") return a.bay ? [a.bay.i * T, BAY0 * T, T, TL * T] : [a.block.x * T, BAY0 * T, a.block.w * T, TL * T]; return [a.stall.i * T, LOT0 * T, T, TL * T]; }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#0b1218"; ctx.fillRect(0, 0, VW, VH);
@@ -552,7 +567,7 @@ function step(dt) {
   const pan = 520 / zoom * dt; if (keys.KeyW || keys.ArrowUp) cam.y -= pan; if (keys.KeyS || keys.ArrowDown) cam.y += pan; if (keys.KeyA || keys.ArrowLeft) cam.x -= pan; if (keys.KeyD || keys.ArrowRight) cam.x += pan;
   cam.x = clamp(cam.x, 0, MW * T); cam.y = clamp(cam.y, 0, MH * T);
   shipStep(dt); for (const b of BERTHS) if (b.open) stsStep(b, dt);
-  for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
+  fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = 8 + rnd() * 6; }
