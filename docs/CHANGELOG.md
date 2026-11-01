@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Shaded stacks, buried wants (owner):** the bottom container of every stack is drawn darker and the top one lighter. Customers can now want a container anywhere in a ship slot, even at the bottom, so you may have to import the whole stack; it flashes until enough pickups are queued to reach it.
+
 - **Queue pickups for a manual tractor (owner):** click several ship slots (or the export area) in a row and the tractor fetches each one, dropping it off at a storage area it picks by itself before the next. No more clicking an RTG in between.
 
 - **Exports, self-delivering tractors, more parking (owner):** a new export area at the east end: export trucks drop containers there, and tractors take them to the cranes, which load them onto the ship (paying $60) and hand back an import on the same trip. Loaded tractors now take their container where it goes by themselves, so a manual tractor only needs to be told what to fetch; an auto tractor can be assigned to the export area. Auto tractors cost 4 times a manual one. 24 more parking stalls (48 in all), and customers come faster the more stalls are open.

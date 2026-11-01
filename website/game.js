@@ -230,14 +230,14 @@ function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, n
 const head = (t) => t.tiles[0];
 const headIJ = (t) => unkey(t.tiles[0]);
 function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
-// (owner) a customer comes for one container: one stored in an open storage area, or one on top of a slot of the docked
+// (owner) a customer comes for one container: one stored in an open storage area, or one anywhere in a slot of the docked
 // ship, and not wanted by another customer
 // (owner) a quarter want one already in storage, three quarters one on the ship (picked evenly, the ship's many tops would crowd
 // out the stored ones)
 function wantable() {
   const stored = [], ship = [];
   for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
-  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.exp && !x.wantedBy) ship.push(x); }
+  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) ship.push(x);   // (owner) anywhere in a stack
   return stored.length && (!ship.length || rnd() < 0.25) ? stored : ship;
 }
 function spawnCustomer() {
@@ -357,7 +357,7 @@ function autoStep(t) {
   // assigned to the export area: fetch an export
   if (t.home.exp) { if (t.home.open && count(t.home) - t.home.expClaims > 0) enqueue(t, { kind: "rtg", block: t.home, pickup: true }); return; }
   const bs = BERTHS.filter((b) => berthLeft(b) > 0 && room(b)); if (!bs.length) return;
-  for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st[st.length - 1], c = k % DOCK.cols; if (x && !x.exp && x.wantedBy && c >= c0 && c < c1 && impCount(st) - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
+  for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st.find((q) => q.wantedBy), c = k % DOCK.cols; if (x && !x.exp && c >= c0 && c < c1 && impCount(st) - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
   enqueue(t, { kind: "sts", berth: bs.reduce((m, b) => (berthLeft(b) > berthLeft(m) ? b : m)) });
 }
 // (owner) any loaded tractor with nothing queued takes its container where it goes by itself: an import to a storage
@@ -665,20 +665,23 @@ const shipSlot = (k) => ({ c: k % DOCK.cols, r: Math.floor(k / DOCK.cols) });
 const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T + Math.round(DOCK.ship ? DOCK.ship.off : 0), (DOCK.top + q.r) * T, CL * T, T]; };
 // (owner) the selected customer truck's container flashes wherever it is
 // (owner) with no customer truck selected, the containers on the ship that a customer is waiting for flash instead
-// (owner) a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot (or a
-// crane is already on its way to lift it)
-const flashing = (x, slot) => !!x && (selected && selected.kind === "cust" ? selected.want === x : !!(slot !== undefined && x.wantedBy && DOCK.ship && !DOCK.ship.claims[slot] && !BERTHS.some((b) => b.crane.slot === slot)));
+// (owner) a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to
+// dig down to it (a crane on its way to the slot counts as one)
+const flashing = (x, slot, st) => { if (!x) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + (BERTHS.some((b) => b.crane.slot === slot) ? 1 : 0); return have < need; };
 function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
+// (owner) the bottom container of a stack is drawn darker and the top one lighter
+const TIER_SHADE = ["rgba(0,0,0,.38)", "rgba(0,0,0,0)", "rgba(255,255,255,.22)"];
 function drawStackH(x, y, st, frame, slot) {   // on the ship
   ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, CL * T - 4, T - 4);
   for (let k = 0; k < 3; k++) {
-    const c = st[2 - k], sx = x + k * T + 4, sy = y + 4;
+    const tier = 2 - k, c = st[tier], sx = x + k * T + 4, sy = y + 4;
     if (c === undefined) { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(sx, sy, T - 8, T - 8); continue; }
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
     ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
+    ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, T - 8, T - 8);
     ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
     if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
-    if (flashing(c, slot)) flash(sx, sy, T - 8, T - 8);
+    if (flashing(c, slot, st)) flash(sx, sy, T - 8, T - 8);
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, CL * T - 3, T - 3); }
 }
@@ -689,6 +692,7 @@ function drawStack(x, y, st, frame) {
     if (c === undefined) { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(sx, sy, T - 8, T - 8); continue; }
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
     ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
+    ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, T - 8, T - 8);
     ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
     if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
     if (flashing(c)) flash(sx, sy, T - 8, T - 8);

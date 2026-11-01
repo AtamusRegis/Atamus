@@ -90,6 +90,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
   red at the bottom and green on top. Storage slots draw this way. **A ship's slots are 3 × 1, horizontal (owner)**, with
   the same three squares left to right (left the top). Stacks go up to 3 high.
+- **Shading (owner, 2026-11-01):** in every stack the bottom container is drawn darker and the top one lighter.
 
 ## The ship and STS cranes
 
@@ -187,11 +188,13 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
   there. Only a truck with something else queued waits for that first.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
-  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). A
+  areas or anywhere in a slot's stack on the docked ship (owner: even at the bottom, so you may have to import the whole
+  stack to reach it), never one another customer wants (with none to pick, none comes). A
   quarter want one already in storage, three quarters one on the ship (owner). Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
   the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
-  truck selected, a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot** (or a crane is already on its way to lift it)
+  truck selected, a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to dig down
+  to it** (a crane already on its way to the slot counts as one)
   (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
