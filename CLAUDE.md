@@ -10,7 +10,8 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
    seaport, then a container terminal, all that evening), in the browser with no server: one big ship docks at a time and two ship-to-shore
    cranes unload it (each its half) onto yard trucks; containers (3 tiles long, seven colors) stack 3 high in six vertical 5 × 12
    storage areas, each with an RTG crane and 5 truck bays at its end; trucks follow one-way roads and hold their tiles; three STS lanes side by side per crane; yard tractors go only where you send them (they wait where they finished); customer trucks park in the lot; you select a truck and queue where it parks; customer trucks want
-   a container of their cab's color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
+   a container of their cab's color and pay for it; the port starts small (1 tractor, 1 crane, 1 storage area, 4 stalls)
+   and the rest is bought. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
    will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.

@@ -98,7 +98,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 ## Storage areas and RTG cranes (owner)
 
 - **Six storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
-  high. They start part full.
+  high. The first starts part full; the others start empty when bought.
 - **RTG bays (owner):** below each area are 5 vertical drive-through bays, one per column, so up to five trucks park side
   by side.
 - **The RTG crane** rests at the area's south end. It serves the trucks standing in its bays one at a time, running its
@@ -110,7 +110,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Trucks: you send them (owner)
 
-- **Three yard tractors** (yellow cabs, numbered 1–3) start in berth A's lanes. They can be empty or loaded.
+- **Yard tractors** (yellow cabs, numbered) start with one, in crane A's lanes. They can be empty or loaded.
 - **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
   it takes the container to; an unloaded one waits for you to pick the STS crane it goes to. Tractors never park. A
   tractor with nothing queued stays where it finished (in its STS lane or RTG bay, which it keeps until its next trip).
@@ -135,6 +135,24 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
   right click deselects.
 - **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
+
+## Progress: income and unlocks (owner, 2026-11-01)
+
+> start with 1 tractor, 1 stack/RTG, 1 Quay, and 4 parking lots. let player earn small income from loading trucks with
+> their container. let player unlock more trucks or quays or rtg/stacks or parking spots for the trucks etc
+
+- **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
+- **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
+- **The money** shows top left, beside **+ Tractor**, which buys another yard tractor into a free STS lane. Tractors cost
+  $400, then $300 more each time.
+- **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
+  A price you can't pay flashes a red ✕.
+  - storage areas 2–6 with their RTG cranes and bays: $600, $900, $1,300, $1,800, $2,400
+  - STS crane B with its lanes: $2,000
+  - parking stalls, in groups of 4: $200, $300, $400, $500, $600
+- **Locked things can't be used:** no trucks go to them, and customer trucks only park in open stalls and want colors
+  held in open storage.
+- **With only crane A, it works the whole ship.** Once B is bought, they split it west and east.
 
 ## Rejected / removed
 

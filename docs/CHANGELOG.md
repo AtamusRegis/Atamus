@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-01
+
+- **Income and unlocks (owner):** the port starts small: 1 tractor, STS crane A, one storage area and 4 parking stalls. Customer trucks pay $60 when loaded. Buy more tractors from the button by your money, and storage areas, crane B and parking stalls by clicking their dimmed price tags on the map.
+
 ## 2026-10-31
 
 - **One big ship (owner):** a single much larger ship (14 × 5 slots) docks at one berth, and its two STS cranes split it west and east. Ship slots are now 3 × 1 horizontal, drawn with the same three squares left to right.
