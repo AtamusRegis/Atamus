@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: export tractors parking instead of going to the quay, and other leftovers when a ship leaves.** The count of exports on their way to each crane (and reserved in the export area) drifted, making the ship look full; both are now counted from the trips themselves. Exports are only picked up while a docked ship has room; a tractor holding one when its ship leaves takes it to the next. A tractor whose next step can't start yet waits in the tractor parking instead of blocking a bay or lane. Queues are tidied properly when a ship leaves.
+
 - **Start with $500 (owner).**
 
 - **Two streets up to the quay (owner):** one-lane streets run north from the yard road to the quay road after storage areas 2 and 4, so tractors skip the trip round the east side. Fix: an RTG no longer keeps passing over a truck in a far bay while nearer ones keep arriving.

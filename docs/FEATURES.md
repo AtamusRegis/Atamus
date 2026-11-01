@@ -196,6 +196,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   into a crane's line (one with room for it on the ship, preferring one that can hand back an import). You can still
   send it to a particular RTG yourself. An empty manual tractor waits in the tractor parking for you to pick what it
   fetches.
+- **Waiting it out (bug fixes, 2026-11-01):** a tractor whose next step can't start yet (its crane line is full, there's
+  no ship, nowhere to drop its container) waits in the tractor parking instead of where it stopped, and goes as soon as
+  it can. An export is only picked up (by an auto tractor, or sent for by you) while a docked ship has room for one at a
+  crane; a tractor still holding an export when its ship leaves parks and takes it to the next ship. When a ship
+  leaves, each tractor's queue is tidied by what it will actually be carrying (crane trips go; an RTG trip stays only
+  with an import to drop, an export pickup only empty-handed).
 - **A list of pickups (owner, 2026-11-01):** click any number of ship slots (or the export area) for a manual tractor and
   it fetches them in turn, dropping each container off wherever it goes (as above) before the next. You never have to
   pick a storage area.
