@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Customers want ship cargo 75% of the time (owner),** stored containers 25%. Fix: a wanted ship container no longer starts flashing again while the crane is on its way to lift it for the tractor that claimed it.
+
 - **Fix: tractors stuck in RTG bays or jammed on the road.** When a ship's time ran out, an RTG trip queued after a called-off crane trip sent an empty tractor to a bay it could never be served in, where it ignored commands; a loaded tractor whose storage area filled up waited forever too. Those trips are now called off. Two trucks side by side each changing into the other's lane no longer lock up the road.
 
 - **Ship sizes, a timer, longer STS lines (owner):** ships come small, medium or large, and each has a countdown to be unloaded; when it runs out the ship sails with what's left and customers waiting for that cargo leave unpaid. Each STS lane holds 3 more tractors waiting behind the one under the crane. Ship containers a customer waits for flash until a tractor is queued for their slot. Customers now want stored and shipped containers about 50/50.

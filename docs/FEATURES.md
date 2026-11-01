@@ -162,11 +162,11 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
   there. Only a truck with something else queued waits for that first.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
-  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). About
-  half want one already in storage, half one on the ship (owner: "closer to 50/50"). Its
+  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). A
+  quarter want one already in storage, three quarters one on the ship (owner). Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
   the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
-  truck selected, a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot**
+  truck selected, a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot** (or a crane is already on its way to lift it)
   (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**

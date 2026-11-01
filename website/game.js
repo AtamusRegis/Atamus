@@ -213,13 +213,13 @@ const headIJ = (t) => unkey(t.tiles[0]);
 function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
 // (owner) a customer comes for one container: one stored in an open storage area, or one on top of a slot of the docked
 // ship, and not wanted by another customer
-// (owner) about half want one already in storage, half one on the ship (picked evenly, the ship's many tops would crowd
+// (owner) a quarter want one already in storage, three quarters one on the ship (picked evenly, the ship's many tops would crowd
 // out the stored ones)
 function wantable() {
   const stored = [], ship = [];
   for (const b of BLOCKS) if (b.open) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
   const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.wantedBy) ship.push(x); }
-  return stored.length && (!ship.length || rnd() < 0.5) ? stored : ship;
+  return stored.length && (!ship.length || rnd() < 0.25) ? stored : ship;
 }
 function spawnCustomer() {
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;
@@ -410,12 +410,12 @@ function stsStep(b, dt) {
       if (best < 0) s.bays.forEach((st, k) => { const q = shipSlot(k); if (st.length - s.claims[k] > 0 && q.c >= craneCols(b)[0] && q.c < craneCols(b)[1]) { const d = Math.abs((DOCK.x + q.c * CL + 1.5) * T - tr.x) + (DOCK.rows - q.r) * 8; if (d < bd) { bd = d; best = k; } } });
       if (best < 0) return;
       const q = shipSlot(best), bx = (DOCK.x + q.c * CL + 1.5) * T, by = (DOCK.top + q.r + 0.5) * T;
-      t.locked = true; cr.truck = t;
+      t.locked = true; cr.truck = t; cr.slot = best;
       const ly = (t.lane.r + 0.5) * T;
       cr.ops = [{ to: [bx, cr.y] }, { to: [bx, by] }, { lift: { stack: s.bays[best] } }, { to: [bx, ly] }, { to: () => [trailerOf(t).x, ly] }, { lower: { truck: t } }];
     }
   }
-  craneStep(cr, dt, () => { const t = cr.truck; if (!t) return; cr.truck = null; b.promised = Math.max(0, b.promised - 1); doneServing(t); });
+  craneStep(cr, dt, () => { cr.slot = undefined; const t = cr.truck; if (!t) return; cr.truck = null; b.promised = Math.max(0, b.promised - 1); doneServing(t); });
 }
 const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
 // RTG: serves the trucks standing in its bays, one at a time, moving as little as it can (owner): it stays where it
@@ -556,8 +556,9 @@ const shipSlot = (k) => ({ c: k % DOCK.cols, r: Math.floor(k / DOCK.cols) });
 const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T + Math.round(DOCK.ship ? DOCK.ship.off : 0), (DOCK.top + q.r) * T, CL * T, T]; };
 // (owner) the selected customer truck's container flashes wherever it is
 // (owner) with no customer truck selected, the containers on the ship that a customer is waiting for flash instead
-// (owner) a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot
-const flashing = (x, slot) => !!x && (selected && selected.kind === "cust" ? selected.want === x : !!(slot !== undefined && x.wantedBy && DOCK.ship && !DOCK.ship.claims[slot]));
+// (owner) a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot (or a
+// crane is already on its way to lift it)
+const flashing = (x, slot) => !!x && (selected && selected.kind === "cust" ? selected.want === x : !!(slot !== undefined && x.wantedBy && DOCK.ship && !DOCK.ship.claims[slot] && !BERTHS.some((b) => b.crane.slot === slot)));
 function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
 function drawStackH(x, y, st, frame, slot) {   // on the ship
   ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, CL * T - 4, T - 4);
