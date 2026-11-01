@@ -51,6 +51,13 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - the **parking lot** (48 stalls, for customer trucks)
   - the lot road
   - a fence, with a gate at its southwest corner (in) and one on the east side (out)
+- **Art (2026-11-01, owner: containers should look like containers, the boat less clunky):** containers have ribbed
+  roofs, side rails, corner castings and a door end (in stacks, each tier is a small container lid, still shaded by
+  tier). The ship has a curved bow, a rounded stern with a white accommodation block (bridge wings, windows, lifeboats,
+  a funnel with a colored band), an antifouling rim, a steel deck with hatch covers and a railing, a forecastle, mooring
+  lines while docked and a wake while moving. The ground has grainy asphalt with oil stains and painted edge lines,
+  concrete slabs with joints, a hazard-striped quay edge with bollards and fenders, crane rails, storage pads with
+  painted slot outlines and tyre tracks, and a chain-link fence.
 - **Art and animation (2026-11-01, placeholder):** cranes speed up and brake; their spreader (a yellow frame) drops onto
   a container and lifts it, the container drawn a little bigger with its shadow further off the higher it hangs, and
   the grab or drop happens at the bottom of the motion. STS cranes have a lattice boom, a machinery house and a blinking
@@ -153,8 +160,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   way to it right now, it lifts a spare and holds it, and the next tractor (one not sent for a particular slot) gets it
   straight away. An idle crane with a tractor on its way lifts a spare to hold ready; with none on its way it puts the
   spare back (owner: no holding one for no reason).
+- **The next tractor first (owner, 2026-11-01):** a crane keeps an eye on the tractors on their way to it. With one coming
+  and its second slot free, it lifts that tractor's container ready (one a customer is waiting for, if one is on top in
+  reach). It only sorts with no tractor coming, or with the spare in hand while the nearest is still a good way off, and
+  only compresses with none coming.
 - **Sorting the ship while idle (owner, 2026-11-01):** a crane with no tractor to serve digs out buried containers that
-  customers want, before anything else (holding a spare, compressing): it takes the top container off such a slot in
+  customers want: it takes the top container off such a slot in
   its columns (the least buried first; a slot tractors are queued for only while enough is left there for them) and sets it on the nearest low slot of its columns with no exports and no wanted container.
 - **Compressing while idle (owner, 2026-11-01):** with nothing to sort, a crane packs the imports in its section toward
   the section's west end (one crane: the whole ship to the left; two: each its half; and so on). It moves the top

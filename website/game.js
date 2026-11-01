@@ -601,10 +601,14 @@ function stsStep(b, dt) {
   if (!cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && b.open) {
     const [c0, c1] = craneCols(b), sx = (k) => (DOCK.x + shipSlot(k).c * CL + 1.5) * T, sy = (k) => (DOCK.top + shipSlot(k).r + 0.5) * T, inCols = (k) => k % DOCK.cols >= c0 && k % DOCK.cols < c1 && onDeck(s, k);
     const nearest = (ok) => { let best = -1, bd = 1e9; s.bays.forEach((st, k) => { if (!inCols(k) || !ok(st, k)) return; const d = Math.abs(sx(k) - cr.x) + Math.abs(sy(k) - cr.y); if (d < bd) { bd = d; best = k; } }); return best; };
-    if (cr.hold2 && !coming(b)) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st))); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
-    else if (s.state === "docked" && sortShip(b)) { /* digging out a wanted container comes first (owner) */ }
-    else if (!cr.hold2 && coming(b) && s.state === "docked") { const k = nearest((st, kk) => impCount(st) - s.claims[kk] > 0 && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk)); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: s.bays[k], second: true } }]; }
-    else if (s.state === "docked") compressShip(b);
+    // (owner) it keeps an eye on the tractors on their way: the next one's container comes first, lifted ready in its
+    // second slot (one a customer is waiting for, if one is on top within reach); it only sorts or compresses with no
+    // tractor coming, or (spare in hand) while the nearest is still a good way off
+    const eta = soonest(b), wanted = (st) => { const x = st[st.length - 1]; return x && !x.exp && x.wantedBy ? 1 : 0; };
+    if (cr.hold2 && eta === Infinity) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st))); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
+    else if (!cr.hold2 && eta < Infinity && s.state === "docked") { const free = (st, kk) => impCount(st) - s.claims[kk] > 0 && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk); let k = nearest((st, kk) => free(st, kk) && wanted(st)); if (k < 0) k = nearest(free); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: s.bays[k], second: true } }]; }
+    else if (s.state === "docked" && (eta === Infinity || (cr.hold2 && eta > 28)) && sortShip(b)) { /* digging out a wanted container (owner) */ }
+    else if (s.state === "docked" && eta === Infinity) compressShip(b);
   }
   craneStep(cr, dt, () => {
     cr.slot = undefined; cr.slot2 = undefined; const t = cr.truck, t2 = cr.truck2; cr.truck = null; cr.truck2 = null;
@@ -613,6 +617,8 @@ function stsStep(b, dt) {
 }
 // a tractor on its way to this crane right now that could take a spare (empty or bringing an export, not sent for a
 // particular slot), other than t
+// how many tiles off the nearest such tractor is (Infinity with none)
+const soonest = (b) => trucks.reduce((m, q) => (q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && q.cmd.pick !== false && q.cmd.slot === undefined && !q.locked && (q.load === null || q.load.exp) ? Math.min(m, q.path.length) : m), Infinity);
 const coming = (b, t) => trucks.some((q) => q !== t && q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && q.cmd.pick !== false && q.cmd.slot === undefined && !q.locked && (q.load === null || q.load.exp));
 // (owner) an idle STS crane sorts the ship, before anything else: it takes the top container off a slot where a
 // customer's container is buried (the least buried first; a slot tractors are queued for only while enough is left for them) and sets it on the nearest low slot of its own columns
@@ -783,31 +789,57 @@ function noiseFill(g, x, y, w, h, base, amt, seed) {
   for (let j = 0; j < h; j += 2) for (let i = 0; i < w; i += 2) { const n = (R() - 0.5) * amt; g.fillStyle = `rgb(${clamp(r + n, 0, 255) | 0},${clamp(gg + n, 0, 255) | 0},${clamp(b + n, 0, 255) | 0})`; g.fillRect(x + i, y + j, 2, 2); }
 }
 const GROUND = canvas(MW * T, MH * T);
-function arrow(g, i, j, dx, dy) { const cx = (i + 0.5) * T, cy = (j + 0.5) * T; g.save(); g.translate(cx, cy); g.rotate(Math.atan2(dy, dx)); g.fillStyle = "rgba(255,255,255,.16)"; g.beginPath(); g.moveTo(7, 0); g.lineTo(-4, -5); g.lineTo(-4, 5); g.fill(); g.restore(); }
+function arrow(g, i, j, dx, dy) { const cx = (i + 0.5) * T, cy = (j + 0.5) * T; g.save(); g.translate(cx, cy); g.rotate(Math.atan2(dy, dx)); g.fillStyle = "rgba(236,231,220,.22)"; g.fillRect(-8, -1.5, 9, 3); g.beginPath(); g.moveTo(8, 0); g.lineTo(0, -5); g.lineTo(0, 5); g.fill(); g.restore(); }
+// (art) painted once: asphalt with grain, oil stains and edge lines; concrete in slabs with joints; the quay edge with its
+// hazard stripe and bollards, crane rails along the quay; storage pads with painted slot outlines; a chain-link fence
 function buildGround() {
-  const g = GROUND.getContext("2d");
+  const g = GROUND.getContext("2d"), road = (i, j) => ROADSET.has(key(i, j)), fence = (i, j) => j === MH - 1 || i === 0 || i === MW - 1;
   for (let j = QUAY; j < MH; j++) for (let i = 0; i < MW; i++) {
     const x = i * T, y = j * T;
-    if (ROADSET.has(key(i, j))) { noiseFill(g, x, y, T, T, "#2c2f35", 10, i * 7 + j * 3); continue; }
-    if (j === MH - 1 || i === 0 || i === MW - 1) { noiseFill(g, x, y, T, T, "#3a3a34", 18, i * 31 + j * 17); g.fillStyle = "#55565c"; g.fillRect(x, y + 10, T, 2); g.fillRect(x, y + 20, T, 2); g.fillStyle = "#1e1e22"; g.fillRect(x + 14, y + 4, 4, 24); continue; }
-    noiseFill(g, x, y, T, T, "#6a6c70", 12, i * 13 + j * 29); g.fillStyle = "rgba(0,0,0,.14)"; g.fillRect(x, y, T, 1); g.fillRect(x, y, 1, T);
-    if (j === QUAY) { g.fillStyle = "#c9a23a"; for (let k = 0; k < T; k += 8) g.fillRect(x + k, y, 4, 3); }
+    if (road(i, j)) {
+      noiseFill(g, x, y, T, T, "#2b2e34", 9, i * 7 + j * 3);
+      const R = seeded(i * 131 + j * 71); if (R() < 0.05) { g.fillStyle = "rgba(0,0,0,.2)"; g.beginPath(); g.ellipse(x + 8 + R() * 16, y + 8 + R() * 16, 4 + R() * 6, 3 + R() * 4, R() * 3, 0, TAU); g.fill(); }
+      if (R() < 0.04) { g.strokeStyle = "rgba(0,0,0,.25)"; g.lineWidth = 1; g.beginPath(); g.moveTo(x + R() * T, y + R() * T); g.lineTo(x + R() * T, y + R() * T); g.stroke(); }
+      continue;
+    }
+    if (fence(i, j)) {
+      noiseFill(g, x, y, T, T, "#3a3c38", 14, i * 31 + j * 17);
+      g.strokeStyle = "rgba(170,176,182,.35)"; g.lineWidth = 1; g.beginPath(); for (let k = -T; k < T; k += 6) { g.moveTo(x + k, y); g.lineTo(x + k + T, y + T); g.moveTo(x + k + T, y); g.lineTo(x + k, y + T); } g.stroke();
+      g.fillStyle = "#1e1f22"; g.fillRect(x + 13, y + 13, 6, 6); g.fillStyle = "#6a6e74"; g.fillRect(x + 14, y + 14, 3, 3);
+      continue;
+    }
+    const sl = seeded(Math.floor(i / 2) * 97 + Math.floor(j / 2) * 53)(), tint = Math.round((sl - 0.5) * 10);
+    noiseFill(g, x, y, T, T, "#" + [0x6c + tint, 0x6e + tint, 0x72 + tint].map((v) => v.toString(16).padStart(2, "0")).join(""), 10, i * 13 + j * 29);
+    g.fillStyle = "rgba(0,0,0,.22)"; if (i % 2 === 0) g.fillRect(x, y, 1, T); if (j % 2 === 0) g.fillRect(x, y, T, 1);
+    g.fillStyle = "rgba(255,255,255,.06)"; if (i % 2 === 0) g.fillRect(x + 1, y, 1, T); if (j % 2 === 0) g.fillRect(x, y + 1, T, 1);
   }
+  // painted edge lines where a road meets the ground
+  g.fillStyle = "rgba(230,226,214,.32)";
+  for (const k of ROADSET) { const [i, j] = unkey(k); if (i < 1 || i >= MW - 1 || j < QUAY || j >= MH - 1) continue; const x = i * T, y = j * T;
+    if (!road(i, j - 1) && j > QUAY) g.fillRect(x, y + 1, T, 2); if (!road(i, j + 1) && j + 1 < MH - 1) g.fillRect(x, y + T - 3, T, 2);
+    if (!road(i - 1, j) && i > 1) g.fillRect(x + 1, y, 2, T); if (!road(i + 1, j) && i + 1 < MW - 1) g.fillRect(x + T - 3, y, 2, T); }
+  // the quay edge: a concrete cap with a hazard stripe, bollards; crane rails along the quay
+  g.fillStyle = "#8c8e92"; g.fillRect(0, QUAY * T, MW * T, 6);
+  for (let x = 0; x < MW * T; x += 16) { g.fillStyle = "#e8b432"; g.beginPath(); g.moveTo(x, QUAY * T + 6); g.lineTo(x + 8, QUAY * T + 6); g.lineTo(x + 12, QUAY * T + 10); g.lineTo(x + 4, QUAY * T + 10); g.fill(); g.fillStyle = "#1e1f22"; g.beginPath(); g.moveTo(x + 8, QUAY * T + 6); g.lineTo(x + 16, QUAY * T + 6); g.lineTo(x + 20, QUAY * T + 10); g.lineTo(x + 12, QUAY * T + 10); g.fill(); }
+  for (let i = 1; i < MW; i += 3) { const x = i * T + 16, y = QUAY * T + 18; g.fillStyle = "rgba(0,0,0,.35)"; g.beginPath(); g.arc(x + 2, y + 3, 6, 0, TAU); g.fill(); g.fillStyle = "#2a2c30"; g.beginPath(); g.arc(x, y, 6, 0, TAU); g.fill(); g.fillStyle = "#5a5e66"; g.beginPath(); g.arc(x - 1.5, y - 1.5, 2.5, 0, TAU); g.fill(); }
+  for (const ry of [QUAY * T + 30, 12 * T - 6]) { g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(0, ry - 1, MW * T, 5); g.fillStyle = "#9aa0a6"; g.fillRect(0, ry, MW * T, 2); g.fillStyle = "#cfd4d8"; g.fillRect(0, ry, MW * T, 1); }
   // the dashed line between a road's two lanes, and direction arrows (every few tiles)
-  g.strokeStyle = "rgba(236,231,220,.28)"; g.lineWidth = 2; g.setLineDash([10, 10]);
+  g.strokeStyle = "rgba(236,231,220,.34)"; g.lineWidth = 2; g.setLineDash([10, 10]);
   for (const [x, y, dx, dy, n, ox, oy] of DIVS) { const sx = (x + 0.5 + ox / 2) * T, sy = (y + 0.5 + oy / 2) * T; g.beginPath(); g.moveTo(sx + dx * T / 2, sy + dy * T / 2); g.lineTo(sx + dx * (n - 0.5) * T, sy + dy * (n - 0.5) * T); g.stroke(); }
   g.setLineDash([]);
   for (const [k, l] of E) { const [i, j] = unkey(k); if (i < 0 || i >= MW || (i + j) % 3) continue; for (const n of l) { if (CHG.has(k + ">" + n)) continue; const [ni, nj] = unkey(n); arrow(g, i, j, ni - i, nj - j); } }
   // the STS lines, the RTG bays, the parking stalls
-  for (const b of BERTHS) { g.strokeStyle = "rgba(242,169,59,.55)"; g.lineWidth = 2; for (const l of b.lanes) for (let d = 0; d < LANE_DEEP; d++) { const rgb = l.kind === "auto" ? "95,211,208" : "242,169,59"; g.strokeStyle = `rgba(${rgb},${d ? 0.22 : 0.55})`; g.strokeRect((b.x + 5 + TL * d) * T + 2, l.r * T + 2, TL * T - 4, T - 4); } g.fillStyle = "#e8e2d0"; g.font = "800 20px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.ex + 0.5) * T, (QUAY + 1) * T); }
+  for (const b of BERTHS) { g.lineWidth = 2; for (const l of b.lanes) for (let d = 0; d < LANE_DEEP; d++) { const rgb = l.kind === "auto" ? "95,211,208" : "242,169,59"; g.strokeStyle = `rgba(${rgb},${d ? 0.25 : 0.6})`; g.strokeRect((b.x + 5 + TL * d) * T + 2, l.r * T + 2, TL * T - 4, T - 4); } g.fillStyle = "#e8e2d0"; g.font = "800 20px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.ex + 0.5) * T, (QUAY + 1.5) * T); }
   for (const b of BLOCKS) {
-    noiseFill(g, b.x * T, b.y * T, b.w * T, b.h * T, "#55575c", 10, b.id * 9 + 1); noiseFill(g, b.x * T, REST * T, b.w * T, T, "#4a4c52", 8, b.id + 3);
-    g.fillStyle = b.exp ? "rgba(127,200,255,.6)" : "rgba(201,162,58,.5)"; g.fillRect(b.x * T, b.y * T, b.w * T, 2); g.fillRect(b.x * T, (b.y + b.h) * T - 2, b.w * T, 2); g.fillRect(b.x * T, b.y * T, 2, b.h * T); g.fillRect((b.x + b.w) * T - 2, b.y * T, 2, b.h * T);
+    noiseFill(g, b.x * T, b.y * T, b.w * T, b.h * T, "#5a5d63", 9, b.id * 9 + 1); noiseFill(g, b.x * T, REST * T, b.w * T, T, "#4a4c52", 8, b.id + 3);
+    g.fillStyle = "rgba(0,0,0,.16)"; g.fillRect(b.x * T + 2, b.y * T, 4, (b.h + 1) * T); g.fillRect((b.x + b.w) * T - 6, b.y * T, 4, (b.h + 1) * T);   // RTG tyre tracks
+    g.strokeStyle = "rgba(255,255,255,.16)"; g.lineWidth = 1; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) g.strokeRect((b.x + c) * T + 1.5, (b.y + r * CL) * T + 1.5, T - 3, CL * T - 3);
+    g.fillStyle = b.exp ? "rgba(127,200,255,.6)" : "rgba(201,162,58,.55)"; g.fillRect(b.x * T, b.y * T, b.w * T, 2); g.fillRect(b.x * T, (b.y + b.h) * T - 2, b.w * T, 2); g.fillRect(b.x * T, b.y * T, 2, b.h * T); g.fillRect((b.x + b.w) * T - 2, b.y * T, 2, b.h * T);
     if (b.exp) { g.fillStyle = "rgba(127,200,255,.45)"; g.font = "800 16px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("EXPORT", (b.x + b.w / 2) * T, (REST + 0.5) * T); }
-    for (const bay of b.bays) { g.strokeStyle = "rgba(127,200,255,.35)"; g.lineWidth = 2; g.strokeRect(bay.i * T + 2, BAY0 * T + 2, T - 4, TL * T - 4); }
+    for (const bay of b.bays) { g.fillStyle = "rgba(236,231,220,.3)"; g.fillRect(bay.i * T, BAY0 * T, 1, TL * T); g.fillRect(bay.i * T + T - 1, BAY0 * T, 1, TL * T); g.fillStyle = "rgba(127,200,255,.45)"; g.fillRect(bay.i * T + 4, (BAY0 + TL) * T - 4, T - 8, 2); }
   }
-  for (const p of PARK) { g.strokeStyle = "rgba(232,180,50,.4)"; g.lineWidth = 2; g.strokeRect(PARK_X * T + 2, p.j * T + 2, TL * T - 4, T - 4); }
-  for (const s of STALLS) { g.strokeStyle = "rgba(255,255,255,.22)"; g.lineWidth = 2; g.strokeRect(s.i * T + 2, LOT0 * T + 2, T - 4, TL * T - 4); }
+  for (const p of PARK) { g.fillStyle = "rgba(232,180,50,.45)"; g.fillRect(PARK_X * T, p.j * T, TL * T, 1); g.fillRect(PARK_X * T, p.j * T + T - 1, TL * T, 1); g.fillRect(PARK_X * T + 2, p.j * T + 4, 2, T - 8); }
+  for (const st of STALLS) { g.fillStyle = "rgba(236,231,220,.32)"; g.fillRect(st.i * T, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + T - 1, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + 4, (LOT0 + TL) * T - 4, T - 8, 2); }
 }
 // (perf) the sea and its wave lines are painted once (one wave period wider) and slid along
 let WATER = null;
@@ -821,6 +853,7 @@ function drawWater() {
   // (art) glints and foam lapping at the quay
   ctx.fillStyle = "rgba(255,255,255,.12)"; for (let i = -20; i < MW + 20; i++) { const a = Math.sin(clock * 1.7 + i * 1.3); if (a > 0.6) ctx.fillRect(i * T + ((i * 13) % 20), (QUAY - 1) * T + 6 + ((i * 7) % 14), 4, 2); }
   ctx.fillStyle = "rgba(255,255,255,.22)"; for (let i = -20; i < MW + 20; i++) { const o = Math.sin(clock * 2.2 + i * 0.9) * 3; ctx.fillRect(i * T, QUAY * T - 5 + o, 20, 2); }
+  ctx.fillStyle = "#141518"; for (let i = 0; i < MW; i += 2) ctx.fillRect(i * T + 10, QUAY * T - 5, 12, 5);   // rubber fenders on the quay face
 }
 // (owner) a stack drawn as three squares down its 1 x 3 footprint: top square the top of the stack, bottom the bottom
 // a ship's slot: the same three squares, left to right (left the top of the stack, right the bottom)
@@ -839,31 +872,36 @@ const flashing = (x, slot, st) => { if (!x || CACHING) return false; if (selecte
 function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
 // (owner) the bottom container of a stack is drawn darker and the top one lighter
 const TIER_SHADE = ["rgba(0,0,0,.58)", "rgba(0,0,0,.18)", "rgba(255,255,255,.4)"];
+// (art) one container of a stack, seen from above: ribbed roof, lit and shaded rails, corner castings; the tier shading on
+// top (vert: ribs run along y, for the ship's horizontal slots)
+function drawLid(c, sx, sy, n, tier, vert) {
+  ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(sx - 1, sy - 1, n + 2, n + 2);
+  ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, n, n);
+  for (let k = 3; k < n - 3; k += 3) { ctx.fillStyle = "rgba(0,0,0,.2)"; if (vert) ctx.fillRect(sx + k, sy + 2, 1, n - 4); else ctx.fillRect(sx + 2, sy + k, n - 4, 1); ctx.fillStyle = "rgba(255,255,255,.12)"; if (vert) ctx.fillRect(sx + k + 1, sy + 2, 1, n - 4); else ctx.fillRect(sx + 2, sy + k + 1, n - 4, 1); }
+  ctx.fillStyle = "rgba(255,255,255,.32)"; ctx.fillRect(sx, sy, n, 1); ctx.fillRect(sx, sy, 1, n);
+  ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.fillRect(sx, sy + n - 2, n, 2); ctx.fillRect(sx + n - 2, sy, 2, n);
+  ctx.fillStyle = "#24262a"; ctx.fillRect(sx, sy, 3, 3); ctx.fillRect(sx + n - 3, sy, 3, 3); ctx.fillRect(sx, sy + n - 3, 3, 3); ctx.fillRect(sx + n - 3, sy + n - 3, 3, 3);
+  ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, n, n);
+  if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 7, sy + 7, n - 14, n - 14); }   // exports: a dark center
+}
+const LID = T - 6;
 function drawStackH(x, y, st, frame, slot) {   // on the ship
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, CL * T - 4, T - 4);
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 2, y + 2, CL * T - 3, T - 3);
   for (let k = 0; k < 3; k++) {
-    const tier = 2 - k, c = st[tier], sx = x + k * T + 4, sy = y + 4;
-    if (c === undefined) { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(sx, sy, T - 8, T - 8); continue; }
-    ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
-    ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
-    ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, T - 8, T - 8);
-    ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
-    if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
-    if (flashing(c, slot, st)) flash(sx, sy, T - 8, T - 8);
+    const tier = 2 - k, c = st[tier], sx = x + k * T + 3, sy = y + 3;
+    if (c === undefined) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, LID - 1, LID - 1); continue; }
+    drawLid(c, sx, sy, LID, tier, true);
+    if (flashing(c, slot, st)) flash(sx, sy, LID, LID);
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, CL * T - 3, T - 3); }
 }
 function drawStack(x, y, st, frame) {
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, T - 4, CL * T - 4);
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 2, y + 2, T - 3, CL * T - 3);
   for (let k = 0; k < 3; k++) {
-    const tier = 2 - k, c = st[tier], sx = x + 4, sy = y + k * T + 4;
-    if (c === undefined) { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(sx, sy, T - 8, T - 8); continue; }
-    ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
-    ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
-    ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, T - 8, T - 8);
-    ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
-    if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
-    if (flashing(c)) flash(sx, sy, T - 8, T - 8);
+    const tier = 2 - k, c = st[tier], sx = x + 3, sy = y + k * T + 3;
+    if (c === undefined) { ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, LID - 1, LID - 1); continue; }
+    drawLid(c, sx, sy, LID, tier, false);
+    if (flashing(c)) flash(sx, sy, LID, LID);
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, T - 3, CL * T - 3); }
 }
@@ -883,12 +921,18 @@ function drawBox(c, cx, cy, ang, h) {
   h = h === true ? 1 : h || 0;
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
   if (h > 0) { ctx.fillStyle = `rgba(0,0,0,${0.18 + 0.14 * h})`; ctx.fillRect(-CL * T / 2 + 2 + 7 * h, -T / 2 + 4 + 9 * h, CL * T - 4, T - 6); ctx.translate(-3 * h, -5 * h); const sc = 1 + 0.1 * h; ctx.scale(sc, sc); }
-  ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(-CL * T / 2 + 1, -T / 2 + 3, CL * T - 2, T - 6);
-  ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
-  ctx.fillStyle = "rgba(0,0,0,.2)"; for (let k = -CL * T / 2 + 6; k < CL * T / 2 - 4; k += 5) ctx.fillRect(k, -T / 2 + 5, 1, T - 10);
-  ctx.fillStyle = "rgba(255,255,255,.22)"; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, 2);
-  if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(-CL * T / 2 + 10, -T / 2 + 10, CL * T - 20, T - 20); }
-  if (flashing(c)) flash(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
+  // (art) a container from above: corrugated roof, side rails, a plain front end, the door end with its locking bars,
+  // corner castings
+  const L = CL * T - 4, W = T - 8, x0 = -L / 2, y0 = -W / 2;
+  ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(x0 - 1, y0 - 1, L + 2, W + 2);
+  ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(x0, y0, L, W);
+  for (let k = x0 + 5; k < x0 + L - 6; k += 3) { ctx.fillStyle = "rgba(0,0,0,.2)"; ctx.fillRect(k, y0 + 2, 1, W - 4); ctx.fillStyle = "rgba(255,255,255,.13)"; ctx.fillRect(k + 1, y0 + 2, 1, W - 4); }
+  ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.fillRect(x0, y0, L, 2); ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.fillRect(x0, y0 + W - 2, L, 2);
+  ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fillRect(x0, y0, 3, W); ctx.fillRect(x0 + L - 5, y0, 5, W);
+  ctx.fillStyle = "rgba(0,0,0,.5)"; for (const by of [y0 + 5, y0 + 9, y0 + W - 10, y0 + W - 6]) ctx.fillRect(x0 + L - 5, by, 5, 1);
+  ctx.fillStyle = "#24262a"; ctx.fillRect(x0, y0, 4, 4); ctx.fillRect(x0 + L - 4, y0, 4, 4); ctx.fillRect(x0, y0 + W - 4, 4, 4); ctx.fillRect(x0 + L - 4, y0 + W - 4, 4, 4);
+  if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(x0 + 10, y0 + 6, L - 20, W - 12); }
+  if (flashing(c)) flash(x0, y0, L, W);
   ctx.restore();
 }
 // (art) smoke puffs from the ship's funnel, drifting off on the wind
@@ -900,16 +944,37 @@ function drawSmoke() {
 }
 function drawShip() {
   const s = DOCK.ship, x = DOCK.x * T + Math.round(s.off), y = (DOCK.top + DOCK.rows - s.rows - 1) * T + 14, w = s.cols * CL * T, h = (s.rows + 1) * T + 2;
-  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 10, y + 6, w + 50, h);
-  ctx.fillStyle = s.hull; ctx.beginPath(); ctx.moveTo(x - 20, y); ctx.lineTo(x + w + 8, y); ctx.lineTo(x + w + 44, y + h / 2); ctx.lineTo(x + w + 8, y + h); ctx.lineTo(x - 20, y + h); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#c8ccd0"; ctx.fillRect(x - 20, y, w + 28, 3); ctx.fillRect(x - 20, y + h - 3, w + 28, 3);
-  // (art) foam along the waterline, hatch lines, the bridge with its windows, the funnel
-  ctx.fillStyle = "rgba(255,255,255,.18)"; for (let k = 0; k < w + 40; k += 10) { const o = Math.sin(clock * 2 + k * 0.3) * 2; ctx.fillRect(x - 20 + k, y + h + 1 + o, 6, 2); ctx.fillRect(x - 20 + k, y - 3 - o, 6, 2); }
-  ctx.fillStyle = "rgba(0,0,0,.18)"; for (let c = 1; c < s.cols; c++) ctx.fillRect(x + c * CL * T - 1, y + 6, 2, h - 12);
-  ctx.fillStyle = "#e8e2d0"; ctx.fillRect(x - 19, y + 8, 16, h - 16); ctx.fillStyle = "#c8c2b0"; ctx.fillRect(x - 19, y + 8, 3, h - 16);
-  ctx.fillStyle = "#6ab8e8"; for (let wy = y + 14; wy < y + h - 12; wy += 9) ctx.fillRect(x - 14, wy, 8, 4);
-  const fx = x - 30, fy = y + h / 2; ctx.fillStyle = "#2a2c30"; ctx.fillRect(fx - 6, fy - 9, 12, 18); ctx.fillStyle = "#c83a2e"; ctx.fillRect(fx - 6, fy - 9, 12, 5);
-  if (clock - (s.lastPuff || 0) > (s.state === "docked" ? 0.9 : 0.3)) { s.lastPuff = clock; SMOKE.push({ x: fx, y: fy, ship: s, r: 5, t: 0 }); }
+  // (art) the hull: a rounded stern, a long body and a curved bow; an antifouling rim, a steel deck with a railing
+  const sx0 = x - 2.6 * T, bx = x + w + 2 * T, mid = y + h / 2, moving = s.state !== "docked" && s.state !== "closing";
+  const hull = (d) => { ctx.beginPath(); ctx.moveTo(sx0 + 18 + d, y + d); ctx.lineTo(x + w, y + d); ctx.bezierCurveTo(bx - 34, y + d, bx - 4 - d, mid - h * 0.22, bx - d * 1.6, mid); ctx.bezierCurveTo(bx - 4 - d, mid + h * 0.22, bx - 34, y + h - d, x + w, y + h - d); ctx.lineTo(sx0 + 18 + d, y + h - d); ctx.quadraticCurveTo(sx0 + d, y + h - d, sx0 + d, mid); ctx.quadraticCurveTo(sx0 + d, y + d, sx0 + 18 + d, y + d); ctx.closePath(); };
+  // wake while moving: a V of foam off the stern, a bow wave
+  if (moving) { ctx.strokeStyle = "rgba(255,255,255,.22)"; ctx.lineWidth = 3; for (let k = 0; k < 5; k++) { const o = ((clock * 30) % 24) + k * 24; ctx.beginPath(); ctx.moveTo(sx0 - o, mid - 10 - o * 0.45); ctx.lineTo(sx0 - o - 14, mid - 14 - o * 0.5); ctx.moveTo(sx0 - o, mid + 10 + o * 0.45); ctx.lineTo(sx0 - o - 14, mid + 14 + o * 0.5); ctx.stroke(); } ctx.fillStyle = "rgba(255,255,255,.3)"; ctx.beginPath(); ctx.ellipse(bx + 2, mid, 8, h * 0.42, 0, -Math.PI / 2, Math.PI / 2); ctx.fill(); }
+  ctx.save(); ctx.translate(7, 9); hull(-1); ctx.fillStyle = "rgba(0,0,0,.28)"; ctx.fill(); ctx.restore();
+  ctx.fillStyle = "rgba(255,255,255,.16)"; for (let k = 0; k < w + 3 * T; k += 9) { const o = Math.sin(clock * 2 + k * 0.31) * 2; ctx.fillRect(sx0 + 14 + k, y + h + 2 + o, 6, 2); ctx.fillRect(sx0 + 14 + k, y - 4 - o, 6, 2); }
+  hull(-3); ctx.fillStyle = "#6e2620"; ctx.fill();
+  hull(0); ctx.fillStyle = s.hull; ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(sx0 + 16, y + 1, x + w - sx0 - 16, 3);
+  hull(6); ctx.fillStyle = "#3a3f46"; ctx.fill();
+  hull(5); ctx.strokeStyle = "rgba(225,228,232,.55)"; ctx.lineWidth = 1; ctx.stroke();
+  // hatch covers under each slot column, with seams between the rows
+  const r0 = DOCK.rows - s.rows;
+  for (let c = 0; c < s.cols; c++) { const hx = x + c * CL * T + 1; ctx.fillStyle = "#4b525b"; ctx.fillRect(hx, (DOCK.top + r0) * T + 1, CL * T - 2, s.rows * T - 2); ctx.fillStyle = "rgba(255,255,255,.08)"; ctx.fillRect(hx, (DOCK.top + r0) * T + 1, CL * T - 2, 2); ctx.fillStyle = "rgba(0,0,0,.3)"; for (let r = 1; r < s.rows; r++) ctx.fillRect(hx, (DOCK.top + r0 + r) * T - 1, CL * T - 2, 2); }
+  // forecastle: windlasses and the foremast
+  ctx.fillStyle = "#2a2d32"; for (const wy of [mid - 14, mid + 14]) { ctx.beginPath(); ctx.arc(x + w + 18, wy, 5, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = "#d8dcdf"; ctx.fillRect(x + w + 30, mid - 1, 10, 2); ctx.fillRect(x + w + 34, mid - 6, 2, 12);
+  // the accommodation block at the stern: white, with bridge wings, a band of windows facing forward, lifeboats, the funnel
+  const ax = sx0 + 14, aw = x - 8 - ax;
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(ax + 4, y + 10, aw, h - 14);
+  ctx.fillStyle = "#e6e2d8"; ctx.fillRect(ax, y + 6, aw, h - 12); ctx.fillStyle = "#c9c4b8"; ctx.fillRect(ax, y + 6, 3, h - 12); ctx.fillRect(ax, y + h - 9, aw, 3);
+  ctx.fillStyle = "#d8d4ca"; ctx.fillRect(x - 18, y - 2, 10, h + 4);   // bridge wings, out over the sides
+  ctx.fillStyle = "#29506e"; ctx.fillRect(x - 15, y + 1, 4, h - 2); ctx.fillStyle = "#6ab8e8"; for (let wy = y + 3; wy < y + h - 4; wy += 7) ctx.fillRect(x - 15, wy, 4, 4);
+  ctx.fillStyle = "#e8822a"; ctx.fillRect(ax + 8, y + 2, 16, 6); ctx.fillRect(ax + 8, y + h - 8, 16, 6);
+  ctx.fillStyle = "#9aa0a8"; ctx.fillRect(ax + 30, y + 16, 6, 5); ctx.fillRect(ax + 30, y + h - 21, 6, 5);
+  const fx = ax + 14, fy = mid; ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(fx - 5, fy - 7, 16, 18);
+  ctx.fillStyle = "#33363c"; ctx.fillRect(fx - 8, fy - 10, 16, 20); ctx.fillStyle = "#c83a2e"; ctx.fillRect(fx - 8, fy - 3, 16, 6); ctx.fillStyle = "#141518"; ctx.fillRect(fx - 5, fy - 7, 10, 14);
+  if (clock - (s.lastPuff || 0) > (moving ? 0.3 : 0.9)) { s.lastPuff = clock; SMOKE.push({ x: fx, y: fy, ship: s, r: 5, t: 0 }); }
+  // mooring lines to the quay while docked
+  if (!moving) { ctx.strokeStyle = "rgba(226,214,180,.8)"; ctx.lineWidth = 1.5; ctx.beginPath(); for (const [hx, qx] of [[sx0 + 20, sx0 - 1.5 * T], [sx0 + 40, sx0 + 1.5 * T], [bx - 40, bx - 3 * T], [bx - 20, bx + 1.5 * T]]) { ctx.moveTo(hx, y + h - 4); ctx.lineTo(qx, QUAY * T + 10); } ctx.stroke(); }
   // (perf) the deck's stacks are drawn once into a cached image, again only when they change; flashing goes on top
   if (!s.deck) { s.deck = canvas(DOCK.cols * CL * T, DOCK.rows * T); s.deckVer = 0; }
   if (s.deckVer !== STACK_VER) {
@@ -917,15 +982,14 @@ function drawShip() {
     ctx = g; CACHING = true; s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const q = shipSlot(k); drawStackH(q.c * CL * T, q.r * T, st, "rgba(0,0,0,.4)", k); }); CACHING = false; ctx = mainCtx;
   }
   ctx.drawImage(s.deck, x, DOCK.top * T);
-  s.bays.forEach((st, k) => { for (let n = 0; n < st.length; n++) if (st[n].wantedBy && flashing(st[n], k, st)) { const q = shipSlot(k); flash(x + q.c * CL * T + (2 - n) * T + 4, (DOCK.top + q.r) * T + 4, T - 8, T - 8); } });
+  s.bays.forEach((st, k) => { for (let n = 0; n < st.length; n++) if (st[n].wantedBy && flashing(st[n], k, st)) { const q = shipSlot(k); flash(x + q.c * CL * T + (2 - n) * T + 3, (DOCK.top + q.r) * T + 3, LID, LID); } });
   // the time it has left
   if (s.state === "docked" || s.state === "closing") {
     const sec = Math.max(0, Math.ceil(s.time)), txt = Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), low = sec <= 30;
-    ctx.font = "800 18px 'Big Shoulders Display', Impact, sans-serif"; const tw = ctx.measureText(txt).width + 14, tx = x + w + 56 + tw / 2, ty = y + h / 2;
+    ctx.font = "800 18px 'Big Shoulders Display', Impact, sans-serif"; const tw = ctx.measureText(txt).width + 14, tx = bx + 16 + tw / 2, ty = y + h / 2;
     ctx.fillStyle = "rgba(10,14,20,.85)"; ctx.fillRect(tx - tw / 2, ty - 12, tw, 24); ctx.strokeStyle = low ? "#ff5a4a" : "#6a7080"; ctx.lineWidth = 2; ctx.strokeRect(tx - tw / 2, ty - 12, tw, 24);
     ctx.fillStyle = low && Math.sin(clock * 8) > 0 ? "#ff5a4a" : "#ece7dc"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(txt, tx, ty + 1);
   }
-  if (s.state !== "docked") { ctx.fillStyle = "rgba(255,255,255,.35)"; for (let k = 0; k < 4; k++) ctx.fillRect(x - 30 - k * 12 - ((clock * 40) % 12), y + 14 + k * 10, 8, 2); }
 }
 function rectBetween(a, b, w, fill) { const cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2, l = hyp(b[0] - a[0], b[1] - a[1]), an = Math.atan2(a[1] - b[1], a[0] - b[0]); ctx.save(); ctx.translate(cx, cy); ctx.rotate(an); ctx.fillStyle = fill; ctx.fillRect(-l / 2, -w / 2, l, w); ctx.restore(); }
 function drawTruck(t) {
@@ -1032,7 +1096,7 @@ function draw() {
     }
     ctx.drawImage(b.layer, b.x * T, b.y * T);
   }
-  if (selected && selected.kind === "cust" && selected.want) { const at = boxAt(selected.want); if (at && BLOCKS.some((b) => holds(b, selected.want))) flash(at[0] - (T - 8) / 2, at[1] - (T - 8) / 2, T - 8, T - 8); }
+  if (selected && selected.kind === "cust" && selected.want) { const at = boxAt(selected.want); if (at && BLOCKS.some((b) => holds(b, selected.want))) flash(at[0] - LID / 2 + 1, at[1] - LID / 2 + 1, LID, LID); }
   // (owner) a selected customer truck: a white dotted line to where its container is
   if (selected && selected.kind === "cust" && selected.load === null) {
     const at = boxAt(selected.want);

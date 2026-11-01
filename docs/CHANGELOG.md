@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Art rework and smarter cranes (owner):** containers now look like containers (ribs, rails, corner castings, door ends), the ship was redrawn (curved bow, accommodation block, hatch covers, mooring lines, wake) and the ground got real textures (asphalt, concrete slabs, quay edge with bollards, crane rails, painted pads). STS cranes now put the next incoming tractor's container first, holding it ready in their second slot, and only sort or compress when there's time.
+
 - **Faster drawing:** storage stacks and the ship's deck are drawn once into cached images and redrawn only when they change, the sea is painted once and slid, trucks off screen are skipped, and tile keys are parsed once.
 
 - **Art and animation pass:** cranes accelerate and brake, and their spreaders drop onto containers and lift them with a sense of height; STS cranes, RTGs, trucks and ships got more detail (lattice booms, bogies, wheels, brake lights, bridge, funnel smoke, foam).
