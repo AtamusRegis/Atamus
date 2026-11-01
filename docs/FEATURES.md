@@ -48,7 +48,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - the RTG lane
   - the **RTG bays**
   - the yard road
-  - the **parking lot** (24 stalls, for customer trucks)
+  - the **parking lot** (48 stalls, for customer trucks)
   - the lot road
   - a fence, with a gate at its southwest corner (in) and one on the east side (out)
 - **Camera:**
@@ -118,12 +118,23 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   tractor sent by clicking a ship slot gets the top container of that slot. That needs a slot with a container nobody
   has claimed, and claims it. Sent by clicking the crane or its lanes, the crane takes the slot nearest the tractor
   (deck rows nearest the quay first), skipping containers claimed by slot.
-- **Leaving:** once the ship is empty and nothing more is promised, it sails off east. Another follows.
+- **Leaving:** once its imports are all off and nothing more is promised (exports on their way included), it sails off
+  east with any exports loaded. Another follows.
 
 ## Storage areas and RTG cranes (owner)
 
 - **Six storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
   high. The first starts part full; the others start empty when bought.
+- **The export area (owner, 2026-11-01):** a seventh area of the same size at the east end, framed blue and marked
+  EXPORT, bought on the map ($1,000). Once it's open, **export trucks** (grey cabs) come in at the southwest gate every
+  10–16 s with a container (while there's room for it), line up at its RTG like any truck, drop it and leave by the east
+  gate. Its RTG stacks them on low stacks near the bays and hands one to each empty tractor that comes for one, off the
+  top of a tall stack nearby (exports are all alike: no digging). Customers never want exports. Export containers have
+  a dark center.
+- **Exports onto the ship (owner):** a tractor carrying an export joins a crane's line (its kind's), and the crane puts
+  it on the ship in a slot with no imports (nearest first; a slot never mixes imports and exports). **It pays $60
+  then.** On the way back the crane takes an import for that same tractor, if its columns have one, so no trip is empty.
+  Cranes serve tractors bringing exports first.
 - **RTG bays (owner):** below each area are 5 vertical drive-through bays, one per column, so up to five trucks park side
   by side. Trucks drive in from the RTG lane and out onto the yard road (southbound).
 - **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
@@ -144,22 +155,29 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Yard tractors** (numbered) start with one manual one, in the tractor parking. They can be empty or loaded.
 - **Two kinds (owner, 2026-11-01):**
-  - **Manual** (yellow cab): you send it, a ship container (or a crane), then the RTG it goes to.
+  - **Manual** (yellow cab): you pick what it fetches: a ship container (a slot, or a crane for its pick), or an export
+    (click the export area). The rest it does itself (below).
   - **Auto** (teal cab): select it and click a storage area (or its bays) to assign it that RTG, outlined while it's
     selected. It then shuttles by itself: loaded, it takes the container to its RTG (when the area has room); empty, it
     fetches from the ship, a container a customer is waiting for if one is in reach and unclaimed, otherwise whatever its
-    crane takes (the crane with the most left, with room in its auto line). It works through anything you queue first,
+    crane takes (the crane with the most left, with room in its auto line). **Assigned to the export area** it fetches
+    exports instead, takes each to a crane, drops the import it's handed back at the nearest storage area with room,
+    and goes back for the next. It works through anything you queue first,
     and parks when there's nothing to do or no RTG assigned.
 - **The tractor parking (owner, 2026-11-01):** one column of 13 horizontal spots west of the storage areas, left of the
   dock. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
   west, then down to the RTG lane. **New tractors appear there, and a tractor with nothing to do drives there and
   parks** (loaded or empty), taking the free spot nearest the top. Sent somewhere on the way, it gives the spot up.
-- **You drive every manual tractor trip (owner, 2026-10-31: "too automated"):** a loaded one waits for you to pick the
-  RTG it takes the container to; an unloaded one waits for you to pick what it fetches, in the tractor parking.
+- **Loaded tractors deliver by themselves (owner, 2026-11-01):** any tractor that's loaded with nothing queued takes its
+  container where it goes: an import to the nearest storage area with room (an auto tractor: its own RTG), an export
+  into a crane's line (one with room for it on the ship, preferring one that can hand back an import). You can still
+  send it to a particular RTG yourself. An empty manual tractor waits in the tractor parking for you to pick what it
+  fetches.
 - **Fetching a slot with an auto tractor (owner):** click a ship slot with an auto tractor selected and it fetches that
   slot's top container next. If it's already on its way to a crane (and the crane hasn't started on it), that pickup
   becomes the slot's. It takes the container to its RTG and carries on.
-- **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
+- **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s (faster the more stalls
+  are open (owner): divided by 1 + (open stalls − 4) / 16), when a stall is free,
   and parks in the lot until you send it.
 - **To its stack by itself (owner, 2026-11-01: "make trucks with a container in a stack automatically go to that stack"):**
   a customer truck whose container is in a storage area goes to that RTG on its own. If it hasn't parked yet it skips
@@ -204,17 +222,20 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **The money** shows top left, beside **+ Manual** and **+ Auto**, which buy another yard tractor of that kind. It
   appears empty in the tractor parking or, with that full, at the front of an open crane's line for its kind or in a
   free RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
-  $400, then $50 more each time (owner, 2026-11-01), the same for both kinds.
+  $400, then $50 more each time (owner, 2026-11-01); an auto tractor costs 4 times that (owner).
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.
-  - storage areas 2–6 with their RTG cranes and bays: $600, $900, $1,300, $1,800, $2,400
+  - storage areas 2–6 with their RTG cranes and bays: $600, $900, $1,300, $1,800, $2,400; the export area: $1,000
   - STS cranes B, C, D with their lanes: $2,000, $3,500, $5,000
-  - parking stalls, in groups of 4: $200, $300, $400, $500, $600
+  - parking stalls, in groups of 4 (owner, 2026-11-01: 48 in all): $200, $300, $400, $500, $600, $700, $800, $900,
+    $1,000, $1,200, $1,400
 - **Locked things can't be used:** no trucks go to them, and customer trucks only park in open stalls and want containers
   in open storage (or on the ship).
 - **With only crane A, it works the whole ship.** Each crane bought takes its share.
 
 ## Rejected / removed
+
+- **Picking the RTG for every loaded manual tractor (2026-11-01):** loaded tractors now deliver by themselves (owner).
 
 - **The Loop switch, three identical lanes under each of two cranes (2026-11-01):** replaced by auto and manual tractors
   (an auto one is assigned an RTG), and up to 4 cranes each with an auto line, a manual line and a way-out lane between.

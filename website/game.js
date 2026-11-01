@@ -31,7 +31,7 @@ const DOCK = { x: 5 + OX, cols: 14, rows: 5, top: 2, ship: null, wait: 1.5 };
 // (the tractor being loaded plus 2 waiting), and the middle one a drive-through that loaded tractors pull out into.
 // ex: the exit column (west), x + 5: the spot under the crane, ox: the entry column (east)
 const LANE_DEEP = 3, BERTH_W = 3 + TL * LANE_DEEP;
-const BERTHS = [0, 1, 2, 3].map((id) => { const ex = 10 + id * BERTH_W, x = ex - 3; return { id, ex, x, ox: x + 5 + TL * LANE_DEEP, promised: 0, crane: { x: (x + 6) * T, y: (10 + 0.5) * T, hold: null, ops: [], truck: null } }; });
+const BERTHS = [0, 1, 2, 3].map((id) => { const ex = 10 + id * BERTH_W, x = ex - 3; return { id, ex, x, ox: x + 5 + TL * LANE_DEEP, promised: 0, expPromised: 0, crane: { x: (x + 6) * T, y: (10 + 0.5) * T, hold: null, ops: [], truck: null } }; });
 const PASS_ROW = 10;
 for (const b of BERTHS) b.lanes = [{ r: 9, kind: "auto", berth: b, q: [] }, { r: 11, kind: "manual", berth: b, q: [] }];
 const laneFor = (b, t) => b.lanes.find((l) => l.kind === (t.auto ? "auto" : "manual"));
@@ -47,8 +47,10 @@ function sortLanes() {
 }
 function leaveLane(t) { if (t.lane) t.lane.q = t.lane.q.filter((x) => x !== t); t.lane = null; }
 // storage areas (owner): 5 wide, 12 long, vertical; 5 x 4 slots (1 x 3 each), stacked up to 3; 5 RTG bays below, one per column
-const BLOCKS = [4, 12, 20, 28, 36, 44].map((x) => x + OX).map((x, k) => {
-  const b = { id: k, x, y: 14, w: 5, h: 12, cols: 5, rows: 4 };
+// (owner, 2026-11-01) the seventh, at the east end, is the export area: export trucks drop containers there, and
+// tractors haul them to the ship
+const BLOCKS = [4, 12, 20, 28, 36, 44, 52].map((x) => x + OX).map((x, k) => {
+  const b = { id: k, x, y: 14, w: 5, h: 12, cols: 5, rows: 4, exp: k === 6, expClaims: 0 };
   b.slots = Array.from({ length: b.cols }, () => Array.from({ length: b.rows }, () => []));
   b.bays = Array.from({ length: 5 }, (_, c) => ({ i: x + c, claim: null }));
   b.rtg = { x: (x + 2.5) * T, y: (REST + 0.5) * T, hold: null, ops: [], truck: null };
@@ -59,14 +61,15 @@ const LANES = [10, 18, 26, 34, 42].map((x) => x + OX), WEST = 2 + OX, EAST = 51 
 // between two roads; new tractors appear here and idle ones park here
 const PARK_X = 3, PARK = [...Array(13).keys()].map((k) => ({ j: 14 + k, claim: null }));
 const parkTiles = (p) => [0, 1, 2, 3].map((d) => key(PARK_X + d, p.j));
-const STALLS = [...Array(12).keys()].map((k) => ({ i: 4 + OX + k, claim: null })).concat([...Array(12).keys()].map((k) => ({ i: 20 + OX + k, claim: null })));
+// (owner, 2026-11-01) 48 stalls in groups of 4
+const STALLS = [...Array(12).keys()].map((k) => ({ i: 4 + OX + k, claim: null })).concat([...Array(12).keys()].map((k) => ({ i: 20 + OX + k, claim: null })), [...Array(24).keys()].map((k) => ({ i: 36 + OX + k, claim: null })));
 // ---- progress (owner, 2026-11-01): start with 1 tractor, 1 STS crane, 1 storage area and 4 parking stalls; customers pay
 // for their container; the rest is bought. Locked things show on the map, dimmed with their price: click one to buy it.
 let money = 0;
 const INCOME = 60;
-const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400], CRANE_PRICE = [0, 2000, 3500, 5000], STALL_PRICE = [0, 200, 300, 400, 500, 600];
+const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400, 1000], CRANE_PRICE = [0, 2000, 3500, 5000], STALL_PRICE = [0, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400];
 BERTHS.forEach((b) => (b.open = b.id === 0)); BLOCKS.forEach((b) => (b.open = b.id === 0)); STALLS.forEach((s, k) => { s.group = Math.floor(k / 4); s.open = s.group === 0; });
-const tractorPrice = () => 400 + 50 * (trucks.filter((t) => t.kind === "yard").length - 1);   // (owner) +$50 each
+const tractorPrice = (auto) => (400 + 50 * (trucks.filter((t) => t.kind === "yard").length - 1)) * (auto ? 4 : 1);   // (owner) +$50 each; auto ones 4x
 // which slot columns of the ship a crane works: with only crane A, all of them
 // which slot columns of the ship a crane works: split evenly between the open cranes, west to east
 const craneCols = (b) => { const op = BERTHS.filter((q) => q.open), i = op.indexOf(b), n = op.length; return i < 0 ? [0, 0] : [Math.round(i * DOCK.cols / n), Math.round((i + 1) * DOCK.cols / n)]; };
@@ -87,12 +90,12 @@ function tractorSpot(auto) {
 // (owner, 2026-11-01) two kinds: manual (you send it: a ship container, then an RTG) and auto (you assign it an RTG and
 // it shuttles between the ship and that RTG by itself)
 function addTractor(auto) {
-  const price = tractorPrice(), sp = tractorSpot(auto); if (money < price || !sp) return false;
+  const price = tractorPrice(auto), sp = tractorSpot(auto); if (money < price || !sp) return false;
   money -= price; const t = mkTruck("yard", sp.tiles); t.num = trucks.filter((q) => q.kind === "yard").length; t.auto = !!auto;
   if (sp.park) { t.park = sp.park; sp.park.claim = t; } else if (sp.lane) { t.lane = sp.lane; sp.lane.q.push(t); } else { t.bay = sp.bay; sp.bay.claim = t; }
   return true;
 }
-const AUTO_CAB = "#5fd3d0";   // auto tractors' cabs
+const AUTO_CAB = "#5fd3d0", EXP_CAB = "#8a94a6";   // auto tractors' and export trucks' cabs
 const floats = [];   // "+$60" over a paid truck
 
 // ---- roads: one-way, a tile at a time (owner: an actual traffic rule), two lanes each (owner: one for passing) ----
@@ -170,7 +173,9 @@ let boxSeq = 0;
 const box = (c) => ({ id: ++boxSeq, c, wantedBy: null });
 const holds = (b, x) => b.slots.some((col) => col.some((st) => st.includes(x)));
 const free = (b) => b.cols * b.rows * 3 - count(b);
-const shipCount = (s) => s.bays.reduce((a, st) => a + st.length, 0);
+const shipCount = (s) => s.bays.reduce((a, st) => a + impCount(st), 0);   // import containers aboard
+// a ship slot holds imports or exports, never both (exports only go into slots with no imports)
+const impCount = (st) => (st.length && !st[0].exp ? st.length : 0);
 for (const b of BLOCKS.slice(0, 1)) for (let n = 0; n < 14 + Math.floor(rnd() * 6); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(box(Math.floor(rnd() * COLORS.length))); }
 
 // ---- ships ----
@@ -203,21 +208,23 @@ function shipGone(s) {
       t.stall = null; t.cmd = null; t.queue = []; t.exiting = true; t.sad = 2.5; goTo(t, key(MW + 5, YROAD + 1));
     }
   }
-  BERTHS.forEach((b) => (b.promised = 0));
+  BERTHS.forEach((b) => { b.promised = 0; b.expPromised = 0; });
 }
-const inReach = (s, b) => { const [c0, c1] = craneCols(b); return s.bays.some((st, k) => st.length && k % DOCK.cols >= c0 && k % DOCK.cols < c1); };
-const berthLeft = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1) n += st.length; }); return n - b.promised; };
+const inReach = (s, b) => { const [c0, c1] = craneCols(b); return s.bays.some((st, k) => impCount(st) && k % DOCK.cols >= c0 && k % DOCK.cols < c1); };
+const berthLeft = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1) n += impCount(st); }); return n - b.promised; };
+// room for exports in a crane's columns: slots with no imports, minus exports already on their way
+const exportRoom = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1 && onDeck(s, k) && !impCount(st)) n += 3 - st.length; }); return n - b.expPromised; };
 function shipStep(dt) {
   const s = DOCK.ship; if (!s) { DOCK.wait -= dt; if (DOCK.wait <= 0) newShip(); return; }
   if (s.state === "arrive") { s.off += Math.max(50, -s.off * 1.2) * dt; if (s.off >= 0) { s.off = 0; s.state = "docked"; } }
-  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && b.crane.hold === null)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) s.state = "closing"; }
+  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && !b.expPromised && b.crane.hold === null)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) s.state = "closing"; }
   else if (s.state === "closing") { if (BERTHS.every((b) => !b.crane.ops.length && b.crane.hold === null && !b.crane.truck && (!b.promised || !b.open || !inReach(s, b)))) { shipGone(s); s.state = "depart"; } }
   else if (s.state === "depart") { s.off += (50 + s.off * 0.8) * dt; if (s.off > 64 * T) { DOCK.ship = null; DOCK.wait = 5 + rnd() * 5; } }
 }
 
 // ---- trucks: each holds the 4 tiles under it (and the next one while moving into it) ----
 const occ = new Map();
-let passes = 0, trucks = [], truckSeq = 0, custWait = 2, delivered = 0, clock = 0;
+let passes = 0, trucks = [], truckSeq = 0, custWait = 2, expWait = 6, delivered = 0, exported = 0, clock = 0;
 function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, next: null, p: 0, path: [], queue: [], cmd: null, load: null, want, locked: false, stall: null, gone: false }; for (const k of tiles) occ.set(k, t); trucks.push(t); return t; }
 { const p = PARK[0], t = mkTruck("yard", parkTiles(p)); t.num = 1; t.park = p; p.claim = t; }
 const head = (t) => t.tiles[0];
@@ -229,8 +236,8 @@ function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next
 // out the stored ones)
 function wantable() {
   const stored = [], ship = [];
-  for (const b of BLOCKS) if (b.open) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
-  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.wantedBy) ship.push(x); }
+  for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
+  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.exp && !x.wantedBy) ship.push(x); }
   return stored.length && (!ship.length || rnd() < 0.25) ? stored : ship;
 }
 function spawnCustomer() {
@@ -241,8 +248,17 @@ function spawnCustomer() {
   stall.claim = t; t.cmd = { kind: "park", stall }; goTo(t, key(stall.i, LOT0 + 3));
 }
 
-// what a truck will carry once its queue is done
-function loadedAfter(t) { let l = t.load !== null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "sts" ? true : a.kind === "rtg" ? t.kind === "cust" : l; return l; }
+// what a truck will carry once its queue is done: null, "imp" or "exp"
+function loadAfter(t) { let l = t.load ? (t.load.exp ? "exp" : "imp") : null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "sts" ? (a.pick === false ? null : "imp") : a.kind === "rtg" ? (t.kind === "cust" ? "imp" : a.pickup ? "exp" : null) : l; return l; }
+// (owner) export trucks come in at the southwest gate with a container for the export area (when it's open and has
+// room for one more), drop it at its RTG and leave
+function spawnExport() {
+  const b = BLOCKS.find((q) => q.exp && q.open); if (!b) return;
+  if (free(b) - trucks.filter((t) => t.kind === "exp" && t.load).length <= 0) return;
+  const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
+  const t = mkTruck("exp", tiles, null); t.load = box(Math.floor(rnd() * COLORS.length)); t.load.exp = true;
+  startCmd(t, { kind: "rtg", block: b });
+}
 function targetAt(i, j) {
   // (owner) a ship slot picks which one the crane takes from; the crane or its lanes leave it to the crane (the nearest)
   if (j >= DOCK.top && j < DOCK.top + DOCK.rows) { const c = Math.floor((i - DOCK.x) / CL); if (c < 0 || c >= DOCK.cols || !DOCK.ship || DOCK.ship.state !== "docked") return null; const k = (j - DOCK.top) * DOCK.cols + c; if (!onDeck(DOCK.ship, k)) return null; const b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]); return b ? { kind: "sts", berth: b, slot: k } : null; }
@@ -259,16 +275,23 @@ function targetAt(i, j) {
 function planFor(t, i, j) {
   if (t.gone || t.exiting) return null;
   const g = targetAt(i, j); if (!g) return null;
-  const loaded = loadedAfter(t), acts = t.cmd ? [t.cmd, ...t.queue] : t.queue;
+  const la = loadAfter(t), loaded = la !== null, acts = t.cmd ? [t.cmd, ...t.queue] : t.queue;
   if (t.kind === "cust" && acts.some((a) => a.kind === "rtg")) return null;
   if (g.kind === "park") return t.kind === "cust" && !g.stall.claim ? { kind: "park", stall: g.stall } : null;
-  if (g.kind === "sts") { const b = g.berth; if (t.kind !== "yard" || loaded || berthLeft(b) <= 0) return null; if (g.slot === undefined) return { kind: "sts", berth: b }; return DOCK.ship.bays[g.slot].length - DOCK.ship.claims[g.slot] > 0 ? { kind: "sts", berth: b, slot: g.slot } : null; }
+  if (g.kind === "sts") {
+    const b = g.berth; if (t.kind !== "yard" || la === "imp") return null;
+    const slotOk = g.slot !== undefined && impCount(DOCK.ship.bays[g.slot]) - DOCK.ship.claims[g.slot] > 0;
+    if (la === "exp") { if (exportRoom(b) <= 0) return null; const a = { kind: "sts", berth: b, exp: true, pick: berthLeft(b) > 0 }; if (slotOk && a.pick) a.slot = g.slot; return a; }
+    if (berthLeft(b) <= 0) return null; if (g.slot === undefined) return { kind: "sts", berth: b }; return slotOk ? { kind: "sts", berth: b, slot: g.slot } : null;
+  }
   const b = g.block;
-  if (t.kind === "yard") return loaded && free(b) > 0 ? { kind: "rtg", block: b } : null;
+  if (t.kind === "yard" && b.exp) return la === null && count(b) - b.expClaims > 0 ? { kind: "rtg", block: b, pickup: true } : null;
+  if (t.kind === "yard") return la === "imp" && free(b) > 0 ? { kind: "rtg", block: b } : null;
   return !loaded && holds(b, t.want) ? { kind: "rtg", block: b } : null;
 }
 function claim(t, a, d) {
-  if (a.kind === "sts") { a.berth.promised += d; if (a.slot !== undefined && DOCK.ship) DOCK.ship.claims[a.slot] += d; }
+  if (a.kind === "sts") { if (a.pick !== false) a.berth.promised += d; if (a.exp) a.berth.expPromised += d; if (a.slot !== undefined && DOCK.ship) DOCK.ship.claims[a.slot] += d; }
+  else if (a.kind === "rtg" && a.pickup) a.block.expClaims += d;
   else if (a.kind === "park") a.stall.claim = d > 0 ? t : null;
 }
 function enqueue(t, a) { claim(t, a, 1); t.queue.push(a); }
@@ -324,26 +347,39 @@ function idleStep(t) {
 // fetches from the ship: a container a customer is waiting for if one is in reach and unclaimed, otherwise whatever its
 // crane takes (the crane with the most left). It works through anything queued first, and parks when there's nothing.
 function autoStep(t) {
-  if (!t.auto || !t.home || t.cmd || t.next || t.queue.length || t.locked) return;
-  if (t.load) { if (t.home.open && free(t.home) > 0) enqueue(t, { kind: "rtg", block: t.home }); return; }
-  const s = DOCK.ship, bs = BERTHS.filter((b) => berthLeft(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (!bs.length) return;
-  for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st[st.length - 1], c = k % DOCK.cols; if (x && x.wantedBy && c >= c0 && c < c1 && st.length - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
+  if (!t.auto || !t.home || t.load || t.cmd || t.next || t.queue.length || t.locked) return;
+  const s = DOCK.ship, room = (b) => laneFor(b, t).q.length < LANE_DEEP;
+  // assigned to the export area: fetch an export
+  if (t.home.exp) { if (t.home.open && count(t.home) - t.home.expClaims > 0) enqueue(t, { kind: "rtg", block: t.home, pickup: true }); return; }
+  const bs = BERTHS.filter((b) => berthLeft(b) > 0 && room(b)); if (!bs.length) return;
+  for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st[st.length - 1], c = k % DOCK.cols; if (x && !x.exp && x.wantedBy && c >= c0 && c < c1 && impCount(st) - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
   enqueue(t, { kind: "sts", berth: bs.reduce((m, b) => (berthLeft(b) > berthLeft(m) ? b : m)) });
+}
+// (owner) any loaded tractor with nothing queued takes its container where it goes by itself: an import to a storage
+// area with room (an auto tractor's own RTG, otherwise the nearest), an export into a crane's line (one with room for it
+// on the ship, preferring one that can hand back an import)
+function deliverStep(t) {
+  if (t.kind !== "yard" || !t.load || t.cmd || t.next || t.queue.length || t.locked) return;
+  if (t.load.exp) { const bs = BERTHS.filter((b) => exportRoom(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (bs.length) { const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; enqueue(t, { kind: "sts", berth: b, exp: true, pick: berthLeft(b) > 0 }); } return; }
+  const hx = headIJ(t)[0], own = t.auto && t.home && !t.home.exp && t.home.open && free(t.home) > 0 ? t.home : null;
+  const dest = own || (t.auto && t.home && !t.home.exp ? null : BLOCKS.filter((b) => b.open && !b.exp && free(b) > 0).reduce((m, b) => (!m || Math.abs(b.x + 2 - hx) < Math.abs(m.x + 2 - hx) ? b : m), null));
+  if (dest) enqueue(t, { kind: "rtg", block: dest });
 }
 
 // (bug 2026-11-01) a tractor's RTG trip is called off when it has nothing to deliver, or its storage area has filled up
 // meanwhile; it goes to park and takes new orders
 function dropTrip(t) {
   if (t.cmd.bay && t.cmd.bay.claim === t) t.cmd.bay.claim = null;
+  if (t.cmd.pickup) t.cmd.block.expClaims = Math.max(0, t.cmd.block.expClaims - 1);
   t.cmd = null; t.path = t.next ? [t.next] : [];
 }
 function truckStep(t, dt) {
   if (t.locked) return;
-  if (t.kind === "yard" && t.cmd && t.cmd.kind === "rtg" && (t.load === null || free(t.cmd.block) <= 0)) dropTrip(t);
+  if (t.kind === "yard" && t.cmd && t.cmd.kind === "rtg" && (t.cmd.pickup ? t.load !== null : t.load === null || t.load.exp || free(t.cmd.block) <= 0)) dropTrip(t);
   custStep(t);
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
-    autoStep(t);
+    deliverStep(t); autoStep(t);
     if (t.queue.length && startCmd(t, t.queue[0])) t.queue.shift();
   }
   idleStep(t);
@@ -382,6 +418,7 @@ function doneServing(t) {
   const a = t.cmd; t.cmd = null; t.locked = false;
   if (a && a.kind === "rtg") { if (t.kind === "yard") t.bay = a.bay; else a.bay.claim = null; }   // a tractor keeps its bay until its next trip
   if (t.queue.length) return;
+  if (t.kind === "exp") { t.exiting = true; goTo(t, key(MW + 5, YROAD + 1)); }
   if (t.kind === "cust") { t.happy = 1.8; t.exiting = true; delivered++; money += INCOME; const tr = trailerOf(t); floats.push({ x: tr.x, y: tr.y - 20, t: 1.6, text: "+$" + INCOME }); goTo(t, key(MW + 5, YROAD + 1)); }
 }
 
@@ -414,23 +451,37 @@ function craneStep(cr, dt, onDone) {
   cr.ops.shift(); if (!cr.ops.length) onDone();
 }
 // STS (owner: one container at a time): the front-most empty tractor standing in its line gets the nearest container
+// (owner) a tractor bringing an export: the crane lifts it off onto the ship (a slot with no imports, nearest first; it
+// pays then) and on the way back takes an import for the same tractor, so no trip is empty. Tractors bringing exports
+// are served first.
 function stsStep(b, dt) {
   const cr = b.crane, s = DOCK.ship;
-  if (!cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && berthLeft(b) + b.promised > 0) {
+  if (!cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && (berthLeft(b) + b.promised > 0 || b.expPromised > 0)) {
     let t = null, ti = 1e9;
-    for (const q of trucks) { if (!q.cmd || q.cmd.kind !== "sts" || q.cmd.berth !== b || q.load !== null || q.next || q.locked || !q.lane || head(q) !== laneHead(q.lane)) continue; const d = Math.abs(q.lane.r + 0.5 - cr.y / T); if (d > ti) continue; ti = d; t = q; }
+    for (const q of trucks) { if (!q.cmd || q.cmd.kind !== "sts" || q.cmd.berth !== b || (q.load !== null && !q.load.exp) || q.next || q.locked || !q.lane || head(q) !== laneHead(q.lane)) continue; const d = Math.abs(q.lane.r + 0.5 - cr.y / T) - (q.load ? 100 : 0); if (d > ti) continue; ti = d; t = q; }
     if (t) {
-      const tr = trailerOf(t), sl = t.cmd.slot; let best = -1, bd = 1e9;
-      if (sl !== undefined) { s.claims[sl] = Math.max(0, s.claims[sl] - 1); delete t.cmd.slot; if (s.bays[sl].length) best = sl; }
-      if (best < 0) s.bays.forEach((st, k) => { const q = shipSlot(k); if (st.length - s.claims[k] > 0 && q.c >= craneCols(b)[0] && q.c < craneCols(b)[1]) { const d = Math.abs((DOCK.x + q.c * CL + 1.5) * T - tr.x) + (DOCK.rows - q.r) * 8; if (d < bd) { bd = d; best = k; } } });
-      if (best < 0) return;
-      const q = shipSlot(best), bx = (DOCK.x + q.c * CL + 1.5) * T, by = (DOCK.top + q.r + 0.5) * T;
-      t.locked = true; cr.truck = t; cr.slot = best;
-      const ly = (t.lane.r + 0.5) * T;
-      cr.ops = [{ to: [bx, cr.y] }, { to: [bx, by] }, { lift: { stack: s.bays[best] } }, { to: [bx, ly] }, { to: () => [trailerOf(t).x, ly] }, { lower: { truck: t } }];
+      const a = t.cmd, ly = (t.lane.r + 0.5) * T, [c0, c1] = craneCols(b), ops = [];
+      const sx = (k) => (DOCK.x + shipSlot(k).c * CL + 1.5) * T, sy = (k) => (DOCK.top + shipSlot(k).r + 0.5) * T;
+      let refX = trailerOf(t).x, placed = !t.load;
+      if (t.load) {
+        let es = -1, ed = 1e9;
+        s.bays.forEach((st, k) => { const q = shipSlot(k); if (!onDeck(s, k) || q.c < c0 || q.c >= c1 || st.length >= 3 || impCount(st)) return; const d = Math.abs(sx(k) - refX) + (DOCK.rows - q.r) * 8; if (d < ed) { ed = d; es = k; } });
+        if (a.exp) { b.expPromised = Math.max(0, b.expPromised - 1); a.exp = false; }
+        if (es >= 0) { placed = true; ops.push({ to: () => [trailerOf(t).x, ly] }, { lift: { truck: t } }, { to: [sx(es), sy(es)] }, { lower: { stack: s.bays[es] }, then: () => { money += INCOME; exported++; floats.push({ x: sx(es), y: sy(es) - 20, t: 1.6, text: "+$" + INCOME }); } }); refX = sx(es); }
+      }
+      let best = -1;
+      if (a.pick !== false) {
+        const sl = a.slot; let bd = 1e9;
+        if (sl !== undefined) { s.claims[sl] = Math.max(0, s.claims[sl] - 1); delete a.slot; if (placed && impCount(s.bays[sl])) best = sl; }
+        if (best < 0 && placed) s.bays.forEach((st, k) => { const q = shipSlot(k); if (impCount(st) - s.claims[k] > 0 && q.c >= c0 && q.c < c1) { const d = Math.abs(sx(k) - refX) + (DOCK.rows - q.r) * 8; if (d < bd) { bd = d; best = k; } } });
+        if (best < 0) b.promised = Math.max(0, b.promised - 1);
+      }
+      cr.picked = best >= 0;
+      if (best >= 0) { cr.slot = best; ops.push(...(ops.length ? [] : [{ to: [sx(best), cr.y] }]), { to: [sx(best), sy(best)] }, { lift: { stack: s.bays[best] } }, { to: [sx(best), ly] }, { to: () => [trailerOf(t).x, ly] }, { lower: { truck: t } }); }
+      if (ops.length) { t.locked = true; cr.truck = t; cr.ops = ops; } else doneServing(t);
     }
   }
-  craneStep(cr, dt, () => { cr.slot = undefined; const t = cr.truck; if (!t) return; cr.truck = null; b.promised = Math.max(0, b.promised - 1); doneServing(t); });
+  craneStep(cr, dt, () => { cr.slot = undefined; const t = cr.truck; if (!t) return; cr.truck = null; if (cr.picked) b.promised = Math.max(0, b.promised - 1); doneServing(t); });
 }
 const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
 // RTG: serves the trucks standing in its bays, one at a time, moving as little as it can (owner): it stays where it
@@ -438,6 +489,7 @@ const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
 // customer next; and a tractor's container goes down near the container the next customer wants (never on it), so the
 // crane drops it on its way there
 function rtgStep(b, dt) {
+  if (b.exp) return exportRtgStep(b, dt);
   const cr = b.rtg;
   if (!cr.ops.length && !cr.truck) {
     const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
@@ -470,6 +522,32 @@ function rtgStep(b, dt) {
         ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: at }, { lower: { truck: t }, then: () => { cr.truck = null; doneServing(t); } });
         t.locked = true; cr.truck = t; cr.ops = ops;
       }
+    }
+  }
+  craneStep(cr, dt, () => {});
+}
+
+// the export area's RTG: takes containers off export trucks (onto a low stack near the bays) and puts one onto each
+// empty tractor that comes for one (off the top of a tall stack nearby; exports are all alike, so no digging)
+function exportRtgStep(b, dt) {
+  const cr = b.rtg;
+  if (!cr.ops.length && !cr.truck) {
+    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const U = free(b) > 0 ? ready.filter((q) => q.kind === "exp" && q.load !== null) : [], L = count(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load === null) : [];
+    const near = (list) => list.reduce((m, q) => (!m || Math.abs(trailerOf(q).x - cr.x) < Math.abs(trailerOf(m).x - cr.x) ? q : m), null);
+    const atBays = cr.y >= (REST + 0.5) * T - 1, t = atBays ? near(U) || near(L) : near(L) || near(U);
+    if (t) {
+      const at = () => { const tr = trailerOf(t); return [tr.x, tr.y]; }, cc = clamp(Math.round(trailerOf(t).x / T - 0.5) - b.x, 0, b.cols - 1);
+      let best = null, bs = 1e9;
+      for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
+        const st = b.slots[c][r], d = Math.abs(c - cc) + (b.rows - 1 - r) * CL;
+        const sc = t.kind === "exp" ? (st.length >= 3 ? 1e9 : st.length * 4 + d) : (!st.length ? 1e9 : -st.length * 4 + d);
+        if (sc < bs) { bs = sc; best = [c, r]; }
+      }
+      const done = () => { cr.truck = null; doneServing(t); };
+      t.locked = true; cr.truck = t;
+      if (t.kind === "exp") cr.ops = [{ to: at }, { lift: { truck: t } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] }, then: done }];
+      else { b.expClaims = Math.max(0, b.expClaims - 1); cr.ops = [{ to: slotXY(b, best[0], best[1]) }, { lift: { stack: b.slots[best[0]][best[1]] } }, { to: at }, { lower: { truck: t }, then: done }]; }
     }
   }
   craneStep(cr, dt, () => {});
@@ -557,7 +635,8 @@ function buildGround() {
   for (const b of BERTHS) { g.strokeStyle = "rgba(242,169,59,.55)"; g.lineWidth = 2; for (const l of b.lanes) for (let d = 0; d < LANE_DEEP; d++) { const rgb = l.kind === "auto" ? "95,211,208" : "242,169,59"; g.strokeStyle = `rgba(${rgb},${d ? 0.22 : 0.55})`; g.strokeRect((b.x + 5 + TL * d) * T + 2, l.r * T + 2, TL * T - 4, T - 4); } g.fillStyle = "#e8e2d0"; g.font = "800 20px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.ex + 0.5) * T, (QUAY + 1) * T); }
   for (const b of BLOCKS) {
     noiseFill(g, b.x * T, b.y * T, b.w * T, b.h * T, "#55575c", 10, b.id * 9 + 1); noiseFill(g, b.x * T, REST * T, b.w * T, T, "#4a4c52", 8, b.id + 3);
-    g.fillStyle = "rgba(201,162,58,.5)"; g.fillRect(b.x * T, b.y * T, b.w * T, 2); g.fillRect(b.x * T, (b.y + b.h) * T - 2, b.w * T, 2); g.fillRect(b.x * T, b.y * T, 2, b.h * T); g.fillRect((b.x + b.w) * T - 2, b.y * T, 2, b.h * T);
+    g.fillStyle = b.exp ? "rgba(127,200,255,.6)" : "rgba(201,162,58,.5)"; g.fillRect(b.x * T, b.y * T, b.w * T, 2); g.fillRect(b.x * T, (b.y + b.h) * T - 2, b.w * T, 2); g.fillRect(b.x * T, b.y * T, 2, b.h * T); g.fillRect((b.x + b.w) * T - 2, b.y * T, 2, b.h * T);
+    if (b.exp) { g.fillStyle = "rgba(127,200,255,.45)"; g.font = "800 16px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("EXPORT", (b.x + b.w / 2) * T, (REST + 0.5) * T); }
     for (const bay of b.bays) { g.strokeStyle = "rgba(127,200,255,.35)"; g.lineWidth = 2; g.strokeRect(bay.i * T + 2, BAY0 * T + 2, T - 4, TL * T - 4); }
   }
   for (const p of PARK) { g.strokeStyle = "rgba(232,180,50,.4)"; g.lineWidth = 2; g.strokeRect(PARK_X * T + 2, p.j * T + 2, TL * T - 4, T - 4); }
@@ -586,6 +665,7 @@ function drawStackH(x, y, st, frame, slot) {   // on the ship
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
     ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
     ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
+    if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
     if (flashing(c, slot)) flash(sx, sy, T - 8, T - 8);
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, CL * T - 3, T - 3); }
@@ -598,6 +678,7 @@ function drawStack(x, y, st, frame) {
     ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
     ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
     ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
+    if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 6, sy + 6, T - 20, T - 20); }   // exports: a dark center
     if (flashing(c)) flash(sx, sy, T - 8, T - 8);
   }
   if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, T - 3, CL * T - 3); }
@@ -609,6 +690,7 @@ function drawBox(c, cx, cy, ang, lifted) {
   ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
   ctx.fillStyle = "rgba(0,0,0,.2)"; for (let k = -CL * T / 2 + 6; k < CL * T / 2 - 4; k += 5) ctx.fillRect(k, -T / 2 + 5, 1, T - 10);
   ctx.fillStyle = "rgba(255,255,255,.22)"; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, 2);
+  if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(-CL * T / 2 + 10, -T / 2 + 10, CL * T - 20, T - 20); }
   if (flashing(c)) flash(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
   ctx.restore();
 }
@@ -635,7 +717,7 @@ function drawTruck(t) {
   rectBetween([s.trFront[0] + 3, s.trFront[1] + 4], [s.trBack[0] + 3, s.trBack[1] + 4], 22, "rgba(0,0,0,.3)");
   rectBetween(s.trFront, s.trBack, 18, "#4a4e56");
   rectBetween(s.front, s.cabBack, 24, "#1e2024");
-  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? COLORS[t.want.c].c : t.auto ? AUTO_CAB : "#e8b432");
+  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? COLORS[t.want.c].c : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
   const an = Math.atan2(s.front[1] - s.cabBack[1], s.front[0] - s.cabBack[0]); ctx.save(); ctx.translate(s.front[0], s.front[1]); ctx.rotate(an); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(-9, -7, 4, 14); ctx.restore();
   if (t.load !== null) { const tr = trailerOf(t); drawBox(t.load, tr.x, tr.y, tr.a, false); }
   if (t.num) { const m = [(s.front[0] + s.cabBack[0]) / 2, (s.front[1] + s.cabBack[1]) / 2]; ctx.fillStyle = "#1e2024"; ctx.fillRect(m[0] - 6, m[1] - 6, 12, 12); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(t.num), m[0], m[1] + 0.5); }
@@ -669,17 +751,17 @@ function drawLocked() {
   ctx.fillStyle = "rgba(8,12,18,.62)";
   for (const b of BLOCKS) if (!b.open) ctx.fillRect(b.x * T - 4, b.y * T - 4, b.w * T + 8, (YROAD - b.y) * T + 4);
   for (const b of BERTHS) if (!b.open) ctx.fillRect(b.ex * T, QUAY * T, (b.ox - b.ex + 1) * T, 5 * T);
-  for (let g = 1; g < 6; g++) { const st = STALLS.filter((q) => q.group === g); if (!st[0].open) ctx.fillRect(st[0].i * T, LOT0 * T, 4 * T, TL * T); }
+  for (let g = 1; g < STALLS.length / 4; g++) { const st = STALLS.filter((q) => q.group === g); if (!st[0].open) ctx.fillRect(st[0].i * T, LOT0 * T, 4 * T, TL * T); }
   for (const b of BLOCKS) if (!b.open) priceTag((b.x + b.w / 2) * T, (b.y + 6) * T, BLOCK_PRICE[b.id]);
   for (const b of BERTHS) if (!b.open) priceTag((b.ex + b.ox + 1) / 2 * T, (QUAY + 2.5) * T, CRANE_PRICE[b.id]);
-  for (let g = 1; g < 6; g++) { const st = STALLS.filter((q) => q.group === g); if (!st[0].open) priceTag((st[0].i + 2) * T, (LOT0 + 2) * T, STALL_PRICE[g]); }
+  for (let g = 1; g < STALLS.length / 4; g++) { const st = STALLS.filter((q) => q.group === g); if (!st[0].open) priceTag((st[0].i + 2) * T, (LOT0 + 2) * T, STALL_PRICE[g]); }
 }
 // the money, and buying a tractor
 let hudTxt = "";
 function hud() {
-  const p = tractorPrice(), ok = money >= p && !!tractorSpot(), txt = "$" + money.toLocaleString() + "|" + p + "|" + ok; if (txt === hudTxt) return; hudTxt = txt;
+  const p = tractorPrice(false), pa = tractorPrice(true), sp = !!tractorSpot(), txt = "$" + money.toLocaleString() + "|" + p + "|" + sp; if (txt === hudTxt) return; hudTxt = txt;
   $("money").textContent = "$" + money.toLocaleString();
-  for (const [id, name] of [["buy-tractor", "Manual"], ["buy-auto", "Auto"]]) { const b = $(id); b.textContent = "+ " + name + " $" + p.toLocaleString(); b.disabled = !ok; }
+  for (const [id, name, pr] of [["buy-tractor", "Manual", p], ["buy-auto", "Auto", pa]]) { const b = $(id); b.textContent = "+ " + name + " $" + pr.toLocaleString(); b.disabled = !sp || money < pr; }
 }
 $("buy-tractor").onclick = () => addTractor(false);
 $("buy-auto").onclick = () => addTractor(true);
@@ -742,7 +824,9 @@ function step(dt) {
   sortLanes(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
-  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = 8 + rnd() * 6; }
+  // (owner) customers come faster the more parking stalls are open
+  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = (8 + rnd() * 6) / (1 + (STALLS.filter((q) => q.open).length - 4) / 16); }
+  expWait -= dt; if (expWait <= 0) { spawnExport(); expWait = 10 + rnd() * 6; }
   for (const t of [...trucks]) { truckStep(t, dt); if (t.happy > 0) t.happy -= dt; if (t.sad > 0) t.sad -= dt; }
   if (selected && (!trucks.includes(selected) || selected.exiting)) selected = null;
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
@@ -753,5 +837,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, step, planFor, enqueue, slotSwap, doSwap, route, wantable, select: (t) => (selected = t) };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, slotSwap, doSwap, route, wantable, select: (t) => (selected = t) };
 })();
