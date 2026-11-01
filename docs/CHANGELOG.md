@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Customer traffic follows the stacks (owner):** with little unclaimed in storage, few customers come; as it fills, many more come and pick faster.
+
 - **Grey trucks, stacks that build up (owner):** most customer trucks now arrive grey with no container picked and park; now and then one picks a container already in storage and takes its color. The rest want ship cargo. The more unclaimed containers are stored, the more customers come, the more of them grey, and the faster grey ones pick, so storage builds up without clogging.
 
 - **Fix: wanted ship containers blinking when they couldn't be claimed** (every container at their crane already spoken for, or their slot fully claimed).

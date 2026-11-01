@@ -258,8 +258,10 @@ function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next
 // for a container on the docked ship, anywhere in a slot's stack. So most ship cargo is stored unclaimed and the stacks
 // fill up.
 const CLAIM_SHIP = 0.3;
-// (owner) the fuller storage is with containers nobody has claimed, the more customers come, the more of them come grey,
-// and the sooner grey ones pick: 0 with none unclaimed, 1 with every open storage area full of them
+// (owner) dynamic: low stacks, few trucks (time to fill); high stacks, many trucks (to empty them). The fuller storage is
+// with containers nobody has claimed, the more customers come (a third of the base rate with none, over four times with
+// it full), the more of them come grey, and the sooner grey ones pick. 0 with none unclaimed, 1 with every open storage
+// area full of them.
 const unclaimedFill = () => { const n = BLOCKS.filter((b) => b.open && !b.exp).length * 60; return n ? storedFree().length / n : 0; };
 const storedFree = () => { const out = []; for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) out.push(x); return out; };
 const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) out.push(x); return out; };
@@ -276,7 +278,7 @@ function claimStep(dt) {
   const t = trucks.filter((q) => q.kind === "cust" && !q.want && !q.exiting).sort((a, b) => a.since - b.since)[0], pool = storedFree();
   if (!t || !pool.length) { claimWait = 4; return; }
   t.want = pick(pool); t.want.wantedBy = t;
-  claimWait = (30 + rnd() * 40) / (1 + (STALLS.filter((q) => q.open).length - 4) / 32) / (1 + 10 * unclaimedFill());
+  claimWait = (30 + rnd() * 40) / (1 + (STALLS.filter((q) => q.open).length - 4) / 32) / (0.6 + 10 * unclaimedFill());
 }
 
 // what a truck will carry once its queue is done: null, "imp" or "exp"
@@ -957,7 +959,7 @@ function step(dt) {
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   // (owner) customers come faster the more parking stalls are open
-  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = (8 + rnd() * 6) / (1 + (STALLS.filter((q) => q.open).length - 4) / 16) / (1 + 3 * unclaimedFill()); }
+  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = (8 + rnd() * 6) / (1 + (STALLS.filter((q) => q.open).length - 4) / 16) / (0.3 + 4 * unclaimedFill()); }
   expWait -= dt; if (expWait <= 0) { spawnExport(); expWait = 10 + rnd() * 6; }
   claimStep(dt);
   for (const t of [...trucks]) { truckStep(t, dt); if (t.happy > 0) t.happy -= dt; if (t.sad > 0) t.sad -= dt; }

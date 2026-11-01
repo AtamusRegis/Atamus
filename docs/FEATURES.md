@@ -220,9 +220,11 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   wants yet, takes its color and goes for it. The rest (30%) come for a particular container on the docked ship,
   anywhere in a slot's stack (owner: even at the bottom, so you may have to import the whole stack to reach it), never
   one another customer wants. So most ship cargo is stored unclaimed and the stacks build up.
-- **Balancing (owner):** the fuller storage is with unclaimed containers (out of the room in the open storage areas),
-  the more customers come, the more of them come grey (fewer want ship cargo), and the sooner grey ones pick: about
-  every 30–70 s with storage empty, several times as often as it fills, a little faster with more stalls open.
+- **Dynamic (owner: "lower stacks, less trucks, higher stacks, more trucks"):** the fuller storage is with unclaimed
+  containers (out of the room in the open storage areas), the more customers come (about a third of the base rate with
+  none, over four times with it full), the more of them come grey (fewer want ship cargo), and the sooner grey ones
+  pick (every minute or two with none, every few seconds when full; a little faster with more stalls open). Empty
+  stacks get time to fill; nearly full ones draw a crowd.
 - **Its container (owner):** a truck's cab is its container's color. **While the truck is selected its container
   flashes** wherever it is: in storage, on the ship, on a tractor or in a crane, **and a white dotted line runs from the
   truck to it**. **With no customer truck selected, a container on the ship that a customer is waiting for flashes until
