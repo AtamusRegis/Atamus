@@ -37,14 +37,14 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The port
 
-- **A 54 × 42 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
+- **A 61 × 42 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
   pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
   - water with **one berth** for one big ship
   - the quay with two **STS cranes**, A and B
   - the **STS lanes**
   - the quay road
-  - six **storage areas** with their RTG cranes
+  - six **storage areas** with their RTG cranes, and west of them the **tractor parking**
   - the RTG lane
   - the **RTG bays**
   - the yard road
@@ -116,7 +116,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   by side. Trucks drive in from the RTG lane and out onto the yard road (southbound).
 - **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
   whichever bay is free, or waits in line on the RTG lane at the area's west end until one clears, first come first
-  served. Trucks behind it in line don't pass it. A tractor that finished there keeps its bay until its next trip.
+  served. Trucks behind it in line don't pass it. A tractor that finished there drives off to the tractor parking.
 - **The RTG crane** starts at the area's south end. It serves the trucks standing in its bays one at a time, running its
   gantry down over them.
 - **It moves as little as it can (owner, 2026-11-01):** it stays where it finished instead of going back to rest. At the
@@ -130,10 +130,13 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Trucks: you send them (owner)
 
-- **Yard tractors** (yellow cabs, numbered) start with one, in crane A's lanes. They can be empty or loaded.
+- **Yard tractors** (yellow cabs, numbered) start with one, in the tractor parking. They can be empty or loaded.
+- **The tractor parking (owner, 2026-11-01):** one column of 13 horizontal spots west of the storage areas, left of the
+  dock. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
+  west, then down to the RTG lane. **New tractors appear there, and a tractor with nothing to do drives there and
+  parks** (loaded or empty), taking the free spot nearest the top. Sent somewhere on the way, it gives the spot up.
 - **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
-  it takes the container to; an unloaded one waits for you to pick the STS crane it goes to. Tractors never park. A
-  tractor with nothing queued stays where it finished (in its STS lane or RTG bay, which it keeps until its next trip).
+  it takes the container to; an unloaded one waits for you to pick the STS crane it goes to, in the tractor parking.
 - **Loop (owner, 2026-11-01: "a toggle switch for it to just go back and forth from a certain quay to a certain stack"):**
   while a tractor is selected, a **Loop** switch shows beside the money. Switched on, the tractor keeps going back and
   forth by itself between the STS crane and the RTG it was last sent to: loaded, it heads for that RTG (if its area has
@@ -178,8 +181,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
-- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor. It appears empty in a free STS lane of an open crane or, with those full, in a free
-  RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
+- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor. It appears empty in the tractor parking or, with that full, in a free STS lane of an
+  open crane or a free RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
   $400, then $50 more each time (owner, 2026-11-01).
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.
@@ -191,6 +194,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **With only crane A, it works the whole ship.** Once B is bought, they split it west and east.
 
 ## Rejected / removed
+
+- **Idle tractors staying where they finished, keeping their STS lane or RTG bay (2026-11-01):** replaced by the tractor
+  parking (owner).
 
 - **Picking and claiming a particular RTG bay when queuing (2026-11-01):** replaced by the 5 bays as one queue (owner).
 
