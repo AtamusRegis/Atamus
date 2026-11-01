@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Blueprints (owner).** Storage, Export, Parking and Lot now place a blueprint you drag where you want it, turn to face the road on any side (a button, or R) and build with the check mark (or Enter), instead of building straight away where you tap. Also: a lifted finger the browser cancels no longer leaves a stuck touch behind.
+
 - **You build the port now (owner).** Instead of unlocking a fixed map you lay roads and place buildings on a grid of cells below the quay road. Roads are 4 lanes, two each way (an outer lane to drive and line up in, an inner one to pass); junctions, corners and turning loops at dead ends work themselves out, and roads off the map's edge are gates. Storage areas go beside straight road; their RTG serves trucks stopped in the road's outer lane beside them (4 spots, up to 2 waiting), and you add rows to them. Tractor parking and the customer lot are cells of 2 pull-in pockets. Cranes load the truck at their spot on the quay road. You start with one tractor, crane A, a 5 × 1 storage area on a loop of road, 6 tractor spots and no customer lot (customers then only come for containers already stored). Build buttons: Road, Storage, Parking, Lot, Export, Bulldoze. The old map, its bays, crane lanes and the shared waiting line are gone.
 
 - **Fix: auto tractors parked instead of joining the cranes' waiting line (owner).** An auto tractor (or one holding an export) only picked a crane with room in its line, so with every line full it went to the parking. Now it heads for a crane anyway and waits in the shared line.

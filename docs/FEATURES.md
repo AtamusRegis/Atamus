@@ -297,10 +297,14 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   tractor costs 4 times that (owner).
 - **Building (owner, 2026-11-01):** the build buttons beside them: **Road** ($30 a cell), **Storage** ($600; tap an
   existing storage area to add a row, $250), **Parking** ($150, 2 tractor spots), **Lot** ($120, 2 customer spots),
-  **Export** ($1,000), **Bulldoze**. Tap one to turn it on (again, or Escape, to turn it off), then tap the map; roads
-  and bulldozing also paint along a drag (the right mouse button or two fingers still pan). Where a building goes is
-  worked out from the cell you tap: next to a suitable road, facing it. Under the pointer the cells it would take show
-  green or red with the price. A road can't join a road a building is served from from the side (it would make it a
+  **Export** ($1,000), **Bulldoze**. Tap one to turn it on (again, or Escape, to turn it off). Roads and bulldozing: tap
+  the map, or paint along a drag (the right mouse button or two fingers still pan); under the pointer the cell shows
+  green or red with the price. **Blueprints (owner, 2026-11-01):** Storage, Export, Parking and Lot put a blueprint on
+  the map instead (blue, red where it can't go, with its price and a bright edge on the side that faces the road),
+  starting at the spot nearest the middle of the screen where it fits. Drag it to move it (it snaps to the cells), or
+  tap elsewhere to move it there; its two round buttons turn it a quarter (R) and build it (Enter). It stays on after
+  building, for the next one. In Storage mode tapping an existing storage area still adds a row. A storage area needs 4
+  cells of plain straight road beside it on the side it faces; parking or a lot, a straight road cell. A road can't join a road a building is served from from the side (it would make it a
   junction), nor the quay road below a crane's spot, its waiting cell or the cell after it. Bulldozing refunds half: an empty road cell
   (not the quay road, not one a building is served from), an empty storage area, or a parking or lot cell with nobody
   in or bound for it (keeping a spot for every tractor).

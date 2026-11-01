@@ -250,7 +250,16 @@ const cellFree = (cx, cy) => inGrid(cx, cy) && cy > 0 && !isRoad(cx, cy) && !OCC
 // the road cells a building needs to stay as they are (straight), and its own cells
 const servedCells = () => { const out = new Map(); for (const b of BLOCKS) for (const c of b.laneCells) out.set(ckey(...c), SIDES[b.side].ew); for (const p of POCKETS) out.set(ckey(...p.r), SIDES[p.side].ew); return out; };
 // what building at a cell would be: { ok, price, cells (to outline), do () }
-function planBuild(mode, cx, cy) {
+// (owner, 2026-11-01) a storage area's footprint, 4 cells along the road and 2 deep, for a side of the road it faces
+// and the top-left cell of its footprint; the 4 road cells beside it, r0 the first of them along the lane
+function blockFoot(side, bx, by) {
+  const S = SIDES[side], w = S.ew ? 4 : 2, h = S.ew ? 2 : 4, cells = [];
+  for (let y = by; y < by + h; y++) for (let x = bx; x < bx + w; x++) cells.push([x, y]);
+  const lane = cells.map(([x, y]) => [x - S.v[0], y - S.v[1]]).filter(([x, y]) => !cells.some((c) => c[0] === x && c[1] === y));
+  const r0 = lane.reduce((m, c) => (c[0] * S.u[0] + c[1] * S.u[1] < m[0] * S.u[0] + m[1] * S.u[1] ? c : m));
+  return { cells, lane, r0, w, h };
+}
+function planBuild(mode, cx, cy, side) {
   if (!inGrid(cx, cy)) return null;
   if (mode === "road") {
     const price = PRICE.road, cells = [[cx, cy]];
@@ -263,7 +272,12 @@ function planBuild(mode, cx, cy) {
   }
   if (mode === "storage" || mode === "export") {
     const ex = OCCUPIED.get(ckey(cx, cy));
-    if (ex && ex.slots) { const ok = ex.rows < MAX_ROWS; return { ok, price: PRICE.row, cells: ex.cells, do: () => { ex.rows++; STACK_VER++; } }; }   // another row
+    if (ex && ex.slots && !side) { const ok = ex.rows < MAX_ROWS; return { ok, price: PRICE.row, cells: ex.cells, do: () => { ex.rows++; STACK_VER++; } }; }   // another row
+    if (side) {   // a blueprint: this footprint, facing the road on this side
+      const f = blockFoot(side, cx, cy), S = SIDES[side], price = mode === "export" ? PRICE.export : PRICE.storage;
+      const ok = !(mode === "export" && BLOCKS.some((b) => b.exp)) && f.cells.every(([x, y]) => inGrid(x, y) && cellFree(x, y)) && f.lane.every(([x, y]) => through(x, y, S.ew));
+      return { ok, price, cells: f.cells, do: () => { const b = makeBlock(f.r0, side, mode === "export", 1); BLOCKS.push(b); for (const c of f.cells) OCCUPIED.set(ckey(...c), b); } };
+    }
     if (mode === "export" && BLOCKS.some((b) => b.exp)) return { ok: false, price: PRICE.export, cells: [[cx, cy]] };
     for (const side of ["S", "N", "E", "W"]) for (const depth of [1, 2]) for (let k = 0; k < 4; k++) {
       const S = SIDES[side], lc = [cx - S.v[0] * depth, cy - S.v[1] * depth], r0 = [lc[0] - S.u[0] * k, lc[1] - S.u[1] * k];
@@ -279,11 +293,11 @@ function planBuild(mode, cx, cy) {
   if (mode === "parking" || mode === "lot") {
     const price = PRICE[mode], cells = [[cx, cy]];
     if (!cellFree(cx, cy)) return { ok: false, price, cells };
-    for (const side of ["S", "N", "E", "W"]) {
-      const S = SIDES[side], r = [cx - S.v[0], cy - S.v[1]];
+    for (const sd of side ? [side] : ["S", "N", "E", "W"]) {
+      const S = SIDES[sd], r = [cx - S.v[0], cy - S.v[1]];
       if (!isRoad(...r)) continue; const l = links(...r);
       if (S.ew ? !((l.w || l.e) && !l.n && !l.s) : !((l.n || l.s) && !l.w && !l.e)) continue;
-      return { ok: true, price, cells, do: () => { const pc = makePocketCell(mode === "parking" ? "park" : "lot", r, side, [cx, cy]); POCKETS.push(pc); OCCUPIED.set(ckey(cx, cy), pc); } };
+      return { ok: true, price, cells, do: () => { const pc = makePocketCell(mode === "parking" ? "park" : "lot", r, sd, [cx, cy]); POCKETS.push(pc); OCCUPIED.set(ckey(cx, cy), pc); } };
     }
     return { ok: false, price, cells };
   }
@@ -304,8 +318,8 @@ function planBuild(mode, cx, cy) {
   }
   return null;
 }
-function doBuild(mode, cx, cy) {
-  const p = planBuild(mode, cx, cy); if (!p || !p.ok || money < p.price) return false;
+function doBuild(mode, cx, cy, side) {
+  const p = planBuild(mode, cx, cy, side); if (!p || !p.ok || money < p.price) return false;
   money -= p.price; p.do(); rebuilt(); return true;
 }
 // after the roads or buildings change: the road graph and the ground are redrawn, and every truck plans its way again
@@ -999,8 +1013,31 @@ let VW = 0, VH = 0, DPR = 1, zoom = 1, cam = { x: MW * T / 2, y: MH * T / 2 }, s
 // (owner, 2026-11-01) build mode: one of the build buttons is on; taps build there (roads and bulldozing also by
 // dragging)
 let buildMode = null;
+// (owner, 2026-11-01) blueprints: a storage area, the export area, parking or a lot is placed as a blueprint first,
+// dragged where it goes, turned to face the road on any side, then built with the check mark
+let bp = null, ICONS = [];
+const BP_MODES = ["storage", "export", "parking", "lot"], TURN = ["S", "W", "N", "E"];
+const bpFoot = (b) => (b.mode === "parking" || b.mode === "lot" ? { cells: [[b.cx, b.cy]], w: 1, h: 1 } : blockFoot(b.side, b.cx, b.cy));
+const bpPlan = () => bp && planBuild(bp.mode, bp.cx, bp.cy, bp.side);
+function bpCenter(cx, cy) { const f = bpFoot(bp); bp.cx = cx - Math.floor((f.w - 1) / 2); bp.cy = cy - Math.floor((f.h - 1) / 2); }
+function bpTurn() { if (!bp) return; const f = bpFoot(bp), mx = bp.cx + f.w / 2, my = bp.cy + f.h / 2; bp.side = TURN[(TURN.indexOf(bp.side) + 1) % 4]; const g = bpFoot(bp); bp.cx = Math.round(mx - g.w / 2); bp.cy = Math.round(my - g.h / 2); }
+function bpPlace() { if (!bp) return; if (!doBuild(bp.mode, bp.cx, bp.cy, bp.side)) { const [x, y, w, h] = cellsRect(bpFoot(bp).cells); bad = { i: Math.floor((x + w / 2) / T), j: Math.floor((y + h / 2) / T), t: 0.5 }; } }
+// a new blueprint starts at the spot nearest the middle of the screen where it would fit
+function bpStart(mode) {
+  const w = toWorld(VW / 2, VH / 2), mc = [w.x / (CELL * T), (w.y / T - Y0) / CELL];
+  let best = null, bd = Infinity;
+  for (let cy = 1; cy < CH; cy++) for (let cx = 0; cx < CW; cx++) for (const side of TURN) {
+    const p = planBuild(mode, cx, cy, side); if (!p || !p.ok) continue;
+    const f = bpFoot({ mode, side, cx, cy }), d = hyp(cx + f.w / 2 - mc[0], cy + f.h / 2 - mc[1]);
+    if (d < bd) { bd = d; best = { mode, side, cx, cy }; }
+  }
+  if (best) return best;
+  bp = { mode, side: "S", cx: 0, cy: 0 }; bpCenter(clamp(Math.floor(mc[0]), 0, CW - 1), clamp(Math.floor(mc[1]), 1, CH - 1)); return bp;
+}
+const bpHas = (cx, cy) => bp && bpFoot(bp).cells.some((c) => c[0] === cx && c[1] === cy);
+const iconAt = (sx, sy) => ICONS.find((ic) => hyp(sx - ic.x, sy - ic.y) <= ic.r + (touchy ? 6 : 2));
 const keys = {};
-addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") { selected = null; setBuild(null); } const n = /^Digit([1-9])$/.exec(e.code); if (n) { const t = trucks.find((q) => q.num === +n[1]); if (t) selected = t; } });
+addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") { selected = null; setBuild(null); } if (bp && e.code === "KeyR") bpTurn(); if (bp && (e.code === "Enter" || e.code === "NumpadEnter")) bpPlace(); const n = /^Digit([1-9])$/.exec(e.code); if (n) { const t = trucks.find((q) => q.num === +n[1]); if (t) selected = t; } });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
@@ -1053,6 +1090,12 @@ function homeFor(t, i, j) { if (t.kind !== "yard" || !t.auto) return null; const
 // (owner, 2026-11-01) everything is one tap: tap a truck to select it (again to let go), tap where it goes to queue it,
 // tap a numbered badge of its queue to take that trip back, tap open ground to let go of it
 function click(sx, sy) {
+  if (bp) {   // a tap on a storage area adds a row to it; anywhere else the blueprint moves there
+    const [cx, cy] = cellAtScreen(sx, sy), ex = OCCUPIED.get(ckey(cx, cy));
+    if (ex && ex.slots && !ex.exp && bp.mode === "storage") { if (!doBuild("storage", cx, cy)) { const [i, j] = tileAtScreen(sx, sy); bad = { i, j, t: 0.5 }; } }
+    else if (inGrid(cx, cy)) bpCenter(cx, cy);
+    return;
+  }
   if (buildMode) { const [cx, cy] = cellAtScreen(sx, sy); if (!doBuild(buildMode, cx, cy)) { const [i, j] = tileAtScreen(sx, sy); bad = { i, j, t: 0.5 }; } return; }
   const pk = pickAt(sx, sy);
   if (pk && pk.badge) { unqueue(selected, pk.badge.a); return; }
@@ -1092,6 +1135,13 @@ cv.addEventListener("pointerdown", (e) => {
   // in road or bulldoze mode a drag paints (the right mouse button, or two fingers, still pan)
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false, paint: paints() && e.button !== 2 };
   if (gesture.paint) { painted = new Set(); paintAt(e.clientX, e.clientY); return; }
+  // a blueprint: its turn and check-mark buttons, or grab it to drag it
+  if (bp && e.button !== 2) {
+    const ic = iconAt(e.clientX, e.clientY);
+    if (ic) { gesture.held = true; if (ic.kind === "turn") bpTurn(); else bpPlace(); return; }
+    const [cx, cy] = cellAtScreen(e.clientX, e.clientY);
+    if (bpHas(cx, cy)) { gesture.drag = [cx - bp.cx, cy - bp.cy]; gesture.held = true; return; }
+  }
   if (e.button === 2) return;
   const g = gesture; setTimeout(() => { if (gesture === g && !g.moved && pts.size === 1 && unclaimAt(g.sx, g.sy)) g.held = true; }, 450);
 });
@@ -1101,10 +1151,12 @@ cv.addEventListener("pointermove", (e) => {
   if (gesture.pinch && pts.size === 2) { const [a, b] = [...pts.values()]; cam.x = gesture.cx - ((a.x + b.x) / 2 - gesture.mx) / zoom; cam.y = gesture.cy - ((a.y + b.y) / 2 - gesture.my) / zoom; setZoom(gesture.zoom * hyp(a.x - b.x, a.y - b.y) / gesture.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
   if (gesture.pinch) return;
   if (gesture.paint) { paintAt(e.clientX, e.clientY); return; }
+  if (gesture.drag) { if (!bp) return; const [cx, cy] = cellAtScreen(e.clientX, e.clientY); bp.cx = cx - gesture.drag[0]; bp.cy = cy - gesture.drag[1]; return; }
   const dx = e.clientX - gesture.sx, dy = e.clientY - gesture.sy; if (hyp(dx, dy) > (touchy ? 12 : 6)) gesture.moved = true;
   if (gesture.moved) { cam.x = gesture.cx - dx / zoom; cam.y = gesture.cy - dy / zoom; }
 });
 cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch && !gesture.held && !gesture.paint && e.button !== 2) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
+cv.addEventListener("pointercancel", (e) => { pts.delete(e.pointerId); if (!pts.size) gesture = null; });
 cv.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY); }, { passive: false });
 function setZoom(z, sx, sy) { const before = toWorld(sx, sy); zoom = clamp(z, 0.3, 3); const after = toWorld(sx, sy); cam.x += before.x - after.x; cam.y += before.y - after.y; }
 
@@ -1393,7 +1445,7 @@ function drawLocked() {
 // the money, buying a tractor, and the build buttons (owner, 2026-11-01)
 const BUILD = [["road", "Road"], ["storage", "Storage"], ["parking", "Parking"], ["lot", "Lot"], ["export", "Export"], ["bulldoze", "Bulldoze"]];
 { const hudEl = $("hud"); for (const [m, name] of BUILD) { const btn = document.createElement("button"); btn.type = "button"; btn.id = "build-" + m; btn.className = "build"; btn.dataset.name = name; btn.onclick = () => setBuild(buildMode === m ? null : m); hudEl.appendChild(btn); } }
-function setBuild(m) { buildMode = m; if (m) selected = null; hudTxt = ""; }
+function setBuild(m) { buildMode = m; if (m) selected = null; hudTxt = ""; bp = m && BP_MODES.includes(m) ? bpStart(m) : null; }
 let hudTxt = "";
 function hud() {
   const p = tractorPrice(false), pa = tractorPrice(true), sp = !!tractorSpot(), txt = "$" + money.toLocaleString() + "|" + p + "|" + sp + "|" + buildMode; if (txt === hudTxt) return; hudTxt = txt;
@@ -1471,7 +1523,35 @@ function draw() {
   drawLocked();
   for (const f of floats) { ctx.globalAlpha = Math.min(1, f.t); ctx.fillStyle = "#7fd88a"; ctx.font = "800 18px 'Big Shoulders Display', Impact, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(f.text, f.x, f.y - (1.6 - f.t) * 24); } ctx.globalAlpha = 1;
   // building: what a tap would build under the pointer, green or red, with its price
-  if (buildMode && hover && hover.cell) {
+  ICONS = [];
+  if (bp) {
+    const p = bpPlan(), f = bpFoot(bp), ok = p && p.ok && money >= p.price, [x, y, w, h] = cellsRect(f.cells);
+    ctx.fillStyle = ok ? "rgba(70,140,230,.32)" : "rgba(255,90,74,.25)"; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = ok ? "rgba(170,210,255,.35)" : "rgba(255,160,150,.3)"; ctx.lineWidth = 1; ctx.beginPath();
+    for (let gx = x + T; gx < x + w; gx += T) { ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); } for (let gy = y + T; gy < y + h; gy += T) { ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); } ctx.stroke();
+    ctx.strokeStyle = ok ? "#9cc8ff" : "#ff5a4a"; ctx.lineWidth = 3; ctx.setLineDash([10, 6]); ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
+    // the edge that faces the road (the pocket entrances, or where the RTG serves)
+    const v = SIDES[bp.side].v; ctx.fillStyle = ok ? "#e8f2ff" : "#ff8a7a";
+    if (v[1] === 1) ctx.fillRect(x, y, w, 6); else if (v[1] === -1) ctx.fillRect(x, y + h - 6, w, 6); else if (v[0] === -1) ctx.fillRect(x + w - 6, y, 6, h); else ctx.fillRect(x, y, 6, h);
+    if (p && p.price > 0) priceTag(x + w / 2, y + h / 2, p.price);
+    // the turn and check-mark buttons, in screen space below it (above it when that's off the screen)
+    const r = touchy ? 22 : 17, k = DPR, sx = clamp((x + w / 2 - cam.x) * zoom + VW / 2, 2 * r + 16, VW - 2 * r - 16), top = (y - cam.y) * zoom + VH / 2, bot = (y + h - cam.y) * zoom + VH / 2;
+    const iy = clamp(bot + r + 10 + r <= VH ? bot + r + 10 : top - r - 10, r + 8, VH - r - 8);   // kept on the screen
+    ICONS = [{ kind: "turn", x: sx - r - 8, y: iy, r }, { kind: "ok", x: sx + r + 8, y: iy, r }];
+    ctx.save(); ctx.setTransform(k, 0, 0, k, 0, 0);
+    for (const ic of ICONS) {
+      ctx.fillStyle = "rgba(10,14,20,.88)"; ctx.beginPath(); ctx.arc(ic.x, ic.y, ic.r, 0, TAU); ctx.fill();
+      const col = ic.kind === "ok" ? (ok ? "#7fd88a" : "#6a7080") : "#9cc8ff"; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+      ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round"; const q = ic.r * 0.45;
+      if (ic.kind === "ok") { ctx.beginPath(); ctx.moveTo(ic.x - q, ic.y); ctx.lineTo(ic.x - q * 0.25, ic.y + q * 0.75); ctx.lineTo(ic.x + q, ic.y - q * 0.7); ctx.stroke(); }
+      else { ctx.beginPath(); ctx.arc(ic.x, ic.y, q, -Math.PI * 0.15, Math.PI * 1.45); ctx.stroke(); const ax = ic.x + q * Math.cos(-Math.PI * 0.15), ay = ic.y + q * Math.sin(-Math.PI * 0.15); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(ax + 5, ay - 1); ctx.lineTo(ax - 4, ay - 4); ctx.lineTo(ax - 1, ay + 5); ctx.fill(); }
+      ctx.lineCap = "butt";
+    }
+    ctx.restore();
+  }
+  // roads and bulldozing (and a row for a storage area): what a tap would build under the pointer
+  const rowHover = bp && bp.mode === "storage" && hover && hover.cell && (() => { const ex = OCCUPIED.get(ckey(...hover.cell)); return ex && ex.slots && !ex.exp; })();
+  if (buildMode && hover && hover.cell && (!bp || rowHover)) {
     const p = planBuild(buildMode, hover.cell[0], hover.cell[1]);
     if (p) { const ok = p.ok && money >= p.price, [x, y, w, h] = cellsRect(p.cells); ctx.fillStyle = ok ? "rgba(127,216,138,.18)" : "rgba(255,90,74,.18)"; ctx.fillRect(x, y, w, h); ctx.strokeStyle = ok ? "#7fd88a" : "#ff5a4a"; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h); if (p.price > 0) priceTag(x + w / 2, y + h / 2, p.price); }
   }
@@ -1528,5 +1608,5 @@ function resize() {
 addEventListener("resize", resize); resize();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(() => { groundDirty = true; }).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, pockets: POCKETS, gates: GATES, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, badges: () => BADGES, cam, screenOf: (x, y) => ({ x: (x - cam.x) * zoom + VW / 2, y: (y - cam.y) * zoom + VH / 2 }), screenOfTruck: (t) => { const s = trailerOf(t); return { x: (s.x - cam.x) * zoom + VW / 2, y: (s.y - cam.y) * zoom + VH / 2 }; }, slotSwap, doSwap, route, select: (t) => (selected = t), build: doBuild, planBuild, setBuild, isRoad, slotXY };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, pockets: POCKETS, gates: GATES, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, badges: () => BADGES, cam, screenOf: (x, y) => ({ x: (x - cam.x) * zoom + VW / 2, y: (y - cam.y) * zoom + VH / 2 }), screenOfTruck: (t) => { const s = trailerOf(t); return { x: (s.x - cam.x) * zoom + VW / 2, y: (s.y - cam.y) * zoom + VH / 2 }; }, slotSwap, doSwap, route, select: (t) => (selected = t), build: doBuild, planBuild, setBuild, isRoad, slotXY, get bp() { return bp; }, icons: () => ICONS, cellsRect };
 })();
