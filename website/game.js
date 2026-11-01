@@ -146,31 +146,16 @@ function startCmd(t, a) {
     if (t.lane && t.lane !== lane) t.lane.claim = null;
     lane.claim = t; t.lane = lane; a.lane = lane;
   } else if (t.lane) { t.lane.claim = null; t.lane = null; }
+  if (t.bay) { if (t.bay.claim === t) t.bay.claim = null; t.bay = null; }
   if (t.stall && t.stall.claim === t && !(a.kind === "park" && a.stall === t.stall)) t.stall.claim = null;
   t.stall = null; t.cmd = a; goTo(t, targetKey(a)); return true;
-}
-// (owner) yard tractors don't park: with nothing queued they fetch from a ship and deliver to storage on their own,
-// and with no ship to work they wait in a free STS lane
-function autoWork(t) {
-  const [hi] = headIJ(t);
-  if (t.load === null) {
-    const ok = BERTHS.filter((b) => b.ship && b.ship.state === "docked" && shipCount(b.ship) - b.ship.promised > 0 && ((t.lane && t.lane.berth === b) || b.lanes.some((l) => !l.claim)));
-    const left = (b) => shipCount(b.ship) - b.ship.promised;   // the ship with the most still to unload first, then the nearest
-    ok.sort((p, q) => left(q) - left(p) || Math.abs(p.x + 6 - hi) - Math.abs(q.x + 6 - hi));
-    if (ok.length) { const a = { kind: "sts", berth: ok[0], ship: ok[0].ship }; claim(t, a, 1); if (!startCmd(t, a)) claim(t, a, -1); return; }
-    if (!t.lane) { const b = BERTHS.find((q) => q.lanes.some((l) => !l.claim)); if (b) startCmd(t, { kind: "wait", berth: b }); }
-  } else {
-    const ok = BLOCKS.filter((b) => free(b) > 0 && b.bays.some((q) => !q.claim)).sort((p, q) => free(q) - free(p) || Math.abs(p.x + 2 - hi) - Math.abs(q.x + 2 - hi));   // the emptiest storage area first
-    if (ok.length) { const a = { kind: "rtg", block: ok[0], bay: ok[0].bays.find((q) => !q.claim) }; claim(t, a, 1); startCmd(t, a); }
-  }
 }
 
 function truckStep(t, dt) {
   if (t.locked) return;
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
-    if (t.queue.length) { if (startCmd(t, t.queue[0])) t.queue.shift(); }
-    else if (t.kind === "yard") autoWork(t);
+    if (t.queue.length && startCmd(t, t.queue[0])) t.queue.shift();
   }
   // traffic: move into the next tile only when no other truck holds it
   if (!t.next && t.path.length) { const n = t.path[0], o = occ.get(n); if (!o || o === t) { occ.set(n, t); t.next = n; t.p = 0; } }
@@ -187,7 +172,7 @@ function truckStep(t, dt) {
 }
 function doneServing(t) {
   const a = t.cmd; t.cmd = null; t.locked = false;
-  if (a && a.kind === "rtg") a.bay.claim = null;
+  if (a && a.kind === "rtg") { if (t.kind === "yard") t.bay = a.bay; else a.bay.claim = null; }   // a tractor keeps its bay until its next trip
   if (t.queue.length) return;
   if (t.kind === "cust") { t.happy = 1.8; t.exiting = true; delivered++; goTo(t, key(MW + 5, GATE)); }
 }

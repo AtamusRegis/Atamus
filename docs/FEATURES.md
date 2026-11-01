@@ -107,11 +107,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 ## Trucks: you send them (owner)
 
 - **Three yard tractors** (yellow cabs, numbered 1–3) start in berth A's lanes. They can be empty or loaded.
-- **Tractors never park (owner, 2026-10-31: "they will always be moving from quay to rtg's"):** with nothing queued, a
-  tractor works on its own.
-  - Empty: it goes to the STS whose docked ship has the most containers left unclaimed (ties: the nearest).
-  - Loaded: it goes to the emptiest storage area with a free bay.
-  - With no ship to unload, it waits in a free STS lane.
+- **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
+  it takes the container to; an unloaded one waits for you to pick the STS crane it goes to. Tractors never park. A
+  tractor with nothing queued stays where it finished (in its STS lane or RTG bay, which it keeps until its next trip).
 - **Customer trucks park (owner):** a customer truck drives in on the gate road every 8–14 s, when a stall is free, and
   parks in the lot until you send it. Its cab is the color of the container it wants, picked from colors in storage
   that no other waiting customer wants.
@@ -120,7 +118,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - Select one by clicking it (or 1–3 for tractors).
   - Then click an STS crane or its lanes, a storage area or one of its bays (a bay you click, if free; otherwise the
     first free one), or (customers) a parking stall.
-  - Clicks queue up, with no limit for now. A tractor's queue comes before its own work.
+  - Clicks queue up, with no limit for now.
 - **Only where it can be served (owner):**
   - an empty tractor → an STS at a docked ship with a container no one has claimed
   - a loaded tractor → an RTG with a free bay and room in its area
@@ -135,6 +133,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
 
 ## Rejected / removed
+
+- **Tractors working on their own when nothing was queued (2026-10-31, later; owner: "too automated"):** removed.
 
 - **The single STS line of three trucks one behind another, tractors parking in the lot (2026-10-31, later):** replaced by
   three lanes side by side under each crane, and tractors that keep working.
