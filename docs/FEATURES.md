@@ -37,18 +37,18 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The port
 
-- **A 54 × 37 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
+- **A 54 × 39 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
   pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
   - water with two **berths**, A and B
   - the quay with an **STS crane** at each berth
-  - the **STS lines**
+  - the **STS lanes**
   - the quay road
   - six **storage areas** with their RTG cranes
   - the RTG lane
   - the **RTG bays**
   - the yard road
-  - the **parking lot** (24 stalls)
+  - the **parking lot** (24 stalls, for customer trucks)
   - the gate road
   - a fence
 - **Camera:**
@@ -68,7 +68,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **No overlapping or clipping:** a truck holds the tiles under it (4 tiles) and moves on only into a free tile.
   Trucks queue up behind each other, and none can pass through another.
 - **Truck shape:** a cab and a trailer bend around corners along the tiles they hold.
-- **The STS lines** are used only by trucks headed for an STS crane, so through traffic takes the quay road.
+- **The STS lanes:** each berth has its own three parallel lanes. Trucks enter them up a column west of the crane and
+  leave down a column east of it. Only trucks headed for that crane use them; through traffic takes the quay road.
 
 ## Containers (owner)
 
@@ -82,10 +83,11 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Arriving:** an empty berth gets a ship after a few seconds. It sails in and docks.
 - **Cargo:** 12 bays, each a stack of 0–3 containers (14 or more in all).
-- **The STS line (owner):** under each STS crane is a 12-tile line, long enough for three yard tractors one behind
-  another. At most three tractors can be headed for one line at once.
-- **The STS crane unloads automatically, one container at a time (owner):** it picks the front-most empty tractor
-  standing in its line. It runs along the quay to the nearest bay with a container, runs its trolley out, lifts the top
+- **Three lanes side by side (owner, 2026-10-31: "make the quay tractor line 3 tall instead of 3 wide"):** under each STS
+  crane are three parallel lanes with one tractor spot each, so no tractor waits behind another. A tractor takes a free
+  lane when its trip there starts (or keeps the one it's already in).
+- **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
+  spot (the nearest lane first). It runs along the quay to the nearest bay with a container, runs its trolley out, lifts the top
   container, brings it back and lowers it onto that tractor. Then it does the next.
 - **Leaving:** once its bays are empty and nothing more is promised, the ship sails off. Another follows.
 
@@ -104,24 +106,28 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Trucks: you send them (owner)
 
-- **Three yard tractors** (yellow cabs, numbered 1–3) start in the parking lot. They can be empty or loaded.
-- **Customer trucks:**
-  - A customer truck drives in on the gate road every 8–14 s, when a stall is free, and parks in the lot.
-  - Its cab is the color of the container it wants, picked from colors in storage that no other waiting customer wants.
-- **Sharing (owner):** yard tractors and customer trucks share the parking lot and the RTG bays.
+- **Three yard tractors** (yellow cabs, numbered 1–3) start in berth A's lanes. They can be empty or loaded.
+- **Tractors never park (owner, 2026-10-31: "they will always be moving from quay to rtg's"):** with nothing queued, a
+  tractor works on its own.
+  - Empty: it goes to the STS whose docked ship has the most containers left unclaimed (ties: the nearest).
+  - Loaded: it goes to the emptiest storage area with a free bay.
+  - With no ship to unload, it waits in a free STS lane.
+- **Customer trucks park (owner):** a customer truck drives in on the gate road every 8–14 s, when a stall is free, and
+  parks in the lot until you send it. Its cab is the color of the container it wants, picked from colors in storage
+  that no other waiting customer wants.
+- **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
-  - Then click an STS crane or its line, a storage area or one of its bays (a bay you click, if free; otherwise the
-    first free one), or a parking stall.
-  - Clicks queue up, with no limit for now.
+  - Then click an STS crane or its lanes, a storage area or one of its bays (a bay you click, if free; otherwise the
+    first free one), or (customers) a parking stall.
+  - Clicks queue up, with no limit for now. A tractor's queue comes before its own work.
 - **Only where it can be served (owner):**
-  - an empty tractor → an STS line with room, at a docked ship with a container no one has claimed
+  - an empty tractor → an STS at a docked ship with a container no one has claimed
   - a loaded tractor → an RTG with a free bay and room in its area
   - a customer → an RTG with a free bay and its color, unclaimed (just one trip)
-  - anyone → a free stall
-  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its line place, bay, stall,
-    container or slot at once. Anything else flashes a red ✕.
-- **When a tractor runs out of trips**, it drives to the nearest free stall and parks, so it never sits in a road.
+  - a customer → a free stall
+  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its bay, stall, container or
+    slot at once. Anything else flashes a red ✕.
 - **Showing it:** the selected truck's queued spots are outlined, numbered and joined by a dashed line. The target under
   the cursor shows green or red.
 - **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
@@ -129,6 +135,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
 
 ## Rejected / removed
+
+- **The single STS line of three trucks one behind another, tractors parking in the lot (2026-10-31, later):** replaced by
+  three lanes side by side under each crane, and tractors that keep working.
 
 - **Trucks driving through each other, a single parking spot at each crane, the east parking stubs (2026-10-31, later):**
   replaced by one-way traffic with held tiles, STS lines for three, RTG bays for five and the shared parking lot.
