@@ -139,8 +139,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   spot (the nearest lane first). It runs along the quay to the slot, runs its trolley out, lifts the top container,
   brings it back and lowers it onto that tractor. Then it does the next.
 - **Which slot (owner, 2026-11-01: "make the player able to tell the quay which column to pick a container from"):** a
-  tractor sent by clicking a ship slot gets the top container of that slot. That needs a slot with a container nobody
-  has claimed, and claims it. Sent by clicking the crane or its lanes, the crane takes the slot nearest the tractor
+  tractor sent by clicking a ship slot claims that slot's top container nobody has claimed yet, and gets **that
+  container** (owner, 2026-11-01): if a crane moves it while sorting, the trip follows it (it's outlined where it is
+  now). Cranes never set anything on top of a claimed container. If two tractors claimed containers in the same stack
+  and the lower one's tractor arrives first, the two swap; if the trip on top of it was called off, it takes that one. Sent by clicking the crane or its lanes, the crane takes the slot nearest the tractor
   (deck rows nearest the quay first), skipping containers claimed by slot.
 - **Leaving:** once its imports are all off and nothing more is promised (exports on their way included), it sails off
   east with any exports loaded. Another follows.

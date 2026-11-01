@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Clicked containers are tracked (owner):** sending a tractor to a ship slot claims that particular container, so if the crane moves it while sorting, the tractor still gets it.
+
 - **Fix: tractors stuck in the lower parking block's aisle.** A tractor given a new trip while driving up the aisle had no way out and blocked the aisle and the back road behind it. The aisle now carries on up onto the tractors' lane. Checked that no truck can be left at a dead end anywhere on the map.
 
 - **No leftover concrete (owner):** the concrete islands between groups of bays, the gaps in the lot and the other spare ground in the yard are paved over.

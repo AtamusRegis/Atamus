@@ -406,8 +406,24 @@ function planFor(t, i, j) {
   const bay = !loaded && holds(b, t.want) && freeBay(b);
   return bay ? { kind: "rtg", block: b, bay } : null;
 }
+// (owner, 2026-11-01) a pickup sent to a ship slot claims a particular container (the top one nobody has claimed yet),
+// not the slot: if a crane moves it while sorting or packing, the trip follows it (a.slot is wherever it is now).
+// TAKEN marks a container a crane has started a job on, so nobody claims it on its way off the ship.
+const TAKEN = { taken: true };
+function syncClaims() {
+  const s = DOCK.ship; if (!s) return;
+  s.claims.fill(0);
+  s.bays.forEach((st, k) => { for (const x of st) if (x.claimedBy) { s.claims[k]++; if (x.claimedBy !== TAKEN) x.claimedBy.slot = k; } });
+}
+// the next container a crane would hand out from a slot unclaimed: the top one (skip: ones already being taken above it)
+const pickable = (st, skip = 0) => { const x = st[st.length - 1 - skip]; return !!x && !x.exp && !x.claimedBy; };
 function claim(t, a, d) {
-  if (a.kind === "sts") { if (a.pick !== false) a.berth.promised += d; if (a.slot !== undefined && DOCK.ship) DOCK.ship.claims[a.slot] += d; }
+  if (a.kind === "sts") {
+    if (a.pick !== false) a.berth.promised += d;
+    if (d > 0 && a.slot !== undefined && DOCK.ship) { const x = DOCK.ship.bays[a.slot].slice().reverse().find((q) => !q.exp && !q.claimedBy); if (x) { a.box = x; x.claimedBy = a; } }
+    if (d < 0 && a.box) { if (a.box.claimedBy === a) a.box.claimedBy = null; delete a.box; }
+    syncClaims();
+  }
   else if (a.kind === "park") a.stall.claim = d > 0 ? t : null;
   else if (a.kind === "rtg" && a.bay && t.kind !== "yard") a.bay.claim = d > 0 ? t : null;
 }
@@ -633,7 +649,7 @@ function craneStep(cr, dt, onDone) {
     op.done = true; STACK_VER++;
     // (owner) an STS crane can hold a second container (hold2)
     if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; if (op.then) op.then(); }
-    else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
+    else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (x && x.claimedBy === TAKEN) x.claimedBy = null; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
   }
   if (ph < 1) return;
   cr.hoist = 0; cr.ops.shift(); if (!cr.ops.length) onDone();
@@ -653,8 +669,20 @@ function stsStep(b, dt) {
       const sx = (k) => (DOCK.x + shipSlot(k).c * CL + 1.5) * T, sy = (k) => (DOCK.top + shipSlot(k).r + 0.5) * T;
       // the slot an import pickup takes from: its own slot if it has one and it still holds an import, else the nearest
       // with an import nobody has claimed (used: a slot already being taken from once in this lift)
-      const slotFor = (q, refX, used) => { const sl = q.cmd.slot; if (sl !== undefined && impCount(s.bays[sl]) - (sl === used ? 1 : 0) > 0) return sl; let best = -1, bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (impCount(st) - s.claims[k] - (k === used ? 1 : 0) > 0 && c >= c0 && c < c1) { const d = Math.abs(sx(k) - refX) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; best = k; } } }); return best; };
-      const take = (q) => { const sl = q.cmd.slot; if (sl !== undefined) { s.claims[sl] = Math.max(0, s.claims[sl] - 1); delete q.cmd.slot; } };
+      // (owner) a trip with a claimed container gets that one, wherever it is now; if another trip's claimed container
+      // is on top of it, the two swap (the crane never sets anything else on a claimed one)
+      const own = (q, used) => {
+        const a = q.cmd; if (!a.box) return -1;
+        const k = s.bays.findIndex((st) => st.includes(a.box)); if (k < 0) return -1;
+        const st = s.bays[k], top = st[st.length - 1 - (k === used ? 1 : 0)];
+        if (top === a.box) return k;
+        if (top && top.claimedBy && top.claimedBy !== TAKEN && top.claimedBy !== a) { const o = top.claimedBy; o.box = a.box; a.box.claimedBy = o; a.box = top; top.claimedBy = a; return k; }
+        if (top && !top.claimedBy && !top.exp) { a.box.claimedBy = null; a.box = top; top.claimedBy = a; return k; }   // one left on top of it (its trip called off): that one instead
+        return -1;
+      };
+      const slotFor = (q, refX, used) => { const sl = own(q, used); if (sl >= 0) return sl; let best = -1, bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (pickable(st, k === used ? 1 : 0) && c >= c0 && c < c1) { const d = Math.abs(sx(k) - refX) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; best = k; } } }); return best; };
+      const take = (q) => { const a = q.cmd; if (a.box) { if (a.box.claimedBy === a) a.box.claimedBy = null; delete a.box; } delete a.slot; syncClaims(); };
+      const mark = (k, skip) => { const st = s.bays[k], x = st[st.length - 1 - skip]; if (x) x.claimedBy = TAKEN; syncClaims(); };
       // (owner) each tractor drives off the moment it's done with: loaded, or (an export with nothing to take back) lifted off
       const rel = (q, picked) => () => { if (picked) b.promised = Math.max(0, b.promised - 1); if (cr.truck === q) cr.truck = null; if (cr.truck2 === q) cr.truck2 = null; doneServing(q); };
       let refX = trailerOf(t).x, placed = !t.load, liftOff = null;
@@ -667,15 +695,15 @@ function stsStep(b, dt) {
       let best = -1, t2 = null, best2 = -1, spare = false, extra = -1;
       if (a.pick !== false) {
         if (placed && cr.hold2 && a.slot === undefined) spare = true;   // hand over the one it's holding
-        else { if (placed) best = slotFor(t, refX, -1); take(t); if (best < 0) b.promised = Math.max(0, b.promised - 1); }
+        else { if (placed) best = slotFor(t, refX, -1); take(t); if (best >= 0) mark(best, 0); else b.promised = Math.max(0, b.promised - 1); }
       }
       if (spare) { ops.push({ to: () => [trailerOf(t).x, ly] }, { lower: { truck: t, second: true }, then: rel(t, true) }); t.locked = true; cr.truck = t; cr.ops = ops; }
       // (owner) holding two: with an empty tractor at the front of the other line too, lift one for each in the same trip;
       // otherwise, with more pickups on their way, lift a spare to hold for the next tractor
       if (!spare && best >= 0 && !ops.length && !cr.hold2) {
-        for (const q of waiting) { if (q === t || q.load !== null || q.cmd.pick === false) continue; const k = slotFor(q, sx(best), best); if (k >= 0) { t2 = q; best2 = k; take(q); break; } }
+        for (const q of waiting) { if (q === t || q.load !== null || q.cmd.pick === false) continue; const k = slotFor(q, sx(best), best); if (k >= 0) { t2 = q; best2 = k; take(q); mark(k, k === best ? 1 : 0); break; } }
       }
-      if (!spare && best >= 0 && !t2 && !cr.hold2 && coming(b, t)) { let bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (impCount(st) - s.claims[k] - (k === best ? 1 : 0) > 0 && c >= c0 && c < c1) { const d = Math.abs(sx(k) - sx(best)) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; extra = k; } } }); }
+      if (!spare && best >= 0 && !t2 && !cr.hold2 && coming(b, t)) { let bd = 1e9; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (pickable(st, k === best ? 1 : 0) && c >= c0 && c < c1) { const d = Math.abs(sx(k) - sx(best)) + (DOCK.rows - shipSlot(k).r) * 8; if (d < bd) { bd = d; extra = k; } } }); if (extra >= 0) mark(extra, extra === best ? 1 : 0); }
       if (!spare && best < 0 && liftOff) liftOff.then = rel(t, false);
       if (!spare && best >= 0) {
         cr.slot = best; cr.slot2 = t2 ? best2 : undefined;
@@ -697,8 +725,8 @@ function stsStep(b, dt) {
     // second slot (one a customer is waiting for, if one is on top within reach); it only sorts or compresses with no
     // tractor coming, or (spare in hand) while the nearest is still a good way off
     const eta = soonest(b), wanted = (st) => { const x = st[st.length - 1]; return x && !x.exp && x.wantedBy ? 1 : 0; };
-    if (cr.hold2 && eta === Infinity) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st))); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
-    else if (!cr.hold2 && eta < Infinity && s.state === "docked") { const free = (st, kk) => impCount(st) - s.claims[kk] > 0 && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk); let k = nearest((st, kk) => free(st, kk) && wanted(st)); if (k < 0) k = nearest(free); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: s.bays[k], second: true } }]; }
+    if (cr.hold2 && eta === Infinity) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st)) && !st.some((x) => x.claimedBy)); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
+    else if (!cr.hold2 && eta < Infinity && s.state === "docked") { const free = (st, kk) => pickable(st) && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk); let k = nearest((st, kk) => free(st, kk) && wanted(st)); if (k < 0) k = nearest(free); if (k >= 0) { const st = s.bays[k]; st[st.length - 1].claimedBy = TAKEN; syncClaims(); cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: st, second: true } }]; } }
     else if (s.state === "docked" && (eta === Infinity || (cr.hold2 && eta > 28)) && sortShip(b)) { /* digging out a wanted container (owner) */ }
     else if (s.state === "docked" && eta === Infinity) compressShip(b);
   }
@@ -715,11 +743,12 @@ const coming = (b, t) => trucks.some((q) => q !== t && q.cmd && q.cmd.kind === "
 // (owner) an idle STS crane sorts the ship, before anything else: it takes the top container off a slot where a
 // customer's container is buried (the least buried first; a slot tractors are queued for only while enough is left for them) and sets it on the nearest low slot of its own columns
 // that holds no exports and no wanted container
+// (owner) a claimed container on top may be moved too: its trip follows it
 function sortShip(b) {
   const s = DOCK.ship, cr = b.crane, [c0, c1] = craneCols(b), inCols = (k) => k % DOCK.cols >= c0 && k % DOCK.cols < c1 && onDeck(s, k);
   const busy = (k) => s.claims[k] > 0 || BERTHS.some((q) => q.crane.slot === k || q.crane.slot2 === k);
   let src = -1, sd = 1e9;
-  s.bays.forEach((st, k) => { if (!inCols(k) || !impCount(st) || BERTHS.some((q) => q.crane.slot === k || q.crane.slot2 === k) || impCount(st) - 1 < s.claims[k]) return; const i = st.findIndex((x) => x.wantedBy); if (i < 0 || i === st.length - 1) return; if (st.length - 1 - i < sd) { sd = st.length - 1 - i; src = k; } });
+  s.bays.forEach((st, k) => { if (!inCols(k) || !impCount(st) || BERTHS.some((q) => q.crane.slot === k || q.crane.slot2 === k) || st[st.length - 1].claimedBy === TAKEN) return; const i = st.findIndex((x) => x.wantedBy); if (i < 0 || i === st.length - 1) return; if (st.length - 1 - i < sd) { sd = st.length - 1 - i; src = k; } });
   if (src < 0) return false;
   const qs = shipSlot(src); let dst = -1, dd = 1e9;
   s.bays.forEach((st, k) => { if (k === src || !inCols(k) || st.length >= 3 || (st.length && !impCount(st)) || st.some((x) => x.wantedBy) || busy(k)) return; const q = shipSlot(k), d = st.length * 3 + Math.abs(q.c - qs.c) * 2 + Math.abs(q.r - qs.r); if (d < dd) { dd = d; dst = k; } });
@@ -1206,7 +1235,7 @@ function step(dt) {
   clock += dt;
   const pan = 520 / zoom * dt; if (keys.KeyW || keys.ArrowUp) cam.y -= pan; if (keys.KeyS || keys.ArrowDown) cam.y += pan; if (keys.KeyA || keys.ArrowLeft) cam.x -= pan; if (keys.KeyD || keys.ArrowRight) cam.x += pan;
   cam.x = clamp(cam.x, 0, MW * T); cam.y = clamp(cam.y, 0, MH * T);
-  shipStep(dt); for (const b of BERTHS) if (b.open) stsStep(b, dt);
+  shipStep(dt); syncClaims(); for (const b of BERTHS) if (b.open) stsStep(b, dt);
   sortLanes(); freeBays(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
