@@ -37,20 +37,38 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The port
 
-- **A 36 × 24 grid of 32 px tiles (owner)**, 2D top down, north up. Placeholder pixel art drawn in code, to be replaced.
+- **A 54 × 37 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
+  pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
   - water with two **berths**, A and B
-  - the quay, with a **ship-to-shore (STS) crane** at each berth
+  - the quay with an **STS crane** at each berth
+  - the **STS lines**
   - the quay road
-  - four **storage areas** with an **RTG crane** at each one's south end
+  - six **storage areas** with their RTG cranes
+  - the RTG lane
+  - the **RTG bays**
   - the yard road
+  - the **parking lot** (24 stalls)
+  - the gate road
   - a fence
-- **Roads:** lanes between the storage areas join the two roads, and six parking stubs line the east side. Trucks drive
-  only on roads.
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms
   - it starts fitted to the screen
+
+## Traffic (owner, 2026-10-31: "have an actual traffic rule")
+
+- **One-way roads:**
+  - The quay lanes run east, the east connector south, the yard road west and the west connector north.
+  - The lanes between the storage areas run south from the quay road to the RTG lane, which runs east.
+  - RTG bays and parking stalls are drive-through, northbound.
+  - The gate road runs east from the west edge, out past the east connector. A link runs south from the yard road's
+    west end to the gate road.
+  - Faint arrows on the roads show the directions.
+- **No overlapping or clipping:** a truck holds the tiles under it (4 tiles) and moves on only into a free tile.
+  Trucks queue up behind each other, and none can pass through another.
+- **Truck shape:** a cab and a trailer bend around corners along the tiles they hold.
+- **The STS lines** are used only by trucks headed for an STS crane, so through traffic takes the quay road.
 
 ## Containers (owner)
 
@@ -63,47 +81,57 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 ## Ships and STS cranes
 
 - **Arriving:** an empty berth gets a ship after a few seconds. It sails in and docks.
-- **Cargo:** 10 bays, each a stack of 0–3 containers (12 or more in all).
-- **The STS crane unloads automatically (owner)** onto an empty yard truck parked under it:
-  - it runs along the quay to the nearest bay with a container and runs its trolley out over the ship
-  - it lifts the top container, brings it back and lowers it onto the truck
+- **Cargo:** 12 bays, each a stack of 0–3 containers (14 or more in all).
+- **The STS line (owner):** under each STS crane is a 12-tile line, long enough for three yard tractors one behind
+  another. At most three tractors can be headed for one line at once.
+- **The STS crane unloads automatically, one container at a time (owner):** it picks the front-most empty tractor
+  standing in its line. It runs along the quay to the nearest bay with a container, runs its trolley out, lifts the top
+  container, brings it back and lowers it onto that tractor. Then it does the next.
 - **Leaving:** once its bays are empty and nothing more is promised, the ship sails off. Another follows.
 
 ## Storage areas and RTG cranes (owner)
 
-- **Four storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
-  high (60 containers per area). They start part full.
-- **Each has an RTG crane at its south end.** Its gantry runs along the area and its trolley across it. It serves the truck
-  parked at the area's spot on the yard road below it, then goes back to rest at the area's end.
-- **A loaded yard truck:** the RTG lifts the container off and stacks it on the lowest stack nearest the road (on top of
+- **Six storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
+  high. They start part full.
+- **RTG bays (owner):** below each area are 5 vertical drive-through bays, one per column, so up to five trucks park side
+  by side.
+- **The RTG crane** rests at the area's south end. It serves the trucks standing in its bays one at a time, running its
+  gantry down over them, and goes back to rest after.
+- **A loaded yard tractor:** the RTG lifts the container off and stacks it on the lowest stack nearest the bays (on top of
   the same color when it can).
 - **A customer truck:** the RTG finds a container of the truck's color with the fewest on top. It moves those aside onto
   other stacks one by one, then lifts the container out and loads the truck.
 
 ## Trucks: you send them (owner)
 
-- **Three yard trucks** (yellow cabs, numbered 1–3) start at the parking stubs. They can be empty or loaded.
-- **Customer trucks** pull into a free stub every 9–16 s. Their cab is the color of the container they want, picked
-  from colors in storage that no other waiting customer wants.
+- **Three yard tractors** (yellow cabs, numbered 1–3) start in the parking lot. They can be empty or loaded.
+- **Customer trucks:**
+  - A customer truck drives in on the gate road every 8–14 s, when a stall is free, and parks in the lot.
+  - Its cab is the color of the container it wants, picked from colors in storage that no other waiting customer wants.
+- **Sharing (owner):** yard tractors and customer trucks share the parking lot and the RTG bays.
 - **Sending a truck:**
-  - Select one by clicking it (or 1–3 for yard trucks).
-  - Click a berth's STS crane or a storage area (its RTG), and the truck drives there by road and parks at its spot.
-  - Clicks queue up, with no limit for now. For example STS A, then storage 2, then STS A again.
+  - Select one by clicking it (or 1–3 for tractors).
+  - Then click an STS crane or its line, a storage area or one of its bays (a bay you click, if free; otherwise the
+    first free one), or a parking stall.
+  - Clicks queue up, with no limit for now.
 - **Only where it can be served (owner):**
-  - an empty yard truck → an STS with a docked ship that still has a container no one has claimed
-  - a loaded yard truck → an RTG whose area has room
-  - a customer → an RTG whose area has its color, unclaimed. A customer takes just one trip.
-  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its container or slot at
-    once. Anything else flashes a red ✕.
-- **Showing it:** the selected truck's queued spots are numbered and joined by a dashed line. The target under the cursor
-  shows green or red.
+  - an empty tractor → an STS line with room, at a docked ship with a container no one has claimed
+  - a loaded tractor → an RTG with a free bay and room in its area
+  - a customer → an RTG with a free bay and its color, unclaimed (just one trip)
+  - anyone → a free stall
+  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its line place, bay, stall,
+    container or slot at once. Anything else flashes a red ✕.
+- **When a tractor runs out of trips**, it drives to the nearest free stall and parks, so it never sits in a road.
+- **Showing it:** the selected truck's queued spots are outlined, numbered and joined by a dashed line. The target under
+  the cursor shows green or red.
 - **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
   right click deselects.
-- **Sharing a spot:** a truck stops back from a spot another truck is using and pulls in when it's free. Trucks don't
-  otherwise block each other.
-- **Done:** a loaded customer truck shows a smiley and drives off east.
+- **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
 
 ## Rejected / removed
+
+- **Trucks driving through each other, a single parking spot at each crane, the east parking stubs (2026-10-31, later):**
+  replaced by one-way traffic with held tiles, STS lines for three, RTG bays for five and the shared parking lot.
 
 - **Forklifts, 1-tile containers, the long walled storage and the 2 × 5 patch, apron truck bays (2026-10-31, later):**
   replaced by STS cranes, 3-tile containers, four vertical storage areas with RTG cranes, and trucks you send between

@@ -8,8 +8,8 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. **The redo (owner, 2026-10-31): Atamus is a single-player container port management game** (a spaceport, then a
    seaport, then a container terminal, all that evening), in the browser with no server: ships dock and ship-to-shore
-   cranes unload them onto yard trucks; containers (3 tiles long, seven colors) stack 3 high in four vertical 5 × 12
-   storage areas, each with an RTG crane at its end; you select a truck and queue where it parks; customer trucks want
+   cranes unload them onto yard trucks; containers (3 tiles long, seven colors) stack 3 high in six vertical 5 × 12
+   storage areas, each with an RTG crane and 5 truck bays at its end; trucks follow one-way roads and hold their tiles; you select a truck and queue where it parks; customer trucks want
    a container of their cab's color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
    will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
@@ -38,7 +38,7 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 website/          GitHub Pages site (atamus.io) and the game
   game.html       the game page: just the canvas
   game.js         the whole game, single player: the tile map and roads (drawn once), ships, STS cranes, storage areas
-                  and RTG cranes (op lists: move / lift / lower), yard and customer trucks (road BFS, queues, claims),
+                  and RTG cranes (op lists: move / lift / lower), yard and customer trucks (one-way road graph, held tiles, queues, claims),
                   camera (pan / zoom / pinch); window.Atamus for tests
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
