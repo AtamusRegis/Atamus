@@ -974,7 +974,19 @@ addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
 const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
 function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, u = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / l, 0, 1); return hyp(px - a[0] - u * dx, py - a[1] - u * dy); }
-function truckAt(sx, sy) { const w = toWorld(sx, sy); for (const t of trucks) { if (t.exiting) continue; const s = shapeOf(t); if (Math.min(segDist(w.x, w.y, s.front, s.cabBack), segDist(w.x, w.y, s.trFront, s.trBack)) < 14) return t; } return null; }
+// (owner, 2026-11-01) touch friendly: a finger gets a wider reach (at least about 18 screen pixels), the nearest truck wins
+let touchy = false;
+function truckAt(sx, sy) { const w = toWorld(sx, sy), reach = touchy ? Math.max(14, 18 / zoom) : 14; let best = null, bd = reach; for (const t of trucks) { if (t.exiting) continue; const s = shapeOf(t), d = Math.min(segDist(w.x, w.y, s.front, s.cabBack), segDist(w.x, w.y, s.trFront, s.trBack)); if (d < bd) { bd = d; best = t; } } return best; }
+// the selected truck's numbered queue badges, as last drawn (world coordinates), for tapping one off
+let BADGES = [];
+const badgeSize = () => clamp((touchy ? 22 : 16) / zoom, 13, 24);   // never bigger than most of a tile, so the spot under it stays tappable
+// take any queued trip back (not the one under way), with the drop-off step that was put in for it
+function unqueue(t, a) {
+  const i = t.queue.indexOf(a); if (i < 0) return false;
+  claim(t, a, -1); t.queue.splice(i, 1);
+  if (t.queue[i - 1] && t.queue[i - 1].kind === "deliver" && (!t.queue[i] || t.queue[i].kind === "deliver")) t.queue.splice(i - 1, 1);
+  return true;
+}
 // (owner) an auto tractor told to fetch from a ship slot: if it's already on its way to a crane for a pickup the crane
 // hasn't started, that pickup becomes the slot's; it then takes it to its RTG and carries on
 function slotSwap(t, i, j) {
@@ -989,31 +1001,35 @@ function doSwap(t, a) {
 }
 // an auto tractor is assigned an RTG by clicking its storage area or bays
 function homeFor(t, i, j) { if (t.kind !== "yard" || !t.auto) return null; const g = targetAt(i, j); return g && g.kind === "rtg" ? g.block : null; }
+// (owner, 2026-11-01) everything is one tap: tap a truck to select it (again to let go), tap where it goes to queue it,
+// tap a numbered badge of its queue to take that trip back, tap open ground to let go of it
 function click(sx, sy) {
+  if (selected) { const w = toWorld(sx, sy); for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(w.x - b.x) <= b.r && Math.abs(w.y - b.y) <= b.r) { unqueue(selected, b.a); return; } } }
   const t = truckAt(sx, sy); if (t) { selected = selected === t ? null : t; return; }
   const [i, j] = tileAtScreen(sx, sy), u = buyAt(i, j);
   if (u) { if (money >= u.price) { money -= u.price; u.buy(); } else bad = { i, j, t: 0.5 }; return; }
   if (!selected) return;
   const h = homeFor(selected, i, j); if (h) { selected.home = h; return; }
   const a = planFor(selected, i, j), sw = !a && slotSwap(selected, i, j);
-  if (a) enqueue(selected, a); else if (sw) doSwap(selected, sw); else bad = { i, j, t: 0.5 };
+  if (a) enqueue(selected, a); else if (sw) doSwap(selected, sw); else if (!targetAt(i, j)) selected = null; else bad = { i, j, t: 0.5 };
 }
 const pts = new Map(); let gesture = null;
 // right click: take back the selected truck's last queued trip (not the one under way); with none left, deselect
-cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!selected || !unqueueLast(selected)) selected = null; });
+cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (touchy) return; if (!selected || !unqueueLast(selected)) selected = null; });   // a long press on a touch screen does nothing
 cv.addEventListener("pointerdown", (e) => {
   if (e.button === 2) return;
+  touchy = e.pointerType === "touch" || e.pointerType === "pen";
   try { cv.setPointerCapture(e.pointerId); } catch (er) { /* fine */ }
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pts.size === 2) { const [a, b] = [...pts.values()]; gesture = { pinch: hyp(a.x - b.x, a.y - b.y), zoom, moved: true }; return; }
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener("pointermove", (e) => {
-  hover = { tile: tileAtScreen(e.clientX, e.clientY), truck: truckAt(e.clientX, e.clientY) };
+  if (e.pointerType === "mouse") { touchy = false; hover = { tile: tileAtScreen(e.clientX, e.clientY), truck: truckAt(e.clientX, e.clientY) }; } else hover = null;   // no hover on a touch screen
   if (!pts.has(e.pointerId) || !gesture) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (gesture.pinch && pts.size === 2) { const [a, b] = [...pts.values()]; setZoom(gesture.zoom * hyp(a.x - b.x, a.y - b.y) / gesture.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
   if (gesture.pinch) return;
-  const dx = e.clientX - gesture.sx, dy = e.clientY - gesture.sy; if (hyp(dx, dy) > 6) gesture.moved = true;
+  const dx = e.clientX - gesture.sx, dy = e.clientY - gesture.sy; if (hyp(dx, dy) > (touchy ? 12 : 6)) gesture.moved = true;
   if (gesture.moved) { cam.x = gesture.cx - dx / zoom; cam.y = gesture.cy - dy / zoom; }
 });
 cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
@@ -1320,14 +1336,16 @@ function draw() {
   // a selected auto tractor's RTG
   if (selected && selected.auto && selected.home) { const hb = selected.home; ctx.setLineDash([8, 6]); ctx.strokeStyle = "#5fd3d0"; ctx.lineWidth = 3; ctx.strokeRect(hb.x * T - 3, hb.y * T - 3, hb.w * T + 6, (YROAD - hb.y) * T + 6); ctx.setLineDash([]); }
   // the selected truck's queue: numbered spots joined in order
+  if (!selected) BADGES = [];
   if (selected) {
-    const tr = trailerOf(selected); let px = tr.x, py = tr.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+    const tr = trailerOf(selected); let px = tr.x, py = tr.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2; BADGES = [];
     for (const a of selected.cmd ? [selected.cmd, ...selected.queue] : selected.queue) {
       if (a.kind === "deliver" || a.kind === "qwait") continue;
       const [rx, ry, rw, rh] = spotRect(a), sx = rx + rw / 2, sy = ry + rh / 2; n++;
       ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke(); px = sx; py = sy;
       ctx.strokeStyle = "#ffffff"; ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
-      ctx.setLineDash([]); ctx.fillStyle = "#1e2024"; ctx.fillRect(rx - 4, ry - 4, 13, 13); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), rx + 2.5, ry + 3); ctx.setLineDash([5, 5]);
+      const z = badgeSize(), bx = rx - 4 + z / 2, by = ry - 4 + z / 2; BADGES.push({ x: bx, y: by, r: z / 2 + 3 / zoom, a: a === selected.cmd ? null : a });
+      ctx.setLineDash([]); ctx.fillStyle = "#1e2024"; ctx.fillRect(rx - 4, ry - 4, z, z); ctx.fillStyle = "#ece7dc"; ctx.font = `800 ${Math.round(z * 0.75)}px 'JetBrains Mono', monospace`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), bx, by + 0.5); ctx.setLineDash([5, 5]);
     }
     ctx.setLineDash([]);
   }
@@ -1366,10 +1384,19 @@ function step(dt) {
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
 }
 function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); draw(); requestAnimationFrame(frame); }
-function resize() { DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR; zoom = clamp(Math.min(VW / (MW * T), VH / ((MH + 1) * T)), 0.3, 3); cam.y = (MH * T) / 2; }
+// it starts fitted to the screen; (owner, 2026-11-01) on a touch screen close enough for a fingertip, over where the
+// port starts (crane A, the first storage area and the tractor parking). Later resizes (a phone's address bar sliding
+// away, turning it) keep the view as it is.
+let sized = false;
+function resize() {
+  DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR;
+  if (sized) return; sized = true;
+  zoom = clamp(Math.min(VW / (MW * T), VH / ((MH + 1) * T)), 0.3, 3); cam.y = (MH * T) / 2;
+  if (matchMedia && matchMedia("(pointer: coarse)").matches) { touchy = true; zoom = Math.max(zoom, 0.6); cam.x = 13 * T; cam.y = 17 * T; }
+}
 addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, get waitq() { return WAITQ; }, qext: QEXT, slotSwap, doSwap, route, select: (t) => (selected = t) };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, get waitq() { return WAITQ; }, qext: QEXT, badges: () => BADGES, cam, screenOf: (x, y) => ({ x: (x - cam.x) * zoom + VW / 2, y: (y - cam.y) * zoom + VH / 2 }), screenOfTruck: (t) => { const s = trailerOf(t); return { x: (s.x - cam.x) * zoom + VW / 2, y: (s.y - cam.y) * zoom + VH / 2 }; }, slotSwap, doSwap, route, select: (t) => (selected = t) };
 })();

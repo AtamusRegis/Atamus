@@ -68,7 +68,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms
-  - it starts fitted to the screen
+  - it starts fitted to the screen; on a touch screen (owner, 2026-11-01) close enough for a fingertip, over crane A,
+    the first storage area and the tractor parking. Resizing later (a phone's address bar sliding away, turning it)
+    keeps the view as it is.
 
 ## Traffic (owner, 2026-10-31: "have an actual traffic rule")
 
@@ -285,7 +287,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   claimed.
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
-  - Select one by clicking it (or 1–3 for tractors).
+  - Select one by clicking it (or 1–3 for tractors). Click it again, or open ground where it can't go, to let go of it.
   - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or its bays (the RTG; the bay is
     whichever clears first), or (customers) a parking stall.
   - Clicks queue up, with no limit for now. The same RTG can be queued any number of times (owner).
@@ -301,8 +303,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     customer's RTG trip its bay too); a tractor's RTG bay is taken only when one clears for it. Anything else flashes a red ✕.
 - **Showing it:** the selected truck's queued spots are outlined, numbered and joined by a dashed line. The target under
   the cursor shows green or red.
-- **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
-  right click deselects.
+- **Taking back (owner, 2026-11-01: everything one tap):** tap (click) a numbered badge of the selected truck's queue to
+  take that trip back, any of them but the one under way. Right click still removes the last one (with nothing left,
+  it deselects); a long press on a touch screen does nothing.
+- **Touch friendly (owner, 2026-11-01):** every control is a single tap. On a touch screen a truck is easier to hit (the
+  nearest within a fingertip), the queue badges are bigger, a tap that drifts a little still counts as a tap, and there
+  is no hover preview.
 - **Done:** a loaded customer truck shows a smiley and drives out the west gate.
 
 ## Progress: income and unlocks (owner, 2026-11-01)
