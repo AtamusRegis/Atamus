@@ -289,16 +289,19 @@ function shipGone(s) {
   }
   BERTHS.forEach((b) => { b.promised = 0; });
 }
-// (owner, 2026-11-01) when time runs out, each tractor only finishes the crane trip it's on now: crane trips (and export
-// pickups) still waiting in its queue are called off, keeping the drop-offs for what it will actually be carrying
+// (owner, 2026-11-01) when time runs out, each tractor only finishes its next crane trip (the one it's on, or else the
+// first in its queue): any after that (and export pickups) are called off, keeping the drop-offs for what it will
+// actually be carrying
 function closeQueues() {
   for (const t of trucks) {
     if (t.kind !== "yard") continue;
     let l = t.load ? (t.load.exp ? "exp" : "imp") : null;
     if (t.cmd) l = t.cmd.kind === "sts" ? (t.cmd.pick === false ? null : "imp") : t.cmd.kind === "rtg" ? (t.cmd.pickup ? "exp" : null) : t.cmd.kind === "deliver" ? null : l;
+    let one = !!(t.cmd && t.cmd.kind === "sts");
     t.queue = t.queue.filter((a) => {
       let keep = true;
-      if (a.kind === "sts" || (a.kind === "rtg" && a.pickup)) keep = false;
+      if (a.kind === "sts" && !one) { one = true; l = a.pick === false ? null : "imp"; }
+      else if (a.kind === "sts" || (a.kind === "rtg" && a.pickup)) keep = false;
       else if (a.kind === "deliver") { keep = l !== null; l = null; }
       else if (a.kind === "rtg") { keep = l === "imp"; if (keep) l = null; }
       if (!keep) claim(t, a, -1);

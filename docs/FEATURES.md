@@ -124,8 +124,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     large. A small ship only reaches the western cranes.
   - **The timer (owner, 2026-11-01):** once docked, a ship has 90 s plus 8 s per container aboard to be unloaded,
     counting down beside its bow (red in the last 30 s). When it runs out, no new pickups can be assigned (owner), and
-    each tractor only finishes the crane trip it's on now (owner, 2026-11-01): crane trips and export pickups still
-    waiting in its queue are called off, keeping the drop-off for what it's carrying. Then it sails with whatever is left, and customer trucks
+    each tractor still makes its next crane trip, the one it's on or else the first in its queue (owner, 2026-11-01), but
+    no more: any crane trips after that, and export pickups, are called off, keeping the drop-off for what it's carrying. Then it sails with whatever is left, and customer trucks
     waiting for a container still aboard leave without it (frowning, unpaid).
 - **Up to 4 STS cranes, A–D (owner, 2026-11-01),** side by side along the quay. The open ones split the ship's slot
   columns evenly, west to east (with only A, it works the whole ship).
