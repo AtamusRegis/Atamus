@@ -16,7 +16,7 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 // rows 0–6 water (the ship's deck on rows 2–6), 7–8 the quay (crane rails), 9–11 the STS lanes, 12–13 the quay road,
 // 14–25 storage, 26 the RTGs' rest, 27–28 the RTG lane, 29–32 the RTG bays, 33–34 the yard road, 35–38 the parking lot,
 // 39–40 the lot road, 41 the fence. Every road has two lanes (owner). Containers are 3 tiles long (owner).
-const T = 32, OX = 7, EXX = 12, MW = 54 + OX + EXX, MH = 42, QUAY = 7, LINE = 9, LANE_ROWS = [9, 10, 11], QROAD = 12, REST = 26, RLANE = 27, BAY0 = 29, YROAD = 33, LOT0 = 35, LROAD = 39, CL = 3, TL = 4;
+const T = 32, OX = 7, MW = 64 + OX, MH = 43, QUAY = 7, LINE = 9, LANE_ROWS = [9, 10, 11], QROAD = 12, REST = 26, RLANE = 27, BAY0 = 29, YROAD = 33, LOT0 = 35, LROAD = 39, CL = 3, TL = 4;
 const COLORS = [
   { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Green", c: "#3aa04a" },
   { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "White", c: "#d8dcdf" },
@@ -38,7 +38,7 @@ const DOCK = { x: 5 + OX, cols: 14, rows: 5, top: 2, ship: null, wait: 1.5 };
 // (the tractor being loaded plus 2 waiting), and the middle one a drive-through that loaded tractors pull out into.
 // ex: the exit column (west), x + 5: the spot under the crane, ox: the entry column (east)
 const LANE_DEEP = 3, BERTH_W = 3 + TL * LANE_DEEP;
-const BERTHS = [0, 1, 2, 3].map((id) => { const ex = 10 + id * BERTH_W, x = ex - 3; return { id, ex, x, ox: x + 5 + TL * LANE_DEEP, promised: 0, crane: { x: (x + 6) * T, y: (10 + 0.5) * T, hold: null, ops: [], truck: null } }; });
+const BERTHS = [0, 1, 2, 3].map((id) => { const ex = 9 + id * BERTH_W, x = ex - 3; return { id, ex, x, ox: x + 5 + TL * LANE_DEEP, promised: 0, crane: { x: (x + 6) * T, y: (10 + 0.5) * T, hold: null, ops: [], truck: null } }; });
 const PASS_ROW = 10;
 for (const b of BERTHS) b.lanes = [{ r: 9, kind: "auto", berth: b, q: [] }, { r: 11, kind: "manual", berth: b, q: [] }];
 const laneFor = (b, t) => b.lanes.find((l) => l.kind === (t.auto ? "auto" : "manual"));
@@ -63,7 +63,8 @@ const BLOCKS = [4, 12, 20, 28, 36, 44, 52].map((x) => x + OX).map((x, k) => {
   b.rtg = { x: (x + 2.5) * T, y: (REST + 0.5) * T, hold: null, ops: [], truck: null };
   return b;
 });
-const LANES = [10, 18, 26, 34, 42].map((x) => x + OX), WEST = 2 + OX, EAST = 51 + OX + EXX;
+// (owner, 2026-11-01) a lane down to the RTG lanes east of every storage area, and the east side right after the last
+const LANES = BLOCKS.map((b) => b.x + 6), WEST = 2 + OX, EAST = BLOCKS[6].x + 8;
 // (owner, 2026-11-01) the tractor parking: one column of horizontal spots west of the port, drive-through westbound
 // between two roads; new tractors appear here and idle ones park here
 // (2026-11-01) a second block of 9 below the RTG lane (in from the RTG lane down its east aisle, out up its west aisle
@@ -108,15 +109,20 @@ function addTractor(auto) {
 const AUTO_CAB = "#5fd3d0", EXP_CAB = "#8a94a6", WAIT_CAB = "#5a6068";   // auto tractors' and export trucks' cabs
 const floats = [];   // "+$60" over a paid truck
 
-// ---- roads: one-way, a tile at a time (owner: an actual traffic rule), two lanes each (owner: one for passing) ----
-// Tractors: STS lanes (west) → quay road west → down the west side or a lane between the storage areas → RTG lane east →
-// into an RTG bay (southbound) → yard road east → up the east side → quay road west → into an STS lane. Customers come in
-// up the west side from the south gate, take the yard road east and park in a stall (southbound); sent to an RTG, they
-// leave by the lot road west, go up the west side to the RTG lane, and after loading leave by the yard road out the east
-// gate. Each two-lane road has a travel lane (the right one) and a passing lane; a truck held up by a stopped truck
-// changes lanes to pass. Bays, stalls and STS lanes are entered only by the truck going there.
-const E = new Map(), CHG = new Map(), SLOW = new Set(), SPOT = new Map(), DIVS = [];
+// ---- roads: one-way, a tile at a time (owner: an actual traffic rule), most with two lanes (owner: one for passing) ----
+// (owner, 2026-11-01) Tractors: STS lanes (west) → quay road west → down the west side or the lane east of a storage
+// area → the tractors' RTG lane (east, one lane) → into an RTG bay from above → out the bottom onto the yard road (west)
+// → north up the street beside a storage area to the quay road. Customer trucks going straight to an RTG come in at the
+// east gate, west along the yard road and into a bay from below; ones going to park come in at the southeast gate, west
+// along the lot road and north into a stall, then leave it north onto the yard road (one bound for an RTG east of its
+// stall goes round by the back road, east along the south fence). Loaded, they drive out the top of their bay, across
+// the tractors' lane onto the exit lane (west, one lane) and out the west gate. Each two-lane road has a travel lane (the
+// right one) and a passing lane; a truck held up by a stopped truck changes lanes to pass. Bays, stalls and STS lanes are
+// entered only by the truck going there.
+const E = new Map(), CHG = new Map(), SLOW = new Set(), SPOT = new Map(), DIVS = [], EK = new Map();
 const add = (a, b, c, d) => { const k = key(a, b), n = key(c, d); if (!E.has(k)) E.set(k, []); if (!E.get(k).includes(n)) E.get(k).push(n); };
+// a step only tractors ("y") or only other trucks ("c") take
+const only = (a, b, c, d, kind) => { add(a, b, c, d); EK.set(key(a, b) + ">" + key(c, d), kind); };
 // a two-lane road: lane 0 from (x, y), lane 1 beside it at (+ox, +oy), n tiles on in direction (dx, dy); a lane change
 // moves one tile on into the other lane, and needs the tile beside free too
 function road(x, y, dx, dy, n, ox, oy, passing) {
@@ -128,27 +134,39 @@ function road(x, y, dx, dy, n, ox, oy, passing) {
   }
 }
 road(EAST + 1, QROAD, -1, 0, EAST + 1 - (PARK_X + 4), 0, 1, 1);             // quay road, west, on to the tractor parking
-road(PARK_X + 4, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);               // the parking's east road, down to the RTG lane
-road(PARK_X - 2, PARK[0].j, 0, 1, RLANE - PARK[0].j, 1, 0, 1);               // the parking's west road, down to the RTG lane
+road(PARK_X + 4, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);               // the parking's east road, down to the RTG lanes
+road(PARK_X - 2, PARK[0].j, 0, 1, RLANE - PARK[0].j, 1, 0, 1);               // the parking's west road, down to the RTG lanes
 for (const p of PARK) { for (let x = PARK_X + 4; x > PARK_X - 1; x--) add(x, p.j, x - 1, p.j); for (const k of parkTiles(p)) SPOT.set(k, "P" + p.j); }
+// (2026-11-01) the lower block: in off the back road at its south end and up its east aisle, out up its west aisle onto the
+// tractors' lane
 { const low = PARK.filter((p) => p.low), j0 = low[0].j, j1 = low[low.length - 1].j;
-  for (let j = RLANE + 1; j < j1; j++) add(PARK_X + 4, j, PARK_X + 4, j + 1);   // east aisle, down from the RTG lane
-  for (let j = j1; j > RLANE + 1; j--) add(PARK_X - 1, j, PARK_X - 1, j - 1);   // west aisle, up to the RTG lane
-  void j0; }
+  add(PARK_X + 5, j1, PARK_X + 4, j1);
+  for (let j = j1; j > j0; j--) add(PARK_X + 4, j, PARK_X + 4, j - 1);
+  for (let j = j1; j > RLANE + 1; j--) add(PARK_X - 1, j, PARK_X - 1, j - 1); }
 for (const c of [PARK_X + 4, PARK_X + 5, PARK_X - 2, PARK_X - 1]) add(c, RLANE, c, RLANE + 1);
 add(PARK_X + 4, QROAD, PARK_X + 4, QROAD + 1); add(PARK_X + 5, QROAD, PARK_X + 5, QROAD + 1);
-road(WEST, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);                    // west side, down to the RTG lane
-for (const x of [WEST, ...LANES]) for (const c of [x, x + 1]) { add(c, QROAD, c, QROAD + 1); if (x !== WEST) add(c, RLANE, c, RLANE + 1); }
-for (const x of LANES) road(x, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1); // the lanes between the storage areas, down
-road(PARK_X - 2, RLANE, 1, 0, EAST + 1 - (PARK_X - 2), 0, 1, 0);            // RTG lane, east (from the tractor parking)
-road(EAST, YROAD + 1, 0, -1, YROAD + 1 - QROAD, 1, 0, 0);                   // east side, up to the quay road
-road(WEST, YROAD, 1, 0, MW + 6 - WEST, 0, 1, 0);                            // yard road, east and out the east gate
-road(WEST, MH + 5, 0, -1, MH + 5 - RLANE - 1, 1, 0, 0);                     // west side, up from the south gate to the RTG lane
-road(STALLS[STALLS.length - 1].i + 2, LROAD, -1, 0, STALLS[STALLS.length - 1].i + 2 - WEST, 0, 1, 1);   // lot road, west
-// (owner, 2026-11-01) two streets north from the yard road to the quay road, in the gaps after storage areas 2 and 4 (one
-// lane each: the gap has room for one beside the lanes going down), so tractors can skip the trip round the east side;
-// they cross the RTG lane, where a truck can also turn east
-const UP_STREETS = [BLOCKS[1].x + 5, BLOCKS[3].x + 5];
+road(WEST, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);                    // west side, down to the RTG lanes
+for (const x of LANES) road(x, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1); // the lanes east of the storage areas, down
+for (const x of [WEST, ...LANES]) for (const c of [x, x + 1]) { add(c, QROAD, c, QROAD + 1); add(c, RLANE, c, RLANE + 1); }
+// (owner, 2026-11-01) the RTG lanes: the tractors' lane east (row 28), above it the exit lane west (row 27, out the west
+// gate; tractors only cross it)
+for (let x = PARK_X - 2; x < EAST; x++) add(x, RLANE + 1, x + 1, RLANE + 1);
+const EXIT_X0 = BLOCKS[6].x + BLOCKS[6].w - 1, EXIT = key(-6, RLANE);
+for (let x = EXIT_X0; x > -6; x--) only(x, RLANE, x - 1, RLANE, "c");
+DIVS.push([PARK_X - 2, RLANE, 1, 0, EXIT_X0 - PARK_X + 2, 0, 1]);
+road(EAST, RLANE + 1, 0, -1, RLANE + 1 - QROAD, 1, 0, 0);                   // east side, up to the quay road
+road(MW + 6, YROAD, -1, 0, MW + 6 - WEST, 0, 1, 1);                         // yard road, west from the east gate
+road(WEST, LROAD + 1, 0, -1, LROAD - RLANE, 1, 0, 0);                       // west side, up from the lot road to the tractors' lane
+road(EAST + 1, LROAD, -1, 0, EAST + 1 - WEST, 0, 1, 1);                     // lot road, west
+road(EAST, MH + 5, 0, -1, MH + 5 - LROAD, 1, 0, 0);                         // in from the southeast gate, up to the lot road
+// the back road: off the west end of the yard road, down, east along the south fence and up the east end onto the yard road
+const BACK = MH - 2;
+add(WEST, YROAD, WEST - 1, YROAD); add(WEST, YROAD + 1, WEST - 1, YROAD + 1);
+for (let j = YROAD; j < BACK; j++) add(WEST - 1, j, WEST - 1, j + 1);
+for (let x = WEST - 1; x < EAST + 2; x++) add(x, BACK, x + 1, BACK);
+for (let j = BACK; j > YROAD; j--) add(EAST + 2, j, EAST + 2, j - 1);
+// (owner, 2026-11-01) a street north beside every storage area (east of it, one lane) from the yard road to the quay road
+const UP_STREETS = BLOCKS.map((b) => b.x + b.w);
 for (const c of UP_STREETS) for (let j = YROAD; j > QROAD + 1; j--) add(c, j, c, j - 1);
 // each berth's lanes: in up its east column, west along the three lanes; the auto and manual lanes end under the crane,
 // where a loaded tractor pulls out into the middle lane, which runs on to the exit column and down to the quay road
@@ -160,12 +178,24 @@ for (const b of BERTHS) {
   add(ex, PASS_ROW, ex, 11); add(ex, 11, ex, QROAD);
   for (const r of LANE_ROWS) for (let x = ex; x <= ox; x++) SPOT.set(key(x, r), "B" + b.id);
 }
-for (const b of BLOCKS) for (const bay of b.bays) { for (let j = RLANE + 1; j < YROAD; j++) { add(bay.i, j, bay.i, j + 1); if (j > RLANE + 1) SPOT.set(key(bay.i, j), "Y" + bay.i); } SPOT.set(key(bay.i, YROAD - 1), "Y" + bay.i); }
-for (const s of STALLS) for (let j = YROAD + 1; j < LROAD; j++) { add(s.i, j, s.i, j + 1); if (j > YROAD + 1) SPOT.set(key(s.i, j), "S" + s.i); }
-for (const s of STALLS) SPOT.set(key(s.i, LROAD - 1), "S" + s.i);
+// (owner, 2026-11-01) RTG bays both ways: tractors in from the tractors' lane above and out the bottom; other trucks in
+// from the yard road below and out the top, across the tractors' lane onto the exit lane
+for (const b of BLOCKS) for (const bay of b.bays) {
+  for (let j = RLANE + 1; j < YROAD; j++) only(bay.i, j, bay.i, j + 1, "y");
+  for (let j = YROAD; j > RLANE; j--) only(bay.i, j, bay.i, j - 1, "c");
+  for (let j = BAY0; j < YROAD; j++) SPOT.set(key(bay.i, j), "Y" + bay.i);
+}
+// (owner, 2026-11-01) stalls: in from the lot road below, out the top onto the yard road
+for (const s of STALLS) { for (let j = LROAD; j > YROAD + 1; j--) add(s.i, j, s.i, j - 1); for (let j = LOT0; j < LROAD; j++) SPOT.set(key(s.i, j), "S" + s.i); }
 const ROADSET = new Set(); for (const [k, l] of E) { ROADSET.add(k); for (const n of l) ROADSET.add(n); }
-// (bug 2026-11-01) where the north streets cross the RTG lane: a truck only drives in with room beyond to clear it
-const BOX = new Set(); for (const c of UP_STREETS) for (const j of [RLANE, RLANE + 1]) BOX.add(key(c, j));
+// (bug 2026-11-01) where roads cross: a truck only drives in with room beyond to clear it
+const BOX = new Set();
+for (const c of UP_STREETS) for (const j of [RLANE, RLANE + 1]) BOX.add(key(c, j));
+// the top of a bay is one only for a truck driving out of it across the tractors' lane
+const BAYTOP = new Set(); for (const b of BLOCKS) for (const bay of b.bays) BAYTOP.add(key(bay.i, RLANE + 1));
+for (const x of [WEST, ...LANES]) for (const c of [x, x + 1]) if (c <= EXIT_X0) BOX.add(key(c, RLANE));
+for (const c of [PARK_X + 4, PARK_X + 5, PARK_X - 2, PARK_X - 1]) BOX.add(key(c, RLANE));
+for (const c of [EAST, EAST + 1]) BOX.add(key(c, BACK));
 // cheapest way there: a lane change costs a bit more than a step, the passing lane a little more than the travel lane;
 // avoid(k) rules tiles out (passing)
 const PERF = { routes: 0 };
@@ -177,10 +207,11 @@ function graph() {
   const adj = nodes.map((k) => (E.get(k) || []).map((n) => id.get(n)));
   const cost = nodes.map((k, i) => adj[i].map((j) => (CHG.has(k + ">" + nodes[j]) ? 1.3 : 1) + (SLOW.has(nodes[j]) ? 0.3 : 0)));
   const spot = nodes.map((k) => SPOT.get(k) || null);
-  G = { nodes, id, adj, cost, spot, dist: new Float64Array(nodes.length), prev: new Int32Array(nodes.length), seen: new Uint32Array(nodes.length), gen: 0 };
+  const ek = nodes.map((k, i) => adj[i].map((j) => ({ y: 1, c: 2 })[EK.get(k + ">" + nodes[j])] || 0));
+  G = { nodes, id, adj, cost, spot, ek, dist: new Float64Array(nodes.length), prev: new Int32Array(nodes.length), seen: new Uint32Array(nodes.length), gen: 0 };
   return G;
 }
-function route(fromK, toK, avoid) {
+function route(fromK, toK, avoid, yard) {
   PERF.routes++;
   const g = graph(), from = g.id.get(fromK), to = g.id.get(toK); if (from === undefined || to === undefined) return null;
   const gen = ++g.gen, ts = g.spot[to], dist = g.dist, prev = g.prev, seen = g.seen, h = [];
@@ -189,9 +220,10 @@ function route(fromK, toK, avoid) {
   seen[from] = gen; dist[from] = 0; prev[from] = -1; push(0, from);
   while (h.length) {
     const [d, k] = pop(); if (d > dist[k]) continue; if (k === to) break;
-    const cs = g.spot[k], adj = g.adj[k], cost = g.cost[k];
+    const cs = g.spot[k], adj = g.adj[k], cost = g.cost[k], ek = g.ek[k];
     for (let e = 0; e < adj.length; e++) {
       const n = adj[e], ns = g.spot[n]; if (ns && ns !== cs && ns !== ts) continue;
+      if (ek[e] && (ek[e] === 1) !== !!yard) continue;
       if (avoid && n !== to && avoid(g.nodes[n])) continue;
       const nd = d + cost[e];
       if (seen[n] !== gen || nd < dist[n]) { seen[n] = gen; dist[n] = nd; prev[n] = k; push(nd, n); }
@@ -252,7 +284,7 @@ function shipGone(s) {
       if (t.cmd && t.cmd.kind === "park") t.cmd.stall.claim = null;
       if (t.stall && t.stall.claim === t) t.stall.claim = null;
       for (const a of t.queue) claim(t, a, -1);
-      t.stall = null; t.cmd = null; t.queue = []; t.exiting = true; t.sad = 2.5; goTo(t, key(MW + 5, YROAD + 1));
+      t.stall = null; t.cmd = null; t.queue = []; t.exiting = true; t.sad = 2.5; goTo(t, EXIT);
     }
   }
   BERTHS.forEach((b) => { b.promised = 0; });
@@ -283,7 +315,7 @@ function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, n
 { const p = PARK[0], t = mkTruck("yard", parkTiles(p)); t.num = 1; t.park = p; p.claim = t; }
 const head = (t) => t.tiles[0];
 const headIJ = (t) => unkey(t.tiles[0]);
-function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
+function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k, null, t.kind === "yard") || []); }
 // (owner, 2026-11-01) two kinds of customer truck. Grey ones (most) come for everyday cargo: any white, gray or black
 // container. They park, and now and then (every 30–70 s with storage empty, much faster the more unclaimed containers
 // are stored, a little faster with more stalls) the longest waiting takes the easiest-to-reach unclaimed one in storage;
@@ -298,12 +330,21 @@ const coloredShare = () => { const st = storedFree(), c = st.filter((x) => !NEUT
 const unclaimedFill = () => { const n = BLOCKS.filter((b) => b.open && !b.exp).length * 60; return n ? storedFree().length / n : 0; };
 const storedFree = () => { const out = []; for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) out.push(x); return out; };
 const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) out.push(x); return out; };
+// (owner, 2026-11-01) one whose container is already stored, with a bay of its RTG free, comes in at the east gate and
+// drives straight there; any other comes in at the southeast gate and parks
+const EAST_GATE = [1, 2, 3, 4].map((d) => key(MW + d, YROAD)), SE_GATE = [1, 2, 3, 4].map((d) => key(EAST + 1, MH + d));
 function spawnCustomer() {
+  const pool = rnd() < coloredShare() ? shipFree().concat(storedFree()).filter((x) => !NEUTRAL.has(x.c)) : [], want = pool.length ? pick(pool) : null;
+  const b = want && BLOCKS.find((q) => q.open && holds(q, want)), bay = b && freeBay(b);
+  if (bay) {
+    if (EAST_GATE.some((k) => occ.has(k))) return;
+    const t = mkTruck("cust", EAST_GATE.slice(), want); want.wantedBy = t; bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay }); return;
+  }
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;
-  const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
-  const pool = rnd() < coloredShare() ? shipFree().concat(storedFree()).filter((x) => !NEUTRAL.has(x.c)) : [], want = pool.length ? pick(pool) : null, t = mkTruck("cust", tiles, want);
+  if (SE_GATE.some((k) => occ.has(k))) return;
+  const t = mkTruck("cust", SE_GATE.slice(), want);
   if (want) want.wantedBy = t; else { t.generic = true; t.since = clock; }
-  stall.claim = t; t.cmd = { kind: "park", stall }; goTo(t, key(stall.i, LOT0 + 3));
+  stall.claim = t; t.cmd = { kind: "park", stall }; goTo(t, key(stall.i, LOT0));
 }
 let claimWait = 20;
 function claimStep(dt) {
@@ -319,14 +360,14 @@ function claimStep(dt) {
 
 // what a truck will carry once its queue is done: null, "imp" or "exp"
 function loadAfter(t) { let l = t.load ? (t.load.exp ? "exp" : "imp") : null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "deliver" ? null : a.kind === "sts" ? (a.pick === false ? null : "imp") : a.kind === "rtg" ? (t.kind === "cust" ? "imp" : a.pickup ? "exp" : null) : l; return l; }
-// (owner) export trucks come in at the southwest gate with a container for the export area (when it's open and has
-// room for one more), drop it at its RTG and leave
+// (owner) export trucks come in at the east gate with a container for the export area (when it's open, has room for one
+// more and a bay free), drive into a bay from below, drop it and leave by the exit lane
 function spawnExport() {
   const b = BLOCKS.find((q) => q.exp && q.open); if (!b) return;
   if (free(b) - trucks.filter((t) => t.kind === "exp" && t.load).length <= 0) return;
-  const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
-  const t = mkTruck("exp", tiles, null); t.load = box(randColor()); t.load.exp = true;
-  startCmd(t, { kind: "rtg", block: b });
+  const bay = freeBay(b); if (!bay || EAST_GATE.some((k) => occ.has(k))) return;
+  const t = mkTruck("exp", EAST_GATE.slice(), null); t.load = box(randColor()); t.load.exp = true;
+  bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay });
 }
 function targetAt(i, j) {
   // (owner) a ship slot picks which one the crane takes from; the crane or its lanes leave it to the crane (the nearest)
@@ -361,19 +402,40 @@ function planFor(t, i, j) {
   const b = g.block;
   if (t.kind === "yard" && b.exp) return la === null && count(b) - expClaims(b) > 0 && shipTakesExports(t) ? pre({ kind: "rtg", block: b, pickup: true }) : null;
   if (t.kind === "yard") return la === "imp" && free(b) > 0 ? { kind: "rtg", block: b } : null;
-  return !loaded && holds(b, t.want) ? { kind: "rtg", block: b } : null;
+  // (owner, 2026-11-01) a customer sent to an RTG drives into a bay of it from below: only with one free (claimed at once)
+  const bay = !loaded && holds(b, t.want) && freeBay(b);
+  return bay ? { kind: "rtg", block: b, bay } : null;
 }
 function claim(t, a, d) {
   if (a.kind === "sts") { if (a.pick !== false) a.berth.promised += d; if (a.slot !== undefined && DOCK.ship) DOCK.ship.claims[a.slot] += d; }
   else if (a.kind === "park") a.stall.claim = d > 0 ? t : null;
+  else if (a.kind === "rtg" && a.bay && t.kind !== "yard") a.bay.claim = d > 0 ? t : null;
 }
 function enqueue(t, a) { if (a.deliverFirst) { delete a.deliverFirst; t.queue.push({ kind: "deliver" }); } claim(t, a, 1); t.queue.push(a); }
 function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); if (t.queue.length && t.queue[t.queue.length - 1].kind === "deliver") t.queue.pop(); return !!a; }
-// (owner) an RTG's 5 bays are one queue: a truck heading there waits in line on the RTG lane at the area's west end
-// until a bay clears, first come first served, then takes it
-const lineKey = (b) => key(b.x, RLANE + 1);
-const targetKey = (a, t) => (a.kind === "tpark" ? key(PARK_X, a.spot.j) : a.lane ? laneSpot(t) : a.kind === "rtg" ? (a.bay ? key(a.bay.i, BAY0 + 3) : lineKey(a.block)) : key(a.stall.i, LOT0 + 3));
+// (owner) an RTG's 5 bays are one queue: a tractor heading there waits in line until a bay clears, first come first
+// served, then takes it. (2026-11-01) The tractors' RTG lane is one lane, so the line is at the foot of the lane down
+// just west of the area, where others can pass it.
+const lineKey = (b) => key(b.x - 2, RLANE - 1);
+// tractors stop at the bottom of a bay facing south, other trucks at the top facing north
+const targetKey = (a, t) => (a.kind === "tpark" ? key(PARK_X, a.spot.j) : a.lane ? laneSpot(t) : a.kind === "rtg" ? (a.bay ? key(a.bay.i, t.kind === "yard" ? BAY0 + 3 : BAY0) : lineKey(a.block)) : key(a.stall.i, LOT0));
+const bayTiles = (bay) => [0, 1, 2, 3].map((d) => key(bay.i, BAY0 + d));
+const freeBay = (b) => b.bays.find((bay) => !bay.claim && !bayTiles(bay).some((k) => occ.has(k)));
+// (2026-11-01) bays work both ways, so a bay is held until the truck it's for has driven all the way out of it (or
+// stopped heading there)
+function freeBays() {
+  for (const b of BLOCKS) for (const bay of b.bays) {
+    const t = bay.claim; if (!t) continue;
+    const going = !t.gone && ((t.cmd && t.cmd.bay === bay) || t.queue.some((a) => a.bay === bay));
+    const inside = !t.gone && t.tiles.concat(t.next ? [t.next] : []).some((k) => { const [i, j] = unkey(k); return i === bay.i && j >= BAY0 && j < YROAD; });
+    if (!going && !inside) bay.claim = null;
+  }
+}
 const inLine = (t, b) => t.cmd && t.cmd.kind === "rtg" && !t.cmd.bay && (!b || t.cmd.block === b);
+// (stress test 2026-11-01) at most 3 tractors on their way to an RTG's line at once (what the lane holds without backing
+// onto the quay road); the rest wait in the tractor parking
+const LINE_MAX = 3;
+const lineFull = (b, t) => trucks.filter((q) => q !== t && q.kind === "yard" && inLine(q, b)).length >= LINE_MAX && !freeBay(b);
 function fillBays() {
   for (const b of BLOCKS) {
     if (!b.open) continue;
@@ -381,7 +443,9 @@ function fillBays() {
       if (bay.claim) continue;
       // (bug 2026-11-01) only to a truck that has reached the line (or nearly): a bay held for one still stuck in traffic
       // behind the line could lock it all up
-      let t = null; for (const q of trucks) if (inLine(q, b) && !q.locked && q.path.length <= 6 && (!t || q.path.length < t.path.length)) t = q;
+      // (2026-11-01) at the line, or just coming along the tractors' lane toward the bays
+      const near = (q) => { const [i, j] = headIJ(q); return j === RLANE + 1 && i < b.x && i >= b.x - 8 ? b.x - i : q.path.length; };
+      let t = null; for (const q of trucks) if (q.kind === "yard" && inLine(q, b) && !q.locked && near(q) <= 6 && (!t || near(q) < near(t))) t = q;
       if (!t) break;
       bay.claim = t; t.cmd.bay = bay; goTo(t, key(bay.i, BAY0 + 3));
     }
@@ -394,20 +458,21 @@ function startCmd(t, a) {
     if (lane !== t.lane && lane.q.length >= LANE_DEEP) return false;
     if (t.lane !== lane) { leaveLane(t); lane.q.push(t); }
     t.lane = lane; a.lane = lane;
-  } else leaveLane(t);
-  if (t.bay) { if (t.bay.claim === t) t.bay.claim = null; t.bay = null; }
+  } else if (a.kind === "rtg" && t.kind === "yard" && !a.bay && lineFull(a.block, t)) return false;
+  else leaveLane(t);
+  t.bay = null;
   if (t.park && !(a.kind === "tpark" && a.spot === t.park)) { if (t.park.claim === t) t.park.claim = null; t.park = null; }
   if (t.stall && t.stall.claim === t && !(a.kind === "park" && a.stall === t.stall)) t.stall.claim = null;
   t.stall = null; t.cmd = a; goTo(t, targetKey(a, t));
   return true;
 }
-// (owner) a customer truck whose container is in a storage area goes to that RTG by itself: from its stall, or straight
-// there if it hasn't parked yet (giving up its stall)
+// (owner) a customer truck whose container is in a storage area goes to that RTG by itself, from its stall: (2026-11-01)
+// the stall is its place in line, so it sets off once a bay there is free
 function custStep(t) {
-  if (t.kind !== "cust" || t.exiting || t.load !== null || t.queue.length || (t.cmd && t.cmd.kind !== "park")) return;
+  if (t.kind !== "cust" || t.exiting || t.load !== null || t.queue.length || t.cmd || !t.stall || t.next) return;
   const b = BLOCKS.find((q) => q.open && holds(q, t.want)); if (!b) return;
-  if (t.cmd) t.cmd.stall.claim = null;
-  t.cmd = null; startCmd(t, { kind: "rtg", block: b });
+  const bay = freeBay(b); if (!bay) return;
+  bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay });
 }
 // (owner) a tractor with nothing to do drives to a free tractor parking spot (the nearest to the top first) and parks;
 // sent somewhere on the way, it gives the spot up
@@ -417,6 +482,7 @@ function canStart(t) {
   const a = t.queue[0]; if (!a) return false;
   if (a.kind === "deliver") return !t.load || !!deliverAction(t, false);
   if (a.kind === "sts") { const s = DOCK.ship, l = laneFor(a.berth, t); return !!s && (s.state === "docked" || s.state === "closing") && (t.lane === l || l.q.length < LANE_DEEP); }
+  if (a.kind === "rtg" && !a.bay) return !lineFull(a.block, t);
   return true;
 }
 function idleStep(t) {
@@ -424,7 +490,10 @@ function idleStep(t) {
   const ready = canStart(t);
   if (t.cmd && t.cmd.kind === "tpark" && ready) { t.cmd.spot.claim = null; t.cmd = null; return; }
   if (t.cmd || ready || t.park) return;   // (bug 2026-11-01) a tractor whose next step can't start yet waits in the parking
-  const p = PARK.find((q) => !q.claim); if (!p) return;
+  // (2026-11-01) the nearer of the two blocks' first free spots
+  const cands = [PARK.find((q) => !q.claim && !q.low), PARK.find((q) => !q.claim && q.low)].filter(Boolean); if (!cands.length) return;
+  let p = cands[0], best = Infinity;
+  for (const q of cands) { const r = route(t.next || head(t), key(PARK_X, q.j), null, true), c = r ? r.cost : Infinity; if (c < best) { best = c; p = q; } }
   p.claim = t; startCmd(t, { kind: "tpark", spot: p });
 }
 // (owner) an auto tractor with an RTG assigned: loaded, it takes the container there (when its area has room); empty, it
@@ -446,7 +515,7 @@ function autoStep(t) {
 function deliverAction(t, pick) {
   if (t.load.exp) { const bs = BERTHS.filter((b) => exportRoom(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (!bs.length) return null; const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; return { kind: "sts", berth: b, exp: true, pick: pick && berthLeft(b) > 0 }; }
   const hx = headIJ(t)[0], own = t.auto && t.home && !t.home.exp && t.home.open && free(t.home) > 0 ? t.home : null;
-  const dest = own || (t.auto && t.home && !t.home.exp ? null : BLOCKS.filter((b) => b.open && !b.exp && free(b) > 0).reduce((m, b) => (!m || Math.abs(b.x + 2 - hx) < Math.abs(m.x + 2 - hx) ? b : m), null));
+  const dest = own || (t.auto && t.home && !t.home.exp ? null : BLOCKS.filter((b) => b.open && !b.exp && free(b) > 0 && !lineFull(b, t)).reduce((m, b) => (!m || Math.abs(b.x + 2 - hx) < Math.abs(m.x + 2 - hx) ? b : m), null));
   return dest ? { kind: "rtg", block: dest } : null;
 }
 function deliverStep(t) {
@@ -457,8 +526,22 @@ function deliverStep(t) {
 // (bug 2026-11-01) a tractor's RTG trip is called off when it has nothing to deliver, or its storage area has filled up
 // meanwhile; it goes to park and takes new orders
 function dropTrip(t) {
-  if (t.cmd.bay && t.cmd.bay.claim === t) t.cmd.bay.claim = null;
   t.cmd = null; t.path = t.next ? [t.next] : [];
+}
+// room to clear a crossing: the tiles beyond it free for a truck's length, and (2026-11-01) past any crossing just
+// beyond it too, so its tail is never left standing in one. A truck driving in keeps those tiles for itself until it's
+// clear of the crossing, so nobody cuts in.
+const RESV = new Map();
+const mine = (k, t) => { const q = occ.get(k), r = RESV.get(k); return (!q || q === t) && (!r || r === t); };
+function boxClear(t) {
+  let need = TL; const ks = [];
+  for (let i = 1; i <= need; i++) { const k = t.path[i]; if (k === undefined) break; if (!mine(k, t)) return false; ks.push(k); if (BOX.has(k)) need = i + TL; }
+  t.resv = (t.resv || []).concat(ks); for (const k of ks) RESV.set(k, t);
+  return true;
+}
+function unreserve(t, all) {
+  if (!t.resv || !t.resv.length) return;
+  if (all || (!t.tiles.some((k) => BOX.has(k) || BAYTOP.has(k)) && !(t.next && (BOX.has(t.next) || BAYTOP.has(t.next))))) { for (const k of t.resv) if (RESV.get(k) === t) RESV.delete(k); t.resv = []; }
 }
 function truckStep(t, dt) {
   if (t.locked) return;
@@ -478,20 +561,21 @@ function truckStep(t, dt) {
   // traffic: move into the next tile only when no other truck holds it
   if (!t.next && t.path.length) {
     const n = t.path[0], o = occ.get(n), bs = CHG.get(head(t) + ">" + n), ob = bs && occ.get(bs);
-    const clear = !BOX.has(n) || BOX.has(head(t)) || (t.path.length >= 1 + TL && t.path.slice(1, 1 + TL).every((k) => { const q = occ.get(k); return !q || q === t; }));
-    if ((!o || o === t) && (!ob || ob === t) && clear) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
+    const box = (BOX.has(n) || (BAYTOP.has(n) && t.kind !== "yard")) && !BOX.has(head(t));
+    if (mine(n, t) && (!bs || mine(bs, t)) && (!box || boxClear(t))) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
     else if ((t.blocked = (t.blocked || 0) + dt) > (t.patience || (t.patience = 0.5 + rnd()))) {   // staggered, so held-up trucks don't all re-plan at once
       t.blocked = 0;
       if (o && o !== t) { if (!o.next) pass(t); }
-      else { const r = route(head(t), t.path[t.path.length - 1], (k) => k === n); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
+      else { const r = route(head(t), t.path[t.path.length - 1], (k) => k === n, t.kind === "yard"); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
     }
   }
   if (t.next) {
     t.p += 4 * dt;
     if (t.p >= 1) {
       t.tiles.unshift(t.next); const tail = t.tiles.pop(); if (occ.get(tail) === t) occ.delete(tail);
+      if (RESV.get(t.next) === t) RESV.delete(t.next); unreserve(t, false);
       t.next = null; t.p = 0; t.path.shift();
-      if (t.exiting && !t.path.length) { for (const k of t.tiles) if (occ.get(k) === t) occ.delete(k); t.gone = true; trucks.splice(trucks.indexOf(t), 1); return; }
+      if (t.exiting && !t.path.length) { unreserve(t, true); for (const k of t.tiles) if (occ.get(k) === t) occ.delete(k); t.gone = true; trucks.splice(trucks.indexOf(t), 1); return; }
       if (!t.path.length && t.cmd && t.cmd.kind === "park") { t.stall = t.cmd.stall; t.cmd = null; }
       else if (!t.path.length && t.cmd && t.cmd.kind === "tpark") { t.park = t.cmd.spot; t.cmd = null; }
       else if (!t.path.length && t.cmd && t.cmd.kind === "wait") t.cmd = null;
@@ -501,16 +585,16 @@ function truckStep(t, dt) {
 // (owner) held up by a stopped truck: take the other lane round it, if that isn't much longer
 function pass(t) {
   const o = occ.get(t.path[0]); if (o && inLine(o) && inLine(t, o.cmd.block)) return;   // no jumping the RTG line
-  const goal = t.path[t.path.length - 1], now = route(head(t), goal); if (!now) return;
-  const r = route(head(t), goal, (k) => { const o = occ.get(k); return o && o !== t && !o.next; });
+  const goal = t.path[t.path.length - 1], now = route(head(t), goal, null, t.kind === "yard"); if (!now) return;
+  const r = route(head(t), goal, (k) => { const o = occ.get(k); return o && o !== t && !o.next; }, t.kind === "yard");
   if (r && r.length && r[0] !== t.path[0] && r.cost <= now.cost + 8) { t.path = r; passes++; }
 }
 function doneServing(t) {
   const a = t.cmd; t.cmd = null; t.locked = false;
-  if (a && a.kind === "rtg") { if (t.kind === "yard") t.bay = a.bay; else a.bay.claim = null; }   // a tractor keeps its bay until its next trip
+  if (a && a.kind === "rtg") t.bay = a.bay;   // a bay is let go once the truck has driven out of it (freeBays)
   if (t.queue.length) return;
-  if (t.kind === "exp") { t.exiting = true; goTo(t, key(MW + 5, YROAD + 1)); }
-  if (t.kind === "cust") { t.happy = 1.8; t.exiting = true; delivered++; money += INCOME; const tr = trailerOf(t); floats.push({ x: tr.x, y: tr.y - 20, t: 1.6, text: "+$" + INCOME }); goTo(t, key(MW + 5, YROAD + 1)); }
+  if (t.kind === "exp") { t.exiting = true; goTo(t, EXIT); }
+  if (t.kind === "cust") { t.happy = 1.8; t.exiting = true; delivered++; money += INCOME; const tr = trailerOf(t); floats.push({ x: tr.x, y: tr.y - 20, t: 1.6, text: "+$" + INCOME }); goTo(t, EXIT); }
 }
 
 // ---- truck shape: a cab and a trailer bending along the tiles it holds ----
@@ -670,7 +754,7 @@ function rtgStep(b, dt) {
   if (b.exp) return exportRtgStep(b, dt);
   const cr = b.rtg;
   if (!cr.ops.length && !cr.truck) {
-    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === targetKey(q.cmd, q));
     const srcOf = (t) => { let src = null, fewest = 1e9; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } } return src && { src, fewest }; };
     const L = ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q)), U = free(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load !== null) : [];
     // (bug 2026-11-01) nearest first, but the longer a truck has waited in its bay the more it counts, so none is passed over
@@ -712,7 +796,7 @@ function rtgStep(b, dt) {
 function exportRtgStep(b, dt) {
   const cr = b.rtg;
   if (!cr.ops.length && !cr.truck) {
-    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
+    const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === targetKey(q.cmd, q));
     const U = free(b) > 0 ? ready.filter((q) => q.kind === "exp" && q.load !== null) : [], L = count(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load === null) : [];
     for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
     const sc = (q) => Math.abs(trailerOf(q).x - cr.x) - (clock - q.cmd.readyAt) * 60, near = (list) => list.reduce((m, q) => (!m || sc(q) < sc(m) ? q : m), null);
@@ -835,7 +919,7 @@ function buildGround() {
   g.strokeStyle = "rgba(236,231,220,.34)"; g.lineWidth = 2; g.setLineDash([10, 10]);
   for (const [x, y, dx, dy, n, ox, oy] of DIVS) { const sx = (x + 0.5 + ox / 2) * T, sy = (y + 0.5 + oy / 2) * T; g.beginPath(); g.moveTo(sx + dx * T / 2, sy + dy * T / 2); g.lineTo(sx + dx * (n - 0.5) * T, sy + dy * (n - 0.5) * T); g.stroke(); }
   g.setLineDash([]);
-  for (const [k, l] of E) { const [i, j] = unkey(k); if (i < 0 || i >= MW || (i + j) % 3) continue; for (const n of l) { if (CHG.has(k + ">" + n)) continue; const [ni, nj] = unkey(n); arrow(g, i, j, ni - i, nj - j); } }
+  for (const [k, l] of E) { const [i, j] = unkey(k); if (i < 0 || i >= MW || (i + j) % 3) continue; for (const n of l) { if (CHG.has(k + ">" + n) || (E.get(n) || []).includes(k)) continue; const [ni, nj] = unkey(n); arrow(g, i, j, ni - i, nj - j); } }
   // the STS lines, the RTG bays, the parking stalls
   for (const b of BERTHS) { g.lineWidth = 2; for (const l of b.lanes) for (let d = 0; d < LANE_DEEP; d++) { const rgb = l.kind === "auto" ? "95,211,208" : "242,169,59"; g.strokeStyle = `rgba(${rgb},${d ? 0.25 : 0.6})`; g.strokeRect((b.x + 5 + TL * d) * T + 2, l.r * T + 2, TL * T - 4, T - 4); } g.fillStyle = "#e8e2d0"; g.font = "800 20px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.ex + 0.5) * T, (QUAY + 1.5) * T); }
   for (const b of BLOCKS) {
@@ -847,7 +931,7 @@ function buildGround() {
     for (const bay of b.bays) { g.fillStyle = "rgba(236,231,220,.3)"; g.fillRect(bay.i * T, BAY0 * T, 1, TL * T); g.fillRect(bay.i * T + T - 1, BAY0 * T, 1, TL * T); g.fillStyle = "rgba(127,200,255,.45)"; g.fillRect(bay.i * T + 4, (BAY0 + TL) * T - 4, T - 8, 2); }
   }
   for (const p of PARK) { g.fillStyle = "rgba(232,180,50,.45)"; g.fillRect(PARK_X * T, p.j * T, TL * T, 1); g.fillRect(PARK_X * T, p.j * T + T - 1, TL * T, 1); g.fillRect(PARK_X * T + 2, p.j * T + 4, 2, T - 8); }
-  for (const st of STALLS) { g.fillStyle = "rgba(236,231,220,.32)"; g.fillRect(st.i * T, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + T - 1, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + 4, (LOT0 + TL) * T - 4, T - 8, 2); }
+  for (const st of STALLS) { g.fillStyle = "rgba(236,231,220,.32)"; g.fillRect(st.i * T, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + T - 1, LOT0 * T, 1, TL * T); g.fillRect(st.i * T + 4, LOT0 * T + 2, T - 8, 2); }
 }
 // (perf) the sea and its wave lines are painted once (one wave period wider) and slid along
 let WATER = null;
@@ -1121,7 +1205,7 @@ function step(dt) {
   const pan = 520 / zoom * dt; if (keys.KeyW || keys.ArrowUp) cam.y -= pan; if (keys.KeyS || keys.ArrowDown) cam.y += pan; if (keys.KeyA || keys.ArrowLeft) cam.x -= pan; if (keys.KeyD || keys.ArrowRight) cam.x += pan;
   cam.x = clamp(cam.x, 0, MW * T); cam.y = clamp(cam.y, 0, MH * T);
   shipStep(dt); for (const b of BERTHS) if (b.open) stsStep(b, dt);
-  sortLanes(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
+  sortLanes(); freeBays(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   // (owner) customers come faster the more parking stalls are open

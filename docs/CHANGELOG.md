@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Road redo (owner):** customer trucks whose container is already stored come in at the east gate and drive straight into a bay from below; the rest come in at the southeast gate and park, then head out onto the yard road. Loaded trucks leave out the top of the bay onto a new exit lane and out the west gate. Above the bays the RTG lane is now one lane each way (exit west, tractors east); bays work both ways (tractors in from above, everyone else from below) and stay reserved until their truck is out. The concrete strips beside the storage areas are now streets north to the quay, one per area, and the empty ground east of the export area is gone. Tractors wait for a bay at the foot of the lane down just west of the area. A back road along the south fence takes a parked truck to an RTG east of its stall. Crossings: a truck driving into one keeps the room beyond it until it's through. At most 3 tractors head for one RTG's line at once (the rest wait in the parking), and idle tractors park in whichever parking block is nearer; the lower block is now entered off the back road.
+
 - **Full-size stacks (owner):** stacks now show their top container at full size, like a container on a truck. A claimed container's stack blinks green when it's on top, yellow in the middle, red at the bottom.
 
 - **Everyday and colored cargo (owner):** gray and black containers join white as everyday cargo, most of what ships carry. Grey trucks take any everyday container and stay grey; colored trucks come for a matching colored container.
