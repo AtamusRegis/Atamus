@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Faster drawing:** storage stacks and the ship's deck are drawn once into cached images and redrawn only when they change, the sea is painted once and slid, trucks off screen are skipped, and tile keys are parsed once.
+
 - **Art and animation pass:** cranes accelerate and brake, and their spreaders drop onto containers and lift them with a sense of height; STS cranes, RTGs, trucks and ships got more detail (lattice booms, bogies, wheels, brake lights, bridge, funnel smoke, foam).
 
 - **Stress test fixes:** a waiting line could sit across a north street's crossing and lock the yard up (trucks now only enter a crossing with room to clear it); RTG bays were held for trucks still stuck in traffic, which could deadlock the export area (now only handed to trucks at the line); idle tractors with nowhere to park blocked bays (a second tractor parking block of 9, and as many tractors as spots, 22). Routing is about 10× faster and held-up trucks re-plan at staggered times.

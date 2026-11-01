@@ -7,7 +7,8 @@
 "use strict";
 (() => {
 const $ = (id) => document.getElementById(id);
-const cv = $("view"), ctx = cv.getContext("2d");
+const cv = $("view"), mainCtx = cv.getContext("2d");
+let ctx = mainCtx;   // swapped to an offscreen canvas while a cached layer is drawn
 const TAU = Math.PI * 2, rnd = Math.random, hyp = Math.hypot, clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const pick = (a) => a[Math.floor(rnd() * a.length)];
 
@@ -20,7 +21,9 @@ const COLORS = [
   { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Green", c: "#3aa04a" },
   { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "White", c: "#d8dcdf" },
 ];
-const key = (i, j) => i + "," + j, unkey = (k) => k.split(",").map(Number);
+// (perf) keys parsed once and kept
+const UNKEY = new Map();
+const key = (i, j) => i + "," + j, unkey = (k) => { let v = UNKEY.get(k); if (!v) { v = k.split(",").map(Number); UNKEY.set(k, v); } return v; };
 // berths: 12 bays; under each STS crane a 12-tile line holds three trucks (owner)
 // (owner) under each STS crane three lanes side by side, one tractor each, so none waits behind another
 // (owner) one much larger ship at a single berth: 14 slots across (42 tiles) x 5 rows of deck (rows 2–6); its two STS
@@ -205,6 +208,7 @@ const free = (b) => b.cols * b.rows * 3 - count(b);
 const shipCount = (s) => s.bays.reduce((a, st) => a + impCount(st), 0);   // import containers aboard
 // a ship slot holds imports or exports, never both (exports only go into slots with no imports)
 const impCount = (st) => (st.length && !st[0].exp ? st.length : 0);
+let STACK_VER = 1;   // (perf) bumped whenever any stack changes, so cached drawings know to redraw
 for (const b of BLOCKS.slice(0, 1)) for (let n = 0; n < 14 + Math.floor(rnd() * 6); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(box(Math.floor(rnd() * COLORS.length))); }
 
 // ---- ships ----
@@ -217,7 +221,7 @@ function newShip() {
   let u = rnd(), z = SIZES[0]; for (const q of SIZES) { if (u < q.w) { z = q; break; } u -= q.w; }
   const s = { off: -60 * T, state: "arrive", size: z.name, cols: z.cols, rows: z.rows, hull: pick(HULLS), bays: Array.from({ length: DOCK.cols * DOCK.rows }, () => []), claims: Array(DOCK.cols * DOCK.rows).fill(0) };   // (owner) 3 x 1 horizontal slots
   s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const n = Math.floor(rnd() * 4); for (let q = 0; q < n; q++) st.push(box(Math.floor(rnd() * COLORS.length))); });
-  s.time = SHIP_TIME_BASE + SHIP_TIME_PER * shipCount(s);
+  s.time = SHIP_TIME_BASE + SHIP_TIME_PER * shipCount(s); STACK_VER++;
   DOCK.ship = s; return s;
 }
 const SHIP_TIME_BASE = 90, SHIP_TIME_PER = 8;
@@ -534,7 +538,7 @@ function craneStep(cr, dt, onDone) {
   // (art) the spreader goes down, grabs or lets go at the bottom, and comes back up
   op.t = (op.t || 0) + dt; const ph = Math.min(1, op.t / LIFT); cr.hoist = ph < 0.5 ? ph * 2 : (1 - ph) * 2;
   if (ph >= 0.5 && !op.done) {
-    op.done = true;
+    op.done = true; STACK_VER++;
     // (owner) an STS crane can hold a second container (hold2)
     if (op.lift) { const s = op.lift, x = s.stack ? s.stack.pop() : s.truck.load; if (!s.stack) s.truck.load = null; if (s.second) cr.hold2 = x; else cr.hold = x; if (op.then) op.then(); }
     else if (op.lower) { const s = op.lower, x = s.second ? cr.hold2 : cr.hold; if (s.stack) s.stack.push(x); else s.truck.load = x; if (s.second) cr.hold2 = null; else cr.hold = null; if (op.then) op.then(); }
@@ -805,10 +809,15 @@ function buildGround() {
   for (const p of PARK) { g.strokeStyle = "rgba(232,180,50,.4)"; g.lineWidth = 2; g.strokeRect(PARK_X * T + 2, p.j * T + 2, TL * T - 4, T - 4); }
   for (const s of STALLS) { g.strokeStyle = "rgba(255,255,255,.22)"; g.lineWidth = 2; g.strokeRect(s.i * T + 2, LOT0 * T + 2, T - 4, TL * T - 4); }
 }
+// (perf) the sea and its wave lines are painted once (one wave period wider) and slid along
+let WATER = null;
 function drawWater() {
-  ctx.fillStyle = "#1a4a6a"; ctx.fillRect(-30 * T, -10 * T, (MW + 60) * T, (QUAY + 10) * T);
-  ctx.fillStyle = "rgba(255,255,255,.07)";
-  for (let j = -6; j < QUAY; j++) for (let i = -20; i < MW + 20; i += 2) { const o = Math.round(((clock * 12 + j * 37) % 64)) - 32; ctx.fillRect(i * T + o + (j % 2) * 20, j * T + 14, 14, 2); }
+  if (!WATER) {
+    WATER = canvas((MW + 60) * T + 64, (QUAY + 10) * T); const g = WATER.getContext("2d");
+    g.fillStyle = "#1a4a6a"; g.fillRect(0, 0, WATER.width, WATER.height); g.fillStyle = "rgba(255,255,255,.07)";
+    for (let j = -6; j < QUAY; j++) for (let i = -32; i < MW + 30; i += 2) { const o = ((j * 37) % 64) - 32; g.fillRect((i + 30) * T + o + (j % 2) * 20, (j + 10) * T + 14, 14, 2); }
+  }
+  ctx.drawImage(WATER, -30 * T - 64 + Math.round((clock * 12) % 64), -10 * T);
   // (art) glints and foam lapping at the quay
   ctx.fillStyle = "rgba(255,255,255,.12)"; for (let i = -20; i < MW + 20; i++) { const a = Math.sin(clock * 1.7 + i * 1.3); if (a > 0.6) ctx.fillRect(i * T + ((i * 13) % 20), (QUAY - 1) * T + 6 + ((i * 7) % 14), 4, 2); }
   ctx.fillStyle = "rgba(255,255,255,.22)"; for (let i = -20; i < MW + 20; i++) { const o = Math.sin(clock * 2.2 + i * 0.9) * 3; ctx.fillRect(i * T, QUAY * T - 5 + o, 20, 2); }
@@ -821,7 +830,8 @@ const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T
 // (owner) with no customer truck selected, the containers on the ship that a customer is waiting for flash instead
 // (owner) a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to
 // dig down to it (a crane on its way to the slot counts as one)
-const flashing = (x, slot, st) => { if (!x) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + BERTHS.reduce((n, b) => n + (b.crane.slot === slot ? 1 : 0) + (b.crane.slot2 === slot ? 1 : 0), 0); if (have >= need) return false;
+let CACHING = false;
+const flashing = (x, slot, st) => { if (!x || CACHING) return false; if (selected && selected.kind === "cust") return selected.want === x; if (slot === undefined || !x.wantedBy || !DOCK.ship) return false; const need = st.length - st.indexOf(x), have = DOCK.ship.claims[slot] + BERTHS.reduce((n, b) => n + (b.crane.slot === slot ? 1 : 0) + (b.crane.slot2 === slot ? 1 : 0), 0); if (have >= need) return false;
   // (bug 2026-11-01) and only while you could still claim it: not once its crane's containers are all spoken for (it
   // will be fetched anyway), nor with its slot fully claimed
   const c = slot % DOCK.cols, b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]);
@@ -900,7 +910,14 @@ function drawShip() {
   ctx.fillStyle = "#6ab8e8"; for (let wy = y + 14; wy < y + h - 12; wy += 9) ctx.fillRect(x - 14, wy, 8, 4);
   const fx = x - 30, fy = y + h / 2; ctx.fillStyle = "#2a2c30"; ctx.fillRect(fx - 6, fy - 9, 12, 18); ctx.fillStyle = "#c83a2e"; ctx.fillRect(fx - 6, fy - 9, 12, 5);
   if (clock - (s.lastPuff || 0) > (s.state === "docked" ? 0.9 : 0.3)) { s.lastPuff = clock; SMOKE.push({ x: fx, y: fy, ship: s, r: 5, t: 0 }); }
-  s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const q = shipSlot(k); drawStackH(x + q.c * CL * T, (DOCK.top + q.r) * T, st, "rgba(0,0,0,.4)", k); });
+  // (perf) the deck's stacks are drawn once into a cached image, again only when they change; flashing goes on top
+  if (!s.deck) { s.deck = canvas(DOCK.cols * CL * T, DOCK.rows * T); s.deckVer = 0; }
+  if (s.deckVer !== STACK_VER) {
+    s.deckVer = STACK_VER; const g = s.deck.getContext("2d"); g.clearRect(0, 0, s.deck.width, s.deck.height);
+    ctx = g; CACHING = true; s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const q = shipSlot(k); drawStackH(q.c * CL * T, q.r * T, st, "rgba(0,0,0,.4)", k); }); CACHING = false; ctx = mainCtx;
+  }
+  ctx.drawImage(s.deck, x, DOCK.top * T);
+  s.bays.forEach((st, k) => { for (let n = 0; n < st.length; n++) if (st[n].wantedBy && flashing(st[n], k, st)) { const q = shipSlot(k); flash(x + q.c * CL * T + (2 - n) * T + 4, (DOCK.top + q.r) * T + 4, T - 8, T - 8); } });
   // the time it has left
   if (s.state === "docked" || s.state === "closing") {
     const sec = Math.max(0, Math.ceil(s.time)), txt = Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), low = sec <= 30;
@@ -1006,7 +1023,16 @@ function draw() {
   if (DOCK.ship) drawShip();
   drawSmoke();
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
-  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) drawStack((b.x + c) * T, (b.y + r * CL) * T, b.slots[c][r], "rgba(201,162,58,.35)");
+  // (perf) each storage area's stacks are drawn once into a cached image, again only when its stacks change
+  for (const b of BLOCKS) {
+    if (!b.layer) { b.layer = canvas(b.cols * T, b.rows * CL * T); b.layerVer = 0; b.layerSig = ""; }
+    if (b.layerVer !== STACK_VER) {
+      b.layerVer = STACK_VER; const sig = b.slots.map((col) => col.map((st) => st.map((x) => x.id).join(".")).join("|")).join("/");
+      if (sig !== b.layerSig) { b.layerSig = sig; const g = b.layer.getContext("2d"); g.clearRect(0, 0, b.layer.width, b.layer.height); ctx = g; CACHING = true; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) drawStack(c * T, r * CL * T, b.slots[c][r], b.exp ? "rgba(127,200,255,.35)" : "rgba(201,162,58,.35)"); CACHING = false; ctx = mainCtx; }
+    }
+    ctx.drawImage(b.layer, b.x * T, b.y * T);
+  }
+  if (selected && selected.kind === "cust" && selected.want) { const at = boxAt(selected.want); if (at && BLOCKS.some((b) => holds(b, selected.want))) flash(at[0] - (T - 8) / 2, at[1] - (T - 8) / 2, T - 8, T - 8); }
   // (owner) a selected customer truck: a white dotted line to where its container is
   if (selected && selected.kind === "cust" && selected.load === null) {
     const at = boxAt(selected.want);
@@ -1026,7 +1052,9 @@ function draw() {
     }
     ctx.setLineDash([]);
   }
-  for (const t of trucks) drawTruck(t);
+  // (perf) only what's on screen
+  const vw = VW / 2 / zoom + 6 * T, vh = VH / 2 / zoom + 6 * T, onScreen = (x, y) => Math.abs(x - cam.x) < vw && Math.abs(y - cam.y) < vh;
+  for (const t of trucks) { const [i, j] = unkey(t.tiles[0]); if (onScreen((i + 0.5) * T, (j + 0.5) * T)) drawTruck(t); }
   for (const b of BLOCKS) if (b.open) drawRTG(b);
   for (const b of BERTHS) if (b.open) drawSTS(b);
   drawLocked();
