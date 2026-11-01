@@ -84,9 +84,12 @@ const tractorPrice = (auto) => (400 + 50 * (trucks.filter((t) => t.kind === "yar
 // which slot columns of the ship a crane works: with only crane A, all of them
 // which slot columns of the ship a crane works: split evenly between the open cranes, west to east
 const craneCols = (b) => { const op = BERTHS.filter((q) => q.open), i = op.indexOf(b), n = op.length; return i < 0 ? [0, 0] : [Math.round(i * DOCK.cols / n), Math.round((i + 1) * DOCK.cols / n)]; };
+// (owner, 2026-11-01) a storage area's own ground: its pad (with the RTG's rest row) and its bays, not the RTG lanes
+// running between them, which are road
+const onBlock = (b, i, j) => i >= b.x && i < b.x + b.w && ((j >= b.y && j <= REST) || (j >= BAY0 && j < YROAD));
 function buyAt(i, j) {
   for (const b of BERTHS) if (!b.open && i >= b.ex && i <= b.ox && j >= QUAY && j <= 11) return { price: CRANE_PRICE[b.id], buy: () => { b.open = true; } };
-  for (const b of BLOCKS) if (!b.open && i >= b.x && i < b.x + b.w && j >= b.y && j < YROAD) return { price: BLOCK_PRICE[b.id], buy: () => { b.open = true; } };
+  for (const b of BLOCKS) if (!b.open && onBlock(b, i, j)) return { price: BLOCK_PRICE[b.id], buy: () => { b.open = true; } };
   if (j >= LOT0 && j < LROAD) { const st = STALLS.find((q) => q.i === i); if (st && !st.open) { const g = STALLS.filter((q) => q.group === st.group); return { price: STALL_PRICE[st.group], buy: () => g.forEach((q) => (q.open = true)) }; } }
   return null;
 }
@@ -409,7 +412,7 @@ function targetAt(i, j) {
   if (j >= DOCK.top && j < DOCK.top + DOCK.rows) { const c = Math.floor((i - DOCK.x) / CL); if (c < 0 || c >= DOCK.cols || !DOCK.ship || DOCK.ship.state !== "docked") return null; const k = (j - DOCK.top) * DOCK.cols + c; if (!onDeck(DOCK.ship, k)) return null; const b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]); return b ? { kind: "sts", berth: b, slot: k } : null; }
   // (owner, 2026-11-01) its lanes, or the crane itself; the bare quay concrete around it is open ground
   if (j >= QUAY && j <= 11) for (const b of BERTHS) if (i >= b.ex && i <= b.ox) return b.open && (j >= LANE_ROWS[0] || Math.abs(i + 0.5 - b.crane.x / T) <= 1.5) ? { kind: "sts", berth: b } : null;
-  for (const b of BLOCKS) if (b.open && i >= b.x && i < b.x + b.w && j >= b.y && j < YROAD) return { kind: "rtg", block: b };
+  for (const b of BLOCKS) if (b.open && onBlock(b, i, j)) return { kind: "rtg", block: b };
   if (j >= LOT0 && j < LROAD) { const s = STALLS.find((q) => q.i === i && q.open); if (s) return { kind: "park", stall: s }; }
   return null;
 }
@@ -975,9 +978,9 @@ addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
 const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
 function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, u = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / l, 0, 1); return hyp(px - a[0] - u * dx, py - a[1] - u * dy); }
-// (owner, 2026-11-01) touch friendly: a finger gets a wider reach (at least about 18 screen pixels), the nearest truck wins
+// (owner, 2026-11-01) touch friendly: a finger gets a wider reach (at least about 12 screen pixels), the nearest truck wins
 let touchy = false;
-function truckAt(sx, sy) { const w = toWorld(sx, sy), reach = touchy ? Math.max(14, 18 / zoom) : 14; let best = null, bd = reach; for (const t of trucks) { if (t.exiting) continue; const s = shapeOf(t), d = Math.min(segDist(w.x, w.y, s.front, s.cabBack), segDist(w.x, w.y, s.trFront, s.trBack)); if (d < bd) { bd = d; best = t; } } return best; }
+function truckAt(sx, sy) { const w = toWorld(sx, sy), reach = touchy ? Math.max(14, 12 / zoom) : 14; let best = null, bd = reach; for (const t of trucks) { if (t.exiting) continue; const s = shapeOf(t), d = Math.min(segDist(w.x, w.y, s.front, s.cabBack), segDist(w.x, w.y, s.trFront, s.trBack)); if (d < bd) { bd = d; best = t; } } return best; }
 // the selected truck's numbered queue badges, as last drawn (world coordinates), for tapping one off
 let BADGES = [];
 const badgeSize = () => clamp((touchy ? 22 : 16) / zoom, 13, 24);   // never bigger than most of a tile, so the spot under it stays tappable

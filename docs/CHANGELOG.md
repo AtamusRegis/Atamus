@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: tapping the road between a storage area and its bays didn't let go (owner).** Those two lanes counted as the storage area (sending a loaded tractor there, or showing ✕); now they're road like any other. On touch screens a tap on the road beside a truck no longer grabs that truck unless it's right next to it.
+
 - **Tap open ground to let go (owner):** tapping a road, concrete or water lets go of the selected truck; the bare quay concrete around a crane now counts too (only the crane and its lanes send a tractor there).
 
 - **One-tap controls (owner):** everything works with single taps. Tap a numbered badge on a truck's queue to take that trip back (any of them, not just the last); tap open ground to let go of the selected truck. On touch screens trucks are easier to hit, badges are bigger, slightly shaky taps still count, a long press no longer undoes anything, the game starts zoomed in on the port, and the address bar sliding away no longer resets the view.

@@ -287,7 +287,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   claimed.
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
-  - Select one by clicking it (or 1–3 for tractors). Click it again, or open ground (roads, concrete, water: anywhere that isn't a crane or its lanes, a ship slot, a storage area or its bays, or a stall), to let go of it. The bare quay concrete around a crane counts as open ground.
+  - Select one by clicking it (or 1–3 for tractors). Click it again, or open ground (roads, concrete, water: anywhere that isn't a crane or its lanes, a ship slot, a storage area or its bays, or a stall), to let go of it. The bare quay concrete around a crane counts as open ground. So do the RTG lanes between a storage area and its bays (a storage area is its pad and its bays).
   - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or its bays (the RTG; the bay is
     whichever clears first), or (customers) a parking stall.
   - Clicks queue up, with no limit for now. The same RTG can be queued any number of times (owner).
@@ -307,7 +307,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   take that trip back, any of them but the one under way. Right click still removes the last one (with nothing left,
   it deselects); a long press on a touch screen does nothing.
 - **Touch friendly (owner, 2026-11-01):** every control is a single tap. On a touch screen a truck is easier to hit (the
-  nearest within a fingertip), the queue badges are bigger, a tap that drifts a little still counts as a tap, and there
+  nearest within a little more than a fingertip's width of its body), the queue badges are bigger, a tap that drifts a little still counts as a tap, and there
   is no hover preview.
 - **Done:** a loaded customer truck shows a smiley and drives out the west gate.
 
