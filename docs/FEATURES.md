@@ -245,7 +245,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 > start with 1 tractor, 1 stack/RTG, 1 Quay, and 4 parking lots. let player earn small income from loading trucks with
 > their container. let player unlock more trucks or quays or rtg/stacks or parking spots for the trucks etc
 
-- **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
+- **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $500 (owner, 2026-11-01).
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
 - **The money** shows top left, beside **+ Manual** and **+ Auto**, which buy another yard tractor of that kind. It
   appears empty in the tractor parking or, with that full, at the front of an open crane's line for its kind or in a

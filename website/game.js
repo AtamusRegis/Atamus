@@ -65,7 +65,7 @@ const parkTiles = (p) => [0, 1, 2, 3].map((d) => key(PARK_X + d, p.j));
 const STALLS = [...Array(12).keys()].map((k) => ({ i: 4 + OX + k, claim: null })).concat([...Array(12).keys()].map((k) => ({ i: 20 + OX + k, claim: null })), [...Array(24).keys()].map((k) => ({ i: 36 + OX + k, claim: null })));
 // ---- progress (owner, 2026-11-01): start with 1 tractor, 1 STS crane, 1 storage area and 4 parking stalls; customers pay
 // for their container; the rest is bought. Locked things show on the map, dimmed with their price: click one to buy it.
-let money = 0;
+let money = 500;   // (owner, 2026-11-01) every game starts with $500
 const INCOME = 60;
 const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400, 1000], CRANE_PRICE = [0, 2000, 3500, 5000], STALL_PRICE = [0, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400];
 BERTHS.forEach((b) => (b.open = b.id === 0)); BLOCKS.forEach((b) => (b.open = b.id === 0)); STALLS.forEach((s, k) => { s.group = Math.floor(k / 4); s.open = s.group === 0; });
