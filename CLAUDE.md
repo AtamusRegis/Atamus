@@ -1,85 +1,61 @@
 # Atamus: working notes for Claude
 
-Atamus is a browser-based multiplayer game. Claude writes all the code and runs every deploy.
+Atamus is a browser-based single-player game. Claude writes all the code and runs every deploy.
 
 **Before you change anything:**
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. `docs/DESIGN.md` holds the agreed direction; the design document itself is `docs/Atamus_Ring_Mining.html` ("Crack, Bank and Haul", draft 9).
-4. **The mining redesign (owner, 2026-10-18):** the game was rebuilt from that document alone — a cooperative 2D gather-and-craft MMO like Palia, no PvP. Asteroids are hidden chunk masonry around a core; ore banks into the core and pays at the pop. **All old branches were deleted (owner: "delete all old branches, stop reading from them")** — older versions live only in git history and `reference/`. **Old database data stays untouched for reference.** Use the design document's look (`website/theme.css`) for the game and the website; the ship art artifact is linked from `docs/DESIGN.md`. Every number is in `rules.js`.
-6. **Back to basics (owner, 2026-10-18, latest): "lets start from the bottom."** Cores surrounded by visible masonry; the Miner cuts through; ore chunks bank their bits into the core; denser takes longer; breaking the core piñatas every bit out as free drops. **Miner only.** Heat, beam stages, the charge shot, bursts, bedrock, scanning and the other ships are gone (FEATURES.md, Rejected / removed). Build back up from here only as the owner asks.
-5. **The sandbox build (owner, 2026-10-18, same day, later): "make the sandbox the atamus live server."** The owner iterated a single-player sandbox artifact and it replaced the live game: **no login (create a name and play; owner 2026-10-19: no accounts at all, nothing remembered, like an .io game), no chat, no parties, no fuel, no money, no in-game admin or developer UI.** Four ships — Miner (charge shot), Scanner (drill, tow), Booster (one-ship boost beam + coolant spray, no laser), Hauler (refine beam) — beam heat stages (blue/yellow/red), free-for-all ore drops instead of cans, three rings with thicker bedrock-heavier rocks deeper, per-ship optional tutorials. FEATURES.md has the full rules.
+3. **The redo (owner, 2026-10-31): Atamus is a single-player sci-fi spaceport management game**, in the browser with no
+   server: ships land on pads and take off; you open a landed ship's cargo grid and drag stacks to storage units, and
+   NPC workers carry them over one item at a time. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder
+   art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
+   prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
+   data stays untouched for reference.** Build up from here only as the owner asks.
 
 **In the same commit as any change to behavior:**
 
 - Update `docs/FEATURES.md`. Add new rules, edit changed ones, and move anything removed to "Rejected / removed".
 - Add a dated entry to `docs/CHANGELOG.md`.
 
-These docs are the project's memory between sessions; DESIGN.md is the plan, FEATURES.md is what's live. If they disagree with the code, the code wins: fix the doc.
+These docs are the project's memory between sessions; FEATURES.md is what's live. If they disagree with the code, the code wins: fix the doc.
 
 ## Owner's standing rules
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
 - **No helper or hint text**, anywhere. Tooltips show names only. (The developer panel's hover descriptions are the owner-requested exception.)
-- **Mobile parity.** The design document calls for twin-stick controls on touch screens: the left half flies, the right half aims and fires. Hold = right-click (menus), tap = pick up, a second finger on a busy half pinches the zoom; the layout compacts for landscape phones and chat folds behind a bubble.
+- **Mobile parity.** Everything works on touch screens too: tap selects, one finger pans the map, two fingers pinch the zoom, and cargo drags with a finger.
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
-- **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. Batch changes so players aren't kicked repeatedly; a live push kicks everyone after a short countdown. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
+- **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
 - **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first). Say what was added or changed, never how it works: no timers, thresholds, counts or rules.
 - **Read the real game files.** Don't guess at behavior. Read the code, or ask when it's a design decision.
 
 ## Layout
 
 ```
+website/          GitHub Pages site (atamus.io) and the game
+  game.html       the game page: canvas, the ship panel (cargo grid + Depart), the storage strip, the drag ghost
+  game.js         the whole game, single player: the tile map and its placeholder art (drawn once), pads and ship
+                  arrivals / landings / take-offs, cargo stacks, storage units, the workers (BFS paths, one item a
+                  trip), camera (pan / zoom / pinch), selection and cargo drag-and-drop; window.Atamus for tests
+  index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
+  play.html       forwards to game.html (old links)
+  fonts/, assets/ self-hosted fonts and the logo
 packages/server/src/
-  index.js        Express + ws bootstrap, /healthz {build}; in the PTR it also serves website/
-  build.js        SERVER_BUILD, website build polling, update countdown (announceUpdate)
-  guest.js        (owner, 2026-10-19) name and play, no accounts: POST /auth/guest hands out an in-memory session token for a name
-  db.js           schema for the tables in use; every old game's tables stay in the database untouched, unused
-  ptr.js, config.js, hash.js, ratelimit.js   the local test copy, settings, password hashing, rate limits
-  security.js     failed-login backoff, device ids, account unlock (no login records)
-  names.js, namefilter.js, textsafe.js   the name filter and banned names (sign-up), text cleaning
+  index.js        Express bootstrap: /healthz {build} and the deploy workflows' /game routes; in the PTR it also
+                  serves website/. There is no game socket anymore.
+  build.js        SERVER_BUILD, website build polling, the update countdown the workflows call (announceUpdate)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
-  game/
-    net.js        the game socket at /ws: the name cookie only (no accounts), one session per pilot (4002), one pilot per
-                  device (4003), input / act / st /
-                  tune in; 20 Hz sim, 15 Hz ship snapshots (beam temp + charge in the rows), 5 Hz rock summaries +
-                  per-socket chunk layouts by version + drops / me diffs
-    rules.js      every fixed number: world, the four ships, flying, the chunk-sheet LAYOUT (layer arcs), chunks (3 densities, 1-3 ore bits), ROCK_SIZE(layers) + per-ring layer bands,
-                  the core, heat (+ chunkBreak), the beam stages, the charge shot, ores, drops, econ
-    tuning.js     live tuning server-side (no game UI): the editable groups of rules.js, checked, kept in ring_tuning
-                  (_v: 6), reset; which changes regrow the asteroids
-    world.js      the world: seeded rock slots, chunk generation (the chunk sheet: rotated layers of slots, width / length halves, densities, ore bits; older notes: the bedrock-free
-                  line), laser ray-walks with beam temp stages and hot-chunk fast-cut, the Miner's charge blast, burst
-                  cascades, core banking / weakening / the pop, the Booster's one-ship boost beam and coolant, the
-                  Hauler's refine, free-for-all ore drops (flyover pickup), delivery into own storage, towing, marks,
-                  fog-of-war vision gating, saving (ring_players, ring_drops, ring_meta)
-website/          GitHub Pages site (atamus.io) and the game client
-  game.html       the game page (canvas, HUD with the mode switch and tutorial chip, station panel, minimap,
-                  overlays, __BUILD__ marker; no chat / admin / dev UI)
-  game.js         the 2D canvas client: input (WASD + mouse; twin sticks on touch; F flips the mode switch), my ship
-                  predicted, others interpolated, camera and zoom, rings / Saturn / station, chunk rocks (jittered
-                  slabs, near-black bedrock, the blue swelling core with damage cracks), the staged beam colors,
-                  charge / lance / coolant spray / boost pluses / refine beams, ore drops, HUD (one square per ore),
-                  station panel (storage + the four ships), minimap, menus, per-ship tutorials, countdown and
-                  reconnect handling
-  shipart.js      the art from the ship sheet: shipLayout / drawShip (a section per role, animated), drawStation,
-                  drawSaturn
-  theme.css       the design document's fonts and colors (fonts/ self-hosted), used by the game and style.css
-  index/play.html (+ play.js), api.js, style.css, front-updates.js
-                  the website; play.html is the name-and-play door (and the update-wait page); no account pages
-  salvage/        (owner, 2026-10-21) Salvage, a side prototype: isometric pixel-art salvage sandbox, single player
-                  (index.html + salvage.js + branko.png, the owner's sprite); rules in docs/SALVAGE.md. (Breach.io and
-                  Skeleton Crew were scrapped the same day; git history only.)
-reference/        old snapshots, for reference only (never deployed)
+  db.js           the schema migrations (old tables stay untouched, unused), config.js, hash.js
+reference/        old snapshots, for reference only (never deployed); 2026-10-31-pre-spaceport/ is the last
+                  multiplayer game and Salvage
 scripts/
   check.sh        syntax-check every JS file (run before every push)
   ptr.sh          start|stop|reset|status for a local copy (local Postgres :5433, server :8090 serving website/)
-  ptr-run.mjs     run a JS snippet in headless Chromium against the local copy (window.Atamus)
+  ptr-run.mjs     run a JS snippet in headless Chromium against the local copy
   deploy.sh       server-side redeploy (the forced command for the deploy key)
   setup.sh        server provisioning
 .github/workflows deploy-server.yml (packages/server/**), deploy-website.yml (website/**)
-docs/Atamus_Ring_Mining.html   the design document (draft 9), checked in
 ```
 
 Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deploy.
@@ -90,13 +66,10 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 2. Run `scripts/check.sh`.
 3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/play.html`, and the other pages for `style.css`).
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
-5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy:
-   - each one first calls `/game/update-countdown`, which starts the countdown in every client;
-   - it then sleeps and switches the live build;
-   - clients are sent to `play.html?updating=1`, which waits for the new build.
-6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html (PTR mode with no name cookie plays as the PTR tester, who may tune numbers; `?as=Name`, 3+ characters, plays as another pilot; play.html's name form works too).
+5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy (website to GitHub Pages, server over the deploy key). The game is client only, so a deploy just takes effect on the next page load.
+6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html.
 
 ## Code conventions
 
-- **Server-authoritative.** The client only sends commands (a movement direction). Validate every command field on the server as hostile: finite numbers, clamped ranges, the player can only act as themselves.
+- **Single player, client only.** The game lives entirely in `website/game.js`; keep it working without the server.
 - **Syntax check before every commit.** `node --check` (via `scripts/check.sh`) runs before every commit. A syntax error once reached live.

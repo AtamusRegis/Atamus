@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://play.atamus.io wss://play.atamus.io; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Atamus</title>
-  <meta name="description" content="WIP prototype of a cooperative space mining game.">
+  <meta name="description" content="WIP prototype of a sci-fi spaceport management game.">
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="style.css?v=1792500002">
@@ -24,8 +24,8 @@
     <section class="card front-about" aria-labelledby="about-title">
       <h2 id="about-title" class="brand">Atamus</h2>
       <div class="front-body">
-        <p class="front-lead">WIP prototype of a cooperative space mining game.</p>
-        <a class="btn btn-primary btn-play" href="play.html">Play now</a>
+        <p class="front-lead">WIP prototype of a sci-fi spaceport management game.</p>
+        <a class="btn btn-primary btn-play" href="game.html">Play now</a>
       </div>
     </section>
 
@@ -33,96 +33,12 @@
       <h2 id="updates-title" class="brand">Updates</h2>
       <div class="front-body">
         <!-- one entry per day, newest first: that day's new features, saying what was added, never how it works (owner).
-             (owner, 2026-10-14) only the current game's design: the older versions' entries were cleared (again 2026-10-16 for the ring game) -->
+             (owner, 2026-10-14) only the current game's design: the older versions' entries were cleared (again 2026-10-16 for the ring game, and 2026-10-31 for the spaceport) -->
         <article class="update">
-          <time datetime="2026-10-19">Oct 19, 2026</time>
+          <time datetime="2026-10-31">Oct 31, 2026</time>
           <ul>
-            <li><b>Just a name.</b> No accounts at all: type a name and play.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-18">Oct 18, 2026</time>
-          <ul>
-            <li><b>Parties.</b> Invite pilots to a party, see everyone in it, and share party jetcans whose ore is split evenly among the party.</li>
-            <li><b>Haulers are barges.</b> Haulers carry far more and can collect party jetcans for delivery.</li>
-            <li><b>Ship handling.</b> Bigger ships turn and speed up slower but reach higher top speeds.</li>
-            <li><b>Settings.</b> A new menu with settings, including a respawn at the station.</li>
-            <li><b>Ore clumps.</b> Loose ore of the same kind lying close together combines into bigger clumps, and each clump starts its clock fresh.</li>
-            <li><b>Heat.</b> Mining heats the rock and its core — hot chunks cut faster, but an overheated core shatters the asteroid.</li>
-            <li><b>The Booster returns.</b> Cool overheating cores, or boost another ship to work faster.</li>
-            <li><b>Haulers refine.</b> Haulers can refine the ore in their holds to pack in more.</li>
-            <li><b>The Scanner scans.</b> Asteroids keep their secrets until a Scanner sweeps them, chunk by chunk, revealing density, ore and bedrock for everyone.</li>
-            <li><b>Bedrock.</b> Some chunks are solid bedrock that miners can't cut through.</li>
-            <li><b>Cargo fields.</b> Miners and Haulers project holographic fields from their sides: one pulls in loose ore and jetcans, the other hands cargo to another ship or the station.</li>
-            <li><b>Station deposit fields.</b> The station now has long deposit fields you can pull up beside to unload straight into storage.</li>
-            <li><b>Jetcans.</b> Send out a jetcan to stash your ore in space for yourself, your party, or anyone once it goes public.</li>
-            <li><b>Ore timers.</b> Loose ore now shows how long it has left before it drifts away.</li>
-            <li><b>Ore rides the beam.</b> Ore bits now travel back down your laser straight into your hold.</li>
-            <li><b>Corium.</b> Every core holds a new ore, corium, with more in bigger and deeper asteroids, bursting out when the core breaks.</li>
-            <li><b>New asteroids.</b> Rocks are rebuilt layer by layer from the new chunk designs, with three rock densities and bright ore bits.</li>
-            <li><b>New ship art.</b> Every ship has a fresh pixel-art look, and the Scanner, Booster and Hauler are back to fly.</li>
-            <li><b>Core piñatas.</b> Mining is back to its heart: cut through the masonry, feed the core, and break it open to scatter every bit of ore for anyone to scoop up.</li>
-            <li><b>Name and play.</b> Accounts are gone: type a pilot name and fly.</li>
-            <li><b>The beam runs hot.</b> A held laser climbs from blue through yellow to red — cold beams cut clean, hot ones cut faster but cook the rock.</li>
-            <li><b>The charge shot.</b> Miners can hold a chunk at its breaking point and release it as a blast that drives deep into the rock.</li>
-            <li><b>The Booster, the coordinator.</b> It carries no laser now: a held beam boosts one ship at a time — green pluses and a blue glow — and a coolant spray cools overworked rock and cores.</li>
-            <li><b>Haulers refine in the field.</b> A refine beam compresses another ship's cargo where they sit, and the Hauler's own hold compresses as it flies.</li>
-            <li><b>Ore drifts free.</b> A pop's overflow scatters beside the rock for anyone to sweep up, in as many trips as it takes.</li>
-            <li><b>A living core.</b> Cores are blue now, swelling as the rock is stripped, running orange as they overheat, and cracking open with the mining they take.</li>
-            <li><b>Thicker rocks deeper.</b> Asteroids vary from thin-shelled pebbles to many-layered monsters, heavier with bedrock the farther out you fly.</li>
-            <li><b>Ship tutorials.</b> An optional walkthrough for each ship, advancing as you actually do each step.</li>
-            <li><b>Cleared away.</b> Chat, parties, fuel, money and the Fueler are gone for now — mine, haul and bank ore.</li>
-            <li><b>Crack, Bank and Haul.</b> Mining was rebuilt from the ground up: asteroids are now hidden masonry you survey and cut, chunk by chunk, with ore banking into a glowing core that pays out when it pops.</li>
-            <li><b>Scanning matters.</b> A rock reads as one solid mass until a scanner maps it: densities, ore veins and bedrock walls, visible to everyone working it.</li>
-            <li><b>Chain breaks.</b> Breaking a chunk shocks the chunks around it, so breaks cascade and the order you cut in matters.</li>
-            <li><b>Ore is cargo now.</b> Pop payouts land in miners' holds and overflow into cans and party crates, and ore only becomes credits when it's flown home.</li>
-            <li><b>Parties share everything.</b> A party splits all its ore evenly on delivery, wherever its members are.</li>
-            <li><b>One ship per role.</b> Miner, Scanner, Booster, Fueler and Hauler are ships of their own, swapped at the station.</li>
-            <li><b>Support for hire.</b> Support ships can post a charge, and anyone outside their party can hire them on the spot.</li>
-            <li><b>Every ship mines.</b> Support ships carry a light laser of their own; miners remain the specialists.</li>
-            <li><b>Bigger asteroids.</b> Rocks grew and now run deeper, layered differently by size.</li>
-            <li><b>Drop cargo.</b> Ships can jettison their hold for a hauler to collect — haulers themselves still never drop.</li>
-            <li><b>The core driller.</b> The Scanner now surveys by drilling: anchor to a rock and bore a revealing line straight toward its core — but grinding through bedrock puts the ore around it at risk.</li>
-            <li><b>Rich bedrock.</b> Bedrock now hides ore of its own, and only a boosted laser can cut it cleanly.</li>
-            <li><b>Ring 3.</b> A third, farther ring with the biggest rocks, the rarest ores, and bedrock everywhere — some of its cores are sealed in it.</li>
-            <li><b>Plays on phones.</b> Landscape touch controls: twin sticks to fly and fire, tap to pick up, hold for menus, pinch to zoom, with a compact interface and chat tucked behind a bubble.</li>
-            <li><b>Heat.</b> Mining runs chunks orange and the heat pours into the core when they break — a hot core cracks faster, but push it too far and it blows early, taking the rest of the rock with it.</li>
-            <li><b>The Booster's pulse and coolant.</b> Boosters now boost everyone nearby at the press of a button — boosted ships glow blue — and can switch to a coolant beam that cools overworked rock.</li>
-            <li><b>The drill, hands-on.</b> The Scanner's drill is a held beam now: keep it on and circle the rock to sweep column after column.</li>
-            <li><b>Paid in ore.</b> Delivery splits the ore itself between everyone tagged on it, rounded up in each player's favor, into station storage — selling is each player's own choice.</li>
-            <li><b>Claims and marks.</b> Towing a rock claims it for you and your party, and rocks can be marked to stay on your party's minimap.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-17">Oct 17, 2026</time>
-          <ul>
-            <li><b>The Shop.</b> A new station window to buy modules and hulls, with what each one does.</li>
-            <li><b>Upgrades.</b> Every module can be upgraded, and bigger hulls fit more modules at once.</li>
-            <li><b>Ships show their modules.</b> Each module you fit adds its own section to your ship.</li>
-            <li><b>Cargo you can see.</b> Your hold and station storage now show every unit, and you can check what it's worth and who helped mine it.</li>
-            <li><b>Claiming ore.</b> Broken asteroids leave their ore beside them for anyone to claim.</li>
-            <li><b>New ore names.</b> Ores are now named Alpha through Epsilon, rarer down the alphabet.</li>
-            <li><b>Ship menus and trading.</b> Right-click a ship to invite, whisper, fuel or refine it, or to trade your cargo to a hauler.</li>
-            <li><b>All sectors open.</b> The whole ring system is open all the time.</li>
-            <li><b>Party and corporation invites.</b> Invites now pop up to accept or decline, and leaders and owners can remove members.</li>
-            <li><b>Friends on the minimap.</b> Your party and corporation show on the minimap wherever they are.</li>
-            <li><b>Field refining.</b> Refinery ships now offer to refine the cargo of everyone nearby.</li>
-            <li><b>Tutorial.</b> New pilots get a short guided tour of mining, delivering, refining, selling and upgrading.</li>
-            <li><b>Fog of war.</b> Ships now see only their surroundings, so the rings hold surprises again.</li>
-            <li><b>Wider rings.</b> Both asteroid rings grew to the same width, with more room to mine.</li>
-            <li><b>More alive.</b> Engines leave trails, mining throws sparks, asteroids crack apart with a rumble, claimed ore flies into your hold, and the whole interface moves with you.</li>
-          </ul>
-        </article>
-        <article class="update">
-          <time datetime="2026-10-16">Oct 16, 2026</time>
-          <ul>
-            <li><b>Saturn's rings.</b> A new 2D world: fly out from the station around Saturn to mine the asteroids in its rings, with richer ores deeper out.</li>
-            <li><b>Mining together.</b> Everyone who helps break an asteroid gets their name on the ore, and every named player gets a copy when it's delivered.</li>
-            <li><b>Modules.</b> Fit your ship as a miner, hauler, fueler, tractor, command ship, refinery or scanner.</li>
-            <li><b>The station.</b> Sell ore, refine it, turn ice into fuel, refuel and buy modules.</li>
-            <li><b>Fuel.</b> Ships run on fuel, and fuelers can top up anyone who runs dry. Stranded ships can call for help.</li>
-            <li><b>Parties and corporations.</b> Team up with other players, with their own chat channels.</li>
-            <li><b>Shards.</b> Crowded zones split into copies so there's room for everyone, and parties stay together.</li>
+            <li><b>A spaceport.</b> Atamus starts over as a single-player spaceport: ships land on your pads and take off again.</li>
+            <li><b>Unloading.</b> Open a landed ship's cargo and drag it to your storage units, and your workers carry it over item by item.</li>
           </ul>
         </article>
       </div>

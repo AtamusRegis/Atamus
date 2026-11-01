@@ -2,6 +2,11 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-10-31
+
+- **The redo: a spaceport (owner):** Atamus is now a single-player sci-fi spaceport management game in the browser (`website/game.html` + `game.js`). Two landing pads take ships that fly in, land and take off. Click a landed ship for its cargo grid and drag stacks onto the four storage units; three workers carry one item at a time until the stack is gone or the unit is full. 32 px tile grid, placeholder art. Rules in `docs/FEATURES.md`.
+- **Multiplayer and the side games removed (owner: "get rid of multiplayer. SP only", "get rid of the sub-games"):** the ring-mining game, name-and-play, the game socket and Salvage are gone (snapshot in `reference/2026-10-31-pre-spaceport/`). The server now only answers the deploy workflows (`/healthz`, `/game/*`); the old database stays untouched. `play.html` forwards to the game.
+
 ## 2026-10-21
 
 - **Salvage (owner):** a new side prototype at `website/salvage/` (atamus.io/salvage/): an isometric pixel-art sandbox — one salvager (the owner's Branko sprite) on a tug docked to a derelict, taking it apart with hands, screwdriver, saw, blowtorch, cutters and charges, and hauling loot to the sell pad. Power, pressure, fire and wiring tie the parts together, so the wrong order shocks, scalds, decompresses or blows up. Rules in `docs/SALVAGE.md`.
