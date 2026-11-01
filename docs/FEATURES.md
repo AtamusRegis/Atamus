@@ -32,6 +32,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - water along the top, with two **berths**, A and B
   - the quay and the container yard
   - an apron along the yard's bottom edge
+  - three **storage areas** in the yard (owner, 2026-10-31: "make the storage have 3 walls and the open space 5 spaces
+    wide"): each is 5 × 5 inside, walled on the left, right and back, with the open 5-wide side facing the quay. Walls
+    block forklifts and can't hold containers, so a storage area fills from the back forward. Containers can still go
+    anywhere in the open yard too.
   - the truck road with five **bays**
   - a fence around the land
   - three forklift parking spots
@@ -42,7 +46,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Containers (owner)
 
-- **Ten colors:** red, orange, yellow, lime, green, teal, blue, purple, pink, white.
+- **Seven colors (owner, 2026-10-31):** red, orange, yellow, green, blue, purple, white (lime, teal and pink dropped).
 - One container fills one tile for now. Containers block forklifts. They don't stack yet.
 
 ## Boats

@@ -12,16 +12,21 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 // ---- the port: 36 x 24 tiles of 32 px ----
 // rows 0–6 water (boats dock at rows 5–6), 7–20 the quay and yard, 21–22 the truck road, 23 the fence
 const T = 32, MW = 36, MH = 24, QUAY = 7, APRON = 20, ROAD = 21;
-const COLORS = [
-  { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Lime", c: "#8ccf3a" }, { name: "Green", c: "#2e9a4a" },
-  { name: "Teal", c: "#2ab0a8" }, { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "Pink", c: "#e05aa8" }, { name: "White", c: "#d8dcdf" },
+const COLORS = [   // (owner, 2026-10-31) seven colors
+  { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Green", c: "#3aa04a" },
+  { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "White", c: "#d8dcdf" },
 ];
 const BERTHS = [{ id: 0, x: 3, w: 8 }, { id: 1, x: 18, w: 8 }];
 for (const b of BERTHS) { b.boat = null; b.wait = 1 + rnd() * 3; }
 const BAYS = [3, 9, 15, 21, 27].map((x, i) => ({ id: i, x, truck: null }));   // trailer at (x, ROAD), cab at (x + 1, ROAD)
 const DEPOT = [[31, 9], [32, 9], [33, 9]];
 
-const isYard = (i, j) => i >= 1 && i <= MW - 2 && j >= QUAY && j <= APRON;
+// (owner, 2026-10-31) storage areas: walls on three sides (left, right, back) and the open side, toward the quay, 5 tiles wide
+const STORAGE = [4, 13, 22].map((x, k) => ({ id: k, x, y: 12, w: 5, h: 5 }));
+const WALL = new Set();
+for (const s of STORAGE) { for (let j = s.y; j <= s.y + s.h; j++) { WALL.add((j) * MW + s.x - 1); WALL.add(j * MW + s.x + s.w); } for (let i = s.x - 1; i <= s.x + s.w; i++) WALL.add((s.y + s.h) * MW + i); }
+const isWall = (i, j) => WALL.has(j * MW + i);
+const isYard = (i, j) => i >= 1 && i <= MW - 2 && j >= QUAY && j <= APRON && !isWall(i, j);
 let containers = [], boats = [], trucks = [], forklifts = [], jobs = [], delivered = 0, clock = 0;
 const contAt = (i, j) => containers.find((c) => !c.carried && c.i === i && c.j === j) || null;
 function deckBoat(i, j) { for (const b of boats) if (b.state === "docked" && j >= 5 && j <= 6 && i >= b.berth.x && i < b.berth.x + b.berth.w) return b; return null; }
@@ -209,6 +214,8 @@ function buildGround() {
   }
   for (const b of BAYS) { g.fillStyle = "rgba(255,255,255,.22)"; g.fillRect(b.x * T - 2, ROAD * T + 2, 2, T * 2 - 4); g.fillRect((b.x + 2) * T, ROAD * T + 2, 2, T * 2 - 4); g.fillStyle = "rgba(201,162,58,.35)"; g.fillRect(b.x * T + 4, APRON * T + 4, T - 8, T - 8); }
   for (const b of BERTHS) { g.fillStyle = "#e8e2d0"; g.font = "800 22px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.x + b.w / 2) * T, QUAY * T + 18); }
+  for (const st of STORAGE) for (let j = st.y; j < st.y + st.h; j++) for (let i = st.x; i < st.x + st.w; i++) { g.fillStyle = "rgba(0,0,0,.12)"; g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4); }
+  for (const k of WALL) { const i = k % MW, j = Math.floor(k / MW), x = i * T, y = j * T; noiseFill(g, x, y, T, T, "#8a8478", 14, k * 7); g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x, y, T, 3); g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x, y + T - 4, T, 4); g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(x + 15, y + 3, 2, T - 7); }
   for (const [i, j] of DEPOT) { g.strokeStyle = "rgba(242,169,59,.45)"; g.lineWidth = 2; g.strokeRect(i * T + 3, j * T + 3, T - 6, T - 6); }
 }
 function drawWater() {
