@@ -172,7 +172,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **The next tractor first (owner, 2026-11-01):** a crane keeps an eye on the tractors on their way to it. With one coming
   and its second slot free, it lifts that tractor's container ready (one a customer is waiting for, if one is on top in
   reach). It only sorts with no tractor coming, or with the spare in hand while the nearest is still a good way off, and
-  only compresses with none coming.
+  only compresses with none coming: any tractor on its way counts, one sent for a claimed container too (owner,
+  2026-11-01). With the next one coming for a claimed container, the crane waits over that container.
 - **Sorting the ship while idle (owner, 2026-11-01):** a crane with no tractor to serve digs out buried containers that
   customers want: it takes the top container off such a slot in
   its columns (the least buried first; a slot tractors are queued for only while enough is left there for them) and sets it on the nearest low slot of its columns with no exports and no wanted container.

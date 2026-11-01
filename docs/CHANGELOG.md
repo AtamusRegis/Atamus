@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: cranes restacking with a tractor right behind (owner).** A tractor sent for a particular container didn't count as "coming", so the crane sorted or packed the ship while it waited in line. Now any tractor on its way stops that, and the crane waits over the claimed container.
+
 - **Time's up means time's up (owner):** when a ship's timer runs out, each tractor still makes its next crane pickup (even one waiting for room in its crane line), but no more; the rest of its queued pickups are called off.
 
 - **Called-off pickups don't cost you your container (owner):** if a container left on top of the one you claimed belonged to a trip you called off, the crane now moves it aside and hands over yours instead of the wrong one. Two tractors claiming the same stack still swap if the lower one arrives first.

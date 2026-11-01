@@ -771,11 +771,14 @@ function stsStep(b, dt) {
     // (owner) it keeps an eye on the tractors on their way: the next one's container comes first, lifted ready in its
     // second slot (one a customer is waiting for, if one is on top within reach); it only sorts or compresses with no
     // tractor coming, or (spare in hand) while the nearest is still a good way off
-    const eta = soonest(b), wanted = (st) => { const x = st[st.length - 1]; return x && !x.exp && x.wantedBy ? 1 : 0; };
+    const eta = soonest(b), any = soonestAny(b), nextBox = nextClaimed(b), wanted = (st) => { const x = st[st.length - 1]; return x && !x.exp && x.wantedBy ? 1 : 0; };
     if (cr.hold2 && eta === Infinity) { const k = nearest((st) => st.length < 3 && (!st.length || impCount(st)) && !st.some((x) => x.claimedBy)); if (k >= 0) cr.ops = [{ to: [sx(k), sy(k)] }, { lower: { stack: s.bays[k], second: true } }]; }
     else if (!cr.hold2 && eta < Infinity && s.state === "docked") { const free = (st, kk) => pickable(st) && !BERTHS.some((q) => q.crane.slot === kk || q.crane.slot2 === kk); let k = nearest((st, kk) => free(st, kk) && wanted(st)); if (k < 0) k = nearest(free); if (k >= 0) { const st = s.bays[k]; st[st.length - 1].claimedBy = TAKEN; syncClaims(); cr.ops = [{ to: [sx(k), sy(k)] }, { lift: { stack: st, second: true } }]; } }
-    else if (s.state === "docked" && (eta === Infinity || (cr.hold2 && eta > 28)) && sortShip(b)) { /* digging out a wanted container (owner) */ }
-    else if (s.state === "docked" && eta === Infinity) compressShip(b);
+    // (owner, 2026-11-01) any tractor on its way counts here, one sent for a claimed container too
+    else if (s.state === "docked" && (any === Infinity || (cr.hold2 && any > 28)) && sortShip(b)) { /* digging out a wanted container (owner) */ }
+    else if (s.state === "docked" && any === Infinity) compressShip(b);
+    // the next one's coming for a claimed container: wait over it
+    else if (any < Infinity && nextBox) { const k = s.bays.findIndex((st) => st.includes(nextBox)); if (k >= 0 && hyp(sx(k) - cr.x, sy(k) - cr.y) > 2) cr.ops = [{ to: [sx(k), sy(k)] }]; }
   }
   craneStep(cr, dt, () => {
     cr.slot = undefined; cr.slot2 = undefined; const t = cr.truck, t2 = cr.truck2; cr.truck = null; cr.truck2 = null;
@@ -786,6 +789,11 @@ function stsStep(b, dt) {
 // particular slot), other than t
 // how many tiles off the nearest such tractor is (Infinity with none)
 const soonest = (b) => trucks.reduce((m, q) => (q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && q.cmd.pick !== false && q.cmd.slot === undefined && !q.locked && (q.load === null || q.load.exp) ? Math.min(m, q.path.length) : m), Infinity);
+// (owner, 2026-11-01) how far off the nearest tractor on its way to this crane is, whatever it's coming for, and the
+// claimed container of the nearest one sent for one
+const comingAny = (b) => trucks.filter((q) => q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && !q.locked);
+const soonestAny = (b) => comingAny(b).reduce((m, q) => Math.min(m, q.path.length), Infinity);
+const nextClaimed = (b) => { let best = null, d = Infinity; for (const q of comingAny(b)) if (q.cmd.box && q.cmd.pick !== false && q.path.length < d) { d = q.path.length; best = q.cmd.box; } return best; };
 const coming = (b, t) => trucks.some((q) => q !== t && q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && q.cmd.pick !== false && q.cmd.slot === undefined && !q.locked && (q.load === null || q.load.exp));
 // (owner) an idle STS crane sorts the ship, before anything else: it takes the top container off a slot where a
 // customer's container is buried (the least buried first; a slot tractors are queued for only while enough is left for them) and sets it on the nearest low slot of its own columns
