@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Two streets up to the quay (owner):** one-lane streets run north from the yard road to the quay road after storage areas 2 and 4, so tractors skip the trip round the east side. Fix: an RTG no longer keeps passing over a truck in a far bay while nearer ones keep arriving.
+
 - **Tractors drive off at once (owner):** a tractor leaves the moment it's loaded, or its container is lifted off, instead of waiting for the crane to set the container down or finish its other lift.
 
 - **Stronger stack shading; cranes dig out wanted containers first (owner):** the bottom of each stack is much darker and the top clearly lighter. An idle crane now digs out containers customers want before grabbing a spare or compressing, including in slots tractors are queued for.

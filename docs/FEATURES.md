@@ -67,6 +67,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - The quay road runs west. The west side and the lanes between the storage areas run south from it to the RTG lane,
     which runs east. RTG bays are drive-through southbound, from the RTG lane to the yard road.
   - The yard road runs east and out the east gate. The east side runs north from it to the quay road.
+  - **Two streets north (owner, 2026-11-01):** in the gaps after storage areas 2 and 4, a street runs north from the yard
+    road to the quay road, so tractors can head up to the cranes without going round the east side. One lane each (the
+    gap only has room for one beside the lanes going down); they cross the RTG lane, where a truck can turn east.
   - Customer trucks come in at the southwest gate and up the west side to the yard road. Parking stalls are
     drive-through southbound, from the yard road to the lot road, which runs west to the west side. From there it runs
     north to the RTG lane.
@@ -158,6 +161,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
   whichever bay is free, or waits in line on the RTG lane at the area's west end until one clears, first come first
   served. Trucks behind it in line don't pass it. A tractor that finished there drives off to the tractor parking.
+- **Fair turns (bug 2026-11-01):** an RTG picks the nearest waiting truck, but the longer a truck has waited in its bay the
+  more it counts, so a truck in a far bay is never passed over for good.
 - **The RTG crane** starts at the area's south end. It serves the trucks standing in its bays one at a time, running its
   gantry down over them.
 - **It moves as little as it can (owner, 2026-11-01):** it stays where it finished instead of going back to rest. At the

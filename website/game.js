@@ -131,6 +131,11 @@ road(EAST, YROAD + 1, 0, -1, YROAD + 1 - QROAD, 1, 0, 0);                   // e
 road(WEST, YROAD, 1, 0, MW + 6 - WEST, 0, 1, 0);                            // yard road, east and out the east gate
 road(WEST, MH + 5, 0, -1, MH + 5 - RLANE - 1, 1, 0, 0);                     // west side, up from the south gate to the RTG lane
 road(STALLS[STALLS.length - 1].i + 2, LROAD, -1, 0, STALLS[STALLS.length - 1].i + 2 - WEST, 0, 1, 1);   // lot road, west
+// (owner, 2026-11-01) two streets north from the yard road to the quay road, in the gaps after storage areas 2 and 4 (one
+// lane each: the gap has room for one beside the lanes going down), so tractors can skip the trip round the east side;
+// they cross the RTG lane, where a truck can also turn east
+const UP_STREETS = [BLOCKS[1].x + 5, BLOCKS[3].x + 5];
+for (const c of UP_STREETS) for (let j = YROAD; j > QROAD + 1; j--) add(c, j, c, j - 1);
 // each berth's lanes: in up its east column, west along the three lanes; the auto and manual lanes end under the crane,
 // where a loaded tractor pulls out into the middle lane, which runs on to the exit column and down to the quay road
 for (const b of BERTHS) {
@@ -576,7 +581,9 @@ function rtgStep(b, dt) {
     const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
     const srcOf = (t) => { let src = null, fewest = 1e9; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } } return src && { src, fewest }; };
     const L = ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q)), U = free(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load !== null) : [];
-    const near = (list, f) => list.reduce((m, q) => (!m || f(q) < f(m) ? q : m), null);
+    // (bug 2026-11-01) nearest first, but the longer a truck has waited in its bay the more it counts, so none is passed over
+    for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
+    const age = (q) => (clock - q.cmd.readyAt) * 60, near = (list, f) => list.reduce((m, q) => (!m || f(q) - age(q) < f(m) - age(m) ? q : m), null);
     const toTruck = (q) => Math.abs(trailerOf(q).x - cr.x) + Math.abs(trailerOf(q).y - cr.y), toSrc = (q) => { const [c, r] = srcOf(q).src, [x, y] = slotXY(b, c, r); return Math.abs(x - cr.x) + Math.abs(y - cr.y); };
     const atBays = cr.y >= (REST + 0.5) * T - 1, nu = near(U, toTruck), nl = near(L, toSrc);
     const t = atBays ? nu || nl : nl || nu;
@@ -615,7 +622,8 @@ function exportRtgStep(b, dt) {
   if (!cr.ops.length && !cr.truck) {
     const ready = trucks.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.next && !q.locked && head(q) === key(q.cmd.bay.i, BAY0 + 3));
     const U = free(b) > 0 ? ready.filter((q) => q.kind === "exp" && q.load !== null) : [], L = count(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load === null) : [];
-    const near = (list) => list.reduce((m, q) => (!m || Math.abs(trailerOf(q).x - cr.x) < Math.abs(trailerOf(m).x - cr.x) ? q : m), null);
+    for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
+    const sc = (q) => Math.abs(trailerOf(q).x - cr.x) - (clock - q.cmd.readyAt) * 60, near = (list) => list.reduce((m, q) => (!m || sc(q) < sc(m) ? q : m), null);
     const atBays = cr.y >= (REST + 0.5) * T - 1, t = atBays ? near(U) || near(L) : near(L) || near(U);
     if (t) {
       const at = () => { const tr = trailerOf(t); return [tr.x, tr.y]; }, cc = clamp(Math.round(trailerOf(t).x / T - 0.5) - b.x, 0, b.cols - 1);
