@@ -138,10 +138,10 @@ road(PARK_X + 4, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);               // 
 road(PARK_X - 2, PARK[0].j, 0, 1, RLANE - PARK[0].j, 1, 0, 1);               // the parking's west road, down to the RTG lanes
 for (const p of PARK) { for (let x = PARK_X + 4; x > PARK_X - 1; x--) add(x, p.j, x - 1, p.j); for (const k of parkTiles(p)) SPOT.set(k, "P" + p.j); }
 // (2026-11-01) the lower block: in off the back road at its south end and up its east aisle, out up its west aisle onto the
-// tractors' lane
-{ const low = PARK.filter((p) => p.low), j0 = low[0].j, j1 = low[low.length - 1].j;
+// tractors' lane (the east aisle carries on up to it too)
+{ const low = PARK.filter((p) => p.low), j1 = low[low.length - 1].j;
   add(PARK_X + 5, j1, PARK_X + 4, j1);
-  for (let j = j1; j > j0; j--) add(PARK_X + 4, j, PARK_X + 4, j - 1);
+  for (let j = j1; j > RLANE + 1; j--) add(PARK_X + 4, j, PARK_X + 4, j - 1);   // (bug 2026-11-01) on up onto the tractors' lane, so one sent elsewhere on the way can drive out
   for (let j = j1; j > RLANE + 1; j--) add(PARK_X - 1, j, PARK_X - 1, j - 1); }
 for (const c of [PARK_X + 4, PARK_X + 5, PARK_X - 2, PARK_X - 1]) add(c, RLANE, c, RLANE + 1);
 add(PARK_X + 4, QROAD, PARK_X + 4, QROAD + 1); add(PARK_X + 5, QROAD, PARK_X + 5, QROAD + 1);

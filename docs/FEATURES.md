@@ -219,7 +219,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     and parks when there's nothing to do or no RTG assigned.
 - **The tractor parking (owner, 2026-11-01):** one column of 13 horizontal spots west of the storage areas, left of the
   dock, and (2026-11-01, stress test) a second block of 9 below the RTG lanes, entered off the back road at its south end and up
-  its east aisle, and left up its west aisle onto the tractors' lane. **You can own as many tractors as there are spots (22)**, so an idle
+  its east aisle (which carries on up onto the tractors' lane, so a tractor sent elsewhere on the way drives straight
+  out), and left up its west aisle onto the tractors' lane. **You can own as many tractors as there are spots (22)**, so an idle
   tractor always has somewhere to park. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
   west, then down to the tractors' lane. **New tractors appear there, and a tractor with nothing to do drives there and
   parks** (loaded or empty), taking the free spot nearest the top of whichever block is nearer. Sent somewhere on the way, it gives the spot up.

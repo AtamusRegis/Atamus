@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: tractors stuck in the lower parking block's aisle.** A tractor given a new trip while driving up the aisle had no way out and blocked the aisle and the back road behind it. The aisle now carries on up onto the tractors' lane. Checked that no truck can be left at a dead end anywhere on the map.
+
 - **No leftover concrete (owner):** the concrete islands between groups of bays, the gaps in the lot and the other spare ground in the yard are paved over.
 
 - **Road redo (owner):** customer trucks whose container is already stored come in at the east gate and drive straight into a bay from below; the rest come in at the southeast gate and park, then head out onto the yard road. Loaded trucks leave out the top of the bay onto a new exit lane and out the west gate. Above the bays the RTG lane is now one lane each way (exit west, tractors east); bays work both ways (tractors in from above, everyone else from below) and stay reserved until their truck is out. The concrete strips beside the storage areas are now streets north to the quay, one per area, and the empty ground east of the export area is gone. Tractors wait for a bay at the foot of the lane down just west of the area. A back road along the south fence takes a parked truck to an RTG east of its stall. Crossings: a truck driving into one keeps the room beyond it until it's through. At most 3 tractors head for one RTG's line at once (the rest wait in the parking), and idle tractors park in whichever parking block is nearer; the lower block is now entered off the back road.
