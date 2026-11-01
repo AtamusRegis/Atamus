@@ -7,12 +7,21 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. **The redo (owner, 2026-10-31): Atamus is a single-player container port management game** (a spaceport, then a
-   seaport, then a container terminal, all that evening), in the browser with no server: one ship (small, medium or large, on a timer) docks at a time and up to 4 ship-to-shore
-   cranes unload it (splitting it) onto yard trucks; containers (3 tiles long, nine colors, white/gray/black everyday) stack 3 high in six vertical 5 × 12
-   storage areas, each with an RTG crane and 5 truck bays at its end; trucks follow one-way roads, mostly two-lane (passing a stopped truck), and hold their tiles; above the bays one lane each way (exit west, tractors east), and bays work both ways (tractors in from above, customers and export trucks from below, out the west gate); a street north beside every storage area; under each crane an auto line, a manual line (3 deep each) and a way-out lane, and behind them one waiting line shared by all the cranes (along the quay road and up the lane east of the export area); yard tractors are manual (you pick what they fetch: a ship slot or an export) or auto (assigned an RTG or the export area, they shuttle by themselves), and loaded ones deliver by themselves; export trucks drop containers at a seventh, export area and cranes load them onto the ship (handing back an import on the same trip); idle and new ones are in the tractor parking west of the port; customer trucks are mostly grey (any everyday white/gray/black container, picked from storage now and then, faster the more unclaimed ones are stored) or colored (a particular container of their color); once their container is stored they go to its RTG by themselves; you select a truck and queue where it parks; each customer truck wants
-   one particular container (flashing, with a dotted line to it, while selected) and pays for it; the port starts small (1 tractor, 1 crane, 1 storage area, 4 stalls)
-   and the rest is bought. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
-   will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
+   seaport, then a container terminal, all that evening), in the browser with no server. **Since 2026-11-01 you build
+   the port** on a grid of 4 × 4 tile cells below the fixed quay road: 4-lane two-way roads (outer lane to drive and line
+   up in, inner lane to pass; junctions, corners and dead-end loops worked out per cell; gates where a road runs off the
+   map's edge), storage areas beside straight road (5 slots along the road, rows added up to 6, 3 high; the RTG serves 4
+   spots in the road's outer lane beside it, with up to 2 waiting just before), an export area, tractor parking and a
+   customer lot (cells of 2 pull-in pockets), bulldozing. One ship (small, medium or large, on a timer) docks at a time;
+   up to 4 bought STS cranes split it, each loading the truck at its spot in the quay road's westbound outer lane (one
+   waiting behind). Containers are 3 tiles long, nine colors (white/gray/black everyday). Yard tractors are manual (you
+   pick what they fetch: a ship container or an export) or auto (assigned an RTG or the export area), loaded ones
+   deliver by themselves, idle ones park; export trucks drop containers at the export area and cranes load them onto
+   the ship. Customer trucks are mostly grey (any everyday container) or colored (a particular one); with a lot they park
+   there until their container is stored, without one they only come when it already is and line up at its RTG. Each
+   wants one particular container (flashing, with a dotted line to it, while selected) and pays for it. Start: 1
+   tractor, crane A, a 5 × 1 storage area on a loop of road, 6 tractor spots, $500. 2D top down, 32 × 32 px tiles,
+   placeholder art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
 
