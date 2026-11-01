@@ -40,8 +40,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **A 54 × 39 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
   pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
-  - water with two **berths**, A and B
-  - the quay with an **STS crane** at each berth
+  - water with **one berth** for one big ship
+  - the quay with two **STS cranes**, A and B
   - the **STS lanes**
   - the quay road
   - six **storage areas** with their RTG cranes
@@ -77,19 +77,23 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **3 tiles long (owner).**
 - **A stack is drawn as three squares** down its 1 × 3 footprint (owner): the top square is the top of the stack and the
   bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
-  red at the bottom and green on top. Ships' bays and storage slots both draw this way. Stacks go up to 3 high.
+  red at the bottom and green on top. Storage slots draw this way. **A ship's slots are 3 × 1, horizontal (owner)**, with
+  the same three squares left to right (left the top). Stacks go up to 3 high.
 
-## Ships and STS cranes
+## The ship and STS cranes
 
-- **Arriving:** an empty berth gets a ship after a few seconds. It sails in and docks.
-- **Cargo:** 12 bays, each a stack of 0–3 containers (14 or more in all).
+- **One much larger ship at a single berth (owner, 2026-10-31)** instead of two small ones.
+  - **Arriving:** it sails in from the west and docks a few seconds after the last one leaves.
+  - **Cargo:** 14 horizontal slots across × 5 rows of deck (rows 2–6), each a stack of 0–3 containers (about 100 in all).
+- **Two STS cranes, A and B, split the ship:** A takes the west 7 slot columns, B the east 7. Each crane has its own lanes.
 - **Three lanes side by side (owner, 2026-10-31: "make the quay tractor line 3 tall instead of 3 wide"):** under each STS
   crane are three parallel lanes with one tractor spot each, so no tractor waits behind another. A tractor takes a free
   lane when its trip there starts (or keeps the one it's already in).
 - **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
   spot (the nearest lane first). It runs along the quay to the nearest bay with a container, runs its trolley out, lifts the top
-  container, brings it back and lowers it onto that tractor. Then it does the next.
-- **Leaving:** once its bays are empty and nothing more is promised, the ship sails off. Another follows.
+  container, brings it back and lowers it onto that tractor. Then it does the next. It takes the container nearest its
+  tractors, from the deck rows nearest the quay first.
+- **Leaving:** once the ship is empty and nothing more is promised, it sails off east. Another follows.
 
 ## Storage areas and RTG cranes (owner)
 
@@ -120,7 +124,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     first free one), or (customers) a parking stall.
   - Clicks queue up, with no limit for now.
 - **Only where it can be served (owner):**
-  - an empty tractor → an STS at a docked ship with a container no one has claimed
+  - an empty tractor → an STS crane whose half of the docked ship has a container no one has claimed
   - a loaded tractor → an RTG with a free bay and room in its area
   - a customer → an RTG with a free bay and its color, unclaimed (just one trip)
   - a customer → a free stall
@@ -133,6 +137,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
 
 ## Rejected / removed
+
+- **Two berths with a small ship each, ship slots running across the deck (2026-10-31, later):** replaced by one big ship
+  with 3 × 1 horizontal slots, worked by both cranes.
 
 - **Tractors working on their own when nothing was queued (2026-10-31, later; owner: "too automated"):** removed.
 

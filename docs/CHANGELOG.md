@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-31
 
+- **One big ship (owner):** a single much larger ship (14 × 5 slots) docks at one berth, and its two STS cranes split it west and east. Ship slots are now 3 × 1 horizontal, drawn with the same three squares left to right.
 - **Tractors wait for you (owner: "too automated"):** tractors no longer pick their own trips. Loaded, you choose the RTG; unloaded, you choose the STS crane. Until then a tractor stays where it finished, keeping its STS lane or RTG bay.
 - **STS lanes and busy tractors (owner):** under each STS crane are now three lanes side by side, one tractor each, so none waits behind another. Tractors no longer park: with nothing queued they fetch from the ship with the most left and deliver to the emptiest storage area, or wait in a free STS lane. The parking lot is for customer trucks, which wait there until sent.
 - **Bigger port, traffic, lines and bays (owner):** the map is 54 × 37 with six storage areas. Trucks follow one-way roads and hold the tiles under them, so they queue instead of overlapping, bending around corners. Each STS crane has a line for three tractors and loads one container at a time; each storage area has five vertical drive-through RTG bays; yard tractors and customer trucks share a 24-stall parking lot and the bays; idle tractors park themselves.
