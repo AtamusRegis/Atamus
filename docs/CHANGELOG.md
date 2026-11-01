@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Flashing and looping (owner):** with no customer truck selected, the ship's containers that customers are waiting for flash. A looping tractor told to fetch a ship slot does that next (taking over a pickup it was already heading for), drops it at its RTG and keeps looping.
+
 - **Tractor parking (owner):** a column of horizontal tractor spots west of the storage areas, left of the dock (the port moved 7 tiles east to make room; the map is 61 × 42). New tractors appear there, and tractors with nothing to do drive there and park instead of waiting where they finished.
 
 - **Fix: couldn't buy more tractors once the STS lanes were full.** A new tractor now appears in a free RTG bay when the lanes are taken, and the button greys out only when there's no free lane or bay.

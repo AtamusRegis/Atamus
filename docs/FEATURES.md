@@ -142,6 +142,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   forth by itself between the STS crane and the RTG it was last sent to: loaded, it heads for that RTG (if its area has
   room); empty, for that crane (if its half of the ship has a container nobody claimed). It still works through anything
   you queue first. Switched off, it stops after its current trip.
+- **Fetching a slot while looping (owner):** click a ship slot with a looping tractor selected and it fetches that slot's
+  top container next. If it's already on its way to a crane (and the crane hasn't started on it), that pickup becomes
+  the slot's. It takes the container to its RTG and carries on looping.
 - **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
   and parks in the lot until you send it.
 - **To its stack by itself (owner, 2026-11-01: "make trucks with a container in a stack automatically go to that stack"):**
@@ -152,7 +155,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Most
   (4 in 5) want one already in storage, while there is one. Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
-  the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner).
+  the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
+  truck selected, every container on the ship that a customer is waiting for flashes** (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
