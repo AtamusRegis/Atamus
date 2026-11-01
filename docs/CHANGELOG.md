@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Cranes hold two and sort the ship (owner):** an STS crane can hold a second container, lifting one for each of two waiting tractors in one trip, or keeping a spare ready for the next tractor. Idle, it digs out buried containers customers want by moving what's on top to other slots.
+
 - **Shaded stacks, buried wants (owner):** the bottom container of every stack is drawn darker and the top one lighter. Customers can now want a container anywhere in a ship slot, even at the bottom, so you may have to import the whole stack; it flashes until enough pickups are queued to reach it.
 
 - **Queue pickups for a manual tractor (owner):** click several ship slots (or the export area) in a row and the tractor fetches each one, dropping it off at a storage area it picks by itself before the next. No more clicking an RTG in between.
