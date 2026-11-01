@@ -78,7 +78,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   side by side, each changing into the other's lane) carries straight on and changes later. A dashed line divides the lanes and
   faint arrows show the direction.
 - **The road layout (owner, 2026-11-01: routes should make sense; then a redo from the owner's marked-up screenshot):**
-  - The quay road runs west. The west side and a lane east of every storage area run south from it to the RTG lanes.
+  - The quay road runs west. The west side and a lane east of every storage area but the export area run south from it to the RTG lanes (the lane east of the export area runs north, for the cranes' waiting line).
   - **The RTG lanes are one lane each way (owner):** the tractors' lane runs east, and above it the exit lane runs west
     and out the west gate. Tractors only cross the exit lane.
   - **RTG bays work both ways (owner):** tractors drive in from the tractors' lane above and out the bottom onto the yard
@@ -136,6 +136,17 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     and moves up as the ones ahead leave (the line goes by who is furthest in). With its line full it waits where it is.
   - **the middle lane is the way out:** a tractor loaded under the crane pulls out into it and drives on to the exit
     column west of the crane, so the next in line moves straight up.
+- **The cranes' shared waiting line (owner, 2026-11-01):** a tractor whose crane line is full waits in one line shared
+  by all the cranes, instead of in the tractor parking: along the south lane of the quay road (from just past crane A's
+  way in, eastward; the north lane is left free to pass it) and, at its back, up the lane east of the export area (now
+  two lanes north, entered off the tractors' lane; the other lane passes it). Room for 13. It leaves the street and lane
+  after storage area 4 clear. The line goes by who is furthest along it; each moves up as ones ahead leave, and one
+  leaves for its crane, front first, as soon as its crane line has room. Nobody else jumps it: a tractor whose crane
+  has a tractor waiting in the line joins the back. With the line full, a tractor waits in the tractor parking.
+  - **Other trucks go round it (owner):** trucks plan round the stretch of the line in use (and the next place in it),
+    the long way if it stands across a shortcut. A new place at the back is only taken while no truck is already set
+    to drive through it. Where the line stands across the top of the lane down to an RTG's line, a tractor only heads to
+    that RTG with a bay free for it (taken at once), going the long way round.
 - **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
   spot (the nearest lane first). It runs along the quay to the slot, runs its trolley out, lifts the top container,
   brings it back and lowers it onto that tractor. Then it does the next.

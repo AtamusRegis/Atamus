@@ -63,8 +63,9 @@ const BLOCKS = [4, 12, 20, 28, 36, 44, 52].map((x) => x + OX).map((x, k) => {
   b.rtg = { x: (x + 2.5) * T, y: (REST + 0.5) * T, hold: null, ops: [], truck: null };
   return b;
 });
-// (owner, 2026-11-01) a lane down to the RTG lanes east of every storage area, and the east side right after the last
-const LANES = BLOCKS.map((b) => b.x + 6), WEST = 2 + OX, EAST = BLOCKS[6].x + 8;
+// (owner, 2026-11-01) a lane down to the RTG lanes east of every storage area but the export area, and the east side
+// right after it
+const LANES = BLOCKS.slice(0, 6).map((b) => b.x + 6), WEST = 2 + OX, EAST = BLOCKS[6].x + 8;
 // (owner, 2026-11-01) the tractor parking: one column of horizontal spots west of the port, drive-through westbound
 // between two roads; new tractors appear here and idle ones park here
 // (2026-11-01) a second block of 9 below the RTG lane (in from the RTG lane down its east aisle, out up its west aisle
@@ -168,6 +169,18 @@ for (let j = BACK; j > YROAD; j--) add(EAST + 2, j, EAST + 2, j - 1);
 // (owner, 2026-11-01) a street north beside every storage area (east of it, one lane) from the yard road to the quay road
 const UP_STREETS = BLOCKS.map((b) => b.x + b.w);
 for (const c of UP_STREETS) for (let j = YROAD; j > QROAD + 1; j--) add(c, j, c, j - 1);
+// (owner, 2026-11-01) the cranes' shared waiting line: tractors whose crane line is full wait along the south lane of the
+// quay road (the north lane is left to pass them) and, at its back, up the lane east of the export area (in off the
+// tractors' lane, north). It leaves the street and lane after storage area 4 clear. The front is at the west end, just
+// past crane A's way in.
+const QCOL = BLOCKS[6].x + 6;
+road(QCOL, RLANE + 1, 0, -1, RLANE - QROAD, 1, 0, 1);   // two lanes north: the line's, and one to pass it
+const QSEQ = [], QGAP = new Set();
+for (let x = BERTHS[0].ox + 1; x < QCOL; x++) { QSEQ.push(key(x, QROAD + 1)); if (x >= 40 && x <= 42) QGAP.add(key(x, QROAD + 1)); }
+for (let j = QROAD + 1; j <= RLANE; j++) QSEQ.push(key(QCOL, j));
+// where each tractor in it stands (its front tile), front first
+const QIDX = new Map(QSEQ.map((k, i) => [k, i]));
+const QSLOTS = []; for (let i = 0; i + TL <= QSEQ.length - 1;) { if (QSEQ.slice(i, i + TL).some((k) => QGAP.has(k))) { i++; continue; } QSLOTS.push(QSEQ[i]); i += TL; }
 // each berth's lanes: in up its east column, west along the three lanes; the auto and manual lanes end under the crane,
 // where a loaded tractor pulls out into the middle lane, which runs on to the exit column and down to the quay road
 for (const b of BERTHS) {
@@ -335,7 +348,9 @@ function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, n
 { const p = PARK[0], t = mkTruck("yard", parkTiles(p)); t.num = 1; t.park = p; p.claim = t; }
 const head = (t) => t.tiles[0];
 const headIJ = (t) => unkey(t.tiles[0]);
-function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k, null, t.kind === "yard") || []); }
+// (owner, 2026-11-01) a truck not in the cranes' waiting line plans round it (the long way, if the line blocks a shortcut)
+const aroundLine = (t) => (t.cmd && t.cmd.kind === "qwait" ? null : (k) => QEXT.has(k) && occ.get(k) !== t);
+function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k, aroundLine(t), t.kind === "yard") || route(from, k, null, t.kind === "yard") || []); }
 // (owner, 2026-11-01) two kinds of customer truck. Grey ones (most) come for everyday cargo: any white, gray or black
 // container. They park, and now and then (every 30–70 s with storage empty, much faster the more unclaimed containers
 // are stored, a little faster with more stalls) the longest waiting takes the easiest-to-reach unclaimed one in storage;
@@ -454,7 +469,7 @@ function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); if (t
 // just west of the area, where others can pass it.
 const lineKey = (b) => key(b.x - 2, RLANE - 1);
 // tractors stop at the bottom of a bay facing south, other trucks at the top facing north
-const targetKey = (a, t) => (a.kind === "tpark" ? key(PARK_X, a.spot.j) : a.lane ? laneSpot(t) : a.kind === "rtg" ? (a.bay ? key(a.bay.i, t.kind === "yard" ? BAY0 + 3 : BAY0) : lineKey(a.block)) : key(a.stall.i, LOT0));
+const targetKey = (a, t) => (a.kind === "qwait" ? QSLOTS[a.qi] : a.kind === "tpark" ? key(PARK_X, a.spot.j) : a.lane ? laneSpot(t) : a.kind === "rtg" ? (a.bay ? key(a.bay.i, t.kind === "yard" ? BAY0 + 3 : BAY0) : lineKey(a.block)) : key(a.stall.i, LOT0));
 const bayTiles = (bay) => [0, 1, 2, 3].map((d) => key(bay.i, BAY0 + d));
 const freeBay = (b) => b.bays.find((bay) => !bay.claim && !bayTiles(bay).some((k) => occ.has(k)));
 // (2026-11-01) bays work both ways, so a bay is held until the truck it's for has driven all the way out of it (or
@@ -471,7 +486,10 @@ const inLine = (t, b) => t.cmd && t.cmd.kind === "rtg" && !t.cmd.bay && (!b || t
 // (stress test 2026-11-01) at most 3 tractors on their way to an RTG's line at once (what the lane holds without backing
 // onto the quay road); the rest wait in the tractor parking
 const LINE_MAX = 3;
-const lineFull = (b, t) => trucks.filter((q) => q !== t && q.kind === "yard" && inLine(q, b)).length >= LINE_MAX && !freeBay(b);
+const lineFull = (b, t) => !freeBay(b) && (trucks.filter((q) => q !== t && q.kind === "yard" && inLine(q, b)).length >= LINE_MAX || !lineOpen(b));
+// (owner, 2026-11-01) the cranes' waiting line can stand across the top of the lane down to an RTG's line: then a tractor
+// only heads there with a bay free for it, going the long way round
+const lineOpen = (b) => { const [x] = unkey(lineKey(b)); return !QEXT.has(key(x, QROAD + 1)) && !QEXT.has(key(x + 1, QROAD + 1)); };
 function fillBays() {
   for (const b of BLOCKS) {
     if (!b.open) continue;
@@ -492,9 +510,12 @@ function startCmd(t, a) {
   if (a.kind === "sts" || a.kind === "wait") {
     const lane = laneFor(a.berth, t);
     if (lane !== t.lane && lane.q.length >= LANE_DEEP) return false;
+    if (lane !== t.lane && !t.released && WAITQ.some((q) => q !== t && laneFor(q.queue[0].berth, q) === lane)) return false;   // (owner) no jumping the waiting line
+    t.released = false;
     if (t.lane !== lane) { leaveLane(t); lane.q.push(t); }
     t.lane = lane; a.lane = lane;
   } else if (a.kind === "rtg" && t.kind === "yard" && !a.bay && lineFull(a.block, t)) return false;
+  else if (a.kind === "rtg" && t.kind === "yard" && !a.bay && !lineOpen(a.block)) { const bay = freeBay(a.block); bay.claim = t; a.bay = bay; leaveLane(t); }
   else leaveLane(t);
   t.bay = null;
   if (t.park && !(a.kind === "tpark" && a.spot === t.park)) { if (t.park.claim === t) t.park.claim = null; t.park = null; }
@@ -517,14 +538,54 @@ function custStep(t) {
 function canStart(t) {
   const a = t.queue[0]; if (!a) return false;
   if (a.kind === "deliver") return !t.load || !!deliverAction(t, false);
-  if (a.kind === "sts") { const s = DOCK.ship, l = laneFor(a.berth, t); return !!s && (s.state === "docked" || s.state === "closing") && (t.lane === l || l.q.length < LANE_DEEP); }
+  if (a.kind === "sts") { const s = DOCK.ship, l = laneFor(a.berth, t); return !!s && (s.state === "docked" || s.state === "closing") && (t.lane === l || (l.q.length < LANE_DEEP && !WAITQ.some((q) => q !== t && laneFor(q.queue[0].berth, q) === l))); }   // (owner) no jumping the waiting line
   if (a.kind === "rtg" && !a.bay) return !lineFull(a.block, t);
   return true;
+}
+// (owner, 2026-11-01) the waiting line, front first: each moves up as ones ahead leave; one leaves for its crane, front
+// first, as soon as its line has room
+let WAITQ = [];
+const QOCC = new Set(), QEXT = new Set();
+// to its place in the waiting line, driving the last four tiles along the line so it stands straight in it
+function goQ(t, i) {
+  const p = QIDX.get(QSLOTS[i]), from = t.next || head(t), h = QIDX.get(from), pre = t.next ? [t.next] : [];
+  if (h !== undefined && h >= p) { t.path = pre.concat(QSEQ.slice(p, h).reverse()); return; }   // already in it: straight up it
+  const r = route(from, QSEQ[p + TL - 1], null, true); t.path = r ? pre.concat(r, QSEQ.slice(p, p + TL - 1).reverse()) : pre;
+}
+// (stress test) a new place at the back of the line is only taken while no other truck is already set to drive through
+// it (one in a street up to the quay road can't turn off)
+function slotFree(i) {
+  const p = QIDX.get(QSLOTS[i]), ks = new Set(QSEQ.slice(p, p + TL));
+  return !trucks.some((q) => !(q.cmd && q.cmd.kind === "qwait") && (q.path.some((k) => ks.has(k)) || (q.next && ks.has(q.next))));
+}
+function waitStep() {
+  const ok = (t) => !t.gone && t.cmd && t.cmd.kind === "qwait" && t.queue[0] && t.queue[0].kind === "sts";
+  for (const t of WAITQ) if (!ok(t) && t.cmd && t.cmd.kind === "qwait") t.cmd = null;
+  WAITQ = WAITQ.filter(ok);
+  const s = DOCK.ship, open = s && (s.state === "docked" || s.state === "closing"), took = new Map();
+  WAITQ = WAITQ.filter((t) => {
+    const l = laneFor(t.queue[0].berth, t), n = l.q.length + (took.get(l) || 0);
+    if (!open || n >= LANE_DEEP || t.next) return true;
+    took.set(l, (took.get(l) || 0) + 1); t.cmd = null; t.path = []; t.released = true; return false;
+  });
+  // (stress test) the line goes by who is furthest along it, then those on their way, so none has to get past another
+  const rank = (t) => { const i = QIDX.get(head(t)); return i !== undefined ? i : 1000 + t.path.length; };
+  WAITQ.sort((a, b) => rank(a) - rank(b));
+  WAITQ.forEach((t, i) => { if (t.cmd.qi !== i) { t.cmd.qi = i; goQ(t, i); } });
+  QOCC.clear(); for (const t of WAITQ) for (const k of t.tiles) QOCC.add(k);
+  // the stretch of the line in use, and the next place in it: other trucks plan round all of it
+  QEXT.clear(); const end = QIDX.get(QSLOTS[Math.min(WAITQ.length, QSLOTS.length - 1)]) + TL - 1; for (let i = 0; i <= end; i++) if (!QGAP.has(QSEQ[i])) QEXT.add(QSEQ[i]);
 }
 function idleStep(t) {
   if (t.kind !== "yard" || t.next || t.locked) return;
   const ready = canStart(t);
   if (t.cmd && t.cmd.kind === "tpark" && ready) { t.cmd.spot.claim = null; t.cmd = null; return; }
+  // (owner, 2026-11-01) one whose crane line is full joins the cranes' shared waiting line (with room in it)
+  const a = t.queue[0], s = DOCK.ship;
+  if (!ready && a && a.kind === "sts" && s && (s.state === "docked" || s.state === "closing") && (!t.cmd || t.cmd.kind === "tpark") && WAITQ.length < QSLOTS.length && slotFree(WAITQ.length)) {
+    if (t.cmd) t.cmd.spot.claim = null; if (t.park) { if (t.park.claim === t) t.park.claim = null; t.park = null; }
+    WAITQ.push(t); t.cmd = { kind: "qwait", qi: WAITQ.length - 1 }; goQ(t, t.cmd.qi); return;
+  }
   if (t.cmd || ready || t.park) return;   // (bug 2026-11-01) a tractor whose next step can't start yet waits in the parking
   // (2026-11-01) the nearer of the two blocks' first free spots
   const cands = [PARK.find((q) => !q.claim && !q.low), PARK.find((q) => !q.claim && q.low)].filter(Boolean); if (!cands.length) return;
@@ -599,10 +660,11 @@ function truckStep(t, dt) {
     const n = t.path[0], o = occ.get(n), bs = CHG.get(head(t) + ">" + n), ob = bs && occ.get(bs);
     const box = (BOX.has(n) || (BAYTOP.has(n) && t.kind !== "yard")) && !BOX.has(head(t));
     if (mine(n, t) && (!bs || mine(bs, t)) && (!box || boxClear(t))) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
+    else if (t.cmd && t.cmd.kind === "qwait" && QIDX.has(head(t))) t.blocked = 0;   // in the waiting line: just wait for the one ahead
     else if ((t.blocked = (t.blocked || 0) + dt) > (t.patience || (t.patience = 0.5 + rnd()))) {   // staggered, so held-up trucks don't all re-plan at once
       t.blocked = 0;
       if (o && o !== t) { if (!o.next) pass(t); }
-      else { const r = route(head(t), t.path[t.path.length - 1], (k) => k === n, t.kind === "yard"); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
+      else { const al = aroundLine(t), r = route(head(t), t.path[t.path.length - 1], (k) => k === n || (al && al(k)), t.kind === "yard"); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
     }
   }
   if (t.next) {
@@ -621,8 +683,9 @@ function truckStep(t, dt) {
 // (owner) held up by a stopped truck: take the other lane round it, if that isn't much longer
 function pass(t) {
   const o = occ.get(t.path[0]); if (o && inLine(o) && inLine(t, o.cmd.block)) return;   // no jumping the RTG line
-  const goal = t.path[t.path.length - 1], now = route(head(t), goal, null, t.kind === "yard"); if (!now) return;
-  const r = route(head(t), goal, (k) => { const o = occ.get(k); return o && o !== t && !o.next; }, t.kind === "yard");
+  if (o && o.cmd && o.cmd.kind === "qwait" && !(t.cmd && t.cmd.kind === "qwait")) { const r = route(head(t), t.path[t.path.length - 1], aroundLine(t), t.kind === "yard"); if (r && r.length) t.path = r; return; }   // held up by the waiting line: the long way
+  const al = aroundLine(t), goal = t.path[t.path.length - 1], now = route(head(t), goal, al, t.kind === "yard"); if (!now) return;
+  const r = route(head(t), goal, (k) => { const o = occ.get(k); return (o && o !== t && !o.next) || (al && al(k)); }, t.kind === "yard");
   if (r && r.length && r[0] !== t.path[0] && r.cost <= now.cost + 8) { t.path = r; passes++; }
 }
 function doneServing(t) {
@@ -1260,7 +1323,7 @@ function draw() {
   if (selected) {
     const tr = trailerOf(selected); let px = tr.x, py = tr.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
     for (const a of selected.cmd ? [selected.cmd, ...selected.queue] : selected.queue) {
-      if (a.kind === "deliver") continue;
+      if (a.kind === "deliver" || a.kind === "qwait") continue;
       const [rx, ry, rw, rh] = spotRect(a), sx = rx + rw / 2, sy = ry + rh / 2; n++;
       ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke(); px = sx; py = sy;
       ctx.strokeStyle = "#ffffff"; ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
@@ -1291,7 +1354,7 @@ function step(dt) {
   const pan = 520 / zoom * dt; if (keys.KeyW || keys.ArrowUp) cam.y -= pan; if (keys.KeyS || keys.ArrowDown) cam.y += pan; if (keys.KeyA || keys.ArrowLeft) cam.x -= pan; if (keys.KeyD || keys.ArrowRight) cam.x += pan;
   cam.x = clamp(cam.x, 0, MW * T); cam.y = clamp(cam.y, 0, MH * T);
   shipStep(dt); syncClaims(); for (const b of BERTHS) if (b.open) stsStep(b, dt);
-  sortLanes(); freeBays(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
+  sortLanes(); waitStep(); freeBays(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   // (owner) customers come faster the more parking stalls are open
@@ -1308,5 +1371,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, slotSwap, doSwap, route, select: (t) => (selected = t) };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, get waitq() { return WAITQ; }, qext: QEXT, slotSwap, doSwap, route, select: (t) => (selected = t) };
 })();
