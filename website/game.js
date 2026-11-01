@@ -1,7 +1,8 @@
-// Atamus (owner, 2026-10-31): a single-player seaport management game. Boats dock at two berths with containers in seven
-// colors; you drive each forklift yourself (select it, then the container to pick up, then where to set it down), and a
-// forklift must be able to drive up to both ends. Containers live only in the storage areas. Trucks pull into the bays with their cab colored like the container they want: bring
-// them a match and they leave happy. A 32 x 32 tile grid with placeholder pixel art. Rules in docs/FEATURES.md.
+// Atamus (owner, 2026-10-31): a single-player container port. Ships dock at two berths and their ship-to-shore cranes
+// unload them onto your yard trucks; the trucks carry the containers to storage areas, each with an RTG crane at its end
+// that stacks them three high; customer trucks with a colored cab come for a container of that color, and the RTG digs it
+// out and loads it. You pick a truck and queue where it parks. 32 x 32 tiles, placeholder pixel art. Rules in
+// docs/FEATURES.md.
 "use strict";
 (() => {
 const $ = (id) => document.getElementById(id);
@@ -10,170 +11,197 @@ const TAU = Math.PI * 2, rnd = Math.random, hyp = Math.hypot, clamp = (v, a, b) 
 const pick = (a) => a[Math.floor(rnd() * a.length)];
 
 // ---- the port: 36 x 24 tiles of 32 px ----
-// rows 0–6 water (boats dock at rows 5–6), 7–20 the quay and yard, 21–22 the truck road, 23 the fence
-const T = 32, MW = 36, MH = 24, QUAY = 7, APRON = 20, ROAD = 21;
-const COLORS = [   // (owner, 2026-10-31) seven colors
+// rows 0–5 water (ships dock with their decks on rows 3–5), 6–7 the quay, 8 the quay road, 9–20 storage, 21 the RTGs'
+// end, 22 the yard road, 23 the fence. Containers are 3 tiles long (owner).
+const T = 32, MW = 36, MH = 24, QUAY = 6, QROAD = 8, YROAD = 22, CL = 3;
+const COLORS = [
   { name: "Red", c: "#d23c32" }, { name: "Orange", c: "#e8822a" }, { name: "Yellow", c: "#e8c832" }, { name: "Green", c: "#3aa04a" },
   { name: "Blue", c: "#3a7ad0" }, { name: "Purple", c: "#7a4ac8" }, { name: "White", c: "#d8dcdf" },
 ];
-const BERTHS = [{ id: 0, x: 3, w: 8 }, { id: 1, x: 18, w: 8 }];
-for (const b of BERTHS) { b.boat = null; b.wait = 1 + rnd() * 3; }
-const BAYS = [3, 9, 15, 21, 27].map((x, i) => ({ id: i, x, truck: null }));   // trailer at (x, ROAD), cab at (x + 1, ROAD)
-const DEPOT = [[31, 9], [32, 9], [33, 9]];
-
-// (owner, 2026-10-31) storage: one long walled area — walls on three sides, open at its east end, 5 tiles wide — and a
-// 2 x 5 painted area with no walls. Containers can be set down only in these (or on a truck).
-const LONG = { x: 4, y: 12, w: 18, h: 5 }, PATCH = { x: 26, y: 13, w: 5, h: 2 };
-const WALL = new Set();
-for (let i = LONG.x - 1; i <= LONG.x + LONG.w - 1; i++) { WALL.add((LONG.y - 1) * MW + i); WALL.add((LONG.y + LONG.h) * MW + i); }
-for (let j = LONG.y - 1; j <= LONG.y + LONG.h; j++) WALL.add(j * MW + LONG.x - 1);
-const inArea = (a, i, j) => i >= a.x && i < a.x + a.w && j >= a.y && j < a.y + a.h;
-const isStorage = (i, j) => inArea(LONG, i, j) || inArea(PATCH, i, j);
-const isWall = (i, j) => WALL.has(j * MW + i);
-const isYard = (i, j) => i >= 1 && i <= MW - 2 && j >= QUAY && j <= APRON && !isWall(i, j);
-let containers = [], boats = [], trucks = [], forklifts = [], delivered = 0, clock = 0;
-const contAt = (i, j) => containers.find((c) => !c.carried && c.i === i && c.j === j) || null;
-function deckBoat(i, j) { for (const b of boats) if (b.state === "docked" && j >= 5 && j <= 6 && i >= b.berth.x && i < b.berth.x + b.berth.w) return b; return null; }
-const rk = (i, j) => j * MW + i;
-// a forklift can drive over a tile: open yard, or the deck of a docked boat, with no container on it
-// ignore: a container (or a Set of them) treated as gone; blockRes: storage tiles already claimed for a drop count as full
-function drivable(i, j, ignore, blockRes) { if (!(isYard(i, j) || deckBoat(i, j))) return false; if (blockRes && reserved.has(rk(i, j))) return false; const c = contAt(i, j); return !c || c === ignore || !!(ignore && ignore.has && ignore.has(c)); }
-
-// ---- paths: 4-way BFS over drivable tiles ----
-const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-function reachFrom(starts, ignore, blockRes) {
-  const seen = new Map(), q = [];
-  for (const [i, j] of starts) { const k = rk(i, j); if (!seen.has(k)) { seen.set(k, -1); q.push([i, j]); } }
-  while (q.length) { const [i, j] = q.shift(); for (const [a, b] of N4) { const ni = i + a, nj = j + b, k = rk(ni, nj); if (seen.has(k) || !drivable(ni, nj, ignore, blockRes)) continue; seen.set(k, rk(i, j)); q.push([ni, nj]); } }
-  return seen;
-}
-function pathTo(seen, i, j) { const out = []; let k = rk(i, j); if (!seen.has(k)) return null; while (k !== -1) { out.unshift([k % MW, Math.floor(k / MW)]); k = seen.get(k); } return out; }
-// the free tiles beside a spot that a forklift can reach (the container itself is ignored, it's moving)
-function accessFrom(seen, i, j) { return N4.map(([a, b]) => [i + a, j + b]).filter(([x, y]) => seen.has(rk(x, y))); }
-
-// ---- boats ----
-const HULLS = ["#5a6a7a", "#7a3a3a", "#3a5a4a", "#4a4a6a", "#6a5a3a"];
-function newBoat(berth) {
-  const b = { berth, x: -14 * T, state: "arrive", hull: pick(HULLS), name: pick(["Maris", "Cobalt Star", "Northwind", "Halyard", "Saltmere", "Orca", "Tern", "Bellwether", "Kestrel Bay", "Juniper"]) };
-  b.tx = berth.x * T; berth.boat = b; boats.push(b);
-  const slots = []; for (let i = 0; i < berth.w; i++) for (const j of [5, 6]) slots.push([berth.x + i, j]);
-  slots.sort(() => rnd() - 0.5);
-  const n = 8 + Math.floor(rnd() * 7);
-  for (let k = 0; k < n; k++) containers.push({ id: containers.length + "_" + rnd(), color: Math.floor(rnd() * COLORS.length), i: slots[k][0], j: slots[k][1], boat: b, carried: null, job: null });
+const BERTHS = [{ id: 0, x: 4, w: 10 }, { id: 1, x: 19, w: 10 }].map((b) => ({ ...b, ship: null, wait: 1 + rnd() * 2, spot: { i: b.x + 5, j: QROAD, occ: null }, crane: { x: (b.x + 5.5) * T, y: (QROAD + 0.5) * T, hold: null, ops: [], truck: null } }));
+// storage areas (owner): 5 wide, 12 long, vertical; each slot is one container footprint (1 x 3) stacked up to 3 high
+const BLOCKS = [2, 9, 16, 23].map((x, k) => {
+  const b = { id: k, x, y: 9, w: 5, h: 12, cols: 5, rows: 4, incoming: 0, claims: Array(COLORS.length).fill(0), spot: { i: x + 2, j: YROAD, occ: null } };
+  b.slots = Array.from({ length: b.cols }, () => Array.from({ length: b.rows }, () => []));
+  b.rtg = { x: (x + 2.5) * T, y: (YROAD - 1 + 0.5) * T, hold: null, ops: [], truck: null };
   return b;
-}
-function boatStep(b, dt) {
-  if (b.state === "arrive") { b.x += Math.max(30, (b.tx - b.x) * 1.4) * dt; if (b.x >= b.tx) { b.x = b.tx; b.state = "docked"; } }
-  else if (b.state === "docked") {
-    const busy = containers.some((c) => c.boat === b) || forklifts.some((f) => { const [i, j] = tileF(f); return i >= b.berth.x && i < b.berth.x + b.berth.w && j <= 6; });
-    if (!busy) { b.idle = (b.idle || 0) + dt; if (b.idle > 2) b.state = "depart"; } else b.idle = 0;
-  }
-  else if (b.state === "depart") { b.x += (40 + (b.x - b.tx) * 0.8) * dt; if (b.x > (MW + 2) * T) { boats.splice(boats.indexOf(b), 1); b.berth.boat = null; b.berth.wait = 4 + rnd() * 6; } }
+});
+const STUBS = [10, 12, 14, 16, 18, 20].map((j) => ({ i: 32, j, occ: null }));   // parking stubs off the east road
+
+// roads: the quay road, the yard road, the lanes between the storage areas, and the parking stubs
+const ROADS = new Set(), rk = (i, j) => j * MW + i, isRoad = (i, j) => ROADS.has(rk(i, j));
+for (let i = 1; i <= 34; i++) { ROADS.add(rk(i, QROAD)); ROADS.add(rk(i, YROAD)); }
+for (const x of [1, 8, 15, 22, 29]) for (let j = QROAD; j <= YROAD; j++) ROADS.add(rk(x, j));
+for (const s of STUBS) for (let i = 30; i <= 34; i++) ROADS.add(rk(i, s.j));
+const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+function roadPath(si, sj, ti, tj) {
+  const prev = new Map([[rk(si, sj), -1]]), q = [[si, sj]];
+  while (q.length) { const [i, j] = q.shift(); if (i === ti && j === tj) break; for (const [a, b] of N4) { const ni = i + a, nj = j + b, k = rk(ni, nj); if (prev.has(k) || !isRoad(ni, nj)) continue; prev.set(k, rk(i, j)); q.push([ni, nj]); } }
+  if (!prev.has(rk(ti, tj))) return null;
+  const out = []; let k = rk(ti, tj); while (k !== -1) { out.unshift({ x: (k % MW + 0.5) * T, y: (Math.floor(k / MW) + 0.5) * T }); k = prev.get(k); }
+  return out.slice(1);
 }
 
-// ---- trucks: the cab's color is the container it wants ----
-let truckWait = 3;
-function colorsInPort() { const s = new Set(containers.filter((c) => !c.delivered).map((c) => c.color)); return [...s]; }
-function newTruck(bay) {
-  const want = trucks.map((t) => t.color), have = colorsInPort(), fresh = have.filter((c) => !want.includes(c));
-  const color = fresh.length ? pick(fresh) : have.length ? pick(have) : Math.floor(rnd() * COLORS.length);
-  const t = { bay, color, x: (MW + 2) * T, tx: bay.x * T, state: "arrive", t: 0, load: null }; bay.truck = t; trucks.push(t); return t;
+// ---- stacks ----
+const count = (b) => b.slots.reduce((a, col) => a + col.reduce((s, st) => s + st.length, 0), 0);
+const colorCount = (b, c) => b.slots.reduce((a, col) => a + col.reduce((s, st) => s + st.filter((x) => x === c).length, 0), 0);
+const free = (b) => b.cols * b.rows * 3 - count(b) - b.incoming;
+const shipCount = (s) => s.bays.reduce((a, st) => a + st.length, 0);
+for (const b of BLOCKS) for (let n = 0; n < 8 + Math.floor(rnd() * 8); n++) { const c = Math.floor(rnd() * b.cols), r = Math.floor(rnd() * b.rows); if (b.slots[c][r].length < 3) b.slots[c][r].push(Math.floor(rnd() * COLORS.length)); }
+
+// ---- ships ----
+const HULLS = ["#5a6a7a", "#7a3a3a", "#3a5a4a", "#4a4a6a", "#6a5a3a"];
+function newShip(berth) {
+  const s = { berth, off: -18 * T, state: "arrive", hull: pick(HULLS), promised: 0, bays: Array.from({ length: berth.w }, () => []) };
+  let n = 0; while (n < 12) for (const st of s.bays) { const k = Math.floor(rnd() * 4); for (let q = 0; q < k && st.length < 3; q++) { st.push(Math.floor(rnd() * COLORS.length)); n++; } }
+  berth.ship = s; return s;
 }
-function truckStep(t, dt) {
-  if (t.state === "arrive") { t.x -= Math.max(40, (t.x - t.tx) * 1.6) * dt; if (t.x <= t.tx) { t.x = t.tx; t.state = "wait"; } }
-  else if (t.state === "happy") { t.t += dt; if (t.t > 1.6) { t.state = "leave"; t.bay.truck = null; } }
-  else if (t.state === "leave") { t.x -= (60 + (t.tx - t.x) * 1.2) * dt; if (t.x < -4 * T) trucks.splice(trucks.indexOf(t), 1); }
+function shipStep(b, dt) {
+  const s = b.ship; if (!s) { b.wait -= dt; if (b.wait <= 0) newShip(b); return; }
+  if (s.state === "arrive") { s.off += Math.max(40, -s.off * 1.3) * dt; if (s.off >= 0) { s.off = 0; s.state = "docked"; } }
+  else if (s.state === "docked") { if (!shipCount(s) && !s.promised && b.crane.hold === null) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } }
+  else if (s.state === "depart") { s.off += (40 + s.off * 0.9) * dt; if (s.off > 30 * T) { b.ship = null; b.wait = 4 + rnd() * 5; } }
 }
 
-// ---- forklifts: driven by you, each with its own queue of actions ----
-// (owner, 2026-10-31) select a forklift, then targets in order — a container to pick up, then (carrying) a storage tile
-// or a matching truck to set it down, or an open tile to drive to — and it works through them. A target is accepted only
-// if it can still be done after everything already queued; its container, drop tile or truck is claimed from the other
-// forklifts at once. No limit on the queue for now.
-forklifts = DEPOT.map(([i, j], k) => ({ id: k, x: i * T, y: j * T, dir: 3, path: [], cmd: null, queue: [], carry: null, stage: "idle", t: 0, wait: false, retry: 0 }));
-const tileF = (f) => [Math.round(f.x / T), Math.round(f.y / T)];
-const DIRS = { "1,0": 0, "0,1": 1, "-1,0": 2, "0,-1": 3 };
-const reserved = new Map();   // drop tile -> forklift
-const actsOf = (f) => (f.cmd ? [f.cmd, ...f.queue] : f.queue);
-function claim(f, a) { if (a.type === "pick") a.c.claim = f; if (a.type === "drop") { reserved.set(rk(a.ti, a.tj), f); if (a.truck) a.truck.claimed = f; } }
-function release(a) { if (a.type === "pick" && a.c.claim) a.c.claim = null; if (a.type === "drop") { reserved.delete(rk(a.ti, a.tj)); if (a.truck) a.truck.claimed = null; } }
-// what the forklift will be holding once its queue is done
-function heldAfter(f) { let carry = f.carry; for (const a of actsOf(f)) carry = a.type === "pick" ? a.c : a.type === "drop" ? null : carry; return carry; }
-// what clicking (i, j) would add to this forklift's queue, or null when it couldn't be done
-function planFor(f, i, j) {
-  const carry = heldAfter(f), going = new Set(actsOf(f).filter((a) => a.type === "pick").map((a) => a.c));
-  const seen = reachFrom([tileF(f)], going, true), t = truckAt(i, j);
-  const access = (x, y) => accessFrom(seen, x, y).length > 0;
-  if (!carry) {
-    const c = contAt(i, j);
-    if (c) return !(c.boat && c.boat.state !== "docked") && !c.claim && !going.has(c) && access(c.i, c.j) ? { type: "pick", c } : null;
-    if (t) return null;
-  } else {
-    if (t) return t.state === "wait" && !t.claimed && t.color === carry.color && access(t.bay.x, ROAD) ? { type: "drop", ti: t.bay.x, tj: ROAD, truck: t } : null;
-    if (isStorage(i, j) && !contAt(i, j) && !reserved.has(rk(i, j)) && access(i, j)) return { type: "drop", ti: i, tj: j };
-  }
-  if (drivable(i, j, going, true) && seen.has(rk(i, j))) return { type: "move", ti: i, tj: j };
+// ---- trucks: your yard trucks, and customer trucks whose cab is the color they want ----
+let trucks = [], truckSeq = 0, custWait = 2, delivered = 0, clock = 0;
+function mkTruck(kind, x, y, want) { const t = { id: ++truckSeq, kind, x, y, a: Math.PI, path: [], queue: [], cmd: null, load: null, want, state: "idle", stub: null }; trucks.push(t); return t; }
+[10, 12, 14].forEach((j, k) => { const t = mkTruck("yard", 32.5 * T, (j + 0.5) * T); t.num = k + 1; t.stub = STUBS[k]; STUBS[k].occ = t; });
+function spawnCustomer() {
+  const stub = STUBS.slice(3).find((s) => !s.occ); if (!stub) return;
+  const stored = COLORS.map((_, c) => c).filter((c) => BLOCKS.some((b) => colorCount(b, c) - b.claims[c] > 0) && !trucks.some((t) => t.kind === "cust" && t.want === c && t.load === null));
+  const want = stored.length ? pick(stored) : Math.floor(rnd() * COLORS.length);
+  const t = mkTruck("cust", 38 * T, (YROAD + 0.5) * T, want); t.stub = stub; stub.occ = t; t.state = "arriving";
+  t.path = [{ x: 34.5 * T, y: (YROAD + 0.5) * T }, ...(roadPath(34, YROAD, stub.i, stub.j) || [])];
+}
+const tileOf = (t) => [Math.floor(t.x / T), Math.floor(t.y / T)];
+
+// what a truck will carry once its queue is done
+function loadedAfter(t) { let l = t.load !== null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "sts" ? true : a.kind === "rtg" ? t.kind === "cust" : l; return l; }
+function targetAt(i, j) {
+  for (const b of BERTHS) if (Math.abs(i - b.spot.i) <= 2 && j >= QUAY - 4 && j <= QROAD) return { kind: "sts", berth: b, spot: b.spot };
+  for (const b of BLOCKS) if (i >= b.x && i < b.x + b.w && j >= b.y && j <= YROAD) return { kind: "rtg", block: b, spot: b.spot };
   return null;
 }
-function enqueue(f, a) { claim(f, a); f.queue.push(a); }
-function unqueueLast(f) { const a = f.queue.pop(); if (a) release(a); return !!a; }
-const targetOf = (a) => (a.type === "pick" ? [a.c.i, a.c.j] : [a.ti, a.tj]);
-// drive to the current action; a container put in the way means another route, or a wait (red "!") until one opens
-function replan(f) {
-  const a = f.cmd; if (!a) return;
-  const seen = reachFrom([tileF(f)], null), [ti, tj] = targetOf(a);
-  const acc = a.type === "move" ? (seen.has(rk(ti, tj)) && drivable(ti, tj, null) ? [[ti, tj]] : []) : accessFrom(seen, ti, tj).filter(([x, y]) => x !== ti || y !== tj);
-  if (!acc.length) { f.wait = true; f.path = []; return; }
-  f.wait = false; acc.sort((p, q) => hyp(p[0] - f.x / T, p[1] - f.y / T) - hyp(q[0] - f.x / T, q[1] - f.y / T));
-  const p = pathTo(seen, acc[0][0], acc[0][1]); f.path = p ? p.slice(1) : []; f.stage = "drive";
+// (owner) a truck can only be sent where it can be served: an empty yard truck to a crane with a ship to unload, a loaded
+// one to an RTG with room, a customer to an RTG holding its color. Queued trips count: each one claims its container or slot.
+function planFor(t, i, j) {
+  if (t.state === "leaving" || t.state === "arriving" || t.state === "gone") return null;
+  const g = targetAt(i, j); if (!g) return null;
+  const loaded = loadedAfter(t);
+  if (t.kind === "cust" && (loaded || t.cmd || t.queue.length)) return null;
+  if (g.kind === "sts") { const s = g.berth.ship; return t.kind === "yard" && !loaded && s && s.state === "docked" && shipCount(s) - s.promised > 0 ? g : null; }
+  if (t.kind === "yard") return loaded && free(g.block) > 0 ? g : null;
+  return colorCount(g.block, t.want) - g.block.claims[t.want] > 0 ? g : null;
 }
-function forkStep(f, dt) {
-  if (!f.cmd && f.queue.length && f.stage === "idle") { f.cmd = f.queue.shift(); replan(f); }
-  if (f.wait) { f.retry += dt; if (f.retry > 0.5) { f.retry = 0; replan(f); } return; }
-  if (f.path.length) {
-    const [ni, nj] = f.path[0];
-    if (!drivable(ni, nj, null)) { replan(f); return; }
-    const tx = ni * T, ty = nj * T, dx = tx - f.x, dy = ty - f.y, d = hyp(dx, dy), sp = (f.carry ? 110 : 130) * dt;
-    if (dx || dy) f.dir = DIRS[Math.sign(Math.round(dx)) + "," + Math.sign(Math.round(dy))] ?? f.dir;
-    if (d <= sp) { f.x = tx; f.y = ty; f.path.shift(); } else { f.x += dx / d * sp; f.y += dy / d * sp; }
-    return;
+function claim(t, a, d) { if (a.kind === "sts") a.berth.ship.promised += d; else if (t.kind === "yard") a.block.incoming += d; else a.block.claims[t.want] += d; }
+function enqueue(t, g) { const a = { ...g, ship: g.berth && g.berth.ship }; claim(t, a, 1); t.queue.push(a); }
+function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); return !!a; }
+
+function truckStep(t, dt) {
+  if (!t.cmd && t.queue.length && !t.path.length && t.state === "idle") {
+    t.cmd = t.queue.shift(); if (t.stub) { t.stub.occ = null; t.stub = null; }
+    const [i, j] = tileOf(t); t.path = roadPath(i, j, t.cmd.spot.i, t.cmd.spot.j) || []; t.state = "driving";
+    if (!t.path.length) { t.cmd.spot.occ = t.cmd.spot.occ || t; t.state = "served"; }
   }
-  const a = f.cmd; if (!a) { f.stage = "idle"; return; }
-  const [fi, fj] = tileF(f), face = (i, j) => { f.dir = DIRS[Math.sign(i - fi) + "," + Math.sign(j - fj)] ?? f.dir; };
-  if (f.stage === "drive") {
-    if (a.type === "move") { f.cmd = null; f.stage = "idle"; return; }
-    const [ti, tj] = targetOf(a);
-    if (Math.abs(ti - fi) + Math.abs(tj - fj) !== 1) { replan(f); return; }
-    face(ti, tj); f.stage = a.type === "pick" ? "lift" : "lower"; f.t = 0;
-  } else if (f.stage === "lift") {
-    f.t += dt; if (f.t >= 0.45) { const k = a.c; k.carried = f; k.boat = null; release(a); f.carry = k; f.cmd = null; f.stage = "idle"; }
-  } else if (f.stage === "lower") {
-    f.t += dt;
-    if (f.t >= 0.45) {
-      const k = f.carry; f.carry = null; k.carried = null; k.i = a.ti; k.j = a.tj; release(a); f.cmd = null; f.stage = "idle";
-      if (a.truck) { containers.splice(containers.indexOf(k), 1); a.truck.load = k.color; a.truck.state = "happy"; a.truck.t = 0; delivered++; }
+  // drive the path; wait back from a spot another truck is using
+  if (t.path.length) {
+    if (t.cmd && t.state === "driving" && t.cmd.spot.occ && t.cmd.spot.occ !== t && t.path.length <= 4) return;
+    const n = t.path[0], dx = n.x - t.x, dy = n.y - t.y, d = hyp(dx, dy), sp = 150 * dt;
+    if (d > 0.5) { const want = Math.atan2(dy, dx); let da = ((want - t.a + Math.PI * 3) % TAU) - Math.PI; t.a += clamp(da, -8 * dt, 8 * dt); }
+    if (d <= sp) { t.x = n.x; t.y = n.y; t.path.shift(); } else { t.x += dx / d * sp; t.y += dy / d * sp; }
+    if (!t.path.length) {
+      if (t.state === "arriving") t.state = "idle";
+      else if (t.state === "leaving") { t.path = [{ x: 40 * T, y: t.y }]; t.state = "gone"; }
+      else if (t.state === "gone") trucks.splice(trucks.indexOf(t), 1);
+      else if (t.cmd) { if (t.cmd.spot.occ && t.cmd.spot.occ !== t) { t.path = [{ x: t.x, y: t.y }]; return; } t.cmd.spot.occ = t; t.state = "served"; }
     }
   }
 }
+function doneServing(t) {
+  const a = t.cmd; a.spot.occ = null; t.cmd = null; t.state = "idle";
+  if (t.kind === "cust") { t.happy = 1.6; t.state = "leaving"; const [i, j] = tileOf(t); t.path = roadPath(i, j, 34, YROAD) || [{ x: 34.5 * T, y: (YROAD + 0.5) * T }]; delivered++; }
+}
 
-// ---- input: pan / zoom; select a forklift, then its target ----
+// ---- cranes: a list of moves and lifts, played in order ----
+// STS: travels along the quay and runs its trolley out over the ship; RTG: its gantry runs along the storage area and its
+// trolley across it. A lift / lower takes a moment.
+const CRANE_SP = 120, LIFT = 0.55;
+function craneStep(cr, dt, onDone) {
+  const op = cr.ops[0]; if (!op) return;
+  if (op.to) { const [tx, ty] = op.to, dx = tx - cr.x, dy = ty - cr.y, sp = CRANE_SP * dt; cr.x += clamp(dx, -sp, sp); cr.y += clamp(dy, -sp, sp); if (Math.abs(tx - cr.x) < 0.5 && Math.abs(ty - cr.y) < 0.5) { cr.x = tx; cr.y = ty; cr.ops.shift(); if (!cr.ops.length) onDone(); } return; }
+  op.t = (op.t || 0) + dt;
+  if (op.t < LIFT) return;
+  if (op.lift) { const s = op.lift; if (s.stack) cr.hold = s.stack.pop(); else { cr.hold = s.truck.load; s.truck.load = null; } }
+  else if (op.lower) { const s = op.lower; if (s.stack) s.stack.push(cr.hold); else s.truck.load = cr.hold; cr.hold = null; }
+  cr.ops.shift(); if (!cr.ops.length) onDone();
+}
+function stsStep(b, dt) {
+  const cr = b.crane, s = b.ship;
+  if (!cr.ops.length && !cr.truck) {
+    const t = b.spot.occ;
+    if (t && t.state === "served" && t.load === null && s && s.state === "docked" && shipCount(s)) {
+      let best = -1, bd = 1e9; s.bays.forEach((st, k) => { if (st.length) { const d = Math.abs(b.x + k - b.spot.i); if (d < bd) { bd = d; best = k; } } });
+      const bx = (b.x + best + 0.5) * T, home = [(b.spot.i + 0.5) * T, (QROAD + 0.5) * T];
+      cr.truck = t; cr.ops = [{ to: [bx, cr.y] }, { to: [bx, 4.5 * T] }, { lift: { stack: s.bays[best] } }, { to: [bx, home[1]] }, { to: home }, { lower: { truck: t } }];
+    }
+  }
+  craneStep(cr, dt, () => { const t = cr.truck; if (!t) return; cr.truck = null; if (s) s.promised = Math.max(0, s.promised - 1); doneServing(t); });
+}
+const slotXY = (b, c, r) => [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
+function rtgStep(b, dt) {
+  const cr = b.rtg;
+  if (!cr.ops.length && !cr.truck) {
+    const t = b.spot.occ, home = [(b.spot.i + 0.5) * T, (YROAD + 0.5) * T], rest = [home[0], (YROAD - 0.5) * T];   // it rests at the storage end, clear of the truck
+    if (t && t.state === "served") {
+      if (t.kind === "yard" && t.load !== null) {
+        // put it on the lowest stack nearest the road end (topping a matching color first)
+        let best = null, bs = 1e9;
+        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; if (st.length >= 3) continue; const sc = st.length * 10 + (b.rows - r) + (st.length && st[st.length - 1] === t.load ? -15 : 0); if (sc < bs) { bs = sc; best = [c, r]; } }
+        if (best) { cr.truck = t; b.incoming = Math.max(0, b.incoming - 1); cr.ops = [{ to: home }, { lift: { truck: t } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }, { to: rest }]; }
+      } else if (t.kind === "cust" && t.load === null) {
+        // dig: the matching container with the fewest on top; move those aside, then load it
+        let src = null, fewest = 1e9;
+        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r]; const k = st.lastIndexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } }
+        if (src) {
+          const ops = [], h = b.slots.map((col) => col.map((st) => st.length));
+          for (let n = 0; n < fewest; n++) {
+            let dst = null, ds = 1e9;
+            for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { if ((c === src[0] && r === src[1]) || h[c][r] >= 3) continue; const sc = h[c][r] * 4 + Math.abs(c - src[0]) + Math.abs(r - src[1]); if (sc < ds) { ds = sc; dst = [c, r]; } }
+            if (!dst) break;
+            h[src[0]][src[1]]--; h[dst[0]][dst[1]]++;
+            ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: slotXY(b, dst[0], dst[1]) }, { lower: { stack: b.slots[dst[0]][dst[1]] } });
+          }
+          ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: home }, { lower: { truck: t } }, { to: rest });
+          cr.truck = t; b.claims[t.want] = Math.max(0, b.claims[t.want] - 1); cr.ops = ops;
+        }
+      }
+    }
+  }
+  craneStep(cr, dt, () => { const t = cr.truck; if (!t) return; cr.truck = null; doneServing(t); });
+}
+
+// ---- input: pan / zoom; select a truck, then where it parks ----
 let VW = 0, VH = 0, DPR = 1, zoom = 1, cam = { x: MW * T / 2, y: MH * T / 2 }, selected = null, hover = null, bad = null;
 const keys = {};
-addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") selected = null; if (/^Digit[1-9]$/.test(e.code) && forklifts[+e.code.slice(5) - 1]) selected = forklifts[+e.code.slice(5) - 1]; });
+addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape") selected = null; const n = /^Digit([1-9])$/.exec(e.code); if (n) { const t = trucks.find((q) => q.num === +n[1]); if (t) selected = t; } });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
 const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
-function truckAt(i, j) { return trucks.find((t) => t.state === "wait" && j === ROAD && (i === t.bay.x || i === t.bay.x + 1)) || null; }
-function forkAt(sx, sy) { const w = toWorld(sx, sy); let best = null, bd = 18; for (const f of forklifts) { const d = hyp(f.x + T / 2 - w.x, f.y + T / 2 - w.y); if (d < bd) { bd = d; best = f; } } return best; }
+function truckAt(sx, sy) {
+  const w = toWorld(sx, sy);
+  for (const t of trucks) { if (t.state === "gone" || t.state === "leaving") continue; const dx = w.x - t.x, dy = w.y - t.y, ca = Math.cos(-t.a), sa = Math.sin(-t.a), lx = dx * ca - dy * sa, ly = dx * sa + dy * ca; if (Math.abs(lx) < 2 * T && Math.abs(ly) < 14) return t; }
+  return null;
+}
 function click(sx, sy) {
-  const f = forkAt(sx, sy); if (f) { selected = selected === f ? null : f; return; }
+  const t = truckAt(sx, sy); if (t) { selected = selected === t ? null : t; return; }
   if (!selected) return;
-  const [i, j] = tileAtScreen(sx, sy), plan = planFor(selected, i, j);
-  if (plan) enqueue(selected, plan); else bad = { i, j, t: 0.5 };
+  const [i, j] = tileAtScreen(sx, sy), g = planFor(selected, i, j);
+  if (g) enqueue(selected, g); else bad = { i, j, t: 0.5 };
 }
 const pts = new Map(); let gesture = null;
-// right click: take back the selected forklift's last queued action (not the one under way); with none left, deselect
+// right click: take back the selected truck's last queued trip (not the one under way); with none left, deselect
 cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!selected || !unqueueLast(selected)) selected = null; });
 cv.addEventListener("pointerdown", (e) => {
   if (e.button === 2) return;
@@ -183,7 +211,7 @@ cv.addEventListener("pointerdown", (e) => {
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener("pointermove", (e) => {
-  hover = { tile: tileAtScreen(e.clientX, e.clientY), f: forkAt(e.clientX, e.clientY) };
+  hover = { tile: tileAtScreen(e.clientX, e.clientY), truck: truckAt(e.clientX, e.clientY) };
   if (!pts.has(e.pointerId) || !gesture) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (gesture.pinch && pts.size === 2) { const [a, b] = [...pts.values()]; setZoom(gesture.zoom * hyp(a.x - b.x, a.y - b.y) / gesture.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
   if (gesture.pinch) return;
@@ -192,7 +220,7 @@ cv.addEventListener("pointermove", (e) => {
 });
 cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
 cv.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY); }, { passive: false });
-function setZoom(z, sx, sy) { const before = toWorld(sx, sy); zoom = clamp(z, 0.5, 3); const after = toWorld(sx, sy); cam.x += before.x - after.x; cam.y += before.y - after.y; }
+function setZoom(z, sx, sy) { const before = toWorld(sx, sy); zoom = clamp(z, 0.4, 3); const after = toWorld(sx, sy); cam.x += before.x - after.x; cam.y += before.y - after.y; }
 
 // ---- placeholder art ----
 function canvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
@@ -204,114 +232,118 @@ function noiseFill(g, x, y, w, h, base, amt, seed) {
 const GROUND = canvas(MW * T, MH * T);
 function buildGround() {
   const g = GROUND.getContext("2d");
-  for (let j = 0; j < MH; j++) for (let i = 0; i < MW; i++) {
+  for (let j = QUAY; j < MH; j++) for (let i = 0; i < MW; i++) {
     const x = i * T, y = j * T;
-    if (j < QUAY) { g.fillStyle = "#1a4a6a"; g.fillRect(x, y, T, T); continue; }
     if (j === MH - 1 || i === 0 || i === MW - 1) { noiseFill(g, x, y, T, T, "#3a3a34", 18, i * 31 + j * 17); g.fillStyle = "#55565c"; g.fillRect(x, y + 10, T, 2); g.fillRect(x, y + 20, T, 2); g.fillStyle = "#1e1e22"; g.fillRect(x + 14, y + 4, 4, 24); continue; }
-    if (j >= ROAD) { noiseFill(g, x, y, T, T, "#2c2f35", 10, i * 7 + j * 3); if (j === ROAD + 1) { g.fillStyle = "#c9a23a"; g.fillRect(x + 4, y, 14, 2); } continue; }
-    noiseFill(g, x, y, T, T, "#6a6c70", 12, i * 13 + j * 29);
-    g.fillStyle = "rgba(0,0,0,.16)"; g.fillRect(x, y, T, 1); g.fillRect(x, y, 1, T);
-    if (j === QUAY) { g.fillStyle = "#c9a23a"; for (let k = 0; k < T; k += 8) g.fillRect(x + k, y, 4, 3); if (i % 4 === 2) { g.fillStyle = "#2a2c30"; g.fillRect(x + 12, y + 5, 8, 7); g.fillStyle = "#4a4c52"; g.fillRect(x + 13, y + 6, 6, 3); } }
-    if (j === APRON) { g.fillStyle = "rgba(201,162,58,.5)"; g.fillRect(x, y + T - 3, T, 3); }
+    if (isRoad(i, j)) { noiseFill(g, x, y, T, T, "#2c2f35", 10, i * 7 + j * 3); continue; }
+    noiseFill(g, x, y, T, T, "#6a6c70", 12, i * 13 + j * 29); g.fillStyle = "rgba(0,0,0,.14)"; g.fillRect(x, y, T, 1); g.fillRect(x, y, 1, T);
+    if (j === QUAY) { g.fillStyle = "#c9a23a"; for (let k = 0; k < T; k += 8) g.fillRect(x + k, y, 4, 3); }
   }
-  for (const b of BAYS) { g.fillStyle = "rgba(255,255,255,.22)"; g.fillRect(b.x * T - 2, ROAD * T + 2, 2, T * 2 - 4); g.fillRect((b.x + 2) * T, ROAD * T + 2, 2, T * 2 - 4); g.fillStyle = "rgba(201,162,58,.35)"; g.fillRect(b.x * T + 4, APRON * T + 4, T - 8, T - 8); }
-  for (const b of BERTHS) { g.fillStyle = "#e8e2d0"; g.font = "800 22px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.x + b.w / 2) * T, QUAY * T + 18); }
-  for (const a of [LONG, PATCH]) for (let j = a.y; j < a.y + a.h; j++) for (let i = a.x; i < a.x + a.w; i++) { g.fillStyle = "rgba(0,0,0,.14)"; g.fillRect(i * T + 2, j * T + 2, T - 4, T - 4); g.fillStyle = "rgba(242,220,140,.35)"; g.fillRect(i * T + 2, j * T + 2, T - 4, 1); g.fillRect(i * T + 2, j * T + T - 3, T - 4, 1); g.fillRect(i * T + 2, j * T + 2, 1, T - 4); g.fillRect(i * T + T - 3, j * T + 2, 1, T - 4); }
-  g.strokeStyle = "#c9a23a"; g.lineWidth = 3; g.strokeRect(PATCH.x * T + 1.5, PATCH.y * T + 1.5, PATCH.w * T - 3, PATCH.h * T - 3);
-  for (const k of WALL) { const i = k % MW, j = Math.floor(k / MW), x = i * T, y = j * T; noiseFill(g, x, y, T, T, "#8a8478", 14, k * 7); g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(x, y, T, 3); g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(x, y + T - 4, T, 4); g.fillStyle = "rgba(0,0,0,.2)"; g.fillRect(x + 15, y + 3, 2, T - 7); }
-  for (const [i, j] of DEPOT) { g.strokeStyle = "rgba(242,169,59,.45)"; g.lineWidth = 2; g.strokeRect(i * T + 3, j * T + 3, T - 6, T - 6); }
+  g.fillStyle = "#c9a23a"; for (let i = 1; i <= 34; i++) for (const j of [QROAD, YROAD]) if (i % 2) g.fillRect(i * T + 6, j * T + 15, 14, 2);
+  g.fillStyle = "#3a3c40"; g.fillRect(T, (QUAY + 0.3) * T, 34 * T, 3); g.fillRect(T, (QROAD + 1) * T - 3, 34 * T, 3);
+  for (const b of BLOCKS) { noiseFill(g, b.x * T, b.y * T, b.w * T, b.h * T, "#55575c", 10, b.id * 9 + 1); noiseFill(g, b.x * T, (YROAD - 1) * T, b.w * T, T, "#4a4c52", 8, b.id + 3); g.fillStyle = "rgba(201,162,58,.5)"; g.fillRect(b.x * T, b.y * T, b.w * T, 2); g.fillRect(b.x * T, (b.y + b.h) * T - 2, b.w * T, 2); g.fillRect(b.x * T, b.y * T, 2, b.h * T); g.fillRect((b.x + b.w) * T - 2, b.y * T, 2, b.h * T); }
+  for (const s of STUBS) { g.fillStyle = "rgba(255,255,255,.18)"; g.fillRect(30 * T, s.j * T, 5 * T, 2); g.fillRect(30 * T, (s.j + 1) * T - 2, 5 * T, 2); }
+  for (const b of BERTHS) { g.fillStyle = "#e8e2d0"; g.font = "800 20px 'Big Shoulders Display', Impact, sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(String.fromCharCode(65 + b.id), (b.x + 1) * T, (QUAY + 1) * T + 4); }
 }
 function drawWater() {
   ctx.fillStyle = "#1a4a6a"; ctx.fillRect(-20 * T, -10 * T, (MW + 40) * T, (QUAY + 10) * T);
   ctx.fillStyle = "rgba(255,255,255,.07)";
   for (let j = -6; j < QUAY; j++) for (let i = -16; i < MW + 16; i += 2) { const o = Math.round(((clock * 12 + j * 37) % 64)) - 32; ctx.fillRect(i * T + o + (j % 2) * 20, j * T + 14, 14, 2); }
 }
-function drawContainer(color, x, y, lift, ghost) {
-  const col = COLORS[color].c;
-  if (lift) { ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 4, y + 6, T - 6, T - 6); }
-  x -= lift ? 2 : 0; y -= lift ? 4 : 0;
-  ctx.globalAlpha = ghost ? 0.45 : 1;
-  ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(x + 2, y + 2, T - 4, T - 4);
-  ctx.fillStyle = col; ctx.fillRect(x + 3, y + 3, T - 6, T - 6);
-  ctx.fillStyle = "rgba(0,0,0,.22)"; for (let k = 6; k < T - 5; k += 4) ctx.fillRect(x + 4, y + k, T - 8, 1);
-  ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(x + 3, y + 3, T - 6, 2);
-  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 3, y + T - 5, T - 6, 2);
-  ctx.fillStyle = "#2a2c30"; for (const [a, b] of [[3, 3], [T - 6, 3], [3, T - 6], [T - 6, T - 6]]) ctx.fillRect(x + a, y + b, 3, 3);
-  ctx.globalAlpha = 1;
+// (owner) a stack drawn as three squares down its 1 x 3 footprint: top square the top of the stack, bottom the bottom
+function drawStack(x, y, st, frame) {
+  ctx.fillStyle = "rgba(0,0,0,.35)"; ctx.fillRect(x + 2, y + 2, T - 4, CL * T - 4);
+  for (let k = 0; k < 3; k++) {
+    const tier = 2 - k, c = st[tier], sx = x + 4, sy = y + k * T + 4;
+    if (c === undefined) { ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(sx, sy, T - 8, T - 8); continue; }
+    ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(sx - 1, sy - 1, T - 6, T - 6);
+    ctx.fillStyle = COLORS[c].c; ctx.fillRect(sx, sy, T - 8, T - 8);
+    ctx.fillStyle = "rgba(255,255,255,.25)"; ctx.fillRect(sx, sy, T - 8, 2); ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(sx, sy + T - 11, T - 8, 3);
+  }
+  if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, T - 3, CL * T - 3); }
 }
-function drawBoat(b) {
-  const x = Math.round(b.x), y = 4 * T + 8, w = b.berth.w * T, h = 3 * T - 8;
-  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 10, y + 6, w + 46, h);
-  ctx.fillStyle = b.hull; ctx.beginPath(); ctx.moveTo(x - 16, y); ctx.lineTo(x + w + 8, y); ctx.lineTo(x + w + 40, y + h / 2); ctx.lineTo(x + w + 8, y + h); ctx.lineTo(x - 16, y + h); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#c8ccd0"; ctx.fillRect(x - 16, y, w + 24, 3); ctx.fillRect(x - 16, y + h - 3, w + 24, 3);
-  ctx.fillStyle = "#4a3a2a"; ctx.fillRect(x, 5 * T, w, 2 * T);
-  ctx.fillStyle = "rgba(0,0,0,.2)"; for (let k = 0; k < b.berth.w; k++) ctx.fillRect(x + k * T, 5 * T, 1, 2 * T);
-  ctx.fillStyle = "#e8e2d0"; ctx.fillRect(x - 14, y + 8, 12, h - 16); ctx.fillStyle = "#6ab8e8"; ctx.fillRect(x - 12, y + 12, 8, 6);
-  if (b.state !== "docked") { ctx.fillStyle = "rgba(255,255,255,.35)"; for (let k = 0; k < 4; k++) ctx.fillRect(x - 26 - k * 12 - ((clock * 40) % 12), y + 10 + k * 8, 8, 2); }
+// a container in transit: 3 tiles long, along its own axis
+function drawBox(c, cx, cy, ang, lifted) {
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+  if (lifted) { ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(-CL * T / 2 + 6, -T / 2 + 8, CL * T - 4, T - 6); ctx.translate(-3, -5); }
+  ctx.fillStyle = "rgba(0,0,0,.5)"; ctx.fillRect(-CL * T / 2 + 1, -T / 2 + 3, CL * T - 2, T - 6);
+  ctx.fillStyle = COLORS[c].c; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, T - 8);
+  ctx.fillStyle = "rgba(0,0,0,.2)"; for (let k = -CL * T / 2 + 6; k < CL * T / 2 - 4; k += 5) ctx.fillRect(k, -T / 2 + 5, 1, T - 10);
+  ctx.fillStyle = "rgba(255,255,255,.22)"; ctx.fillRect(-CL * T / 2 + 2, -T / 2 + 4, CL * T - 4, 2);
+  ctx.restore();
+}
+function drawShip(b) {
+  const s = b.ship, x = b.x * T + Math.round(s.off), y = 2 * T + 10, w = b.w * T, h = 4 * T - 12;
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 10, y + 6, w + 50, h);
+  ctx.fillStyle = s.hull; ctx.beginPath(); ctx.moveTo(x - 20, y); ctx.lineTo(x + w + 8, y); ctx.lineTo(x + w + 44, y + h / 2); ctx.lineTo(x + w + 8, y + h); ctx.lineTo(x - 20, y + h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#c8ccd0"; ctx.fillRect(x - 20, y, w + 28, 3); ctx.fillRect(x - 20, y + h - 3, w + 28, 3);
+  ctx.fillStyle = "#e8e2d0"; ctx.fillRect(x - 18, y + 10, 14, h - 20); ctx.fillStyle = "#6ab8e8"; ctx.fillRect(x - 15, y + 16, 8, 8);
+  s.bays.forEach((st, k) => drawStack(x + k * T, 3 * T, st, "rgba(0,0,0,.4)"));
+  if (s.state !== "docked") { ctx.fillStyle = "rgba(255,255,255,.35)"; for (let k = 0; k < 4; k++) ctx.fillRect(x - 30 - k * 12 - ((clock * 40) % 12), y + 14 + k * 10, 8, 2); }
 }
 function drawTruck(t) {
-  const x = Math.round(t.x), y = ROAD * T;
-  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 4, y + 8, T * 2 - 2, T - 6);
-  ctx.fillStyle = "#4a4e56"; ctx.fillRect(x + 1, y + 6, T - 2, T - 10); ctx.fillStyle = "#2a2c30"; ctx.fillRect(x + 3, y + 4, 6, 3); ctx.fillRect(x + T - 9, y + 4, 6, 3); ctx.fillRect(x + 3, y + T - 5, 6, 3); ctx.fillRect(x + T - 9, y + T - 5, 6, 3);
-  ctx.fillStyle = "#6a6e76"; ctx.fillRect(x + T - 2, y + 12, 4, 8);
-  const col = COLORS[t.color].c; ctx.fillStyle = "#1e2024"; ctx.fillRect(x + T + 1, y + 5, T - 4, T - 10);
-  ctx.fillStyle = col; ctx.fillRect(x + T + 2, y + 6, T - 6, T - 12); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(x + 2 * T - 9, y + 9, 4, T - 18);
-  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x + T + 5, y + 3, 6, 3); ctx.fillRect(x + T + 5, y + T - 6, 6, 3);
-  if (t.load !== null) drawContainer(t.load, x, y, false);
-  if (t.state === "wait") { const held = selected && heldAfter(selected), pulse = held && held.color === t.color && !t.claimed ? 0.5 + 0.5 * Math.sin(clock * 8) : 0; if (pulse) { ctx.strokeStyle = `rgba(127,216,138,${pulse})`; ctx.lineWidth = 2; ctx.strokeRect(x - 1, y + 1, 2 * T + 2, T - 2); } }
-  if (t.state === "happy") { const bx = x + T + 8, by = y - 22 - Math.min(6, t.t * 12); ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#2e9a4a"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 9, 2, 2); ctx.fillRect(bx + 13, by + 9, 2, 2); }
-}
-function drawForklift(f) {
-  const x = Math.round(f.x) + T / 2, y = Math.round(f.y) + T / 2, a = [0, Math.PI / 2, Math.PI, -Math.PI / 2][f.dir];
-  if (f === selected) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; const p = 1 + Math.sin(clock * 8); ctx.strokeRect(Math.round(f.x) - p, Math.round(f.y) - p, T + p * 2, T + p * 2); }
-  else if (hover && hover.f === f) { ctx.strokeStyle = "rgba(255,255,255,.4)"; ctx.lineWidth = 2; ctx.strokeRect(Math.round(f.x), Math.round(f.y), T, T); }
-  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(-10, -8, 20, 18);
-  ctx.fillStyle = "#2a2c30"; ctx.fillRect(-9, -11, 6, 4); ctx.fillRect(3, -11, 6, 4); ctx.fillRect(-9, 7, 6, 4); ctx.fillRect(3, 7, 6, 4);
-  ctx.fillStyle = "#e8b432"; ctx.fillRect(-11, -8, 20, 16); ctx.fillStyle = "#b88a22"; ctx.fillRect(-11, -8, 6, 16);
-  ctx.fillStyle = "#1e2024"; ctx.fillRect(-4, -6, 8, 12); ctx.fillStyle = "#3a3e46"; ctx.fillRect(-3, -5, 6, 6);
-  ctx.fillStyle = "#55585e"; ctx.fillRect(9, -9, 3, 18);
-  ctx.fillStyle = "#9aa0a8"; ctx.fillRect(12, -7, 12, 2); ctx.fillRect(12, 5, 12, 2);
+  ctx.save(); ctx.translate(Math.round(t.x), Math.round(t.y)); ctx.rotate(t.a);
+  const L = 4 * T;
+  if (t === selected) { ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; const p = 1 + Math.sin(clock * 8); ctx.strokeRect(-L / 2 - p, -14 - p, L + p * 2, 28 + p * 2); }
+  else if (hover && hover.truck === t) { ctx.strokeStyle = "rgba(255,255,255,.45)"; ctx.lineWidth = 2; ctx.strokeRect(-L / 2, -14, L, 28); }
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(-L / 2 + 4, -10, L, 24);
+  ctx.fillStyle = "#2a2c30"; for (const wx of [-L / 2 + 6, -L / 2 + 22, T - 14, L / 2 - 20]) { ctx.fillRect(wx, -13, 9, 4); ctx.fillRect(wx, 9, 9, 4); }
+  ctx.fillStyle = "#4a4e56"; ctx.fillRect(-L / 2 + 2, -9, CL * T - 4, 18);
+  ctx.fillStyle = "#1e2024"; ctx.fillRect(T - 2, -11, T - 2, 22);
+  ctx.fillStyle = t.kind === "cust" ? COLORS[t.want].c : "#e8b432"; ctx.fillRect(T, -10, T - 6, 20);
+  ctx.fillStyle = "#9ad0f0"; ctx.fillRect(2 * T - 12, -7, 4, 14);
   ctx.restore();
-  ctx.fillStyle = "#1e2024"; ctx.fillRect(x - 4, y - 4, 8, 8); ctx.fillStyle = "#ece7dc"; ctx.font = "800 9px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(f.id + 1), x, y + 0.5);
-  if (f.carry) { const off = [[1, 0], [0, 1], [-1, 0], [0, -1]][f.dir], lowering = f.stage === "lower" && f.t > 0.22; drawContainer(f.carry.color, Math.round(f.x) + off[0] * 22, Math.round(f.y) + off[1] * 22, !lowering); }
-  if (f.wait) { ctx.fillStyle = "#ff5a4a"; ctx.fillRect(x - 2, y - 24, 4, 8); ctx.fillRect(x - 2, y - 14, 4, 3); }
+  if (t.load !== null) drawBox(t.load, t.x - Math.cos(t.a) * T / 2, t.y - Math.sin(t.a) * T / 2, t.a, false);
+  if (t.num) { const nx = Math.round(t.x + Math.cos(t.a) * 1.5 * T), ny = Math.round(t.y + Math.sin(t.a) * 1.5 * T); ctx.fillStyle = "#1e2024"; ctx.fillRect(nx - 6, ny - 6, 12, 12); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(t.num), nx, ny + 0.5); }
+  if (t.happy > 0) { const bx = t.x + 10, by = t.y - 40; ctx.fillStyle = "#ffffff"; ctx.fillRect(bx, by, 18, 16); ctx.fillRect(bx + 4, by + 16, 4, 3); ctx.fillStyle = "#2e9a4a"; ctx.fillRect(bx + 4, by + 4, 3, 3); ctx.fillRect(bx + 11, by + 4, 3, 3); ctx.fillRect(bx + 4, by + 10, 10, 2); ctx.fillRect(bx + 3, by + 9, 2, 2); ctx.fillRect(bx + 13, by + 9, 2, 2); }
+}
+function drawSTS(b) {
+  const cr = b.crane, x = Math.round(cr.x);
+  ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(x - 40, 0, 88, (QROAD + 1) * T);
+  ctx.fillStyle = "#b8452a"; for (const lx of [x - 44, x + 36]) ctx.fillRect(lx, QUAY * T, 8, 3 * T);
+  ctx.fillStyle = "#d8552e"; ctx.fillRect(x - 44, QUAY * T - 6, 88, 10); ctx.fillRect(x - 44, (QROAD + 1) * T - 10, 88, 8);
+  ctx.fillStyle = "#e8653a"; ctx.fillRect(x - 6, 0, 12, (QROAD + 1) * T); ctx.fillStyle = "#8a3a22"; for (let y = 4; y < (QROAD + 1) * T; y += 16) ctx.fillRect(x - 6, y, 12, 2);
+  const ty = Math.round(cr.y);
+  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x - 12, ty - 10, 24, 20);
+  if (cr.hold !== null) drawBox(cr.hold, x, ty, Math.PI / 2, true);
+  else { ctx.fillStyle = "#9aa0a8"; ctx.fillRect(x - 3, ty - CL * T / 2 + 4, 6, CL * T - 8); }
+}
+function drawRTG(b) {
+  const cr = b.rtg, gy = Math.round(cr.y), x0 = b.x * T - 6, x1 = (b.x + b.w) * T + 6;
+  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x0 + 6, gy - 12, x1 - x0, 30);
+  ctx.fillStyle = "#3a6ab0"; ctx.fillRect(x0, gy - 14, 10, 28); ctx.fillRect(x1 - 10, gy - 14, 10, 28);
+  ctx.fillStyle = "#4a7ac8"; ctx.fillRect(x0, gy - 6, x1 - x0, 12); ctx.fillStyle = "#2a4a80"; ctx.fillRect(x0, gy + 4, x1 - x0, 2);
+  ctx.fillStyle = "#2a2c30"; ctx.fillRect(x0 + 2, gy - 18, 6, 4); ctx.fillRect(x1 - 8, gy - 18, 6, 4); ctx.fillRect(x0 + 2, gy + 14, 6, 4); ctx.fillRect(x1 - 8, gy + 14, 6, 4);
+  const tx = Math.round(cr.x);
+  ctx.fillStyle = "#1e2024"; ctx.fillRect(tx - 9, gy - 9, 18, 18);
+  if (cr.hold !== null) drawBox(cr.hold, tx, gy, Math.PI / 2, true);
 }
 function draw() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#0b1218"; ctx.fillRect(0, 0, VW, VH);
   ctx.setTransform(DPR * zoom, 0, 0, DPR * zoom, Math.round(DPR * (VW / 2 - cam.x * zoom)), Math.round(DPR * (VH / 2 - cam.y * zoom)));
   drawWater();
-  for (const b of boats) drawBoat(b);
+  for (const b of BERTHS) if (b.ship) drawShip(b);
   ctx.drawImage(GROUND, 0, QUAY * T, MW * T, (MH - QUAY) * T, 0, QUAY * T, MW * T, (MH - QUAY) * T);
-  for (const t of trucks) drawTruck(t);
-  for (const c of containers) if (!c.carried) {
-    const onBoat = c.boat && c.boat.state !== "docked", bx = onBoat ? c.boat.x - c.boat.berth.x * T : 0;
-    drawContainer(c.color, c.i * T + bx, c.j * T, false);
-  }
-  // each forklift's queue: dashed outlines on its targets; the selected one's numbered and joined up in order
-  ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
-  for (const f of forklifts) {
-    let carry = f.carry, px = f.x + T / 2, py = f.y + T / 2, n = 0;
-    for (const a of actsOf(f)) {
-      const [ti, tj] = targetOf(a), col = a.type === "pick" ? COLORS[a.c.color].c : carry ? COLORS[carry.color].c : "rgba(255,255,255,.6)";
-      carry = a.type === "pick" ? a.c : a.type === "drop" ? null : carry; n++;
-      ctx.strokeStyle = col; ctx.globalAlpha = f === selected ? 1 : 0.45;
-      if (a.truck) ctx.strokeRect(ti * T + 2, tj * T + 2, 2 * T - 4, T - 4); else ctx.strokeRect(ti * T + 3, tj * T + 3, T - 6, T - 6);
-      if (f === selected) {
-        ctx.strokeStyle = "rgba(255,255,255,.5)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(ti * T + T / 2, tj * T + T / 2); ctx.stroke(); px = ti * T + T / 2; py = tj * T + T / 2;
-        ctx.setLineDash([]); ctx.fillStyle = "#1e2024"; ctx.fillRect(ti * T + 1, tj * T + 1, 11, 11); ctx.fillStyle = "#ece7dc"; ctx.font = "800 9px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), ti * T + 6.5, tj * T + 7); ctx.setLineDash([4, 4]);
-      }
+  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) drawStack((b.x + c) * T, (b.y + r * CL) * T, b.slots[c][r], "rgba(201,162,58,.35)");
+  // the selected truck's queue: numbered parking spots joined in order
+  if (selected) {
+    let px = selected.x, py = selected.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
+    for (const a of selected.cmd ? [selected.cmd, ...selected.queue] : selected.queue) {
+      const sx = (a.spot.i + 0.5) * T, sy = (a.spot.j + 0.5) * T; n++;
+      ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke(); px = sx; py = sy;
+      ctx.strokeStyle = "#ffffff"; ctx.strokeRect(sx - 2 * T, sy - 14, 4 * T, 28);
+      ctx.setLineDash([]); ctx.fillStyle = "#1e2024"; ctx.fillRect(sx - 2 * T - 6, sy - 20, 13, 13); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n), sx - 2 * T + 0.5, sy - 13); ctx.setLineDash([5, 5]);
     }
+    ctx.setLineDash([]);
   }
-  ctx.globalAlpha = 1; ctx.setLineDash([]);
-  for (const f of forklifts) drawForklift(f);
-  // the selected forklift's target under the cursor: green if it can do it, red if not
-  if (selected && hover && !hover.f) {
-    const [i, j] = hover.tile, plan = planFor(selected, i, j), t = truckAt(i, j);
-    ctx.lineWidth = 2; ctx.strokeStyle = plan ? "#7fd88a" : "rgba(255,90,74,.8)";
-    if (t) ctx.strokeRect(t.bay.x * T, ROAD * T, 2 * T, T);
-    else { if (plan && plan.type === "drop" && !plan.truck) drawContainer(heldAfter(selected).color, i * T, j * T, false, true); ctx.strokeRect(i * T + 1, j * T + 1, T - 2, T - 2); }
+  for (const t of trucks) drawTruck(t);
+  for (const b of BLOCKS) drawRTG(b);
+  for (const b of BERTHS) drawSTS(b);
+  // the target under the cursor for the selected truck: green if it can go there, red if not
+  if (selected && hover && !hover.truck) {
+    const [i, j] = hover.tile, g = targetAt(i, j);
+    if (g) { const ok = !!planFor(selected, i, j); ctx.strokeStyle = ok ? "#7fd88a" : "#ff5a4a"; ctx.lineWidth = 3; if (g.kind === "rtg") ctx.strokeRect(g.block.x * T, g.block.y * T, g.block.w * T, (YROAD - g.block.y + 1) * T); else ctx.strokeRect((g.spot.i - 2) * T, 0, 5 * T, (QROAD + 1) * T); }
   }
   if (bad) { ctx.strokeStyle = `rgba(255,90,74,${bad.t * 2})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bad.i * T + 8, bad.j * T + 8); ctx.lineTo(bad.i * T + T - 8, bad.j * T + T - 8); ctx.moveTo(bad.i * T + T - 8, bad.j * T + 8); ctx.lineTo(bad.i * T + 8, bad.j * T + T - 8); ctx.stroke(); }
 }
@@ -322,18 +354,18 @@ function step(dt) {
   clock += dt;
   const pan = 420 / zoom * dt; if (keys.KeyW || keys.ArrowUp) cam.y -= pan; if (keys.KeyS || keys.ArrowDown) cam.y += pan; if (keys.KeyA || keys.ArrowLeft) cam.x -= pan; if (keys.KeyD || keys.ArrowRight) cam.x += pan;
   cam.x = clamp(cam.x, 0, MW * T); cam.y = clamp(cam.y, 0, MH * T);
-  for (const b of BERTHS) if (!b.boat) { b.wait -= dt; if (b.wait <= 0) newBoat(b); }
-  for (const b of [...boats]) boatStep(b, dt);
-  truckWait -= dt; if (truckWait <= 0) { const free = BAYS.filter((b) => !b.truck); if (free.length && colorsInPort().length) newTruck(pick(free)); truckWait = 6 + rnd() * 8; }
-  for (const t of [...trucks]) truckStep(t, dt);
-  for (const f of forklifts) forkStep(f, dt);
+  for (const b of BERTHS) { shipStep(b, dt); stsStep(b, dt); }
+  for (const b of BLOCKS) rtgStep(b, dt);
+  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = 9 + rnd() * 7; }
+  for (const t of [...trucks]) { truckStep(t, dt); if (t.happy > 0) t.happy -= dt; }
+  if (selected && (!trucks.includes(selected) || selected.state === "leaving" || selected.state === "gone")) selected = null;
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
 }
 function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); draw(); requestAnimationFrame(frame); }
-function resize() { DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR; zoom = clamp(Math.min(VW / (MW * T), VH / ((MH - 2) * T)), 0.5, 3); cam.y = (MH * T) / 2 + T; }
+function resize() { DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR; zoom = clamp(Math.min(VW / (MW * T), VH / ((MH + 1) * T)), 0.4, 3); cam.y = (MH * T) / 2; }
 addEventListener("resize", resize); resize();
 buildGround();
-if (document.fonts && document.fonts.load) document.fonts.load("800 22px 'Big Shoulders Display'").then(buildGround).catch(() => {});
+if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { get state() { return { containers, boats, trucks, forklifts, delivered, selected }; }, step, planFor, enqueue, select: (f) => (selected = f), click: (i, j) => { const s = { x: (i + 0.5) * T, y: (j + 0.5) * T }; click((s.x - cam.x) * zoom + VW / 2, (s.y - cam.y) * zoom + VH / 2); } };
+window.Atamus = { get state() { return { trucks, berths: BERTHS, blocks: BLOCKS, delivered, selected }; }, step, planFor, enqueue, select: (t) => (selected = t) };
 })();

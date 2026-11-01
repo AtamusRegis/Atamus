@@ -25,82 +25,89 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 > their cab is colored like the container they need. player must get the container color to match with a forklift and
 > bring it to that truck for it to be happy.
 
+## A container terminal (owner, 2026-10-31, later that evening)
+
+> lets make ship to shore cranes automatically unload containers from the ships. lets make containers 3 units long, lets
+> make each line of storage areas 5 units wide and 12 units long. lets make an RTG crane at the end of each unit for
+> loading and unloading units to each storage area. lets make storage areas vertical on the screen. for each unit in
+> storage, have 3 squares, each square can be the color of the unit type, and ordered from top to bottom … instead of
+> forklifts, lets have trucks that can be empty or loaded to move between the ship to shores, and rtg's. for now, lets
+> have the player choose a truck, tell it where to park next to an rtg, and have that rtg load that truck with a container
+> for it to leave with
+
 ## The port
 
 - **A 36 × 24 grid of 32 px tiles (owner)**, 2D top down, north up. Placeholder pixel art drawn in code, to be replaced.
-- **What's on it:**
-  - water along the top, with two **berths**, A and B
-  - the quay and the container yard
-  - an apron along the yard's bottom edge
-  - **storage (owner, 2026-10-31):**
-    - **one long walled storage area**, 18 × 5 inside, walled on the north, south and west and open at its east end
-      (5 wide). A forklift drives in from that end, so it fills from the far end out.
-    - **a 2 × 5 painted storage area with no walls**, east of it.
-    - **Containers can be set down only in these two areas** (or on a truck).
-  - the truck road with five **bays**
-  - a fence around the land
-  - three forklift starting spots
+- **What's on it, top to bottom:**
+  - water with two **berths**, A and B
+  - the quay, with a **ship-to-shore (STS) crane** at each berth
+  - the quay road
+  - four **storage areas** with an **RTG crane** at each one's south end
+  - the yard road
+  - a fence
+- **Roads:** lanes between the storage areas join the two roads, and six parking stubs line the east side. Trucks drive
+  only on roads.
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
-  - the wheel (or a pinch) zooms between 0.5× and 3×
+  - the wheel (or a pinch) zooms
   - it starts fitted to the screen
 
 ## Containers (owner)
 
-- **Seven colors (owner, 2026-10-31):** red, orange, yellow, green, blue, purple, white (lime, teal and pink dropped).
-- One container fills one tile for now. Containers block forklifts. They don't stack yet. Walls block forklifts too.
+- **Seven colors:** red, orange, yellow, green, blue, purple, white.
+- **3 tiles long (owner).**
+- **A stack is drawn as three squares** down its 1 × 3 footprint (owner): the top square is the top of the stack and the
+  bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
+  red at the bottom and green on top. Ships' bays and storage slots both draw this way. Stacks go up to 3 high.
 
-## Boats
+## Ships and STS cranes
 
-- **Arriving:** an empty berth gets a boat after a few seconds. It sails in from the left and docks.
-- **Cargo:** 8–14 containers in random colors, on a 2-row, 8-tile deck.
-- **Leaving:** once its deck is empty (and no forklift is on it), the boat waits a moment and sails off. Another boat
-  follows.
-- **The deck:** a docked boat's deck is drivable, so the back row can be reached once a front container is out of the way.
+- **Arriving:** an empty berth gets a ship after a few seconds. It sails in and docks.
+- **Cargo:** 10 bays, each a stack of 0–3 containers (12 or more in all).
+- **The STS crane unloads automatically (owner)** onto an empty yard truck parked under it:
+  - it runs along the quay to the nearest bay with a container and runs its trolley out over the ship
+  - it lifts the top container, brings it back and lowers it onto the truck
+- **Leaving:** once its bays are empty and nothing more is promised, the ship sails off. Another follows.
 
-## Forklifts: driven by you (owner, 2026-10-31)
+## Storage areas and RTG cranes (owner)
 
-> lets make the forklifts selectable and controllable individually instead of being AI. select forklift, select target,
-> if forklift has container, selecting target is selecting where to drop the container. cant select to drop somewhere
-> not accessible
+- **Four storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
+  high (60 containers per area). They start part full.
+- **Each has an RTG crane at its south end.** Its gantry runs along the area and its trolley across it. It serves the truck
+  parked at the area's spot on the yard road below it, then goes back to rest at the area's end.
+- **A loaded yard truck:** the RTG lifts the container off and stacks it on the lowest stack nearest the road (on top of
+  the same color when it can).
+- **A customer truck:** the RTG finds a container of the truck's color with the fewest on top. It moves those aside onto
+  other stacks one by one, then lifts the container out and loads the truck.
 
-- **Three forklifts**, numbered 1–3. Select one by clicking it, or with keys 1–3. Escape deselects.
-- **Each forklift has a queue (owner, 2026-10-31):** every target you click is added to the end, and the forklift works
-  through them in order (e.g. a container, then a truck: it picks the container up, then delivers it). No limit for now.
-- **What a target can be** depends on what the forklift will be holding once its queue so far is done:
-  - holding nothing: a container (drive up beside it and lift it), or an open tile (drive there).
-  - holding a container: an empty storage tile (drive up beside it and set it down), a waiting truck of that
-    container's color (load it from the apron tile above the trailer), or an open tile (drive there, still carrying).
-- **Accepted only if it can still be done (owner):**
-  - The forklift must be able to drive to it: to a free tile beside it (side by side, not diagonal) for a container or
-    drop spot.
-  - The check counts its own queued pickups as already gone and every claimed drop tile as already full. Anything else
-    flashes a red ✕.
-- **Claims (owner):** a queued action claims its container, drop tile or truck at once, and no other forklift can target
-  it. A claim is released when the action is done or taken back.
-- **Taking back:** right click removes the selected forklift's last queued action (not the one under way). With nothing
-  left to take back, right click deselects.
-- **Showing the queues:**
-  - Every forklift's queued targets have dashed outlines: picks in the container's color, drops in the carried color.
-  - The selected forklift's targets are numbered in order and joined by a dashed line from the forklift.
-  - The tile under the cursor shows green or red, with a ghost of the container on a valid drop spot.
-- **Blocked on the way:** if a container blocks its way, it finds another route. With none, it waits with a red "!" and
-  keeps trying.
-- Forklifts don't block each other.
+## Trucks: you send them (owner)
 
-## Trucks (owner)
-
-- **Arriving:** a truck pulls into a free bay every 6–14 s.
-  - Its cab is the color of the container it wants, picked from colors in the port (boats and yard), favoring ones no
-    other truck wants.
-- **Delivering:**
-  - Have a forklift carry a container of that color and click the truck. Matching trucks pulse green while the
-    selected forklift carries one.
-  - A forklift reaches the trailer from the apron tile above it, so keep that tile clear.
-  - A wrong color is refused (red ✕).
-- **Leaving:** once its container is on the trailer, the truck shows a smiley and drives off.
+- **Three yard trucks** (yellow cabs, numbered 1–3) start at the parking stubs. They can be empty or loaded.
+- **Customer trucks** pull into a free stub every 9–16 s. Their cab is the color of the container they want, picked
+  from colors in storage that no other waiting customer wants.
+- **Sending a truck:**
+  - Select one by clicking it (or 1–3 for yard trucks).
+  - Click a berth's STS crane or a storage area (its RTG), and the truck drives there by road and parks at its spot.
+  - Clicks queue up, with no limit for now. For example STS A, then storage 2, then STS A again.
+- **Only where it can be served (owner):**
+  - an empty yard truck → an STS with a docked ship that still has a container no one has claimed
+  - a loaded yard truck → an RTG whose area has room
+  - a customer → an RTG whose area has its color, unclaimed. A customer takes just one trip.
+  - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its container or slot at
+    once. Anything else flashes a red ✕.
+- **Showing it:** the selected truck's queued spots are numbered and joined by a dashed line. The target under the cursor
+  shows green or red.
+- **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
+  right click deselects.
+- **Sharing a spot:** a truck stops back from a spot another truck is using and pulls in when it's free. Trucks don't
+  otherwise block each other.
+- **Done:** a loaded customer truck shows a smiley and drives off east.
 
 ## Rejected / removed
+
+- **Forklifts, 1-tile containers, the long walled storage and the 2 × 5 patch, apron truck bays (2026-10-31, later):**
+  replaced by STS cranes, 3-tile containers, four vertical storage areas with RTG cranes, and trucks you send between
+  them.
 
 - **A forklift doing one thing at a time, a new target replacing the old (2026-10-31, the same evening):** replaced by
   each forklift's own queue.

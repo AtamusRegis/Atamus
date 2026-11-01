@@ -6,10 +6,12 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. **The redo (owner, 2026-10-31): Atamus is a single-player seaport management game** (first a spaceport, made a
-   seaport the same evening), in the browser with no server: boats dock at two berths with containers in seven colors; containers go only in the storage (one long walled area,
-   one open 2 × 5 patch); you drive each forklift yourself (select it, then its target; it needs a way to reach it); trucks want a container matching
-   their cab color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
+3. **The redo (owner, 2026-10-31): Atamus is a single-player container port management game** (a spaceport, then a
+   seaport, then a container terminal, all that evening), in the browser with no server: ships dock and ship-to-shore
+   cranes unload them onto yard trucks; containers (3 tiles long, seven colors) stack 3 high in four vertical 5 × 12
+   storage areas, each with an RTG crane at its end; you select a truck and queue where it parks; customer trucks want
+   a container of their cab's color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
+   will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
 
@@ -35,9 +37,9 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 ```
 website/          GitHub Pages site (atamus.io) and the game
   game.html       the game page: just the canvas
-  game.js         the whole game, single player: the tile map and its placeholder art (drawn once), berths and boats,
-                  containers, storage, the forklifts you drive (select, target, the access check: 4-way BFS), truck bays and trucks, camera
-                  (pan / zoom / pinch); window.Atamus for tests
+  game.js         the whole game, single player: the tile map and roads (drawn once), ships, STS cranes, storage areas
+                  and RTG cranes (op lists: move / lift / lower), yard and customer trucks (road BFS, queues, claims),
+                  camera (pan / zoom / pinch); window.Atamus for tests
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
   fonts/, assets/ self-hosted fonts and the logo
