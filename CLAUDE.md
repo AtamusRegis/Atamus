@@ -6,10 +6,10 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. **The redo (owner, 2026-10-31): Atamus is a single-player sci-fi spaceport management game**, in the browser with no
-   server: ships land on pads and take off; you open a landed ship's cargo grid and drag stacks to storage units, and
-   NPC workers carry them over one item at a time. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder
-   art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
+3. **The redo (owner, 2026-10-31): Atamus is a single-player seaport management game** (first a spaceport, made a
+   seaport the same evening), in the browser with no server: boats dock at two berths with containers in ten colors;
+   you tell forklifts which container goes where (they need a way to reach both ends); trucks want a container matching
+   their cab color. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
 
@@ -24,7 +24,7 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 
 - **No unrequested UI.** Don't add UI, panels or UX unless the owner asks for it.
 - **No helper or hint text**, anywhere. Tooltips show names only. (The developer panel's hover descriptions are the owner-requested exception.)
-- **Mobile parity.** Everything works on touch screens too: tap selects, one finger pans the map, two fingers pinch the zoom, and cargo drags with a finger.
+- **Mobile parity.** Everything works on touch screens too: tap selects and places, one finger pans the map, two fingers pinch the zoom.
 - **US spelling.** Separately, the internal license key `exumers` is a misspelling saved in old player data: leave it as it is.
 - **PTR suspended for now (owner, 2026-10-12): push straight to live to move fast.** Still run `scripts/check.sh` before every push. (`scripts/ptr.sh` still runs the server + site locally when a quick look is worth it.)
 - **Front-page updates.** When a new feature ships (owner: never minor changes or fixes), add a bullet to that day's entry in the Updates list in `website/index.html` (one entry per day, newest first). Say what was added or changed, never how it works: no timers, thresholds, counts or rules.
@@ -34,10 +34,10 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 
 ```
 website/          GitHub Pages site (atamus.io) and the game
-  game.html       the game page: canvas, the ship panel (cargo grid + Depart), the storage strip, the drag ghost
-  game.js         the whole game, single player: the tile map and its placeholder art (drawn once), pads and ship
-                  arrivals / landings / take-offs, cargo stacks, storage units, the workers (BFS paths, one item a
-                  trip), camera (pan / zoom / pinch), selection and cargo drag-and-drop; window.Atamus for tests
+  game.html       the game page: just the canvas
+  game.js         the whole game, single player: the tile map and its placeholder art (drawn once), berths and boats,
+                  containers, orders and the access check (4-way BFS), forklifts, truck bays and trucks, camera
+                  (pan / zoom / pinch), click-to-select / click-to-place; window.Atamus for tests
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
   fonts/, assets/ self-hosted fonts and the logo

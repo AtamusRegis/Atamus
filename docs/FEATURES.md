@@ -17,46 +17,75 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Nothing is saved yet:** a reload starts a fresh port.
 - `play.html` just forwards to `game.html`. The front page's Play now goes straight to the game.
 
+## A seaport, not a spaceport (owner, 2026-10-31, same evening)
+
+> hmm, lets do a seaport with boats instead. 2 ports for now, instead of storage units, we will have containers. player
+> moves containers via forklifts to where he tells them to be placed, and containers must have a way for forklifts to
+> get to the destination to be picked up or dropped off. 10 different colors of containers. trucks come to the dock, and
+> their cab is colored like the container they need. player must get the container color to match with a forklift and
+> bring it to that truck for it to be happy.
+
 ## The port
 
 - **A 36 × 24 grid of 32 px tiles (owner)**, 2D top down, north up. Placeholder pixel art drawn in code, to be replaced.
 - **What's on it:**
-  - a fence around the edge
-  - two **landing pads**, A and B (5 × 5)
-  - a taxi road
-  - four **storage units** (3 × 3) with doors on the road side
-  - crew quarters (where the workers wait) and a control tower (decor)
+  - water along the top, with two **berths**, A and B
+  - the quay and the container yard
+  - an apron along the yard's bottom edge
+  - the truck road with five **bays**
+  - a fence around the land
+  - three forklift parking spots
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms between 0.5× and 3×
   - it starts fitted to the screen
 
-## Ships
+## Containers (owner)
 
-- **Arriving:** an empty pad gets a new ship after a few seconds. The pad's border pulses green while a ship is inbound.
-  - The ship flies in from off the map, high and with a big shadow, then descends onto the pad.
-  - Ships are placeholder sprites with five hull colors and random wing and body shapes, and a name like "MV Kestrel".
-- **Cargo:** a 6 × 3 cargo grid holding 3–6 stacks of Ore, Ice, Food, Fuel, Parts or Medical (4–16 each).
-- **Leaving:** once its cargo is all unloaded, a landed ship waits a moment, then takes off and flies away. Depart sends it
-  off with whatever is left (workers still walking to it give up).
+- **Ten colors:** red, orange, yellow, lime, green, teal, blue, purple, pink, white.
+- One container fills one tile for now. Containers block forklifts. They don't stack yet.
 
-## Unloading (owner)
+## Boats
 
-- **Click a ship** to open its panel: name, status (Approaching / Landing / Landed / Taking off / Departing) with its pad,
-  the cargo grid, and Depart. Escape, ×, or clicking empty ground closes it.
-- **Drag a stack** (landed ships only):
-  - onto a **storage unit**, either its card in the bottom strip or the building on the map, to send it there. The slot
-    gets a badge in that unit's color and number. Dragging it again re-targets it.
-  - onto another slot in the grid to move it there.
-- **Workers (three for now)** do the carrying, always the nearest open job:
-  - A worker walks to one of the pad's loading tiles and picks up **one item**.
-  - They carry it to the unit's door and drop it in, then come back for the next. They carry the item over their head.
-- **Until the unit is full:** storage units hold 40 items each, counting items already on the way. When the unit fills,
-  the stack's slot turns red and its workers stop. Re-target it to another unit to carry on.
-- **The storage strip** shows each unit's fill and its contents stacked by type. Clicking a card centers the map on the
-  unit; clicking a unit on the map flashes its card. Each unit's roof shows a fill bar.
+- **Arriving:** an empty berth gets a boat after a few seconds. It sails in from the left and docks.
+- **Cargo:** 8–14 containers in random colors, on a 2-row, 8-tile deck.
+- **Leaving:** once its deck is empty (and no forklift is on it), the boat waits a moment and sails off. Another boat
+  follows.
+- **The deck:** a docked boat's deck is drivable, so the back row can be reached once a front container is out of the way.
+
+## Moving containers: forklifts (owner)
+
+- **Ordering:**
+  - Click a container to select it (it pulses). A container on a boat that's still arriving can't be picked.
+  - Click an empty yard tile to send it there; a green ghost shows a valid spot.
+  - Or click a waiting truck to deliver it.
+  - Clicking the container again, Escape or right click deselects. Clicking a waiting order's container cancels the order.
+- **Access (owner):** an order is only accepted when a forklift can drive to a free tile beside the container (side by
+  side, not diagonal) **and** to one beside the destination. Otherwise a red ✕ flashes.
+- **While it waits:** the order shows as a dashed outline in the container's color at the destination, with a dashed
+  line from the container. The destination is reserved.
+- **Doing the work:** three forklifts take the oldest order they can reach.
+  - A forklift drives up beside the container, lifts it, carries it on its forks to a tile beside the destination and
+    sets it down.
+  - If its way gets blocked (a container put in the path), it finds another way. With none, it waits with a red "!" and
+    keeps trying.
+  - Idle forklifts go back to their parking spots.
+
+## Trucks (owner)
+
+- **Arriving:** a truck pulls into a free bay every 6–14 s.
+  - Its cab is the color of the container it wants, picked from colors in the port (boats and yard), favoring ones no
+    other truck wants.
+- **Delivering:**
+  - Select a container of that color and click the truck. Matching trucks pulse green while a container is selected.
+  - A forklift reaches the trailer from the apron tile above it, so keep that tile clear.
+  - A wrong color is refused (red ✕).
+- **Leaving:** once its container is on the trailer, the truck shows a smiley and drives off.
 
 ## Rejected / removed
+
+- **The spaceport (2026-10-31, the same evening):** ships landing on two pads, cargo grids dragged to four storage units,
+  and workers carrying one item at a time. Replaced by the seaport (owner: "lets do a seaport with boats instead").
 
 - **The multiplayer ring-mining game (2026-10-16 to 2026-10-30):** Saturn's rings, chunk-masonry asteroids, the Miner and
   other ships, the station, name-and-play, the game server socket. Removed 2026-10-31 (owner: "get rid of multiplayer.

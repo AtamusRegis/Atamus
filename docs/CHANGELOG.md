@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-10-31
 
+- **A seaport instead (owner):** the spaceport became a seaport the same evening. Boats dock at two berths with containers in ten colors. Click a container, then where it goes, and one of three forklifts moves it, but only if a forklift can drive up to both ends. Trucks pull into five bays with their cab colored like the container they want; deliver the match and they leave happy. The ships, cargo grids, storage units and workers are gone.
 - **The redo: a spaceport (owner):** Atamus is now a single-player sci-fi spaceport management game in the browser (`website/game.html` + `game.js`). Two landing pads take ships that fly in, land and take off. Click a landed ship for its cargo grid and drag stacks onto the four storage units; three workers carry one item at a time until the stack is gone or the unit is full. 32 px tile grid, placeholder art. Rules in `docs/FEATURES.md`.
 - **Multiplayer and the side games removed (owner: "get rid of multiplayer. SP only", "get rid of the sub-games"):** the ring-mining game, name-and-play, the game socket and Salvage are gone (snapshot in `reference/2026-10-31-pre-spaceport/`). The server now only answers the deploy workflows (`/healthz`, `/game/*`); the old database stays untouched. `play.html` forwards to the game.
 
