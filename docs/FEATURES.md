@@ -287,7 +287,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   claimed.
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
-  - Select one by clicking it (or 1–3 for tractors). Click it again, or open ground where it can't go, to let go of it.
+  - Select one by clicking it (or 1–3 for tractors). Click it again, or open ground (roads, concrete, water: anywhere that isn't a crane or its lanes, a ship slot, a storage area or its bays, or a stall), to let go of it. The bare quay concrete around a crane counts as open ground.
   - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or its bays (the RTG; the bay is
     whichever clears first), or (customers) a parking stall.
   - Clicks queue up, with no limit for now. The same RTG can be queued any number of times (owner).

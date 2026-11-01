@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Tap open ground to let go (owner):** tapping a road, concrete or water lets go of the selected truck; the bare quay concrete around a crane now counts too (only the crane and its lanes send a tractor there).
+
 - **One-tap controls (owner):** everything works with single taps. Tap a numbered badge on a truck's queue to take that trip back (any of them, not just the last); tap open ground to let go of the selected truck. On touch screens trucks are easier to hit, badges are bigger, slightly shaky taps still count, a long press no longer undoes anything, the game starts zoomed in on the port, and the address bar sliding away no longer resets the view.
 
 - **A waiting line for the cranes (owner):** tractors whose crane line is full now wait in one line shared by all the cranes, along the quay road and up the lane east of the export area, with the other lane free to pass. Other trucks drive round it, the long way if it blocks a shortcut. The lane east of the export area now runs north.

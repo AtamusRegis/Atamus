@@ -407,7 +407,8 @@ function spawnExport() {
 function targetAt(i, j) {
   // (owner) a ship slot picks which one the crane takes from; the crane or its lanes leave it to the crane (the nearest)
   if (j >= DOCK.top && j < DOCK.top + DOCK.rows) { const c = Math.floor((i - DOCK.x) / CL); if (c < 0 || c >= DOCK.cols || !DOCK.ship || DOCK.ship.state !== "docked") return null; const k = (j - DOCK.top) * DOCK.cols + c; if (!onDeck(DOCK.ship, k)) return null; const b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]); return b ? { kind: "sts", berth: b, slot: k } : null; }
-  if (j >= QUAY && j <= 11) for (const b of BERTHS) if (i >= b.ex && i <= b.ox) return b.open ? { kind: "sts", berth: b } : null;
+  // (owner, 2026-11-01) its lanes, or the crane itself; the bare quay concrete around it is open ground
+  if (j >= QUAY && j <= 11) for (const b of BERTHS) if (i >= b.ex && i <= b.ox) return b.open && (j >= LANE_ROWS[0] || Math.abs(i + 0.5 - b.crane.x / T) <= 1.5) ? { kind: "sts", berth: b } : null;
   for (const b of BLOCKS) if (b.open && i >= b.x && i < b.x + b.w && j >= b.y && j < YROAD) return { kind: "rtg", block: b };
   if (j >= LOT0 && j < LROAD) { const s = STALLS.find((q) => q.i === i && q.open); if (s) return { kind: "park", stall: s }; }
   return null;
