@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Queue pickups for a manual tractor (owner):** click several ship slots (or the export area) in a row and the tractor fetches each one, dropping it off at a storage area it picks by itself before the next. No more clicking an RTG in between.
+
 - **Exports, self-delivering tractors, more parking (owner):** a new export area at the east end: export trucks drop containers there, and tractors take them to the cranes, which load them onto the ship (paying $60) and hand back an import on the same trip. Loaded tractors now take their container where it goes by themselves, so a manual tractor only needs to be told what to fetch; an auto tractor can be assigned to the export area. Auto tractors cost 4 times a manual one. 24 more parking stalls (48 in all), and customers come faster the more stalls are open.
 
 - **Auto and manual tractors, up to 4 cranes (owner):** buy manual tractors (you send them) or auto ones (assign an RTG and they shuttle between the ship and it by themselves, fetching wanted containers first); the Loop switch is gone. Up to 4 STS cranes (C and D are new); under each, an auto line, a manual line and a middle lane that loaded tractors leave by. The map is 73 × 42.

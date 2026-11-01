@@ -173,6 +173,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   into a crane's line (one with room for it on the ship, preferring one that can hand back an import). You can still
   send it to a particular RTG yourself. An empty manual tractor waits in the tractor parking for you to pick what it
   fetches.
+- **A list of pickups (owner, 2026-11-01):** click any number of ship slots (or the export area) for a manual tractor and
+  it fetches them in turn, dropping each container off wherever it goes (as above) before the next. You never have to
+  pick a storage area.
 - **Fetching a slot with an auto tractor (owner):** click a ship slot with an auto tractor selected and it fetches that
   slot's top container next. If it's already on its way to a crane (and the crane hasn't started on it), that pickup
   becomes the slot's. It takes the container to its RTG and carries on.

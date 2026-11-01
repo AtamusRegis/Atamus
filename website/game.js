@@ -249,7 +249,7 @@ function spawnCustomer() {
 }
 
 // what a truck will carry once its queue is done: null, "imp" or "exp"
-function loadAfter(t) { let l = t.load ? (t.load.exp ? "exp" : "imp") : null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "sts" ? (a.pick === false ? null : "imp") : a.kind === "rtg" ? (t.kind === "cust" ? "imp" : a.pickup ? "exp" : null) : l; return l; }
+function loadAfter(t) { let l = t.load ? (t.load.exp ? "exp" : "imp") : null; for (const a of t.cmd ? [t.cmd, ...t.queue] : t.queue) l = a.kind === "deliver" ? null : a.kind === "sts" ? (a.pick === false ? null : "imp") : a.kind === "rtg" ? (t.kind === "cust" ? "imp" : a.pickup ? "exp" : null) : l; return l; }
 // (owner) export trucks come in at the southwest gate with a container for the export area (when it's open and has
 // room for one more), drop it at its RTG and leave
 function spawnExport() {
@@ -275,17 +275,22 @@ function targetAt(i, j) {
 function planFor(t, i, j) {
   if (t.gone || t.exiting) return null;
   const g = targetAt(i, j); if (!g) return null;
-  const la = loadAfter(t), loaded = la !== null, acts = t.cmd ? [t.cmd, ...t.queue] : t.queue;
+  let la = loadAfter(t); const loaded = la !== null, acts = t.cmd ? [t.cmd, ...t.queue] : t.queue;
   if (t.kind === "cust" && acts.some((a) => a.kind === "rtg")) return null;
   if (g.kind === "park") return t.kind === "cust" && !g.stall.claim ? { kind: "park", stall: g.stall } : null;
+  // (owner) a tractor can be given pickups one after another: if it would be carrying an import (or, for the export
+  // area, anything), a drop-off step goes in first
+  let first = false;
+  if (t.kind === "yard" && la !== null && ((g.kind === "sts" && la === "imp") || (g.kind === "rtg" && g.block.exp))) { first = true; la = null; }
+  const pre = (a) => { if (a && first) a.deliverFirst = true; return a; };
   if (g.kind === "sts") {
     const b = g.berth; if (t.kind !== "yard" || la === "imp") return null;
     const slotOk = g.slot !== undefined && impCount(DOCK.ship.bays[g.slot]) - DOCK.ship.claims[g.slot] > 0;
     if (la === "exp") { if (exportRoom(b) <= 0) return null; const a = { kind: "sts", berth: b, exp: true, pick: berthLeft(b) > 0 }; if (slotOk && a.pick) a.slot = g.slot; return a; }
-    if (berthLeft(b) <= 0) return null; if (g.slot === undefined) return { kind: "sts", berth: b }; return slotOk ? { kind: "sts", berth: b, slot: g.slot } : null;
+    if (berthLeft(b) <= 0) return null; if (g.slot === undefined) return pre({ kind: "sts", berth: b }); return slotOk ? pre({ kind: "sts", berth: b, slot: g.slot }) : null;
   }
   const b = g.block;
-  if (t.kind === "yard" && b.exp) return la === null && count(b) - b.expClaims > 0 ? { kind: "rtg", block: b, pickup: true } : null;
+  if (t.kind === "yard" && b.exp) return la === null && count(b) - b.expClaims > 0 ? pre({ kind: "rtg", block: b, pickup: true }) : null;
   if (t.kind === "yard") return la === "imp" && free(b) > 0 ? { kind: "rtg", block: b } : null;
   return !loaded && holds(b, t.want) ? { kind: "rtg", block: b } : null;
 }
@@ -294,8 +299,8 @@ function claim(t, a, d) {
   else if (a.kind === "rtg" && a.pickup) a.block.expClaims += d;
   else if (a.kind === "park") a.stall.claim = d > 0 ? t : null;
 }
-function enqueue(t, a) { claim(t, a, 1); t.queue.push(a); }
-function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); return !!a; }
+function enqueue(t, a) { if (a.deliverFirst) { delete a.deliverFirst; t.queue.push({ kind: "deliver" }); } claim(t, a, 1); t.queue.push(a); }
+function unqueueLast(t) { const a = t.queue.pop(); if (a) claim(t, a, -1); if (t.queue.length && t.queue[t.queue.length - 1].kind === "deliver") t.queue.pop(); return !!a; }
 // (owner) an RTG's 5 bays are one queue: a truck heading there waits in line on the RTG lane at the area's west end
 // until a bay clears, first come first served, then takes it
 const lineKey = (b) => key(b.x, RLANE + 1);
@@ -358,12 +363,16 @@ function autoStep(t) {
 // (owner) any loaded tractor with nothing queued takes its container where it goes by itself: an import to a storage
 // area with room (an auto tractor's own RTG, otherwise the nearest), an export into a crane's line (one with room for it
 // on the ship, preferring one that can hand back an import)
-function deliverStep(t) {
-  if (t.kind !== "yard" || !t.load || t.cmd || t.next || t.queue.length || t.locked) return;
-  if (t.load.exp) { const bs = BERTHS.filter((b) => exportRoom(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (bs.length) { const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; enqueue(t, { kind: "sts", berth: b, exp: true, pick: berthLeft(b) > 0 }); } return; }
+// where a loaded tractor's container goes right now (pick: whether a crane taking an export may hand back an import)
+function deliverAction(t, pick) {
+  if (t.load.exp) { const bs = BERTHS.filter((b) => exportRoom(b) > 0 && laneFor(b, t).q.length < LANE_DEEP); if (!bs.length) return null; const b = bs.find((q) => berthLeft(q) > 0) || bs[0]; return { kind: "sts", berth: b, exp: true, pick: pick && berthLeft(b) > 0 }; }
   const hx = headIJ(t)[0], own = t.auto && t.home && !t.home.exp && t.home.open && free(t.home) > 0 ? t.home : null;
   const dest = own || (t.auto && t.home && !t.home.exp ? null : BLOCKS.filter((b) => b.open && !b.exp && free(b) > 0).reduce((m, b) => (!m || Math.abs(b.x + 2 - hx) < Math.abs(m.x + 2 - hx) ? b : m), null));
-  if (dest) enqueue(t, { kind: "rtg", block: dest });
+  return dest ? { kind: "rtg", block: dest } : null;
+}
+function deliverStep(t) {
+  if (t.kind !== "yard" || !t.load || t.cmd || t.next || t.queue.length || t.locked) return;
+  const a = deliverAction(t, true); if (a) enqueue(t, a);
 }
 
 // (bug 2026-11-01) a tractor's RTG trip is called off when it has nothing to deliver, or its storage area has filled up
@@ -375,12 +384,15 @@ function dropTrip(t) {
 }
 function truckStep(t, dt) {
   if (t.locked) return;
+  if (t.kind === "yard" && t.cmd && t.cmd.kind === "sts" && t.load && !t.load.exp && !t.next) { const a = t.cmd; delete a.lane; leaveLane(t); t.cmd = null; t.path = []; t.queue.unshift({ kind: "deliver" }, a); }
   if (t.kind === "yard" && t.cmd && t.cmd.kind === "rtg" && (t.cmd.pickup ? t.load !== null : t.load === null || t.load.exp || free(t.cmd.block) <= 0)) dropTrip(t);
   custStep(t);
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
     deliverStep(t); autoStep(t);
-    if (t.queue.length && startCmd(t, t.queue[0])) t.queue.shift();
+    // (owner) a queued "drop it off" step becomes a trip to wherever the container goes now (skipped if empty)
+    while (t.queue.length && t.queue[0].kind === "deliver") { if (!t.load) { t.queue.shift(); continue; } const a = deliverAction(t, t.queue.length === 1); if (!a) break; claim(t, a, 1); t.queue[0] = a; }
+    if (t.queue.length && t.queue[0].kind !== "deliver" && startCmd(t, t.queue[0])) t.queue.shift();
   }
   idleStep(t);
   // in an STS lane's line: move up as the ones ahead leave
@@ -793,6 +805,7 @@ function draw() {
   if (selected) {
     const tr = trailerOf(selected); let px = tr.x, py = tr.y, n = 0; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
     for (const a of selected.cmd ? [selected.cmd, ...selected.queue] : selected.queue) {
+      if (a.kind === "deliver") continue;
       const [rx, ry, rw, rh] = spotRect(a), sx = rx + rw / 2, sy = ry + rh / 2; n++;
       ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(sx, sy); ctx.stroke(); px = sx; py = sy;
       ctx.strokeStyle = "#ffffff"; ctx.strokeRect(rx + 1, ry + 1, rw - 2, rh - 2);
