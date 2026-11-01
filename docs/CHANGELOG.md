@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Time's up means time's up (owner):** when a ship's timer runs out, each tractor only finishes the crane trip it's on; the rest of its queued pickups are called off.
+
 - **Called-off pickups don't cost you your container (owner):** if a container left on top of the one you claimed belonged to a trip you called off, the crane now moves it aside and hands over yours instead of the wrong one. Two tractors claiming the same stack still swap if the lower one arrives first.
 
 - **Clicked containers are tracked (owner):** sending a tractor to a ship slot claims that particular container, so if the crane moves it while sorting, the tractor still gets it.

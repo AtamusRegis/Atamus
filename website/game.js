@@ -289,6 +289,23 @@ function shipGone(s) {
   }
   BERTHS.forEach((b) => { b.promised = 0; });
 }
+// (owner, 2026-11-01) when time runs out, each tractor only finishes the crane trip it's on now: crane trips (and export
+// pickups) still waiting in its queue are called off, keeping the drop-offs for what it will actually be carrying
+function closeQueues() {
+  for (const t of trucks) {
+    if (t.kind !== "yard") continue;
+    let l = t.load ? (t.load.exp ? "exp" : "imp") : null;
+    if (t.cmd) l = t.cmd.kind === "sts" ? (t.cmd.pick === false ? null : "imp") : t.cmd.kind === "rtg" ? (t.cmd.pickup ? "exp" : null) : t.cmd.kind === "deliver" ? null : l;
+    t.queue = t.queue.filter((a) => {
+      let keep = true;
+      if (a.kind === "sts" || (a.kind === "rtg" && a.pickup)) keep = false;
+      else if (a.kind === "deliver") { keep = l !== null; l = null; }
+      else if (a.kind === "rtg") { keep = l === "imp"; if (keep) l = null; }
+      if (!keep) claim(t, a, -1);
+      return keep;
+    });
+  }
+}
 const inReach = (s, b) => { const [c0, c1] = craneCols(b); return s.bays.some((st, k) => impCount(st) && k % DOCK.cols >= c0 && k % DOCK.cols < c1); };
 const berthLeft = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1) n += impCount(st); }); return n + (b.crane.hold2 ? 1 : 0) - b.promised; };
 // room for exports in a crane's columns: slots with no imports, minus exports already on their way
@@ -303,7 +320,7 @@ const exportRoom = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" 
 function shipStep(dt) {
   const s = DOCK.ship; if (!s) { DOCK.wait -= dt; if (DOCK.wait <= 0) newShip(); return; }
   if (s.state === "arrive") { s.off += Math.max(50, -s.off * 1.2) * dt; if (s.off >= 0) { s.off = 0; s.state = "docked"; } }
-  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && !expPromised(b) && b.crane.hold === null && !b.crane.hold2)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) s.state = "closing"; }
+  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && !expPromised(b) && b.crane.hold === null && !b.crane.hold2)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) { s.state = "closing"; closeQueues(); } }
   else if (s.state === "closing") { if (BERTHS.every((b) => !b.crane.ops.length && b.crane.hold === null && !b.crane.hold2 && !b.crane.truck && (!b.promised || !b.open || !inReach(s, b)))) { shipGone(s); s.state = "depart"; } }
   else if (s.state === "depart") { s.off += (50 + s.off * 0.8) * dt; if (s.off > 64 * T) { DOCK.ship = null; DOCK.wait = 5 + rnd() * 5; } }
 }
