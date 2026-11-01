@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Ship sizes, a timer, longer STS lines (owner):** ships come small, medium or large, and each has a countdown to be unloaded; when it runs out the ship sails with what's left and customers waiting for that cargo leave unpaid. Each STS lane holds 3 more tractors waiting behind the one under the crane. Ship containers a customer waits for flash until a tractor is queued for their slot. Customers now want stored and shipped containers about 50/50.
+
 - **Flashing and looping (owner):** with no customer truck selected, the ship's containers that customers are waiting for flash. A looping tractor told to fetch a ship slot does that next (taking over a pickup it was already heading for), drops it at its RTG and keeps looping.
 
 - **Tractor parking (owner):** a column of horizontal tractor spots west of the storage areas, left of the dock (the port moved 7 tiles east to make room; the map is 61 × 42). New tractors appear there, and tractors with nothing to do drive there and park instead of waiting where they finished.

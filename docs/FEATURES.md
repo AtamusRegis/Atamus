@@ -94,11 +94,20 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **One much larger ship at a single berth (owner, 2026-10-31)** instead of two small ones.
   - **Arriving:** it sails in from the west and docks a few seconds after the last one leaves.
-  - **Cargo:** 14 horizontal slots across × 5 rows of deck (rows 2–6), each a stack of 0–3 containers (about 100 in all).
+  - **Small, medium and large (owner, 2026-11-01):** 6 × 3, 10 × 4 or 14 × 5 horizontal slots (columns from the west
+    end × deck rows nearest the quay), each a stack of 0–3 containers. About a third small, two fifths medium, a quarter
+    large. A small ship only reaches crane A's half.
+  - **The timer (owner, 2026-11-01):** once docked, a ship has 90 s plus 8 s per container aboard to be unloaded,
+    counting down beside its bow (red in the last 30 s). When it runs out, the cranes finish the lift under way, no new
+    pickups start, tractors' trips to the cranes are called off, and customer trucks waiting for a container still
+    aboard leave without it (frowning, unpaid). Then it sails with whatever is left.
 - **Two STS cranes, A and B, split the ship:** A takes the west 7 slot columns, B the east 7. Each crane has its own lanes.
 - **Three lanes side by side (owner, 2026-10-31: "make the quay tractor line 3 tall instead of 3 wide"):** under each STS
-  crane are three parallel lanes with one tractor spot each, so no tractor waits behind another. A tractor takes a free
-  lane when its trip there starts (or keeps the one it's already in).
+  crane are three parallel lanes, one tractor under the crane in each.
+- **A line of 3 behind each (owner, 2026-11-01):** behind the tractor under the crane each lane holds 3 more waiting, so
+  9 more per crane. A tractor takes the lane with the shortest line when its trip there starts (or keeps the one it's
+  already in) and moves up as the ones ahead leave; the line goes by who is furthest in. With every line full it waits
+  where it is.
 - **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
   spot (the nearest lane first). It runs along the quay to the slot, runs its trolley out, lifts the top container,
   brings it back and lowers it onto that tractor. Then it does the next.
@@ -152,11 +161,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
   there. Only a truck with something else queued waits for that first.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
-  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Most
-  (4 in 5) want one already in storage, while there is one. Its
+  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). About
+  half want one already in storage, half one on the ship (owner: "closer to 50/50"). Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
   the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
-  truck selected, every container on the ship that a customer is waiting for flashes** (owner).
+  truck selected, a container on the ship that a customer is waiting for flashes until a tractor is queued for its slot**
+  (owner).
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
