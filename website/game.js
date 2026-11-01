@@ -159,11 +159,12 @@ const headIJ = (t) => unkey(t.tiles[0]);
 function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
 // (owner) a customer comes for one container: one stored in an open storage area, or one on top of a slot of the docked
 // ship, and not wanted by another customer
+// (owner, bug 2026-11-01) mostly ones already in storage: the ship's ~70 tops would otherwise crowd out the stored ones
 function wantable() {
-  const out = [];
-  for (const b of BLOCKS) if (b.open) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) out.push(x);
-  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.wantedBy) out.push(x); }
-  return out;
+  const stored = [], ship = [];
+  for (const b of BLOCKS) if (b.open) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
+  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) { const x = st[st.length - 1]; if (x && !x.wantedBy) ship.push(x); }
+  return stored.length && (!ship.length || rnd() < 0.8) ? stored : ship;
 }
 function spawnCustomer() {
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;

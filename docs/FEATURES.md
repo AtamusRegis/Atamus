@@ -130,7 +130,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
   and parks in the lot until you send it.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
-  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Its
+  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Most
+  (4 in 5) want one already in storage, while there is one. Its
   cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
   the ship, on a tractor or in a crane.
 - **Sharing:** tractors and customers share the RTG bays.
