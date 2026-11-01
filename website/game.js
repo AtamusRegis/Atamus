@@ -236,6 +236,14 @@ function startCmd(t, a) {
   if (a.kind === "sts") t.lastSts = a.berth; else if (a.kind === "rtg" && t.kind === "yard") t.lastRtg = a.block;
   return true;
 }
+// (owner) a customer truck whose container is in a storage area goes to that RTG by itself: from its stall, or straight
+// there if it hasn't parked yet (giving up its stall)
+function custStep(t) {
+  if (t.kind !== "cust" || t.exiting || t.load !== null || t.queue.length || (t.cmd && t.cmd.kind !== "park")) return;
+  const b = BLOCKS.find((q) => q.open && holds(q, t.want)); if (!b) return;
+  if (t.cmd) t.cmd.stall.claim = null;
+  t.cmd = null; startCmd(t, { kind: "rtg", block: b });
+}
 // (owner) a tractor on loop goes back and forth on its own between the STS crane and the RTG it was last sent to
 function loopStep(t) {
   if (!t.loop || t.cmd || t.next || t.queue.length || t.locked) return;
@@ -245,6 +253,7 @@ function loopStep(t) {
 
 function truckStep(t, dt) {
   if (t.locked) return;
+  custStep(t);
   // start the next queued trip once the current one is done
   if (!t.cmd && !t.next) {
     loopStep(t);

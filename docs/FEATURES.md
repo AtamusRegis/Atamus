@@ -137,6 +137,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   you queue first. Switched off, it stops after its current trip.
 - **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
   and parks in the lot until you send it.
+- **To its stack by itself (owner, 2026-11-01: "make trucks with a container in a stack automatically go to that stack"):**
+  a customer truck whose container is in a storage area goes to that RTG on its own. If it hasn't parked yet it skips
+  the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
+  there. Only a truck with something else queued waits for that first.
 - **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
   areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Most
   (4 in 5) want one already in storage, while there is one. Its
