@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Full-size stacks (owner):** stacks now show their top container at full size, like a container on a truck. A claimed container's stack blinks green when it's on top, yellow in the middle, red at the bottom.
+
 - **Everyday and colored cargo (owner):** gray and black containers join white as everyday cargo, most of what ships carry. Grey trucks take any everyday container and stay grey; colored trucks come for a matching colored container.
 
 - **Art rework and smarter cranes (owner):** containers now look like containers (ribs, rails, corner castings, door ends), the ship was redrawn (curved bow, accommodation block, hatch covers, mooring lines, wake) and the ground got real textures (asphalt, concrete slabs, quay edge with bollards, crane rails, painted pads). STS cranes now put the next incoming tractor's container first, holding it ready in their second slot, and only sort or compress when there's time.

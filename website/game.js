@@ -877,42 +877,16 @@ const flashing = (x, slot, st) => { if (!x || CACHING) return false; if (selecte
   // will be fetched anyway), nor with its slot fully claimed
   const c = slot % DOCK.cols, b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]);
   return !!b && berthLeft(b) > 0 && impCount(st) - DOCK.ship.claims[slot] > 0; };
-function flash(x, y, w, h) { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(255,255,255,${0.55 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(255,255,255,${0.4 + 0.6 * a})`; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
-// (owner) the bottom container of a stack is drawn darker and the top one lighter
-const TIER_SHADE = ["rgba(0,0,0,.58)", "rgba(0,0,0,.18)", "rgba(255,255,255,.4)"];
-// (art) one container of a stack, seen from above: ribbed roof, lit and shaded rails, corner castings; the tier shading on
-// top (vert: ribs run along y, for the ship's horizontal slots)
-function drawLid(c, sx, sy, n, tier, vert) {
-  ctx.fillStyle = "rgba(0,0,0,.6)"; ctx.fillRect(sx - 1, sy - 1, n + 2, n + 2);
-  ctx.fillStyle = COLORS[c.c].c; ctx.fillRect(sx, sy, n, n);
-  for (let k = 3; k < n - 3; k += 3) { ctx.fillStyle = "rgba(0,0,0,.2)"; if (vert) ctx.fillRect(sx + k, sy + 2, 1, n - 4); else ctx.fillRect(sx + 2, sy + k, n - 4, 1); ctx.fillStyle = "rgba(255,255,255,.12)"; if (vert) ctx.fillRect(sx + k + 1, sy + 2, 1, n - 4); else ctx.fillRect(sx + 2, sy + k + 1, n - 4, 1); }
-  ctx.fillStyle = "rgba(255,255,255,.32)"; ctx.fillRect(sx, sy, n, 1); ctx.fillRect(sx, sy, 1, n);
-  ctx.fillStyle = "rgba(0,0,0,.38)"; ctx.fillRect(sx, sy + n - 2, n, 2); ctx.fillRect(sx + n - 2, sy, 2, n);
-  ctx.fillStyle = "#24262a"; ctx.fillRect(sx, sy, 3, 3); ctx.fillRect(sx + n - 3, sy, 3, 3); ctx.fillRect(sx, sy + n - 3, 3, 3); ctx.fillRect(sx + n - 3, sy + n - 3, 3, 3);
-  ctx.fillStyle = TIER_SHADE[tier]; ctx.fillRect(sx, sy, n, n);
-  if (c.exp) { ctx.fillStyle = "rgba(8,16,30,.6)"; ctx.fillRect(sx + 7, sy + 7, n - 14, n - 14); }   // exports: a dark center
+function flash(x, y, w, h, rgb = "255,255,255") { const a = 0.5 + 0.5 * Math.sin(clock * 10); ctx.fillStyle = `rgba(${rgb},${0.45 * a})`; ctx.fillRect(x, y, w, h); ctx.strokeStyle = `rgba(${rgb},${0.45 + 0.55 * a})`; ctx.lineWidth = 3; ctx.strokeRect(x - 2, y - 2, w + 4, h + 4); }
+// (owner) a claimed container in a stack: the stack blinks green with it on top, yellow in the middle, red at the bottom
+const posRGB = (st, x) => { const i = st.indexOf(x); return i === st.length - 1 ? "74,222,106" : i === 0 ? "255,74,58" : "242,194,50"; };
+// (owner, 2026-11-01) a stack shows its top container at full size, as it looks on a truck
+function drawStackAt(cx, cy, ang, st) { if (st.length) drawBox(st[st.length - 1], cx, cy, ang, 0); }
+function drawStackH(x, y, st, frame) {   // on the ship
+  if (!st.length) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; ctx.strokeRect(x + 2.5, y + 4.5, CL * T - 5, T - 9); return; }
+  drawStackAt(x + CL * T / 2, y + T / 2, 0, st);
 }
-const LID = T - 6;
-function drawStackH(x, y, st, frame, slot) {   // on the ship
-  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 2, y + 2, CL * T - 3, T - 3);
-  for (let k = 0; k < 3; k++) {
-    const tier = 2 - k, c = st[tier], sx = x + k * T + 3, sy = y + 3;
-    if (c === undefined) { ctx.strokeStyle = "rgba(255,255,255,.08)"; ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, LID - 1, LID - 1); continue; }
-    drawLid(c, sx, sy, LID, tier, true);
-    if (flashing(c, slot, st)) flash(sx, sy, LID, LID);
-  }
-  if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, CL * T - 3, T - 3); }
-}
-function drawStack(x, y, st, frame) {
-  ctx.fillStyle = "rgba(0,0,0,.3)"; ctx.fillRect(x + 2, y + 2, T - 3, CL * T - 3);
-  for (let k = 0; k < 3; k++) {
-    const tier = 2 - k, c = st[tier], sx = x + 3, sy = y + k * T + 3;
-    if (c === undefined) { ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, LID - 1, LID - 1); continue; }
-    drawLid(c, sx, sy, LID, tier, false);
-    if (flashing(c)) flash(sx, sy, LID, LID);
-  }
-  if (frame) { ctx.strokeStyle = frame; ctx.lineWidth = 1; ctx.strokeRect(x + 1.5, y + 1.5, T - 3, CL * T - 3); }
-}
+function drawStack(x, y, st) { drawStackAt(x + T / 2, y + CL * T / 2, Math.PI / 2, st); }
 // (art) a crane's spreader: a yellow frame the size of a container, hanging at height h
 function drawSpreader(cx, cy, ang, h) {
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
@@ -990,7 +964,7 @@ function drawShip() {
     ctx = g; CACHING = true; s.bays.forEach((st, k) => { if (!onDeck(s, k)) return; const q = shipSlot(k); drawStackH(q.c * CL * T, q.r * T, st, "rgba(0,0,0,.4)", k); }); CACHING = false; ctx = mainCtx;
   }
   ctx.drawImage(s.deck, x, DOCK.top * T);
-  s.bays.forEach((st, k) => { for (let n = 0; n < st.length; n++) if (st[n].wantedBy && flashing(st[n], k, st)) { const q = shipSlot(k); flash(x + q.c * CL * T + (2 - n) * T + 3, (DOCK.top + q.r) * T + 3, LID, LID); } });
+  s.bays.forEach((st, k) => { for (let n = st.length - 1; n >= 0; n--) if (st[n].wantedBy && flashing(st[n], k, st)) { const q = shipSlot(k); flash(x + q.c * CL * T + 2, (DOCK.top + q.r) * T + 4, CL * T - 4, T - 8, posRGB(st, st[n])); break; } });
   // the time it has left
   if (s.state === "docked" || s.state === "closing") {
     const sec = Math.max(0, Math.ceil(s.time)), txt = Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), low = sec <= 30;
@@ -1081,8 +1055,8 @@ $("buy-auto").onclick = () => addTractor(true);
 function spotRect(a) { if (a.kind === "tpark") return [PARK_X * T, a.spot.j * T, TL * T, T]; if (a.slot !== undefined) return slotRect(a.slot); if (a.lane) return [(a.berth.x + 5) * T, a.lane.r * T, TL * T, T]; if (a.kind === "sts" || a.kind === "wait") return [(a.berth.x + 5) * T, LINE * T, TL * T, 3 * T]; if (a.kind === "rtg") return a.bay ? [a.bay.i * T, BAY0 * T, T, TL * T] : [a.block.x * T, BAY0 * T, a.block.w * T, TL * T]; return [a.stall.i * T, LOT0 * T, T, TL * T]; }
 // where a container is on the map, if anywhere
 function boxAt(x) {
-  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const k = b.slots[c][r].indexOf(x); if (k >= 0) return [(b.x + c + 0.5) * T, (b.y + r * CL + 2 - k + 0.5) * T]; }
-  const s = DOCK.ship; if (s) for (let n = 0; n < s.bays.length; n++) { const k = s.bays[n].indexOf(x); if (k >= 0) { const q = shipSlot(n); return [(DOCK.x + q.c * CL + 2 - k + 0.5) * T + s.off, (DOCK.top + q.r + 0.5) * T]; } }
+  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) if (b.slots[c][r].includes(x)) return [(b.x + c + 0.5) * T, (b.y + r * CL + 1.5) * T];
+  const s = DOCK.ship; if (s) for (let n = 0; n < s.bays.length; n++) if (s.bays[n].includes(x)) { const q = shipSlot(n); return [(DOCK.x + q.c * CL + 1.5) * T + s.off, (DOCK.top + q.r + 0.5) * T]; }
   for (const t of trucks) if (t.load === x) { const tr = trailerOf(t); return [tr.x, tr.y]; }
   for (const cr of [...BERTHS.map((b) => b.crane), ...BLOCKS.map((b) => b.rtg)]) if (cr.hold === x || cr.hold2 === x) return [cr.x, cr.y];
   return null;
@@ -1104,7 +1078,7 @@ function draw() {
     }
     ctx.drawImage(b.layer, b.x * T, b.y * T);
   }
-  if (selected && selected.kind === "cust" && selected.want) { const at = boxAt(selected.want); if (at && BLOCKS.some((b) => holds(b, selected.want))) flash(at[0] - LID / 2 + 1, at[1] - LID / 2 + 1, LID, LID); }
+  if (selected && selected.kind === "cust" && selected.want) for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) if (b.slots[c][r].includes(selected.want)) flash((b.x + c) * T + 4, (b.y + r * CL) * T + 2, T - 8, CL * T - 4, posRGB(b.slots[c][r], selected.want));
   // (owner) a selected customer truck: a white dotted line to where its container is
   if (selected && selected.kind === "cust" && selected.load === null) {
     const at = boxAt(selected.want);

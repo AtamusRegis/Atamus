@@ -104,15 +104,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Nine colors:** red, orange, yellow, green, blue, purple, and the everyday white, gray and black (owner, 2026-11-01).
 - **3 tiles long (owner).**
 - **Every container is its own (owner, 2026-11-01):** a customer truck comes for one particular container, not a color.
-- **A stack is drawn as three squares** down its 1 × 3 footprint (owner): the top square is the top of the stack and the
-  bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
-  red at the bottom and green on top. Storage slots draw this way. **A ship's slots are 3 × 1, horizontal (owner)**, with
-  the same three squares left to right (left the top). Stacks go up to 3 high.
-- **Shading (owner, 2026-11-01):** in every stack the bottom container is drawn much darker, the middle a little darker
-  and the top one lighter.
-
-## The ship and STS cranes
-
+- **A stack shows its top container at full size (owner, 2026-11-01),** as it looks on a truck (a container's footprint
+  is 1 × 3: vertical in storage, horizontal on the ship). Stacks go up to 3 high.
+- **Where a claimed container is in its stack (owner):** when a claimed container blinks, its whole stack blinks, green
+  with it on top, yellow in the middle, red at the bottom.
 - **One much larger ship at a single berth (owner, 2026-10-31)** instead of two small ones.
   - **Arriving:** it sails in from the west and docks a few seconds after the last one leaves.
   - **Small, medium and large (owner, 2026-11-01):** 6 × 3, 10 × 4 or 14 × 5 horizontal slots (columns from the west
@@ -298,6 +293,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **With only crane A, it works the whole ship.** Each crane bought takes its share.
 
 ## Rejected / removed
+
+- **Stacks drawn as three squares, shaded by tier (2026-10-31 to 2026-11-01):** replaced by the top container at full size,
+  with claimed containers' stacks blinking green / yellow / red for where they sit (owner).
 
 - **Grey trucks taking any stored container and turning its color (2026-11-01):** replaced by grey trucks for everyday
   white, gray and black cargo, and colored trucks for matching colored containers (owner: "feels weird").
