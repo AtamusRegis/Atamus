@@ -982,9 +982,25 @@ addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
 const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
 function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, u = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / l, 0, 1); return hyp(px - a[0] - u * dx, py - a[1] - u * dy); }
-// (owner, 2026-11-01) touch friendly: a finger gets a wider reach (at least about 12 screen pixels), the nearest truck wins
+// (owner, 2026-11-01) bigger hit areas, and where they overlap the one nearest the pointer wins: trucks (measured to
+// their cab and trailer) and the containers on the docked ship (measured to the middle of the slot), with more reach
+// on a touch screen. A queue badge, drawn on top, comes first.
 let touchy = false;
-function truckAt(sx, sy) { const w = toWorld(sx, sy), reach = touchy ? Math.max(14, 12 / zoom) : 14; let best = null, bd = reach; for (const t of trucks) { if (t.exiting) continue; const s = shapeOf(t), d = Math.min(segDist(w.x, w.y, s.front, s.cabBack), segDist(w.x, w.y, s.trFront, s.trBack)); if (d < bd) { bd = d; best = t; } } return best; }
+function pickAt(sx, sy) {
+  const w = toWorld(sx, sy);
+  if (selected) for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(w.x - b.x) <= b.r && Math.abs(w.y - b.y) <= b.r) return { badge: b }; }
+  let best = null, bd = Infinity;
+  const near = (d, r, o) => { if (d <= r && d < bd) { bd = d; best = o; } };
+  const tr = touchy ? Math.max(20, 24 / zoom) : Math.max(20, 12 / zoom);
+  for (const t of trucks) { if (t.exiting) continue; const q = shapeOf(t); near(Math.min(segDist(w.x, w.y, q.front, q.cabBack), segDist(w.x, w.y, q.trFront, q.trBack)), tr, { truck: t }); }
+  const sh = DOCK.ship;
+  if (sh && sh.state === "docked") {
+    const sr = T / 2 + (touchy ? Math.max(8, 18 / zoom) : Math.max(6, 10 / zoom));
+    sh.bays.forEach((st, k) => { if (!onDeck(sh, k)) return; const [x, y, rw] = slotRect(k), cy = y + T / 2; near(segDist(w.x, w.y, [x + T / 2, cy], [x + rw - T / 2, cy]), sr, { slot: k }); });
+  }
+  return best;
+}
+function truckAt(sx, sy) { const p = pickAt(sx, sy); return p && p.truck ? p.truck : null; }
 // the selected truck's numbered queue badges, as last drawn (world coordinates), for tapping one off
 let BADGES = [];
 const badgeSize = () => clamp((touchy ? 22 : 16) / zoom, 13, 24);   // never bigger than most of a tile, so the spot under it stays tappable
@@ -1012,9 +1028,10 @@ function homeFor(t, i, j) { if (t.kind !== "yard" || !t.auto) return null; const
 // (owner, 2026-11-01) everything is one tap: tap a truck to select it (again to let go), tap where it goes to queue it,
 // tap a numbered badge of its queue to take that trip back, tap open ground to let go of it
 function click(sx, sy) {
-  if (selected) { const w = toWorld(sx, sy); for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(w.x - b.x) <= b.r && Math.abs(w.y - b.y) <= b.r) { unqueue(selected, b.a); return; } } }
-  const t = truckAt(sx, sy); if (t) { selected = selected === t ? null : t; return; }
-  const [i, j] = tileAtScreen(sx, sy), u = buyAt(i, j);
+  const pk = pickAt(sx, sy);
+  if (pk && pk.badge) { unqueue(selected, pk.badge.a); return; }
+  if (pk && pk.truck) { selected = selected === pk.truck ? null : pk.truck; return; }
+  const [i, j] = pk && pk.slot !== undefined ? slotTile(pk.slot) : tileAtScreen(sx, sy), u = buyAt(i, j);
   if (u) { if (money >= u.price) { money -= u.price; u.buy(); } else bad = { i, j, t: 0.5 }; return; }
   if (!selected) return;
   const h = homeFor(selected, i, j); if (h) { selected.home = h; return; }
@@ -1033,7 +1050,7 @@ cv.addEventListener("pointerdown", (e) => {
   gesture = { sx: e.clientX, sy: e.clientY, cx: cam.x, cy: cam.y, moved: false };
 });
 cv.addEventListener("pointermove", (e) => {
-  if (e.pointerType === "mouse") { touchy = false; hover = { tile: tileAtScreen(e.clientX, e.clientY), truck: truckAt(e.clientX, e.clientY) }; } else hover = null;   // no hover on a touch screen
+  if (e.pointerType === "mouse") { touchy = false; const pk = pickAt(e.clientX, e.clientY); hover = { tile: pk && pk.slot !== undefined ? slotTile(pk.slot) : tileAtScreen(e.clientX, e.clientY), truck: pk && pk.truck }; } else hover = null;   // no hover on a touch screen
   if (!pts.has(e.pointerId) || !gesture) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (gesture.pinch && pts.size === 2) { const [a, b] = [...pts.values()]; setZoom(gesture.zoom * hyp(a.x - b.x, a.y - b.y) / gesture.pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); return; }
   if (gesture.pinch) return;
@@ -1123,6 +1140,7 @@ function drawWater() {
 // (owner) a stack drawn as three squares down its 1 x 3 footprint: top square the top of the stack, bottom the bottom
 // a ship's slot: the same three squares, left to right (left the top of the stack, right the bottom)
 const shipSlot = (k) => ({ c: k % DOCK.cols, r: Math.floor(k / DOCK.cols) });
+const slotTile = (k) => { const q = shipSlot(k); return [DOCK.x + q.c * CL + 1, DOCK.top + q.r]; };
 const slotRect = (k) => { const q = shipSlot(k); return [(DOCK.x + q.c * CL) * T + Math.round(DOCK.ship ? DOCK.ship.off : 0), (DOCK.top + q.r) * T, CL * T, T]; };
 // (owner) the selected customer truck's container flashes wherever it is
 // (owner) with no customer truck selected, the containers on the ship that a customer is waiting for flash instead

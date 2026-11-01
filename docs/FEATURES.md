@@ -307,8 +307,10 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Taking back (owner, 2026-11-01: everything one tap):** tap (click) a numbered badge of the selected truck's queue to
   take that trip back, any of them but the one under way. Right click still removes the last one (with nothing left,
   it deselects); a long press on a touch screen does nothing.
-- **Touch friendly (owner, 2026-11-01):** every control is a single tap. On a touch screen a truck is easier to hit (the
-  nearest within a little more than a fingertip's width of its body), the queue badges are bigger, a tap that drifts a little still counts as a tap, and there
+- **Bigger hit areas (owner, 2026-11-01):** trucks and the containers on the docked ship can be hit from a little way
+  off (further on a touch screen), and where two overlap the one nearest the pointer wins (a truck measured to its cab
+  and trailer, a ship container to the middle of its slot). A queue badge, drawn on top, comes first.
+- **Touch friendly (owner, 2026-11-01):** every control is a single tap. On a touch screen the queue badges are bigger, a tap that drifts a little still counts as a tap, and there
   is no hover preview.
 - **Done:** a loaded customer truck shows a smiley and drives out the west gate.
 
