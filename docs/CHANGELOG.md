@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **A ship out of time finishes its assigned pickups (owner):** when the timer runs out, no new pickups can be assigned, but the ones already assigned (queued too) are finished before it sails.
+
 - **Customers want ship cargo 75% of the time (owner),** stored containers 25%. Fix: a wanted ship container no longer starts flashing again while the crane is on its way to lift it for the tractor that claimed it.
 
 - **Fix: tractors stuck in RTG bays or jammed on the road.** When a ship's time ran out, an RTG trip queued after a called-off crane trip sent an empty tractor to a bay it could never be served in, where it ignored commands; a loaded tractor whose storage area filled up waited forever too. Those trips are now called off. Two trucks side by side each changing into the other's lane no longer lock up the road.

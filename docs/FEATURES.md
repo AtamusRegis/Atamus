@@ -99,9 +99,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     end × deck rows nearest the quay), each a stack of 0–3 containers. About a third small, two fifths medium, a quarter
     large. A small ship only reaches crane A's half.
   - **The timer (owner, 2026-11-01):** once docked, a ship has 90 s plus 8 s per container aboard to be unloaded,
-    counting down beside its bow (red in the last 30 s). When it runs out, the cranes finish the lift under way, no new
-    pickups start, tractors' trips to the cranes are called off, and customer trucks waiting for a container still
-    aboard leave without it (frowning, unpaid). Then it sails with whatever is left.
+    counting down beside its bow (red in the last 30 s). When it runs out, no new pickups can be assigned (owner), but the
+    ones already assigned, queued trips too, are finished first. Then it sails with whatever is left, and customer trucks
+    waiting for a container still aboard leave without it (frowning, unpaid).
 - **Two STS cranes, A and B, split the ship:** A takes the west 7 slot columns, B the east 7. Each crane has its own lanes.
 - **Three lanes side by side (owner, 2026-10-31: "make the quay tractor line 3 tall instead of 3 wide"):** under each STS
   crane are three parallel lanes, one tractor under the crane in each.

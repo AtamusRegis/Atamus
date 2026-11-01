@@ -176,14 +176,13 @@ function newShip() {
   DOCK.ship = s; return s;
 }
 const SHIP_TIME_BASE = 90, SHIP_TIME_PER = 8;
-// time's up: no new pickups; trips to the cranes are called off, and customers waiting for a container still aboard
-// leave without it
-function closeShip(s) {
-  s.state = "closing";
+// (owner) time's up: no new pickups can be assigned, but the ones already assigned (queued too) are finished; then it
+// sails. Then any crane trips left are called off (with the RTG trips that would have nothing to deliver), and customers
+// waiting for a container still aboard leave without it.
+function shipGone(s) {
   for (const t of trucks) {
     if (t.kind === "yard") {
       if (t.cmd && t.cmd.kind === "sts" && !t.locked) { claim(t, t.cmd, -1); t.cmd = null; t.path = t.next ? [t.next] : []; }
-      // drop the crane trips, and the RTG trips that would now have nothing to deliver
       let loaded = t.load !== null || !!(t.cmd && t.cmd.kind === "sts");
       t.queue = t.queue.filter((a) => { const keep = a.kind === "sts" ? false : a.kind === "rtg" ? loaded : true; if (a.kind === "rtg" && keep) loaded = false; if (!keep) claim(t, a, -1); return keep; });
     } else if (!t.exiting && t.load === null && s.bays.some((st) => st.includes(t.want))) {
@@ -193,13 +192,15 @@ function closeShip(s) {
       t.stall = null; t.cmd = null; t.queue = []; t.exiting = true; t.sad = 2.5; goTo(t, key(MW + 5, YROAD + 1));
     }
   }
+  BERTHS.forEach((b) => (b.promised = 0));
 }
+const inReach = (s, b) => { const [c0, c1] = craneCols(b); return s.bays.some((st, k) => st.length && k % DOCK.cols >= c0 && k % DOCK.cols < c1); };
 const berthLeft = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1) n += st.length; }); return n - b.promised; };
 function shipStep(dt) {
   const s = DOCK.ship; if (!s) { DOCK.wait -= dt; if (DOCK.wait <= 0) newShip(); return; }
   if (s.state === "arrive") { s.off += Math.max(50, -s.off * 1.2) * dt; if (s.off >= 0) { s.off = 0; s.state = "docked"; } }
-  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && b.crane.hold === null)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) closeShip(s); }
-  else if (s.state === "closing") { if (BERTHS.every((b) => !b.crane.ops.length && b.crane.hold === null && !b.crane.truck)) { BERTHS.forEach((b) => (b.promised = 0)); s.state = "depart"; } }
+  else if (s.state === "docked") { s.time -= dt; if (!shipCount(s) && BERTHS.every((b) => !b.promised && b.crane.hold === null)) { s.idle = (s.idle || 0) + dt; if (s.idle > 1.5) s.state = "depart"; } else if (s.time <= 0) s.state = "closing"; }
+  else if (s.state === "closing") { if (BERTHS.every((b) => !b.crane.ops.length && b.crane.hold === null && !b.crane.truck && (!b.promised || !b.open || !inReach(s, b)))) { shipGone(s); s.state = "depart"; } }
   else if (s.state === "depart") { s.off += (50 + s.off * 0.8) * dt; if (s.off > 64 * T) { DOCK.ship = null; DOCK.wait = 5 + rnd() * 5; } }
 }
 
@@ -401,7 +402,7 @@ function craneStep(cr, dt, onDone) {
 // STS (owner: one container at a time): the front-most empty tractor standing in its line gets the nearest container
 function stsStep(b, dt) {
   const cr = b.crane, s = DOCK.ship;
-  if (!cr.ops.length && !cr.truck && s && s.state === "docked" && berthLeft(b) + b.promised > 0) {
+  if (!cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && berthLeft(b) + b.promised > 0) {
     let t = null, ti = 1e9;
     for (const q of trucks) { if (!q.cmd || q.cmd.kind !== "sts" || q.cmd.berth !== b || q.load !== null || q.next || q.locked || !q.lane || head(q) !== laneHead(q.lane)) continue; const d = Math.abs(q.lane.r + 0.5 - cr.y / T); if (d > ti) continue; ti = d; t = q; }
     if (t) {
