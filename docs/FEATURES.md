@@ -37,7 +37,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The port
 
-- **A 54 × 39 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
+- **A 54 × 42 grid of 32 px tiles (owner, 2026-10-31: "make the game area bigger")**, 2D top down, north up. Placeholder
   pixel art drawn in code, to be replaced.
 - **What's on it, top to bottom:**
   - water with **one berth** for one big ship
@@ -49,8 +49,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - the **RTG bays**
   - the yard road
   - the **parking lot** (24 stalls, for customer trucks)
-  - the gate road
-  - a fence
+  - the lot road
+  - a fence, with a gate at its southwest corner (in) and one on the east side (out)
 - **Camera:**
   - drag the map (or WASD / arrows) to pan
   - the wheel (or a pinch) zooms
@@ -58,23 +58,33 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## Traffic (owner, 2026-10-31: "have an actual traffic rule")
 
-- **One-way roads:**
-  - The quay lanes run east, the east connector south, the yard road west and the west connector north.
-  - The lanes between the storage areas run south from the quay road to the RTG lane, which runs east.
-  - RTG bays and parking stalls are drive-through, northbound.
-  - The gate road runs east from the west edge, out past the east connector. A link runs south from the yard road's
-    west end to the gate road.
-  - Faint arrows on the roads show the directions.
+- **One-way roads, two lanes each (owner, 2026-11-01: "each road should have 2 lanes so one can be used for passing"):**
+  both lanes run the same way. Trucks keep to the right-hand lane; one held up by a stopped truck moves to the other lane
+  and passes it, then moves back. A lane change needs the tile beside it free too. A dashed line divides the lanes and
+  faint arrows show the direction.
+- **The road layout (owner, 2026-11-01: routes should make sense, no loop back past the lot first):**
+  - The quay road runs west. The west side and the lanes between the storage areas run south from it to the RTG lane,
+    which runs east. RTG bays are drive-through southbound, from the RTG lane to the yard road.
+  - The yard road runs east and out the east gate. The east side runs north from it to the quay road.
+  - Customer trucks come in at the southwest gate and up the west side to the yard road. Parking stalls are
+    drive-through southbound, from the yard road to the lot road, which runs west to the west side. From there it runs
+    north to the RTG lane.
+  - **A tractor's loop:** STS lane → quay road west → down to the RTG lane → its bay → yard road east → up the east side
+    → quay road west → its STS lane.
+  - **A customer's trip:** in at the southwest gate → yard road east → its stall. When sent: lot road west → up the west
+    side → RTG lane east → its bay → yard road east → out the east gate.
 - **No overlapping or clipping:** a truck holds the tiles under it (4 tiles) and moves on only into a free tile.
   Trucks queue up behind each other, and none can pass through another.
 - **Truck shape:** a cab and a trailer bend around corners along the tiles they hold.
-- **The STS lanes:** each berth has its own three parallel lanes. Trucks enter them up a column west of the crane and
-  leave down a column east of it. Only trucks headed for that crane use them; through traffic takes the quay road.
+- **Spots are private:** STS lanes, RTG bays and parking stalls are entered only by the truck headed there; nobody cuts
+  through them. Each berth's three lanes run west: trucks enter up a column east of the crane and leave down a column
+  west of it, facing west under the crane.
 
 ## Containers (owner)
 
 - **Seven colors:** red, orange, yellow, green, blue, purple, white.
 - **3 tiles long (owner).**
+- **Every container is its own (owner, 2026-11-01):** a customer truck comes for one particular container, not a color.
 - **A stack is drawn as three squares** down its 1 × 3 footprint (owner): the top square is the top of the stack and the
   bottom square the bottom, each in that container's color or empty. For example empty / green / red is two containers,
   red at the bottom and green on top. Storage slots draw this way. **A ship's slots are 3 × 1, horizontal (owner)**, with
@@ -90,9 +100,12 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   crane are three parallel lanes with one tractor spot each, so no tractor waits behind another. A tractor takes a free
   lane when its trip there starts (or keeps the one it's already in).
 - **The STS crane unloads automatically, one container at a time (owner):** it picks an empty tractor standing at a lane
-  spot (the nearest lane first). It runs along the quay to the nearest bay with a container, runs its trolley out, lifts the top
-  container, brings it back and lowers it onto that tractor. Then it does the next. It takes the container nearest its
-  tractors, from the deck rows nearest the quay first.
+  spot (the nearest lane first). It runs along the quay to the slot, runs its trolley out, lifts the top container,
+  brings it back and lowers it onto that tractor. Then it does the next.
+- **Which slot (owner, 2026-11-01: "make the player able to tell the quay which column to pick a container from"):** a
+  tractor sent by clicking a ship slot gets the top container of that slot. That needs a slot with a container nobody
+  has claimed, and claims it. Sent by clicking the crane or its lanes, the crane takes the slot nearest the tractor
+  (deck rows nearest the quay first), skipping containers claimed by slot.
 - **Leaving:** once the ship is empty and nothing more is promised, it sails off east. Another follows.
 
 ## Storage areas and RTG cranes (owner)
@@ -100,13 +113,13 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Six storage areas, vertical, each 5 wide and 12 long:** 5 × 4 slots, one container footprint each, stacked up to 3
   high. The first starts part full; the others start empty when bought.
 - **RTG bays (owner):** below each area are 5 vertical drive-through bays, one per column, so up to five trucks park side
-  by side.
+  by side. Trucks drive in from the RTG lane and out onto the yard road (southbound).
 - **The RTG crane** rests at the area's south end. It serves the trucks standing in its bays one at a time, running its
   gantry down over them, and goes back to rest after.
-- **A loaded yard tractor:** the RTG lifts the container off and stacks it on the lowest stack nearest the bays (on top of
-  the same color when it can).
-- **A customer truck:** the RTG finds a container of the truck's color with the fewest on top. It moves those aside onto
-  other stacks one by one, then lifts the container out and loads the truck.
+- **A loaded yard tractor:** the RTG lifts the container off and stacks it on the lowest stack nearest the bays, avoiding
+  stacks holding a container a customer wants.
+- **A customer truck:** the RTG finds the truck's container. It moves whatever is on top of it aside onto other stacks one
+  by one, then lifts the container out and loads the truck.
 
 ## Trucks: you send them (owner)
 
@@ -114,19 +127,24 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **You drive every tractor trip (owner, 2026-10-31: "too automated"):** a loaded tractor waits for you to pick the RTG
   it takes the container to; an unloaded one waits for you to pick the STS crane it goes to. Tractors never park. A
   tractor with nothing queued stays where it finished (in its STS lane or RTG bay, which it keeps until its next trip).
-- **Customer trucks park (owner):** a customer truck drives in on the gate road every 8–14 s, when a stall is free, and
-  parks in the lot until you send it. Its cab is the color of the container it wants, picked from colors in storage
-  that no other waiting customer wants.
+- **Customer trucks park (owner):** a customer truck drives in at the southwest gate every 8–14 s, when a stall is free,
+  and parks in the lot until you send it.
+- **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
+  areas or on top of a slot of the docked ship, never one another customer wants (with none to pick, none comes). Its
+  cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
+  the ship, on a tractor or in a crane.
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
-  - Then click an STS crane or its lanes, a storage area or one of its bays (a bay you click, if free; otherwise the
+  - Then click an STS crane or its lanes, a ship slot (tractors), a storage area or one of its bays (a bay you click, if free; otherwise the
     first free one), or (customers) a parking stall.
   - Clicks queue up, with no limit for now.
 - **Only where it can be served (owner):**
-  - an empty tractor → an STS crane whose half of the docked ship has a container no one has claimed
+  - an empty tractor → an STS crane whose half of the docked ship has a container no one has claimed, or a ship slot
+    with a container no one has claimed
   - a loaded tractor → an RTG with a free bay and room in its area
-  - a customer → an RTG with a free bay and its color, unclaimed (just one trip)
+  - a customer → the RTG of the storage area holding its container, with a free bay (just one trip). A container still
+    on the ship has to be brought in first.
   - a customer → a free stall
   - Whether a truck is empty or loaded counts its queued trips first. Each queued trip claims its bay, stall, container or
     slot at once. Anything else flashes a red ✕.
@@ -134,7 +152,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   the cursor shows green or red.
 - **Taking back:** right click removes the selected truck's last queued trip (not the one under way). With nothing left,
   right click deselects.
-- **Done:** a loaded customer truck shows a smiley and drives out east on the gate road.
+- **Done:** a loaded customer truck shows a smiley and drives out the east gate.
 
 ## Progress: income and unlocks (owner, 2026-11-01)
 
@@ -144,17 +162,22 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 - **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
 - **The money** shows top left, beside **+ Tractor**, which buys another yard tractor into a free STS lane. Tractors cost
-  $400, then $300 more each time.
+  $400, then $50 more each time (owner, 2026-11-01).
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.
   - storage areas 2–6 with their RTG cranes and bays: $600, $900, $1,300, $1,800, $2,400
   - STS crane B with its lanes: $2,000
   - parking stalls, in groups of 4: $200, $300, $400, $500, $600
-- **Locked things can't be used:** no trucks go to them, and customer trucks only park in open stalls and want colors
-  held in open storage.
+- **Locked things can't be used:** no trucks go to them, and customer trucks only park in open stalls and want containers
+  in open storage (or on the ship).
 - **With only crane A, it works the whole ship.** Once B is bought, they split it west and east.
 
 ## Rejected / removed
+
+- **Single-lane roads, northbound RTG bays and stalls, the gate road along the bottom (2026-11-01):** replaced by two-lane
+  roads laid out so customers don't loop up past the quay first. Customers wanting any container of a color, and the
+  RTG stacking onto the same color, replaced by one particular container per customer. Tractors going $300 more each
+  replaced by $50 more each.
 
 - **Two berths with a small ship each, ship slots running across the deck (2026-10-31, later):** replaced by one big ship
   with 3 × 1 horizontal slots, worked by both cranes.

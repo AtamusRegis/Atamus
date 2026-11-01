@@ -4,6 +4,11 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Two-lane roads, a new layout (owner):** every road has two lanes the same way, and a truck held up by a stopped one changes lanes and passes. The roads were reworked so trips go straight where they need to: customers come in at a southwest gate, park, go up the west side to the RTG lane, load and leave out an east gate; RTG bays and stalls are now entered from the north. The map is 54 × 42.
+- **One container per customer (owner):** each customer truck comes for one particular container, picked from storage or the tops of the ship's slots; it flashes while that truck is selected, and the truck can only be sent to the storage area holding it.
+- **Pick the ship slot (owner):** with a tractor selected, click a ship slot and its STS crane takes that slot's top container for it.
+- **Tractors cost $50 more each (owner),** instead of $300.
+
 - **Income and unlocks (owner):** the port starts small: 1 tractor, STS crane A, one storage area and 4 parking stalls. Customer trucks pay $60 when loaded. Buy more tractors from the button by your money, and storage areas, crane B and parking stalls by clicking their dimmed price tags on the map.
 
 ## 2026-10-31
