@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Fix: couldn't buy more tractors once the STS lanes were full.** A new tractor now appears in a free RTG bay when the lanes are taken, and the button greys out only when there's no free lane or bay.
+
 - **RTGs move less (owner):** an RTG no longer goes back to rest after each job; it unloads the tractor beside it after loading a customer, and sets that container down near the next customer's container on the way to pick it up.
 
 - **Customers go to their stack by themselves (owner):** a customer truck whose container is in a storage area drives to that RTG on its own, skipping the stall if it hasn't parked yet. Ones waiting on ship cargo park until it's stored.

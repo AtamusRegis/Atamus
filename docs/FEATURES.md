@@ -178,7 +178,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 - **Starting setup:** 1 yard tractor, STS crane A, storage area 1 (part full), and the first 4 parking stalls. $0.
 - **Income:** each customer truck loaded with its container pays **$60**. A green "+$60" rises over it.
-- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor into a free STS lane. Tractors cost
+- **The money** shows top left, beside **+ Tractor** (and **Loop** while a tractor is selected), which buys another yard tractor. It appears empty in a free STS lane of an open crane or, with those full, in a free
+  RTG bay of an open storage area. With no free lane or bay the button is greyed out. Tractors cost
   $400, then $50 more each time (owner, 2026-11-01).
 - **Buying on the map:** locked things show dimmed with their price (green when you can afford it). Click one to buy it.
   A price you can't pay flashes a red ✕.

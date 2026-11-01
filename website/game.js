@@ -55,11 +55,18 @@ function buyAt(i, j) {
   if (j >= LOT0 && j < LROAD) { const st = STALLS.find((q) => q.i === i); if (st && !st.open) { const g = STALLS.filter((q) => q.group === st.group); return { price: STALL_PRICE[st.group], buy: () => g.forEach((q) => (q.open = true)) }; } }
   return null;
 }
+// a bought tractor appears empty in a free STS lane of an open crane or, with those full, in a free RTG bay of an open
+// storage area (as if it had just unloaded there)
+function tractorSpot() {
+  for (const b of BERTHS) if (b.open) for (const l of b.lanes) { const tiles = laneTiles(b, l.r); if (!l.claim && !tiles.some((k) => occ.has(k))) return { tiles, lane: l }; }
+  for (const b of BLOCKS) if (b.open) for (const bay of b.bays) { const tiles = [3, 2, 1, 0].map((d) => key(bay.i, BAY0 + d)); if (!bay.claim && !tiles.some((k) => occ.has(k))) return { tiles, bay }; }
+  return null;
+}
 function addTractor() {
-  const price = tractorPrice(), b = BERTHS.find((q) => q.open && q.lanes.some((l) => !l.claim)); if (money < price || !b) return false;
-  const l = b.lanes.find((q) => !q.claim), tiles = laneTiles(b, l.r);
-  if (tiles.some((k) => occ.has(k))) return false;
-  money -= price; const t = mkTruck("yard", tiles); t.num = trucks.filter((q) => q.kind === "yard").length; t.lane = l; l.claim = t; return true;
+  const price = tractorPrice(), sp = tractorSpot(); if (money < price || !sp) return false;
+  money -= price; const t = mkTruck("yard", sp.tiles); t.num = trucks.filter((q) => q.kind === "yard").length;
+  if (sp.lane) { t.lane = sp.lane; sp.lane.claim = t; } else { t.bay = sp.bay; sp.bay.claim = t; }
+  return true;
 }
 const floats = [];   // "+$60" over a paid truck
 
@@ -555,8 +562,8 @@ function drawLocked() {
 // the money, and buying a tractor
 let hudTxt = "";
 function hud() {
-  const lp = selected && selected.kind === "yard" ? (selected.loop ? 2 : 1) : 0, p = tractorPrice(), txt = "$" + money.toLocaleString() + "|" + p + "|" + (money >= p) + "|" + lp; if (txt === hudTxt) return; hudTxt = txt;
-  $("loop").hidden = !lp; $("loop").classList.toggle("on", lp === 2); $("loop").setAttribute("aria-checked", lp === 2 ? "true" : "false"); $("money").textContent = "$" + money.toLocaleString(); const b = $("buy-tractor"); b.textContent = "+ Tractor $" + p.toLocaleString(); b.disabled = money < p; }
+  const lp = selected && selected.kind === "yard" ? (selected.loop ? 2 : 1) : 0, p = tractorPrice(), txt = "$" + money.toLocaleString() + "|" + p + "|" + (money >= p) + "|" + lp + "|" + !!tractorSpot(); if (txt === hudTxt) return; hudTxt = txt;
+  $("loop").hidden = !lp; $("loop").classList.toggle("on", lp === 2); $("loop").setAttribute("aria-checked", lp === 2 ? "true" : "false"); $("money").textContent = "$" + money.toLocaleString(); const b = $("buy-tractor"); b.textContent = "+ Tractor $" + p.toLocaleString(); b.disabled = money < p || !tractorSpot(); }
 $("buy-tractor").onclick = () => addTractor();
 $("loop").onclick = () => { if (selected && selected.kind === "yard") selected.loop = !selected.loop; };
 function spotRect(a) { if (a.slot !== undefined) return slotRect(a.slot); if (a.lane) return [(a.berth.x + 5) * T, a.lane.r * T, TL * T, T]; if (a.kind === "sts" || a.kind === "wait") return [(a.berth.x + 5) * T, LINE * T, TL * T, 3 * T]; if (a.kind === "rtg") return a.bay ? [a.bay.i * T, BAY0 * T, T, TL * T] : [a.block.x * T, BAY0 * T, a.block.w * T, TL * T]; return [a.stall.i * T, LOT0 * T, T, TL * T]; }
