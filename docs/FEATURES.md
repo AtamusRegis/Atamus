@@ -67,6 +67,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   - The quay road runs west. The west side and the lanes between the storage areas run south from it to the RTG lane,
     which runs east. RTG bays are drive-through southbound, from the RTG lane to the yard road.
   - The yard road runs east and out the east gate. The east side runs north from it to the quay road.
+  - **Don't block the crossing (stress test, 2026-11-01):** where a north street crosses the RTG lane, a truck only
+    drives in with room beyond to clear it, so a waiting line can't sit across the crossing.
   - **Two streets north (owner, 2026-11-01):** in the gaps after storage areas 2 and 4, a street runs north from the yard
     road to the quay road, so tractors can head up to the cranes without going round the east side. One lane each (the
     gap only has room for one beside the lanes going down); they cross the RTG lane, where a truck can turn east.
@@ -160,7 +162,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   by side. Trucks drive in from the RTG lane and out onto the yard road (southbound).
 - **The bays are one queue of 5 (owner, 2026-11-01):** you send a truck to an RTG, never to a particular bay. It takes
   whichever bay is free, or waits in line on the RTG lane at the area's west end until one clears, first come first
-  served. Trucks behind it in line don't pass it. A tractor that finished there drives off to the tractor parking.
+  served. A bay is only handed to a truck that has reached the line (or nearly), never one still stuck in traffic. Trucks behind it in line don't pass it. A tractor that finished there drives off to the tractor parking.
 - **Fair turns (bug 2026-11-01):** an RTG picks the nearest waiting truck, but the longer a truck has waited in its bay the
   more it counts, so a truck in a far bay is never passed over for good.
 - **The RTG crane** starts at the area's south end. It serves the trucks standing in its bays one at a time, running its
@@ -188,7 +190,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
     and goes back for the next. It works through anything you queue first,
     and parks when there's nothing to do or no RTG assigned.
 - **The tractor parking (owner, 2026-11-01):** one column of 13 horizontal spots west of the storage areas, left of the
-  dock. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
+  dock, and (2026-11-01, stress test) a second block of 9 below the RTG lane, entered from the RTG lane down its east
+  aisle and left up its west aisle back onto it. **You can own as many tractors as there are spots (22)**, so an idle
+  tractor always has somewhere to park. Tractors drive in from the east (the quay road carries on west past the cranes to its east road) and out to the
   west, then down to the RTG lane. **New tractors appear there, and a tractor with nothing to do drives there and
   parks** (loaded or empty), taking the free spot nearest the top. Sent somewhere on the way, it gives the spot up.
 - **Loaded tractors deliver by themselves (owner, 2026-11-01):** any tractor that's loaded with nothing queued takes its

@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-01
 
+- **Stress test fixes:** a waiting line could sit across a north street's crossing and lock the yard up (trucks now only enter a crossing with room to clear it); RTG bays were held for trucks still stuck in traffic, which could deadlock the export area (now only handed to trucks at the line); idle tractors with nowhere to park blocked bays (a second tractor parking block of 9, and as many tractors as spots, 22). Routing is about 10× faster and held-up trucks re-plan at staggered times.
+
 - **Customer traffic follows the stacks (owner):** with little unclaimed in storage, few customers come; as it fills, many more come and pick faster.
 
 - **Grey trucks, stacks that build up (owner):** most customer trucks now arrive grey with no container picked and park; now and then one picks a container already in storage and takes its color. The rest want ship cargo. The more unclaimed containers are stored, the more customers come, the more of them grey, and the faster grey ones pick, so storage builds up without clogging.

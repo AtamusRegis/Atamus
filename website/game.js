@@ -59,7 +59,9 @@ const BLOCKS = [4, 12, 20, 28, 36, 44, 52].map((x) => x + OX).map((x, k) => {
 const LANES = [10, 18, 26, 34, 42].map((x) => x + OX), WEST = 2 + OX, EAST = 51 + OX + EXX;
 // (owner, 2026-11-01) the tractor parking: one column of horizontal spots west of the port, drive-through westbound
 // between two roads; new tractors appear here and idle ones park here
-const PARK_X = 3, PARK = [...Array(13).keys()].map((k) => ({ j: 14 + k, claim: null }));
+// (2026-11-01) a second block of 9 below the RTG lane (in from the RTG lane down its east aisle, out up its west aisle
+// back onto it), so every tractor has a spot: you can own as many tractors as there are spots
+const PARK_X = 3, PARK = [...Array(13).keys()].map((k) => ({ j: 14 + k, claim: null })).concat([...Array(9).keys()].map((k) => ({ j: 30 + k, claim: null, low: true })));
 const parkTiles = (p) => [0, 1, 2, 3].map((d) => key(PARK_X + d, p.j));
 // (owner, 2026-11-01) 48 stalls in groups of 4
 const STALLS = [...Array(12).keys()].map((k) => ({ i: 4 + OX + k, claim: null })).concat([...Array(12).keys()].map((k) => ({ i: 20 + OX + k, claim: null })), [...Array(24).keys()].map((k) => ({ i: 36 + OX + k, claim: null })));
@@ -82,6 +84,7 @@ function buyAt(i, j) {
 // a bought tractor appears empty in a free STS lane of an open crane or, with those full, in a free RTG bay of an open
 // storage area (as if it had just unloaded there)
 function tractorSpot(auto) {
+  if (trucks.filter((t) => t.kind === "yard").length >= PARK.length) return null;   // one parking spot per tractor
   for (const p of PARK) { const tiles = parkTiles(p); if (!p.claim && !tiles.some((k) => occ.has(k))) return { tiles, park: p }; }
   for (const b of BERTHS) if (b.open) for (const l of b.lanes) { const tiles = laneTiles(b, l.r); if (l.kind === (auto ? "auto" : "manual") && !l.q.length && !tiles.some((k) => occ.has(k))) return { tiles, lane: l }; }
   for (const b of BLOCKS) if (b.open) for (const bay of b.bays) { const tiles = [3, 2, 1, 0].map((d) => key(bay.i, BAY0 + d)); if (!bay.claim && !tiles.some((k) => occ.has(k))) return { tiles, bay }; }
@@ -121,6 +124,10 @@ road(EAST + 1, QROAD, -1, 0, EAST + 1 - (PARK_X + 4), 0, 1, 1);             // q
 road(PARK_X + 4, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);               // the parking's east road, down to the RTG lane
 road(PARK_X - 2, PARK[0].j, 0, 1, RLANE - PARK[0].j, 1, 0, 1);               // the parking's west road, down to the RTG lane
 for (const p of PARK) { for (let x = PARK_X + 4; x > PARK_X - 1; x--) add(x, p.j, x - 1, p.j); for (const k of parkTiles(p)) SPOT.set(k, "P" + p.j); }
+{ const low = PARK.filter((p) => p.low), j0 = low[0].j, j1 = low[low.length - 1].j;
+  for (let j = RLANE + 1; j < j1; j++) add(PARK_X + 4, j, PARK_X + 4, j + 1);   // east aisle, down from the RTG lane
+  for (let j = j1; j > RLANE + 1; j--) add(PARK_X - 1, j, PARK_X - 1, j - 1);   // west aisle, up to the RTG lane
+  void j0; }
 for (const c of [PARK_X + 4, PARK_X + 5, PARK_X - 2, PARK_X - 1]) add(c, RLANE, c, RLANE + 1);
 add(PARK_X + 4, QROAD, PARK_X + 4, QROAD + 1); add(PARK_X + 5, QROAD, PARK_X + 5, QROAD + 1);
 road(WEST, QROAD + 1, 0, 1, RLANE - QROAD - 1, 1, 0, 1);                    // west side, down to the RTG lane
@@ -150,25 +157,42 @@ for (const b of BLOCKS) for (const bay of b.bays) { for (let j = RLANE + 1; j < 
 for (const s of STALLS) for (let j = YROAD + 1; j < LROAD; j++) { add(s.i, j, s.i, j + 1); if (j > YROAD + 1) SPOT.set(key(s.i, j), "S" + s.i); }
 for (const s of STALLS) SPOT.set(key(s.i, LROAD - 1), "S" + s.i);
 const ROADSET = new Set(); for (const [k, l] of E) { ROADSET.add(k); for (const n of l) ROADSET.add(n); }
+// (bug 2026-11-01) where the north streets cross the RTG lane: a truck only drives in with room beyond to clear it
+const BOX = new Set(); for (const c of UP_STREETS) for (const j of [RLANE, RLANE + 1]) BOX.add(key(c, j));
 // cheapest way there: a lane change costs a bit more than a step, the passing lane a little more than the travel lane;
 // avoid(k) rules tiles out (passing)
+const PERF = { routes: 0 };
+// (perf 2026-11-01) the road graph as numbered nodes, built once, so routing doesn't hash strings
+let G = null;
+function graph() {
+  if (G) return G;
+  const nodes = [...ROADSET], id = new Map(nodes.map((k, i) => [k, i]));
+  const adj = nodes.map((k) => (E.get(k) || []).map((n) => id.get(n)));
+  const cost = nodes.map((k, i) => adj[i].map((j) => (CHG.has(k + ">" + nodes[j]) ? 1.3 : 1) + (SLOW.has(nodes[j]) ? 0.3 : 0)));
+  const spot = nodes.map((k) => SPOT.get(k) || null);
+  G = { nodes, id, adj, cost, spot, dist: new Float64Array(nodes.length), prev: new Int32Array(nodes.length), seen: new Uint32Array(nodes.length), gen: 0 };
+  return G;
+}
 function route(fromK, toK, avoid) {
-  const ts = SPOT.get(toK), dist = new Map([[fromK, 0]]), prev = new Map([[fromK, null]]), h = [[0, fromK]];
-  const push = (e) => { h.push(e); let i = h.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (h[p][0] <= h[i][0]) break; [h[p], h[i]] = [h[i], h[p]]; i = p; } };
-  const pop = () => { const top = h[0], last = h.pop(); if (h.length) { h[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < h.length && h[l][0] < h[m][0]) m = l; if (r < h.length && h[r][0] < h[m][0]) m = r; if (m === i) break; [h[m], h[i]] = [h[i], h[m]]; i = m; } } return top; };
+  PERF.routes++;
+  const g = graph(), from = g.id.get(fromK), to = g.id.get(toK); if (from === undefined || to === undefined) return null;
+  const gen = ++g.gen, ts = g.spot[to], dist = g.dist, prev = g.prev, seen = g.seen, h = [];
+  const push = (d, i) => { h.push(d, i); let c = h.length / 2 - 1; while (c > 0) { const p = (c - 1) >> 1; if (h[2 * p] <= h[2 * c]) break; [h[2 * p], h[2 * c]] = [h[2 * c], h[2 * p]]; [h[2 * p + 1], h[2 * c + 1]] = [h[2 * c + 1], h[2 * p + 1]]; c = p; } };
+  const pop = () => { const d = h[0], i = h[1], ld = h[h.length - 2], li = h[h.length - 1]; h.length -= 2; if (h.length) { h[0] = ld; h[1] = li; let c = 0; const n = h.length / 2; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c; if (l < n && h[2 * l] < h[2 * m]) m = l; if (r < n && h[2 * r] < h[2 * m]) m = r; if (m === c) break; [h[2 * m], h[2 * c]] = [h[2 * c], h[2 * m]]; [h[2 * m + 1], h[2 * c + 1]] = [h[2 * c + 1], h[2 * m + 1]]; c = m; } } return [d, i]; };
+  seen[from] = gen; dist[from] = 0; prev[from] = -1; push(0, from);
   while (h.length) {
-    const [d, k] = pop(); if (d > dist.get(k)) continue; if (k === toK) break;
-    const cs = SPOT.get(k);
-    for (const n of E.get(k) || []) {
-      const ns = SPOT.get(n); if (ns && ns !== cs && ns !== ts) continue;
-      if (avoid && n !== toK && avoid(n)) continue;
-      const nd = d + (CHG.has(k + ">" + n) ? 1.3 : 1) + (SLOW.has(n) ? 0.3 : 0);
-      if (!dist.has(n) || nd < dist.get(n)) { dist.set(n, nd); prev.set(n, k); push([nd, n]); }
+    const [d, k] = pop(); if (d > dist[k]) continue; if (k === to) break;
+    const cs = g.spot[k], adj = g.adj[k], cost = g.cost[k];
+    for (let e = 0; e < adj.length; e++) {
+      const n = adj[e], ns = g.spot[n]; if (ns && ns !== cs && ns !== ts) continue;
+      if (avoid && n !== to && avoid(g.nodes[n])) continue;
+      const nd = d + cost[e];
+      if (seen[n] !== gen || nd < dist[n]) { seen[n] = gen; dist[n] = nd; prev[n] = k; push(nd, n); }
     }
   }
-  if (!prev.has(toK)) return null;
-  const out = []; let k = toK; while (k !== fromK) { out.unshift(k); k = prev.get(k); }
-  out.cost = dist.get(toK); return out;
+  if (seen[to] !== gen) return null;
+  const out = []; for (let k = to; k !== from; k = prev[k]) out.push(g.nodes[k]); out.reverse();
+  out.cost = dist[to]; return out;
 }
 
 // ---- stacks ----
@@ -343,7 +367,9 @@ function fillBays() {
     if (!b.open) continue;
     for (const bay of b.bays) {
       if (bay.claim) continue;
-      let t = null; for (const q of trucks) if (inLine(q, b) && !q.locked && (!t || q.path.length < t.path.length)) t = q;
+      // (bug 2026-11-01) only to a truck that has reached the line (or nearly): a bay held for one still stuck in traffic
+      // behind the line could lock it all up
+      let t = null; for (const q of trucks) if (inLine(q, b) && !q.locked && q.path.length <= 6 && (!t || q.path.length < t.path.length)) t = q;
       if (!t) break;
       bay.claim = t; t.cmd.bay = bay; goTo(t, key(bay.i, BAY0 + 3));
     }
@@ -440,8 +466,9 @@ function truckStep(t, dt) {
   // traffic: move into the next tile only when no other truck holds it
   if (!t.next && t.path.length) {
     const n = t.path[0], o = occ.get(n), bs = CHG.get(head(t) + ">" + n), ob = bs && occ.get(bs);
-    if ((!o || o === t) && (!ob || ob === t)) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
-    else if ((t.blocked = (t.blocked || 0) + dt) > 0.5) {
+    const clear = !BOX.has(n) || BOX.has(head(t)) || (t.path.length >= 1 + TL && t.path.slice(1, 1 + TL).every((k) => { const q = occ.get(k); return !q || q === t; }));
+    if ((!o || o === t) && (!ob || ob === t) && clear) { occ.set(n, t); t.next = n; t.p = 0; t.blocked = 0; }
+    else if ((t.blocked = (t.blocked || 0) + dt) > (t.patience || (t.patience = 0.5 + rnd()))) {   // staggered, so held-up trucks don't all re-plan at once
       t.blocked = 0;
       if (o && o !== t) { if (!o.next) pass(t); }
       else { const r = route(head(t), t.path[t.path.length - 1], (k) => k === n); if (r && r.length) t.path = r; }   // (bug) two side by side each changing into the other's lane: carry straight on instead
@@ -972,5 +999,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, slotSwap, doSwap, route, select: (t) => (selected = t) };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, slotSwap, doSwap, route, select: (t) => (selected = t) };
 })();
