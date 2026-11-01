@@ -95,7 +95,7 @@ function addTractor(auto) {
   if (sp.park) { t.park = sp.park; sp.park.claim = t; } else if (sp.lane) { t.lane = sp.lane; sp.lane.q.push(t); } else { t.bay = sp.bay; sp.bay.claim = t; }
   return true;
 }
-const AUTO_CAB = "#5fd3d0", EXP_CAB = "#8a94a6";   // auto tractors' and export trucks' cabs
+const AUTO_CAB = "#5fd3d0", EXP_CAB = "#8a94a6", WAIT_CAB = "#5a6068";   // auto tractors' and export trucks' cabs
 const floats = [];   // "+$60" over a paid truck
 
 // ---- roads: one-way, a tile at a time (owner: an actual traffic rule), two lanes each (owner: one for passing) ----
@@ -252,22 +252,31 @@ function mkTruck(kind, tiles, want) { const t = { id: ++truckSeq, kind, tiles, n
 const head = (t) => t.tiles[0];
 const headIJ = (t) => unkey(t.tiles[0]);
 function goTo(t, k) { const from = t.next || head(t); t.path = (t.next ? [t.next] : []).concat(route(from, k) || []); }
-// (owner) a customer comes for one container: one stored in an open storage area, or one anywhere in a slot of the docked
-// ship, and not wanted by another customer
-// (owner) a quarter want one already in storage, three quarters one on the ship (picked evenly, the ship's many tops would crowd
-// out the stored ones)
-function wantable() {
-  const stored = [], ship = [];
-  for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) stored.push(x);
-  const s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) ship.push(x);   // (owner) anywhere in a stack
-  return stored.length && (!ship.length || rnd() < 0.25) ? stored : ship;
-}
+// (owner, 2026-11-01) most customer trucks come without a container picked (a grey cab) and park; now and then (every
+// 30–70 s with storage empty, much faster the more unclaimed containers are stored, a little faster with more stalls) one of them, the longest waiting, picks a container already in
+// storage that nobody wants yet, takes its color and goes for it. The rest (CLAIM_SHIP) come
+// for a container on the docked ship, anywhere in a slot's stack. So most ship cargo is stored unclaimed and the stacks
+// fill up.
+const CLAIM_SHIP = 0.3;
+// (owner) the fuller storage is with containers nobody has claimed, the more customers come, the more of them come grey,
+// and the sooner grey ones pick: 0 with none unclaimed, 1 with every open storage area full of them
+const unclaimedFill = () => { const n = BLOCKS.filter((b) => b.open && !b.exp).length * 60; return n ? storedFree().length / n : 0; };
+const storedFree = () => { const out = []; for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) out.push(x); return out; };
+const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) out.push(x); return out; };
 function spawnCustomer() {
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;
   const tiles = [1, 2, 3, 4].map((d) => key(WEST + 1, MH + d)); if (tiles.some((k) => occ.has(k))) return;
-  const pool = wantable(); if (!pool.length) return;
-  const want = pick(pool), t = mkTruck("cust", tiles, want); want.wantedBy = t;
+  const ship = rnd() < CLAIM_SHIP * (1 - unclaimedFill()) ? shipFree() : [], want = ship.length ? pick(ship) : null, t = mkTruck("cust", tiles, want);
+  if (want) want.wantedBy = t; else t.since = clock;
   stall.claim = t; t.cmd = { kind: "park", stall }; goTo(t, key(stall.i, LOT0 + 3));
+}
+let claimWait = 20;
+function claimStep(dt) {
+  if ((claimWait -= dt) > 0) return;
+  const t = trucks.filter((q) => q.kind === "cust" && !q.want && !q.exiting).sort((a, b) => a.since - b.since)[0], pool = storedFree();
+  if (!t || !pool.length) { claimWait = 4; return; }
+  t.want = pick(pool); t.want.wantedBy = t;
+  claimWait = (30 + rnd() * 40) / (1 + (STALLS.filter((q) => q.open).length - 4) / 32) / (1 + 10 * unclaimedFill());
 }
 
 // what a truck will carry once its queue is done: null, "imp" or "exp"
@@ -838,7 +847,7 @@ function drawTruck(t) {
   rectBetween([s.trFront[0] + 3, s.trFront[1] + 4], [s.trBack[0] + 3, s.trBack[1] + 4], 22, "rgba(0,0,0,.3)");
   rectBetween(s.trFront, s.trBack, 18, "#4a4e56");
   rectBetween(s.front, s.cabBack, 24, "#1e2024");
-  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? COLORS[t.want.c].c : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
+  rectBetween(s.front, s.cabBack, 20, t.kind === "cust" ? (t.want ? COLORS[t.want.c].c : WAIT_CAB) : t.kind === "exp" ? EXP_CAB : t.auto ? AUTO_CAB : "#e8b432");
   const an = Math.atan2(s.front[1] - s.cabBack[1], s.front[0] - s.cabBack[0]); ctx.save(); ctx.translate(s.front[0], s.front[1]); ctx.rotate(an); ctx.fillStyle = "#9ad0f0"; ctx.fillRect(-9, -7, 4, 14); ctx.restore();
   if (t.load !== null) { const tr = trailerOf(t); drawBox(t.load, tr.x, tr.y, tr.a, false); }
   if (t.num) { const m = [(s.front[0] + s.cabBack[0]) / 2, (s.front[1] + s.cabBack[1]) / 2]; ctx.fillStyle = "#1e2024"; ctx.fillRect(m[0] - 6, m[1] - 6, 12, 12); ctx.fillStyle = "#ece7dc"; ctx.font = "800 10px 'JetBrains Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(t.num), m[0], m[1] + 0.5); }
@@ -948,8 +957,9 @@ function step(dt) {
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   // (owner) customers come faster the more parking stalls are open
-  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = (8 + rnd() * 6) / (1 + (STALLS.filter((q) => q.open).length - 4) / 16); }
+  custWait -= dt; if (custWait <= 0) { spawnCustomer(); custWait = (8 + rnd() * 6) / (1 + (STALLS.filter((q) => q.open).length - 4) / 16) / (1 + 3 * unclaimedFill()); }
   expWait -= dt; if (expWait <= 0) { spawnExport(); expWait = 10 + rnd() * 6; }
+  claimStep(dt);
   for (const t of [...trucks]) { truckStep(t, dt); if (t.happy > 0) t.happy -= dt; if (t.sad > 0) t.sad -= dt; }
   if (selected && (!trucks.includes(selected) || selected.exiting)) selected = null;
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
@@ -960,5 +970,5 @@ addEventListener("resize", resize); resize();
 buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
-window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, slotSwap, doSwap, route, wantable, select: (t) => (selected = t) };
+window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, slotSwap, doSwap, route, select: (t) => (selected = t) };
 })();

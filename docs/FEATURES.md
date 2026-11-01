@@ -215,16 +215,20 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   a customer truck whose container is in a storage area goes to that RTG on its own. If it hasn't parked yet it skips
   the stall (giving it up) and drives straight up the west side; if it's parked it leaves when the container gets
   there. Only a truck with something else queued waits for that first.
-- **Each customer wants one container (owner, 2026-11-01):** picked when it arrives from the containers in open storage
-  areas or anywhere in a slot's stack on the docked ship (owner: even at the bottom, so you may have to import the whole
-  stack to reach it), never one another customer wants (with none to pick, none comes). A
-  quarter want one already in storage, three quarters one on the ship (owner). Its
-  cab is that container's color. **While the truck is selected its container flashes** wherever it is: in storage, on
-  the ship, on a tractor or in a crane, **and a white dotted line runs from the truck to it** (owner). **With no customer
-  truck selected, a container on the ship that a customer is waiting for flashes until enough tractors are queued for its slot to dig down
-  to it** (a crane already on its way to the slot counts as one), and only while it can still be claimed: not once its
-  crane's containers are all spoken for, nor with its slot fully claimed
-  (owner).
+- **Grey trucks and claimed ones (owner, 2026-11-01):** most customer trucks come without a container picked: a grey
+  cab, parked in the lot. Now and then the longest-waiting grey truck picks a container already in storage that nobody
+  wants yet, takes its color and goes for it. The rest (30%) come for a particular container on the docked ship,
+  anywhere in a slot's stack (owner: even at the bottom, so you may have to import the whole stack to reach it), never
+  one another customer wants. So most ship cargo is stored unclaimed and the stacks build up.
+- **Balancing (owner):** the fuller storage is with unclaimed containers (out of the room in the open storage areas),
+  the more customers come, the more of them come grey (fewer want ship cargo), and the sooner grey ones pick: about
+  every 30–70 s with storage empty, several times as often as it fills, a little faster with more stalls open.
+- **Its container (owner):** a truck's cab is its container's color. **While the truck is selected its container
+  flashes** wherever it is: in storage, on the ship, on a tractor or in a crane, **and a white dotted line runs from the
+  truck to it**. **With no customer truck selected, a container on the ship that a customer is waiting for flashes until
+  enough tractors are queued for its slot to dig down to it** (a crane already on its way to the slot counts as one), and
+  only while it can still be claimed: not once its crane's containers are all spoken for, nor with its slot fully
+  claimed.
 - **Sharing:** tractors and customers share the RTG bays.
 - **Sending a truck:**
   - Select one by clicking it (or 1–3 for tractors).
