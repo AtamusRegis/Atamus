@@ -1,5 +1,5 @@
-// Atamus 3D view (owner, 2026-11-03): the same game as game.js, drawn in 3D with a camera you tilt (45° to straight
-// down), turn and zoom. One map tile is 1 m (1 unit), so a container is 3 x 1 x 1. Basic shapes for now: the owner will
+// Atamus 3D view (owner, 2026-11-03): the same game as game.js, drawn in 3D with a perspective camera you tilt (45° to
+// straight down), turn and zoom. One map tile is 1 m (1 unit), so a container is 3 x 1 x 1. Basic shapes for now: the owner will
 // make the models. game.js keeps every rule, click and queue; this file draws, moves the camera and says what's under
 // the pointer (the nearest truck or ship container wins, measured on the screen).
 import * as THREE from "./vendor/three.module.min.js";
@@ -14,7 +14,7 @@ const glc = document.getElementById("gl"), ov = document.getElementById("view"),
 const renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true });
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.background = new THREE.Color("#0b1218");
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 2000); camera.rotation.order = "YXZ";
+const FOV = 40, camera = new THREE.PerspectiveCamera(FOV, 1, 0.5, 600); camera.rotation.order = "YXZ";
 scene.add(new THREE.HemisphereLight(0xdde6f0, 0x40382c, 1.4));
 const sun = new THREE.DirectionalLight(0xfff4e0, 2.4);
 sun.position.set(MW / 2 - 30, 70, MH / 2 + 35); sun.target.position.set(MW / 2, 0, MH / 2); scene.add(sun, sun.target);
@@ -197,10 +197,13 @@ function syncRTG() {
 const PITCH_MIN = Math.PI / 4, PITCH_MAX = Math.PI / 2;
 const cam = { x: MW / 2, z: (QUAY + MH) / 2, yaw: 0, pitch: Math.PI / 3, vh: 40 };
 let VW = 1, VH = 1, DPR = 1;
+// (owner, 2026-11-03) a perspective camera: zoom is how far it stands back, given as how many meters of ground show from
+// the top of the screen to the bottom at the point it looks at (vh)
+const TANH = Math.tan(FOV * Math.PI / 360), camDist = () => cam.vh / (2 * TANH);
 function applyCam() {
   cam.pitch = clamp(cam.pitch, PITCH_MIN, PITCH_MAX); cam.vh = clamp(cam.vh, 5, 80); cam.x = clamp(cam.x, 0, MW); cam.z = clamp(cam.z, 0, MH);
-  const hh = cam.vh / 2, hw = hh * VW / VH; Object.assign(camera, { left: -hw, right: hw, top: hh, bottom: -hh }); camera.updateProjectionMatrix();
-  const D = 400, cp = Math.cos(cam.pitch);
+  camera.aspect = VW / VH; camera.updateProjectionMatrix();
+  const D = camDist(), cp = Math.cos(cam.pitch);
   camera.position.set(cam.x + Math.sin(cam.yaw) * cp * D, Math.sin(cam.pitch) * D, cam.z + Math.cos(cam.yaw) * cp * D);
   camera.rotation.set(-cam.pitch, cam.yaw, 0); camera.updateMatrixWorld();
 }
@@ -208,8 +211,24 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), PLANE = new THREE.
 function setRay(sx, sy) { ndc.set(sx / VW * 2 - 1, -(sy / VH) * 2 + 1); ray.setFromCamera(ndc, camera); }
 function groundAt(sx, sy, y = 0) { setRay(sx, sy); PLANE.constant = -y; return ray.ray.intersectPlane(PLANE, hitP) ? { x: hitP.x, z: hitP.z } : { x: cam.x, z: cam.z }; }
 const pv = new THREE.Vector3();
-function scr(x, y, z) { pv.set(x, y, z).project(camera); return [(pv.x + 1) / 2 * VW, (1 - pv.y) / 2 * VH]; }
-const ppm = () => VH / cam.vh;   // screen pixels per meter
+// world to screen; null for a point behind the camera (so nothing is drawn or picked from there). Shapes on the overlay
+// are cut where they pass behind the camera before they're projected, or they'd turn inside out across the screen.
+const vv = new THREE.Vector3(), ZC = -1;
+const view = (x, y, z) => vv.set(x, y, z).applyMatrix4(camera.matrixWorldInverse).clone();
+const toScr = (v) => { pv.copy(v).applyMatrix4(camera.projectionMatrix); return [(pv.x + 1) / 2 * VW, (1 - pv.y) / 2 * VH]; };
+function scr(x, y, z) { const v = view(x, y, z); return v.z > ZC ? null : toScr(v); }
+function clipView(vs, closed) {
+  const out = [], n = vs.length;
+  for (let i = 0; i < (closed ? n : n - 1); i++) {
+    const a = vs[i], b = vs[(i + 1) % n], ain = a.z <= ZC, bin = b.z <= ZC;
+    if (ain) out.push(a); if (ain !== bin) out.push(a.clone().lerp(b, (ZC - a.z) / (b.z - a.z)));
+    if (!closed && i === n - 2 && bin) out.push(b);
+  }
+  return out;
+}
+const ppm = () => VH / cam.vh;   // screen pixels per meter where the camera looks
+const fwd = new THREE.Vector3();
+function ppmAt(x, y, z) { camera.getWorldDirection(fwd); const d = (x - camera.position.x) * fwd.x + (y - camera.position.y) * fwd.y + (z - camera.position.z) * fwd.z; return VH / (2 * Math.max(0.5, d) * TANH); }   // nearer is bigger
 // keep the ground point that was under (sx, sy) there after the camera changed
 function anchor(before, sx, sy) { applyCam(); const after = groundAt(sx, sy); cam.x += before.x - after.x; cam.z += before.z - after.z; applyCam(); }
 
@@ -225,14 +244,15 @@ R3.pick = (sx, sy) => {
     const t = h.object.userData.truck; if (t) { if (!t.exiting) return { truck: t }; continue; }
     if (h.object === boxes) { const inf = INST[h.instanceId]; if (!inf) continue; if (inf.truck) { if (!inf.truck.exiting) return { truck: inf.truck }; continue; } if (inf.slot !== undefined && DOCK.ship && DOCK.ship.state === "docked") return { slot: inf.slot }; break; }
   }
-  let best = null, bd = Infinity; const R = touchy ? 30 : 16, k = ppm();
+  let best = null, bd = Infinity; const R = touchy ? 30 : 16;
   const near = (d, o) => { if (d <= R && d < bd) { bd = d; best = o; } };
   for (const t of G.trucks) {
-    if (t.exiting) continue; const s = G.shapeOf(t), P = (p, y) => scr(m(p[0]), y, m(p[1]));
-    near(Math.min(segDist(sx, sy, P(s.front, 0.7), P(s.cabBack, 0.7)), segDist(sx, sy, P(s.trFront, 0.7), P(s.trBack, 0.7))) - 0.4 * k, { truck: t });
+    if (t.exiting) continue; const s = G.shapeOf(t), P = (p, y) => scr(m(p[0]), y, m(p[1])), f = P(s.front, 0.7), cb = P(s.cabBack, 0.7), tf = P(s.trFront, 0.7), tb = P(s.trBack, 0.7);
+    if (!f || !cb || !tf || !tb) continue;
+    near(Math.min(segDist(sx, sy, f, cb), segDist(sx, sy, tf, tb)) - 0.4 * ppmAt(m(s.cabBack[0]), 0.7, m(s.cabBack[1])), { truck: t });
   }
   const sh = DOCK.ship;
-  if (sh && sh.state === "docked") sh.bays.forEach((st, n) => { if (!G.onDeck(sh, n)) return; const [rx, ry] = G.slotRect(n), y = DECK + st.length, z = m(ry) + 0.5; near(segDist(sx, sy, scr(m(rx) + 0.5, y, z), scr(m(rx) + CL - 0.5, y, z)) - 0.45 * k, { slot: n }); });
+  if (sh && sh.state === "docked") sh.bays.forEach((st, n) => { if (!G.onDeck(sh, n)) return; const [rx, ry] = G.slotRect(n), y = DECK + st.length, z = m(ry) + 0.5, a = scr(m(rx) + 0.5, y, z), b = scr(m(rx) + CL - 0.5, y, z); if (!a || !b) return; near(segDist(sx, sy, a, b) - 0.45 * ppmAt(m(rx) + CL / 2, y, z), { slot: n }); });
   return best;
 };
 // the tile under the pointer: on top of a storage stack if the ray meets one, else on the ground
@@ -308,10 +328,11 @@ function keyCam(dt) {
 
 // ---- the overlay: labels, prices, the selected truck's queue, what a click would do, drawn flat on the screen ----
 const FONT = "'Big Shoulders Display', Impact, sans-serif";
-function poly(pts2, stroke, width, fill, dash) { octx.beginPath(); pts2.forEach(([x, y], i) => (i ? octx.lineTo(x, y) : octx.moveTo(x, y))); octx.closePath(); if (fill) { octx.fillStyle = fill; octx.fill(); } if (stroke) { octx.setLineDash(dash || []); octx.strokeStyle = stroke; octx.lineWidth = width; octx.stroke(); octx.setLineDash([]); } }
-const rectPts = ([x, y, w, h], yy = 0.04) => [scr(m(x), yy, m(y)), scr(m(x + w), yy, m(y)), scr(m(x + w), yy, m(y + h)), scr(m(x), yy, m(y + h))];
+function poly(world, stroke, width, fill, dash) { const pts2 = clipView(world.map((p) => view(...p)), true).map(toScr); if (pts2.length < 3) return; octx.beginPath(); pts2.forEach(([x, y], i) => (i ? octx.lineTo(x, y) : octx.moveTo(x, y))); octx.closePath(); if (fill) { octx.fillStyle = fill; octx.fill(); } if (stroke) { octx.setLineDash(dash || []); octx.strokeStyle = stroke; octx.lineWidth = width; octx.stroke(); octx.setLineDash([]); } }
+const rectPts = ([x, y, w, h], yy = 0.04) => [[m(x), yy, m(y)], [m(x + w), yy, m(y)], [m(x + w), yy, m(y + h)], [m(x), yy, m(y + h)]];
+function seg(a, b, color, width, dash, cap) { const p = clipView([view(...a), view(...b)], false).map(toScr); if (p.length < 2) return; octx.setLineDash(dash || []); octx.lineCap = cap || "butt"; octx.strokeStyle = color; octx.lineWidth = width; octx.beginPath(); octx.moveTo(...p[0]); octx.lineTo(...p[1]); octx.stroke(); octx.setLineDash([]); octx.lineCap = "butt"; }
 function tag(x, y, txt, edge, ink) { octx.font = `800 18px ${FONT}`; const w = octx.measureText(txt).width + 14; octx.fillStyle = "rgba(10,14,20,.85)"; octx.fillRect(x - w / 2, y - 12, w, 24); octx.strokeStyle = edge; octx.lineWidth = 2; octx.strokeRect(x - w / 2, y - 12, w, 24); octx.fillStyle = ink; octx.textAlign = "center"; octx.textBaseline = "middle"; octx.fillText(txt, x, y + 1); }
-const price = (x, y, p) => tag(x, y, "$" + p.toLocaleString(), G.money >= p ? "#7fd88a" : "#6a7080", G.money >= p ? "#ece7dc" : "#8b919b");
+const price = (at, p) => at && tag(at[0], at[1], "$" + p.toLocaleString(), G.money >= p ? "#7fd88a" : "#6a7080", G.money >= p ? "#ece7dc" : "#8b919b");
 function face(x, y, happy) { octx.fillStyle = "#ffffff"; octx.fillRect(x, y, 18, 16); octx.fillRect(x + 4, y + 16, 4, 3); octx.fillStyle = happy ? "#2e9a4a" : "#c83a2e"; octx.fillRect(x + 4, y + 4, 3, 3); octx.fillRect(x + 11, y + 4, 3, 3); octx.fillRect(x + 4, y + 10, 10, 2); const yy = happy ? y + 9 : y + 11; octx.fillRect(x + 3, yy, 2, 2); octx.fillRect(x + 13, yy, 2, 2); }
 function overlay() {
   octx.setTransform(DPR, 0, 0, DPR, 0, 0); octx.clearRect(0, 0, VW, VH);
@@ -321,22 +342,22 @@ function overlay() {
   for (const b of BERTHS) if (!b.open) poly(rectPts([b.ex * T, QUAY * T, (b.ox - b.ex + 1) * T, 5 * T]), null, 0, "rgba(8,12,18,.55)");
   const groups = []; for (const st of STALLS) if (!st.open && st.group > 0 && !groups[st.group]) groups[st.group] = st;
   for (const st of groups) if (st) poly(rectPts([st.i * T, LOT0 * T, 4 * T, TL * T]), null, 0, "rgba(8,12,18,.55)");
-  for (const b of BLOCKS) if (!b.open) price(...scr(b.x + b.w / 2, 0, b.y + 6), G.BLOCK_PRICE[b.id]);
-  for (const b of BERTHS) if (!b.open) price(...scr((b.ex + b.ox + 1) / 2, 0, QUAY + 2.5), G.CRANE_PRICE[b.id]);
-  groups.forEach((st, g) => { if (st) price(...scr(st.i + 2, 0, LOT0 + 2), G.STALL_PRICE[g]); });
+  for (const b of BLOCKS) if (!b.open) price(scr(b.x + b.w / 2, 0, b.y + 6), G.BLOCK_PRICE[b.id]);
+  for (const b of BERTHS) if (!b.open) price(scr((b.ex + b.ox + 1) / 2, 0, QUAY + 2.5), G.CRANE_PRICE[b.id]);
+  groups.forEach((st, g) => { if (st) price(scr(st.i + 2, 0, LOT0 + 2), G.STALL_PRICE[g]); });
   // a selected customer truck: a dotted line to its container; a selected auto tractor: its RTG
-  if (sel && sel.kind === "cust" && sel.load === null) { const at = G.boxAt(sel.want); if (at) { const tr = G.trailerOf(sel), a = scr(m(tr.x), 1.1, m(tr.y)), b = scr(m(at[0]), 1.2, m(at[1])); octx.setLineDash([2, 7]); octx.lineCap = "round"; octx.strokeStyle = "#ffffff"; octx.lineWidth = 3; octx.beginPath(); octx.moveTo(...a); octx.lineTo(...b); octx.stroke(); octx.setLineDash([]); octx.lineCap = "butt"; } }
+  if (sel && sel.kind === "cust" && sel.load === null) { const at = G.boxAt(sel.want); if (at) { const tr = G.trailerOf(sel); seg([m(tr.x), 1.1, m(tr.y)], [m(at[0]), 1.2, m(at[1])], "#ffffff", 3, [2, 7], "round"); } }
   if (sel && sel.auto && sel.home) { const hb = sel.home; poly(rectPts([hb.x * T - 3, hb.y * T - 3, hb.w * T + 6, (YROAD - hb.y) * T + 6]), "#5fd3d0", 3, null, [8, 6]); }
   // the selected truck's queue: numbered spots joined in order; the numbers can be tapped to take a trip back
   BADGES = [];
   if (sel) {
-    const tr = G.trailerOf(sel); let prev = scr(m(tr.x), 0.05, m(tr.y)), n = 0;
+    const tr = G.trailerOf(sel); let prev = [m(tr.x), 0.05, m(tr.y)], n = 0;
     for (const a of sel.cmd ? [sel.cmd, ...sel.queue] : sel.queue) {
       if (a.kind === "deliver" || a.kind === "qwait") continue;
-      const r = G.spotRect(a), c = scr(m(r[0] + r[2] / 2), 0.05, m(r[1] + r[3] / 2)); n++;
-      octx.setLineDash([5, 5]); octx.strokeStyle = "rgba(255,255,255,.6)"; octx.lineWidth = 2; octx.beginPath(); octx.moveTo(...prev); octx.lineTo(...c); octx.stroke(); octx.setLineDash([]); prev = c;
+      const r = G.spotRect(a), c = [m(r[0] + r[2] / 2), 0.05, m(r[1] + r[3] / 2)]; n++;
+      seg(prev, c, "rgba(255,255,255,.6)", 2, [5, 5]); prev = c;
       poly(rectPts(r), "#ffffff", 2, null, [5, 5]);
-      const z = touchy ? 26 : 18, [bx, by] = scr(m(r[0]), 0.05, m(r[1]));
+      const z = touchy ? 26 : 18, bp = scr(m(r[0]), 0.05, m(r[1])); if (!bp) continue; const [bx, by] = bp;
       BADGES.push({ x: bx, y: by, r: z / 2 + 3, a: a === sel.cmd ? null : a });
       octx.fillStyle = "#1e2024"; octx.fillRect(bx - z / 2, by - z / 2, z, z); octx.strokeStyle = "#ece7dc"; octx.lineWidth = 1; octx.strokeRect(bx - z / 2 + 0.5, by - z / 2 + 0.5, z - 1, z - 1);
       octx.fillStyle = "#ece7dc"; octx.font = `800 ${Math.round(z * 0.7)}px 'JetBrains Mono', monospace`; octx.textAlign = "center"; octx.textBaseline = "middle"; octx.fillText(String(n), bx, by + 1);
@@ -357,18 +378,20 @@ function overlay() {
   octx.textAlign = "center"; octx.textBaseline = "middle";
   for (const t of G.trucks) {
     const s = G.shapeOf(t), cx = m((s.front[0] + s.cabBack[0]) / 2), cz = m((s.front[1] + s.cabBack[1]) / 2);
-    if (t.num) { const [x, y] = scr(cx, 1.2, cz); if (x > -20 && y > -20 && x < VW + 20 && y < VH + 20) { const z = clamp(ppm() * 0.45, 12, 20); octx.fillStyle = "#1e2024"; octx.fillRect(x - z / 2, y - z / 2, z, z); octx.fillStyle = "#ece7dc"; octx.font = `800 ${Math.round(z * 0.75)}px 'JetBrains Mono', monospace`; octx.fillText(String(t.num), x, y + 0.5); } }
-    if (t.sad > 0 || t.happy > 0) { const [x, y] = scr(m(s.front[0]), 1.4, m(s.front[1])); face(x + 6, y - 30, t.happy > 0); }
+    const np = scr(cx, 1.2, cz);
+    if (t.num && np) { const [x, y] = np; if (x > -20 && y > -20 && x < VW + 20 && y < VH + 20) { const z = clamp(ppmAt(cx, 1.2, cz) * 0.45, 12, 20); octx.fillStyle = "#1e2024"; octx.fillRect(x - z / 2, y - z / 2, z, z); octx.fillStyle = "#ece7dc"; octx.font = `800 ${Math.round(z * 0.75)}px 'JetBrains Mono', monospace`; octx.fillText(String(t.num), x, y + 0.5); } }
+    if (t.sad > 0 || t.happy > 0) { const fp = scr(m(s.front[0]), 1.4, m(s.front[1])); if (fp) face(fp[0] + 6, fp[1] - 30, t.happy > 0); }
   }
-  for (const f of G.floats) { const [x, y] = scr(m(f.x), 1.6, m(f.y) ); octx.globalAlpha = Math.min(1, f.t); octx.fillStyle = "#7fd88a"; octx.font = `800 18px ${FONT}`; octx.fillText(f.text, x, y - 20 - (1.6 - f.t) * 24); } octx.globalAlpha = 1;
+  for (const f of G.floats) { const fp = scr(m(f.x), 1.6, m(f.y)); if (!fp) continue; const [x, y] = fp; octx.globalAlpha = Math.min(1, f.t); octx.fillStyle = "#7fd88a"; octx.font = `800 18px ${FONT}`; octx.fillText(f.text, x, y - 20 - (1.6 - f.t) * 24); } octx.globalAlpha = 1;
   // the ship's time left, off its bow
   const s = DOCK.ship;
   if (s && (s.state === "docked" || s.state === "closing")) {
     const sec = Math.max(0, Math.ceil(s.time)), txt = Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"), low = sec <= 30, y = (DOCK.top + DOCK.rows - s.rows - 1) * T + 14, h = (s.rows + 1) * T + 2;
-    const [x0, y0] = scr(m(DOCK.x * T + Math.round(s.off) + s.cols * CL * T) + 3.5, DECK, m(y + h / 2));
-    tag(x0, y0, txt, low ? "#ff5a4a" : "#6a7080", low && Math.sin(G.clock * 8) > 0 ? "#ff5a4a" : "#ece7dc");
+    const tp = scr(m(DOCK.x * T + Math.round(s.off) + s.cols * CL * T) + 3.5, DECK, m(y + h / 2));
+    if (tp) { const [x0, y0] = tp;
+    tag(x0, y0, txt, low ? "#ff5a4a" : "#6a7080", low && Math.sin(G.clock * 8) > 0 ? "#ff5a4a" : "#ece7dc"); }
   }
-  const bad = G.bad; if (bad) { const [x, y] = scr(bad.i + 0.5, 0.05, bad.j + 0.5); octx.strokeStyle = `rgba(255,90,74,${bad.t * 2})`; octx.lineWidth = 3; octx.beginPath(); octx.moveTo(x - 9, y - 9); octx.lineTo(x + 9, y + 9); octx.moveTo(x + 9, y - 9); octx.lineTo(x - 9, y + 9); octx.stroke(); }
+  const bad = G.bad; if (bad && scr(bad.i + 0.5, 0.05, bad.j + 0.5)) { const [x, y] = scr(bad.i + 0.5, 0.05, bad.j + 0.5); octx.strokeStyle = `rgba(255,90,74,${bad.t * 2})`; octx.lineWidth = 3; octx.beginPath(); octx.moveTo(x - 9, y - 9); octx.lineTo(x + 9, y + 9); octx.moveTo(x + 9, y - 9); octx.lineTo(x - 9, y + 9); octx.stroke(); }
 }
 
 // ---- each frame ----
@@ -395,6 +418,6 @@ R3.draw = () => {
 };
 // for tests
 R3.cam = cam; R3.applyCam = applyCam; R3.scr = scr; R3.badges = () => BADGES;
-R3.screenOfTruck = (t) => { const tr = G.trailerOf(t); const [x, y] = scr(m(tr.x), 1, m(tr.y)); return { x, y }; };
-R3.screenOfSlot = (k) => { const [rx, ry] = G.slotRect(k), st = DOCK.ship.bays[k]; const [x, y] = scr(m(rx) + CL / 2, DECK + Math.max(0.5, st.length - 0.2), m(ry) + 0.5); return { x, y }; };
-R3.screenOfTile = (i, j, y = 0) => { const [x, yy] = scr(i + 0.5, y, j + 0.5); return { x, y: yy }; };
+R3.screenOfTruck = (t) => { const tr = G.trailerOf(t); const [x, y] = scr(m(tr.x), 1, m(tr.y)) || [-1, -1]; return { x, y }; };
+R3.screenOfSlot = (k) => { const [rx, ry] = G.slotRect(k), st = DOCK.ship.bays[k]; const [x, y] = scr(m(rx) + CL / 2, DECK + Math.max(0.5, st.length - 0.2), m(ry) + 0.5) || [-1, -1]; return { x, y }; };
+R3.screenOfTile = (i, j, y = 0) => { const [x, yy] = scr(i + 0.5, y, j + 0.5) || [-1, -1]; return { x, y: yy }; };

@@ -350,8 +350,8 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   up to 3 high (ship stacks too). Basic shapes for now (owner: the owner will make the models): boxes for the
   trucks' cabs and trailers, the cranes, the ship's hull, deck and accommodation block. The ground is the 2D game's
   painted ground (roads, markings, pads, bays, stalls) on the land, with the sea below the quay.
-- **Camera (owner):** an orthographic (isometric-style) camera looking down at 45° to 90° (straight down), turned any
-  way, zoomed. Touch: one finger pans; two fingers pinch to zoom and twist to turn (around the point between them), or
+- **Camera (owner):** a perspective camera (40° field of view; owner: perspective, not orthographic) looking down at
+  45° to 90° (straight down), turned any way, zoomed (it moves closer or further back). Touch: one finger pans; two fingers pinch to zoom and twist to turn (around the point between them), or
   slide up or down together to tilt. Mouse: the left button drags to pan, the right (or middle) button drags to turn
   (sideways) and tilt (up and down), the wheel zooms at the pointer. Keys: WASD / arrows pan, Q / E turn, R / F tilt,
   + / − zoom. It starts over the whole port, or on a touch screen close up over crane A and the first storage area.
@@ -363,7 +363,7 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   and the right click to take back the last queued trip work as in 2D. The selected truck has a white pad under it
   (pulsing), the hovered one a fainter one; its queue, the green or red outline of what a click would do, a customer's
   dotted line, locked things with their prices, tractor numbers, faces, "+$60" and the ship's time are drawn flat on
-  the screen over the 3D view. A customer's container flashes itself (green, yellow or red for where it sits in its
+  the screen over the 3D view (cut where they pass behind the camera). A customer's container flashes itself (green, yellow or red for where it sits in its
   stack), as do the ship's containers customers are waiting for.
 
 ## Rejected / removed
