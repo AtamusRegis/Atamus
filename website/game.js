@@ -12,7 +12,7 @@ const $ = (id) => document.getElementById(id);
 { const mine = (document.querySelector('meta[name="build"]') || {}).content;
   if (mine && mine !== "__BUILD__" && window.fetch) fetch("version.json", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j && j.v && j.v !== mine && !location.search.includes("b=" + j.v)) location.replace((location.pathname.split("/").pop() || "game.html") + "?b=" + j.v); }).catch(() => {}); }
 const cv = $("view"), mainCtx = cv.getContext("2d");
-// (owner, 2026-11-03) the 3D view (game3d.html, which has a #gl canvas): the same game, drawn by game3d.js, which also
+// (owner, 2026-11-03) the 3D view (game.html, which has a #gl canvas; game2d.html has none): the same game, drawn by game3d.js, which also
 // does the camera and works out what's under the pointer; this file keeps the rules, the clicks and the queues
 const R3 = $("gl") ? (window.ATAMUS_3D = window.ATAMUS_3D || {}) : null;
 let ctx = mainCtx;   // swapped to an offscreen canvas while a cached layer is drawn

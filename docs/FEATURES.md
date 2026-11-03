@@ -344,8 +344,9 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
 
 ## The 3D view (owner, 2026-11-03)
 
-- **game3d.html** is the same game (game.js runs the rules, clicks and queues) drawn in 3D by game3d.js with Three.js
-  (self-hosted in website/vendor/). game.html stays the 2D game.
+- **game.html is the 3D game (owner: the main game page, 2026-11-03):** game.js runs the rules, clicks and queues and
+  game3d.js draws it in 3D with Three.js (self-hosted in website/vendor/). The 2D game is at game2d.html; game3d.html
+  forwards to game.html.
 - **Scale:** one map tile is 1 m (1 unit, as in Unity), so a container is 3 × 1 × 1 and stacks show every container,
   up to 3 high (ship stacks too). Basic shapes for now (owner: the owner will make the models): boxes for the
   trucks' cabs and trailers, the cranes, the ship's hull, deck and accommodation block. The ground is the 2D game's

@@ -37,11 +37,12 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 
 ```
 website/          GitHub Pages site (atamus.io) and the game
-  game.html       the game page: just the canvas
+  game.html       the game page (3D since 2026-11-03): game.js + game3d.js
+  game2d.html     the 2D game: game.js drawing the canvas itself
   game.js         the whole game, single player: the tile map and roads (drawn once), ships, STS cranes, storage areas
                   and RTG cranes (op lists: move / lift / lower), yard and customer trucks (one-way road graph, held tiles, queues, claims),
                   camera (pan / zoom / pinch); window.Atamus for tests
-  game3d.html     the 3D view (owner, 2026-11-03): the same game.js, drawn by game3d.js
+  game3d.html     forwards to game.html (old links)
   game3d.js       the 3D renderer (Three.js, self-hosted in vendor/): camera (tilt 45–90°, turn, zoom), basic shapes
                   (1 tile = 1 m), screen-space picking; game.js hands it drawing and picking when the page has #gl
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
@@ -70,7 +71,7 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 
 1. Make the change.
 2. Run `scripts/check.sh`.
-3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/game3d.html`, `website/play.html`, and the other pages for `style.css`).
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/game2d.html`, `website/play.html`, and the other pages for `style.css`).
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
 5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy (website to GitHub Pages, server over the deploy key). The game is client only, so a deploy just takes effect on the next page load.
 6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html.

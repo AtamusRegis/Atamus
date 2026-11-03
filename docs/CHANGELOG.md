@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-03
 
+- **3D is the main game page (owner).** game.html (Play now, old links) is the 3D game; the 2D game moved to game2d.html, and game3d.html forwards to game.html.
 - **The 3D view's camera has perspective now (owner).** It was orthographic; now nearer things look bigger, with the same 45°–90° tilt, turning and zoom. Picking reach and tractor numbers scale with distance, and the overlay's outlines and lines are cut where they pass behind the camera.
 - **A 3D view (owner): game3d.html.** The same game in 3D with basic shapes (1 tile = 1 m, containers 3 × 1 × 1, full stacks visible), a camera that tilts from 45° to straight down, turns and zooms (touch: one finger pans, pinch zooms, twist turns, two fingers up or down tilt; mouse: left drag pans, right drag turns and tilts, wheel zooms). Truck and container picking is done on the screen, ray first and nearest within reach after, so selecting works from any angle. game.html stays 2D.
 
