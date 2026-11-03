@@ -10,8 +10,11 @@ const $ = (id) => document.getElementById(id);
 // (2026-11-01) a page the browser kept from an older build loads the live one instead (the build id is stamped into
 // game.html and version.json on deploy)
 { const mine = (document.querySelector('meta[name="build"]') || {}).content;
-  if (mine && mine !== "__BUILD__" && window.fetch) fetch("version.json", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j && j.v && j.v !== mine && !location.search.includes("b=" + j.v)) location.replace("game.html?b=" + j.v); }).catch(() => {}); }
+  if (mine && mine !== "__BUILD__" && window.fetch) fetch("version.json", { cache: "no-store" }).then((r) => r.json()).then((j) => { if (j && j.v && j.v !== mine && !location.search.includes("b=" + j.v)) location.replace((location.pathname.split("/").pop() || "game.html") + "?b=" + j.v); }).catch(() => {}); }
 const cv = $("view"), mainCtx = cv.getContext("2d");
+// (owner, 2026-11-03) the 3D view (game3d.html, which has a #gl canvas): the same game, drawn by game3d.js, which also
+// does the camera and works out what's under the pointer; this file keeps the rules, the clicks and the queues
+const R3 = $("gl") ? (window.ATAMUS_3D = window.ATAMUS_3D || {}) : null;
 let ctx = mainCtx;   // swapped to an offscreen canvas while a cached layer is drawn
 const TAU = Math.PI * 2, rnd = Math.random, hyp = Math.hypot, clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const pick = (a) => a[Math.floor(rnd() * a.length)];
@@ -993,13 +996,14 @@ addEventListener("keydown", (e) => { keys[e.code] = true; if (e.code === "Escape
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 const toWorld = (sx, sy) => ({ x: (sx - VW / 2) / zoom + cam.x, y: (sy - VH / 2) / zoom + cam.y });
-const tileAtScreen = (sx, sy) => { const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
+const tileAtScreen = (sx, sy) => { if (R3) return R3.tileAt ? R3.tileAt(sx, sy) : [-1, -1]; const w = toWorld(sx, sy); return [Math.floor(w.x / T), Math.floor(w.y / T)]; };
 function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, u = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / l, 0, 1); return hyp(px - a[0] - u * dx, py - a[1] - u * dy); }
 // (owner, 2026-11-01) bigger hit areas, and where they overlap the one nearest the pointer wins: trucks (measured to
 // their cab and trailer) and the containers on the docked ship (measured to the middle of the slot), with more reach
 // on a touch screen. A queue badge, drawn on top, comes first.
 let touchy = false;
 function pickAt(sx, sy) {
+  if (R3) return R3.pick ? R3.pick(sx, sy) : null;
   const w = toWorld(sx, sy);
   if (selected) for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(w.x - b.x) <= b.r && Math.abs(w.y - b.y) <= b.r) return { badge: b }; }
   let best = null, bd = Infinity;
@@ -1067,6 +1071,7 @@ function unclaimAt(sx, sy) {
   return true;
 }
 // right click: take back the selected truck's last queued trip (not the one under way); with none left, deselect
+if (!R3) {
 cv.addEventListener("contextmenu", (e) => { e.preventDefault(); if (touchy) return; if (!selected || !unqueueLast(selected)) selected = null; });   // a long press on a touch screen does nothing
 cv.addEventListener("pointerdown", (e) => {
   if (e.button === 2) return;
@@ -1088,6 +1093,7 @@ cv.addEventListener("pointermove", (e) => {
 cv.addEventListener("pointerup", (e) => { pts.delete(e.pointerId); if (gesture && !gesture.moved && !gesture.pinch && !gesture.held) click(e.clientX, e.clientY); if (!pts.size) gesture = null; });
 cv.addEventListener("pointercancel", (e) => { pts.delete(e.pointerId); if (!pts.size) gesture = null; });
 cv.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX, e.clientY); }, { passive: false });
+}
 function setZoom(z, sx, sy) { const before = toWorld(sx, sy); zoom = clamp(z, 0.3, 3); const after = toWorld(sx, sy); cam.x += before.x - after.x; cam.y += before.y - after.y; }
 
 // ---- placeholder art ----
@@ -1101,7 +1107,9 @@ const GROUND = canvas(MW * T, MH * T);
 function arrow(g, i, j, dx, dy) { const cx = (i + 0.5) * T, cy = (j + 0.5) * T; g.save(); g.translate(cx, cy); g.rotate(Math.atan2(dy, dx)); g.fillStyle = "rgba(236,231,220,.22)"; g.fillRect(-8, -1.5, 9, 3); g.beginPath(); g.moveTo(8, 0); g.lineTo(0, -5); g.lineTo(0, 5); g.fill(); g.restore(); }
 // (art) painted once: asphalt with grain, oil stains and edge lines; concrete in slabs with joints; the quay edge with its
 // hazard stripe and bollards, crane rails along the quay; storage pads with painted slot outlines; a chain-link fence
+let GROUND_VER = 0;
 function buildGround() {
+  GROUND_VER++;
   // (owner, 2026-11-01) no leftover concrete in the yard: any ground below the quay road that isn't a storage pad is paved
   const g = GROUND.getContext("2d"), pad = (i, j) => BLOCKS.some((b) => i >= b.x && i < b.x + b.w && j >= b.y && j <= REST);
   const road = (i, j) => ROADSET.has(key(i, j)) || (j >= QROAD && j < MH - 1 && i > 0 && i < MW - 1 && !pad(i, j)), fence = (i, j) => j === MH - 1 || i === 0 || i === MW - 1;
@@ -1438,12 +1446,13 @@ function step(dt) {
   if (selected && (!trucks.includes(selected) || selected.exiting)) selected = null;
   if (bad) { bad.t -= dt; if (bad.t <= 0) bad = null; }
 }
-function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); draw(); requestAnimationFrame(frame); }
+function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; step(dt); if (!R3) draw(); else if (R3.draw) R3.draw(); requestAnimationFrame(frame); }
 // it starts fitted to the screen; (owner, 2026-11-01) on a touch screen close enough for a fingertip, over where the
 // port starts (crane A, the first storage area and the tractor parking). Later resizes (a phone's address bar sliding
 // away, turning it) keep the view as it is.
 let sized = false;
 function resize() {
+  if (R3) return;
   DPR = Math.min(2, devicePixelRatio || 1); VW = innerWidth; VH = innerHeight; cv.width = VW * DPR; cv.height = VH * DPR;
   if (sized) return; sized = true;
   zoom = clamp(Math.min(VW / (MW * T), VH / ((MH + 1) * T)), 0.3, 3); cam.y = (MH * T) / 2;
@@ -1454,4 +1463,15 @@ buildGround();
 if (document.fonts && document.fonts.load) document.fonts.load("800 20px 'Big Shoulders Display'").then(buildGround).catch(() => {});
 requestAnimationFrame(frame);
 window.Atamus = { addMoney: (n) => (money += n), buyAt: (i, j) => { const u = buyAt(i, j); if (u && money >= u.price) { money -= u.price; u.buy(); return true; } return false; }, addTractor, get money() { return money; }, get passes() { return passes; }, perf: PERF, get state() { return { trucks, dock: DOCK, berths: BERTHS, blocks: BLOCKS, stalls: STALLS, delivered, selected, occ }; }, get exported() { return exported; }, step, planFor, enqueue, unqueueLast, get waitq() { return WAITQ; }, qext: QEXT, badges: () => BADGES, cam, screenOf: (x, y) => ({ x: (x - cam.x) * zoom + VW / 2, y: (y - cam.y) * zoom + VH / 2 }), screenOfTruck: (t) => { const s = trailerOf(t); return { x: (s.x - cam.x) * zoom + VW / 2, y: (s.y - cam.y) * zoom + VH / 2 }; }, slotSwap, doSwap, route, select: (t) => (selected = t) };
+// what the 3D view reads and calls
+if (R3) R3.game = {
+  T, MW, MH, QUAY, LINE, QROAD, REST, RLANE, BAY0, YROAD, LOT0, LROAD, CL, TL, PARK_X, COLORS, AUTO_CAB, EXP_CAB, WAIT_CAB,
+  BLOCKS, BERTHS, DOCK, STALLS, PARK, BLOCK_PRICE, CRANE_PRICE, STALL_PRICE, GROUND, floats,
+  get trucks() { return trucks; }, get selected() { return selected; }, set selected(t) { selected = t; }, get hover() { return hover; }, get bad() { return bad; },
+  get money() { return money; }, get clock() { return clock; }, get groundVer() { return GROUND_VER; },
+  shapeOf, trailerOf, slotRect, shipSlot, onDeck, spotRect, boxAt, flashing, posRGB, targetAt, planFor, slotSwap, homeFor, craneCols,
+  click, unclaimAt, rightClick: () => { if (!selected || !unqueueLast(selected)) selected = null; },
+  hoverAt: (sx, sy) => { const pk = pickAt(sx, sy); hover = { tile: pk && pk.slot !== undefined ? slotTile(pk.slot) : tileAtScreen(sx, sy), truck: pk && pk.truck }; },
+  noHover: () => { hover = null; },
+};
 })();

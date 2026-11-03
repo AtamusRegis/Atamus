@@ -342,6 +342,30 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   in open storage (or on the ship).
 - **With only crane A, it works the whole ship.** Each crane bought takes its share.
 
+## The 3D view (owner, 2026-11-03)
+
+- **game3d.html** is the same game (game.js runs the rules, clicks and queues) drawn in 3D by game3d.js with Three.js
+  (self-hosted in website/vendor/). game.html stays the 2D game.
+- **Scale:** one map tile is 1 m (1 unit, as in Unity), so a container is 3 × 1 × 1 and stacks show every container,
+  up to 3 high (ship stacks too). Basic shapes for now (owner: the owner will make the models): boxes for the
+  trucks' cabs and trailers, the cranes, the ship's hull, deck and accommodation block. The ground is the 2D game's
+  painted ground (roads, markings, pads, bays, stalls) on the land, with the sea below the quay.
+- **Camera (owner):** an orthographic (isometric-style) camera looking down at 45° to 90° (straight down), turned any
+  way, zoomed. Touch: one finger pans; two fingers pinch to zoom and twist to turn (around the point between them), or
+  slide up or down together to tilt. Mouse: the left button drags to pan, the right (or middle) button drags to turn
+  (sideways) and tilt (up and down), the wheel zooms at the pointer. Keys: WASD / arrows pan, Q / E turn, R / F tilt,
+  + / − zoom. It starts over the whole port, or on a touch screen close up over crane A and the first storage area.
+- **Selecting (owner: make sure it works well):** what's under the pointer is worked out on the screen: a numbered badge
+  of the selected truck's queue first; then whatever the pointer's ray meets first (a truck, the container on a truck's
+  trailer, a container on the docked ship); otherwise the nearest truck or ship slot within reach (more on a touch
+  screen), measured to the truck's cab and trailer or the slot's top. A ray meeting a storage stack picks the tile at
+  the stack's top, so tapping a stack sends to that storage area. Taps, the long press to call off a claimed container
+  and the right click to take back the last queued trip work as in 2D. The selected truck has a white pad under it
+  (pulsing), the hovered one a fainter one; its queue, the green or red outline of what a click would do, a customer's
+  dotted line, locked things with their prices, tractor numbers, faces, "+$60" and the ship's time are drawn flat on
+  the screen over the 3D view. A customer's container flashes itself (green, yellow or red for where it sits in its
+  stack), as do the ship's containers customers are waiting for.
+
 ## Rejected / removed
 
 - **Building the port (2026-11-01), with blueprints (owner: reverted for now, 2026-11-02):** 4-lane roads on a grid of
