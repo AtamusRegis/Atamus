@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-02
+
+- **Building reverted (owner, for now).** The game is back to the fixed map with unlocking, as it was before building (roads, storage areas, parking, lot, export, bulldozing and blueprints are gone; the code is in git at 4fa15ee). Kept one fix: a touch the browser cancels no longer leaves a stuck finger behind.
+
 ## 2026-11-01
 
 - **Blueprints (owner).** Storage, Export, Parking and Lot now place a blueprint you drag where you want it, turn to face the road on any side (a button, or R) and build with the check mark (or Enter), instead of building straight away where you tap. Also: a lifted finger the browser cancels no longer leaves a stuck touch behind.
