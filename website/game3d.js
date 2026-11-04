@@ -92,6 +92,16 @@ function syncShip() {
   });
 }
 
+// (owner, 2026-11-04) a flat collider over each slot of the docked ship's deck, so an empty slot can be tapped too
+const MAXSLOT = 128, slotCols = new THREE.InstancedMesh(new THREE.BoxGeometry(CL - 0.05, 0.3, 0.98), COLM_SLOT(), MAXSLOT), SLOTK = [];
+function COLM_SLOT() { return new THREE.MeshBasicMaterial({ visible: false }); }
+slotCols.frustumCulled = false; scene.add(slotCols);
+function syncSlotCols() {
+  const s = DOCK.ship; let n = 0;
+  if (s) s.bays.forEach((st, k) => { if (!G.onDeck(s, k) || n >= MAXSLOT) return; const [rx, ry] = G.slotRect(k); dummy.position.set(m(rx) + CL / 2, DECK + 0.15, m(ry) + 0.5); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); slotCols.setMatrixAt(n, dummy.matrix); SLOTK[n++] = k; });
+  slotCols.count = n; slotCols.instanceMatrix.needsUpdate = true; slotCols.computeBoundingSphere();
+}
+
 // ---- storage: every container in its stack (rows of 3 tiles running north-south) ----
 function syncStorage() {
   const sel = G.selected, want = sel && sel.kind === "cust" ? sel.want : null;
@@ -105,15 +115,19 @@ function syncStorage() {
 const TRUCKS = new Map(), PICKABLE = [];
 const darkM = mat("#1e2024"), chassisM = mat("#4a4e56"), glassM = mat("#9ad0f0", { roughness: 0.2 }), tyreM = mat("#141518");
 const padG = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const COLM = new THREE.MeshBasicMaterial({ visible: false });   // colliders are never drawn
 function truckObj(t) {
   let o = TRUCKS.get(t.id); if (o) return o;
   const cabM = mat("#e8b432"), cab = new THREE.Group(), trl = new THREE.Group();
   const body = box(1, 0.95, 0.74, cabM, 0, 0.68, 0, cab); box(1, 0.3, 0.7, darkM, 0, 0.2, 0, cab); const glass = box(0.06, 0.32, 0.6, glassM, 0.5, 0.95, 0, cab);
   const bed = box(1, 0.12, 0.56, chassisM, 0, 0.5, 0, trl); const axle = box(0.95, 0.42, 0.72, tyreM, -0.3, 0.21, 0, trl); axle.userData.rel = true;
   const pads = [0, 1].map(() => { const p = new THREE.Mesh(padG, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })); p.position.y = 0.03; p.renderOrder = 1; scene.add(p); return p; });
-  for (const q of [body, glass, bed, axle]) { q.userData.truck = t; PICKABLE.push(q); }
-  cab.children.forEach((q) => (q.userData.truck = t)); trl.children.forEach((q) => (q.userData.truck = t));
-  scene.add(cab, trl); o = { cab, trl, cabM, body, glass, bed, axle, pads, parts: [body, glass, bed, axle] }; TRUCKS.set(t.id, o); return o;
+  // (owner, 2026-11-04) 3D box colliders, a little bigger than what they cover: one around the cab, one around the
+  // trailer (up to the top of a container on it); taps and the pointer hit these
+  const cabCol = new THREE.Mesh(BOXG, COLM), trlCol = new THREE.Mesh(BOXG, COLM);
+  cabCol.position.y = 0.7; trlCol.position.y = 0.8; cab.add(cabCol); trl.add(trlCol);
+  for (const q of [cabCol, trlCol]) { q.userData.truck = t; PICKABLE.push(q); }
+  scene.add(cab, trl); o = { cab, trl, cabM, body, glass, bed, axle, pads, cabCol, trlCol, parts: [cabCol, trlCol] }; TRUCKS.set(t.id, o); return o;
 }
 // lay a part between two points (game pixels): mid-point, heading and length
 function lay(obj, a, b) { const ax = m(a[0]), az = m(a[1]), bx = m(b[0]), bz = m(b[1]), L = hyp(bx - ax, bz - az) || 0.01; obj.position.set((ax + bx) / 2, 0, (az + bz) / 2); obj.rotation.set(0, Math.atan2(-(az - bz), ax - bx), 0); return L; }
@@ -123,6 +137,7 @@ function syncTrucks() {
     live.add(t.id); const o = truckObj(t), s = G.shapeOf(t);
     const cl = lay(o.cab, s.front, s.cabBack); o.body.scale.x = cl; o.cab.children[1].scale.x = cl; o.glass.position.x = cl / 2 - 0.02;
     const tl = lay(o.trl, s.trFront, s.trBack); o.bed.scale.x = tl; o.axle.position.x = -tl / 2 + 0.55;
+    o.cabCol.scale.set(cl + 0.2, 1.4, 1.0); o.trlCol.scale.set(tl + 0.15, 1.6, 1.0);
     o.cabM.color.set(t.kind === "cust" ? (t.generic || !t.want ? G.WAIT_CAB : COLORS[t.want.c].c) : t.kind === "exp" ? G.EXP_CAB : t.auto ? G.AUTO_CAB : "#e8b432");
     const sel = t === G.selected, hov = G.hover && G.hover.truck === t, op = sel ? 0.42 + 0.12 * Math.sin(G.clock * 8) : hov ? 0.22 : 0;
     o.cabM.emissive.set(sel ? 0x333333 : 0x000000);
@@ -196,6 +211,11 @@ function syncRTG() {
 // ---- camera (owner): looking down at 45° to 90° (straight down), turned any way, zoomed ----
 const PITCH_MIN = Math.PI / 4, PITCH_MAX = Math.PI / 2;
 const cam = { x: MW / 2, z: (QUAY + MH) / 2, yaw: 0, pitch: Math.PI / 3, vh: 40 };
+// (owner, 2026-11-04) smoother: the camera eases toward where it's headed (goal) instead of jumping; a drag still moves
+// it with the finger, and a flick keeps it gliding a moment after letting go
+const goal = { ...cam }, flick = { x: 0, z: 0 }, keyV = { x: 0, z: 0, yaw: 0, pitch: 0, zoom: 0 };
+let zoomAt = null;   // the wheel zooms toward the point under the pointer, kept there while it eases
+const syncGoal = () => Object.assign(goal, cam);
 let VW = 1, VH = 1, DPR = 1;
 // (owner, 2026-11-03) a perspective camera: zoom is how far it stands back, given as how many meters of ground show from
 // the top of the screen to the bottom at the point it looks at (vh)
@@ -232,33 +252,37 @@ function ppmAt(x, y, z) { camera.getWorldDirection(fwd); const d = (x - camera.p
 // keep the ground point that was under (sx, sy) there after the camera changed
 function anchor(before, sx, sy) { applyCam(); const after = groundAt(sx, sy); cam.x += before.x - after.x; cam.z += before.z - after.z; applyCam(); }
 
-// ---- what's under the pointer: a badge of the selected truck's queue first, then whatever the ray meets (a truck, a
-// container on the ship), then the nearest truck or ship slot on the screen within reach ----
+// ---- what's under the pointer (owner, 2026-11-04: 3D colliders, not the 2D grid): a badge of the selected truck's queue
+// first; then the first collider the pointer's ray meets: a truck's (its cab, its trailer and the container on it), a
+// container's own box, or a slot of the docked ship. A container in storage stops the ray (it's the tile under it that
+// counts then); one hanging from a crane doesn't. On a touch screen, with nothing right under the finger, rays a little around it are
+// tried too, nearest first.
 let touchy = false, BADGES = [];
-function segDist(px, py, a, b) { const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy || 1, u = clamp(((px - a[0]) * dx + (py - a[1]) * dy) / l, 0, 1); return hyp(px - a[0] - u * dx, py - a[1] - u * dy); }
+function castAt(sx, sy) {
+  setRay(sx, sy);
+  const hits = ray.intersectObjects(PICKABLE.concat([boxes, slotCols]), false);
+  const docked = DOCK.ship && DOCK.ship.state === "docked";
+  for (const h of hits) {
+    const t = h.object.userData.truck; if (t) { if (t.exiting) continue; return { truck: t }; }
+    if (h.object === slotCols) return docked ? { slot: SLOTK[h.instanceId] } : null;
+    const inf = INST[h.instanceId]; if (!inf) continue;
+    if (inf.truck) { if (inf.truck.exiting) continue; return { truck: inf.truck }; }
+    if (inf.slot !== undefined) return docked ? { slot: inf.slot } : null;
+    if (inf.storage) return null;   // a stored container stops the ray; one hanging from a crane doesn't
+  }
+  return null;
+}
+const RING = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => [Math.cos(k * Math.PI / 4), Math.sin(k * Math.PI / 4)]);
 R3.pick = (sx, sy) => {
   if (G.selected) for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(sx - b.x) <= b.r && Math.abs(sy - b.y) <= b.r) return { badge: b }; }
-  setRay(sx, sy);
-  const hits = ray.intersectObjects(PICKABLE.concat([boxes]), false);
-  for (const h of hits) {
-    const t = h.object.userData.truck; if (t) { if (!t.exiting) return { truck: t }; continue; }
-    if (h.object === boxes) { const inf = INST[h.instanceId]; if (!inf) continue; if (inf.truck) { if (!inf.truck.exiting) return { truck: inf.truck }; continue; } if (inf.slot !== undefined && DOCK.ship && DOCK.ship.state === "docked") return { slot: inf.slot }; break; }
-  }
-  let best = null, bd = Infinity; const R = touchy ? 30 : 16;
-  const near = (d, o) => { if (d <= R && d < bd) { bd = d; best = o; } };
-  for (const t of G.trucks) {
-    if (t.exiting) continue; const s = G.shapeOf(t), P = (p, y) => scr(m(p[0]), y, m(p[1])), f = P(s.front, 0.7), cb = P(s.cabBack, 0.7), tf = P(s.trFront, 0.7), tb = P(s.trBack, 0.7);
-    if (!f || !cb || !tf || !tb) continue;
-    near(Math.min(segDist(sx, sy, f, cb), segDist(sx, sy, tf, tb)) - 0.4 * ppmAt(m(s.cabBack[0]), 0.7, m(s.cabBack[1])), { truck: t });
-  }
-  const sh = DOCK.ship;
-  if (sh && sh.state === "docked") sh.bays.forEach((st, n) => { if (!G.onDeck(sh, n)) return; const [rx, ry] = G.slotRect(n), y = DECK + st.length, z = m(ry) + 0.5, a = scr(m(rx) + 0.5, y, z), b = scr(m(rx) + CL - 0.5, y, z); if (!a || !b) return; near(segDist(sx, sy, a, b) - 0.45 * ppmAt(m(rx) + CL / 2, y, z), { slot: n }); });
-  return best;
+  const hit = castAt(sx, sy); if (hit || !touchy) return hit;
+  for (const r of [10, 20]) for (const [cx, cy] of RING) { const h = castAt(sx + cx * r, sy + cy * r); if (h) return h; }
+  return null;
 };
-// the tile under the pointer: on top of a storage stack if the ray meets one, else on the ground
+// the tile under the pointer: where the ray meets a stored container (the top of a stack), else the ground
 R3.tileAt = (sx, sy) => {
   setRay(sx, sy);
-  for (const h of ray.intersectObject(boxes, false)) { const inf = INST[h.instanceId]; if (inf && inf.storage) return [Math.floor(h.point.x), Math.floor(h.point.z)]; if (inf && inf.slot !== undefined) break; }
+  for (const h of ray.intersectObject(boxes, false)) { const inf = INST[h.instanceId]; if (inf && inf.storage) { const q = h.point.clone().addScaledVector(ray.ray.direction, 0.02); return [Math.floor(q.x), Math.floor(q.z)]; } if (inf && inf.slot !== undefined) break; }
   const p = groundAt(sx, sy); return [Math.floor(p.x), Math.floor(p.z)];
 };
 
@@ -271,7 +295,7 @@ addEventListener("keydown", (e) => { keys[e.code] = true; });
 addEventListener("keyup", (e) => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
 ov.addEventListener("contextmenu", (e) => e.preventDefault());
-function startOne(x, y, button, moved) { gest = { sx: x, sy: y, button, moved, g0: groundAt(x, y), yaw0: cam.yaw, pitch0: cam.pitch }; }
+function startOne(x, y, button, moved) { gest = { sx: x, sy: y, button, moved, g0: groundAt(x, y), yaw0: goal.yaw, pitch0: goal.pitch, lx: cam.x, lz: cam.z, lt: performance.now() }; }
 function startTwo() {
   const [a, b] = [...pts.values()], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
   gest = { two: true, moved: true, d0: hyp(a.x - b.x, a.y - b.y) || 1, an0: Math.atan2(b.y - a.y, b.x - a.x), mx, my, a0: { ...a }, b0: { ...b }, vh0: cam.vh, yaw0: cam.yaw, pitch0: cam.pitch, g0: groundAt(mx, my), mode: null };
@@ -280,7 +304,8 @@ ov.addEventListener("pointerdown", (e) => {
   touchy = e.pointerType === "touch" || e.pointerType === "pen";
   try { ov.setPointerCapture(e.pointerId); } catch (er) { /* fine */ }
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pts.size === 2) { startTwo(); return; }
+  flick.x = flick.z = 0; zoomAt = null; goal.x = cam.x; goal.z = cam.z;   // a touch stops any glide
+  if (pts.size === 2) { goal.vh = cam.vh; goal.yaw = cam.yaw; startTwo(); return; }
   if (pts.size > 2) return;
   startOne(e.clientX, e.clientY, e.button, false);
   const g = gest; if (e.button === 0) setTimeout(() => { if (gest === g && !g.moved && pts.size === 1 && G.unclaimAt(g.sx, g.sy)) g.held = true; }, 450);
@@ -298,17 +323,22 @@ ov.addEventListener("pointermove", (e) => {
       gest.mode = ay * by > 0 && Math.abs(ay) > 1.5 * Math.abs(ax) && Math.abs(by) > 1.5 * Math.abs(bx) && spread < 24 && twist < 0.15 ? "tilt" : "pinch";
       gest.a0 = { ...a }; gest.b0 = { ...b }; gest.d0 = d; gest.an0 = Math.atan2(b.y - a.y, b.x - a.x); gest.mx = mx; gest.my = my; gest.g0 = groundAt(mx, my);
     }
-    if (gest.mode === "tilt") { cam.pitch = gest.pitch0 + (my - gest.my) * 0.006; applyCam(); return; }
+    if (gest.mode === "tilt") { goal.pitch = gest.pitch0 + (my - gest.my) * 0.006; return; }
     cam.vh = gest.vh0 * gest.d0 / d; cam.yaw = gest.yaw0 + (Math.atan2(b.y - a.y, b.x - a.x) - gest.an0);
-    anchor(gest.g0, mx, my); return;
+    anchor(gest.g0, mx, my); goal.vh = cam.vh; goal.yaw = cam.yaw; goal.x = cam.x; goal.z = cam.z; return;
   }
   const dx = e.clientX - gest.sx, dy = e.clientY - gest.sy; if (!gest.moved && hyp(dx, dy) > (touchy ? 12 : 5)) gest.moved = true;
   if (!gest.moved) return;
-  if (gest.button === 2 || gest.button === 1) { cam.yaw = gest.yaw0 - dx * 0.008; cam.pitch = gest.pitch0 + dy * 0.006; applyCam(); return; }
-  anchor(gest.g0, e.clientX, e.clientY);
+  if (gest.button === 2 || gest.button === 1) { goal.yaw = gest.yaw0 - dx * 0.008; goal.pitch = gest.pitch0 + dy * 0.006; return; }
+  anchor(gest.g0, e.clientX, e.clientY); goal.x = cam.x; goal.z = cam.z;
+  // how fast it's being dragged, for the glide after letting go
+  const now = performance.now(), ddt = (now - gest.lt) / 1000;
+  if (ddt > 0.004) { const vx = (cam.x - gest.lx) / ddt, vz = (cam.z - gest.lz) / ddt, a = Math.min(1, ddt / 0.05); flick.x += (vx - flick.x) * a; flick.z += (vz - flick.z) * a; gest.lx = cam.x; gest.lz = cam.z; gest.lt = now; }
 });
 function up(e, cancel) {
   pts.delete(e.pointerId);
+  if (gest && !gest.two && gest.moved && gest.button === 0 && performance.now() - gest.lt > 80) flick.x = flick.z = 0;   // it had stopped before letting go
+  if (gest && (gest.two || !gest.moved || gest.button !== 0)) flick.x = flick.z = 0;
   if (gest && !gest.two && !gest.moved && !gest.held && !cancel) { if (gest.button === 0) G.click(e.clientX, e.clientY); else if (gest.button === 2 && !touchy) G.rightClick(); }
   if (pts.size === 1) { const [p] = [...pts.values()]; startOne(p.x, p.y, 0, true); }   // back to one finger: it pans on
   else if (!pts.size) gest = null;
@@ -316,14 +346,26 @@ function up(e, cancel) {
 ov.addEventListener("pointerup", (e) => up(e, false));
 ov.addEventListener("pointercancel", (e) => up(e, true));
 ov.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") G.noHover(); });
-ov.addEventListener("wheel", (e) => { e.preventDefault(); const g0 = groundAt(e.clientX, e.clientY); cam.vh *= Math.pow(1.0015, e.deltaY * (e.deltaMode === 1 ? 30 : 1)); anchor(g0, e.clientX, e.clientY); }, { passive: false });
+ov.addEventListener("wheel", (e) => { e.preventDefault(); flick.x = flick.z = 0; goal.vh *= Math.pow(1.0015, e.deltaY * (e.deltaMode === 1 ? 30 : 1)); zoomAt = { sx: e.clientX, sy: e.clientY, g: groundAt(e.clientX, e.clientY) }; }, { passive: false });
+// keys speed the camera up and slow it down instead of starting and stopping dead
 function keyCam(dt) {
-  const pan = cam.vh * 0.9 * dt, fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);   // forward on the ground: up the screen
-  if (keys.KeyW || keys.ArrowUp) { cam.x += fx * pan; cam.z += fz * pan; } if (keys.KeyS || keys.ArrowDown) { cam.x -= fx * pan; cam.z -= fz * pan; }
-  if (keys.KeyA || keys.ArrowLeft) { cam.x += fz * pan; cam.z -= fx * pan; } if (keys.KeyD || keys.ArrowRight) { cam.x -= fz * pan; cam.z += fx * pan; }
-  if (keys.KeyQ) cam.yaw += 1.6 * dt; if (keys.KeyE) cam.yaw -= 1.6 * dt;
-  if (keys.KeyR) cam.pitch += 0.9 * dt; if (keys.KeyF) cam.pitch -= 0.9 * dt;
-  if (keys.Equal || keys.NumpadAdd) cam.vh /= 1 + 1.5 * dt; if (keys.Minus || keys.NumpadSubtract) cam.vh *= 1 + 1.5 * dt;
+  const k = (a, b) => (keys[a] || keys[b] ? 1 : 0), fwdIn = k("KeyW", "ArrowUp") - k("KeyS", "ArrowDown"), side = k("KeyD", "ArrowRight") - k("KeyA", "ArrowLeft");
+  const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), sp = cam.vh * 0.9, e = 1 - Math.exp(-dt * 8);   // forward on the ground: up the screen
+  const tx = (fx * fwdIn - fz * side) * sp, tz = (fz * fwdIn + fx * side) * sp;
+  keyV.x += (tx - keyV.x) * e; keyV.z += (tz - keyV.z) * e;
+  keyV.yaw += ((k("KeyQ", "KeyQ") - k("KeyE", "KeyE")) * 1.6 - keyV.yaw) * e; keyV.pitch += ((k("KeyR", "KeyR") - k("KeyF", "KeyF")) * 0.9 - keyV.pitch) * e;
+  keyV.zoom += ((k("Minus", "NumpadSubtract") - k("Equal", "NumpadAdd")) * 1.5 - keyV.zoom) * e;
+  goal.x += keyV.x * dt; goal.z += keyV.z * dt; goal.yaw += keyV.yaw * dt; goal.pitch += keyV.pitch * dt; goal.vh *= Math.exp(keyV.zoom * dt);
+}
+// each frame: a flick glides on and slows down; the camera eases toward its goal
+function easeCam(dt) {
+  if (!gest && (flick.x || flick.z)) { goal.x += flick.x * dt; goal.z += flick.z * dt; const f = Math.exp(-dt * 4); flick.x *= f; flick.z *= f; if (hyp(flick.x, flick.z) < 0.05) flick.x = flick.z = 0; }
+  goal.pitch = clamp(goal.pitch, PITCH_MIN, PITCH_MAX); goal.vh = clamp(goal.vh, 5, 80); goal.x = clamp(goal.x, 0, MW); goal.z = clamp(goal.z, 0, MH);
+  const e = 1 - Math.exp(-dt * 14);
+  cam.yaw += (goal.yaw - cam.yaw) * e; cam.pitch += (goal.pitch - cam.pitch) * e; cam.vh += (goal.vh - cam.vh) * e;
+  if (zoomAt) { anchor(zoomAt.g, zoomAt.sx, zoomAt.sy); goal.x = cam.x; goal.z = cam.z; if (Math.abs(goal.vh - cam.vh) < goal.vh * 0.002) zoomAt = null; }
+  else { cam.x += (goal.x - cam.x) * e; cam.z += (goal.z - cam.z) * e; }
+  applyCam();
 }
 
 // ---- the overlay: labels, prices, the selected truck's queue, what a click would do, drawn flat on the screen ----
@@ -402,6 +444,7 @@ function resize() {
   if (!sized) {   // it starts over the whole port; on a touch screen close enough for a fingertip, over where the port starts
     sized = true; cam.z = MH / 2 - 1; cam.vh = clamp(Math.max(MH * Math.sin(cam.pitch) + 4, (MW + 2) * VH / VW), 5, 80);
     if (matchMedia && matchMedia("(pointer: coarse)").matches) { touchy = true; cam.vh = 24; cam.x = 15; cam.z = 18; }
+    syncGoal();
   }
   applyCam();
 }
@@ -409,15 +452,16 @@ addEventListener("resize", resize); resize();
 R3.draw = () => {
   const now = performance.now(), dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
   if (innerWidth !== VW || innerHeight !== VH) resize();
-  keyCam(dt); applyCam(); syncGround();
+  keyCam(dt); easeCam(dt); syncGround();
   nBox = 0; INST.length = 0;
-  syncShip(); syncStorage(); syncTrucks(); syncSTS(); syncRTG();
+  syncShip(); syncSlotCols(); syncStorage(); syncTrucks(); syncSTS(); syncRTG();
   boxes.count = nBox; boxes.instanceMatrix.needsUpdate = true; if (boxes.instanceColor) boxes.instanceColor.needsUpdate = true; boxes.computeBoundingSphere();
   renderer.render(scene, camera);
   overlay();
 };
 // for tests
-R3.cam = cam; R3.applyCam = applyCam; R3.scr = scr; R3.badges = () => BADGES;
+R3.cam = cam; R3.goal = goal; R3.applyCam = () => { applyCam(); syncGoal(); }; R3.scr = scr; R3.badges = () => BADGES;
 R3.screenOfTruck = (t) => { const tr = G.trailerOf(t); const [x, y] = scr(m(tr.x), 1, m(tr.y)) || [-1, -1]; return { x, y }; };
-R3.screenOfSlot = (k) => { const [rx, ry] = G.slotRect(k), st = DOCK.ship.bays[k]; const [x, y] = scr(m(rx) + CL / 2, DECK + Math.max(0.5, st.length - 0.2), m(ry) + 0.5) || [-1, -1]; return { x, y }; };
+R3.screenOfSlot = (k) => { const [rx, ry] = G.slotRect(k), st = DOCK.ship.bays[k]; const [x, y] = scr(m(rx) + CL / 2, DECK + (st.length ? st.length - 0.2 : 0.25), m(ry) + 0.5) || [-1, -1]; return { x, y }; };
 R3.screenOfTile = (i, j, y = 0) => { const [x, yy] = scr(i + 0.5, y, j + 0.5) || [-1, -1]; return { x, y: yy }; };
+R3.camera = camera; R3.firstHitDist = (sx, sy) => { setRay(sx, sy); const h = ray.intersectObjects(PICKABLE.concat([boxes, slotCols]), false)[0]; return h ? h.distance : Infinity; };

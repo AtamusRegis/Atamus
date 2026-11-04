@@ -356,11 +356,18 @@ behavior. Rules marked **(owner)** were decided explicitly by the owner, so keep
   slide up or down together to tilt. Mouse: the left button drags to pan, the right (or middle) button drags to turn
   (sideways) and tilt (up and down), the wheel zooms at the pointer. Keys: WASD / arrows pan, Q / E turn, R / F tilt,
   + / − zoom. It starts over the whole port, or on a touch screen close up over crane A and the first storage area.
-- **Selecting (owner: make sure it works well):** what's under the pointer is worked out on the screen: a numbered badge
-  of the selected truck's queue first; then whatever the pointer's ray meets first (a truck, the container on a truck's
-  trailer, a container on the docked ship); otherwise the nearest truck or ship slot within reach (more on a touch
-  screen), measured to the truck's cab and trailer or the slot's top. A ray meeting a storage stack picks the tile at
-  the stack's top, so tapping a stack sends to that storage area. Taps, the long press to call off a claimed container
+  **Smooth (owner, 2026-11-04):** zooming, turning and tilting ease in instead of jumping (the wheel keeps the point
+  under the pointer in place as it eases); a drag still moves the map with the finger, and a flick keeps it gliding a
+  moment after letting go; keys speed it up and slow it down instead of starting and stopping dead; a touch stops any
+  glide.
+- **Selecting (owner: make sure it works well; 3D colliders, not the 2D grid, 2026-11-04):** a numbered badge of the
+  selected truck's queue first; then the first 3D collider the pointer's ray meets: each truck has two invisible boxes a
+  little bigger than it (one around the cab, one around the trailer, up to the top of a container on it), every
+  container is its own box (on a truck it selects that truck), and each slot of the docked ship has a flat one over the
+  deck, so empty slots can be tapped too. A stored container stops the ray (one hanging from a crane doesn't): then it's the
+  tile at the top of the stack that counts, so tapping a stack sends to that storage area. Cranes have none, so they
+  never block a tap. On a touch screen, with nothing right under the finger, rays a little around it are tried, nearest
+  first; with a mouse only the one under the pointer. Taps, the long press to call off a claimed container
   and the right click to take back the last queued trip work as in 2D. The selected truck has a white pad under it
   (pulsing), the hovered one a fainter one; its queue, the green or red outline of what a click would do, a customer's
   dotted line, locked things with their prices, tractor numbers, faces, "+$60" and the ship's time are drawn flat on

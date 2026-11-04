@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-04
+
+- **Smoother 3D camera and 3D colliders for selecting (owner).** Zoom, turn and tilt ease in; a flicked pan glides on; keys accelerate and brake. Taps now hit invisible 3D box colliders (around each truck's cab and trailer, every container's own box, a flat one over each ship slot) instead of guessing from the ground grid and screen distance; on a touch screen rays a little around the finger are tried when nothing is right under it.
+
 ## 2026-11-03
 
 - **3D is the main game page (owner).** game.html (Play now, old links) is the 3D game; the 2D game moved to game2d.html, and game3d.html forwards to game.html.
