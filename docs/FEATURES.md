@@ -107,6 +107,10 @@ column at a time; the freighter takes any shape; all at once.
 - **One loading spot per arm (owner, 2026-11-05):** on the loading deck under the arm. Haulers line up for it: the front
   one hovers at the spot, the rest wait at a free dock station (with none free, they stack up in the air behind the
   spot) and come in turn.
+- **Line spots (owner, 2026-11-06):** a hauler spot blueprint dragged onto a loader arm's line (south of its loading
+  spot) snaps into it, up to 4, one behind another 3.3 m apart. Haulers waiting for that arm wait on them in order (the
+  next one on the nearest), and only past them at dock stations. Tapping one with a hauler selected sends it to that
+  arm. They move with their loader arm, and can be moved to another place in a line or removed.
 - **An arm serves the hauler at its spot.** A pickup sent for a claimed container gets that one: whatever unclaimed was
   left on top of it is set aside first (to low import stacks nearby, avoiding ones a customer wants); else the nearest
   unclaimed top container in its columns, preferring one with room for its shape at a hauler spot.
@@ -140,7 +144,9 @@ assigned to a hauler spot.
     ready beside it (east, south, west, north, whichever's clear; ✗ stops). An empty slot's shape can be changed later
     for a small fee ($50): tap it with nothing selected.
   - **Crane:** a robot arm on its own unit, reaching 10.5 m (a dashed circle while placing any unit). It works every
-    slot and spot in its reach.
+    slot and spot in its reach. **Upright (owner, 2026-11-06):** a turret that turns to face the work, with a shoulder
+    and an elbow bending in the vertical plane (the elbow up), the wrist held above the gripper; with nothing to do it
+    folds up small beside the turret, and opens out again when it starts a job.
   - **Hauler spot:** haulers drop imports there and take exports from there.
   - **Truck spot:** customers pick up there; export ships drop exports there.
 - **Cranes work together (owner, 2026-11-06):** a container can go from crane to crane through slots of its shape that
@@ -164,6 +170,15 @@ assigned to a hauler spot.
   brought to a truck spot.
 - **Lines:** a ship sent to a spot that's taken waits its turn, first come first served (a hauler at a free dock
   station). A customer is only sent once a truck spot is free (it waits on its pad).
+- **Moving and removing (owner, 2026-11-06):** with nothing selected, tap something built to pick it (again, or
+  elsewhere, to let go). It's outlined (a unit's whole platform dotted, a crane's reach dashed), with buttons below it:
+  **move** (cranes, hauler spots, truck spots, a loader arm's line spots, dock stations, pad groups, loader arms),
+  **move the whole platform** (any unit: every unit joined to it edge to edge, cranes and containers included),
+  **remove** (an empty storage slot, a line spot) and **turn its shape** (an empty storage slot, $50). Storage slots
+  are removed, never moved on their own. A move is a blueprint like building (drag, ✓ / ✗, free); while it's out, the
+  cranes being moved start nothing new, and it can't be placed until they've finished what they're doing. **A platform
+  (units joined edge to edge) always keeps at least one crane, one hauler spot and one truck spot:** nothing is moved
+  or removed that would leave a platform without one (or split one into a part without).
 - **Exports (owner):** export ships bring a container to a free truck spot with room for its shape, while there's a
   hauler spot to take exports out from and exports fill under an eighth of storage. Haulers take them from hauler
   spots to the freighter.
@@ -177,9 +192,10 @@ assigned to a hauler spot.
   queued takes its container where it goes by itself: an import to the nearest hauler spot with room for its shape (a
   shorter line counts), an export to an arm with room for it on the freighter. Tap a hauler spot to drop an import there,
   or (empty) to fetch an export from there. Sent to a spot without room for its container's shape, it goes elsewhere.
-- **Auto (owner, 2026-11-06: assigned a hauler spot):** tap a hauler spot to assign it. It shuttles by itself: loaded, to
-  its spot (or, with no room there for that shape, the nearest that has); empty, it takes an export from its spot if
-  one's there and the freighter has room, else to an arm with containers left (the one with the shorter line), going
+- **Auto (owner, 2026-11-06: assigned a platform):** tap a hauler spot to assign it that spot's platform; it uses any
+  hauler spot on that platform (the nearest, a shorter line and a free spot counting; all are outlined while it's
+  selected). It shuttles by itself: loaded, to one of them with room for that shape (or, with none, the nearest hauler
+  spot that has); empty, it takes an export from one of them if one's there and the freighter has room, else to an arm with containers left (the one with the shorter line), going
   for a container a customer is waiting for if one is in reach. Tapping a freighter stack with an auto hauler on its way
   to an arm makes that trip the stack's.
 - **Idle haulers** fly to the nearest free dock station.
@@ -244,6 +260,9 @@ assigned to a hauler spot.
   queue and outlines are drawn flat over the 3D view (cut where they pass behind the camera).
 
 ## Rejected / removed
+
+- **Cranes with level arms (2026-11-05 to 2026-11-06; owner: vertical, folding when idle):** two links swinging
+  level above the stacks, always stretched out to the gripper.
 
 - **Storage platforms (2026-11-05 to 2026-11-06; owner: "platform upgrades are buildings now. And each building is 1
   unit"):** platforms as one building (3 × 3 to start, grown a row or column at a time up to 8 × 8, with drop-off and

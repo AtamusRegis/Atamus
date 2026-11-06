@@ -11,11 +11,13 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
    time and loader arms (placed along the spine, one loading spot each) unload its containers (circle, square or hex, 9
    colors) onto haulers; haulers, customer ships and export ships fly freely (climb to cruise height, fly over, settle
    at their hover point, steer clear of each other; no roads); you build with blueprints (drag, ✓ / ✗), storage one
-   2.7 m unit at a time on a grid: storage slots (one shape each, stacks 3 high), cranes (reach 10.5 m; they hand
-   containers on to each other through shared slots), hauler spots (haulers drop imports, take exports) and truck spots
+   2.7 m unit at a time on a grid: storage slots (one shape each, stacks 3 high), cranes (reach 10.5 m, upright arms that fold
+   when idle; they hand containers on to each other through shared slots), hauler spots (haulers drop imports, take exports) and truck spots
    (customers pick up, export ships drop off); also customer pad groups, dock stations (bought with each hauler; waiting
    haulers park there) and loader arms; freighter stacks are one shape each; manual haulers (you tap what they fetch)
-   and auto ones (assigned a hauler spot); every customer wants one particular container and pays $60; start with 1
+   and auto ones (assigned a platform via one of its hauler spots); built things can be picked to move (whole platforms
+   too) or remove (empty slots); a platform always keeps a crane, a hauler spot and a truck spot; loader arms take up to
+   4 line spots; every customer wants one particular container and pays $60; start with 1
    hauler, 1 loader arm, 9 slots, a crane, a hauler spot, a truck spot, 4 pads, $500. Camera: perspective, tilt 45–90°,
    turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database

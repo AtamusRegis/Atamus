@@ -4,6 +4,10 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-06
 
+- **Upright cranes that fold away (owner).** Crane arms bend in the vertical plane (turret, shoulder, elbow) and fold up small when idle.
+- **Moving and removing (owner).** Tap something built to pick it: move it (cranes, hauler and truck spots, line spots, dock stations, pad groups, loader arms), move its whole platform with its cranes and containers, remove an empty storage slot or a line spot, or turn an empty slot's shape. A platform always keeps a crane, a hauler spot and a truck spot; moves wait for the cranes involved to finish.
+- **Auto haulers use their whole platform (owner).** Assigned by tapping a hauler spot, an auto hauler uses any hauler spot on that spot's platform.
+- **Line spots for loader arms (owner).** Hauler spots can be built in a loader arm's line (up to 4); waiting haulers queue on them before dock stations.
 - **Storage is built a unit at a time (owner).** Platforms are gone: storage slots (each one shape, chosen on the blueprint; tap it to turn), cranes, hauler spots (haulers drop imports, take exports) and truck spots (customers pick up, export ships drop off) are 1-unit buildings placed anywhere clear on a grid. Cranes work whatever's in their reach and hand containers on to each other through shared slots of the container's shape, bringing a customer's container (or a hauler's export) closer one move at a time. Auto haulers are assigned a hauler spot. The last two spaces of each shape a spot's cranes reach stay free so containers can always be dug out. Start: 9 slots, a crane, a hauler spot, a truck spot.
 - **Freighter stacks are one shape each (owner).** Stacks side by side can differ; its arms only stack a container on its own shape.
 - **Robot arms are buildings with a reach (owner).** Built from the menu (Robot arm) beside a platform, not bought as a platform upgrade; a new platform comes with none. Each reaches 10.5 m and only works the slots and spots within it (shown as a dashed circle); spots, deliveries and customers only go where an arm can serve them. A platform can't grow over its arms.

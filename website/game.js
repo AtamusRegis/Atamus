@@ -47,10 +47,21 @@ const SPINE = [DOCK.x0 + 1, DOCK.x0 + (DOCK.cols - 1) * HW];
 const BERTHS = []; let berthSeq = 0;
 function mkBerth(cx) {
   const b = { id: berthSeq++, cx, promised: 0, open: true, crane: { x: cx, z: 9, hold: null, ops: [], truck: null } };
-  b.lanes = [{ kind: "any", x: cx, berth: b, q: [] }];
+  b.lanes = [{ kind: "any", x: cx, berth: b, q: [] }]; b.lineSpots = [];
   BERTHS.push(b); BERTHS.sort((p, q) => p.cx - q.cx); ver++; return b;
 }
 const laneFor = (b) => b.lanes[0];
+// (owner, 2026-11-06) hauler spots built in a loader arm's line, one behind another south of its loading spot: haulers
+// waiting their turn there wait on them in order (the next on the nearest), and only past them at a dock station
+const LINE_STEP = 3.3, MAXLINE = 4;
+const mkLineSpot = (b, k) => { const s = { berth: b, k, claim: null, get x() { return this.berth.cx; }, get z() { return LANE_Z + this.k * LINE_STEP; } }; b.lineSpots.push(s); ver++; return s; };
+const lineSpots = () => BERTHS.flatMap((b) => b.lineSpots);
+// the line a point is on (near a loader arm, south of its loading spot), and the place in it
+function lineAt(x, z) {
+  const b = BERTHS.reduce((m, q) => (!m || Math.abs(q.cx - x) < Math.abs(m.cx - x) ? q : m), null);
+  if (!b || Math.abs(b.cx - x) > 3.5 || z < LANE_Z + 1 || z > LANE_Z + (MAXLINE + 0.6) * LINE_STEP) return null;
+  return { b, k: clamp(Math.round((z - LANE_Z) / LINE_STEP), 1, MAXLINE) };
+}
 const laneSpot = (l, k) => (k === 0 ? { x: l.x, y: HOVER, z: LANE_Z, yaw: N } : { x: l.x, y: HOVER + 2 + k * STACK_STEP, z: LANE_Z + LANE_BACK, yaw: N });
 // storage (owner, 2026-11-06): built a unit at a time on a 2.7 m grid, anywhere clear: storage slots (each set to one
 // shape: circle, square or hexagon; containers stack 3 high), robot arms (cranes), hauler spots (haulers drop imports
@@ -129,7 +140,7 @@ const PRICE_SCALE = 0.1, priced = (n) => Math.round(n * PRICE_SCALE);
 const expo = (base, k, n) => priced(base * Math.pow(k, Math.max(0, n)));
 const PRICES = {
   slot: () => expo(80, 1.02, SLOTS.length - 9), crane: () => expo(1200, 1.6, CRANES.length - 1),
-  hspot: () => expo(200, 1.5, hspots().length - 1), tspot: () => expo(200, 1.5, tspots().length - 1),
+  hspot: () => expo(200, 1.5, hspots().length + lineSpots().length - 1), tspot: () => expo(200, 1.5, tspots().length - 1),
   pads: () => expo(200, 1.4, padSeq - 1), station: () => expo(250, 1.15, PARK.length - 1) + (ghost && ghost.kind === "station" && ghost.hauler ? tractorPrice(ghost.hauler === "auto") : 0),
   berth: () => expo(2000, 1.75, BERTHS.length - 1),
 };
@@ -152,30 +163,41 @@ const padsRect = (x, z) => [x - 3.8, x + 3.8, z - 3.8, z + 3.8];
 const stationRect = (x, z) => [x - 1.7, x + 1.7, z - 1.7, z + 1.7];
 const tileRect = (x, z) => [x - UNIT / 2, x + UNIT / 2, z - UNIT / 2, z + UNIT / 2];
 const TILE_KINDS = new Set(["slot", "crane", "hspot", "tspot"]);
-function others() {
+function others(skip) {
   const out = [];
-  for (let g = 0; g < padSeq; g++) { const s = STALLS.filter((q) => q.group === g); out.push(padsRect((s[0].x + s[1].x) / 2, (s[0].z + s[2].z) / 2)); }
-  for (const p of PARK) out.push(stationRect(p.x, p.z));
+  for (let g = 0; g < padSeq; g++) { if (skip && skip.pads === g) continue; const s = STALLS.filter((q) => q.group === g); out.push(padsRect((s[0].x + s[1].x) / 2, (s[0].z + s[2].z) / 2)); }
+  for (const p of PARK) if (!skip || skip.station !== p) out.push(stationRect(p.x, p.z));
+  for (const q of lineSpots()) if (!skip || (skip.lspot !== q && skip.line !== q.berth)) out.push(tileRect(q.x, q.z));
   return out;
 }
-const clearAt = (r) => inside(r, AREA) && !overlaps(r, LOADING, 0) && others().every((o) => !overlaps(r, o)) && [...TILES.values()].every((t) => !overlaps(r, tileRect(t.x, t.z)));
+const clearAt = (r, skip) => inside(r, AREA) && !overlaps(r, LOADING, 0) && others(skip).every((o) => !overlaps(r, o)) && [...TILES.values()].every((t) => !overlaps(r, tileRect(t.x, t.z)));
 let ghost = null;
 function ghostRect(g) {
+  if (g.kind === "move") return moveRect(g);
+  if (g.line) return tileRect(g.x, g.z);
   if (TILE_KINDS.has(g.kind)) return tileRect(g.x, g.z);
   if (g.kind === "pads") return padsRect(g.x, g.z);
   if (g.kind === "station") return stationRect(g.x, g.z);
   return [g.x - 2.5, g.x + 2.5, 11.6, LANE_Z + 2];   // a loader arm
 }
+const lineFree = (b, k, own, r) => !b.lineSpots.some((q) => q !== own && q.k === k) && others({ lspot: own, line: b }).every((o) => !overlaps(r, o)) && [...TILES.values()].every((t) => !overlaps(r, tileRect(t.x, t.z)));
 function ghostOk(g) {
+  if (g.kind === "move") return moveOk(g);
+  if (g.line) return lineFree(g.line, g.k, null, tileRect(g.x, g.z));
   if (g.kind === "berth") return BERTHS.every((b) => Math.abs(b.cx - g.x) >= BERTH_GAP);
   if (TILE_KINDS.has(g.kind)) { const r = tileRect(g.x, g.z); return !TILES.has(tileKey(g.i, g.j)) && inside(r, AREA) && !overlaps(r, LOADING, 0) && others().every((o) => !overlaps(r, o)); }
   return clearAt(ghostRect(g));
 }
-const ghostPrice = (g) => PRICES[g.kind]();
+const ghostPrice = (g) => (g.kind === "move" ? 0 : PRICES[g.kind]());
 function ghostMove(x, z) {
   const g = ghost; if (!g) return;
-  if (g.kind === "berth") { g.x = clamp(Math.round(x * 2) / 2, SPINE[0], SPINE[1]); g.z = LANE_Z; return; }
-  if (TILE_KINDS.has(g.kind)) { g.i = Math.round(x / UNIT); g.j = Math.round(z / UNIT); g.x = g.i * UNIT; g.z = g.j * UNIT; return; }
+  if (g.kind === "berth" || (g.kind === "move" && g.what === "berth")) { g.x = clamp(Math.round(x * 2) / 2, SPINE[0], SPINE[1]); g.z = LANE_Z; return; }
+  if (g.kind === "hspot" || (g.kind === "move" && g.what === "lspot")) {   // onto a loader arm's line when it's there
+    const l = lineAt(x, z); g.line = l ? l.b : null;
+    if (l) { g.k = l.k; g.x = l.b.cx; g.z = LANE_Z + l.k * LINE_STEP; return; }
+    if (g.kind === "move") return;
+  }
+  if (TILE_KINDS.has(g.kind) || (g.kind === "move" && (g.what === "tile" || g.what === "plat"))) { g.i = Math.round(x / UNIT); g.j = Math.round(z / UNIT); g.x = g.i * UNIT; g.z = g.j * UNIT; return; }
   g.x = Math.round(x * 2) / 2; g.z = Math.round(z * 2) / 2;
 }
 // a new blueprint starts in the middle of the view, or the nearest clear place to it
@@ -192,9 +214,11 @@ function ghostCancel() { ghost = null; }
 function ghostConfirm() {
   const g = ghost; if (!g) return false;
   const p = ghostPrice(g); if (!ghostOk(g) || money < p) { bad = { p: [g.x, 0, g.z], t: 0.5 }; return false; }
+  if (g.kind === "move") { moveDone(g); ghost = null; return true; }
   money -= p - (g.hauler ? tractorPrice(g.hauler === "auto") : 0);   // the hauler's part is paid as it's added
   ghost = null;
-  if (TILE_KINDS.has(g.kind)) mkTile(g.kind, g.i, g.j, g.shape);
+  if (g.line) mkLineSpot(g.line, g.k);
+  else if (TILE_KINDS.has(g.kind)) mkTile(g.kind, g.i, g.j, g.shape);
   else if (g.kind === "pads") mkPads(g.x, g.z);
   else if (g.kind === "station") { const s = mkStation(g.x, g.z); if (g.hauler) addTractor(g.hauler === "auto", s); }
   else if (g.kind === "berth") mkBerth(g.x);
@@ -206,10 +230,108 @@ function ghostConfirm() {
 }
 // tapping a slot blueprint turns its shape
 const ghostTurn = () => { if (ghost && ghost.kind === "slot") ghost.shape = (ghost.shape + 1) % SHAPES.length; };
-// (owner, 2026-11-05) an empty storage slot's shape can be changed for a small fee: tap it (nothing selected)
+// (owner, 2026-11-05) an empty storage slot's shape can be changed for a small fee
 function turnShape(v, at) {
   if (v.stack.length || CRANES.some((c) => c.cr.res && c.cr.res.has(v)) || money < SHAPE_FEE) { bad = { p: at, t: 0.5 }; return false; }
   money -= SHAPE_FEE; v.shape = (v.shape + 1) % SHAPES.length; ver++; return true;
+}
+// ---- moving and removing (owner, 2026-11-06) ----
+// With nothing selected, tap something built to pick it; its buttons: move it (cranes, hauler and truck spots, dock
+// stations, pad groups, loader arms), move its whole platform (any unit: every unit joined to it edge to edge, cranes
+// included, with its containers), remove it (storage slots, when empty), turn its shape (empty storage slots, a fee).
+// A platform must keep at least one crane, one hauler spot and one truck spot: nothing is moved or removed that would
+// leave one without.
+const D4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+// how many platforms (units joined edge to edge) lack a crane, a hauler spot or a truck spot, for a layout key -> kind
+function incomplete(map) {
+  const seen = new Set(); let n = 0;
+  for (const k of map.keys()) {
+    if (seen.has(k)) continue;
+    const kinds = new Set(), q = [k]; seen.add(k);
+    while (q.length) { const u = q.pop(); kinds.add(map.get(u)); const [i, j] = u.split(",").map(Number); for (const [di, dj] of D4) { const v = tileKey(i + di, j + dj); if (map.has(v) && !seen.has(v)) { seen.add(v); q.push(v); } } }
+    if (!kinds.has("crane") || !kinds.has("hspot") || !kinds.has("tspot")) n++;
+  }
+  return n;
+}
+const layout = () => new Map([...TILES].map(([k, t]) => [k, t.kind]));
+// the platform a unit belongs to: it and every unit joined to it edge to edge
+function platformOf(t) {
+  const out = [t], seen = new Set([t]);
+  for (let n = 0; n < out.length; n++) for (const [di, dj] of D4) { const v = TILES.get(tileKey(out[n].i + di, out[n].j + dj)); if (v && !seen.has(v)) { seen.add(v); out.push(v); } }
+  return out;
+}
+let picked = null;   // { what: "tile" | "station" | "pads" | "berth", ref }
+function acts(p) {
+  if (!p) return [];
+  if (p.what === "lspot") return ["move", "remove"];
+  if (p.what !== "tile") return ["move"];
+  return p.ref.kind === "slot" ? (p.ref.stack.length ? ["plat", "remove"] : ["shape", "plat", "remove"]) : ["move", "plat"];
+}
+// what's being moved: the units (held still by the cranes meanwhile), or the thing
+const movingUnits = () => (ghost && ghost.kind === "move" ? (ghost.what === "tile" ? [ghost.ref] : ghost.what === "plat" ? ghost.units : []) : []);
+let held = new Set();
+// moving waits for the cranes on what's moving (and any crane working it) to finish what they're doing
+const unitsBusy = (us) => us.some((t) => (t.kind === "crane" && (t.cr.ops.length || t.cr.truck)) || CRANES.some((c) => c.cr.res && c.cr.res.has(t)));
+function startMove(what, ref) {
+  picked = null; selected = null;
+  if (what === "tile") ghost = { kind: "move", what, ref, i: ref.i, j: ref.j, x: ref.x, z: ref.z };
+  else if (what === "plat") ghost = { kind: "move", what, ref, units: platformOf(ref), i: ref.i, j: ref.j, x: ref.x, z: ref.z };
+  else if (what === "station") ghost = { kind: "move", what, ref, x: ref.x, z: ref.z };
+  else if (what === "lspot") ghost = { kind: "move", what, ref, line: ref.berth, k: ref.k, x: ref.x, z: ref.z };
+  else if (what === "pads") { const s = STALLS.filter((q) => q.group === ref); ghost = { kind: "move", what, ref, x: (s[0].x + s[1].x) / 2, z: (s[0].z + s[2].z) / 2 }; }
+  else ghost = { kind: "move", what, ref, x: ref.cx, z: LANE_Z };
+}
+function moveRect(g) {
+  if (g.what === "tile" || g.what === "lspot") return tileRect(g.x, g.z);
+  if (g.what === "plat") { const di = g.i - g.ref.i, dj = g.j - g.ref.j, xs = g.units.map((t) => (t.i + di) * UNIT), zs = g.units.map((t) => (t.j + dj) * UNIT); return [Math.min(...xs) - UNIT / 2, Math.max(...xs) + UNIT / 2, Math.min(...zs) - UNIT / 2, Math.max(...zs) + UNIT / 2]; }
+  if (g.what === "station") return stationRect(g.x, g.z);
+  if (g.what === "pads") return padsRect(g.x, g.z);
+  return [g.x - 2.5, g.x + 2.5, 11.6, LANE_Z + 2];
+}
+const unitFits = (i, j, own) => { const r = tileRect(i * UNIT, j * UNIT), o = TILES.get(tileKey(i, j)); return (!o || own.has(o)) && inside(r, AREA) && !overlaps(r, LOADING, 0) && others().every((q) => !overlaps(r, q)); };
+function moveOk(g) {
+  if (g.what === "tile" || g.what === "plat") {
+    const us = movingUnits(), own = new Set(us), di = g.i - g.ref.i, dj = g.j - g.ref.j;
+    if (unitsBusy(us) || !us.every((t) => unitFits(t.i + di, t.j + dj, own))) return false;
+    const after = layout(); for (const t of us) after.delete(tileKey(t.i, t.j)); for (const t of us) after.set(tileKey(t.i + di, t.j + dj), t.kind);
+    return incomplete(after) <= incomplete(layout());
+  }
+  if (g.what === "lspot") return !!g.line && lineFree(g.line, g.k, g.ref, tileRect(g.x, g.z));
+  if (g.what === "station") return clearAt(stationRect(g.x, g.z), { station: g.ref });
+  if (g.what === "pads") return clearAt(padsRect(g.x, g.z), { pads: g.ref });
+  const b = g.ref; return BERTHS.every((q) => q === b || Math.abs(q.cx - g.x) >= BERTH_GAP) && !b.crane.ops.length && !b.crane.truck && !b.lanes[0].q.length;
+}
+function moveDone(g) {
+  if (g.what === "tile" || g.what === "plat") {
+    const us = movingUnits(), di = g.i - g.ref.i, dj = g.j - g.ref.j, dx = di * UNIT, dz = dj * UNIT;
+    for (const t of us) TILES.delete(tileKey(t.i, t.j));
+    for (const t of us) { t.i += di; t.j += dj; t.x += dx; t.z += dz; if (t.mount) { t.mount.x += dx; t.mount.z += dz; t.cr.x += dx; t.cr.z += dz; } TILES.set(tileKey(t.i, t.j), t); }
+  } else if (g.what === "lspot") { const q = g.ref; q.berth.lineSpots.splice(q.berth.lineSpots.indexOf(q), 1); q.berth = g.line; q.k = g.k; g.line.lineSpots.push(q); }
+  else if (g.what === "station") { g.ref.x = g.x; g.ref.z = g.z; }
+  else if (g.what === "pads") { const s = STALLS.filter((q) => q.group === g.ref), dx = g.x - (s[0].x + s[1].x) / 2, dz = g.z - (s[0].z + s[2].z) / 2; for (const q of s) { q.x += dx; q.z += dz; } }
+  else { const b = g.ref; b.cx = g.x; b.lanes[0].x = g.x; b.crane.x = g.x; BERTHS.sort((p, q) => p.cx - q.cx); }
+  ver++;
+}
+// removing an empty storage slot
+function removeSlot(v, at) {
+  const after = layout(); after.delete(tileKey(v.i, v.j));
+  if (v.stack.length || CRANES.some((c) => c.cr.res && c.cr.res.has(v)) || incomplete(after) > incomplete(layout())) { bad = { p: at, t: 0.5 }; return false; }
+  TILES.delete(tileKey(v.i, v.j)); SLOTS.splice(SLOTS.indexOf(v), 1); ver++; return true;
+}
+function doAct(a, at) {
+  const p = picked; if (!p) return;
+  if (a === "move") startMove(p.what, p.ref);
+  else if (a === "plat") startMove("plat", p.ref);
+  else if (a === "remove" && p.what === "lspot") { const q = p.ref; q.berth.lineSpots.splice(q.berth.lineSpots.indexOf(q), 1); q.claim = null; picked = null; ver++; }
+  else if (a === "remove") { if (removeSlot(p.ref, at)) picked = null; }
+  else if (a === "shape") turnShape(p.ref, at);
+}
+// where a picked thing is (for its buttons)
+function pickedAt(p) {
+  if (!p) return null;
+  if (p.what === "tile" || p.what === "station" || p.what === "lspot") return { x: p.ref.x, z: p.ref.z, r: p.what === "tile" ? UNIT / 2 : 1.7 };
+  if (p.what === "pads") { const s = STALLS.filter((q) => q.group === p.ref); return { x: (s[0].x + s[1].x) / 2, z: (s[0].z + s[2].z) / 2, r: 3.8 }; }
+  return { x: p.ref.cx, z: LANE_Z, r: 2.5 };
 }
 // (owner, 2026-11-01) two kinds of hauler: manual (you send it: a freighter container, then a hauler spot) and auto (you
 // assign it a hauler spot and it shuttles by itself). (owner, 2026-11-06) a hauler is only bought with its own dock
@@ -380,6 +502,7 @@ function targetOf(pk) {
   if (!pk) return null;
   if (pk.slot !== undefined) { const s = DOCK.ship; if (!s || s.state !== "docked" || !onDeck(s, pk.slot)) return null; const c = pk.slot % DOCK.cols, b = BERTHS.find((q) => q.open && c >= craneCols(q)[0] && c < craneCols(q)[1]); return b ? { kind: "sts", berth: b, slot: pk.slot } : null; }
   if (pk.berth) return pk.berth.open ? { kind: "sts", berth: pk.berth } : null;
+  if (pk.lspot) return { kind: "sts", berth: pk.lspot.berth };
   if (pk.tile && (pk.tile.kind === "hspot" || pk.tile.kind === "tspot")) return { kind: "rtg", spot: pk.tile };
   if (pk.stall) return pk.stall.open ? { kind: "park", stall: pk.stall } : null;
   return null;
@@ -462,18 +585,21 @@ function fillBays() {
 }
 const nearPad = (t) => PARK.filter((q) => !q.claim).reduce((m, q) => (!m || hyp(q.x - t.x, q.z - t.z) < hyp(m.x - t.x, m.z - t.z) ? q : m), null);
 // (owner, 2026-11-05) a loader arm has one loading spot: the hauler at the front of its line hovers there, the others
-// wait at a free dock station (or stack up in the air behind the spot)
+// wait on the line's hauler spots in order (owner, 2026-11-06), then at a free dock station (or stack up in the air
+// behind the spot)
 function fillLanes() {
   for (const b of BERTHS) for (const l of b.lanes) {
     l.q = l.q.filter((t) => !t.gone && t.lane === l);
+    const ls = b.lineSpots.slice().sort((p, q) => p.k - q.k); for (const q of ls) q.claim = null;
     l.q.forEach((t, k) => {
       const a = t.cmd; if (!a || t.locked) return;
-      if (k === 0) { if (a.waitPad) { a.waitPad.claim = null; a.waitPad = null; } return; }
+      const s = k > 0 ? ls[k - 1] : null; a.lineSpot = s || null; if (s) s.claim = t;
+      if (k === 0 || s) { if (a.waitPad) { a.waitPad.claim = null; a.waitPad = null; } return; }
       if (!a.waitPad) { const p = nearPad(t); if (p) { p.claim = t; a.waitPad = p; } }
     });
   }
 }
-function unwait(a) { if (!a) return; if (a.waitPad) { a.waitPad.claim = null; a.waitPad = null; } }
+function unwait(a) { if (!a) return; if (a.waitPad) { a.waitPad.claim = null; a.waitPad = null; } if (a.lineSpot) { if (a.lineSpot.claim) a.lineSpot.claim = null; a.lineSpot = null; } }
 function leaveLines(t) {
   unwait(t.cmd);
   if (t.lane) { t.lane.q = t.lane.q.filter((x) => x !== t); t.lane = null; }
@@ -493,7 +619,7 @@ function spotOf(t) {
   if (t.exiting) return { ...t.exiting, yaw: null };
   const a = t.cmd;
   if (!a) return t.park ? padSpot(t.park) : t.stall ? padSpot(t.stall) : null;
-  if (a.kind === "sts") return a.waitPad ? padSpot(a.waitPad) : t.lane ? laneSpot(t.lane, Math.max(0, t.lane.q.indexOf(t))) : null;
+  if (a.kind === "sts") return a.lineSpot ? padSpot(a.lineSpot) : a.waitPad ? padSpot(a.waitPad) : t.lane ? laneSpot(t.lane, Math.max(0, t.lane.q.indexOf(t))) : null;
   if (a.kind === "rtg") return a.bay ? { x: a.bay.x, y: HOVER, z: a.bay.z, yaw: N } : a.waitPad ? padSpot(a.waitPad) : null;
   if (a.kind === "park") return padSpot(a.stall);
   if (a.kind === "tpark") return padSpot(a.spot);
@@ -525,10 +651,14 @@ function idleStep(t) {
 // (owner) an auto hauler with a hauler spot assigned: loaded, it takes the container there; empty, it takes an export
 // from there if one's waiting and the freighter has room, else fetches from the freighter (a container a customer is
 // waiting for if one is in reach and unclaimed, otherwise whatever its arm takes)
+// (owner, 2026-11-06) the hauler spots an auto hauler uses: every one on the platform of the spot it was assigned
+const homeSpots = (t) => (t.home && TILES.get(tileKey(t.home.i, t.home.j)) === t.home ? platformOf(t.home).filter((u) => u.kind === "hspot") : []);
+const nearestSpot = (t, list) => list.reduce((m, p) => (!m || hyp(p.x - t.x, p.z - t.z) + p.line.length * 6 + (p.claim ? 4 : 0) < hyp(m.x - t.x, m.z - t.z) + m.line.length * 6 + (m.claim ? 4 : 0) ? p : m), null);
 function autoStep(t) {
   if (!t.auto || !t.home || t.load || t.cmd || t.queue.length || t.locked) return;
   const s = DOCK.ship;
-  if (exportsAt(t.home) - pickupTrips(t.home) > 0 && shipTakesExports()) { enqueue(t, { kind: "rtg", spot: t.home, pickup: true }); return; }
+  const ex = homeSpots(t).filter((p) => exportsAt(p) - pickupTrips(p) > 0);
+  if (ex.length && shipTakesExports()) { enqueue(t, { kind: "rtg", spot: nearestSpot(t, ex), pickup: true }); return; }
   const bs = BERTHS.filter((b) => berthLeft(b) > 0).sort((a, b) => laneFor(a, t).q.length - laneFor(b, t).q.length); if (!bs.length) return;
   for (const b of bs) { const [c0, c1] = craneCols(b); for (let k = 0; k < s.bays.length; k++) { const st = s.bays[k], x = st.find((q) => q.wantedBy), c = k % DOCK.cols; if (x && !x.exp && c >= c0 && c < c1 && impCount(st) - s.claims[k] > 0 && !BERTHS.some((q) => q.crane.slot === k)) { enqueue(t, { kind: "sts", berth: b, slot: k }); return; } } }
   enqueue(t, { kind: "sts", berth: bs[0] });
@@ -539,7 +669,7 @@ function autoStep(t) {
 function deliverAction(t, pickIt) {
   if (t.load.exp) { const ok = BERTHS.filter((b) => exportRoom(b) > 0).sort((a, b) => laneFor(a, t).q.length - laneFor(b, t).q.length); if (!ok.length) return null; const b = ok.find((q) => berthLeft(q) > 0) || ok[0]; return { kind: "sts", berth: b, exp: true, pick: pickIt && berthLeft(b) > 0 }; }
   const ok = (p) => dropRoom(p, t.load.s) > 0;
-  const dest = (t.auto && t.home && ok(t.home) ? t.home : null) || hspots().filter(ok).reduce((m, p) => (!m || hyp(p.x - t.x, p.z - t.z) + p.line.length * 6 < hyp(m.x - t.x, m.z - t.z) + m.line.length * 6 ? p : m), null);
+  const dest = (t.auto ? nearestSpot(t, homeSpots(t).filter(ok)) : null) || nearestSpot(t, hspots().filter(ok));
   return dest ? { kind: "rtg", spot: dest } : null;
 }
 function deliverStep(t) {
@@ -664,7 +794,8 @@ const roomFor = (t, x) => hspots().some((p) => dropRoom(p, x.s) > 0);
 // top container in the arm's columns.
 function stsStep(b, dt) {
   const cr = b.crane, s = DOCK.ship;
-  if (!cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && (berthLeft(b) + b.promised > 0 || expPromised(b) > 0)) {
+  const still = ghost && ghost.kind === "move" && ghost.ref === b;   // (owner, 2026-11-06) being moved: it starts nothing new
+  if (!still && !cr.ops.length && !cr.truck && s && (s.state === "docked" || s.state === "closing") && (berthLeft(b) + b.promised > 0 || expPromised(b) > 0)) {
     const waiting = b.lanes.map((l) => l.q[0]).filter((q) => q && q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && (q.load === null || q.load.exp) && !q.locked && atSpot(q));
     let t = null, ti = 1e9;
     for (const q of waiting) { if (!canServe(b, q)) continue; const d = hyp(q.x - cr.x, q.z - cr.z) - (q.load ? 100 : 0); if (d < ti) { ti = d; t = q; } }
@@ -697,7 +828,7 @@ function stsStep(b, dt) {
   }
   // idle (owner): the next hauler first (a container it's coming for, buried, is dug out ready); with none coming, dig
   // out buried containers customers want, then even its columns out into stacks of two
-  if (!cr.ops.length && !cr.truck && s && s.state === "docked" && b.open) {
+  if (!still && !cr.ops.length && !cr.truck && s && s.state === "docked" && b.open) {
     const coming = crafts.filter((q) => q.cmd && q.cmd.kind === "sts" && q.cmd.berth === b && !q.locked);
     const next = coming.filter((q) => q.cmd.box && q.cmd.pick !== false).reduce((m, q) => (!m || hyp(q.x - cr.x, q.z - cr.z) < hyp(m.x - cr.x, m.z - cr.z) ? q : m), null);
     const nb = next ? boxPlan(next.cmd) : null;
@@ -747,12 +878,12 @@ const CRANE_THINK = 0.25;
 function cranesStep(dt) {
   for (const c of CRANES) {
     const cr = c.cr;
-    if (!cr.ops.length && !cr.truck && (cr.think = (cr.think || 0) - dt) <= 0) { cr.think = CRANE_THINK; craneWork(c); }
+    if (!cr.ops.length && !cr.truck && !held.has(c) && (cr.think = (cr.think || 0) - dt) <= 0) { cr.think = CRANE_THINK; craneWork(c); }
     craneStep(cr, dt, () => { cr.res = null; });
   }
 }
 function craneWork(c) {
-  const N = net(), cr = c.cr, tk = (v) => CRANES.some((o) => o !== c && o.cr.res && o.cr.res.has(v)), mine = (v) => N.by.has(v) && N.by.get(v).includes(c);
+  const N = net(), cr = c.cr, tk = (v) => held.has(v) || CRANES.some((o) => o !== c && o.cr.res && o.cr.res.has(v)), mine = (v) => N.by.has(v) && N.by.get(v).includes(c);
   const ready = crafts.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.bay && !q.locked && atSpot(q) && mine(q.cmd.bay));
   for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
   const score = (q) => hyp(q.x - cr.x, q.z - cr.z) - (clock - q.cmd.readyAt) * 2;
@@ -847,7 +978,7 @@ function flatten(c, tk, mine) {
 
 // ---- input (the 3D view works out what's under the pointer and calls these) ----
 let selected = null, hover = null, bad = null;
-addEventListener("keydown", (e) => { if (e.code === "Escape") { selected = null; ghostCancel(); } const n = /^Digit([1-9])$/.exec(e.code); if (n) { const t = crafts.find((q) => q.num === +n[1]); if (t) selected = t; } });
+addEventListener("keydown", (e) => { if (e.code === "Escape") { selected = null; picked = null; ghostCancel(); } const n = /^Digit([1-9])$/.exec(e.code); if (n) { const t = crafts.find((q) => q.num === +n[1]); if (t) selected = t; } });
 const pickAt = (sx, sy) => (R3.pick ? R3.pick(sx, sy) : null);
 // take any queued trip back (not the one under way), with the drop-off step that was put in for it
 function unqueue(t, a) {
@@ -865,7 +996,7 @@ function slotSwap(t, g) {
   return { kind: "sts", berth: g.berth, slot: g.slot, swap: true };
 }
 function doSwap(t, a) { claim(t, t.cmd, -1); delete a.swap; claim(t, a, 1); startCmd(t, a); }
-// (owner, 2026-11-06) an auto hauler is assigned a hauler spot by tapping it
+// (owner, 2026-11-06) an auto hauler is assigned a platform by tapping one of its hauler spots
 const homeFor = (t, g) => (t.kind === "yard" && t.auto && g && g.kind === "rtg" && g.spot.kind === "hspot" ? g.spot : null);
 // (owner, 2026-11-01) everything is one tap: tap a ship to select it (again to let go), tap where it goes to queue it, tap
 // a numbered badge of its queue to take that trip back, tap empty space to let go of it. (owner, 2026-11-06) With nothing
@@ -878,9 +1009,14 @@ function click(sx, sy) {
     else { const g = R3.ground ? R3.ground(sx, sy) : null; if (!g) return; const r = ghostRect(ghost); if (ghost.kind === "slot" && g.x >= r[0] && g.x <= r[1] && g.z >= r[2] && g.z <= r[3]) ghostTurn(); else ghostMove(g.x, g.z); }
     return;
   }
+  if (pk && pk.act) { doAct(pk.act, pk.at); return; }
   if (pk && pk.badge) { unqueue(selected, pk.badge.a); return; }
-  if (pk && pk.truck) { selected = selected === pk.truck ? null : pk.truck; return; }
-  if (!selected) { if (pk && pk.tile && pk.tile.kind === "slot") turnShape(pk.tile, pk.at); return; }
+  if (pk && pk.truck) { picked = null; selected = selected === pk.truck ? null : pk.truck; return; }
+  if (!selected) {
+    // (owner, 2026-11-06) pick something built (again to let go)
+    const b = !pk ? null : pk.tile ? { what: "tile", ref: pk.tile } : pk.station ? { what: "station", ref: pk.station } : pk.lspot ? { what: "lspot", ref: pk.lspot } : pk.stall ? { what: "pads", ref: pk.stall.group } : pk.berth ? { what: "berth", ref: pk.berth } : null;
+    picked = b && !(picked && picked.what === b.what && picked.ref === b.ref) ? b : null; return;
+  }
   const g = targetOf(pk), h = homeFor(selected, g); if (h) { selected.home = h; return; }
   const a = planFor(selected, g), sw = !a && slotSwap(selected, g);
   if (a) enqueue(selected, a); else if (sw) doSwap(selected, sw); else if (!g) selected = null; else bad = { p: pk.at, t: 0.5 };
@@ -942,7 +1078,7 @@ let last = performance.now();
 function step(dt) {
   clock += dt;
   shipStep(dt); syncClaims(); trimPromises(); for (const b of BERTHS) if (b.open) stsStep(b, dt);
-  fillLanes(); freeBays(); fillBays(); sweepWants(); cranesStep(dt);
+  held = new Set(movingUnits()); fillLanes(); freeBays(); fillBays(); sweepWants(); cranesStep(dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
   // (owner) customers come faster the more pads are open
@@ -958,17 +1094,18 @@ requestAnimationFrame(frame);
 window.Atamus = {
   addMoney: (n) => (money += n), addTractor, startGhost, ghostMove, ghostConfirm, ghostCancel, ghostOk, ghostTurn, turnShape, mkTile, mkBerth, mkPads, mkStation,
   get money() { return money; }, get state() { return { crafts, dock: DOCK, berths: BERTHS, slots: SLOTS, cranes: CRANES, spots: SPOTS, tiles: TILES, stalls: STALLS, park: PARK, delivered, selected, ghost }; }, get exported() { return exported; },
-  step, planFor, targetOf, enqueue, unqueueLast, slotSwap, doSwap, select: (t) => (selected = t), atSpot, spotOf, dropRoom, route, fromSpot, click, slotOf,
+  step, planFor, targetOf, enqueue, unqueueLast, slotSwap, doSwap, select: (t) => (selected = t), atSpot, spotOf, dropRoom, route, fromSpot, click, slotOf, pick: (p) => (picked = p), doAct, startMove, removeSlot, platformOf, incomplete, get picked() { return picked; },
 };
 // what the 3D view reads and calls
 R3.game = {
   HR, HW, RZ, PH, HOVER, CARRY, X0, MW, MH, LANE_Z, LANE_BACK, UNIT, REACH, MOUNT, SHAPES, COLORS, AUTO_CAB, EXP_CAB, WAIT_CAB, MANUAL_CAB,
-  BERTHS, DOCK, STALLS, PARK, SLOTS, CRANES, SPOTS, floats,
+  BERTHS, DOCK, STALLS, PARK, SLOTS, CRANES, SPOTS, floats, LINE_STEP,
   get trucks() { return crafts; }, get selected() { return selected; }, get hover() { return hover; }, get bad() { return bad; },
-  get money() { return money; }, get clock() { return clock; }, get ver() { return ver; }, get ghost() { return ghost; },
+  get money() { return money; }, get clock() { return clock; }, get ver() { return ver; }, get ghost() { return ghost; }, get picked() { return picked; },
+  acts, pickedAt, platformOf, homeSpots,
   slotPos, shipSlot, onDeck, spotMark, boxAt, flashing, posRGB, targetOf, planFor, slotSwap, homeFor, craneCols, laneFor,
   ghostRect, ghostOk, ghostPrice, ghostMove,
-  click, unclaimAt, rightClick: () => { if (ghost) { ghostCancel(); return; } if (!selected || !unqueueLast(selected)) selected = null; },
+  click, unclaimAt, rightClick: () => { if (ghost) { ghostCancel(); return; } if (picked) { picked = null; return; } if (!selected || !unqueueLast(selected)) selected = null; },
   hoverAt: (sx, sy) => { hover = pickAt(sx, sy); },
   noHover: () => { hover = null; },
 };

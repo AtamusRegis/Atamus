@@ -69,7 +69,7 @@ const SLOTG = [ringG(1.05, 0.07), sqRingG(1.27, 0.1), hexRingG(HR * 0.98, 0.07)]
 const SHARED = new Set([BOXG, FLAMEG, ...SLOTG, UNSETG, INBAYG, OUTBAYG, LANEG, PADG, DOCKRG]);
 // (owner, 2026-11-05) everything built is rebuilt whenever the layout changes (a new piece flies up into place)
 let DYN = [], DYNCOL = [], builtVer = -1, firstBuild = true;
-const known = new WeakSet(), TILE3 = new Map(), DOCKS = new Map(), PADS = [], CRANES = new Map();
+const known = new WeakSet(), LSP = new Map(), TILE3 = new Map(), DOCKS = new Map(), PADS = [], CRANES = new Map();
 const addDyn = (o) => { scene.add(o); DYN.push(o); return o; };
 const dynCollider = (w, h, d, x, y, z, data) => { const c = collider(w, h, d, x, y, z, data); DYNCOL.push(c); return c; };
 // (owner, 2026-11-06) a unit of storage: a deck tile, joined at the edges to the units beside it (a glowing edge where
@@ -97,6 +97,7 @@ function dockObj(p) {
   box(0.5, 0.4, 0.5, darkM, -1, -0.5, 1, g); box(0.5, 0.4, 0.5, darkM, 1, -0.5, -1, g);
   const fires = [flame("orange", g, -1, -0.7, 1), flame("orange", g, 1, -0.7, -1)];
   g.position.set(p.x, 0, p.z); addDyn(g); DOCKS.set(p, { g, fires });
+  dynCollider(3.2, 1.2, 3.2, p.x, 0, p.z, { station: p });
 }
 // a group of 4 customer pads
 function padsObj(st) {
@@ -109,12 +110,20 @@ function padsObj(st) {
 function rebuild() {
   for (const o of DYN) { scene.remove(o); o.traverse((m) => { if (m.geometry && !SHARED.has(m.geometry)) m.geometry.dispose(); }); }
   for (const c of DYNCOL) { scene.remove(c); COLLIDERS.splice(COLLIDERS.indexOf(c), 1); }
-  DYN = []; DYNCOL = []; TILE3.clear(); DOCKS.clear(); PADS.length = 0; CRANES.clear();
+  DYN = []; DYNCOL = []; TILE3.clear(); LSP.clear(); DOCKS.clear(); PADS.length = 0; CRANES.clear();
   const fresh = (k) => { if (!known.has(k)) { known.add(k); if (!firstBuild) rising.set(k, nowS()); } };
   for (const b of BERTHS) {
     fresh(b); armObj(b);
     const r = new THREE.Mesh(LANEG, warnM); r.position.set(b.cx, 0.02, LANE_Z); addDyn(r);
     dynCollider(5, 2.4, LANE_Z + 2.4 - 12, b.cx, 0.8, (12 + LANE_Z + 2.4) / 2, { berth: b });   // its loading spot and the stretch of spine
+    // (owner, 2026-11-06) the hauler spots in its line: a deck unit each with its ring
+    for (const q of b.lineSpots) {
+      fresh(q); const g = new THREE.Group(); box(UNIT, 0.5, UNIT, TILEM.hspot, 0, -0.25, 0, g); for (const [w, d, ex, ez] of [[UNIT, 0.08, 0, UNIT / 2], [UNIT, 0.08, 0, -UNIT / 2], [0.08, UNIT, UNIT / 2, 0], [0.08, UNIT, -UNIT / 2, 0]]) box(w, 0.06, d, edgeM, ex, 0.01, ez, g);
+      const m2 = new THREE.Mesh(INBAYG, warnM); m2.position.y = 0.02; g.add(m2);
+      box(0.5, 0.4, 0.5, darkM, 0, -0.7, 0, g); const fires = [flame("orange", g, 0, -0.9, 0)];
+      g.position.set(q.x, 0, q.z); addDyn(g); LSP.set(q, { g, fires });
+      dynCollider(UNIT, 1, UNIT, q.x, -0.25, q.z, { lspot: q });
+    }
   }
   const tiles = new Map(); for (const t of [...SLOTS, ...G.CRANES, ...SPOTS]) tiles.set(t.i + "," + t.j, t);
   for (const t of tiles.values()) { fresh(t); tileObj(t, (i, j) => tiles.has(i + "," + j)); }
@@ -126,6 +135,7 @@ function rebuild() {
 function syncBuilt() {
   if (G.ver !== builtVer) rebuild();
   for (const [t, o] of TILE3) { const off = riseOff(t); o.g.position.y = off; liftFires(o.fires, off, 0.3); }
+  for (const [t, o] of LSP) { const off = riseOff(t); o.g.position.y = off; liftFires(o.fires, off, 0.3); }
   for (const p of PARK) { const o = DOCKS.get(p), off = riseOff(p); o.g.position.y = off; liftFires(o.fires, off, 0.3); }
   for (const o of PADS) { const off = riseOff(o.key); o.g.position.y = off; liftFires(o.fires, off, 0.34); }
 }
@@ -269,46 +279,52 @@ function syncArms() {
     if (cr.hold) putBox(cr.hold, cr.x, y - PH / 2, cr.z, 0, {});
   }
 }
-// (owner, 2026-11-05) a platform's robot arm: a turret on its mount off the east or west edge, with two links swinging
-// level above the stacks (shoulder and elbow), long enough to reach the far corner of the deck, a wrist at the end and a
-// hoist down to the gripper. The gripper goes where the rules put it; the links follow (the elbow kept to the north side,
-// or the south for an arm on the south half). Arms side by side swing at different heights.
-const PA_H = 4.6, PA_TOP = 3.95;
+// (owner, 2026-11-06) a crane: a turret on its unit with an upright arm, a shoulder and an elbow bending in the vertical
+// plane (the turret turns to face the work), a wrist at the end and a hoist down to the gripper. Working, the wrist is
+// held above where the rules put the gripper (the elbow up); with nothing to do it folds up small beside the turret.
+const PA_SH = 1.3, PA_WY = 4.6, PA_L = 5.8, PA_TOP = 3.95, FOLD = [1.42, 1.42 - 2.92];
 const paM = mat("#e8b432", { roughness: 0.45 }), paD = mat("#3a3f48");
-function link(len, w, h, material, parent) { const m2 = new THREE.Mesh(BOXG, material); m2.scale.set(len, h, w); m2.castShadow = true; parent.add(m2); return m2; }
+function link(len, w, h, material, parent) { const m2 = new THREE.Mesh(BOXG, material); m2.scale.set(len, h, w); m2.position.x = len / 2; m2.castShadow = true; parent.add(m2); return m2; }
 function platArmObj(a) {
-  const pos = a.mount, hh = PA_H - (a.cid % 3) * 0.55, L = G.REACH / 2;   // (owner, 2026-11-06) every arm reaches the same distance
+  const pos = a.mount, L = PA_L;
   const g = new THREE.Group(); g.position.set(pos.x, 0, pos.z);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.25, 0.6, 20), paD); base.position.y = 0.3; base.castShadow = true; g.add(base);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.2, 0.5, 20), paD); base.position.y = 0.25; base.castShadow = true; g.add(base);
   const turret = new THREE.Group(); g.add(turret);
-  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, hh, 16), paM); col.position.y = hh / 2; col.castShadow = true; turret.add(col);
-  const up = new THREE.Group(); up.position.y = hh + 0.25; turret.add(up);
-  const l1 = link(L, 0.7, 0.55, paM, up); l1.position.x = L / 2;
-  const elbow = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.8, 16), paD); elbow.position.x = L; up.add(elbow);
-  const fore = new THREE.Group(); fore.position.set(L, -0.45, 0); up.add(fore);
-  const l2 = link(L, 0.55, 0.45, paM, fore); l2.position.x = L / 2;
-  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.7, 12), paD); wrist.position.x = L; fore.add(wrist);
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.75, PA_SH, 16), paM); col.position.y = PA_SH / 2 + 0.3; col.castShadow = true; turret.add(col);
+  const sh = new THREE.Group(); sh.position.y = PA_SH + 0.3; turret.add(sh);
+  const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.0, 16), paD); joint.rotation.x = Math.PI / 2; sh.add(joint);
+  link(L, 0.6, 0.65, paM, sh);
+  const el = new THREE.Group(); el.position.x = L; sh.add(el);
+  const ej = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.9, 16), paD); ej.rotation.x = Math.PI / 2; el.add(ej);
+  link(L, 0.48, 0.5, paM, el);
+  const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.6, 12), paD); wrist.position.x = L; el.add(wrist);
   const cable = box(0.06, 1, 0.06, darkM, 0, 0, 0, scene), spr = new THREE.Mesh(hexRingG(HR, 0.22), yel); addDyn(spr); DYN.push(cable);
-  const lamp = box(0.2, 0.2, 0.2, lampM("#ff4a3a"), 0, hh + 0.75, 0, turret);
-  const near = [...SLOTS, ...SPOTS].filter((t) => hyp(t.x - pos.x, t.z - pos.z) <= G.REACH); const mid = near.length ? near.reduce((m, t) => [m[0] + t.x / near.length, m[1] + t.z / near.length], [0, 0]) : [pos.x, pos.z - 1];
-  addDyn(g); const o = { g, turret, fore, cable, spr, lamp, pos, hh, L, bx: mid[0], bz: mid[1] }; CRANES.set(a, o); return o;
+  const lamp = box(0.2, 0.2, 0.2, lampM("#ff4a3a"), 0, PA_SH + 0.95, 0, turret);
+  addDyn(g); const o = { g, turret, sh, el, cable, spr, lamp, pos, yaw: 0, fold: 1 }; CRANES.set(a, o); return o;
 }
+let armT = performance.now();
 function syncPlatArms() {
+  const now = performance.now(), dt = clamp((now - armT) / 1000, 0, 0.1); armT = now;
   for (const a of G.CRANES) {
     const cr = a.cr, o = CRANES.get(a); if (!o) continue;
-    const lift = TILE3.get(a).g.position.y, y = Math.min(spreaderY(cr, PA_TOP), o.hh - 0.65) + lift, L = o.L;
-    o.g.position.y = lift;
-    // two-link reach: the shoulder turns toward the gripper and opens by the elbow's angle
-    const dx = cr.x - o.pos.x, dz = cr.z - o.pos.z, d = clamp(hyp(dx, dz), 0.4, 2 * L - 0.01);
-    const th = Math.atan2(-dz, dx), an = Math.acos(clamp(d / (2 * L), -1, 1));
-    const e1 = th + an, e2 = th - an;
-    const away = (e) => hyp(o.pos.x + Math.cos(e) * L - o.bx, o.pos.z - Math.sin(e) * L - o.bz);   // the elbow kept away from the platform's middle
-    const sh = away(e1) > away(e2) ? e1 : e2, ex = Math.cos(sh) * L, ezz = -Math.sin(sh) * L;
-    o.turret.rotation.y = sh; o.fore.rotation.y = Math.atan2(-(dz - ezz), dx - ex) - sh;
-    const wy = o.hh + lift - 0.2; o.spr.position.set(cr.x, y + 0.02, cr.z);
-    o.cable.position.set(cr.x, (y + wy) / 2, cr.z); o.cable.scale.y = Math.max(0.05, wy - y);
+    const lift = TILE3.get(a).g.position.y, L = PA_L; o.g.position.y = lift;
+    // folded up when idle, opened out while working
+    const busy = cr.ops.length || cr.truck || cr.hold; o.fold = clamp(o.fold + (busy ? -3 : 1.6) * dt, 0, 1);
+    const dx = cr.x - o.pos.x, dz = cr.z - o.pos.z, r = Math.max(0.6, hyp(dx, dz));
+    if (busy && hyp(dx, dz) > 0.3) { let d = Math.atan2(-dz, dx) - o.yaw; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; o.yaw += d * Math.min(1, dt * 10); }
+    // the wrist above the gripper: two links in the vertical plane, the elbow up
+    const ty = PA_WY - PA_SH - 0.3, dd = clamp(hyp(r, ty), 0.5, 2 * L - 0.01);
+    const a1 = Math.atan2(ty, r) + Math.acos(clamp(dd / (2 * L), -1, 1)), ex = Math.cos(a1) * L, ey = Math.sin(a1) * L, a2 = Math.atan2(ty - ey, r - ex);
+    const f = o.fold * o.fold * (3 - 2 * o.fold), b1 = a1 + (FOLD[0] - a1) * f, b2 = a2 + (FOLD[1] - a2) * f;
+    o.turret.rotation.y = o.yaw; o.sh.rotation.z = b1; o.el.rotation.z = b2 - b1;
+    const wr = Math.cos(b1) * L + Math.cos(b2) * L, wy = PA_SH + 0.3 + Math.sin(b1) * L + Math.sin(b2) * L + lift - 0.3;
+    const wx = o.pos.x + Math.cos(o.yaw) * wr, wz = o.pos.z - Math.sin(o.yaw) * wr;
+    const y = Math.min(spreaderY(cr, PA_TOP) + lift, wy - 0.4);
+    const sx = cr.x + (wx - cr.x) * f, sz = cr.z + (wz - cr.z) * f, sy = y + (wy - 0.4 - y) * f;
+    o.spr.position.set(sx, sy + 0.02, sz);
+    o.cable.position.set(sx, (sy + wy) / 2, sz); o.cable.scale.y = Math.max(0.05, wy - sy);
     o.lamp.material.color.set(cr.ops.length && Math.sin(G.clock * 6 + a.cid) > 0 ? 0xff4a3a : 0x5a2018);
-    if (cr.hold) putBox(cr.hold, cr.x, y - PH / 2, cr.z, 0, {});
+    if (cr.hold) putBox(cr.hold, sx, sy - PH / 2, sz, 0, {});
   }
 }
 
@@ -354,7 +370,7 @@ function anchor(before, sx, sy) { applyCam(); const after = groundAt(sx, sy); ca
 // first collider the pointer's ray meets: a ship's (a box around it and what it carries), a container's own shape, a
 // slot of the docked freighter, an arm's lines, a platform, a customer pad. A container hanging from a crane doesn't
 // stop the ray. On a touch screen, with nothing right under the finger, rays a little around it are tried, nearest first.
-let touchy = false, BADGES = [], GBTN = [];
+let touchy = false, BADGES = [], GBTN = [], ABTN = [];
 function castAt(sx, sy) {
   setRay(sx, sy);
   const hits = ray.intersectObjects(PICKABLE.concat(boxes, [slotCols], COLLIDERS), false);
@@ -371,6 +387,8 @@ function castAt(sx, sy) {
       if (inf.storage) return { tile: inf.storage, at };
       continue;   // one hanging from a crane
     }
+    if (u.station) return { station: u.station, at };
+    if (u.lspot) return { lspot: u.lspot, at };
     if (u.berth) return { berth: u.berth, at }; if (u.tile) return { tile: u.tile, at }; if (u.stall) return { stall: u.stall, at };
   }
   return null;
@@ -379,6 +397,7 @@ const RING = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => [Math.cos(k * Math.PI / 4), Mat
 const inBtn = (b, sx, sy) => sx >= b.x0 && sx <= b.x1 && sy >= b.y0 && sy <= b.y1;
 R3.pick = (sx, sy) => {
   if (G.ghost) for (const b of GBTN) if (inBtn(b, sx, sy)) return b.yes ? { ghostYes: true } : { ghostNo: true };
+  if (G.picked && !G.ghost) for (const b of ABTN) if (inBtn(b, sx, sy)) return { act: b.act, at: b.at };
   if (G.selected) for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(sx - b.x) <= b.r && Math.abs(sy - b.y) <= b.r) return { badge: b }; }
   const hit = castAt(sx, sy); if (hit || !touchy) return hit;
   for (const r of [10, 20]) for (const [cx, cy] of RING) { const h = castAt(sx + cx * r, sy + cy * r); if (h) return h; }
@@ -489,7 +508,7 @@ function overlay() {
   const sel = G.selected;
   // a selected customer: a dotted line to its container; a selected auto hauler: its platform
   if (sel && sel.kind === "cust" && sel.load === null && sel.want) { const at = G.boxAt(sel.want); if (at) seg([sel.x, sel.y - CARRY, sel.z], at, "#ffffff", 3, [2, 7], "round"); }
-  if (sel && sel.auto && sel.home) { const h = sel.home; poly(rect(h.x - UNIT / 2, h.x + UNIT / 2, h.z - UNIT / 2, h.z + UNIT / 2), "#5fd3d0", 3, null, [8, 6]); }
+  if (sel && sel.auto && sel.home) for (const h of G.homeSpots(sel)) poly(rect(h.x - UNIT / 2, h.x + UNIT / 2, h.z - UNIT / 2, h.z + UNIT / 2), "#5fd3d0", 3, null, [8, 6]);   // its platform's hauler spots
   // the selected ship's queue: numbered rings joined in order; the numbers can be tapped to take a trip back
   BADGES = [];
   if (sel) {
@@ -527,9 +546,33 @@ function overlay() {
     const tp = scr(DOCK.x0 + (s.cols - 0.5) * HW + HR + 6 + s.off, 0, DOCK.z0 + (DOCK.rows - s.rows / 2 - 0.5) * RZ);
     if (tp) tag(tp[0], tp[1], txt, low ? "#ff5a4a" : "#6a7080", low && Math.sin(G.clock * 8) > 0 ? "#ff5a4a" : "#ece7dc");
   }
+  // (owner, 2026-11-06) something built that's picked: outlined, with its buttons below it (move it, move its whole
+  // platform, remove it, turn its shape)
+  ABTN = [];
+  const gh = G.ghost, pkd = G.picked;
+  if (pkd && !gh) {
+    const at = G.pickedAt(pkd);
+    if (pkd.what === "tile") { for (const t of G.platformOf(pkd.ref)) poly(rect(t.x - UNIT / 2, t.x + UNIT / 2, t.z - UNIT / 2, t.z + UNIT / 2), "rgba(255,255,255,.35)", 1, null, [3, 4]); if (pkd.ref.kind === "crane") poly(circle(at.x, 0.05, at.z, G.REACH, 64), "rgba(232,180,50,.6)", 1.5, null, [4, 6]); }
+    poly(rect(at.x - at.r, at.x + at.r, at.z - at.r, at.z + at.r), "#ffffff", 2.5);
+    const below = scr(at.x, 0, at.z + at.r), acts = G.acts(pkd);
+    if (below) {
+      const z = touchy ? 50 : 38, gap = 8, w = acts.length * z + (acts.length - 1) * gap, y = Math.min(VH - z / 2 - 8, below[1] + z / 2 + 10);
+      acts.forEach((act, n) => {
+        const x = below[0] - w / 2 + z / 2 + n * (z + gap), k = z * 0.24;
+        octx.fillStyle = "rgba(10,14,20,.9)"; octx.fillRect(x - z / 2, y - z / 2, z, z); octx.strokeStyle = act === "remove" ? "#ff5a4a" : "#ece7dc"; octx.lineWidth = 2; octx.strokeRect(x - z / 2, y - z / 2, z, z);
+        octx.lineWidth = 3; octx.lineCap = "round"; octx.strokeStyle = act === "remove" ? "#ff5a4a" : "#ece7dc"; octx.beginPath();
+        const arrows = (r) => { for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { octx.moveTo(x, y); octx.lineTo(x + ax * r, y + ay * r); octx.moveTo(x + ax * r - ay * r * 0.35 - ax * r * 0.35, y + ay * r + ax * r * 0.35 - ay * r * 0.35); octx.lineTo(x + ax * r, y + ay * r); octx.lineTo(x + ax * r + ay * r * 0.35 - ax * r * 0.35, y + ay * r - ax * r * 0.35 - ay * r * 0.35); } };
+        if (act === "move") arrows(k * 1.1);
+        else if (act === "plat") { octx.rect(x - k * 1.3, y - k * 1.3, k * 2.6, k * 2.6); arrows(k * 0.8); }
+        else if (act === "remove") { octx.rect(x - k * 0.8, y - k * 0.6, k * 1.6, k * 1.7); octx.moveTo(x - k * 1.15, y - k * 0.85); octx.lineTo(x + k * 1.15, y - k * 0.85); octx.moveTo(x - k * 0.35, y - k * 1.15); octx.lineTo(x + k * 0.35, y - k * 1.15); }
+        else { octx.arc(x - k * 0.6, y, k * 0.55, 0, TAU); octx.moveTo(x + k * 0.1, y - k * 0.55); octx.rect(x + k * 0.1, y - k * 0.55, k * 1.1, k * 1.1); }
+        octx.stroke(); octx.lineCap = "butt";
+        ABTN.push({ act, at: [at.x, 0, at.z], x0: x - z / 2, x1: x + z / 2, y0: y - z / 2, y1: y + z / 2 });
+      });
+    }
+  }
   // (owner, 2026-11-05) the blueprint: its outline, green where it can go and red where it can't, its price, ✓ and ✗
   GBTN = [];
-  const gh = G.ghost;
   if (gh) {
     const r = G.ghostRect(gh), ok = G.ghostOk(gh), c = ok ? "127,216,138" : "255,90,74", p = G.ghostPrice(gh);
     poly(rect(r[0], r[1], r[2], r[3]), `rgb(${c})`, 3, `rgba(${c},.18)`, [8, 5]);
@@ -537,12 +580,16 @@ function overlay() {
     else if (gh.kind === "crane") poly(circle(gh.x, 0.05, gh.z, G.REACH, 64), `rgba(${c},.75)`, 2, null, [4, 6]);
     else if (gh.kind === "hspot" || gh.kind === "tspot") poly(circle(gh.x, 0.05, gh.z, gh.kind === "tspot" ? 1.5 : 1.3), `rgba(${c},.8)`, 2);
     else if (gh.kind === "pads") { for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) poly(circle(gh.x + i * 1.9, 0.05, gh.z + j * 1.9, 1.4), `rgba(${c},.7)`, 1.5); }
-    else if (gh.kind === "berth") poly(circle(gh.x, 0.05, LANE_Z, 1.35), `rgba(${c},.8)`, 2);
+    else if (gh.kind === "berth" || (gh.kind === "move" && gh.what === "berth")) poly(circle(gh.x, 0.05, LANE_Z, 1.35), `rgba(${c},.8)`, 2);
+    else if (gh.kind === "move" && (gh.what === "tile" || gh.what === "plat")) {   // each unit where it would go
+      const di = gh.i - gh.ref.i, dj = gh.j - gh.ref.j;
+      for (const t of gh.what === "tile" ? [gh.ref] : gh.units) { const x = t.x + di * UNIT, z = t.z + dj * UNIT; poly(rect(x - UNIT / 2 + 0.1, x + UNIT / 2 - 0.1, z - UNIT / 2 + 0.1, z + UNIT / 2 - 0.1), `rgba(${c},.8)`, 1.5, `rgba(${c},.12)`); if (t.kind === "crane") poly(circle(x, 0.05, z, G.REACH, 64), `rgba(${c},.6)`, 1.5, null, [4, 6]); }
+    }
     if (gh.kind === "crane" || gh.kind === "slot" || gh.kind === "hspot" || gh.kind === "tspot") for (const a of G.CRANES) poly(circle(a.mount.x, 0.05, a.mount.z, G.REACH, 64), "rgba(232,180,50,.35)", 1.2, null, [4, 6]);   // where the cranes reach
     const top = scr(gh.x, 0, r[2]), mid = scr(gh.x, 0, (r[2] + r[3]) / 2), bot = scr(gh.x, 0, r[3]);
     if (top && mid && bot) {
       const ty = Math.min(top[1], bot[1]), by = Math.max(top[1], bot[1]);
-      tag(mid[0], ty - 22, "$" + p.toLocaleString(), ok && G.money >= p ? "#7fd88a" : "#6a7080", ok && G.money >= p ? "#ece7dc" : "#8b919b");
+      if (gh.kind !== "move") tag(mid[0], ty - 22, "$" + p.toLocaleString(), ok && G.money >= p ? "#7fd88a" : "#6a7080", ok && G.money >= p ? "#ece7dc" : "#8b919b");
       const z = touchy ? 50 : 38, y = Math.min(VH - z / 2 - 8, by + z / 2 + 10);
       for (const yes of [true, false]) {
         const x = mid[0] + (yes ? 1 : -1) * (z / 2 + 8), live = !yes || (ok && G.money >= p);
@@ -582,7 +629,7 @@ R3.draw = () => {
   overlay();
 };
 // for tests
-R3.center = () => ({ x: cam.x, z: cam.z }); R3.focus = (x, z) => { flick.x = flick.z = 0; zoomAt = null; goal.x = x; goal.z = z; }; R3.ground = (sx, sy) => groundAt(sx, sy); R3.gbtn = () => GBTN;
+R3.abtn = () => ABTN; R3.center = () => ({ x: cam.x, z: cam.z }); R3.focus = (x, z) => { flick.x = flick.z = 0; zoomAt = null; goal.x = x; goal.z = z; }; R3.ground = (sx, sy) => groundAt(sx, sy); R3.gbtn = () => GBTN;
 R3.cam = cam; R3.goal = goal; R3.applyCam = () => { applyCam(); syncGoal(); }; R3.scr = scr; R3.badges = () => BADGES; R3.camera = camera;
 R3.screenOfCraft = (t) => { const [x, y] = scr(t.x, t.y - 0.4, t.z) || [-1, -1]; return { x, y }; };
 R3.screenOfSlot = (k) => { const p = G.slotPos(k), st = DOCK.ship.bays[k]; const [x, y] = scr(p.x, st.length ? st.length * PH - 0.15 : 0.25, p.z) || [-1, -1]; return { x, y }; };
