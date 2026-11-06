@@ -52,7 +52,13 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 - **What's where, north to south:** the freighter's berth; the docking spine with the loader arms (A–D) and, below it, the
   loading deck where haulers hover in the arms' lines; the main truss; seven storage platforms in a row (the seventh,
   east, is the export platform), each with its 5 bays on its south side and a waiting line south of them; the 48
-  customer pads in 12 groups of 4. The hangar (22 pads) is west.
+  customer pads in 12 groups of 4. Haulers' dock stations are west.
+- **Bought things fly in (owner, 2026-11-05):** a platform not bought yet is empty space with an orange arrow pointing
+  down at it (grey while you can't afford it; tap it to buy). Bought, the platform (with its gantry) flies up into place
+  from below on four thrusters. Every hauler bought comes with its own dock station (a pad with a back wall and red
+  and blue lights, up to 22), which flies up the same way with the new hauler on it.
+- **Freighter fire (owner, 2026-11-05):** blue fire out of its engines while it docks and leaves; orange hover thrusters
+  firing under its hull the whole time, so it reads as floating.
 - **Nothing is saved yet:** a reload starts a fresh station.
 - **Always the live build (2026-11-01):** a game page the browser kept from an older build loads the live one.
 
@@ -119,8 +125,8 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 ## Haulers: you send them (owner)
 
-- **Start:** one manual hauler on a hangar pad. **+ Manual** and **+ Auto** buy more ($400 + $50 per hauler owned; auto
-  ones 4×), one per free hangar pad.
+- **Start:** one manual hauler on its dock station. **+ Manual** and **+ Auto** buy more ($400 + $50 per hauler owned;
+  auto ones 4×), each with a new dock station, up to 22.
 - **Manual:** tap freighter stacks (or an arm's lines) for pickups, any number in a row; a loaded hauler with nothing
   queued takes its container where it goes by itself: an import to the nearest platform with room (a shorter line
   counts), an export to an arm with room for it on the freighter. Tap the export platform to fetch an export.
@@ -128,7 +134,7 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   with the shorter line), going for a container a customer is waiting for if one is in reach; loaded, to its platform.
   Assigned the export platform, it fetches exports for the freighter. Tapping a freighter stack with an auto hauler on
   its way to an arm makes that trip the stack's.
-- **Idle haulers** fly to the nearest free hangar pad.
+- **Idle haulers** fly to the nearest free dock station.
 - **Only where it can be served (owner):** an empty hauler to an arm with a freighter to unload (or a stack with a
   container not yet claimed), a loaded one to a platform with room, a customer to the platform holding its container, or
   (customers only) a free pad. Queued trips count first: with an import aboard, a pickup gets a drop-off put in first.
@@ -162,7 +168,8 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 - **Start:** 1 manual hauler, arm A, platform 1 (part full), 4 customer pads, $500.
 - **Income:** $60 per customer served and per export loaded onto the freighter.
-- **Buying:** locked things show dimmed with their price (green when you can afford it); tap one to buy it. Arms B–D
+- **Buying:** locked arms and pad groups show dimmed with their price (green when you can afford it), locked platforms as
+  an arrow (orange when you can afford it); tap one to buy it. Arms B–D
   $2,000 / $3,500 / $5,000; platforms 2–6 $600 / $900 / $1,300 / $1,800 / $2,400, the export platform $1,000; pad groups
   $200 up to $1,400.
 

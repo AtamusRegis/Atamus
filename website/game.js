@@ -57,8 +57,9 @@ const BLOCKS = [0, 1, 2, 3, 4, 5, 6].map((k) => {
 const slotXY = (b, c, r) => [hexX(b.x0, c, r), b.z0 + r * RZ];
 // haulers waiting for a bay hover in a line south of the platform (stacking up past the third)
 const holdSpot = (b, k) => ({ x: b.cx, y: HOVER + 1 + Math.max(0, k - 2) * STACK_STEP, z: HOLD_Z + Math.min(k, 2) * 3.2, yaw: N });
-// the hangar: 22 pads west of the station; new haulers appear here and idle ones park here
-const PARK = [...Array(22).keys()].map((k) => ({ x: k % 2 ? -6 : -11, z: 14 + Math.floor(k / 2) * 3.4, claim: null }));
+// dock stations west of the station, one per hauler; new haulers appear on theirs and idle ones park at one
+// (owner, 2026-11-05) a dock station comes with each hauler bought (built: there), up to 22
+const PARK = [...Array(22).keys()].map((k) => ({ x: k % 2 ? -6 : -11, z: 14 + Math.floor(k / 2) * 3.4, claim: null, built: k === 0 }));
 // (owner, 2026-11-01) 48 customer pads in groups of 4
 const STALLS = [...Array(48).keys()].map((k) => { const g = Math.floor(k / 4), i = k % 4; return { x: 3 + g * 9 + (i % 2) * 3.8, z: 54 + Math.floor(i / 2) * 3.8, claim: null, group: g }; });
 const padSpot = (p) => ({ x: p.x, y: HOVER, z: p.z, yaw: N });
@@ -84,10 +85,10 @@ function buyOf(pk) {
   return null;
 }
 // (owner, 2026-11-01) two kinds of hauler: manual (you send it: a freighter container, then a platform) and auto (you
-// assign it a platform and it shuttles by itself). A bought one appears on a free hangar pad.
+// assign it a platform and it shuttles by itself). A bought one appears on its new dock station.
 function addTractor(auto) {
-  const price = tractorPrice(auto), p = PARK.find((q) => !q.claim); if (money < price || !p) return false;
-  money -= price; const t = mkCraft("yard", { x: p.x, y: HOVER, z: p.z }); t.num = crafts.filter((q) => q.kind === "yard").length; t.auto = !!auto;
+  const price = tractorPrice(auto), p = PARK.find((q) => !q.built); if (money < price || !p) return false;
+  money -= price; p.built = true; const t = mkCraft("yard", { x: p.x, y: HOVER, z: p.z }); t.num = crafts.filter((q) => q.kind === "yard").length; t.auto = !!auto;
   t.park = p; p.claim = t; return true;
 }
 const AUTO_CAB = "#5fd3d0", EXP_CAB = "#8a94a6", WAIT_CAB = "#5a6068", MANUAL_CAB = "#e8b432";
@@ -336,13 +337,13 @@ function canStart(t) {
   if (a.kind === "sts") { const s = DOCK.ship; return !!s && (s.state === "docked" || s.state === "closing"); }
   return true;
 }
-// a hauler with nothing to do flies to the nearest free hangar pad and parks
+// a hauler with nothing to do flies to the nearest free dock station and parks
 function idleStep(t) {
   if (t.kind !== "yard" || t.locked) return;
   const ready = canStart(t);
   if (t.cmd && t.cmd.kind === "tpark" && ready) { t.cmd.spot.claim = null; t.cmd = null; return; }
   if (t.cmd || ready || t.park) return;
-  const p = PARK.filter((q) => !q.claim).reduce((m, q) => (!m || hyp(q.x - t.x, q.z - t.z) < hyp(m.x - t.x, m.z - t.z) ? q : m), null); if (!p) return;
+  const p = PARK.filter((q) => q.built && !q.claim).reduce((m, q) => (!m || hyp(q.x - t.x, q.z - t.z) < hyp(m.x - t.x, m.z - t.z) ? q : m), null); if (!p) return;
   p.claim = t; startCmd(t, { kind: "tpark", spot: p });
 }
 // (owner) an auto hauler with a platform assigned: loaded, it takes the container there; empty, it fetches from the
@@ -693,7 +694,7 @@ const flashing = (x, slot, st) => {
 const posRGB = (st, x) => { const i = st.indexOf(x); return i === st.length - 1 ? "74,222,106" : i === 0 ? "255,74,58" : "242,194,50"; };
 let hudTxt = "";
 function hud() {
-  const p = tractorPrice(false), pa = tractorPrice(true), sp = PARK.some((q) => !q.claim), txt = "$" + money.toLocaleString() + "|" + p + "|" + sp; if (txt === hudTxt) return; hudTxt = txt;
+  const p = tractorPrice(false), pa = tractorPrice(true), sp = PARK.some((q) => !q.built), txt = "$" + money.toLocaleString() + "|" + p + "|" + sp; if (txt === hudTxt) return; hudTxt = txt;
   $("money").textContent = "$" + money.toLocaleString();
   for (const [id, name, pr] of [["buy-tractor", "Manual", p], ["buy-auto", "Auto", pa]]) { const b = $(id); b.textContent = "+ " + name + " $" + pr.toLocaleString(); b.disabled = !sp || money < pr; }
 }

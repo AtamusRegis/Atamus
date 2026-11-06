@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-05
 
+- **Fire and flying in (owner, from a marked-up screenshot).** The freighter fires its engines (blue) while docking and leaving, and hover thrusters (orange) under its hull. A platform not bought yet is empty space with a down arrow; bought, it flies up into place from below on four thrusters. Every hauler bought comes with its own dock station that flies up with it (the 22-pad hangar deck is gone).
 - **Into space (owner).** The seaport becomes a cargo station in space. Hexagonal containers (pucks) in honeycomb stacks on the freighter's deck and on seven storage platforms; loader arms instead of STS cranes, gantries instead of RTGs. Haulers, customer ships and export ships fly freely: they climb above the cranes, fly over, settle at their hover point and steer clear of each other; lines (an arm's, a platform's bays) stack up into the air instead of queuing on roads. Roads, lanes, held tiles, gates, the waiting line and the 2D page (game2d.html) are gone; the economy, claims, digging, queues, customers, exports and buying carry over. Picking uses 3D colliders on everything. Fixed on the way: a first frame timed before the start could make a still ship's position NaN.
 
 ## 2026-11-04

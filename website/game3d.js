@@ -45,24 +45,73 @@ function collider(w, h, d, x, y, z, data) { const c = new THREE.Mesh(BOXG, COLM)
 // joining them; lights along their edges ----
 const hullM = mat("#3a4250"), deckM = mat("#4a5260", { roughness: 0.8 }), darkM = mat("#1c2028"), trussM = mat("#59606c", { metalness: 0.6 });
 const edgeM = glow("#5fd3ff"), warnM = glow("#f2a93b"), padM = glow("#7fd88a"), custPadM = glow("#c8d0dc"), slotLineM = new THREE.MeshBasicMaterial({ color: "#8fa8c8", transparent: true, opacity: 0.35 });
-function slab(x0, x1, z0, z1, m2 = deckM, t = 0.5) { box(x1 - x0, t, z1 - z0, m2, (x0 + x1) / 2, -t / 2, (z0 + z1) / 2); for (const z of [z0, z1]) box(x1 - x0, 0.06, 0.08, edgeM, (x0 + x1) / 2, 0.01, z); }
+function slab(x0, x1, z0, z1, m2 = deckM, t = 0.5, parent) { box(x1 - x0, t, z1 - z0, m2, (x0 + x1) / 2, -t / 2, (z0 + z1) / 2, parent); for (const z of [z0, z1]) box(x1 - x0, 0.06, 0.08, edgeM, (x0 + x1) / 2, 0.01, z, parent); }
+// (owner, 2026-11-05) thruster fire: a glowing cone pointing down from its nozzle (turn it to point elsewhere), an outer
+// flame and a hot core, flickering
+const FLAMEG = new THREE.ConeGeometry(1, 1, 14, 1, true); FLAMEG.rotateX(Math.PI); FLAMEG.translate(0, -0.5, 0);
+const fireM = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const FIRE = { orange: [fireM("#ff7a1a", 0.75), fireM("#ffe7a0", 0.9)], blue: [fireM("#3fa8ff", 0.7), fireM("#e6f6ff", 0.9)] };
+function flame(kind, parent, x, y, z) { const f = new THREE.Group(), [a, b] = FIRE[kind]; const o = new THREE.Mesh(FLAMEG, a), i = new THREE.Mesh(FLAMEG, b); i.scale.set(0.45, 0.6, 0.45); f.add(o, i); f.position.set(x, y, z); f.visible = false; (parent || scene).add(f); return f; }
+function burn(f, len, r) { if (len <= 0.05) { f.visible = false; return; } f.visible = true; f.scale.set(r, len * (0.82 + 0.36 * Math.random()), r); }
+// (owner, 2026-11-05) bought things fly up into place from below on their thrusters: how far below they still are
+const RISE = 28, RISE_T = 2.8, rising = new Map();   // thing -> when it started rising
+const nowS = () => performance.now() / 1000;
+function riseOff(k) { const t0 = rising.get(k); if (t0 === undefined) return 0; const p = (nowS() - t0) / RISE_T; if (p >= 1) { rising.delete(k); return 0; } return -RISE * Math.pow(1 - p, 3); }
 // the docking spine (the arms' rail) and the loading deck under the arms' lines
 const SPX0 = DOCK.x0 - 3, SPX1 = DOCK.x0 + DOCK.cols * HW + 3;
 box(SPX1 - SPX0, 0.8, 1.6, hullM, (SPX0 + SPX1) / 2, -0.3, 12.6); box(SPX1 - SPX0, 0.12, 0.2, warnM, (SPX0 + SPX1) / 2, 0.15, 11.85);
 slab(SPX0, SPX1, 13.4, LANE_Z + 2 * 3.3 + 2.2);
 for (const b of BERTHS) for (const l of b.lanes) for (let k = 0; k < 3; k++) { const r = new THREE.Mesh(ringG(1.35, 0.08), l.kind === "auto" ? glow("#5fd3d0") : warnM); r.position.set(l.x, 0.02, LANE_Z + k * 3.3); scene.add(r); }
 // storage platforms: a deck with the honeycomb marked on it, rails for the gantry, an apron with the 5 bays
+// (owner, 2026-11-05) a platform not bought yet is empty space with an arrow pointing down at it; bought, it flies up
+// into place from below on four thrusters
+const PLAT = new Map(), ARROWG = new THREE.ConeGeometry(1.6, 3, 4); ARROWG.rotateX(Math.PI);
 for (const b of BLOCKS) {
-  const x0 = b.x0 - HR - 0.4, x1 = b.x0 + 4.5 * HW + HR + 0.4;
-  slab(x0, x1, b.z0 - HR - 0.4, BAY_Z + 1.8, b.exp ? mat("#3c4a5e", { roughness: 0.8 }) : deckM);
-  for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const [x, z] = G.slotXY(b, c, r), h = new THREE.Mesh(hexRingG(HR * 0.98, 0.06), b.exp ? glow("#7fc8ff") : slotLineM); h.position.set(x, 0.015, z); scene.add(h); }
-  for (const bay of b.bays) { const r = new THREE.Mesh(ringG(1.25, 0.08), b.exp ? glow("#7fc8ff") : warnM); r.position.set(bay.x, 0.02, bay.z); scene.add(r); }
-  for (const x of [x0 + 0.2, x1 - 0.2]) box(0.25, 0.25, BAY_Z + 1.6 - (b.z0 - HR - 0.2), trussM, x, 0.12, (BAY_Z + 1.6 + b.z0 - HR - 0.2) / 2);
-  b.deck = [x0, x1, b.z0 - HR - 0.4, BAY_Z + 1.8];
+  const g = new THREE.Group(), x0 = b.x0 - HR - 0.4, x1 = b.x0 + 4.5 * HW + HR + 0.4, z0 = b.z0 - HR - 0.4, z1 = BAY_Z + 1.8;
+  slab(x0, x1, z0, z1, b.exp ? mat("#3c4a5e", { roughness: 0.8 }) : deckM, 0.5, g);
+  for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const [x, z] = G.slotXY(b, c, r), h = new THREE.Mesh(hexRingG(HR * 0.98, 0.06), b.exp ? glow("#7fc8ff") : slotLineM); h.position.set(x, 0.015, z); g.add(h); }
+  for (const bay of b.bays) { const r = new THREE.Mesh(ringG(1.25, 0.08), b.exp ? glow("#7fc8ff") : warnM); r.position.set(bay.x, 0.02, bay.z); g.add(r); }
+  for (const x of [x0 + 0.2, x1 - 0.2]) box(0.25, 0.25, BAY_Z + 1.6 - (b.z0 - HR - 0.2), trussM, x, 0.12, (BAY_Z + 1.6 + b.z0 - HR - 0.2) / 2, g);
+  const fires = [[x0 + 1.5, z0 + 1.5], [x1 - 1.5, z0 + 1.5], [x0 + 1.5, z1 - 1.5], [x1 - 1.5, z1 - 1.5]].map(([x, z]) => { box(1, 0.5, 1, darkM, x, -0.75, z, g); return flame("orange", g, x, -1, z); });
+  const arrow = new THREE.Mesh(ARROWG, glow("#ff7a1a")); arrow.position.set(b.cx, 3, (z0 + z1) / 2); scene.add(arrow);
+  g.visible = !!b.open; scene.add(g);
+  PLAT.set(b, { g, fires, arrow, was: !!b.open });
+  b.deck = [x0, x1, z0, z1];
+}
+function syncPlatforms() {
+  for (const b of BLOCKS) {
+    const o = PLAT.get(b);
+    if (b.open && !o.was) rising.set(b, nowS()); o.was = !!b.open;
+    o.g.visible = !!b.open; o.arrow.visible = !b.open;
+    if (!b.open) { o.arrow.position.y = 4.5 + 0.5 * Math.sin(G.clock * 3 + b.id); o.arrow.material.color.set(G.money >= G.BLOCK_PRICE[b.id] ? "#ff7a1a" : "#5a6070"); continue; }
+    const off = riseOff(b); o.g.position.y = off;
+    for (const f of o.fires) burn(f, off < -0.05 ? 2.2 + Math.min(1, -off / 6) * 2.5 : 0, 0.42);
+  }
 }
 // the hangar and the customer pads
-slab(-13.2, -3.8, 12.2, 51.2);
-for (const p of PARK) { const r = new THREE.Mesh(hexRingG(1.4, 0.1), padM); r.position.set(p.x, 0.02, p.z); scene.add(r); }
+// (owner, 2026-11-05) every hauler bought comes with its own dock station: a pad with a back wall and lights, flying up
+// into place with the new hauler on it
+const DOCKS = new Map(), redM = glow("#ff3a3a"), blueM = glow("#3a8aff");
+function dockObj(p) {
+  let o = DOCKS.get(p); if (o) return o;
+  const g = new THREE.Group();
+  box(3.2, 0.35, 3.2, deckM, 0, -0.18, 0, g); box(3.2, 0.06, 0.08, edgeM, 0, 0.01, 1.6, g); box(3.2, 0.06, 0.08, edgeM, 0, 0.01, -1.6, g);
+  box(0.25, 1.5, 3.2, hullM, -1.6, 0.6, 0, g); box(3.2, 0.45, 0.22, hullM, 0, 0.2, -1.6, g);
+  box(0.2, 0.2, 0.2, redM, -1.6, 1.4, -1.6, g); box(0.2, 0.2, 0.2, blueM, 1.6, 0.25, 1.6, g);
+  const r = new THREE.Mesh(hexRingG(1.35, 0.1), padM); r.position.y = 0.02; g.add(r);
+  box(0.5, 0.4, 0.5, darkM, -1, -0.5, 1, g); box(0.5, 0.4, 0.5, darkM, 1, -0.5, -1, g);
+  const fires = [flame("orange", g, -1, -0.7, 1), flame("orange", g, 1, -0.7, -1)];
+  g.position.set(p.x, 0, p.z); scene.add(g); o = { g, fires }; DOCKS.set(p, o); return o;
+}
+for (const p of PARK) if (p.built) dockObj(p);   // the ones there from the start don't fly in
+function syncDocks() {
+  for (const p of PARK) {
+    if (!p.built) continue;
+    if (!DOCKS.has(p)) { dockObj(p); rising.set(p, nowS()); }
+    const o = DOCKS.get(p), off = riseOff(p); o.g.position.y = off;
+    for (const f of o.fires) burn(f, off < -0.05 ? 1.6 + Math.min(1, -off / 6) * 1.8 : 0, 0.3);
+  }
+}
 for (let g = 0; g < 12; g++) { const st = STALLS.filter((q) => q.group === g), xs = st.map((q) => q.x), zs = st.map((q) => q.z); slab(Math.min(...xs) - 1.8, Math.max(...xs) + 1.8, Math.min(...zs) - 1.8, Math.max(...zs) + 1.8); }
 for (const s of STALLS) { const r = new THREE.Mesh(ringG(1.4, 0.08), custPadM); r.position.set(s.x, 0.02, s.z); scene.add(r); }
 // trusses: the main one along the station from the hangar past the last platform, with arms up to the loading deck and
@@ -114,6 +163,11 @@ function buildShip(s) {
   for (const dz of [-w * 0.3, 0, w * 0.3]) { const e = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.6, 16), darkM); e.rotation.z = Math.PI / 2; e.position.set(x0 - 4.6, -1.4, zc + dz); g.add(e); const f = new THREE.Mesh(new THREE.CircleGeometry(0.75, 16), glow("#6fc8ff")); f.rotation.y = -Math.PI / 2; f.position.set(x0 - 5.42, -1.4, zc + dz); g.add(f); }
   // running lights along the deck edge
   for (const z of [z0 + 0.05, z1 - 0.05]) box(x1 - x0, 0.08, 0.08, glow(s.hull === "#7a3a3a" ? "#ff8a6a" : "#9fd8ff"), (x0 + x1) / 2, 0.02, z, g);
+  // (owner, 2026-11-05) fire out of the engines while it docks and leaves; hover thrusters firing under the hull to keep
+  // it floating
+  g.userData.engines = [-w * 0.3, 0, w * 0.3].map((dz) => { const f = flame("blue", g, x0 - 5.42, -1.4, zc + dz); f.rotation.z = -Math.PI / 2; return f; });
+  g.userData.hover = [];
+  for (let k = 0; k < 4; k++) for (const z of [z0 + 1, z1 - 1]) { const x = x0 + (x1 - x0) * (k + 0.5) / 4; box(0.7, 0.3, 0.7, darkM, x, -2.85, z, g); g.userData.hover.push(flame("orange", g, x, -3, z)); }
   scene.add(g); return g;
 }
 // a flat collider over each slot of the docked freighter's deck, so an empty slot can be tapped too
@@ -125,6 +179,9 @@ function syncShip() {
   let n = 0;
   if (s) {
     shipObj.position.x = s.off;
+    const moving = s.state === "arrive" || s.state === "depart", eng = moving ? 4.5 + Math.min(3, Math.abs(s.off) / 20) : 0;
+    for (const f of shipObj.userData.engines) burn(f, eng, 0.7);
+    for (const f of shipObj.userData.hover) burn(f, 1.4, 0.32);
     const fl = new Map();
     s.bays.forEach((st, k) => { for (let i = st.length - 1; i >= 0; i--) if (st[i].wantedBy && G.flashing(st[i], k, st)) { fl.set(st[i], G.posRGB(st, st[i])); break; } });
     s.bays.forEach((st, k) => {
@@ -165,7 +222,8 @@ function syncCrafts() {
   const live = new Set();
   for (const t of G.trucks) {
     live.add(t.id); const o = craftObj(t);
-    o.g.position.set(t.x, t.y, t.z); o.g.rotation.set(0, t.yaw, 0);
+    const ride = t.park && rising.has(t.park) ? riseOff(t.park) : 0;   // a new hauler rides up on its dock station
+    o.g.position.set(t.x, t.y + ride, t.z); o.g.rotation.set(0, t.yaw, 0);
     o.bodyM.color.set(t.kind === "cust" ? (t.generic || !t.want ? G.WAIT_CAB : COLORS[t.want.c].c) : t.kind === "exp" ? G.EXP_CAB : t.auto ? G.AUTO_CAB : G.MANUAL_CAB);
     const sel = t === G.selected, hov = G.hover && G.hover.truck === t, op = sel ? 0.55 + 0.25 * Math.sin(G.clock * 8) : hov ? 0.3 : 0;
     o.bodyM.emissive.set(sel ? 0x2a2a2a : 0x000000);
@@ -225,7 +283,7 @@ function syncGantries() {
   for (const b of BLOCKS) {
     const o = b.open ? ganObj(b) : CRANES.get(b); if (!o) continue; o.g.visible = !!b.open; if (!b.open) continue;
     const cr = b.rtg, y = spreaderY(cr, GAN_TOP);
-    o.g.position.z = cr.z; o.trolley.position.x = cr.x; o.spr.position.set(cr.x, y + 0.02, 0);
+    o.g.position.z = cr.z; o.g.position.y = PLAT.get(b).g.position.y; o.trolley.position.x = cr.x; o.spr.position.set(cr.x, y + 0.02, 0);
     o.cable.position.set(cr.x, (y + GAN_H) / 2, 0); o.cable.scale.y = Math.max(0.05, GAN_H - y);
     if (cr.hold) putBox(cr.hold, cr.x, y - PH / 2, cr.z, 0, {});
   }
@@ -400,11 +458,9 @@ function overlay() {
   octx.setTransform(DPR, 0, 0, DPR, 0, 0); octx.clearRect(0, 0, VW, VH);
   const sel = G.selected;
   // locked things, dimmed with their price
-  for (const b of BLOCKS) if (!b.open) { const [x0, x1, z0, z1] = b.deck; poly(rect(x0, x1, z0, z1), null, 0, DIM); }
   for (const b of BERTHS) if (!b.open) poly(berthRect(b), null, 0, DIM);
   const groups = []; for (const s of STALLS) if (!s.open && !groups[s.group]) groups[s.group] = STALLS.filter((q) => q.group === s.group);
   for (const g of groups) if (g) { const xs = g.map((q) => q.x), zs = g.map((q) => q.z); poly(rect(Math.min(...xs) - 1.8, Math.max(...xs) + 1.8, Math.min(...zs) - 1.8, Math.max(...zs) + 1.8), null, 0, DIM); }
-  for (const b of BLOCKS) if (!b.open) price(scr(b.cx, 0, (b.deck[2] + b.deck[3]) / 2), G.BLOCK_PRICE[b.id]);
   for (const b of BERTHS) if (!b.open) price(scr(b.cx, 0, LANE_Z + 3), G.CRANE_PRICE[b.id]);
   groups.forEach((g, k) => { if (g) price(scr((g[0].x + g[3].x) / 2, 0, (g[0].z + g[3].z) / 2), G.STALL_PRICE[k]); });
   // a selected customer: a dotted line to its container; a selected auto hauler: its platform
@@ -469,7 +525,7 @@ R3.draw = () => {
   if (innerWidth !== VW || innerHeight !== VH) resize();
   keyCam(dt); easeCam(dt);
   nBox = 0; INST.length = 0;
-  syncShip(); syncStorage(); syncCrafts(); syncArms(); syncGantries();
+  syncPlatforms(); syncDocks(); syncShip(); syncStorage(); syncCrafts(); syncArms(); syncGantries();
   boxes.count = nBox; boxes.instanceMatrix.needsUpdate = true; if (boxes.instanceColor) boxes.instanceColor.needsUpdate = true; boxes.computeBoundingSphere();
   renderer.render(scene, camera);
   overlay();
