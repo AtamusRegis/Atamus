@@ -4,7 +4,7 @@
 import * as THREE from "./vendor/three.module.min.js";
 
 const R3 = window.ATAMUS_3D, G = R3.game;
-const { HR, HW, RZ, PH, CARRY, X0, MW, MH, LANE_Z, CELL, ANY, COLORS, BLOCKS, BERTHS, DOCK, STALLS, PARK } = G;
+const { HR, HW, RZ, PH, CARRY, X0, MW, MH, LANE_Z, UNIT, COLORS, BERTHS, DOCK, STALLS, PARK, SLOTS, SPOTS } = G;
 const TAU = Math.PI * 2, clamp = (v, a, b) => (v < a ? a : v > b ? b : v), hyp = Math.hypot;
 
 // ---- renderer, scene, light: deep space, a sun, a planet far below ----
@@ -69,23 +69,23 @@ const SLOTG = [ringG(1.05, 0.07), sqRingG(1.27, 0.1), hexRingG(HR * 0.98, 0.07)]
 const SHARED = new Set([BOXG, FLAMEG, ...SLOTG, UNSETG, INBAYG, OUTBAYG, LANEG, PADG, DOCKRG]);
 // (owner, 2026-11-05) everything built is rebuilt whenever the layout changes (a new piece flies up into place)
 let DYN = [], DYNCOL = [], builtVer = -1, firstBuild = true;
-const known = new WeakSet(), PLAT = new Map(), DOCKS = new Map(), PADS = [], CRANES = new Map();
+const known = new WeakSet(), TILE3 = new Map(), DOCKS = new Map(), PADS = [], CRANES = new Map();
 const addDyn = (o) => { scene.add(o); DYN.push(o); return o; };
 const dynCollider = (w, h, d, x, y, z, data) => { const c = collider(w, h, d, x, y, z, data); DYNCOL.push(c); return c; };
-function platformObj(b) {
-  // the deck: the drop-off apron along the north edge, the slots, the pickup apron along the south edge
-  const g = new THREE.Group(), [x0, x1, z0, z1] = b.deck, pm = b.exp ? expDeckM : deckM;
-  slab(x0, x1, z0, z1, pm, 0.5, g);
-  for (const z of [b.z0 - CELL / 2 - 0.2, b.z1 + CELL / 2 + 0.2]) box(x1 - x0 - 0.6, 0.05, 0.12, b.exp ? expLineM : warnM, (x0 + x1) / 2, 0.01, z, g);
-  for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
-    const s = b.shapes[c][r], [x, z] = G.slotXY(b, c, r), m2 = new THREE.Mesh(s === null ? UNSETG : SLOTG[s === ANY ? 2 : s], s === null ? unsetM : s === ANY ? expLineM : slotLineM);
-    m2.position.set(x, 0.015, z); g.add(m2);
-  }
-  for (const bay of b.bays) { const r = new THREE.Mesh(bay.pickup ? OUTBAYG : INBAYG, bay.pickup ? glow("#ffd24a") : b.exp ? expLineM : warnM); r.position.set(bay.x, 0.02, bay.z); g.add(r); }
-  const fires = [[x0 + 1.5, z0 + 1.5], [x1 - 1.5, z0 + 1.5], [x0 + 1.5, z1 - 1.5], [x1 - 1.5, z1 - 1.5]].map(([x, z]) => { box(1, 0.5, 1, darkM, x, -0.75, z, g); return flame("orange", g, x, -1, z); });
-  addDyn(g); PLAT.set(b, { g, fires });
-  dynCollider(x1 - x0, 1, z1 - z0, (x0 + x1) / 2, -0.25, (z0 + z1) / 2, { block: b });
-  for (const a of b.arms) platArmObj(b, a);
+// (owner, 2026-11-06) a unit of storage: a deck tile, joined at the edges to the units beside it (a glowing edge where
+// nothing's built next to it), with its mark: a slot's shape, a hauler spot's ring, a truck spot's yellow hexagon
+const TILEM = { slot: deckM, crane: mat("#3a404c", { roughness: 0.8 }), hspot: mat("#4a4a42", { roughness: 0.8 }), tspot: mat("#4c4636", { roughness: 0.8 }) };
+function tileObj(t, near) {
+  const g = new THREE.Group(), h = UNIT / 2;
+  box(UNIT, 0.5, UNIT, TILEM[t.kind], 0, -0.25, 0, g);
+  for (const [di, dj, ex, ez, w, d] of [[1, 0, h, 0, 0.08, UNIT], [-1, 0, -h, 0, 0.08, UNIT], [0, 1, 0, h, UNIT, 0.08], [0, -1, 0, -h, UNIT, 0.08]]) if (!near(t.i + di, t.j + dj)) box(w, 0.06, d, edgeM, ex, 0.01, ez, g);
+  if (t.kind === "slot") { const m2 = new THREE.Mesh(SLOTG[t.shape], slotLineM); m2.position.y = 0.015; g.add(m2); }
+  else if (t.kind === "hspot") { const m2 = new THREE.Mesh(INBAYG, warnM); m2.position.y = 0.02; g.add(m2); }
+  else if (t.kind === "tspot") { const m2 = new THREE.Mesh(OUTBAYG, glow("#ffd24a")); m2.position.y = 0.02; g.add(m2); }
+  box(0.5, 0.4, 0.5, darkM, 0, -0.7, 0, g); const fires = [flame("orange", g, 0, -0.9, 0)];
+  g.position.set(t.x, 0, t.z); addDyn(g); TILE3.set(t, { g, fires });
+  dynCollider(UNIT, 1, UNIT, t.x, -0.25, t.z, { tile: t });
+  if (t.kind === "crane") platArmObj(t);
 }
 // (owner, 2026-11-05) a dock station: a pad with a back wall and lights
 function dockObj(p) {
@@ -109,14 +109,15 @@ function padsObj(st) {
 function rebuild() {
   for (const o of DYN) { scene.remove(o); o.traverse((m) => { if (m.geometry && !SHARED.has(m.geometry)) m.geometry.dispose(); }); }
   for (const c of DYNCOL) { scene.remove(c); COLLIDERS.splice(COLLIDERS.indexOf(c), 1); }
-  DYN = []; DYNCOL = []; PLAT.clear(); DOCKS.clear(); PADS.length = 0; CRANES.clear();
+  DYN = []; DYNCOL = []; TILE3.clear(); DOCKS.clear(); PADS.length = 0; CRANES.clear();
   const fresh = (k) => { if (!known.has(k)) { known.add(k); if (!firstBuild) rising.set(k, nowS()); } };
   for (const b of BERTHS) {
     fresh(b); armObj(b);
     const r = new THREE.Mesh(LANEG, warnM); r.position.set(b.cx, 0.02, LANE_Z); addDyn(r);
     dynCollider(5, 2.4, LANE_Z + 2.4 - 12, b.cx, 0.8, (12 + LANE_Z + 2.4) / 2, { berth: b });   // its loading spot and the stretch of spine
   }
-  for (const b of BLOCKS) { fresh(b); for (const a of b.arms) fresh(a); platformObj(b); }
+  const tiles = new Map(); for (const t of [...SLOTS, ...G.CRANES, ...SPOTS]) tiles.set(t.i + "," + t.j, t);
+  for (const t of tiles.values()) { fresh(t); tileObj(t, (i, j) => tiles.has(i + "," + j)); }
   for (const p of PARK) { fresh(p); dockObj(p); }
   const groups = new Map(); for (const s of STALLS) { if (!groups.has(s.group)) groups.set(s.group, []); groups.get(s.group).push(s); }
   for (const st of groups.values()) { fresh(st[0]); padsObj(st); }
@@ -124,7 +125,7 @@ function rebuild() {
 }
 function syncBuilt() {
   if (G.ver !== builtVer) rebuild();
-  for (const b of BLOCKS) { const o = PLAT.get(b), off = riseOff(b); o.g.position.y = off; liftFires(o.fires, off, 0.42); }
+  for (const [t, o] of TILE3) { const off = riseOff(t); o.g.position.y = off; liftFires(o.fires, off, 0.3); }
   for (const p of PARK) { const o = DOCKS.get(p), off = riseOff(p); o.g.position.y = off; liftFires(o.fires, off, 0.3); }
   for (const o of PADS) { const off = riseOff(o.key); o.g.position.y = off; liftFires(o.fires, off, 0.34); }
 }
@@ -195,9 +196,9 @@ function syncShip() {
 }
 function syncStorage() {
   const sel = G.selected, want = sel && sel.kind === "cust" ? sel.want : null;
-  for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
-    const st = b.slots[c][r], [x, z] = G.slotXY(b, c, r), off = PLAT.has(b) ? PLAT.get(b).g.position.y : 0;
-    st.forEach((q, i) => putBox(q, x, i * PH + PH / 2 + off, z, 0, { storage: b, cell: [c, r] }, want === q ? G.posRGB(st, q) : null));
+  for (const v of SLOTS) {
+    const st = v.stack, off = TILE3.has(v) ? TILE3.get(v).g.position.y : 0;
+    st.forEach((q, i) => putBox(q, v.x, i * PH + PH / 2 + off, v.z, 0, { storage: v }, want === q ? G.posRGB(st, q) : null));
   }
 }
 
@@ -275,10 +276,9 @@ function syncArms() {
 const PA_H = 4.6, PA_TOP = 3.95;
 const paM = mat("#e8b432", { roughness: 0.45 }), paD = mat("#3a3f48");
 function link(len, w, h, material, parent) { const m2 = new THREE.Mesh(BOXG, material); m2.scale.set(len, h, w); m2.castShadow = true; parent.add(m2); return m2; }
-function platArmObj(b, a) {
-  const pos = a.mount, hh = PA_H - (a.id % 3) * 0.55, L = G.REACH / 2;   // (owner, 2026-11-06) every arm reaches the same distance
+function platArmObj(a) {
+  const pos = a.mount, hh = PA_H - (a.cid % 3) * 0.55, L = G.REACH / 2;   // (owner, 2026-11-06) every arm reaches the same distance
   const g = new THREE.Group(); g.position.set(pos.x, 0, pos.z);
-  box(2.9, 0.5, 2.9, deckM, 0, -0.25, 0, g); box(2.9, 0.06, 0.08, edgeM, 0, 0.01, 1.45, g); box(2.9, 0.06, 0.08, edgeM, 0, 0.01, -1.45, g);   // its mount, off the deck's edge
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.25, 0.6, 20), paD); base.position.y = 0.3; base.castShadow = true; g.add(base);
   const turret = new THREE.Group(); g.add(turret);
   const col = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, hh, 16), paM); col.position.y = hh / 2; col.castShadow = true; turret.add(col);
@@ -290,12 +290,13 @@ function platArmObj(b, a) {
   const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.7, 12), paD); wrist.position.x = L; fore.add(wrist);
   const cable = box(0.06, 1, 0.06, darkM, 0, 0, 0, scene), spr = new THREE.Mesh(hexRingG(HR, 0.22), yel); addDyn(spr); DYN.push(cable);
   const lamp = box(0.2, 0.2, 0.2, lampM("#ff4a3a"), 0, hh + 0.75, 0, turret);
-  addDyn(g); const o = { g, turret, fore, cable, spr, lamp, pos, hh, L, bx: b.cx, bz: (b.z0 + b.z1) / 2 }; CRANES.set(a, o); return o;
+  const near = [...SLOTS, ...SPOTS].filter((t) => hyp(t.x - pos.x, t.z - pos.z) <= G.REACH); const mid = near.length ? near.reduce((m, t) => [m[0] + t.x / near.length, m[1] + t.z / near.length], [0, 0]) : [pos.x, pos.z - 1];
+  addDyn(g); const o = { g, turret, fore, cable, spr, lamp, pos, hh, L, bx: mid[0], bz: mid[1] }; CRANES.set(a, o); return o;
 }
 function syncPlatArms() {
-  for (const b of BLOCKS) for (const a of b.arms) {
+  for (const a of G.CRANES) {
     const cr = a.cr, o = CRANES.get(a); if (!o) continue;
-    const lift = PLAT.get(b).g.position.y + riseOff(a), y = Math.min(spreaderY(cr, PA_TOP), o.hh - 0.65) + lift, L = o.L;
+    const lift = TILE3.get(a).g.position.y, y = Math.min(spreaderY(cr, PA_TOP), o.hh - 0.65) + lift, L = o.L;
     o.g.position.y = lift;
     // two-link reach: the shoulder turns toward the gripper and opens by the elbow's angle
     const dx = cr.x - o.pos.x, dz = cr.z - o.pos.z, d = clamp(hyp(dx, dz), 0.4, 2 * L - 0.01);
@@ -306,7 +307,7 @@ function syncPlatArms() {
     o.turret.rotation.y = sh; o.fore.rotation.y = Math.atan2(-(dz - ezz), dx - ex) - sh;
     const wy = o.hh + lift - 0.2; o.spr.position.set(cr.x, y + 0.02, cr.z);
     o.cable.position.set(cr.x, (y + wy) / 2, cr.z); o.cable.scale.y = Math.max(0.05, wy - y);
-    o.lamp.material.color.set(cr.ops.length && Math.sin(G.clock * 6 + b.id + a.id) > 0 ? 0xff4a3a : 0x5a2018);
+    o.lamp.material.color.set(cr.ops.length && Math.sin(G.clock * 6 + a.cid) > 0 ? 0xff4a3a : 0x5a2018);
     if (cr.hold) putBox(cr.hold, cr.x, y - PH / 2, cr.z, 0, {});
   }
 }
@@ -353,7 +354,7 @@ function anchor(before, sx, sy) { applyCam(); const after = groundAt(sx, sy); ca
 // first collider the pointer's ray meets: a ship's (a box around it and what it carries), a container's own shape, a
 // slot of the docked freighter, an arm's lines, a platform, a customer pad. A container hanging from a crane doesn't
 // stop the ray. On a touch screen, with nothing right under the finger, rays a little around it are tried, nearest first.
-let touchy = false, BADGES = [], GBTN = [], OFFERS = [];
+let touchy = false, BADGES = [], GBTN = [];
 function castAt(sx, sy) {
   setRay(sx, sy);
   const hits = ray.intersectObjects(PICKABLE.concat(boxes, [slotCols], COLLIDERS), false);
@@ -367,10 +368,10 @@ function castAt(sx, sy) {
       const inf = INST[bk][h.instanceId]; if (!inf) continue;
       if (inf.truck) { if (inf.truck.exiting) continue; return { truck: inf.truck, at }; }
       if (inf.slot !== undefined) { if (docked) return { slot: inf.slot, at }; continue; }
-      if (inf.storage) return { block: inf.storage, cell: inf.cell, at };
+      if (inf.storage) return { tile: inf.storage, at };
       continue;   // one hanging from a crane
     }
-    if (u.berth) return { berth: u.berth, at }; if (u.block) return { block: u.block, cell: G.cellAt(u.block, h.point.x, h.point.z), at }; if (u.stall) return { stall: u.stall, at };
+    if (u.berth) return { berth: u.berth, at }; if (u.tile) return { tile: u.tile, at }; if (u.stall) return { stall: u.stall, at };
   }
   return null;
 }
@@ -378,7 +379,6 @@ const RING = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => [Math.cos(k * Math.PI / 4), Mat
 const inBtn = (b, sx, sy) => sx >= b.x0 && sx <= b.x1 && sy >= b.y0 && sy <= b.y1;
 R3.pick = (sx, sy) => {
   if (G.ghost) for (const b of GBTN) if (inBtn(b, sx, sy)) return b.yes ? { ghostYes: true } : { ghostNo: true };
-  if (G.managed) for (let k = OFFERS.length - 1; k >= 0; k--) { const b = OFFERS[k]; if (inBtn(b, sx, sy)) return { offer: b.o, at: [b.o.x, 0, b.o.z] }; }
   if (G.selected) for (let k = BADGES.length - 1; k >= 0; k--) { const b = BADGES[k]; if (b.a && Math.abs(sx - b.x) <= b.r && Math.abs(sy - b.y) <= b.r) return { badge: b }; }
   const hit = castAt(sx, sy); if (hit || !touchy) return hit;
   for (const r of [10, 20]) for (const [cx, cy] of RING) { const h = castAt(sx + cx * r, sy + cy * r); if (h) return h; }
@@ -481,31 +481,15 @@ function face(x, y, happy) { octx.fillStyle = "#ffffff"; octx.fillRect(x, y, 18,
 const berthRect = (b) => rect(b.cx - 2.5, b.cx + 2.5, 12, LANE_Z + 2.4);
 function markOf(g) {   // what a target looks like when it can't be used
   if (g.kind === "sts") { if (g.slot !== undefined) { const p = G.slotPos(g.slot), st = DOCK.ship.bays[g.slot]; return circle(p.x, st.length * PH + 0.05, p.z, HR); } return berthRect(g.berth); }
-  if (g.kind === "rtg") { const [x0, x1, z0, z1] = g.block.deck; return rect(x0, x1, z0, z1); }
+  if (g.kind === "rtg") return rect(g.spot.x - UNIT / 2, g.spot.x + UNIT / 2, g.spot.z - UNIT / 2, g.spot.z + UNIT / 2);
   return circle(g.stall.x, 0.05, g.stall.z, 1.5);
 }
 function overlay() {
   octx.setTransform(DPR, 0, 0, DPR, 0, 0); octx.clearRect(0, 0, VW, VH);
   const sel = G.selected;
-  // (owner, 2026-11-05) a managed platform: its outline, and what it offers: a row or column on each side, another arm,
-  // another drop-off or pickup spot, each with its price
-  OFFERS = [];
-  const mb = G.managed;
-  if (mb && !rising.has(mb)) {
-    const d = mb.deck; poly(rect(d[0], d[1], d[2], d[3]), "#ffffff", 2, null, [6, 5]);
-    for (const a of mb.arms) poly(circle(a.mount.x, 0.05, a.mount.z, G.REACH, 64), "rgba(232,180,50,.55)", 1.5, null, [4, 6]);   // each arm's reach
-    for (const o of G.offers(mb)) {
-      const live = o.ok && G.money >= o.price, ink = live ? "rgba(127,216,138,.9)" : "rgba(120,128,140,.7)";
-      if (o.act === "grow") { const r = G.growRect(mb, o.dir), e = o.dir === "e" ? [d[1] + G.SIDE, r[1], d[2], d[3]] : o.dir === "w" ? [r[0], d[0] - G.SIDE, d[2], d[3]] : o.dir === "n" ? [d[0], d[1], r[2], d[2]] : [d[0], d[1], d[3], r[3]]; poly(rect(...e), ink, 2, "rgba(4,6,12,.35)", [6, 4]); }
-      else if (o.act === "arm") poly(rect(o.x - 1.45, o.x + 1.45, o.z - 1.45, o.z + 1.45), ink, 2, "rgba(4,6,12,.35)", [6, 4]);
-      else poly(circle(o.x, 0.05, o.z, o.pickup ? 1.5 : 1.3), ink, 2, null, [5, 4]);
-      const at = scr(o.x, 0, o.z); if (!at) continue;
-      const bx = tagBox(at[0], at[1], "+ $" + o.price.toLocaleString(), live ? "#7fd88a" : "#6a7080", live ? "#ece7dc" : "#8b919b"); bx.o = o; OFFERS.push(bx);
-    }
-  }
   // a selected customer: a dotted line to its container; a selected auto hauler: its platform
   if (sel && sel.kind === "cust" && sel.load === null && sel.want) { const at = G.boxAt(sel.want); if (at) seg([sel.x, sel.y - CARRY, sel.z], at, "#ffffff", 3, [2, 7], "round"); }
-  if (sel && sel.auto && sel.home) { const [x0, x1, z0, z1] = sel.home.deck; poly(rect(x0, x1, z0, z1), "#5fd3d0", 3, null, [8, 6]); }
+  if (sel && sel.auto && sel.home) { const h = sel.home; poly(rect(h.x - UNIT / 2, h.x + UNIT / 2, h.z - UNIT / 2, h.z + UNIT / 2), "#5fd3d0", 3, null, [8, 6]); }
   // the selected ship's queue: numbered rings joined in order; the numbers can be tapped to take a trip back
   BADGES = [];
   if (sel) {
@@ -525,7 +509,7 @@ function overlay() {
   const hv = G.hover;
   if (sel && hv && !hv.truck && !hv.badge) {
     const g = G.targetOf(hv), hb = g && G.homeFor(sel, g);
-    if (hb) { const [x0, x1, z0, z1] = hb.deck; poly(rect(x0, x1, z0, z1), "#7fd88a", 3); }
+    if (hb) poly(rect(hb.x - UNIT / 2, hb.x + UNIT / 2, hb.z - UNIT / 2, hb.z + UNIT / 2), "#7fd88a", 3);
     else if (g) { const a = G.planFor(sel, g) || G.slotSwap(sel, g), mk = a && G.spotMark(a, sel); if (mk) poly(circle(mk.x, mk.y, mk.z, mk.r), "#7fd88a", 3); else poly(markOf(g), "#ff5a4a", 3); }
   }
   // hauler numbers, customers' faces, the money they pay
@@ -549,11 +533,12 @@ function overlay() {
   if (gh) {
     const r = G.ghostRect(gh), ok = G.ghostOk(gh), c = ok ? "127,216,138" : "255,90,74", p = G.ghostPrice(gh);
     poly(rect(r[0], r[1], r[2], r[3]), `rgb(${c})`, 3, `rgba(${c},.18)`, [8, 5]);
-    if (gh.kind === "block" || gh.kind === "exp") { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) poly(rect(gh.x + i * CELL - 1.0, gh.x + i * CELL + 1.0, gh.z + j * CELL - 1.0, gh.z + j * CELL + 1.0), `rgba(${c},.7)`, 1.5); }
+    if (gh.kind === "slot") { const k = gh.shape, rr = 1.0; poly(k === 0 ? circle(gh.x, 0.05, gh.z, rr) : k === 1 ? rect(gh.x - 0.9, gh.x + 0.9, gh.z - 0.9, gh.z + 0.9) : [...Array(6).keys()].map((n) => [gh.x + 1.15 * Math.sin(n * Math.PI / 3), 0.05, gh.z + 1.15 * Math.cos(n * Math.PI / 3)]), `rgba(${c},.95)`, 2.5); }
+    else if (gh.kind === "crane") poly(circle(gh.x, 0.05, gh.z, G.REACH, 64), `rgba(${c},.75)`, 2, null, [4, 6]);
+    else if (gh.kind === "hspot" || gh.kind === "tspot") poly(circle(gh.x, 0.05, gh.z, gh.kind === "tspot" ? 1.5 : 1.3), `rgba(${c},.8)`, 2);
     else if (gh.kind === "pads") { for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) poly(circle(gh.x + i * 1.9, 0.05, gh.z + j * 1.9, 1.4), `rgba(${c},.7)`, 1.5); }
     else if (gh.kind === "berth") poly(circle(gh.x, 0.05, LANE_Z, 1.35), `rgba(${c},.8)`, 2);
-    else if (gh.kind === "arm") { poly(circle(gh.x, 0.05, gh.z, G.REACH, 64), `rgba(${c},.75)`, 2, null, [4, 6]); const ab = G.armBlock(gh); if (ab) { const d = ab.deck; poly(rect(d[0], d[1], d[2], d[3]), `rgba(${c},.6)`, 1.5, null, [6, 5]); } }
-    else if (gh.kind === "bay") poly(circle(gh.x, 0.05, gh.z, gh.pickup ? 1.5 : 1.3), `rgba(${c},.8)`, 2);
+    if (gh.kind === "crane" || gh.kind === "slot" || gh.kind === "hspot" || gh.kind === "tspot") for (const a of G.CRANES) poly(circle(a.mount.x, 0.05, a.mount.z, G.REACH, 64), "rgba(232,180,50,.35)", 1.2, null, [4, 6]);   // where the cranes reach
     const top = scr(gh.x, 0, r[2]), mid = scr(gh.x, 0, (r[2] + r[3]) / 2), bot = scr(gh.x, 0, r[3]);
     if (top && mid && bot) {
       const ty = Math.min(top[1], bot[1]), by = Math.max(top[1], bot[1]);
@@ -597,7 +582,7 @@ R3.draw = () => {
   overlay();
 };
 // for tests
-R3.center = () => ({ x: cam.x, z: cam.z }); R3.focus = (x, z) => { flick.x = flick.z = 0; zoomAt = null; goal.x = x; goal.z = z; }; R3.ground = (sx, sy) => groundAt(sx, sy); R3.offers = () => OFFERS; R3.gbtn = () => GBTN;
+R3.center = () => ({ x: cam.x, z: cam.z }); R3.focus = (x, z) => { flick.x = flick.z = 0; zoomAt = null; goal.x = x; goal.z = z; }; R3.ground = (sx, sy) => groundAt(sx, sy); R3.gbtn = () => GBTN;
 R3.cam = cam; R3.goal = goal; R3.applyCam = () => { applyCam(); syncGoal(); }; R3.scr = scr; R3.badges = () => BADGES; R3.camera = camera;
 R3.screenOfCraft = (t) => { const [x, y] = scr(t.x, t.y - 0.4, t.z) || [-1, -1]; return { x, y }; };
 R3.screenOfSlot = (k) => { const p = G.slotPos(k), st = DOCK.ship.bays[k]; const [x, y] = scr(p.x, st.length ? st.length * PH - 0.15 : 0.25, p.z) || [-1, -1]; return { x, y }; };

@@ -10,12 +10,13 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
    browser with no server, in 3D (Three.js, 1 unit = 1 m): one freighter (small, medium or large, on a timer) docks at a
    time and loader arms (placed along the spine, one loading spot each) unload its containers (circle, square or hex, 9
    colors) onto haulers; haulers, customer ships and export ships fly freely (climb to cruise height, fly over, settle
-   at their hover point, steer clear of each other; no roads); you build with blueprints (drag, ✓ / ✗): storage
-   platforms (square slots 3 high, each slot set to one shape; grown a row or column at a time up to 8 × 8; robot
-   arms built beside them, up to 8 each, reaching 10.5 m; drop-off spots on the north apron, pickup spots on the south), an export platform (any shape), customer
-   pad groups, dock stations (bought with each hauler; waiting haulers park there) and loader arms; manual haulers (you tap what
-   they fetch) and auto ones (assigned a platform); every customer wants one particular container and pays $60; start
-   with 1 hauler, 1 loader arm, a 3 × 3 platform, 4 pads, $500. Camera: perspective, tilt 45–90°,
+   at their hover point, steer clear of each other; no roads); you build with blueprints (drag, ✓ / ✗), storage one
+   2.7 m unit at a time on a grid: storage slots (one shape each, stacks 3 high), cranes (reach 10.5 m; they hand
+   containers on to each other through shared slots), hauler spots (haulers drop imports, take exports) and truck spots
+   (customers pick up, export ships drop off); also customer pad groups, dock stations (bought with each hauler; waiting
+   haulers park there) and loader arms; freighter stacks are one shape each; manual haulers (you tap what they fetch)
+   and auto ones (assigned a hauler spot); every customer wants one particular container and pays $60; start with 1
+   hauler, 1 loader arm, 9 slots, a crane, a hauler spot, a truck spot, 4 pads, $500. Camera: perspective, tilt 45–90°,
    turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.

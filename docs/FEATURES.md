@@ -61,8 +61,8 @@ column at a time; the freighter takes any shape; all at once.
   (Three.js, self-hosted in website/vendor/). Basic shapes for now (owner: the owner will make the models).
 - **Deep space:** a starfield, a sun, a planet far below. The station is separate decks with glowing edges.
 - **What's fixed:** the freighter's berth at the north, the docking spine along it and the loading deck under the spine.
-  Everything else is built where you put it (see Building).
-- **Bought things fly in (owner, 2026-11-05):** a new platform, arm, dock station or pad group flies up into place from
+  Everything else is built where you put it (see Building), storage a unit at a time.
+- **Bought things fly in (owner, 2026-11-05):** a new storage unit, loader arm, dock station or pad group flies up into place from
   below on its thrusters; a new hauler rides up on its dock station if that's new too.
 - **Freighter fire (owner, 2026-11-05):** blue fire out of its engines while it docks and leaves; orange hover thrusters
   firing under its hull the whole time, so it reads as floating.
@@ -75,8 +75,9 @@ column at a time; the freighter takes any shape; all at once.
   each a random shape and color. Up to 3 high.
 - **Nine colors:** red, orange, yellow, green, blue, purple, white, gray, black, equally likely (owner, 2026-11-05: no
   more "everyday" grey cargo).
-- **The freighter takes any shape (owner, 2026-11-05);** its deck is a honeycomb (every other row shifted half a
-  container). A storage slot only takes the shape set on it.
+- **The freighter (owner, 2026-11-05):** its deck is a honeycomb (every other row shifted half a container); **each of
+  its stacks is one shape (owner, 2026-11-06)**, but stacks side by side can be any. Its arms only stack a container on
+  one of its own shape (exports, setting aside, sorting, evening out). A storage slot only takes the shape set on it.
 - **Every container is its own (owner):** a customer comes for one particular container.
 - **Where a claimed container is (owner):** a selected customer's container flashes green on top of its stack, yellow
   in the middle, red at the bottom; so do freighter containers customers are waiting for, while they can still be
@@ -85,7 +86,7 @@ column at a time; the freighter takes any shape; all at once.
 ## Ships fly (owner, 2026-11-05: free-flying, no roads)
 
 - **Haulers** (yellow manual, teal auto; numbered), **customer ships** (their container's color) and **export ships**
-  (grey-blue) fly freely. A ship heads for a hover point (an arm's loading spot, a platform's spot, a pad, a dock
+  (grey-blue) fly freely. A ship heads for a hover point (an arm's loading spot, a hauler or truck spot, a pad, a dock
   station). Further than 5 m off it climbs to its cruising height first (above the arms; haulers lower than customers,
   each a little different), flies level and comes down near the spot, slowing as it arrives. It turns to face where
   it's going, and north once settled.
@@ -108,8 +109,7 @@ column at a time; the freighter takes any shape; all at once.
   spot) and come in turn.
 - **An arm serves the hauler at its spot.** A pickup sent for a claimed container gets that one: whatever unclaimed was
   left on top of it is set aside first (to low import stacks nearby, avoiding ones a customer wants); else the nearest
-  unclaimed top container in its columns, preferring one with a free slot of its shape in storage (in an auto hauler's
-  platform, or any).
+  unclaimed top container in its columns, preferring one with room for its shape at a hauler spot.
 - **Which container (owner):** tapping a freighter stack claims its top unclaimed container for the trip (the claim
   follows the container if an arm moves it). Tap the arm's spot instead to take whatever the arm hands over.
 - **Exports onto the freighter (owner):** an arm puts an export on the nearest stack with no imports and room (it pays
@@ -123,36 +123,50 @@ column at a time; the freighter takes any shape; all at once.
   with containers left; manual ones carry on with their queue or park.
 - **Leaving:** with its imports all off and nothing more promised it leaves after a moment; the next arrives 5–10 s later.
 
-## Storage platforms and their arms (owner)
+## Storage, a unit at a time (owner, 2026-11-06)
 
-- **A platform (owner, 2026-11-05):** a grid of square slots 2.7 m apart, 3 high, built 3 × 3 and grown a whole row or
-  column at a time on any side, up to 8 × 8. Containers come in at the drop-off spots on an apron along the north edge
-  and go out at the pickup spots on an apron along the south edge. It starts with one of each.
-- **Slot shapes (owner, 2026-11-05):** each slot takes one shape (circle, square or hexagon), marked on the deck. New
-  slots (from growing) have none yet (a faint square) and take nothing until set. Setting one is free; changing a set
-  one costs a small fee ($50) and only while it's empty. The starting platform's rows are circles, squares, hexagons.
-- **Robot arms are buildings (owner, 2026-11-06):** built from the menu like anything else (Robot arm), on a mount of their
-  own anywhere clear beside a platform: an arm joins the nearest platform with a slot in its reach, up to 8 per platform,
-  each dearer than the last on that platform. A new platform comes with none. A platform can't grow over its arms.
-- **Reach (owner, 2026-11-06):** every arm reaches 10.5 m from its mount (shown as a dashed circle while it's a blueprint
-  and while its platform is managed) and only works the slots and spots within it. A slot takes deliveries only if an arm
-  reaching it also reaches a drop-off spot, and hands out only if an arm reaching it also reaches a pickup spot; a ship
-  only gets a spot where an arm can serve it (a customer's container, or a free slot of a delivery's shape, in reach of
-  an arm there), and customers only come for stored containers that can be handed out. Arms side by side swing at
-  different heights; each keeps off the stacks the others are working (from, to and set aside).
-- **What an arm does (owner):** the longer waiting first when close. It stays where it finished: at the drop-off spots it
-  unloads a hauler next, out over the stacks it digs for a customer next. A hauler's container goes on the lowest stack
-  of its shape it can (owner, 2026-11-06), near the container the next customer wants (never on it), preferring the
-  north rows; the hauler leaves once its container is lifted. For a customer it moves what's on top of its container
-  aside, one at a time, each to a slot of its own shape, then loads it at a pickup spot.
-- **Flattening (owner, 2026-11-06):** an arm with no ship to serve flattens its stacks: it takes the top off a tall stack
-  (one burying a container a customer wants first) and sets it on a stack of the same shape at least two lower. It never
-  moves a wanted container or puts anything on one, and keeps a container that can be handed out where it still can be.
-- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served; a waiting hauler parks at a
-  free dock station until one is free. A customer is only sent once a pickup spot is free (it waits on its pad).
-- **The export platform (owner),** one, built from the menu (blue deck): its slots take any shape. Export ships drop
-  containers there and haulers take them to the freighter; its arms take containers off export ships onto low stacks
-  near the drop-off spots and put one onto each empty hauler at a pickup spot (off a tall stack; exports are all alike).
+> Platform upgrades are buildings now. And each building is 1 unit. When built, any shape can be selected on that unit.
+> Cranes are also 1 unit and can be placed anywhere. If a container is on an opposite side of the platform but another
+> crane can reach it and bring it closer. Make it do that.
+
+Asked (owner): a hauler spot and a truck spot, each both a pickup and a drop-off for its kind of ship; auto haulers
+assigned to a hauler spot.
+
+- **Units:** storage is built one 2.7 m unit at a time, snapped to a grid, anywhere clear (not over the freighter's
+  berth or the loading deck, pad groups or dock stations). Units side by side join into one deck (a glowing edge where
+  nothing's built next to it). Four kinds:
+  - **Storage slot:** holds a stack of up to 3 containers of its one shape (circle, square or hexagon, marked on it).
+    The shape is chosen on the blueprint (tap the blueprint to turn it); after one is bought the next blueprint is
+    ready beside it (east, south, west, north, whichever's clear; ✗ stops). An empty slot's shape can be changed later
+    for a small fee ($50): tap it with nothing selected.
+  - **Crane:** a robot arm on its own unit, reaching 10.5 m (a dashed circle while placing any unit). It works every
+    slot and spot in its reach.
+  - **Hauler spot:** haulers drop imports there and take exports from there.
+  - **Truck spot:** customers pick up there; export ships drop exports there.
+- **Cranes work together (owner, 2026-11-06):** a container can go from crane to crane through slots of its shape that
+  two cranes both reach. A customer's container (or an export a hauler is coming for) that's out of reach of its spot's
+  crane is brought one move closer at a time, by the shortest chain of moves, through slots with room no other crane is
+  working; the last crane hands it over. While a customer waits on a pad, its container is already brought toward the
+  nearest truck spot.
+- **What a crane does,** each time it's free (a few times a second), in order:
+  1. Serves a ship at a spot in its reach (the longer waiting first when close): a hauler's import or an export ship's
+     export goes onto the lowest stack of its shape in reach (one where it can be handed out, near the ship); the ship
+     leaves once its container is lifted. A customer gets its container and a hauler its export, whatever's on top set
+     aside first, each into a slot of its own shape in reach.
+  2. Brings a wanted container one move closer (as above).
+  3. **Flattens (owner, 2026-11-06):** takes the top off a tall stack (one burying a wanted container first) and sets it
+     on a slot of the same shape at least two lower. It never moves a wanted container or puts anything on one, and
+     never moves one out of where it can be handed out.
+  Each crane keeps off the units the others are working.
+- **Room:** a ship is only given a spot where a crane can serve it: room for its container's shape in reach (the last
+  two spaces of each shape a spot's cranes reach are kept free, so a container can always be dug out), a customer's
+  container that can be brought there, or an export to take. Customers only come for stored containers that can be
+  brought to a truck spot.
+- **Lines:** a ship sent to a spot that's taken waits its turn, first come first served (a hauler at a free dock
+  station). A customer is only sent once a truck spot is free (it waits on its pad).
+- **Exports (owner):** export ships bring a container to a free truck spot with room for its shape, while there's a
+  hauler spot to take exports out from and exports fill under an eighth of storage. Haulers take them from hauler
+  spots to the freighter.
 
 ## Haulers: you send them (owner)
 
@@ -160,26 +174,27 @@ column at a time; the freighter takes any shape; all at once.
   auto ones 4×), **only with a dock station of their own (owner, 2026-11-06):** the button puts out a dock station
   blueprint priced with the hauler, and buying it brings the hauler up on it.
 - **Manual:** tap freighter stacks (or an arm's spot) for pickups, any number in a row; a loaded hauler with nothing
-  queued takes its container where it goes by itself: an import to the nearest platform with a free slot of its shape
-  (a shorter line counts), an export to an arm with room for it on the freighter. Tap the export platform to fetch an
-  export. Sent to a platform with no free slot of its container's shape, it goes elsewhere.
-- **Auto (owner):** tap a platform to assign it. It shuttles by itself: empty, to an arm with containers left (the one
-  with the shorter line), going for a container a customer is waiting for if one is in reach; loaded, to its platform
-  (if it has a free slot of that shape). Assigned the export platform, it fetches exports for the freighter. Tapping a
-  freighter stack with an auto hauler on its way to an arm makes that trip the stack's.
+  queued takes its container where it goes by itself: an import to the nearest hauler spot with room for its shape (a
+  shorter line counts), an export to an arm with room for it on the freighter. Tap a hauler spot to drop an import there,
+  or (empty) to fetch an export from there. Sent to a spot without room for its container's shape, it goes elsewhere.
+- **Auto (owner, 2026-11-06: assigned a hauler spot):** tap a hauler spot to assign it. It shuttles by itself: loaded, to
+  its spot (or, with no room there for that shape, the nearest that has); empty, it takes an export from its spot if
+  one's there and the freighter has room, else to an arm with containers left (the one with the shorter line), going
+  for a container a customer is waiting for if one is in reach. Tapping a freighter stack with an auto hauler on its way
+  to an arm makes that trip the stack's.
 - **Idle haulers** fly to the nearest free dock station.
 - **Only where it can be served (owner):** an empty hauler to an arm with a freighter to unload (or a stack with a
-  container not yet claimed), a loaded one to a platform with a free slot of its shape, a customer to the platform
-  holding its container (with a pickup spot free), or (customers only) a free pad. Queued trips count first: with an
-  import aboard, a pickup gets a drop-off put in first.
+  container not yet claimed), a loaded one to a hauler spot with room for its shape, an empty one to a hauler spot with
+  exports to take, a customer to a free truck spot its container can be brought to, or (customers only) a free pad.
+  Queued trips count first: with an import aboard, a pickup gets a drop-off put in first.
 
 ## Customers (owner)
 
 - **One arrives** every 8–14 s, faster the more pads there are and the fuller storage is with unclaimed containers.
 - **For one particular container (owner, 2026-11-05: by its color, no grey customers):** each comes for a container
   nobody else wants, on the docked freighter or in storage, and is that container's color.
-- **To its platform by itself (owner):** one whose container is stored flies there (straight in if a pickup spot is
-  free, else from its pad once one is).
+- **To a truck spot by itself (owner):** one whose container is stored flies to a free truck spot it can be brought to
+  (straight in, else from its pad once one is free).
 - **Paid:** loaded with its container, it pays **$60** (a green "+$60" rises), smiles and leaves.
 
 ## Selecting and sending (owner)
@@ -187,36 +202,31 @@ column at a time; the freighter takes any shape; all at once.
 - **One tap for everything (owner, 2026-11-01):** tap a ship to select it (again to let go), tap where it goes to queue
   it, tap a numbered badge of its queue to take that trip back, tap empty space to let go. Press and hold a freighter
   container the selected hauler has claimed to call it off (the top one first). Right click takes back the last queued
-  trip (or lets go). Escape lets go; 1–9 select hauler 1–9.
-- **Managing a platform (owner, 2026-11-05):** with nothing selected, tap a platform. It's outlined, and shows what it
-  offers, each with its price (tap to buy): a row or column on each side (outlined where it would go; grey where it
-  doesn't fit or you can't afford it), another drop-off and pickup spot (these start a blueprint on their apron, only
-  where an arm reaches); each arm's reach as a dashed circle. Tapping one of its slots turns its shape. Tap elsewhere to stop.
+  trip (or lets go). Escape lets go; 1–9 select hauler 1–9. With nothing selected, tapping an empty storage slot
+  changes its shape (a fee).
 - **3D colliders (owner, 2026-11-04):** taps hit the first collider along the pointer's ray: a box around each ship and
-  what it carries, every container's own shape (on a ship it selects the ship; stored, it means its platform and slot),
-  a flat hex over each freighter stack (so empty ones can be tapped), each arm's spot, each platform, each customer pad.
+  what it carries, every container's own shape (on a ship it selects the ship; stored, it means its slot), a flat hex
+  over each freighter stack (so empty ones can be tapped), each arm's spot, each storage unit, each customer pad.
   Containers hanging from an arm don't block taps. On a touch screen, with nothing right under the finger, rays a
   little around it are tried, nearest first.
 - **Showing it:** the selected ship has a pulsing white ring under it (a fainter one on hover); its queue is numbered
   dashed rings joined by a dashed line; under the pointer, green where a tap would send it, red where it can't go; a
-  selected customer has a dotted line to its container; a selected auto hauler's platform is outlined.
+  selected customer has a dotted line to its container; a selected auto hauler's spot is outlined.
 
-## Progress: income and building (owner, 2026-11-01 / 2026-11-05)
+## Progress: income and building (owner, 2026-11-01 / 2026-11-06)
 
-- **Start (owner, 2026-11-05):** 1 manual hauler on its dock station, 1 loader arm, a 3 × 3 platform (part full) with 1
-  robot arm (east of it), 1 drop-off and 1 pickup spot, 4 customer pads, $500.
+- **Start (owner, 2026-11-06):** 1 manual hauler on its dock station, 1 loader arm, 9 storage slots (rows of circles,
+  squares, hexagons; part full), a crane east of them, a hauler spot north of them and a truck spot south, 4 customer
+  pads, $500.
 - **Income:** $60 per customer served and per export loaded onto the freighter.
-- **Building (owner, 2026-11-05):** the menu's Platform, Export platform, Robot arm, Pads, Dock station and Loader arm
-  buttons (and + Manual / + Auto, as a dock station with its hauler) put
-  a blueprint on the map (in the middle of the view, or the nearest clear place to it; the view glides to it). Drag it
-  (or tap where it should go); it's green where it can go and red where it can't; ✓ buys it there, ✗ drops it. Platforms,
-  pad groups (4 pads) and dock stations go anywhere clear of each other and of the freighter's berth and loading deck;
-  a loader arm slides along the spine (6 m from the others); a drop-off or pickup spot slides along its apron (3 m from
-  the others of its kind, in an arm's reach); a robot arm goes anywhere clear in reach of a platform's slot.
-- **Prices (each a little dearer than the last of its kind):** platform $600 × 1.5 per platform built, export platform
-  $1,000, pad group $200 × 1.4, dock station $250 × 1.15, loader arm $2,000 × 1.75; a platform's row or column $300 ×
-  1.6 per growth, robot arm $1,200 × 2.5 per arm on its platform (the menu shows the first), drop-off or pickup spot $200 × 1.8 per spot of that kind; a slot
-  shape change $50.
+- **Building (owner, 2026-11-05):** the menu's Storage, Crane, Hauler spot, Truck spot, Pads, Dock station and Loader arm
+  buttons (and + Manual / + Auto, as a dock station with its hauler) put a blueprint on the map (in the middle of the
+  view, or the nearest clear place to it; the view glides to it). Drag it (or tap where it should go); it's green where
+  it can go and red where it can't; ✓ buys it there, ✗ drops it. Units snap to the grid; pad groups (4 pads) and dock
+  stations go anywhere clear; a loader arm slides along the spine (6 m from the others).
+- **Prices (each a little dearer than the last of its kind):** storage slot $80 × 1.02 per slot past the first 9, crane
+  $1,200 × 1.6, hauler spot and truck spot $200 × 1.5 each, pad group $200 × 1.4, dock station $250 × 1.15, loader arm
+  $2,000 × 1.75; a slot shape change $50.
 - **Prices at 10% for testing (owner, 2026-11-05):** every price here (and haulers) is a tenth of what's listed
   (PRICE_SCALE in game.js); income stays $60.
 
@@ -229,11 +239,18 @@ column at a time; the freighter takes any shape; all at once.
   click) drops a blueprint.
 - **Smooth (owner, 2026-11-04):** zoom, turn and tilt ease in; a drag moves the map with the finger and a flick glides
   on; keys speed up and slow down; a touch stops any glide.
-- It starts over the loader arm, the platform and the pads.
+- It starts over the loader arm, the storage and the pads.
 - **Overlay:** hauler numbers, faces, "+$60", prices, offers, blueprints, the freighter's time left off its bow, the
   queue and outlines are drawn flat over the 3D view (cut where they pass behind the camera).
 
 ## Rejected / removed
+
+- **Storage platforms (2026-11-05 to 2026-11-06; owner: "platform upgrades are buildings now. And each building is 1
+  unit"):** platforms as one building (3 × 3 to start, grown a row or column at a time up to 8 × 8, with drop-off and
+  pickup aprons along their north and south edges and spots bought on them), managing a platform (tap it for its
+  offers), robot arms joining the nearest platform, slots with no shape yet, the export platform, and auto haulers
+  assigned a platform. Replaced by units built one at a time (slots, cranes, hauler spots, truck spots) and cranes that
+  hand containers on to each other. The freighter taking any shape in a stack is gone too (one shape per stack).
 
 - **Platform arms as upgrades (2026-11-05; owner: buildings, 2026-11-06):** a "+" offer on a managed platform put the next
   arm on an automatic mount (alternating east and west edges, spread along them), with links long enough to reach the

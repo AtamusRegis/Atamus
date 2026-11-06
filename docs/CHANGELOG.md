@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-06
 
+- **Storage is built a unit at a time (owner).** Platforms are gone: storage slots (each one shape, chosen on the blueprint; tap it to turn), cranes, hauler spots (haulers drop imports, take exports) and truck spots (customers pick up, export ships drop off) are 1-unit buildings placed anywhere clear on a grid. Cranes work whatever's in their reach and hand containers on to each other through shared slots of the container's shape, bringing a customer's container (or a hauler's export) closer one move at a time. Auto haulers are assigned a hauler spot. The last two spaces of each shape a spot's cranes reach stay free so containers can always be dug out. Start: 9 slots, a crane, a hauler spot, a truck spot.
+- **Freighter stacks are one shape each (owner).** Stacks side by side can differ; its arms only stack a container on its own shape.
 - **Robot arms are buildings with a reach (owner).** Built from the menu (Robot arm) beside a platform, not bought as a platform upgrade; a new platform comes with none. Each reaches 10.5 m and only works the slots and spots within it (shown as a dashed circle); spots, deliveries and customers only go where an arm can serve them. A platform can't grow over its arms.
 - **Haulers come with their dock station (owner).** + Manual / + Auto put out a dock station blueprint priced with the hauler; the hauler arrives on it.
 - **Arms flatten stacks (owner).** Deliveries go on the lowest stack of their shape; an arm with nobody to serve moves containers off tall stacks onto ones of the same shape at least two lower (unburying wanted containers first).
