@@ -464,7 +464,7 @@ function overlay() {
   for (const b of BERTHS) if (!b.open) price(scr(b.cx, 0, LANE_Z + 3), G.CRANE_PRICE[b.id]);
   groups.forEach((g, k) => { if (g) price(scr((g[0].x + g[3].x) / 2, 0, (g[0].z + g[3].z) / 2), G.STALL_PRICE[k]); });
   // a selected customer: a dotted line to its container; a selected auto hauler: its platform
-  if (sel && sel.kind === "cust" && sel.load === null) { const at = G.boxAt(sel.want); if (at) seg([sel.x, sel.y - CARRY, sel.z], at, "#ffffff", 3, [2, 7], "round"); }
+  if (sel && sel.kind === "cust" && sel.load === null && sel.want) { const at = G.boxAt(sel.want); if (at) seg([sel.x, sel.y - CARRY, sel.z], at, "#ffffff", 3, [2, 7], "round"); }
   if (sel && sel.auto && sel.home) { const [x0, x1, z0, z1] = sel.home.deck; poly(rect(x0, x1, z0, z1), "#5fd3d0", 3, null, [8, 6]); }
   // the selected ship's queue: numbered rings joined in order; the numbers can be tapped to take a trip back
   BADGES = [];

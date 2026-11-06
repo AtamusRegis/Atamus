@@ -678,6 +678,7 @@ function spotMark(a, t) {
 }
 // where a container is, if anywhere
 function boxAt(x) {
+  if (!x) return null;   // (bug 2026-11-05) a grey customer that hasn't picked yet has no container (an empty hauler's load is null too)
   for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], i = st.indexOf(x); if (i >= 0) { const [px, pz] = slotXY(b, c, r); return [px, i * PH + PH / 2, pz]; } }
   const s = DOCK.ship; if (s) for (let n = 0; n < s.bays.length; n++) { const i = s.bays[n].indexOf(x); if (i >= 0) { const p = slotPos(n); return [p.x, i * PH + PH / 2, p.z]; } }
   for (const t of crafts) if (t.load === x) return [t.x, t.y - CARRY, t.z];

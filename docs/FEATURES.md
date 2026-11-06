@@ -162,7 +162,7 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   little around it are tried, nearest first.
 - **Showing it:** the selected ship has a pulsing white ring under it (a fainter one on hover); its queue is numbered
   dashed rings joined by a dashed line; under the pointer, green where a tap would send it, red where it can't go; a
-  selected customer has a dotted line to its container; a selected auto hauler's platform is outlined.
+  selected customer has a dotted line to its container (a grey one only once it has picked one); a selected auto hauler's platform is outlined.
 
 ## Progress: income and buying (owner, 2026-11-01)
 
