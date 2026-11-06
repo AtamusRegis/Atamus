@@ -6,13 +6,15 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. **The redo (owner, 2026-10-31): Atamus is a single-player container port management game** (a spaceport, then a
-   seaport, then a container terminal, all that evening), in the browser with no server: one ship (small, medium or large, on a timer) docks at a time and up to 4 ship-to-shore
-   cranes unload it (splitting it) onto yard trucks; containers (3 tiles long, nine colors, white/gray/black everyday) stack 3 high in six vertical 5 × 12
-   storage areas, each with an RTG crane and 5 truck bays at its end; trucks follow one-way roads, mostly two-lane (passing a stopped truck), and hold their tiles; above the bays one lane each way (exit west, tractors east), and bays work both ways (tractors in from above, customers and export trucks from below, out the west gate); a street north beside every storage area; under each crane an auto line, a manual line (3 deep each) and a way-out lane, and behind them one waiting line shared by all the cranes (along the quay road and up the lane east of the export area); yard tractors are manual (you pick what they fetch: a ship slot or an export) or auto (assigned an RTG or the export area, they shuttle by themselves), and loaded ones deliver by themselves; export trucks drop containers at a seventh, export area and cranes load them onto the ship (handing back an import on the same trip); idle and new ones are in the tractor parking west of the port; customer trucks are mostly grey (any everyday white/gray/black container, picked from storage now and then, faster the more unclaimed ones are stored) or colored (a particular container of their color); once their container is stored they go to its RTG by themselves; you select a truck and queue where it parks; each customer truck wants
-   one particular container (flashing, with a dotted line to it, while selected) and pays for it; the port starts small (1 tractor, 1 crane, 1 storage area, 4 stalls)
-   and the rest is bought. 2D top down on a 32 × 32 px tile grid (NPCs come later), placeholder art the owner
-   will replace. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
+3. **The redo (owner, 2026-10-31), in space since 2026-11-05: Atamus is a single-player cargo station game** in the
+   browser with no server, in 3D (Three.js, 1 unit = 1 m): one freighter (small, medium or large, on a timer) docks at a
+   time and up to 4 loader arms unload its hexagonal containers (pucks, 9 colors, white/gray/black everyday) from a
+   honeycomb deck onto haulers hovering in their lines; haulers, customer ships and export ships fly freely (climb to
+   cruise height, fly over, settle at their hover point, steer clear of each other; no roads); seven honeycomb storage
+   platforms (5 × 4 stacks, 3 high; the seventh for exports) each with a gantry and 5 hover bays as one line; manual
+   haulers (you tap what they fetch) and auto ones (assigned a platform); customers wait on pads and pay $60 for their
+   one container; start with 1 hauler, arm A, platform 1, 4 pads, $500, buy the rest. Camera: perspective, tilt 45–90°,
+   turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
 
@@ -37,14 +39,13 @@ These docs are the project's memory between sessions; FEATURES.md is what's live
 
 ```
 website/          GitHub Pages site (atamus.io) and the game
-  game.html       the game page (3D since 2026-11-03): game.js + game3d.js
-  game2d.html     the 2D game: game.js drawing the canvas itself
-  game.js         the whole game, single player: the tile map and roads (drawn once), ships, STS cranes, storage areas
-                  and RTG cranes (op lists: move / lift / lower), yard and customer trucks (one-way road graph, held tiles, queues, claims),
-                  camera (pan / zoom / pinch); window.Atamus for tests
+  game.html       the game page: game.js + game3d.js
+  game.js         the rules, single player: the freighter, loader arms and platform gantries (op lists: move / lift /
+                  lower), haulers, customers and export ships (free flight, lines, bays, queues, claims), clicks;
+                  window.Atamus for tests
   game3d.html     forwards to game.html (old links)
-  game3d.js       the 3D renderer (Three.js, self-hosted in vendor/): camera (tilt 45–90°, turn, zoom), basic shapes
-                  (1 tile = 1 m), screen-space picking; game.js hands it drawing and picking when the page has #gl
+  game3d.js       the 3D view (Three.js, self-hosted in vendor/): the station in basic shapes, the camera (tilt 45–90°,
+                  turn, zoom), 3D colliders for picking, the screen overlay
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
   fonts/, assets/ self-hosted fonts and the logo
@@ -71,12 +72,12 @@ Changes under `docs/`, `CLAUDE.md`, `reference/` and `scripts/` trigger no deplo
 
 1. Make the change.
 2. Run `scripts/check.sh`.
-3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/game2d.html`, `website/play.html`, and the other pages for `style.css`).
+3. If you touched client files, bump the cache-busters: the `?v=` stamps on the scripts and stylesheet in the pages you changed (`website/game.html`, `website/play.html`, and the other pages for `style.css`).
 4. Update `docs/FEATURES.md` and `docs/CHANGELOG.md`.
 5. Commit, ending the message with the attribution lines. Push to `main` and the workflows deploy (website to GitHub Pages, server over the deploy key). The game is client only, so a deploy just takes effect on the next page load.
 6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/game.html.
 
 ## Code conventions
 
-- **Single player, client only.** The game lives entirely in `website/game.js`; keep it working without the server.
+- **Single player, client only.** The game lives in `website/game.js` (rules) and `website/game3d.js` (view); keep it working without the server.
 - **Syntax check before every commit.** `node --check` (via `scripts/check.sh`) runs before every commit. A syntax error once reached live.

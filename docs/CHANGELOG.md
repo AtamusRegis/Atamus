@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-05
+
+- **Into space (owner).** The seaport becomes a cargo station in space. Hexagonal containers (pucks) in honeycomb stacks on the freighter's deck and on seven storage platforms; loader arms instead of STS cranes, gantries instead of RTGs. Haulers, customer ships and export ships fly freely: they climb above the cranes, fly over, settle at their hover point and steer clear of each other; lines (an arm's, a platform's bays) stack up into the air instead of queuing on roads. Roads, lanes, held tiles, gates, the waiting line and the 2D page (game2d.html) are gone; the economy, claims, digging, queues, customers, exports and buying carry over. Picking uses 3D colliders on everything. Fixed on the way: a first frame timed before the start could make a still ship's position NaN.
+
 ## 2026-11-04
 
 - **Smoother 3D camera and 3D colliders for selecting (owner).** Zoom, turn and tilt ease in; a flicked pan glides on; keys accelerate and brake. Taps now hit invisible 3D box colliders (around each truck's cab and trailer, every container's own box, a flat one over each ship slot) instead of guessing from the ground grid and screen distance; on a touch screen rays a little around the finger are tried when nothing is right under it.
