@@ -12,7 +12,7 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
    honeycomb deck onto haulers hovering in their lines; haulers, customer ships and export ships fly freely (climb to
    cruise height, fly over, settle at their hover point, steer clear of each other; no roads); seven honeycomb storage
    platforms (5 × 4 stacks, 3 high; the seventh for exports) each with a robot arm, 3 drop-off spots on the north edge
-   and a pickup dock on the south; manual
+   and a pickup dock on the south, upgradable with a second arm and a parking lot; manual
    haulers (you tap what they fetch) and auto ones (assigned a platform); customers wait on pads and pay $60 for their
    one container; start with 1 hauler, arm A, platform 1, 4 pads, $500, buy the rest. Camera: perspective, tilt 45–90°,
    turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage

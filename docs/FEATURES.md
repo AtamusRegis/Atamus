@@ -108,6 +108,10 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 - **Idle (owner):** a container the next hauler is coming for, if buried, is dug out first; with nobody coming, the arm
   digs out containers customers want, then evens its columns out into stacks of two. It never buries or moves a claimed
   or wanted container.
+- **No waiting on nothing (owner, 2026-11-05):** when an arm has more pickups promised than imports left in its columns
+  (the freighter's emptied, or an arm bought since took some columns), the trips furthest back are called off (queued
+  ones first, then the back of its lines); one bringing an export still delivers it. Auto haulers then go to an arm
+  with containers left; manual ones carry on with their queue or park.
 - **Leaving:** with its imports all off and nothing more promised it leaves after a moment; the next arrives 5–10 s later.
 
 ## Storage platforms and their arms (owner)
@@ -117,10 +121,14 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 - **In at the top, out at the bottom (owner, 2026-11-05):** containers come in at 3 drop-off spots on an apron along the
   north edge (haulers from the freighter, export ships). They go out at one small pickup dock jutting out of the middle
   of the south edge (customers; at the export platform, haulers taking exports).
-- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served. Ones bringing a
-  container wait stacked up in the air above the middle drop-off spot; ones picking up wait in a line south of the dock
-  (stacking up past the second). Customers waiting on a pad take the dock once it's free.
-- **The arm (owner, 2026-11-05: an arm instead of the gantry):** a yellow robot arm on a mount off the platform's east
+- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served. **Waiting (owner,
+  2026-11-05):** with the platform's parking lot (an upgrade) it waits on a pad of the lot; without one (or with the lot
+  full), a hauler parks at a free dock station and a customer waits on the customer pads, until a spot is free.
+- **Upgrades (owner, 2026-11-05),** bought on a bought platform (shown dimmed with their price; tap to buy; they fly up
+  into place): a **second arm** on the platform's south-west corner ($1,200): then the east arm only takes deliveries
+  in at the top and the west arm only hands pickups out at the dock, each keeping off the stacks the other is working
+  (its links swing a little lower). A **parking lot** ($400): a deck of 4 pads just south of the platform.
+- **The arm (owner, 2026-11-05: an arm instead of the gantry; one, or two with the upgrade):** a yellow robot arm on a mount off the platform's east
   edge: a turret, two links swinging level above the stacks (the elbow kept to the north), and a hoist down to the
   hex gripper. It serves the ships at its spots one at a time, the longer waiting first when close. It stays where it
   finished: at the drop-off spots it unloads a hauler next, out over the stacks it digs for a customer next. A hauler's
@@ -179,7 +187,7 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 - **Income:** $60 per customer served and per export loaded onto the freighter.
 - **Prices at 10% for testing (owner, 2026-11-05):** every price below (haulers, arms, platforms, pads) is a tenth of
   what's listed (PRICE_SCALE in game.js); income stays $60.
-- **Buying:** locked arms and pad groups show dimmed with their price (green when you can afford it), locked platforms as
+- **Buying:** locked arms, pad groups and platform upgrades show dimmed with their price (green when you can afford it), locked platforms as
   an arrow (orange when you can afford it); tap one to buy it. Arms B–D
   $2,000 / $3,500 / $5,000; platforms 2–6 $600 / $900 / $1,300 / $1,800 / $2,400, the export platform $1,000; pad groups
   $200 up to $1,400.

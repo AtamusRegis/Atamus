@@ -50,7 +50,7 @@ const laneSpot = (l, k) => ({ x: l.x, y: HOVER + Math.max(0, k - 2) * STACK_STEP
 // haulers bringing them from the freighter (and export ships). They go out at the bottom: one small pickup dock in the
 // middle of the south edge, for customers (and, at the export platform, haulers taking exports).
 // (owner, 2026-11-01) the seventh, at the east end, is the export platform.
-const PLAT_Z = 32, DROP_Z = PLAT_Z - HR - 2.2, DOCK_Z = PLAT_Z + 3 * RZ + HR + 2.6;
+const PLAT_Z = 32, DROP_Z = PLAT_Z - HR - 2.2, DOCK_Z = PLAT_Z + 3 * RZ + HR + 2.6, LOT_Z = DOCK_Z + 4.6;
 const BLOCKS = [0, 1, 2, 3, 4, 5, 6].map((k) => {
   const x0 = 3 + k * 15, b = { id: k, x0, z0: PLAT_Z, cols: 5, rows: 4, exp: k === 6, line: [] };
   b.cx = x0 + 2.25 * HW; b.z1 = PLAT_Z + 3 * RZ;
@@ -58,12 +58,15 @@ const BLOCKS = [0, 1, 2, 3, 4, 5, 6].map((k) => {
   b.bays = [-1, 0, 1].map((i) => ({ x: b.cx + i * 3.2, z: DROP_Z, claim: null, pickup: false })).concat([{ x: b.cx, z: DOCK_Z, claim: null, pickup: true }]);
   b.arm = { x: b.x0 + 4.5 * HW + HR + 1.1, z: PLAT_Z + 0.6 };   // where the arm stands
   b.rtg = { x: b.cx, z: DROP_Z, hold: null, ops: [], truck: null };
+  // (owner, 2026-11-05) upgrades: a second arm on the west edge (then the east one only takes deliveries in and the
+  // west one only hands pickups out), and a parking lot of 4 pads just south of the platform where ships wait for it
+  b.arm2 = { x: b.x0 - HR - 1.1, z: b.z1 - 0.4 }; b.rtg2 = { x: b.cx, z: DOCK_Z, hold: null, ops: [], truck: null }; b.hasArm2 = false;
+  b.lotPads = [0, 1, 2, 3].map((i) => ({ x: b.cx + (i - 1.5) * 3.1, z: LOT_Z, claim: null })); b.hasLot = false;
   return b;
 });
 const slotXY = (b, c, r) => [hexX(b.x0, c, r), b.z0 + r * RZ];
-// ships waiting for a spot: ones bringing a container stack up in the air above the middle drop-off spot (above the
-// arm); ones picking up wait in a line south of the dock (stacking up past the second)
-const holdSpot = (b, k, pickup) => (pickup ? { x: b.cx, y: HOVER + 1 + Math.max(0, k - 1) * STACK_STEP, z: DOCK_Z + 4 + Math.min(k, 1) * 3.2, yaw: N } : { x: b.cx, y: 6.8 + k * STACK_STEP, z: DROP_Z - 0.5, yaw: N });
+// (owner, 2026-11-05) ships waiting for a spot at a platform wait in its parking lot, if it has one (a pad each, first
+// come first served); otherwise haulers park at a free dock station and customers wait on the customer pads
 const isPickup = (t, a) => t.kind === "cust" || !!(a && a.pickup);
 // dock stations west of the station, one per hauler; new haulers appear on theirs and idle ones park at one
 // (owner, 2026-11-05) a dock station comes with each hauler bought (built: there), up to 22
@@ -81,6 +84,7 @@ let money = 500;
 const INCOME = 60;
 // (owner, 2026-11-05) every price at 10% for easier testing: set PRICE_SCALE back to 1 for the real prices
 const PRICE_SCALE = 0.1, priced = (n) => Math.round(n * PRICE_SCALE);
+const ARM2_PRICE = priced(1200), LOT_PRICE = priced(400);
 const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400, 1000].map(priced), CRANE_PRICE = [0, 2000, 3500, 5000].map(priced), STALL_PRICE = [0, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400].map(priced);
 BERTHS.forEach((b) => (b.open = b.id === 0)); BLOCKS.forEach((b) => (b.open = b.id === 0)); STALLS.forEach((s) => (s.open = s.group === 0));
 const tractorPrice = (auto) => priced((400 + 50 * (crafts.filter((t) => t.kind === "yard").length - 1)) * (auto ? 4 : 1));   // (owner) +$50 each; auto ones 4x
@@ -91,6 +95,8 @@ function buyOf(pk) {
   if (!pk) return null;
   if (pk.berth && !pk.berth.open) { const b = pk.berth; return { price: CRANE_PRICE[b.id], buy: () => { b.open = true; } }; }
   if (pk.block && !pk.block.open) { const b = pk.block; return { price: BLOCK_PRICE[b.id], buy: () => { b.open = true; } }; }
+  if (pk.arm2 && pk.arm2.open && !pk.arm2.hasArm2) { const b = pk.arm2; return { price: ARM2_PRICE, buy: () => { b.hasArm2 = true; b.rtg2.x = b.cx; b.rtg2.z = DOCK_Z; } }; }
+  if (pk.lot && pk.lot.open && !pk.lot.hasLot) { const b = pk.lot; return { price: LOT_PRICE, buy: () => { b.hasLot = true; } }; }
   if (pk.stall && !pk.stall.open) { const g = STALLS.filter((q) => q.group === pk.stall.group); return { price: STALL_PRICE[pk.stall.group], buy: () => g.forEach((q) => (q.open = true)) }; }
   return null;
 }
@@ -175,6 +181,26 @@ const trips = (f) => crafts.reduce((n, t) => n + (t.cmd && f(t.cmd) ? 1 : 0) + t
 const expClaims = (b) => trips((a) => a.kind === "rtg" && a.pickup && a.block === b && !a.served);
 const expPromised = (b) => trips((a) => a.kind === "sts" && a.exp && a.berth === b);
 const exportRoom = (b) => { const s = DOCK.ship; if (!s || s.state !== "docked" || !b.open) return 0; const [c0, c1] = craneCols(b); let n = 0; s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1 && onDeck(s, k) && !impCount(st)) n += 3 - st.length; }); return n - expPromised(b); };
+// (owner, 2026-11-05) haulers in an arm's line don't wait on containers that aren't there: when an arm has more pickups
+// promised than imports left in its columns (the freighter's emptied, or an arm bought since took some columns), the
+// trips furthest back are called off: queued ones first, then the back of its lines. One bringing an export still
+// delivers it (it just takes nothing back). Auto haulers then go to an arm with containers left; manual ones carry on
+// with their queue or park.
+function trimPromises() {
+  const s = DOCK.ship; if (!s || s.state !== "docked") return;
+  for (const b of BERTHS) {
+    if (!b.open) continue;
+    const [c0, c1] = craneCols(b); let avail = b.crane.hold && !b.crane.hold.exp ? 1 : 0;
+    s.bays.forEach((st, k) => { const c = k % DOCK.cols; if (c >= c0 && c < c1) avail += impCount(st); });
+    let excess = b.promised - avail; if (excess <= 0) continue;
+    const drop = (t, a) => {
+      if (a.exp) { claim(t, a, -1); a.pick = false; return; }   // keeps its export trip, takes nothing back
+      if (a === t.cmd) { claim(t, a, -1); leaveLines(t); t.cmd = null; } else unqueue(t, a);
+    };
+    for (const t of crafts) for (let i = t.queue.length - 1; i >= 0 && excess > 0; i--) { const a = t.queue[i]; if (a.kind === "sts" && a.berth === b && a.pick !== false) { drop(t, a); excess--; } }
+    for (const l of b.lanes) for (let i = l.q.length - 1; i >= 0 && excess > 0; i--) { const t = l.q[i], a = t.cmd; if (!t.locked && a && a.kind === "sts" && a.berth === b && a.pick !== false && b.crane.truck !== t) { drop(t, a); excess--; } }
+  }
+}
 function shipStep(dt) {
   const s = DOCK.ship; if (!s) { DOCK.wait -= dt; if (DOCK.wait <= 0) newShip(); return; }
   if (s.state === "arrive") { s.off += Math.max(1.6, -s.off * 1.2) * dt; if (s.off >= 0) { s.off = 0; s.state = "docked"; } }
@@ -213,8 +239,9 @@ function spawnCustomer() {
     if (greyWaiting >= everyday) { pool = colored(); if (!pool.length) return; }
   }
   const want = pool.length ? pick(pool) : null;
-  const b = want && BLOCKS.find((q) => q.open && holds(q, want)), bay = b && freeBay(b, true);
+  const b = want && BLOCKS.find((q) => q.open && holds(q, want)), bay = b && !pickupLine(b) && freeBay(b, true);
   if (bay) { const t = mkCraft("cust", spawnPoint(), want); want.wantedBy = t; bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay }); return; }
+  if (b && lotFree(b)) { const t = mkCraft("cust", spawnPoint(), want); want.wantedBy = t; startCmd(t, { kind: "rtg", block: b }); return; }
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;
   const t = mkCraft("cust", spawnPoint(), want);
   if (want) want.wantedBy = t; else { t.generic = true; t.since = clock; }
@@ -272,8 +299,9 @@ function planFor(t, g) {
   const b = g.block;
   if (t.kind === "yard" && b.exp) return la === null && count(b) - expClaims(b) > 0 && shipTakesExports() ? pre({ kind: "rtg", block: b, pickup: true }) : null;
   if (t.kind === "yard") return la === "imp" && free(b) > 0 ? { kind: "rtg", block: b } : null;
-  const bay = !loaded && holds(b, t.want) && freeBay(b, true);
-  return bay ? { kind: "rtg", block: b, bay } : null;
+  if (loaded || !holds(b, t.want)) return null;
+  const bay = !pickupLine(b) && freeBay(b, true);
+  return bay ? { kind: "rtg", block: b, bay } : lotFree(b) ? { kind: "rtg", block: b } : null;
 }
 // (owner, 2026-11-01) a pickup sent to a freighter slot claims a particular container (the top one nobody has claimed),
 // not the slot: if an arm moves it while sorting, the trip follows it. TAKEN marks one an arm has started a job on.
@@ -312,19 +340,26 @@ function fillBays() {
     if (!b.open) continue;
     b.line = b.line.filter((t) => !t.gone && t.cmd && t.cmd.kind === "rtg" && t.cmd.block === b && !t.cmd.bay);
     for (const t of b.line.slice()) {
-      const bay = freeBay(b, isPickup(t, t.cmd)); if (!bay) continue;
-      b.line = b.line.filter((q) => q !== t); bay.claim = t; t.cmd.bay = bay;
+      const a = t.cmd, bay = freeBay(b, isPickup(t, a));
+      if (bay) { unwait(a); b.line = b.line.filter((q) => q !== t); bay.claim = t; a.bay = bay; continue; }
+      // somewhere to wait: the lot, else (a hauler) a free dock station
+      if (!a.lotPad && b.hasLot) { const p = b.lotPads.find((q) => !q.claim); if (p) { unwait(a); p.claim = t; a.lotPad = p; continue; } }
+      if (!a.lotPad && !a.waitPad && t.kind === "yard") { const p = PARK.filter((q) => q.built && !q.claim).reduce((m, q) => (!m || hyp(q.x - t.x, q.z - t.z) < hyp(m.x - t.x, m.z - t.z) ? q : m), null); if (p) { p.claim = t; a.waitPad = p; } }
     }
   }
 }
+function unwait(a) { if (!a) return; if (a.lotPad) { a.lotPad.claim = null; a.lotPad = null; } if (a.waitPad) { a.waitPad.claim = null; a.waitPad = null; } }
+const pickupLine = (b) => b.line.some((q) => isPickup(q, q.cmd));
+const lotFree = (b) => b.hasLot && b.lotPads.some((q) => !q.claim);
 function leaveLines(t) {
+  unwait(t.cmd);
   if (t.lane) { t.lane.q = t.lane.q.filter((x) => x !== t); t.lane = null; }
   for (const b of BLOCKS) if (b.line.includes(t)) b.line = b.line.filter((x) => x !== t);
 }
 function startCmd(t, a) {
   leaveLines(t);
   if (a.kind === "sts") { const l = laneFor(a.berth, t); l.q.push(t); t.lane = l; }
-  else if (a.kind === "rtg" && t.kind === "yard" && !a.bay) { const pu = isPickup(t, a), bay = freeBay(a.block, pu); if (bay && !a.block.line.some((q) => isPickup(q, q.cmd) === pu)) { bay.claim = t; a.bay = bay; } else a.block.line.push(t); }
+  else if (a.kind === "rtg" && !a.bay) { const pu = isPickup(t, a), bay = freeBay(a.block, pu); if (bay && !a.block.line.some((q) => isPickup(q, q.cmd) === pu)) { bay.claim = t; a.bay = bay; } else a.block.line.push(t); }
   if (t.park && !(a.kind === "tpark" && a.spot === t.park)) { if (t.park.claim === t) t.park.claim = null; t.park = null; }
   if (t.stall && t.stall.claim === t && !(a.kind === "park" && a.stall === t.stall)) t.stall.claim = null;
   t.stall = null; t.cmd = a;
@@ -336,7 +371,7 @@ function spotOf(t) {
   const a = t.cmd;
   if (!a) return t.park ? padSpot(t.park) : t.stall ? padSpot(t.stall) : null;
   if (a.kind === "sts") return t.lane ? laneSpot(t.lane, Math.max(0, t.lane.q.indexOf(t))) : null;
-  if (a.kind === "rtg") { if (a.bay) return { x: a.bay.x, y: HOVER, z: a.bay.z, yaw: N }; const pu = isPickup(t, a); return holdSpot(a.block, Math.max(0, a.block.line.filter((q) => isPickup(q, q.cmd) === pu).indexOf(t)), pu); }
+  if (a.kind === "rtg") return a.bay ? { x: a.bay.x, y: HOVER, z: a.bay.z, yaw: N } : a.lotPad ? padSpot(a.lotPad) : a.waitPad ? padSpot(a.waitPad) : null;
   if (a.kind === "park") return padSpot(a.stall);
   if (a.kind === "tpark") return padSpot(a.spot);
   return null;
@@ -347,8 +382,9 @@ const atSpot = (t) => { const p = spotOf(t); return !!p && hyp(p.x - t.x, p.y - 
 function custStep(t) {
   if (t.kind !== "cust" || t.exiting || t.load !== null || t.queue.length || t.cmd || !t.stall) return;
   const b = BLOCKS.find((q) => q.open && holds(q, t.want)); if (!b) return;
-  const bay = freeBay(b, true); if (!bay) return;
-  bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay });
+  const bay = !pickupLine(b) && freeBay(b, true);
+  if (bay) { bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay }); return; }
+  if (lotFree(b)) startCmd(t, { kind: "rtg", block: b });   // closer: its platform's parking lot
 }
 function canStart(t) {
   const a = t.queue[0]; if (!a) return false;
@@ -569,73 +605,72 @@ function levelShip(b) {
   cr.ops = [{ to: sxz(src) }, { lift: { stack: s.bays[src] } }, { to: sxz(dst) }, { lower: { stack: s.bays[dst] } }];
   return true;
 }
-// the platform gantry: serves the ships hovering in its bays one at a time, moving as little as it can (owner): it stays
-// where it finished; at the bays it unloads a hauler next, out over the stacks it digs for a customer next; and a hauler's
-// container goes down near the container the next customer wants (never on it)
+// a platform's arm: serves the ships at its spots one at a time, moving as little as it can (owner): it stays where it
+// finished; at the drop-off spots it unloads a hauler next, out over the stacks it digs for a customer next; and a
+// hauler's container goes down near the container the next customer wants (never on it). (owner, 2026-11-05) With a
+// second arm the east one only takes deliveries in ("in") and the west one only hands pickups out ("out"); each keeps
+// off the stacks the other is working.
 function rtgStep(b, dt) {
-  if (b.exp) return exportRtgStep(b, dt);
-  const cr = b.rtg;
-  if (!cr.ops.length && !cr.truck) {
-    const ready = crafts.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.locked && atSpot(q));
-    const srcOf = (t) => { let src = null, fewest = 1e9; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } } return src && { src, fewest }; };
-    const L = ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q)), U = free(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load !== null) : [];
-    for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
-    const age = (q) => (clock - q.cmd.readyAt) * 2, near = (list, f) => list.reduce((m, q) => (!m || f(q) - age(q) < f(m) - age(m) ? q : m), null);
-    const toTruck = (q) => Math.abs(q.x - cr.x) + Math.abs(q.z - cr.z), toSrc = (q) => { const [c, r] = srcOf(q).src, [x, z] = slotXY(b, c, r); return Math.abs(x - cr.x) + Math.abs(z - cr.z); };
-    const atDrops = cr.z < b.z0 - 0.5, nu = near(U, toTruck), nl = near(L, toSrc);
-    const t = atDrops ? nu || nl : nl || nu;
-    if (t) {
-      const at = () => [t.x, t.z];
-      if (t.kind === "yard") {
-        const next = near(L, (q) => Math.abs(q.x - t.x)), hint = next && srcOf(next).src;
-        let best = null, bs = 1e9;
-        for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
-          const st = b.slots[c][r]; if (st.length >= 3 || (hint && c === hint[0] && r === hint[1])) continue;
-          const [x, z] = slotXY(b, c, r), d = hint ? hyp(x - slotXY(b, ...hint)[0], z - slotXY(b, ...hint)[1]) : Math.abs(x - t.x) + (z - b.z0) * 0.6;
-          const sc = st.length * 2.5 + d + (st.some((q) => q.wantedBy) ? 8 : 0); if (sc < bs) { bs = sc; best = [c, r]; }
-        }
-        if (best) { t.locked = true; cr.truck = t; cr.ops = [{ to: at }, { lift: { truck: t }, then: () => { cr.truck = null; doneServing(t); } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }]; }   // (owner) the hauler leaves once its container is lifted
-      } else {
-        const { src, fewest } = srcOf(t), ops = [], h = b.slots.map((col) => col.map((st) => st.length));
-        for (let n = 0; n < fewest; n++) {
-          let dst = null, ds = 1e9;
-          for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { if ((c === src[0] && r === src[1]) || h[c][r] >= 3) continue; const [x, z] = slotXY(b, c, r), [sx, sz] = slotXY(b, src[0], src[1]), sc = h[c][r] * 2.5 + hyp(x - sx, z - sz); if (sc < ds) { ds = sc; dst = [c, r]; } }
-          if (!dst) break;
-          h[src[0]][src[1]]--; h[dst[0]][dst[1]]++;
-          ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: slotXY(b, dst[0], dst[1]) }, { lower: { stack: b.slots[dst[0]][dst[1]] } });
-        }
-        ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: at }, { lower: { truck: t }, then: () => { cr.truck = null; doneServing(t); } });
-        t.locked = true; cr.truck = t; cr.ops = ops;
-      }
-    }
+  const two = b.hasArm2, pair = [[b.rtg, two ? "in" : "both"]].concat(two ? [[b.rtg2, "out"]] : []);
+  for (const [cr, role] of pair) {
+    const other = cr === b.rtg ? (two ? b.rtg2 : null) : b.rtg, taken = (c, r) => !!(other && other.res && other.res.has(c + "," + r));
+    if (!cr.ops.length && !cr.truck) (b.exp ? exportServe : serve)(b, cr, role, taken);
+    craneStep(cr, dt, () => { cr.res = null; });
   }
-  craneStep(cr, dt, () => {});
 }
-// the export platform's gantry: takes containers off export ships (onto a low stack near the bays) and puts one onto each
-// empty hauler that comes for one (off the top of a tall stack nearby; exports are all alike, so no digging)
-function exportRtgStep(b, dt) {
-  const cr = b.rtg;
-  if (!cr.ops.length && !cr.truck) {
-    const ready = crafts.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.locked && atSpot(q));
-    const U = free(b) > 0 ? ready.filter((q) => q.kind === "exp" && q.load !== null) : [], L = count(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load === null) : [];
-    for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
-    const sc = (q) => Math.abs(q.x - cr.x) - (clock - q.cmd.readyAt) * 2, near = (list) => list.reduce((m, q) => (!m || sc(q) < sc(m) ? q : m), null);
-    const atDrops = cr.z < b.z0 - 0.5, t = atDrops ? near(U) || near(L) : near(L) || near(U);
-    if (t) {
-      const at = () => [t.x, t.z];
-      let best = null, bs = 1e9;
-      for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
-        const st = b.slots[c][r], [x, z] = slotXY(b, c, r), d = Math.abs(x - t.x) + (t.kind === "exp" ? z - b.z0 : b.z1 - z) * 0.6;
-        const s2 = t.kind === "exp" ? (st.length >= 3 ? 1e9 : st.length * 2.5 + d) : (!st.length ? 1e9 : -st.length * 2.5 + d);
-        if (s2 < bs) { bs = s2; best = [c, r]; }
-      }
-      const done = () => { cr.truck = null; doneServing(t); };
-      t.locked = true; cr.truck = t;
-      if (t.kind === "exp") cr.ops = [{ to: at }, { lift: { truck: t }, then: done }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }];
-      else { t.cmd.served = true; cr.ops = [{ to: slotXY(b, best[0], best[1]) }, { lift: { stack: b.slots[best[0]][best[1]] } }, { to: at }, { lower: { truck: t }, then: done }]; }
+function serve(b, cr, role, taken) {
+  const ready = crafts.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.locked && atSpot(q));
+  const srcOf = (t) => { let src = null, fewest = 1e9; for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], k = st.indexOf(t.want); if (k >= 0 && st.length - 1 - k < fewest) { fewest = st.length - 1 - k; src = [c, r]; } } return src && { src, fewest }; };
+  const L = role !== "in" ? ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q) && !taken(...srcOf(q).src)) : [], U = role !== "out" && free(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load !== null) : [];
+  for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
+  const age = (q) => (clock - q.cmd.readyAt) * 2, near = (list, f) => list.reduce((m, q) => (!m || f(q) - age(q) < f(m) - age(m) ? q : m), null);
+  const toTruck = (q) => Math.abs(q.x - cr.x) + Math.abs(q.z - cr.z), toSrc = (q) => { const [c, r] = srcOf(q).src, [x, z] = slotXY(b, c, r); return Math.abs(x - cr.x) + Math.abs(z - cr.z); };
+  const atDrops = cr.z < b.z0 - 0.5, nu = near(U, toTruck), nl = near(L, toSrc);
+  const t = atDrops ? nu || nl : nl || nu; if (!t) return;
+  const at = () => [t.x, t.z];
+  if (t.kind === "yard") {
+    const cs = ready.filter((q) => q.kind === "cust" && q.load === null && srcOf(q)), next = near(cs, (q) => Math.abs(q.x - t.x)), hint = next && srcOf(next).src;
+    let best = null, bs = 1e9;
+    for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
+      const st = b.slots[c][r]; if (st.length >= 3 || taken(c, r) || (hint && c === hint[0] && r === hint[1])) continue;
+      const [x, z] = slotXY(b, c, r), d = hint ? hyp(x - slotXY(b, ...hint)[0], z - slotXY(b, ...hint)[1]) : Math.abs(x - t.x) + (z - b.z0) * 0.6;
+      const sc = st.length * 2.5 + d + (st.some((q) => q.wantedBy) ? 8 : 0); if (sc < bs) { bs = sc; best = [c, r]; }
     }
+    if (best) { t.locked = true; cr.truck = t; cr.res = new Set([best.join()]); cr.ops = [{ to: at }, { lift: { truck: t }, then: () => { cr.truck = null; doneServing(t); } }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }]; }   // (owner) the hauler leaves once its container is lifted
+  } else {
+    const { src, fewest } = srcOf(t), ops = [], h = b.slots.map((col) => col.map((st) => st.length)), res = new Set([src.join()]);
+    for (let n = 0; n < fewest; n++) {
+      let dst = null, ds = 1e9;
+      for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { if ((c === src[0] && r === src[1]) || h[c][r] >= 3 || taken(c, r)) continue; const [x, z] = slotXY(b, c, r), [sx, sz] = slotXY(b, src[0], src[1]), sc = h[c][r] * 2.5 + hyp(x - sx, z - sz); if (sc < ds) { ds = sc; dst = [c, r]; } }
+      if (!dst) return;   // nowhere to set them aside right now: try again later
+      h[src[0]][src[1]]--; h[dst[0]][dst[1]]++; res.add(dst.join());
+      ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: slotXY(b, dst[0], dst[1]) }, { lower: { stack: b.slots[dst[0]][dst[1]] } });
+    }
+    ops.push({ to: slotXY(b, src[0], src[1]) }, { lift: { stack: b.slots[src[0]][src[1]] } }, { to: at }, { lower: { truck: t }, then: () => { cr.truck = null; doneServing(t); } });
+    t.locked = true; cr.truck = t; cr.res = res; cr.ops = ops;
   }
-  craneStep(cr, dt, () => {});
+}
+// the export platform's arm: takes containers off export ships (onto a low stack near the drop-off spots) and puts one
+// onto each empty hauler at the dock (off the top of a tall stack nearby; exports are all alike, so no digging)
+function exportServe(b, cr, role, taken) {
+  const ready = crafts.filter((q) => q.cmd && q.cmd.kind === "rtg" && q.cmd.block === b && q.cmd.bay && !q.locked && atSpot(q));
+  const U = role !== "out" && free(b) > 0 ? ready.filter((q) => q.kind === "exp" && q.load !== null) : [], L = role !== "in" && count(b) > 0 ? ready.filter((q) => q.kind === "yard" && q.load === null) : [];
+  for (const q of ready) if (q.cmd.readyAt === undefined) q.cmd.readyAt = clock;
+  const sc = (q) => Math.abs(q.x - cr.x) - (clock - q.cmd.readyAt) * 2, near = (list) => list.reduce((m, q) => (!m || sc(q) < sc(m) ? q : m), null);
+  const atDrops = cr.z < b.z0 - 0.5, t = atDrops ? near(U) || near(L) : near(L) || near(U); if (!t) return;
+  const at = () => [t.x, t.z];
+  let best = null, bs = 1e9;
+  for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) {
+    if (taken(c, r)) continue;
+    const st = b.slots[c][r], [x, z] = slotXY(b, c, r), d = Math.abs(x - t.x) + (t.kind === "exp" ? z - b.z0 : b.z1 - z) * 0.6;
+    const s2 = t.kind === "exp" ? (st.length >= 3 ? 1e9 : st.length * 2.5 + d) : (!st.length ? 1e9 : -st.length * 2.5 + d);
+    if (s2 < bs) { bs = s2; best = [c, r]; }
+  }
+  if (!best || bs >= 1e9) return;
+  const done = () => { cr.truck = null; doneServing(t); };
+  t.locked = true; cr.truck = t; cr.res = new Set([best.join()]);
+  if (t.kind === "exp") cr.ops = [{ to: at }, { lift: { truck: t }, then: done }, { to: slotXY(b, best[0], best[1]) }, { lower: { stack: b.slots[best[0]][best[1]] } }];
+  else { t.cmd.served = true; cr.ops = [{ to: slotXY(b, best[0], best[1]) }, { lift: { stack: b.slots[best[0]][best[1]] } }, { to: at }, { lower: { truck: t }, then: done }]; }
 }
 
 // ---- input (the 3D view works out what's under the pointer and calls these) ----
@@ -699,7 +734,7 @@ function boxAt(x) {
   for (const b of BLOCKS) for (let c = 0; c < b.cols; c++) for (let r = 0; r < b.rows; r++) { const st = b.slots[c][r], i = st.indexOf(x); if (i >= 0) { const [px, pz] = slotXY(b, c, r); return [px, i * PH + PH / 2, pz]; } }
   const s = DOCK.ship; if (s) for (let n = 0; n < s.bays.length; n++) { const i = s.bays[n].indexOf(x); if (i >= 0) { const p = slotPos(n); return [p.x, i * PH + PH / 2, p.z]; } }
   for (const t of crafts) if (t.load === x) return [t.x, t.y - CARRY, t.z];
-  for (const cr of [...BERTHS.map((b) => b.crane), ...BLOCKS.map((b) => b.rtg)]) if (cr.hold === x) return [cr.x, 3.2, cr.z];
+  for (const cr of [...BERTHS.map((b) => b.crane), ...BLOCKS.map((b) => b.rtg), ...BLOCKS.map((b) => b.rtg2)]) if (cr.hold === x) return [cr.x, 3.2, cr.z];
   return null;
 }
 // (owner) a claimed container in the freighter flashes while it could still be claimed; a selected customer's flashes
@@ -725,7 +760,7 @@ $("buy-auto").onclick = () => addTractor(true);
 let last = performance.now();
 function step(dt) {
   clock += dt;
-  shipStep(dt); syncClaims(); for (const b of BERTHS) if (b.open) stsStep(b, dt);
+  shipStep(dt); syncClaims(); trimPromises(); for (const b of BERTHS) if (b.open) stsStep(b, dt);
   freeBays(); fillBays(); for (const b of BLOCKS) if (b.open) rtgStep(b, dt);
   for (let k = floats.length - 1; k >= 0; k--) if ((floats[k].t -= dt) <= 0) floats.splice(k, 1);
   hud();
@@ -748,7 +783,7 @@ window.Atamus = {
 // what the 3D view reads and calls
 R3.game = {
   HR, HW, RZ, PH, HOVER, CARRY, X0, MW, MH, LANE_Z, DROP_Z, DOCK_Z, PLAT_Z, COLORS, AUTO_CAB, EXP_CAB, WAIT_CAB, MANUAL_CAB,
-  BLOCKS, BERTHS, DOCK, STALLS, PARK, BLOCK_PRICE, CRANE_PRICE, STALL_PRICE, floats,
+  BLOCKS, BERTHS, DOCK, STALLS, PARK, BLOCK_PRICE, CRANE_PRICE, STALL_PRICE, ARM2_PRICE, LOT_PRICE, LOT_Z, floats,
   get trucks() { return crafts; }, get selected() { return selected; }, get hover() { return hover; }, get bad() { return bad; },
   get money() { return money; }, get clock() { return clock; },
   slotPos, slotXY, shipSlot, onDeck, spotMark, boxAt, flashing, posRGB, targetOf, planFor, slotSwap, homeFor, craneCols, buyOf, laneFor,
