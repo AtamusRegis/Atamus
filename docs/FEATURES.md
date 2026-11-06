@@ -131,15 +131,23 @@ column at a time; the freighter takes any shape; all at once.
 - **Slot shapes (owner, 2026-11-05):** each slot takes one shape (circle, square or hexagon), marked on the deck. New
   slots (from growing) have none yet (a faint square) and take nothing until set. Setting one is free; changing a set
   one costs a small fee ($50) and only while it's empty. The starting platform's rows are circles, squares, hexagons.
-- **Arms (owner, 2026-11-05):** up to 8 per platform, on mounts off its east and west edges (the first east, the next
-  west, and so on, spread along each edge); each one dearer than the last. Each arm's links are long enough to reach
-  the far corner of the deck; arms side by side swing at different heights. Every arm serves the ships at the spots one
-  at a time, each keeping off the stacks the others are working (from, to and set aside).
+- **Robot arms are buildings (owner, 2026-11-06):** built from the menu like anything else (Robot arm), on a mount of their
+  own anywhere clear beside a platform: an arm joins the nearest platform with a slot in its reach, up to 8 per platform,
+  each dearer than the last on that platform. A new platform comes with none. A platform can't grow over its arms.
+- **Reach (owner, 2026-11-06):** every arm reaches 10.5 m from its mount (shown as a dashed circle while it's a blueprint
+  and while its platform is managed) and only works the slots and spots within it. A slot takes deliveries only if an arm
+  reaching it also reaches a drop-off spot, and hands out only if an arm reaching it also reaches a pickup spot; a ship
+  only gets a spot where an arm can serve it (a customer's container, or a free slot of a delivery's shape, in reach of
+  an arm there), and customers only come for stored containers that can be handed out. Arms side by side swing at
+  different heights; each keeps off the stacks the others are working (from, to and set aside).
 - **What an arm does (owner):** the longer waiting first when close. It stays where it finished: at the drop-off spots it
-  unloads a hauler next, out over the stacks it digs for a customer next. A hauler's container goes on a low stack of
-  its shape near the container the next customer wants (never on it), preferring the north rows; the hauler leaves once
-  its container is lifted. For a customer it moves what's on top of its container aside, one at a time, each to a slot
-  of its own shape, then loads it at a pickup spot.
+  unloads a hauler next, out over the stacks it digs for a customer next. A hauler's container goes on the lowest stack
+  of its shape it can (owner, 2026-11-06), near the container the next customer wants (never on it), preferring the
+  north rows; the hauler leaves once its container is lifted. For a customer it moves what's on top of its container
+  aside, one at a time, each to a slot of its own shape, then loads it at a pickup spot.
+- **Flattening (owner, 2026-11-06):** an arm with no ship to serve flattens its stacks: it takes the top off a tall stack
+  (one burying a container a customer wants first) and sets it on a stack of the same shape at least two lower. It never
+  moves a wanted container or puts anything on one, and keeps a container that can be handed out where it still can be.
 - **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served; a waiting hauler parks at a
   free dock station until one is free. A customer is only sent once a pickup spot is free (it waits on its pad).
 - **The export platform (owner),** one, built from the menu (blue deck): its slots take any shape. Export ships drop
@@ -149,7 +157,8 @@ column at a time; the freighter takes any shape; all at once.
 ## Haulers: you send them (owner)
 
 - **Start:** one manual hauler on its dock station. **+ Manual** and **+ Auto** buy more ($400 + $50 per hauler owned;
-  auto ones 4×); each needs a dock station of its own (build more), and appears on it.
+  auto ones 4×), **only with a dock station of their own (owner, 2026-11-06):** the button puts out a dock station
+  blueprint priced with the hauler, and buying it brings the hauler up on it.
 - **Manual:** tap freighter stacks (or an arm's spot) for pickups, any number in a row; a loaded hauler with nothing
   queued takes its container where it goes by itself: an import to the nearest platform with a free slot of its shape
   (a shorter line counts), an export to an arm with room for it on the freighter. Tap the export platform to fetch an
@@ -181,8 +190,8 @@ column at a time; the freighter takes any shape; all at once.
   trip (or lets go). Escape lets go; 1–9 select hauler 1–9.
 - **Managing a platform (owner, 2026-11-05):** with nothing selected, tap a platform. It's outlined, and shows what it
   offers, each with its price (tap to buy): a row or column on each side (outlined where it would go; grey where it
-  doesn't fit or you can't afford it), another arm (on its mount), another drop-off and pickup spot (these start a
-  blueprint on their apron). Tapping one of its slots turns its shape. Tap elsewhere to stop.
+  doesn't fit or you can't afford it), another drop-off and pickup spot (these start a blueprint on their apron, only
+  where an arm reaches); each arm's reach as a dashed circle. Tapping one of its slots turns its shape. Tap elsewhere to stop.
 - **3D colliders (owner, 2026-11-04):** taps hit the first collider along the pointer's ray: a box around each ship and
   what it carries, every container's own shape (on a ship it selects the ship; stored, it means its platform and slot),
   a flat hex over each freighter stack (so empty ones can be tapped), each arm's spot, each platform, each customer pad.
@@ -195,17 +204,18 @@ column at a time; the freighter takes any shape; all at once.
 ## Progress: income and building (owner, 2026-11-01 / 2026-11-05)
 
 - **Start (owner, 2026-11-05):** 1 manual hauler on its dock station, 1 loader arm, a 3 × 3 platform (part full) with 1
-  arm, 1 drop-off and 1 pickup spot, 4 customer pads, $500.
+  robot arm (east of it), 1 drop-off and 1 pickup spot, 4 customer pads, $500.
 - **Income:** $60 per customer served and per export loaded onto the freighter.
-- **Building (owner, 2026-11-05):** the menu's Platform, Export platform, Pads, Dock station and Loader arm buttons put
+- **Building (owner, 2026-11-05):** the menu's Platform, Export platform, Robot arm, Pads, Dock station and Loader arm
+  buttons (and + Manual / + Auto, as a dock station with its hauler) put
   a blueprint on the map (in the middle of the view, or the nearest clear place to it; the view glides to it). Drag it
   (or tap where it should go); it's green where it can go and red where it can't; ✓ buys it there, ✗ drops it. Platforms,
   pad groups (4 pads) and dock stations go anywhere clear of each other and of the freighter's berth and loading deck;
   a loader arm slides along the spine (6 m from the others); a drop-off or pickup spot slides along its apron (3 m from
-  the others of its kind).
+  the others of its kind, in an arm's reach); a robot arm goes anywhere clear in reach of a platform's slot.
 - **Prices (each a little dearer than the last of its kind):** platform $600 × 1.5 per platform built, export platform
   $1,000, pad group $200 × 1.4, dock station $250 × 1.15, loader arm $2,000 × 1.75; a platform's row or column $300 ×
-  1.6 per growth, arm $1,200 × 2.5 per arm on it, drop-off or pickup spot $200 × 1.8 per spot of that kind; a slot
+  1.6 per growth, robot arm $1,200 × 2.5 per arm on its platform (the menu shows the first), drop-off or pickup spot $200 × 1.8 per spot of that kind; a slot
   shape change $50.
 - **Prices at 10% for testing (owner, 2026-11-05):** every price here (and haulers) is a tenth of what's listed
   (PRICE_SCALE in game.js); income stays $60.
@@ -224,6 +234,11 @@ column at a time; the freighter takes any shape; all at once.
   queue and outlines are drawn flat over the 3D view (cut where they pass behind the camera).
 
 ## Rejected / removed
+
+- **Platform arms as upgrades (2026-11-05; owner: buildings, 2026-11-06):** a "+" offer on a managed platform put the next
+  arm on an automatic mount (alternating east and west edges, spread along them), with links long enough to reach the
+  whole deck however big it grew. Replaced by arms built where you put them, with a fixed reach. Buying a hauler onto a
+  spare dock station (without building one with it) is gone too.
 
 - **The fixed station with locked things to buy (2026-11-05, owner: build it yourself, same day):** arms A–D in fixed
   places with two hover lines each (auto and manual) three places deep; seven fixed honeycomb platforms of 5 × 4 stacks,

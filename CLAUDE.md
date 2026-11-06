@@ -11,9 +11,9 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
    time and loader arms (placed along the spine, one loading spot each) unload its containers (circle, square or hex, 9
    colors) onto haulers; haulers, customer ships and export ships fly freely (climb to cruise height, fly over, settle
    at their hover point, steer clear of each other; no roads); you build with blueprints (drag, ✓ / ✗): storage
-   platforms (square slots 3 high, each slot set to one shape; grown a row or column at a time up to 8 × 8; up to 8
-   robot arms; drop-off spots on the north apron, pickup spots on the south), an export platform (any shape), customer
-   pad groups, dock stations (one per hauler; waiting haulers park there) and loader arms; manual haulers (you tap what
+   platforms (square slots 3 high, each slot set to one shape; grown a row or column at a time up to 8 × 8; robot
+   arms built beside them, up to 8 each, reaching 10.5 m; drop-off spots on the north apron, pickup spots on the south), an export platform (any shape), customer
+   pad groups, dock stations (bought with each hauler; waiting haulers park there) and loader arms; manual haulers (you tap what
    they fetch) and auto ones (assigned a platform); every customer wants one particular container and pays $60; start
    with 1 hauler, 1 loader arm, a 3 × 3 platform, 4 pads, $500. Camera: perspective, tilt 45–90°,
    turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage

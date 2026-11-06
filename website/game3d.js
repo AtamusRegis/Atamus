@@ -276,8 +276,7 @@ const PA_H = 4.6, PA_TOP = 3.95;
 const paM = mat("#e8b432", { roughness: 0.45 }), paD = mat("#3a3f48");
 function link(len, w, h, material, parent) { const m2 = new THREE.Mesh(BOXG, material); m2.scale.set(len, h, w); m2.castShadow = true; parent.add(m2); return m2; }
 function platArmObj(b, a) {
-  const pos = a.mount, hh = PA_H - (a.id % 3) * 0.55, [x0, x1, z0, z1] = b.deck;
-  const far = Math.max(...[[x0, z0], [x1, z0], [x0, z1], [x1, z1]].map(([x, z]) => hyp(x - pos.x, z - pos.z))), L = Math.max(4, far / 2 + 0.4);
+  const pos = a.mount, hh = PA_H - (a.id % 3) * 0.55, L = G.REACH / 2;   // (owner, 2026-11-06) every arm reaches the same distance
   const g = new THREE.Group(); g.position.set(pos.x, 0, pos.z);
   box(2.9, 0.5, 2.9, deckM, 0, -0.25, 0, g); box(2.9, 0.06, 0.08, edgeM, 0, 0.01, 1.45, g); box(2.9, 0.06, 0.08, edgeM, 0, 0.01, -1.45, g);   // its mount, off the deck's edge
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.25, 0.6, 20), paD); base.position.y = 0.3; base.castShadow = true; g.add(base);
@@ -291,7 +290,7 @@ function platArmObj(b, a) {
   const wrist = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.7, 12), paD); wrist.position.x = L; fore.add(wrist);
   const cable = box(0.06, 1, 0.06, darkM, 0, 0, 0, scene), spr = new THREE.Mesh(hexRingG(HR, 0.22), yel); addDyn(spr); DYN.push(cable);
   const lamp = box(0.2, 0.2, 0.2, lampM("#ff4a3a"), 0, hh + 0.75, 0, turret);
-  addDyn(g); const o = { g, turret, fore, cable, spr, lamp, pos, hh, L, north: pos.z <= (b.z0 + b.z1) / 2 + 0.01 }; CRANES.set(a, o); return o;
+  addDyn(g); const o = { g, turret, fore, cable, spr, lamp, pos, hh, L, bx: b.cx, bz: (b.z0 + b.z1) / 2 }; CRANES.set(a, o); return o;
 }
 function syncPlatArms() {
   for (const b of BLOCKS) for (const a of b.arms) {
@@ -301,8 +300,9 @@ function syncPlatArms() {
     // two-link reach: the shoulder turns toward the gripper and opens by the elbow's angle
     const dx = cr.x - o.pos.x, dz = cr.z - o.pos.z, d = clamp(hyp(dx, dz), 0.4, 2 * L - 0.01);
     const th = Math.atan2(-dz, dx), an = Math.acos(clamp(d / (2 * L), -1, 1));
-    const e1 = th + an, e2 = th - an, ez = (e) => -Math.sin(e);
-    const sh = (ez(e1) < ez(e2)) === o.north ? e1 : e2, ex = Math.cos(sh) * L, ezz = -Math.sin(sh) * L;
+    const e1 = th + an, e2 = th - an;
+    const away = (e) => hyp(o.pos.x + Math.cos(e) * L - o.bx, o.pos.z - Math.sin(e) * L - o.bz);   // the elbow kept away from the platform's middle
+    const sh = away(e1) > away(e2) ? e1 : e2, ex = Math.cos(sh) * L, ezz = -Math.sin(sh) * L;
     o.turret.rotation.y = sh; o.fore.rotation.y = Math.atan2(-(dz - ezz), dx - ex) - sh;
     const wy = o.hh + lift - 0.2; o.spr.position.set(cr.x, y + 0.02, cr.z);
     o.cable.position.set(cr.x, (y + wy) / 2, cr.z); o.cable.scale.y = Math.max(0.05, wy - y);
@@ -493,6 +493,7 @@ function overlay() {
   const mb = G.managed;
   if (mb && !rising.has(mb)) {
     const d = mb.deck; poly(rect(d[0], d[1], d[2], d[3]), "#ffffff", 2, null, [6, 5]);
+    for (const a of mb.arms) poly(circle(a.mount.x, 0.05, a.mount.z, G.REACH, 64), "rgba(232,180,50,.55)", 1.5, null, [4, 6]);   // each arm's reach
     for (const o of G.offers(mb)) {
       const live = o.ok && G.money >= o.price, ink = live ? "rgba(127,216,138,.9)" : "rgba(120,128,140,.7)";
       if (o.act === "grow") { const r = G.growRect(mb, o.dir), e = o.dir === "e" ? [d[1] + G.SIDE, r[1], d[2], d[3]] : o.dir === "w" ? [r[0], d[0] - G.SIDE, d[2], d[3]] : o.dir === "n" ? [d[0], d[1], r[2], d[2]] : [d[0], d[1], d[3], r[3]]; poly(rect(...e), ink, 2, "rgba(4,6,12,.35)", [6, 4]); }
@@ -551,6 +552,7 @@ function overlay() {
     if (gh.kind === "block" || gh.kind === "exp") { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) poly(rect(gh.x + i * CELL - 1.0, gh.x + i * CELL + 1.0, gh.z + j * CELL - 1.0, gh.z + j * CELL + 1.0), `rgba(${c},.7)`, 1.5); }
     else if (gh.kind === "pads") { for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) poly(circle(gh.x + i * 1.9, 0.05, gh.z + j * 1.9, 1.4), `rgba(${c},.7)`, 1.5); }
     else if (gh.kind === "berth") poly(circle(gh.x, 0.05, LANE_Z, 1.35), `rgba(${c},.8)`, 2);
+    else if (gh.kind === "arm") { poly(circle(gh.x, 0.05, gh.z, G.REACH, 64), `rgba(${c},.75)`, 2, null, [4, 6]); const ab = G.armBlock(gh); if (ab) { const d = ab.deck; poly(rect(d[0], d[1], d[2], d[3]), `rgba(${c},.6)`, 1.5, null, [6, 5]); } }
     else if (gh.kind === "bay") poly(circle(gh.x, 0.05, gh.z, gh.pickup ? 1.5 : 1.3), `rgba(${c},.8)`, 2);
     const top = scr(gh.x, 0, r[2]), mid = scr(gh.x, 0, (r[2] + r[3]) / 2), bot = scr(gh.x, 0, r[3]);
     if (top && mid && bot) {

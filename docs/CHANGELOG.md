@@ -2,6 +2,12 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-06
+
+- **Robot arms are buildings with a reach (owner).** Built from the menu (Robot arm) beside a platform, not bought as a platform upgrade; a new platform comes with none. Each reaches 10.5 m and only works the slots and spots within it (shown as a dashed circle); spots, deliveries and customers only go where an arm can serve them. A platform can't grow over its arms.
+- **Haulers come with their dock station (owner).** + Manual / + Auto put out a dock station blueprint priced with the hauler; the hauler arrives on it.
+- **Arms flatten stacks (owner).** Deliveries go on the lowest stack of their shape; an arm with nobody to serve moves containers off tall stacks onto ones of the same shape at least two lower (unburying wanted containers first).
+
 ## 2026-11-05
 
 - **Build the station yourself (owner).** The fixed layout with locked things is gone. Start with 1 hauler on its dock station, 1 loader arm, a 3 × 3 platform (1 arm, 1 drop-off, 1 pickup spot), 4 pads and $500; the menu puts blueprints on the map for platforms, an export platform, pad groups, dock stations and loader arms (drag, green or red, ✓ to buy, ✗ to drop). Tap a platform to manage it: grow it a row or column on any side (up to 8 × 8), add arms (up to 8, each dearer than the last), add drop-off and pickup spots (blueprints on its aprons). Each loader arm has one loading spot; the rest of its line waits at dock stations. Haulers need a dock station each. The parking-lot upgrade and the second arm's in/out split are gone (every arm does both).
