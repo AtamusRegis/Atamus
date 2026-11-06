@@ -44,20 +44,26 @@ over from the container terminal (ships on a timer, claims, digging, queues, cus
 kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The terminal's full spec is in git
 (docs/FEATURES.md at commit 343a3d7).
 
+## Building the station (owner, 2026-11-05)
+
+> Let's start with 1 tractor, 1 crane, 1 storage stack, 1 input and 1 output parking for the storage. And 4 parking
+> spots for trucks in general, as well as only 1 input/output parking spot per quay crane. Players can place ghost
+> blueprints of buildings anywhere and confirm to buy them and place them there. [...] Also make stacks expandable same
+> with Cranes. [...] For each upgraded slot per stack, player can choose what shape to use. Circle square or hexagon
+> [...] Get rid of grey containers for certain trucks, make them picked up by their respective colors as well
+
+Asked (owner): blueprints for platforms, customer pads, dock stations and loader arms; platforms grow a whole row or
+column at a time; the freighter takes any shape; all at once.
+
 ## The station
 
 - **Meters, 3D (owner):** 1 unit = 1 m, x east, z south, y up. `game.js` has the rules, `game3d.js` draws it
   (Three.js, self-hosted in website/vendor/). Basic shapes for now (owner: the owner will make the models).
-- **Deep space:** a starfield, a sun, a planet far below. The station is decks joined by trusses, with glowing edges.
-- **What's where, north to south:** the freighter's berth; the docking spine with the loader arms (A–D) and, below it, the
-  loading deck where haulers hover in the arms' lines; the main truss; seven storage platforms in a row (the seventh,
-  east, is the export platform), each with drop-off spots along its north edge, a pickup dock on its south edge and a
-  robot arm; the 48
-  customer pads in 12 groups of 4. Haulers' dock stations are west.
-- **Bought things fly in (owner, 2026-11-05):** a platform not bought yet is empty space with an orange arrow pointing
-  down at it (grey while you can't afford it; tap it to buy). Bought, the platform (with its arm) flies up into place
-  from below on four thrusters. Every hauler bought comes with its own dock station (a pad with a back wall and red
-  and blue lights, up to 22), which flies up the same way with the new hauler on it.
+- **Deep space:** a starfield, a sun, a planet far below. The station is separate decks with glowing edges.
+- **What's fixed:** the freighter's berth at the north, the docking spine along it and the loading deck under the spine.
+  Everything else is built where you put it (see Building).
+- **Bought things fly in (owner, 2026-11-05):** a new platform, arm, dock station or pad group flies up into place from
+  below on its thrusters; a new hauler rides up on its dock station if that's new too.
 - **Freighter fire (owner, 2026-11-05):** blue fire out of its engines while it docks and leaves; orange hover thrusters
   firing under its hull the whole time, so it reads as floating.
 - **Nothing is saved yet:** a reload starts a fresh station.
@@ -65,10 +71,12 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 ## Containers (owner)
 
-- **Hexagonal (owner, 2026-11-05):** pucks 2.4 m corner to corner, 0.8 m tall, pointy ends north and south.
-- **Honeycomb storage (owner, 2026-11-05):** on the freighter's deck and on the platforms, stacks stand in a honeycomb
-  (every other row shifted half a container), so neighbors nest flat side to flat side. Up to 3 high.
-- **Nine colors:** red, orange, yellow, green, blue, purple, and the everyday white, gray and black (owner, 2026-11-01).
+- **Three shapes (owner, 2026-11-05):** circle, square or hexagon, 0.8 m tall (a hexagon is 2.4 m corner to corner),
+  each a random shape and color. Up to 3 high.
+- **Nine colors:** red, orange, yellow, green, blue, purple, white, gray, black, equally likely (owner, 2026-11-05: no
+  more "everyday" grey cargo).
+- **The freighter takes any shape (owner, 2026-11-05);** its deck is a honeycomb (every other row shifted half a
+  container). A storage slot only takes the shape set on it.
 - **Every container is its own (owner):** a customer comes for one particular container.
 - **Where a claimed container is (owner):** a selected customer's container flashes green on top of its stack, yellow
   in the middle, red at the bottom; so do freighter containers customers are waiting for, while they can still be
@@ -76,13 +84,12 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 ## Ships fly (owner, 2026-11-05: free-flying, no roads)
 
-- **Haulers** (yellow manual, teal auto; numbered), **customer ships** (grey for everyday cargo, else their container's
-  color) and **export ships** (grey-blue) fly freely. A ship heads for a hover point (a spot in a line, a bay, a pad).
-  Further than 5 m off it climbs to its cruising height first (above the arms and gantries; haulers lower than
-  customers, each a little different), flies level and comes down near the spot, slowing as it arrives. It turns to
-  face where it's going, and north once settled.
-- **Keeping clear:** a ship steers away from any ship within 3 m (not while settling into its own spot). Nothing holds
-  tiles or waits for a road: lines stack up into the air instead.
+- **Haulers** (yellow manual, teal auto; numbered), **customer ships** (their container's color) and **export ships**
+  (grey-blue) fly freely. A ship heads for a hover point (an arm's loading spot, a platform's spot, a pad, a dock
+  station). Further than 5 m off it climbs to its cruising height first (above the arms; haulers lower than customers,
+  each a little different), flies level and comes down near the spot, slowing as it arrives. It turns to face where
+  it's going, and north once settled.
+- **Keeping clear:** a ship steers away from any ship within 3 m (not while settling into its own spot).
 - **A container rides on top of its ship (owner, 2026-11-05: so it shows),** on a flat cargo bed between two rails, the
   cabin ahead of it.
 - **Customers and export ships** come in from deep space to the south and leave the same way.
@@ -94,76 +101,76 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   unloaded. Up to 3 containers per stack, imports or exports, never both.
 - **Time's up (owner):** no new pickups; each hauler finishes only its next arm trip; then it leaves, and customers
   waiting for a container still aboard leave without it (a sad face).
-- **Up to 4 loader arms, A–D (owner),** along the docking spine; the open ones split the deck's columns evenly, west to
-  east. Each arm has two hover lines running south under its boom: auto haulers on the west one, manual on the east.
-  The front of a line is where the arm loads; the 2nd and 3rd places are behind it, and past that a line stacks up
-  into the air above the third place.
-- **An arm serves the front of either line (owner),** one bringing an export first, else the nearest. A pickup sent for
-  a claimed container gets that one: whatever unclaimed was left on top of it is set aside first (to low import stacks
-  nearby, avoiding ones a customer wants); else the nearest unclaimed top container in its columns.
+- **Loader arms (owner, 2026-11-05: placed),** anywhere along the docking spine, at least 6 m apart. Each deck column
+  belongs to the nearest arm.
+- **One loading spot per arm (owner, 2026-11-05):** on the loading deck under the arm. Haulers line up for it: the front
+  one hovers at the spot, the rest wait at a free dock station (with none free, they stack up in the air behind the
+  spot) and come in turn.
+- **An arm serves the hauler at its spot.** A pickup sent for a claimed container gets that one: whatever unclaimed was
+  left on top of it is set aside first (to low import stacks nearby, avoiding ones a customer wants); else the nearest
+  unclaimed top container in its columns, preferring one with a free slot of its shape in storage (in an auto hauler's
+  platform, or any).
 - **Which container (owner):** tapping a freighter stack claims its top unclaimed container for the trip (the claim
-  follows the container if an arm moves it). Tap the arm's lines instead to take whatever the arm hands over.
+  follows the container if an arm moves it). Tap the arm's spot instead to take whatever the arm hands over.
 - **Exports onto the freighter (owner):** an arm puts an export on the nearest stack with no imports and room (it pays
   $60 then) and, with an import left, hands one back to the same hauler.
 - **Idle (owner):** a container the next hauler is coming for, if buried, is dug out first; with nobody coming, the arm
   digs out containers customers want, then evens its columns out into stacks of two. It never buries or moves a claimed
   or wanted container.
 - **No waiting on nothing (owner, 2026-11-05):** when an arm has more pickups promised than imports left in its columns
-  (the freighter's emptied, or an arm bought since took some columns), the trips furthest back are called off (queued
-  ones first, then the back of its lines); one bringing an export still delivers it. Auto haulers then go to an arm
+  (the freighter's emptied, or an arm built since took some columns), the trips furthest back are called off (queued
+  ones first, then the back of its line); one bringing an export still delivers it. Auto haulers then go to an arm
   with containers left; manual ones carry on with their queue or park.
 - **Leaving:** with its imports all off and nothing more promised it leaves after a moment; the next arrives 5–10 s later.
 
 ## Storage platforms and their arms (owner)
 
-- **Seven platforms:** a honeycomb of 5 × 4 stacks, 3 high (60 containers). The seventh, east, is the export platform (blue
-  rings): export ships drop containers there and haulers take them to the freighter.
-- **In at the top, out at the bottom (owner, 2026-11-05):** containers come in at 3 drop-off spots on an apron along the
-  north edge (haulers from the freighter, export ships). They go out at one small pickup dock jutting out of the middle
-  of the south edge (customers; at the export platform, haulers taking exports).
-- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served. **Waiting (owner,
-  2026-11-05):** with the platform's parking lot (an upgrade) it waits on a pad of the lot; without one (or with the lot
-  full), a hauler parks at a free dock station and a customer waits on the customer pads, until a spot is free.
-- **Upgrades (owner, 2026-11-05),** bought on a bought platform (shown dimmed with their price; tap to buy; they fly up
-  into place): a **second arm** on the platform's south-west corner ($1,200): then the east arm only takes deliveries
-  in at the top and the west arm only hands pickups out at the dock, each keeping off the stacks the other is working
-  (its links swing a little lower). A **parking lot** ($400): a deck of 4 pads just south of the platform.
-- **The arm (owner, 2026-11-05: an arm instead of the gantry; one, or two with the upgrade):** a yellow robot arm on a mount off the platform's east
-  edge: a turret, two links swinging level above the stacks (the elbow kept to the north), and a hoist down to the
-  hex gripper. It serves the ships at its spots one at a time, the longer waiting first when close. It stays where it
-  finished: at the drop-off spots it unloads a hauler next, out over the stacks it digs for a customer next. A hauler's
-  container goes on a low stack near the container the next customer wants (never on it), preferring the north rows;
-  the hauler leaves once its container is lifted. For a customer it moves what's on top of its container aside, one at
-  a time, then loads it at the dock.
-- **The export platform's arm** takes containers off export ships onto low stacks near the drop-off spots and puts one
-  onto each empty hauler at the dock (off a tall stack near the dock; exports are all alike).
+- **A platform (owner, 2026-11-05):** a grid of square slots 2.7 m apart, 3 high, built 3 × 3 and grown a whole row or
+  column at a time on any side, up to 8 × 8. Containers come in at the drop-off spots on an apron along the north edge
+  and go out at the pickup spots on an apron along the south edge. It starts with one of each.
+- **Slot shapes (owner, 2026-11-05):** each slot takes one shape (circle, square or hexagon), marked on the deck. New
+  slots (from growing) have none yet (a faint square) and take nothing until set. Setting one is free; changing a set
+  one costs a small fee ($50) and only while it's empty. The starting platform's rows are circles, squares, hexagons.
+- **Arms (owner, 2026-11-05):** up to 8 per platform, on mounts off its east and west edges (the first east, the next
+  west, and so on, spread along each edge); each one dearer than the last. Each arm's links are long enough to reach
+  the far corner of the deck; arms side by side swing at different heights. Every arm serves the ships at the spots one
+  at a time, each keeping off the stacks the others are working (from, to and set aside).
+- **What an arm does (owner):** the longer waiting first when close. It stays where it finished: at the drop-off spots it
+  unloads a hauler next, out over the stacks it digs for a customer next. A hauler's container goes on a low stack of
+  its shape near the container the next customer wants (never on it), preferring the north rows; the hauler leaves once
+  its container is lifted. For a customer it moves what's on top of its container aside, one at a time, each to a slot
+  of its own shape, then loads it at a pickup spot.
+- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served; a waiting hauler parks at a
+  free dock station until one is free. A customer is only sent once a pickup spot is free (it waits on its pad).
+- **The export platform (owner),** one, built from the menu (blue deck): its slots take any shape. Export ships drop
+  containers there and haulers take them to the freighter; its arms take containers off export ships onto low stacks
+  near the drop-off spots and put one onto each empty hauler at a pickup spot (off a tall stack; exports are all alike).
 
 ## Haulers: you send them (owner)
 
 - **Start:** one manual hauler on its dock station. **+ Manual** and **+ Auto** buy more ($400 + $50 per hauler owned;
-  auto ones 4×), each with a new dock station, up to 22.
-- **Manual:** tap freighter stacks (or an arm's lines) for pickups, any number in a row; a loaded hauler with nothing
-  queued takes its container where it goes by itself: an import to the nearest platform with room (a shorter line
-  counts), an export to an arm with room for it on the freighter. Tap the export platform to fetch an export.
+  auto ones 4×); each needs a dock station of its own (build more), and appears on it.
+- **Manual:** tap freighter stacks (or an arm's spot) for pickups, any number in a row; a loaded hauler with nothing
+  queued takes its container where it goes by itself: an import to the nearest platform with a free slot of its shape
+  (a shorter line counts), an export to an arm with room for it on the freighter. Tap the export platform to fetch an
+  export. Sent to a platform with no free slot of its container's shape, it goes elsewhere.
 - **Auto (owner):** tap a platform to assign it. It shuttles by itself: empty, to an arm with containers left (the one
-  with the shorter line), going for a container a customer is waiting for if one is in reach; loaded, to its platform.
-  Assigned the export platform, it fetches exports for the freighter. Tapping a freighter stack with an auto hauler on
-  its way to an arm makes that trip the stack's.
+  with the shorter line), going for a container a customer is waiting for if one is in reach; loaded, to its platform
+  (if it has a free slot of that shape). Assigned the export platform, it fetches exports for the freighter. Tapping a
+  freighter stack with an auto hauler on its way to an arm makes that trip the stack's.
 - **Idle haulers** fly to the nearest free dock station.
 - **Only where it can be served (owner):** an empty hauler to an arm with a freighter to unload (or a stack with a
-  container not yet claimed), a loaded one to a platform with room, a customer to the platform holding its container, or
-  (customers only) a free pad. Queued trips count first: with an import aboard, a pickup gets a drop-off put in first.
+  container not yet claimed), a loaded one to a platform with a free slot of its shape, a customer to the platform
+  holding its container (with a pickup spot free), or (customers only) a free pad. Queued trips count first: with an
+  import aboard, a pickup gets a drop-off put in first.
 
 ## Customers (owner)
 
-- **One arrives** every 8–14 s, faster the more pads are open and the fuller storage is with unclaimed containers.
-- **Grey ones (most)** come for everyday cargo: they wait on a pad, and now and then the longest waiting takes the easiest
-  to reach unclaimed white, gray or black container in storage. **Only while there's one for them (owner, 2026-11-05):** a grey one comes
-  only while unclaimed everyday containers in storage outnumber the grey ones already waiting; otherwise a colored one
-  comes instead (if a colored container is free), or nobody that time, so grey ones don't fill up the pads. **Colored ones** come for a particular container of
-  their color, on the docked freighter or in storage (more of them the more unclaimed stored containers are colored).
-- **To its platform by itself (owner):** one whose container is stored flies there (straight in if a bay is free, else
-  from its pad once one is).
+- **One arrives** every 8–14 s, faster the more pads there are and the fuller storage is with unclaimed containers.
+- **For one particular container (owner, 2026-11-05: by its color, no grey customers):** each comes for a container
+  nobody else wants, on the docked freighter or in storage, and is that container's color.
+- **To its platform by itself (owner):** one whose container is stored flies there (straight in if a pickup spot is
+  free, else from its pad once one is).
 - **Paid:** loaded with its container, it pays **$60** (a green "+$60" rises), smiles and leaves.
 
 ## Selecting and sending (owner)
@@ -172,40 +179,62 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   it, tap a numbered badge of its queue to take that trip back, tap empty space to let go. Press and hold a freighter
   container the selected hauler has claimed to call it off (the top one first). Right click takes back the last queued
   trip (or lets go). Escape lets go; 1–9 select hauler 1–9.
+- **Managing a platform (owner, 2026-11-05):** with nothing selected, tap a platform. It's outlined, and shows what it
+  offers, each with its price (tap to buy): a row or column on each side (outlined where it would go; grey where it
+  doesn't fit or you can't afford it), another arm (on its mount), another drop-off and pickup spot (these start a
+  blueprint on their apron). Tapping one of its slots turns its shape. Tap elsewhere to stop.
 - **3D colliders (owner, 2026-11-04):** taps hit the first collider along the pointer's ray: a box around each ship and
-  what it carries, every container's own hex shape (on a ship it selects the ship; stored, it means its platform), a
-  flat hex over each freighter stack (so empty ones can be tapped), each arm's lines, each platform, each customer pad.
-  Containers hanging from a crane don't block taps. On a touch screen, with nothing right under the finger, rays a
+  what it carries, every container's own shape (on a ship it selects the ship; stored, it means its platform and slot),
+  a flat hex over each freighter stack (so empty ones can be tapped), each arm's spot, each platform, each customer pad.
+  Containers hanging from an arm don't block taps. On a touch screen, with nothing right under the finger, rays a
   little around it are tried, nearest first.
 - **Showing it:** the selected ship has a pulsing white ring under it (a fainter one on hover); its queue is numbered
   dashed rings joined by a dashed line; under the pointer, green where a tap would send it, red where it can't go; a
-  selected customer has a dotted line to its container (a grey one only once it has picked one); a selected auto hauler's platform is outlined.
+  selected customer has a dotted line to its container; a selected auto hauler's platform is outlined.
 
-## Progress: income and buying (owner, 2026-11-01)
+## Progress: income and building (owner, 2026-11-01 / 2026-11-05)
 
-- **Start:** 1 manual hauler, arm A, platform 1 (part full), 4 customer pads, $500.
+- **Start (owner, 2026-11-05):** 1 manual hauler on its dock station, 1 loader arm, a 3 × 3 platform (part full) with 1
+  arm, 1 drop-off and 1 pickup spot, 4 customer pads, $500.
 - **Income:** $60 per customer served and per export loaded onto the freighter.
-- **Prices at 10% for testing (owner, 2026-11-05):** every price below (haulers, arms, platforms, pads) is a tenth of
-  what's listed (PRICE_SCALE in game.js); income stays $60.
-- **Buying:** locked arms, pad groups and platform upgrades show dimmed with their price (green when you can afford it), locked platforms as
-  an arrow (orange when you can afford it); tap one to buy it. Arms B–D
-  $2,000 / $3,500 / $5,000; platforms 2–6 $600 / $900 / $1,300 / $1,800 / $2,400, the export platform $1,000; pad groups
-  $200 up to $1,400.
+- **Building (owner, 2026-11-05):** the menu's Platform, Export platform, Pads, Dock station and Loader arm buttons put
+  a blueprint on the map (in the middle of the view, or the nearest clear place to it; the view glides to it). Drag it
+  (or tap where it should go); it's green where it can go and red where it can't; ✓ buys it there, ✗ drops it. Platforms,
+  pad groups (4 pads) and dock stations go anywhere clear of each other and of the freighter's berth and loading deck;
+  a loader arm slides along the spine (6 m from the others); a drop-off or pickup spot slides along its apron (3 m from
+  the others of its kind).
+- **Prices (each a little dearer than the last of its kind):** platform $600 × 1.5 per platform built, export platform
+  $1,000, pad group $200 × 1.4, dock station $250 × 1.15, loader arm $2,000 × 1.75; a platform's row or column $300 ×
+  1.6 per growth, arm $1,200 × 2.5 per arm on it, drop-off or pickup spot $200 × 1.8 per spot of that kind; a slot
+  shape change $50.
+- **Prices at 10% for testing (owner, 2026-11-05):** every price here (and haulers) is a tenth of what's listed
+  (PRICE_SCALE in game.js); income stays $60.
 
 ## Camera (owner, 2026-11-03 / 04)
 
 - **A perspective camera (40° field of view)** looking down at 45° to 90° (straight down), turned any way, zoomed.
-- **Touch:** one finger pans; two fingers pinch to zoom, twist to turn, or slide up or down together to tilt. **Mouse:**
-  left drag pans, right (or middle) drag turns and tilts, the wheel zooms at the pointer. **Keys:** WASD / arrows pan,
-  Q / E turn, R / F tilt, + / − zoom.
+- **Touch:** one finger pans (or drags a blueprint, pressed on it); two fingers pinch to zoom, twist to turn, or slide up
+  or down together to tilt. **Mouse:** left drag pans (or drags a blueprint), right (or middle) drag turns and tilts,
+  the wheel zooms at the pointer. **Keys:** WASD / arrows pan, Q / E turn, R / F tilt, + / − zoom. Escape (or a right
+  click) drops a blueprint.
 - **Smooth (owner, 2026-11-04):** zoom, turn and tilt ease in; a drag moves the map with the finger and a flick glides
   on; keys speed up and slow down; a touch stops any glide.
-- It starts over the whole station; on a touch screen close up over arm A and platform 1.
-- **Overlay:** hauler numbers, faces, "+$60", prices, the freighter's time left off its bow, the queue and outlines are
-  drawn flat over the 3D view (cut where they pass behind the camera).
+- It starts over the loader arm, the platform and the pads.
+- **Overlay:** hauler numbers, faces, "+$60", prices, offers, blueprints, the freighter's time left off its bow, the
+  queue and outlines are drawn flat over the 3D view (cut where they pass behind the camera).
 
 ## Rejected / removed
 
+- **The fixed station with locked things to buy (2026-11-05, owner: build it yourself, same day):** arms A–D in fixed
+  places with two hover lines each (auto and manual) three places deep; seven fixed honeycomb platforms of 5 × 4 stacks,
+  each with 3 drop-off spots and one pickup dock; 48 fixed customer pads; 22 dock stations, one coming with each hauler;
+  the trusses joining the decks; tapping a dimmed thing (or an arrow) to buy it. Replaced by building with blueprints.
+- **Platform upgrades: a second arm and a parking lot (2026-11-05, same day):** the second arm (east one only taking
+  deliveries in, west one only handing pickups out) became up to 8 arms that each do both; the parking lot (4 pads
+  where ships waited for the platform) is gone: haulers wait at dock stations and customers on their pads.
+- **Grey customers for everyday cargo (2026-11-01 to 2026-11-05; owner: "get rid of grey containers for certain trucks,
+  make them picked up by their respective colors as well"):** grey customers who waited on a pad and took any white,
+  gray or black container from storage, and white, gray and black making up most of the cargo.
 - **The container terminal on a seaport (2026-10-31 to 2026-11-04; owner: pivot to space, 2026-11-05):** trucks on
   one-way two-lane roads holding grid tiles, STS cranes with lanes and a shared waiting line, vertical 5 × 12 storage
   areas of 3-tile containers with RTG cranes and bays, tractor parking, parking stalls, gates, the 2D page (game2d.html)

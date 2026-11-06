@@ -8,13 +8,14 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. **The redo (owner, 2026-10-31), in space since 2026-11-05: Atamus is a single-player cargo station game** in the
    browser with no server, in 3D (Three.js, 1 unit = 1 m): one freighter (small, medium or large, on a timer) docks at a
-   time and up to 4 loader arms unload its hexagonal containers (pucks, 9 colors, white/gray/black everyday) from a
-   honeycomb deck onto haulers hovering in their lines; haulers, customer ships and export ships fly freely (climb to
-   cruise height, fly over, settle at their hover point, steer clear of each other; no roads); seven honeycomb storage
-   platforms (5 × 4 stacks, 3 high; the seventh for exports) each with a robot arm, 3 drop-off spots on the north edge
-   and a pickup dock on the south, upgradable with a second arm and a parking lot; manual
-   haulers (you tap what they fetch) and auto ones (assigned a platform); customers wait on pads and pay $60 for their
-   one container; start with 1 hauler, arm A, platform 1, 4 pads, $500, buy the rest. Camera: perspective, tilt 45–90°,
+   time and loader arms (placed along the spine, one loading spot each) unload its containers (circle, square or hex, 9
+   colors) onto haulers; haulers, customer ships and export ships fly freely (climb to cruise height, fly over, settle
+   at their hover point, steer clear of each other; no roads); you build with blueprints (drag, ✓ / ✗): storage
+   platforms (square slots 3 high, each slot set to one shape; grown a row or column at a time up to 8 × 8; up to 8
+   robot arms; drop-off spots on the north apron, pickup spots on the south), an export platform (any shape), customer
+   pad groups, dock stations (one per hauler; waiting haulers park there) and loader arms; manual haulers (you tap what
+   they fetch) and auto ones (assigned a platform); every customer wants one particular container and pays $60; start
+   with 1 hauler, 1 loader arm, a 3 × 3 platform, 4 pads, $500. Camera: perspective, tilt 45–90°,
    turn, zoom, smoothed; selection by 3D colliders. Basic shapes; the owner will make the models. **No multiplayer.** The old multiplayer ring-mining game, name-and-play and the Salvage
    prototype were removed; their code and docs are snapshotted in `reference/2026-10-31-pre-spaceport/`. **Old database
    data stays untouched for reference.** Build up from here only as the owner asks.
