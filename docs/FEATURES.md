@@ -107,8 +107,8 @@ column at a time; the freighter takes any shape; all at once.
 - **One loading spot per arm (owner, 2026-11-05):** on the loading deck under the arm. Haulers line up for it: the front
   one hovers at the spot, the rest wait at a free dock station (with none free, they stack up in the air behind the
   spot) and come in turn.
-- **Line spots (owner, 2026-11-06):** a hauler spot blueprint dragged onto a loader arm's line (south of its loading
-  spot) snaps into it, up to 4, one behind another 3.3 m apart. Haulers waiting for that arm wait on them in order (the
+- **Line spots (owner, 2026-11-06):** a hauler spot blueprint dragged or tapped anywhere under a loader arm (from the
+  spine back) snaps into its line, up to 4, one behind another 3.3 m apart. Haulers waiting for that arm wait on them in order (the
   next one on the nearest), and only past them at dock stations. Tapping one with a hauler selected sends it to that
   arm. They move with their loader arm, and can be moved to another place in a line or removed.
 - **An arm serves the hauler at its spot.** A pickup sent for a claimed container gets that one: whatever unclaimed was
@@ -164,10 +164,11 @@ assigned to a hauler spot.
      on a slot of the same shape at least two lower. It never moves a wanted container or puts anything on one, and
      never moves one out of where it can be handed out.
   Each crane keeps off the units the others are working.
-- **Room:** a ship is only given a spot where a crane can serve it: room for its container's shape in reach (the last
-  two spaces of each shape a spot's cranes reach are kept free, so a container can always be dug out), a customer's
-  container that can be brought there, or an export to take. Customers only come for stored containers that can be
-  brought to a truck spot.
+- **Room:** a ship is only given a spot where a crane can serve it: room for its container's shape in reach, a
+  customer's container that can be brought there, or an export to take. **Digging room (owner, 2026-11-06):** a
+  delivery never goes on a stack holding a container someone's waiting for, and the room needed to dig out the buried
+  ones being waited for is kept free (only that: storage otherwise fills right up). Customers only come for stored
+  containers that can be brought to a truck spot and dug out now.
 - **Lines:** a ship sent to a spot that's taken waits its turn, first come first served (a hauler at a free dock
   station). A customer is only sent once a truck spot is free (it waits on its pad).
 - **Moving and removing (owner, 2026-11-06):** with nothing selected, tap something built to pick it (again, or

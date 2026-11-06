@@ -4,6 +4,8 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-06
 
+- **Fix: haulers parking with a container when there was room (owner).** The last two spaces of each shape were always held back for digging; now only the room actually needed to dig out containers someone's waiting for is kept, deliveries never bury a wanted container, and customers only come for containers that can be dug out.
+- **Line spots snap from anywhere under a loader arm (owner).** A hauler spot blueprint dropped on the arm's loading ring or the spine went red instead of joining the line.
 - **Upright cranes that fold away (owner).** Crane arms bend in the vertical plane (turret, shoulder, elbow) and fold up small when idle.
 - **Moving and removing (owner).** Tap something built to pick it: move it (cranes, hauler and truck spots, line spots, dock stations, pad groups, loader arms), move its whole platform with its cranes and containers, remove an empty storage slot or a line spot, or turn an empty slot's shape. A platform always keeps a crane, a hauler spot and a truck spot; moves wait for the cranes involved to finish.
 - **Auto haulers use their whole platform (owner).** Assigned by tapping a hauler spot, an auto hauler uses any hauler spot on that spot's platform.

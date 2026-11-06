@@ -59,7 +59,7 @@ const lineSpots = () => BERTHS.flatMap((b) => b.lineSpots);
 // the line a point is on (near a loader arm, south of its loading spot), and the place in it
 function lineAt(x, z) {
   const b = BERTHS.reduce((m, q) => (!m || Math.abs(q.cx - x) < Math.abs(m.cx - x) ? q : m), null);
-  if (!b || Math.abs(b.cx - x) > 3.5 || z < LANE_Z + 1 || z > LANE_Z + (MAXLINE + 0.6) * LINE_STEP) return null;
+  if (!b || Math.abs(b.cx - x) > 4.5 || z < 11 || z > LANE_Z + (MAXLINE + 0.6) * LINE_STEP) return null;   // anywhere under the arm, from the spine back
   return { b, k: clamp(Math.round((z - LANE_Z) / LINE_STEP), 1, MAXLINE) };
 }
 const laneSpot = (l, k) => (k === 0 ? { x: l.x, y: HOVER, z: LANE_Z, yaw: N } : { x: l.x, y: HOVER + 2 + k * STACK_STEP, z: LANE_Z + LANE_BACK, yaw: N });
@@ -112,10 +112,21 @@ function route(a, goal, s, taken) {
   if (!prev.has(goal)) return null;
   const out = []; for (let v = goal; v; v = prev.get(v)) out.unshift(v); return out;
 }
-// room for a container of shape s that a ship at spot p could hand over (slots of its shape a crane there reaches),
-// keeping the last two spaces free so a crane can always dig a container out
-const RESERVE = 2;
-const dropRoom = (p, s) => { const N = net(); let n = 0; for (const v of SLOTS) if (v.shape === s && v.stack.length < 3 && N.link(p, v)) n += 3 - v.stack.length; return Math.max(0, n - RESERVE); };
+// how many containers have to be set aside to dig x out
+const depth = (v, x) => v.stack.length - 1 - v.stack.indexOf(x);
+// (owner, 2026-11-06) room for a container of shape s that a ship at spot p could hand over (slots of its shape a crane
+// there reaches), less the room kept for digging out the buried containers customers (or haulers) are waiting for there
+function dropRoom(p, s) {
+  const N = net(); let n = 0, keep = 0;
+  for (const v of SLOTS) if (v.shape === s && N.link(p, v)) { n += 3 - v.stack.length; for (const x of v.stack) if (x.wantedBy && depth(v, x) > 0) keep += depth(v, x); }
+  return Math.max(0, n - keep);
+}
+// whether a stored container could be dug out now: room for what's on top of it in slots of its shape a crane there reaches
+function canDig(v, x) {
+  const d = depth(v, x); if (!d) return true;
+  const N = net(); let n = 0; for (const u of SLOTS) if (u !== v && u.shape === x.s && N.link(v, u)) n += 3 - u.stack.length;
+  return n >= d;
+}
 const anyRoom = (p) => SHAPES.reduce((n, _, s) => n + dropRoom(p, s), 0);
 const isPickup = (t, a) => t.kind === "cust" || !!(a && a.pickup);
 // dock stations: each hauler has its own (a new one appears on it); idle haulers park at the nearest free one, and
@@ -461,7 +472,8 @@ function leave(t) {
 // spot free it can be brought to, flies straight there; any other waits on a pad.
 // (owner) dynamic: the fuller storage is with containers nobody has claimed, the more customers come
 const unclaimedFill = () => { const n = capacity(); return n ? storedFree().length / n : 0; };
-const storedFree = () => { const out = []; for (const v of SLOTS) for (const x of v.stack) if (!x.exp && !x.wantedBy && canOut(v, x)) out.push(x); return out; };
+// (owner, 2026-11-06) only ones that can be dug out now
+const storedFree = () => { const out = []; for (const v of SLOTS) for (const x of v.stack) if (!x.exp && !x.wantedBy && canOut(v, x) && canDig(v, x)) out.push(x); return out; };
 const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) out.push(x); return out; };
 // a truck spot free for a customer, its container able to be brought there
 const custSpot = (t, want) => { const v = slotOf(want); return v ? tspots().find((p) => spotFree(p, t) && fromSpot(p, want.s).has(v)) : null; };
@@ -914,8 +926,8 @@ function serveShip(c, q, tk, mine) {
   if (q.load && (q.kind === "exp" || (q.kind === "yard" && !q.load.exp))) {
     const x = q.load, N = net(); let w = null, ws = 1e9;
     for (const v of SLOTS) {
-      if (!mine(v) || v.shape !== x.s || v.stack.length >= 3 || tk(v)) continue;
-      const sc = v.stack.length * 8 + hyp(v.x - q.x, v.z - q.z) * 0.5 + (canOut(v, x) ? 0 : 30) + (v.stack.some((z) => z.wantedBy) ? 8 : 0); if (sc < ws) { ws = sc; w = v; }
+      if (!mine(v) || v.shape !== x.s || v.stack.length >= 3 || tk(v) || v.stack.some((z) => z.wantedBy)) continue;   // never on a wanted one
+      const sc = v.stack.length * 8 + hyp(v.x - q.x, v.z - q.z) * 0.5 + (canOut(v, x) ? 0 : 30); if (sc < ws) { ws = sc; w = v; }
     }
     if (!w) return false;
     q.locked = true; cr.truck = q; cr.res = new Set([w]);
