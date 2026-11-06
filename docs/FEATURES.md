@@ -51,10 +51,11 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 - **Deep space:** a starfield, a sun, a planet far below. The station is decks joined by trusses, with glowing edges.
 - **What's where, north to south:** the freighter's berth; the docking spine with the loader arms (A–D) and, below it, the
   loading deck where haulers hover in the arms' lines; the main truss; seven storage platforms in a row (the seventh,
-  east, is the export platform), each with its 5 bays on its south side and a waiting line south of them; the 48
+  east, is the export platform), each with drop-off spots along its north edge, a pickup dock on its south edge and a
+  robot arm; the 48
   customer pads in 12 groups of 4. Haulers' dock stations are west.
 - **Bought things fly in (owner, 2026-11-05):** a platform not bought yet is empty space with an orange arrow pointing
-  down at it (grey while you can't afford it; tap it to buy). Bought, the platform (with its gantry) flies up into place
+  down at it (grey while you can't afford it; tap it to buy). Bought, the platform (with its arm) flies up into place
   from below on four thrusters. Every hauler bought comes with its own dock station (a pad with a back wall and red
   and blue lights, up to 22), which flies up the same way with the new hauler on it.
 - **Freighter fire (owner, 2026-11-05):** blue fire out of its engines while it docks and leaves; orange hover thrusters
@@ -82,7 +83,8 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   face where it's going, and north once settled.
 - **Keeping clear:** a ship steers away from any ship within 3 m (not while settling into its own spot). Nothing holds
   tiles or waits for a road: lines stack up into the air instead.
-- **A container rides under its ship** in the clamp.
+- **A container rides on top of its ship (owner, 2026-11-05: so it shows),** on a flat cargo bed between two rails, the
+  cabin ahead of it.
 - **Customers and export ships** come in from deep space to the south and leave the same way.
 
 ## The freighter and the loader arms (owner)
@@ -108,20 +110,25 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
   or wanted container.
 - **Leaving:** with its imports all off and nothing more promised it leaves after a moment; the next arrives 5–10 s later.
 
-## Storage platforms and gantries (owner)
+## Storage platforms and their arms (owner)
 
-- **Seven platforms:** a honeycomb of 5 × 4 stacks, 3 high (60 containers), each with a gantry. The seventh, east, is the
-  export platform (blue rings): export ships drop containers there and haulers take them to the freighter.
-- **5 bays along the south edge are one line (owner):** a ship sent to a platform waits in the line south of the bays
-  (stacking up into the air past the third place) until a bay is free, first come first served. Customers waiting on
-  a pad take a bay once one is free.
-- **The gantry** (a bridge on two rails, moving north–south; its trolley east–west) serves the ships hovering in its
-  bays one at a time, the longer waiting first when close. It stays where it finished: at the bays it unloads a hauler
-  next, out over the stacks it digs for a customer next. A hauler's container goes on a low stack near the container
-  the next customer wants (never on it); the hauler leaves once its container is lifted. For a customer it moves what's
-  on top of its container aside, one at a time, then loads it.
-- **The export gantry** takes containers off export ships onto low stacks near the bays and puts one onto each empty
-  hauler that comes for one (off a tall stack nearby; exports are all alike).
+- **Seven platforms:** a honeycomb of 5 × 4 stacks, 3 high (60 containers). The seventh, east, is the export platform (blue
+  rings): export ships drop containers there and haulers take them to the freighter.
+- **In at the top, out at the bottom (owner, 2026-11-05):** containers come in at 3 drop-off spots on an apron along the
+  north edge (haulers from the freighter, export ships). They go out at one small pickup dock jutting out of the middle
+  of the south edge (customers; at the export platform, haulers taking exports).
+- **Lines:** a ship sent to a platform takes a free spot of its kind, first come first served. Ones bringing a
+  container wait stacked up in the air above the middle drop-off spot; ones picking up wait in a line south of the dock
+  (stacking up past the second). Customers waiting on a pad take the dock once it's free.
+- **The arm (owner, 2026-11-05: an arm instead of the gantry):** a yellow robot arm on a mount off the platform's east
+  edge: a turret, two links swinging level above the stacks (the elbow kept to the north), and a hoist down to the
+  hex gripper. It serves the ships at its spots one at a time, the longer waiting first when close. It stays where it
+  finished: at the drop-off spots it unloads a hauler next, out over the stacks it digs for a customer next. A hauler's
+  container goes on a low stack near the container the next customer wants (never on it), preferring the north rows;
+  the hauler leaves once its container is lifted. For a customer it moves what's on top of its container aside, one at
+  a time, then loads it at the dock.
+- **The export platform's arm** takes containers off export ships onto low stacks near the drop-off spots and puts one
+  onto each empty hauler at the dock (off a tall stack near the dock; exports are all alike).
 
 ## Haulers: you send them (owner)
 

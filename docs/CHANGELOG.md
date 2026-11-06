@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-05
 
+- **Platform arms, and containers on top (owner, from a sketch).** Each platform's gantry is replaced by a robot arm (a turret on the east edge, two links swinging above the stacks, a hoist to the gripper). Containers come in at 3 drop-off spots along the north edge and go out at one small pickup dock on the south edge (the 5 south bays are gone); lines for each. Ships now carry their container on top of a flat cargo bed, so it shows from above.
 - **Grey customers only come when there's an everyday container for them (owner).** One comes only while unclaimed white, gray and black containers in storage outnumber the grey customers already waiting; otherwise a colored one comes (if one has a container), or nobody. They no longer fill the pads waiting for containers that aren't there.
 - **Fix: grey customers pointing at parked haulers.** A grey customer that hadn't picked its container yet drew its dotted line to the first empty hauler (asking where "no container" is matched a hauler carrying nothing). It now draws no line until it has a container.
 - **Prices at 10% for easier testing (owner).** Haulers, arms, platforms and pad groups cost a tenth (one setting, PRICE_SCALE, to put back); income unchanged.
