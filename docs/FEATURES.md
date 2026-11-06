@@ -143,7 +143,9 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 - **One arrives** every 8–14 s, faster the more pads are open and the fuller storage is with unclaimed containers.
 - **Grey ones (most)** come for everyday cargo: they wait on a pad, and now and then the longest waiting takes the easiest
-  to reach unclaimed white, gray or black container in storage. **Colored ones** come for a particular container of
+  to reach unclaimed white, gray or black container in storage. **Only while there's one for them (owner, 2026-11-05):** a grey one comes
+  only while unclaimed everyday containers in storage outnumber the grey ones already waiting; otherwise a colored one
+  comes instead (if a colored container is free), or nobody that time, so grey ones don't fill up the pads. **Colored ones** come for a particular container of
   their color, on the docked freighter or in storage (more of them the more unclaimed stored containers are colored).
 - **To its platform by itself (owner):** one whose container is stored flies there (straight in if a bay is free, else
   from its pad once one is).

@@ -194,8 +194,17 @@ const unclaimedFill = () => { const n = BLOCKS.filter((b) => b.open && !b.exp).l
 const storedFree = () => { const out = []; for (const b of BLOCKS) if (b.open && !b.exp) for (const col of b.slots) for (const st of col) for (const x of st) if (!x.wantedBy) out.push(x); return out; };
 const shipFree = () => { const out = [], s = DOCK.ship; if (s && s.state === "docked") for (const st of s.bays) for (const x of st) if (!x.exp && !x.wantedBy) out.push(x); return out; };
 // one whose container is already stored, with a bay of its platform free, flies straight there; any other waits on a pad
+// (owner, 2026-11-05) a grey one only comes while there are more unclaimed everyday containers in storage than grey
+// customers already waiting for one; otherwise a colored one comes instead (if there's a colored container for it), or
+// nobody this time
 function spawnCustomer() {
-  const pool = rnd() < coloredShare() ? shipFree().concat(storedFree()).filter((x) => !NEUTRAL.has(x.c)) : [], want = pool.length ? pick(pool) : null;
+  const colored = () => shipFree().concat(storedFree()).filter((x) => !NEUTRAL.has(x.c));
+  let pool = rnd() < coloredShare() ? colored() : [];
+  if (!pool.length) {
+    const greyWaiting = crafts.filter((q) => q.kind === "cust" && !q.want && !q.exiting).length, everyday = storedFree().filter((x) => NEUTRAL.has(x.c)).length;
+    if (greyWaiting >= everyday) { pool = colored(); if (!pool.length) return; }
+  }
+  const want = pool.length ? pick(pool) : null;
   const b = want && BLOCKS.find((q) => q.open && holds(q, want)), bay = b && freeBay(b);
   if (bay) { const t = mkCraft("cust", spawnPoint(), want); want.wantedBy = t; bay.claim = t; startCmd(t, { kind: "rtg", block: b, bay }); return; }
   const stall = STALLS.slice().reverse().find((s) => s.open && !s.claim); if (!stall) return;

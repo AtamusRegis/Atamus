@@ -4,6 +4,7 @@ Newest first. Add one entry per patch in the same commit, and keep it short: wha
 
 ## 2026-11-05
 
+- **Grey customers only come when there's an everyday container for them (owner).** One comes only while unclaimed white, gray and black containers in storage outnumber the grey customers already waiting; otherwise a colored one comes (if one has a container), or nobody. They no longer fill the pads waiting for containers that aren't there.
 - **Fix: grey customers pointing at parked haulers.** A grey customer that hadn't picked its container yet drew its dotted line to the first empty hauler (asking where "no container" is matched a hauler carrying nothing). It now draws no line until it has a container.
 - **Prices at 10% for easier testing (owner).** Haulers, arms, platforms and pad groups cost a tenth (one setting, PRICE_SCALE, to put back); income unchanged.
 - **Fire and flying in (owner, from a marked-up screenshot).** The freighter fires its engines (blue) while docking and leaving, and hover thrusters (orange) under its hull. A platform not bought yet is empty space with a down arrow; bought, it flies up into place from below on four thrusters. Every hauler bought comes with its own dock station that flies up with it (the 22-pad hangar deck is gone).
