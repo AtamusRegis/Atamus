@@ -71,9 +71,11 @@ const exitPoint = () => ({ x: -30 + rnd() * 30, y: 16, z: MH + 55 });
 // container; the rest is bought. Locked things show dimmed with their price: tap one to buy it.
 let money = 500;
 const INCOME = 60;
-const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400, 1000], CRANE_PRICE = [0, 2000, 3500, 5000], STALL_PRICE = [0, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400];
+// (owner, 2026-11-05) every price at 10% for easier testing: set PRICE_SCALE back to 1 for the real prices
+const PRICE_SCALE = 0.1, priced = (n) => Math.round(n * PRICE_SCALE);
+const BLOCK_PRICE = [0, 600, 900, 1300, 1800, 2400, 1000].map(priced), CRANE_PRICE = [0, 2000, 3500, 5000].map(priced), STALL_PRICE = [0, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1400].map(priced);
 BERTHS.forEach((b) => (b.open = b.id === 0)); BLOCKS.forEach((b) => (b.open = b.id === 0)); STALLS.forEach((s) => (s.open = s.group === 0));
-const tractorPrice = (auto) => (400 + 50 * (crafts.filter((t) => t.kind === "yard").length - 1)) * (auto ? 4 : 1);   // (owner) +$50 each; auto ones 4x
+const tractorPrice = (auto) => priced((400 + 50 * (crafts.filter((t) => t.kind === "yard").length - 1)) * (auto ? 4 : 1));   // (owner) +$50 each; auto ones 4x
 // which deck columns an arm works: split evenly between the open arms, west to east
 const craneCols = (b) => { const op = BERTHS.filter((q) => q.open), i = op.indexOf(b), n = op.length; return i < 0 ? [0, 0] : [Math.round(i * DOCK.cols / n), Math.round((i + 1) * DOCK.cols / n)]; };
 // buying: a locked arm, platform or group of pads

@@ -168,6 +168,8 @@ kept; roads, lanes, tiles and the 2D game are gone (see Rejected / removed). The
 
 - **Start:** 1 manual hauler, arm A, platform 1 (part full), 4 customer pads, $500.
 - **Income:** $60 per customer served and per export loaded onto the freighter.
+- **Prices at 10% for testing (owner, 2026-11-05):** every price below (haulers, arms, platforms, pads) is a tenth of
+  what's listed (PRICE_SCALE in game.js); income stays $60.
 - **Buying:** locked arms and pad groups show dimmed with their price (green when you can afford it), locked platforms as
   an arrow (orange when you can afford it); tap one to buy it. Arms B–D
   $2,000 / $3,500 / $5,000; platforms 2–6 $600 / $900 / $1,300 / $1,800 / $2,400, the export platform $1,000; pad groups
