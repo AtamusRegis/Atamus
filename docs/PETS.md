@@ -22,6 +22,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   is darker. Houses, trees and rocks keep clear of it. In the water everyone floats (sunk about half a meter):
   **swimmers** swim at 1.35× their speed and walk straight in from the shore; anyone else can't wade in from the shore
   (they can jump in) and paddles at 0.4×, climbing out at the bank. Nobody goes over a waterfall. Fliers fly over it.
+- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads on the roads (about every 115 m, not in the plaza),
+  20 cyan rings in the air over town (16 to 82 m up), and 7 indigo rings on the lake, the rivers and the stream. Run, fly
+  or swim through one and your pet goes 1.6× for 5 s (on top of Speed Candy), leaving a trail in the boost's color; not
+  on foot or at home.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
