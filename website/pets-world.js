@@ -340,11 +340,11 @@ function catchPlayer(p, vs, now, ev) {
 }
 // players: [{ id, x, y, z, bag (parcels carried), stars, lastChased, lastStar, immuneUntil }] (changed in place); returns
 // what happened
-export function stepVehicles(vs, players, dt, now) {
+export function stepVehicles(vs, players, dt, now, daylightOverride) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
   // The helicopters keep circling by day, but their searchlights only work once daylight has faded.
-  const daylight = isDaylight(now);
+  const daylight = daylightOverride === undefined ? isDaylight(now) : !!daylightOverride;
   const inLight = new Set();
   for (const v of vs) {
     if (v.kind !== 1) continue;

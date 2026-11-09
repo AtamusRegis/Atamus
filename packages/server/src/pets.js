@@ -78,6 +78,8 @@ function finish(r, won) {
 }
 
 export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = PACKAGE_EVENT_EVERY_MS } = {}) {
+  // Admins can override the clock-driven sky for everyone. It returns to the normal cycle when the server restarts.
+  let environment = { weather: "auto", time: "auto" };
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
   const dirty = new Set();
   const flush = async (acct) => { dirty.delete(acct); try { await store.save(acct.id, acct.data, acct.rev); } catch (e) { console.error("[pets] save", e.message); dirty.add(acct); } };
@@ -127,7 +129,18 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     if (m.op === "list") {
       const list = [...online.values()].map((p) => staffView(p.acct, p));
       if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
-      send(me.ws, { t: "admin_list", list, q: m.q || "" }); return;
+      send(me.ws, { t: "admin_list", list, q: m.q || "", environment }); return;
+    }
+    if (m.op === "environment") {
+      if (my < 2) return reply("Not allowed");
+      const weather = ["auto", "clear", "rain", "snow", "storm", "fog"].includes(m.weather) ? m.weather : null;
+      const time = ["auto", "sunrise", "day", "sunset", "night"].includes(m.time) ? m.time : null;
+      if (!weather || !time) return reply("Unknown");
+      environment = { weather, time };
+      for (const p of online.values()) send(p.ws, { t: "environment", environment });
+      store.log(me.name, "World", "environment", `${weather}, ${time}`).catch(() => {});
+      console.log(`[pets] ${me.name} environment World ${weather}, ${time}`);
+      reply("Done"); return;
     }
     // the target: by account id (the panel) or by name (chat commands)
     const nm = typeof m.name === "string" && NAME_RE.test(m.name) ? m.name.toLowerCase() : null;
@@ -226,7 +239,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me.airMount = AIR_MOUNTS.has(me.sp);
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
+        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean), environment });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
@@ -339,7 +352,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const r of rooms) {
       const dt = Math.min(0.5, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];
-      for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
+      const daylight = environment.time === "auto" ? undefined : environment.time === "day";
+      for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000, daylight)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
       if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => v.kind ? [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target, r2(v.ba), r2(v.bd)] : [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second (a helicopter adds its searchlight)
       if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);
