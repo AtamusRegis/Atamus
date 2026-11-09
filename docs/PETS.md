@@ -16,6 +16,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Terrain:** rolling ground stepped into plateaus whose steps are cliffs (up to about 48 m high), and four big hills.
   Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
   ledges.
+- **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
+  two rivers from it that run off the island's edge in waterfalls (a sheet pouring down and away under the island, spray
+  at the lip), and a stream that steps down the terraces into the lake, foaming white at each little fall. Deeper water
+  is darker. Houses, trees and rocks keep clear of it. In the water everyone floats (sunk about half a meter):
+  **swimmers** swim at 1.35× their speed and walk straight in from the shore; anyone else can't wade in from the shore
+  (they can jump in) and paddles at 0.4×, climbing out at the bank. Nobody goes over a waterfall. Fliers fly over it.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
@@ -138,17 +144,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Pets
 
-- Start: a Pup. 23 kinds in 4 rarities (speed m/s / bag; ✈ flies):
-  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck 6.5/3
-  - Rare: Fox 9.5/3, Penguin 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
-  - Epic: Deer 11.5/3, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
+- Start: a Pup. 25 kinds in 4 rarities (speed m/s / bag; ✈ flies; ≈ swims):
+  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck ≈ 6.5/3
+  - Rare: Fox 9.5/3, Otter ≈ 9/3, Penguin ≈ 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
+  - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
 - **Fliers (owner, 2026-11-08):** climb to 11 m above the land while moving (higher near an island), over houses and
   trucks, and come down when stopped or within 10 m of a parcel's house, the post office, the shops or the board; they
   land on islands. Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
-  Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
+  Glider: teal with spread wings) and the card's frame and tint in that color, also when an egg hatches. **Swimmers
+  (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
+  Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
