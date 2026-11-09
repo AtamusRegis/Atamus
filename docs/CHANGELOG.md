@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Water: a lake, rivers and waterfalls; swimmers (owner).** A small lake out past the outer road, two rivers running off the island's edge in waterfalls, and a stream stepping down the terraces into it. Swimmers (Duck, Penguin, and two new pets: Otter, Rare, and Sea Turtle, Epic) swim fast and walk straight in; other pets can't wade in from the shore and paddle slowly if they jump in. Swimmers have an indigo Swimmer badge.
 - **Whose update (owner).** Under Updating! a small line says whose update it is ("Derek's Update") when the merged change carries an `Update-By` trailer; `scripts/task.sh finish` adds it from the clone's `git config pets.updateBy`.
 - **Van headlights and helicopter searchlights (owner).** Animal control vans have headlights while they're moving (beams ahead and a pool of light on the road, brightest at night). Helicopters no longer chase: each sweeps a real searchlight over town that turns slowly and swings back the other way now and then, its spot moving in and out; it lights the ground and anything it lands on. A parcel carrier who stays in the beam for half a second is caught.
 - **Place labels fade sooner (owner).** The bubbles get fainter the further you are and disappear outside the middle of town.

@@ -18,7 +18,7 @@ import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
 const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000, SAVE_MS = 3000, INVITE_MS = 30000, PARTY_MAX = 6;
-const SPECIES = new Set(["pup", "kitten", "bunny", "duck", "fox", "penguin", "goat", "butterfly", "parrot", "stego", "deer", "bear", "horse", "owl", "trike", "raptor",
+const SPECIES = new Set(["pup", "kitten", "bunny", "duck", "otter", "turtle", "fox", "penguin", "goat", "butterfly", "parrot", "stego", "deer", "bear", "horse", "owl", "trike", "raptor",
   "dragon", "unicorn", "pegasus", "phoenix", "trex", "ptero", "icedragon"]);
 // (owner, 2026-11-08) three kinds of contract: the goal grows with the room; the reward is per parcel of the goal
 const CONTRACTS = { rush: { time: 150, base: 3, per: 3, pay: 22 }, quick: { time: 240, base: 5, per: 4, pay: 26 }, big: { time: 420, base: 10, per: 8, pay: 30 } };   // (owner, 2026-11-08: more time)

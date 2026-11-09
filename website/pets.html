@@ -128,8 +128,10 @@
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
     .mbadge { display: inline-flex; align-items: center; gap: 4px; font: 800 11px ui-rounded, system-ui, sans-serif; padding: 3px 8px; border-radius: 999px; color: #fff; letter-spacing: .02em; }
     .mbadge.fly { background: #3a8ee6; box-shadow: 0 0 0 2px #cfe6ff; }
+    .mbadge.swim { background: #4f5bd5; box-shadow: 0 0 0 2px #d9dcfb; }
     .mbadge.glide { background: #18a39a; box-shadow: 0 0 0 2px #c9f2ee; }
     .card.fly { border-color: #9cc9f5; background: linear-gradient(#f0f7ff, #fff 60%); }
+    .card.swim { border-color: #aab1f0; background: linear-gradient(#f1f2ff, #fff 60%); }
     .card.glide { border-color: #8fdcd4; background: linear-gradient(#ecfbf9, #fff 60%); }
     .pick .mbadge { margin-left: auto; }   /* the admin give list: fliers and gliders tagged at the right */
     #hatch .nm .mbadge { font-size: 14px; vertical-align: middle; }
@@ -196,6 +198,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100021"></script>
+  <script type="module" src="pets.js?v=1793100024"></script>
 </body>
 </html>
