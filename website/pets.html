@@ -133,6 +133,7 @@
     .pick { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; text-align: left; padding: 6px 8px; border-radius: 8px; font: 600 14px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
     .pick img { width: 28px; height: 28px; }
     .pick.on, .pick:hover { background: #fff6dc; }
+    #map { display: block; width: clamp(112px, 24vmin, 184px); height: clamp(112px, 24vmin, 184px); border-radius: 16px; border: 3px solid #fff; background: #6fb6e0; box-shadow: 0 2px 0 rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.18); pointer-events: auto; cursor: pointer; touch-action: manipulation; }
     #guide { position: fixed; left: 0; top: 0; margin-top: -18px; transform-origin: 0 50%; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 14px rgba(255,190,40,.8)); animation: glow 1.2s ease-in-out infinite; }
     #pin { position: fixed; left: 0; top: 0; margin: -54px 0 0 -20px; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 16px rgba(255,190,40,.9)); }
     #pin svg { animation: bob 1s ease-in-out infinite; }
@@ -173,6 +174,7 @@
     </div>
     <div>
       <span class="pill" id="trainp" style="display:none" title="Training"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z" fill="#f2b01e"/></svg><b id="trainn"></b></span>
+      <canvas id="map"></canvas>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
       <span class="pill" id="wanted" style="display:none"></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
@@ -214,6 +216,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100036"></script>
+  <script type="module" src="pets.js?v=1793100037"></script>
 </body>
 </html>
