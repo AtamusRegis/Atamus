@@ -7,6 +7,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 ## 2026-11-09
 
 - **Fliers go up and down only by held keys (owner).** On a flapping flier, hold Space (or Fly ▲) to keep rising and hold Ctrl (or the new Fly ▼ button) to keep sinking; otherwise it holds its height. The camera's angle no longer makes it climb or dive. A "Space Up · Ctrl Down" strip shows at the bottom of the screen only while riding a flier (computers; phones have the two buttons). Land pets and gliders are unchanged.
+- **Whose update (owner).** Under Updating! a small line says whose update it is ("Derek's Update") when the merged change carries an `Update-By` trailer; `scripts/task.sh finish` adds it from the clone's `git config pets.updateBy`.
 - **Van headlights and helicopter searchlights (owner).** Animal control vans have headlights while they're moving (beams ahead and a pool of light on the road, brightest at night). Helicopters no longer chase: each sweeps a real searchlight over town that turns slowly and swings back the other way now and then, its spot moving in and out; it lights the ground and anything it lands on. A parcel carrier who stays in the beam for half a second is caught.
 - **Place labels fade sooner (owner).** The bubbles get fainter the further you are and disappear outside the middle of town.
 - **Staying in the game while away (owner).** Minimizing the browser or switching to another window no longer takes you out of the game; you wait where you stopped.
