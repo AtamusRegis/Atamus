@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Wind (owner).** The wind now changes between 3 and 40 mph (windier in the rain, with gusts) and swings slowly round, the same for everyone; streaks, rain and clouds move with it. In a strong wind, fliers and gliders in the air drift gently downwind and bob a little. A pill under your name shows the wind's speed and an arrow the way it blows.
 - **Working together: the two-player browser check no longer races a falling pet.** It now watches for the highest the second player is seen over a few seconds, not one look after 1.5 s (a land pet falls back from 40 m in under 2 s, so a slow CI runner could read only after the landing). It still fails when the #7 bug is put back. No player-facing change.
 - **Hatching: Not now (owner).** A hatched pet no longer has to be ridden: Not now keeps you on your current pet; the new one goes to your Pets list.
 - **Place labels (owner).** A speech bubble over each place in town (post office, contract board, egg shop, training yard, animal control, sky lifts) says what it is, fading with distance.
