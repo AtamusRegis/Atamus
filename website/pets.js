@@ -1057,7 +1057,8 @@ function bubble(text, old, parent, top) {
 // ---- co-op: everyone in a room sees the others riding; the server keeps your account and shares where everyone is,
 // runs animal control, contracts, chat, parties and trades. A tab that's put away disconnects (and reconnects when it's
 // back), and logging in again replaces the old connection, so nobody's left standing in town after they've gone. ----
-const WS_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `ws://${location.host}/pets` : "wss://play.atamus.io/pets";
+// the game server: set in pets.html (<meta name="pets-server">, alongside its connect-src); a local copy uses its own host
+const WS_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `ws://${location.host}/pets` : (document.querySelector('meta[name="pets-server"]') || {}).content || "wss://play.atamus.io/pets";
 let lastActual = 0;
 let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 0, lastPos = "", hidden = document.hidden;
 const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }

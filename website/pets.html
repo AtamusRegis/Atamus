@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' wss://play.atamus.io ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'">
+  <!-- the game server (moving to another server: change it here and in connect-src above) -->
+  <meta name="pets-server" content="wss://play.atamus.io/pets">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#7ec8f0">
   <title>Pet Delivery Co.</title>
@@ -191,6 +193,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100010"></script>
+  <script type="module" src="pets.js?v=1793100011"></script>
 </body>
 </html>

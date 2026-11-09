@@ -13,6 +13,10 @@ permissions:
   pages: write
   id-token: write
 
+# the game server's address (repository variable GAME_SERVER, e.g. https://play.example.com; atamus.io's by default)
+env:
+  GAME_SERVER: ${{ vars.GAME_SERVER || 'https://play.atamus.io' }}
+
 concurrency:
   group: pages
   cancel-in-progress: true
@@ -27,11 +31,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check (a broken file never deploys)
+        run: bash scripts/check.sh
       - uses: actions/configure-pages@v5
-      - name: Stamp build id (clients compare it to reload onto new versions)
-        run: |
-          echo "{\"v\":\"${GITHUB_SHA}\"}" > website/version.json
-          sed -i "s/__BUILD__/${GITHUB_SHA}/g" website/game.html
+      - name: Stamp build id (players' pages compare it to reload onto new versions)
+        run: echo "{\"v\":\"${GITHUB_SHA}\"}" > website/version.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
@@ -42,9 +49,9 @@ jobs:
           if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
             if git diff --name-only "$BEFORE" "$GITHUB_SHA" | grep -qE '^(packages/server/|packages/shared/|scripts/deploy\.sh|\.github/workflows/deploy-server\.yml)'; then ALSO="server"; fi
           fi
-          curl -sS --retry 3 --retry-all-errors -X POST "https://play.atamus.io/game/update-countdown?part=web&also=$ALSO" -w "\nHTTP %{http_code}\n" || true
+          curl -sS --retry 3 --retry-all-errors -X POST "$GAME_SERVER/game/update-countdown?part=web&also=$ALSO" -w "\nHTTP %{http_code}\n" || true
           sleep 1
       - id: deployment
         uses: actions/deploy-pages@v4
       - name: Tell the game server a new website build is live (it reloads connected players)
-        run: curl -fsS -X POST https://play.atamus.io/game/build-check || true
+        run: curl -fsS -X POST "$GAME_SERVER/game/build-check" || true

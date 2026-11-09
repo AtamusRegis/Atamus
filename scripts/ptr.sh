@@ -35,7 +35,7 @@ server_start() {
   ATAMUS_PTR=1 PORT=$PORT DATABASE_URL="postgres://postgres@127.0.0.1:$PGPORT/atamus" ALLOWED_ORIGINS="http://localhost:$PORT" \
     nohup node src/index.js > "$DATA/server.log" 2>&1 & echo $! > "$DATA/server.pid"
   for _ in $(seq 1 30); do curl -sf "http://localhost:$PORT/healthz" >/dev/null && break; sleep 0.3; done
-  curl -sf "http://localhost:$PORT/healthz" >/dev/null && echo "PTR up: http://localhost:$PORT/game.html" || { echo "PTR server failed:"; tail -20 "$DATA/server.log"; exit 1; }
+  curl -sf "http://localhost:$PORT/healthz" >/dev/null && echo "PTR up: http://localhost:$PORT/pets.html" || { echo "PTR server failed:"; tail -20 "$DATA/server.log"; exit 1; }
 }
 
 case "${1:-start}" in

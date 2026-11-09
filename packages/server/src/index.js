@@ -1,9 +1,8 @@
 import http from "node:http";
-import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { config } from "./config.js";
-import { migrate, cleanupExpired, pool } from "./db.js";
+import { migrate, pool } from "./db.js";
 import { game } from "./gamehttp.js";
 import { attachPets } from "./pets.js";
 import { pgStore } from "./petstore.js";
@@ -37,8 +36,7 @@ app.use(cors({
 if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../website/", import.meta.url).pathname));
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
-// (owner, 2026-10-31) the cargo game is single player in the browser: the server answers the deploy workflows (and, since
-// 2026-11-08, runs Pet Delivery Co.'s co-op, below)
+// the deploy workflows' calls (build check, update countdown); Pet Delivery Co.'s co-op runs on the WebSocket below
 app.use("/game", game);
 
 app.use((err, _req, res, _next) => {
@@ -49,17 +47,13 @@ app.use((err, _req, res, _next) => {
 });
 
 async function main() {
-  // (owner, 2026-10-13) IP geolocation is gone: delete the location databases and VPN lists it downloaded (data/ held only those)
-  try { fs.rmSync(new URL("../data/", import.meta.url), { recursive: true, force: true }); } catch (e) { console.error("geo data cleanup", e.message); }
   await migrate();
-  await cleanupExpired();
-  setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();
 
   const server = http.createServer(app);
-  // (owner, 2026-11-08) Pet Delivery Co. co-op: rooms, positions and contracts over a WebSocket at /pets
+  // Pet Delivery Co. (owner, 2026-11-08): accounts, rooms, players, animal control, contracts, chat, trades and houses over a WebSocket at /pets
   attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1", store: pgStore(pool) });
   server.listen(config.port, "127.0.0.1", () => {
-    console.log(`Atamus server listening on 127.0.0.1:${config.port} (http + ws)`);
+    console.log(`Pet Delivery Co. server listening on 127.0.0.1:${config.port} (http + ws)`);
   });
 }
 

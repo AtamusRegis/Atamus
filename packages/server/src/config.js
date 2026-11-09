@@ -19,9 +19,4 @@ export const config = {
   databaseUrl: required("DATABASE_URL"),
   allowedOrigins: origins,
   isProd: process.env.NODE_ENV === "production",
-
-  // How long a login session lasts.
-  sessionTtlDays: parseInt(process.env.SESSION_TTL_DAYS || "30", 10),
-  // How long a password-recovery attempt token is valid.
-  recoveryTtlMinutes: parseInt(process.env.RECOVERY_TTL_MINUTES || "15", 10),
 };

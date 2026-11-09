@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 #
-# Atamus server bootstrap. Run once on a fresh Ubuntu box as root:
+# Pet Delivery Co. server bootstrap. Run once on a fresh Ubuntu box as root:
 #
 #   curl -fsSL https://raw.githubusercontent.com/AtamusRegis/atamus/main/scripts/setup.sh | sudo bash
+#
+# For another server, set any of these first (atamus.io's values otherwise), e.g.
+#   sudo DOMAIN=play.example.com SITE_ORIGINS=https://example.com REPO=https://github.com/you/repo.git \
+#        DEPLOY_PUBKEY="ssh-ed25519 AAAA... deploy" bash setup.sh
 #
 # It is safe to re-run: it updates to the latest code and restarts the service.
 #
 set -euo pipefail
 
-DOMAIN="play.atamus.io"
+DOMAIN="${DOMAIN:-play.atamus.io}"
+SITE_ORIGINS="${SITE_ORIGINS:-https://atamus.io,https://www.atamus.io}"
 APP_DIR="/opt/atamus"
-REPO="https://github.com/AtamusRegis/atamus.git"
+REPO="${REPO:-https://github.com/AtamusRegis/atamus.git}"
 NODE_VERSION="v22.11.0"
 SERVER_SUBDIR="packages/server"
 
@@ -120,7 +125,7 @@ cat > "$ENV_FILE" <<ENV
 NODE_ENV=production
 PORT=8080
 DATABASE_URL=postgres://atamus:${DB_PASS}@127.0.0.1:5432/atamus
-ALLOWED_ORIGINS=https://atamus.io,https://www.atamus.io
+ALLOWED_ORIGINS=${SITE_ORIGINS}
 SESSION_TTL_DAYS=30
 RECOVERY_TTL_MINUTES=15
 ENV
@@ -162,14 +167,14 @@ install -m 0755 "${APP_DIR}/scripts/deploy.sh" /usr/local/bin/atamus-deploy
 
 # Public half of the GitHub Actions deploy key. Restricted to only run the
 # deploy script (forced command) with no shell, forwarding, or pty.
-DEPLOY_KEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOUgsdi6AtL2TH3BuBPK8qnuumLG8DyTIoGASBzQmNmj atamus-github-deploy'
+DEPLOY_KEY="${DEPLOY_PUBKEY:-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOUgsdi6AtL2TH3BuBPK8qnuumLG8DyTIoGASBzQmNmj atamus-github-deploy}"
 DEPLOY_LINE="command=\"/usr/local/bin/atamus-deploy\",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ${DEPLOY_KEY}"
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
 touch /root/.ssh/authorized_keys
 chmod 600 /root/.ssh/authorized_keys
 # Add once; never duplicate or disturb other keys (e.g. your personal login key).
-if ! grep -qF "atamus-github-deploy" /root/.ssh/authorized_keys; then
+if ! grep -qF "$DEPLOY_KEY" /root/.ssh/authorized_keys; then
   echo "$DEPLOY_LINE" >> /root/.ssh/authorized_keys
 fi
 

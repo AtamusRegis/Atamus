@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Atamus game server: accounts, sessions, and (later) the authoritative simulation.",
+  "description": "Pet Delivery Co. server: accounts, co-op rooms, animal control, contracts, chat, trades and houses over a WebSocket at /pets.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"
