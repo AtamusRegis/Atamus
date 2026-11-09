@@ -1,0 +1,37 @@
+name: check
+
+# (owner, 2026-11-08) the required check for every pull request into main: syntax of every JS file, the two copies of
+# pets-world.js identical, and the smoke test (the world's rules and the real /pets server with two players, in memory).
+# On a pull request GitHub runs it on the merge of the branch with the current main.
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci --no-audit --no-fund
+        working-directory: packages/server
+      - name: Syntax check and shared-file check
+        run: bash scripts/check.sh
+      - name: Smoke test (world rules, /pets server with two players)
+        run: npm run smoke
+        working-directory: packages/server

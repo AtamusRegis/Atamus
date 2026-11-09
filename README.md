@@ -7,7 +7,8 @@ build a house on your plot, and play with friends.
 - Game server (Node behind Caddy, from `packages/server/`): https://play.atamus.io, WebSocket `/pets`
 
 How the game works: [`docs/PETS.md`](docs/PETS.md). What changed: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
-Working on the code: [`CLAUDE.md`](CLAUDE.md) (layout, rules, patch workflow).
+Working on the code: [`CLAUDE.md`](CLAUDE.md) (layout, rules, and how two developers work together: one branch per
+task, pull requests that merge themselves once the required `check` passes; `scripts/task.sh`).
 
 ## Run it locally
 
@@ -25,7 +26,8 @@ The server reads `DATABASE_URL` (required), `PORT` (8080), `ALLOWED_ORIGINS` (th
 
 ## Deploys (CI/CD)
 
-Every push to `main` deploys:
+Every pull request runs **check** (`.github/workflows/check.yml`: syntax, shared-file match, smoke test) on its merge
+with the current `main`. Every push to `main` (every merge) deploys:
 
 - `website/**` → **Deploy website**: syntax check, stamp `version.json`, publish to GitHub Pages, then tell the game
   server a new build is live (connected players reload onto it).
