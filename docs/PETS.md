@@ -55,9 +55,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
   and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
   1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
-  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
-  pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
-  home.
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. Wind
+  streaks are long, bright and common enough to make its direction clear around town. **Airborne fliers and gliders**
+  gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
+  **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
+  camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
 - **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
   sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
   It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
@@ -119,21 +121,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
-- 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
+- 8 white animal control cars with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
-  straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
-  gets away.
-- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
+- **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
+  fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
+  either side (18 m) than behind (14 m), plus 7 m per wanted star; only players on or near the ground. They chase
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing; the standard car chases at 9.5 m/s plus
+  1.3 per star, so a faster pet can get away.
+- **Vehicle headlights (owner, 2026-11-09):** on while a car is moving: lit lamps, two beams reaching ahead and a pool of
   light on the road; faint by day, bright at night.
 - **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
   searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
   every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
-  beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
-  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
-  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
+  beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
+  or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
+  shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the same
+  cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
 - **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
