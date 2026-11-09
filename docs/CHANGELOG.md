@@ -11,6 +11,10 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 - **Working together: the required check also plays the game page.** A browser smoke test (pets.html in headless Chrome against the in-memory server: loads, creates an account, rides, no errors) joins the syntax check and the server smoke test, so a runtime error in the game page can't merge. `scripts/protect-main.sh` applies the GitHub settings the workflow relies on (run once by an owner with admin rights) and `--verify` checks them. No player-facing change.
 - **Pet Delivery Co.: the courier is a blocky R6-style figure (owner).** Matched to the owner's reference: a square torso, arms and legs with softened edges, a rounded head with two oval eyes and a smile; head and arms skin, torso the shirt color, legs dark. It rides astride the pet with arms forward and swings its arms when walking in houses. The cap and mail bag are gone.
 
+## 2026-11-09
+
+- **Fix: getting stuck inside houses (owner).** You're only off your pet under a ceiling or roof, so a flier or glider that drops into a roofless room keeps its wings; and pushing on in a room with no way out (no doorway, open side, stairs or slope) puts you out in front of the plot.
+
 ## 2026-11-08
 
 - **Working together: the rest of the agreed workflow (owner).** `scripts/task.sh integrate` (merge main, show what the branch changes against main with deletions and shared systems called out, run the checks); finish merges only once check passed on a commit holding the latest main and reports main's own check afterwards; CLAUDE.md now covers conflicts, frozen scope after auto-merge, what never to do, unmergeable assets, regressions, reports and the merge queue. `scripts/protect-main.sh --verify` no longer needs gh's GraphQL. No player-facing change.
