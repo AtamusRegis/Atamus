@@ -32,8 +32,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Sky (owner, 2026-11-08), the same for everyone (timed off the clock):** a day lasts 20 minutes (a little more day
   than night): the sun moves, the sky and fog go through dusk to night (stars, house windows light up, lights dim).
   Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
-  out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
+  out). Wind (below); god rays slant down from the sun (strongest with it
   low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
+- **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
+  every 3 minutes (about 17 mph on average; up to 10 mph more in the rain) with gusts on top, its direction swinging
+  slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
+  and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
+  1.4 m/s) and bobs a little (under a metre up and down, a little side to side); never on the ground, while stunned
+  or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
+  pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
+  home.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.

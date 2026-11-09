@@ -4,6 +4,10 @@ Pet Delivery Co. Newest first. Add one entry per patch in the same commit, and k
 and any rule decided. Use `git log` for the code detail (and for the older Atamus prototypes, removed from the tree on
 2026-11-08).
 
+## 2026-11-09
+
+- **Wind (owner).** The wind now changes between 3 and 40 mph (windier in the rain, with gusts) and swings slowly round, the same for everyone; streaks, rain and clouds move with it. In a strong wind, fliers and gliders in the air drift gently downwind and bob a little. A pill under your name shows the wind's speed and an arrow the way it blows.
+
 ## 2026-11-08
 
 - **The repository is Pet Delivery Co. only (owner).** The older Atamus prototypes (the cargo station game, its 3D view and pages, the old snapshots in reference/ and their assets) are gone from the tree; main is the one source of truth and every other branch was deleted. The front page now points to Pet Delivery Co. and lists only its updates. The server keeps only Pet Delivery Co.'s tables and routes (older tables stay in the live database, unused). Both deploy workflows syntax-check before deploying, and the server's address, host and deploy key can come from repository settings (atamus.io's by default); the game page reads its server from one setting in pets.html.
