@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Whose update (owner).** Under Updating! a small line says whose update it is ("Derek's Update") when the merged change carries an `Update-By` trailer; `scripts/task.sh finish` adds it from the clone's `git config pets.updateBy`.
 - **Place labels fade sooner (owner).** The bubbles get fainter the further you are and disappear outside the middle of town.
 - **Staying in the game while away (owner).** Minimizing the browser or switching to another window no longer takes you out of the game; you wait where you stopped.
 - **Pet Delivery Co.: fliers and gliders tip further nose-down going down (owner).** 1.4× the angle of the path, up to about 55° (was 40°); climbing unchanged.

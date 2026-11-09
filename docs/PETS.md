@@ -164,7 +164,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
-  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
+  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
+  2026-11-09):** under Updating! a small line says "Derek's Update" when it's Derek's (the merge commit's `Update-By`
+  trailer, put in version.json by the website deploy; nothing shows without one).
 - **Chat history (owner, 2026-11-08):** while the chat line is open, everything said since you logged in shows above
   it (scrollable); a new login starts it fresh.
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,

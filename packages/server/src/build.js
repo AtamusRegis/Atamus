@@ -8,15 +8,17 @@ export let SERVER_BUILD = "dev";
 try { SERVER_BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8").trim(); } catch {}
 
 const SITE = "https://atamus.io/version.json";
-let webBuild = null, onChange = () => {}, burstUntil = 0, burstTimer = 0;
+let webBuild = null, webBy = "", onChange = () => {}, burstUntil = 0, burstTimer = 0;
 export const onWebsiteUpdate = (fn) => { onChange = fn; };
 export const websiteBuild = () => webBuild;
+export const websiteBy = () => webBy;   // (owner, 2026-11-09) whose update it is (version.json's "by", from the commit's Update-By trailer)
 export async function checkWebsiteBuild() {
   try {
     const r = await fetch(SITE + "?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) return false;
-    const v = (await r.json()).v; if (!v) return false;
-    if (webBuild && v !== webBuild) { webBuild = v; onChange(v); return true; }
+    const j = await r.json(), v = j.v; if (!v) return false;
+    webBy = typeof j.by === "string" ? j.by.slice(0, 24) : "";
+    if (webBuild && v !== webBuild) { webBuild = v; onChange(v, webBy); return true; }
     webBuild = v; return false;
   } catch { return false; }
 }
