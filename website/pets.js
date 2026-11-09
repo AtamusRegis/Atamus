@@ -2654,9 +2654,10 @@ function step(dt) {
   const floor = floorAt(me.x, me.z, me.y);
   const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ShiftLeft") || keys.has("ShiftRight")));
   if (kind === "fly" && !flying && !stunned && (upH || jumpQueued > now)) { me.flying = true; jumpQueued = 0; me.y = Math.max(me.y, floor) + 0.6; }   // Space on the ground: take off
-  if (kind === "fly" && me.flying) {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Shift / Fly ▼ (down); hovers otherwise
+  if (kind === "fly" && me.flying) {   // (owner, 2026-11-09) Space / Shift fly vertically; otherwise forward flight follows the camera's climb or dive
     me.vy = 0; jumpQueued = 0;
-    if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
+    const keyedLift = (upH ? 1 : 0) - (downH ? 1 : 0), forward = me.moving ? clamp(-jy, 0, 1) : 0, cameraLift = forward * clamp((0.42 - cam.pitch) * 1.8, -1, 1);
+    if (!stunned) me.y += (upH || downH ? keyedLift : cameraLift) * sp * FLY_SPEED_UP * dt;
     me.y = Math.min(me.y, FLY_TOP); if (me.y <= floor) { me.y = floor; if (!upH && World.waterAt(me.x, me.z) === -Infinity) me.flying = false; }   // back on the ground: walking (over water it keeps flying)
   } else {
     if (kind === "fly") jumpQueued = 0;   // a walking flier doesn't jump (Space takes off)

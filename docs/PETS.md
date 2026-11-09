@@ -119,9 +119,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): **on the ground they walk** (like a
     land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
     to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
-    shows only while flying. In the air only two controls go up and down:
-    hold Space (or Fly ▲) to keep rising, hold Shift (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
-    hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
+    shows only while flying. In the air, hold Space (or Fly ▲) to rise straight up and hold Shift (or Fly ▼, shown
+    only on a flier) to sink straight down. With neither held, moving forward climbs or dives where the camera looks;
+    standing still holds height. Space / Shift override the camera. Up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
     "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
@@ -373,6 +373,5 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
-- Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
-  2026-11-09): replaced by holding Space / Shift.
+- Space as a single rise per press on a flier (owner, 2026-11-09): replaced by holding Space / Shift.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
