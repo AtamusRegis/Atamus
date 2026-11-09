@@ -62,6 +62,7 @@
     #hatch { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; background: rgba(20,30,45,.55); }
     #hatch canvas { width: 220px; height: 220px; }
     #hatch .nm { font: 800 34px "Big Shoulders Display", Impact, sans-serif; color: #fff; letter-spacing: .04em; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
+    #hatch .hatchb { display: flex; gap: 12px; }
     #hatch .rar { font-weight: 800; font-size: 18px; padding: 4px 14px; border-radius: 999px; background: #fff; }
     #banner { position: fixed; left: 0; right: 0; top: 18%; text-align: center; z-index: 9; pointer-events: none; font: 800 54px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .04em; text-shadow: 0 4px 0 rgba(0,0,0,.28), 0 0 24px rgba(255,200,60,.6); opacity: 0; }
     #banner.go { animation: ban 2.4s ease-out forwards; }
@@ -196,7 +197,7 @@
   </div></form>
   <div id="toast"></div>
   <div id="banner"></div>
-  <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100017"></script>
+  <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
+  <script type="module" src="pets.js?v=1793100018"></script>
 </body>
 </html>

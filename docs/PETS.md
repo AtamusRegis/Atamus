@@ -143,7 +143,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Legendary $2,500.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
-  in the rarity's color; Ride puts you on it (with fireworks and confetti around you).
+  in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
+  keeps you on the pet you're riding and the new one waits in your Pets list (the same celebration).
 - **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
   you're not riding it) shows **Pet Farm +N** in the Pets list; tap it, then **Sure?**, and it goes to live on the farm,
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
