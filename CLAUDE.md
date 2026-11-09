@@ -105,15 +105,52 @@ branches, edit, stash, clean or commit inside another session's folder, or take 
   your task easier. If an open pull request already does overlapping work, don't duplicate it: build on its interface,
   or let it land first, then update and carry on.
 
-**Finish** (with the task's changes committed and the folder clean):
+**Integrate, then finish** (with the task's changes committed and the folder clean):
 
-`scripts/task.sh finish "<title>" <body-file> [<commit-message-file>]` does it all and loops until done: fetch, merge
-`origin/main` into the branch, run the checks, push, open (or reuse) the pull request, wait for the required `check`,
-squash-merge, and verify the merge commit is on `origin/main` (if `main` moved meanwhile it merges it again and
-repeats). The body file ends with the pull-request attribution lines, the commit-message file with the commit
-attribution lines. On a merge conflict (exit 2): resolve it so **both** developers' intended behavior survives (read
-both sides; never just take yours), run the checks, commit, run finish again. If `check` fails, fix it on the branch
-and run finish again. Report done only once finish says the change is on `main`.
+1. `scripts/task.sh integrate`: fetches, merges `origin/main` into the branch (merges only: never rebase a pushed
+   branch, never force-push), shows what the branch changes against `origin/main` (deleted files and touched shared
+   systems called out) and runs the checks. **Read that diff**: anything deleted or changed in shared behavior that
+   isn't your task's is a mistake to fix before going on.
+2. `scripts/task.sh finish "<title>" <body-file> [<commit-message-file>]`: integrates again, pushes, opens (or reuses)
+   the pull request, waits for the required `check`, squash-merges only once `check` passed on a commit that holds the
+   latest `main`, verifies the merge commit is on `origin/main`, and reports `main`'s own `check` on it. If `main` moved
+   meanwhile it integrates again and repeats. The body file ends with the pull-request attribution lines, the
+   commit-message file with the commit attribution lines. If `check` fails, fix it on the branch and run finish again.
+   It's a loop in this session only: it isn't automation that keeps running after the session, so stay with it until
+   it reports the change on `main` (or a concrete blocker).
+3. Report done only once finish says the change is on `main`. Never bypass the checks or use an admin override to merge.
+
+**Conflicts** (exit 2): read both versions and their history, resolve each conflicting section so both changes'
+intended behavior survives, check the affected callers and the gameplay, run the checks, commit, run it again. Never
+take a whole file as ours or theirs, and never restore an old file over newer work. If the two intentions genuinely
+can't both stand and the task, code, tests and docs don't settle it: keep both versions, leave that integration pending,
+carry on with independent work, and report the exact decision needed.
+
+**Frozen scope:** once a pull request is set to merge itself, its scope is frozen. If more changes turn out to be needed,
+turn its auto-merge off first (`gh api -X DELETE repos/{owner}/{repo}/pulls/<n>/ccr/auto_merge`, or in the PR) and look
+at its state: if it already merged, start a new task branch from fresh `main`; never keep adding to a squash-merged
+branch.
+
+**Never** (to resolve anything): force pushes (`--force-with-lease` included), resetting remote `main`, `git reset
+--hard`, a destructive `git clean`, restoring files broadly over existing work, staging everything (`git add -A`) when
+unrelated changes are present, or weakening tests and checks to get a merge through. Unfinished features stay on their
+branch, unless a default-off feature flag lets a complete increment land without changing normal play.
+
+**Assets that can't be merged** (images, fonts, `vendor/`, any future models or maps): there's no locking tool, so
+before editing one, check the open pull requests; if another touches the same asset, let it land first; name every
+such asset in your draft pull request. Never overwrite the other developer's version and call it merged. Prefer
+separate modules and new files over editing shared ones.
+
+**After merging:** the PR reports merged, its squash commit is on `origin/main` (not the task's own commits), and
+`main`'s `check` passed: finish does all three. If it caused a regression, make the smallest corrective pull request
+(or revert the change through a pull request, keeping later work) the same way; never rewrite `main`. Every next task
+starts from freshly fetched `main`.
+
+**Reports** are short and factual and keep apart: merged into `main` (PR and commit), still pending (with the exact
+blocker), checks that passed, and verification that couldn't be done.
+
+**Merge queue:** GitHub only offers it to organization-owned repositories; this one belongs to a user, so the
+integrate / check / merge loop above is the workflow (`check.yml` already runs on `merge_group` should that change).
 
 **The checks** (what the required `check` job runs, `.github/workflows/check.yml`, on every pull request merged with
 the current `main`): `scripts/task.sh checks`, which is `bash scripts/check.sh` (every JS file parses, the two

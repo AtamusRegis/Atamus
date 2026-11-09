@@ -8,7 +8,8 @@
 # to date with main, no force pushes or deletion, and the same rules for admins. Merging: squash only
 # (title and body from the PR), auto-merge on, "Update branch" offered, branches deleted after merge.
 set -euo pipefail
-REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
+# the repository from the origin remote (gh's GraphQL commands aren't available everywhere)
+REPO="$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')"
 if [ "${1:-}" != "--verify" ]; then
   gh api -X PATCH "repos/$REPO" --silent \
     -F allow_squash_merge=true -F allow_merge_commit=false -F allow_rebase_merge=false -F allow_auto_merge=true \
