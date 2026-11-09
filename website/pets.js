@@ -367,13 +367,15 @@ function trainPoint() {
   if (p.tp >= trainNeed(p.lv)) { p.tp -= trainNeed(p.lv); train("points"); }
   else if (openPanel === "p-train") renderTrain();
 }
+// where to go through an obstacle (owner, 2026-11-09: the guide pointed at a gate's post): a gate's gap, else the middle of the track
+const obsSpot = (o) => { const r = o.k === "gate" ? (o.r0 + o.r1) / 2 : TRM; return [AR.x + Math.cos(o.a) * r, AR.z + Math.sin(o.a) * r]; };
 function arenaStep() {
   const here = inArena(), pill = $("trainp");
   AR.beam.visible = AR.gem.visible = here;
   if (!here) { arPrev = null; if (trainPill) { trainPill = ""; pill.style.display = "none"; } return; }
   const p = riding(), s = p.lv >= MAXLV ? "Lv " + MAXLV : `${p.tp || 0}/${trainNeed(p.lv)}`;
   if (s !== trainPill) { trainPill = s; $("trainn").textContent = s; pill.style.display = ""; }
-  const o = OBS[arNext], [bx, bz] = [AR.x + Math.cos(o.a) * TRM, AR.z + Math.sin(o.a) * TRM];
+  const o = OBS[arNext], [bx, bz] = obsSpot(o);
   AR.beam.position.set(bx, AR.y + 7, bz); AR.gem.position.set(bx, AR.y + 5 + Math.sin(clock * 3) * 0.4, bz); AR.gem.rotation.y = clock * 2;
   const q = arLocal(me.x, me.z), h = me.y - AR.y;
   // the middle: the panel on the gold circle, the arch back to town
@@ -1213,9 +1215,7 @@ let hudKey = "", windKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
   const packageLeft = packageEvent ? Math.max(0, Math.ceil((packageEvent.ends - performance.now()) / 1000)) : 0;
-  const home = myPlot >= 0 && !me.inst ? PLOTS[myPlot] : null, homeDist = home ? Math.round(hyp(me.x - home.x, me.z - home.z)) : -1;
-  const homeDir = home && homeDist ? ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round((Math.atan2(home.x - me.x, -(home.z - me.z)) + Math.PI * 2) / (Math.PI / 4)) % 8] : "";
-  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, homeDist, homeDir, c && [c.done, c.goal, c.mine, left, c.kind], packageEvent && [packageEvent.boxes.size, packageLeft]].join("|");
+  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind], packageEvent && [packageEvent.boxes.size, packageLeft]].join("|");
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
   const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
@@ -1224,26 +1224,29 @@ function hud() {
   if (wkey !== windKey) { windKey = wkey; $("windp").style.display = windOn ? "inline-flex" : "none"; if (windOn) { const [mph, deg, effect] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winde").textContent = +effect ? (+effect > 0 ? "+" : "") + effect + "%" : ""; $("windp").classList.toggle("tailwind", +effect > 0); $("windp").classList.toggle("headwind", +effect < 0); $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
   if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
-  $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
-  $("home").style.display = home ? "inline-flex" : "none"; if (home) $("home").textContent = homeDist ? "Home · " + homeDist + "m " + homeDir : "Home · Here";
-  $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
+  $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap;
+  $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); chatIn.disabled = !netOk;
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
   $("contract").style.display = c ? "flex" : "none";
   if (c) { $("cname").textContent = (CONTRACTS.find((k) => k.id === c.kind) || CONTRACTS[2]).name; $("ctime").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"); $("cbar").style.width = Math.min(100, (c.done / c.goal) * 100) + "%"; $("cdone").textContent = c.done + " / " + c.goal; $("cmine").textContent = "You: " + c.mine; }
   $("packageevent").style.display = packageEvent ? "inline-flex" : "none";
   if (packageEvent) $("packageleft").textContent = packageEvent.boxes.size + " · " + Math.floor(packageLeft / 60) + ":" + String(packageLeft % 60).padStart(2, "0");
-  const items = $("items"); items.innerHTML = "";
-  if (save.items.snack > 0) { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; b.title = ITEMS.snack.name; b.disabled = me.boostUntil > performance.now(); b.onclick = useSnack; items.appendChild(b); }
+  // (owner, 2026-11-09: candy couldn't be tapped while moving on a phone) one candy button, kept, only its count and state change
+  let cb = $("candybtn"); if (!cb) { cb = document.createElement("button"); cb.id = "candybtn"; cb.className = "btn gold"; cb.type = "button"; cb.title = ITEMS.snack.name; cb.addEventListener("pointerdown", (e) => { e.preventDefault(); if (!cb.disabled) useSnack(); }); $("items").appendChild(cb); }
+  cb.style.display = save.items.snack > 0 ? "" : "none"; cb.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; cb.disabled = me.boostUntil > performance.now();
 }
 const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-admin", "p-settings"];
 let openPanel = null;
-function show(id) { if (id === "p-train" && !inArena()) { enterArena(); return; } showPanel(id); }
+function show(id) { if (id === "p-train" && !inArena()) return; showPanel(id); }   // (owner, 2026-11-09) the arena is an E prompt in the yard, not a teleport
 function showPanel(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); if (id === "p-settings") renderSettings(); }
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
 function renderSettings() { const el = $("settings"); el.innerHTML = ""; const label = document.createElement("label"); label.className = "setting"; const input = document.createElement("input"); input.type = "checkbox"; input.checked = !!save.settings.followArrowWhenEmpty; input.onchange = () => { save.settings.followArrowWhenEmpty = input.checked; persist(); }; label.append(input, document.createTextNode("Show the follow arrow when the bag is empty")); el.appendChild(label); }
-$("btn-settings").onclick = () => (openPanel === "p-settings" ? closePanels() : show("p-settings"));
+// (owner, 2026-11-09) the gear left of the chat: a menu with Settings and, for staff, the Admin Panel
+const gearMenu = $("gearmenu");
+$("gear").onclick = () => { gearMenu.style.display = gearMenu.style.display === "flex" ? "none" : "flex"; $("gm-admin").style.display = isStaff() ? "" : "none"; };
+$("gm-settings").onclick = () => { gearMenu.style.display = "none"; openPanel === "p-settings" ? closePanels() : show("p-settings"); };
 const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
 // (owner, 2026-11-08: make fliers and gliders obvious) a coloured badge on every card: Flier (sky blue, flapping wings)
 // or Glider (teal, spread wings), and the card's frame in that colour
@@ -1486,18 +1489,20 @@ function caught() {
   sendPos(true);
 }
 
-// ---- chat (owner, 2026-11-08): say something to the room; it shows in the list at the bottom and over your head ----
-const chatBar = $("chatbar"), chatIn = $("chatin");
-// (owner, 2026-11-08) the chat's history since you logged in shows while the chat's open
+// ---- chat (owner, 2026-11-08; like Roblox's, 2026-11-09): the window at the top left holds the room's messages since
+// you logged in, with the line to type in at its foot (/ or Enter, or a tap on it); left alone, its background fades.
+// The chat button beside the gear shows or hides it. What you say also shows over your head. ----
+const chatBar = $("chatbar"), chatIn = $("chatin"), rchat = $("rchat"), rmsgs = $("rmsgs");
 const chatHist = [];
-function openChat() { chatBar.style.display = "flex"; renderHist(); $("chathist").style.display = chatHist.length ? "flex" : "none"; chatIn.focus(); }
-function closeChat() { chatBar.style.display = "none"; $("chathist").style.display = "none"; chatIn.blur(); }
-function renderHist() {
-  const el = $("chathist"); el.innerHTML = "";
-  for (const h of chatHist) { const d = document.createElement("div"), b = document.createElement("b"); b.textContent = h.name + ": "; if (h.mine) b.style.color = "#3a8ee6"; d.append(b, document.createTextNode(h.text)); el.appendChild(d); }
-  el.scrollTop = el.scrollHeight;
-}
-$("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
+const NAME_COLORS = ["#fd2943", "#01a2ff", "#02b857", "#a75ff1", "#f5cd30", "#e8ac85", "#d7c59a", "#fd8c3c", "#4ec0c4", "#ff9be1"];
+const nameColor = (n) => { let h = 0; for (const ch of String(n)) h = (h * 31 + ch.charCodeAt(0)) | 0; return NAME_COLORS[Math.abs(h) % NAME_COLORS.length]; };
+let chatIdle = 0;
+function chatWake() { rchat.classList.remove("idle"); clearTimeout(chatIdle); chatIdle = setTimeout(() => { if (document.activeElement !== chatIn && !rchat.matches(":hover")) rchat.classList.add("idle"); }, 6000); }
+function openChat() { rchat.classList.remove("off"); $("chatbtn").classList.add("on"); chatWake(); chatIn.focus(); }
+function closeChat() { chatIn.blur(); chatWake(); }
+$("chatbtn").onclick = () => { const off = !rchat.classList.toggle("off"); $("chatbtn").classList.toggle("on", off); if (off) chatWake(); };
+rchat.addEventListener("pointerenter", chatWake); rchat.addEventListener("pointerdown", chatWake);
+chatIn.addEventListener("focus", chatWake); chatIn.addEventListener("blur", chatWake);
 chatBar.addEventListener("submit", (e) => {
   e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
   if (text[0] === "/" && isStaff()) { slash(text); closeChat(); return; }   // (owner, 2026-11-09) staff commands
@@ -1506,11 +1511,12 @@ chatBar.addEventListener("submit", (e) => {
 });
 chatIn.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChat(); e.stopPropagation(); });
 function chatLine(name, text, mineToo) {
-  chatHist.push({ name, text, mine: !!mineToo }); if (chatHist.length > 300) chatHist.shift(); if (chatBar.style.display === "flex") { $("chathist").style.display = "flex"; renderHist(); }
-  const d = document.createElement("div"), b = document.createElement("b"); b.textContent = name + ": "; if (mineToo) b.style.color = "#3a8ee6"; d.appendChild(b); d.appendChild(document.createTextNode(text));
-  const log = $("chatlog"); log.appendChild(d); while (log.children.length > 6) log.firstChild.remove();
-  setTimeout(() => d.classList.add("old"), 12000); setTimeout(() => d.remove(), 13000);
+  chatHist.push({ name, text, mine: !!mineToo }); if (chatHist.length > 300) chatHist.shift();
+  const d = document.createElement("div"), b = document.createElement("b"); b.textContent = name + ": "; b.style.color = nameColor(name); d.append(b, document.createTextNode(text));
+  const atEnd = rmsgs.scrollTop + rmsgs.clientHeight >= rmsgs.scrollHeight - 8; rmsgs.appendChild(d); while (rmsgs.children.length > 120) rmsgs.firstChild.remove();
+  if (atEnd) rmsgs.scrollTop = rmsgs.scrollHeight; chatWake();
 }
+chatWake();
 // a speech bubble over a rider for a few seconds
 function bubble(text, old, parent, top) {
   if (old) { parent.remove(old.s); clearTimeout(old.timer); }
@@ -1623,7 +1629,7 @@ function onNet(m) {
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
-      if (!again) { chatHist.length = 0; $("chatlog").innerHTML = ""; }   // a fresh login starts a fresh chat history
+      if (!again) { chatHist.length = 0; rmsgs.innerHTML = ""; }   // a fresh login starts a fresh chat history
       myRole = m.role || "player";
       setEnvironment(m.environment);
       isVip = !!m.vip; for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = m.plot >= 0 ? m.plot : -1;
@@ -1785,10 +1791,10 @@ for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0"));
 const POIS = [
   { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
   { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
-  { x: SHOP_B.x, y: 12, z: SHOP_B.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
-  { x: MOUNT_B.x, y: 11.5, z: MOUNT_B.z, name: "Mount Shop", what: "Buy pets to ride" },
+  { x: SHOP.x, y: 4.6, z: SHOP.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
+  { x: MOUNT.x, y: 4.6, z: MOUNT.z, name: "Mount Shop", what: "Buy pets to ride" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
-  { x: POUND.x, y: 8.5, z: POUND.z + 3, name: "Animal Control", what: "Where caught couriers end up" },
+  { x: POUND.x, y: 4.4, z: POUND.z - 3, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
   { x: LIFTS[1].x, y: LIFTS[1].y + 6, z: LIFTS[1].z, name: "Sky Lift", what: "Down to the plaza" },
   { x: LIFTS[2].x, y: LIFTS[2].y + 6, z: LIFTS[2].z, name: "Sky Lift", what: "Down to the plaza", extra: true },
@@ -1826,7 +1832,7 @@ function homeStep() {
 }
 function poiStep() {
   for (const q of POIS) {
-    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : f * f;   // (owner, 2026-11-09) fainter the further, gone past 45 m
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1) * clamp((hyp(q.x - camera.position.x, q.y - camera.position.y, q.z - camera.position.z) - 5) / 6, 0, 1), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : f * f;   // and not right in front of the camera   // (owner, 2026-11-09) fainter the further, gone past 45 m
     q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 15) / 60, 0, 0.3); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
   homeStep();
@@ -2060,7 +2066,7 @@ let talk = null;
 const talkEl = $("talk"), talkWho = $("tkwho"), talkText = $("tktext"), talkOpts = $("tkopts"), shot = { k: 0, n: null, side: 1 }, SH = {};
 function startTalk(n) {
   if (talk || building || !loggedIn || n.cool > 0) return;
-  closePanels(); if (chatBar.style.display === "flex") closeChat();
+  closePanels(); closeChat();
   joy.x = joy.y = 0; keys.clear(); hopFor = 0;
   me.yaw = Math.atan2(n.x - me.x, n.z - me.z);
   talk = { n, q: [], i: 0, shown: 0, hold: 0, opts: null, then: null };
@@ -2715,6 +2721,7 @@ function context() {
   if (pl !== null) { const o = others.get(pl); a.push({ key: "E", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
   const fk = pl === null && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "E", label: fk.name, fn: () => startTalk(fk) });
   const l = loggedIn && nearLift(); if (l) a.push({ key: "E", label: l.to === "plaza" ? "▼" : "Home ▲", fn: () => ride_lift(l) });
+  if (!a.length && loggedIn && !me.inst && !inArena() && hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r && me.y - terrain(me.x, me.z) < 3.5) a.push({ key: "E", label: "Training Arena", fn: enterArena });
   const dr = !a.length ? nearDoor() : null; if (dr !== null) a.push({ key: "E", label: "Enter", fn: () => enterHouse(dr) });   // (owner, 2026-11-09) into the house
   if (!a.length && nearFrontDoor()) a.push({ key: "E", label: "Leave", fn: () => leaveHouse() });
   const pen = !a.length ? nearPen() : null; if (pen !== null) a.push({ key: "E", label: "Pet pen", fn: () => { picking = pen; show("p-build"); } });
@@ -2734,7 +2741,6 @@ function ui() {
   $("btn-down").style.display = ((kind === "fly" && me.flying) || me.swim) && !building ? "" : "none";
   $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || me.inst === myId || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
-  $("btn-admin").style.display = isStaff() ? "" : "none";
 }
 
 // ---- staff (owner, 2026-11-08): Nyssary is admin and makes admins; admins make moderators and give items; moderators
@@ -2829,7 +2835,7 @@ function renderGive() {
   go.onclick = () => { if (!giveWhat) return; adminSend({ op: "give", id: giveTo.id, what: giveWhat.id, n: +n.value || 1, lv: +lv.value || 1 }); };
   row.append(n, lv, go); el.append(q, list, row); fill();
 }
-$("btn-admin").onclick = () => { if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
+$("gm-admin").onclick = () => { gearMenu.style.display = "none"; if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
 // (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
 // (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
 // Name 7d (minutes, or m / h / d, perma, off)
@@ -3043,7 +3049,7 @@ function draw(dt) {
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   drawPackages();
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
+  folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -3060,4 +3066,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, enterHouse, leaveHouse, get inter() { return inter; }, lotDoor, nearDoor, deleteSel, turnBuild, get myPlotId() { return myPlot; }, INT, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM, obsSpot }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get environment() { return { ...environment }; }, get sky() { return { day: skyNow.day, rain: skyNow.rain, snow: skyNow.snow, storm: skyNow.storm, fog: skyNow.fog }; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

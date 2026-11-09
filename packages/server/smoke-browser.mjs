@@ -62,7 +62,7 @@ try {
   if (packagePrize.title !== "Prize package!" || !packagePrize.sub || !packagePrize.flash) problems.push("package reward celebration is missing: " + JSON.stringify(packagePrize));
   await page.evaluate(() => window.Pets.teleport(0, 14));
   step = "change the weather from the admin panel";
-  await page.click("#btn-admin");
+  await page.click("#gear"); await page.click("#gm-admin");   // the Admin Panel, from the gear menu (owner, 2026-11-09)
   await page.selectOption("#admin-weather", "snow");
   await page.selectOption("#admin-time", "night");
   let changed = false;

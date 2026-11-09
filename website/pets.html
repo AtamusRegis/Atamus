@@ -89,11 +89,26 @@
     .card.wide .col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .card.wide .stats { justify-content: flex-start; }
     #wanted { color: var(--red); font-size: 17px; letter-spacing: 1px; text-shadow: 0 1px 0 #fff; }
-    #chatlog { position: fixed; left: max(10px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); width: min(320px, calc(100vw - 120px)); display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 4; }
-    #chatlog div { padding: 5px 10px; border-radius: 12px; background: rgba(255,255,255,.82); font-size: 13px; overflow-wrap: anywhere; transition: opacity 1s; }
-    #chatlog div.old { opacity: 0; }
-    #chatbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); width: min(440px, calc(100vw - 24px)); display: none; gap: 8px; z-index: 9; }
-    #chatbar input { flex: 1; min-width: 0; border: 0; border-radius: 16px; padding: 0 14px; font: 600 16px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; box-shadow: 0 4px 0 rgba(0,0,0,.18); outline: none; }
+    /* (owner, 2026-11-09) chat like Roblox's: top left, a dark see-through window of messages with the line to type in
+       at its foot; the window's background fades when it's left alone; a gear to its left opens a menu */
+    #tlbar { display: flex; gap: 6px; pointer-events: auto; }
+    .rbtn { width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgba(20,24,30,.55); display: grid; place-items: center; cursor: pointer; padding: 0; }
+    .rbtn.on { background: rgba(20,24,30,.75); }
+    #gearmenu { display: none; flex-direction: column; min-width: 160px; border-radius: 12px; overflow: hidden; background: rgba(20,24,30,.85); pointer-events: auto; }
+    #gearmenu button { border: 0; background: none; color: #fff; font: 700 15px ui-rounded, system-ui, sans-serif; text-align: left; padding: 11px 14px; cursor: pointer; }
+    #gearmenu button + button { border-top: 1px solid rgba(255,255,255,.12); }
+    #rchat { width: min(380px, 46vw); display: flex; flex-direction: column; border-radius: 10px; background: rgba(20,24,30,.45); transition: background .5s; pointer-events: auto; }
+    #rchat.idle { background: rgba(20,24,30,0); }
+    #rchat.idle #chatbar { opacity: 0; }
+    #rchat.off { display: none; }
+    #rmsgs { height: clamp(84px, 22vh, 180px); overflow-y: auto; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; font: 700 14px ui-rounded, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 0 2px rgba(0,0,0,.6); overflow-wrap: anywhere; scrollbar-width: thin; }
+    #rmsgs div { line-height: 1.25; }
+    #chatbar { display: flex; padding: 0 6px 6px; transition: opacity .5s; }
+    #chatbar input { flex: 1; min-width: 0; height: 32px; border: 0; border-radius: 8px; padding: 0 10px; font: 600 15px ui-rounded, system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.45); outline: none; }
+    #chatbar input:focus { background: rgba(0,0,0,.6); }
+    #mapw { position: relative; pointer-events: auto; }
+    #online { position: absolute; right: 7px; bottom: 6px; display: flex; align-items: center; gap: 4px; color: #fff; font: 800 13px ui-rounded, system-ui, sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,.9); pointer-events: none; }
+    #online .dot { width: 9px; height: 9px; box-shadow: 0 0 0 1.5px rgba(0,0,0,.35); }
     #party { display: none; gap: 4px; flex-wrap: wrap; align-items: center; pointer-events: auto; max-width: 60vw; }
     #party .pill { font-size: 12px; padding: 4px 10px; color: var(--green); }
     #party .x { border: 0; background: #fff; width: 26px; height: 26px; border-radius: 50%; font: 800 12px system-ui; color: var(--ink); cursor: pointer; }
@@ -121,8 +136,6 @@
     .buildrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .buildrow .btn { padding: 8px; line-height: 1.3; }
     .card.off { opacity: .6; cursor: default; }
-    #chathist { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 62px); width: min(440px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; display: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 16px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 9; font-size: 13px; }
-    #chathist div { overflow-wrap: anywhere; }
     #news { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; background: var(--card); border-radius: 22px; padding: 14px 18px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); z-index: 11; display: none; }
     #news h2 { margin: 0 0 4px; font: 800 26px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; display: flex; justify-content: space-between; align-items: center; }
     #news .x { border: 0; background: #e9eef3; width: 36px; height: 36px; border-radius: 50%; font: 800 18px system-ui; color: var(--ink); cursor: pointer; }
@@ -189,8 +202,8 @@
     #bars::before, #bars::after { content: ""; position: fixed; left: 0; right: 0; height: 0; background: #0b0f14; z-index: 6; pointer-events: none; transition: height .45s ease; }
     #bars::before { top: 0; } #bars::after { bottom: 0; }
     .talking #bars::before, .talking #bars::after { height: 9vh; }
-    #top, #side, #chatlog { transition: opacity .3s; }
-    .talking #top, .talking #side, .talking #chatlog, .talking #pin, .talking #guide { opacity: 0; pointer-events: none; }
+    #top, #side { transition: opacity .3s; }
+    .talking #top, .talking #side, .talking #pin, .talking #guide { opacity: 0; pointer-events: none; }
     .talking #side * { pointer-events: none; }
     #talk { position: fixed; left: 50%; bottom: calc(9vh + 12px); transform: translateX(-50%); width: min(600px, calc(100vw - 24px)); z-index: 8; display: none; padding: 22px 18px 14px; border-radius: 20px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.3); cursor: pointer; animation: talkin .35s ease-out; }
     @keyframes talkin { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translateX(-50%); } }
@@ -222,7 +235,6 @@
       #side > #items, #side > #acts { flex-basis: 100%; display: flex; flex-direction: row; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
       #side #btn-jump, #side #btn-down { order: 10; }
       .panel { width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 24px); bottom: max(10px, env(safe-area-inset-bottom)); }
-      #chatlog { width: min(300px, 38vw); }
     }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
@@ -231,18 +243,18 @@
   <canvas id="gl"></canvas>
   <div id="top">
     <div>
-      <span class="pill" id="who"></span>
-      <span class="pill" id="home" style="display:none"></span>
+      <div id="tlbar"><button class="rbtn" id="gear" type="button" title="Menu"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 0 0 1.7 1L11 21h4l.4-2.9a7.6 7.6 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button><button class="rbtn on" id="chatbtn" type="button" title="Chat"><svg viewBox="0 0 24 24" width="22" height="22"><path fill="#fff" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg></button></div>
+      <div id="gearmenu"><button type="button" id="gm-settings">Settings</button><button type="button" id="gm-admin">Admin Panel</button></div>
+      <div id="rchat"><div id="rmsgs"></div><form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"></form></div>
       <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
       <div id="party"></div>
     </div>
     <div>
       <span class="pill" id="coinp"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="trainp" style="display:none" title="Training"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z" fill="#f2b01e"/></svg><b id="trainn"></b></span>
-      <canvas id="map"></canvas>
+      <div id="mapw"><canvas id="map"></canvas><span id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span></div>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
       <span class="pill" id="wanted" style="display:none"></span>
-      <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
       <span class="pill" id="contract" style="display:none"><span class="row"><b id="cname">Contract</b><span id="ctime"></span></span><span class="bar"><i id="cbar"></i></span><span class="row"><span id="cdone"></span><span id="cmine"></span></span></span>
       <span class="pill" id="packageevent" style="display:none"><span class="box"></span><b>Package Rush</b><span id="packageleft"></span></span>
     </div>
@@ -253,10 +265,7 @@
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
-    <button class="btn" id="btn-admin" type="button" style="display:none">Admin</button>
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
-    <button class="btn ghost" id="btn-chat" type="button">Chat</button>
-    <button class="btn ghost" id="btn-settings" type="button">Settings</button>
     <button class="btn green" id="btn-jump" type="button">Jump</button>
     <button class="btn green" id="btn-down" type="button" style="display:none">Fly ▼</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
@@ -272,9 +281,6 @@
   <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div class="panel" id="p-settings"><h2>Settings <button class="x" type="button">✕</button></h2><div id="settings"></div></div>
-  <div id="chatlog"></div>
-  <div id="chathist"></div>
-  <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"><button class="btn" type="submit">Send</button></form>
   <div id="invite"><b id="iname"></b><span id="ikind"></span><button class="btn green" id="iyes" type="button">✓</button><button class="btn ghost" id="ino" type="button">✕</button></div>
   <form id="login" autocomplete="on"><div class="lbox"><h1>Pet Delivery Co.</h1>
     <input id="luser" name="username" autocomplete="username" placeholder="Username" maxlength="16" autocapitalize="off" spellcheck="false">
@@ -290,6 +296,6 @@
   <div id="banner"></div>
   <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1794200019"></script>
+  <script type="module" src="pets.js?v=1794200022"></script>
 </body>
 </html>
