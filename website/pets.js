@@ -1921,13 +1921,13 @@ function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn();
 function ui() {
   acts = context();
   const kind = me.foot ? "foot" : moveKind(), mine2 = onMyPlot();
-  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
+  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
-  $("btn-down").style.display = kind === "fly" && !building ? "" : "none";
+  $("btn-down").style.display = kind === "fly" && me.flying && !building ? "" : "none";
   $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
@@ -2069,10 +2069,15 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  // (owner, 2026-11-09) on foot only inside: on a house's floor with a ceiling over it; open-air floors keep you riding
-  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y);
+  // (owner, 2026-11-09) on foot on any plot (in its house or out in its yard), up to just over its top level; flying
+  // higher over it you keep riding. Elsewhere, on foot only under a ceiling.
+  const hs0 = houseSurface(me.x, me.z, me.y), pl0 = me.inst ? null : World.plotAt(me.x, me.z);
+  me.foot = (pl0 && me.y < pl0.y + LEVELS * LEVEL_H + 1.5) || (hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y));
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
+  // (owner, 2026-11-09) a flier walks on the ground until Space takes it up; off the ground it's always flying
+  if (kind !== "fly") me.flying = false; else if (me.y - floor0 > 1.2) me.flying = true;
+  const flying = kind === "fly" && me.flying;
   if (grounded) me.flapped = false;
   if (!me.inst && kind !== "foot") boostTouch(now);
   let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
@@ -2086,7 +2091,7 @@ function step(dt) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
       if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || arenaBlocked(x, z, me.y)) return false;
-      if (kind === "fly") return true;
+      if (flying) return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
       if (!wet && !swims() && World.waterAt(x, z) > me.y - 0.3) return false;   // the shore: only swimmers walk in
@@ -2096,17 +2101,19 @@ function step(dt) {
     const bx = me.x, bz = me.z;
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
     // shut in a room with no way out (walled over, or dropped in from above): pushing on, you're put out in front of the plot
-    if (hyp(me.x - bx, me.z - bz) < v * 0.2 && kind !== "fly") stuckFor += dt; else stuckFor = 0;
+    if (hyp(me.x - bx, me.z - bz) < v * 0.2 && !flying) stuckFor += dt; else stuckFor = 0;
     if (stuckFor > 1.5) { stuckFor = 0; if (enclosed()) { const pl = World.plotAt(me.x, me.z); me.x = pl.x; me.z = pl.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, pl.y + 3); me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 24, 4, ["#7fd8ff", "#ffffff"], 0.7, -1); sendPos(true); } }
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Ctrl / Fly ▼ (down); hovers otherwise
-    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ControlLeft") || keys.has("ControlRight")));
+  const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ControlLeft") || keys.has("ControlRight")));
+  if (kind === "fly" && !flying && !stunned && (upH || jumpQueued > now)) { me.flying = true; jumpQueued = 0; me.y = Math.max(me.y, floor) + 0.6; }   // Space on the ground: take off
+  if (kind === "fly" && me.flying) {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Ctrl / Fly ▼ (down); hovers otherwise
     me.vy = 0; jumpQueued = 0;
     if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
-    me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
+    me.y = Math.min(me.y, FLY_TOP); if (me.y <= floor) { me.y = floor; if (!upH) me.flying = false; }   // back on the ground: walking
   } else {
+    if (kind === "fly") jumpQueued = 0;   // a walking flier doesn't jump (Space takes off)
     if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
     else if (jumpQueued > now && kind === "glide" && !grounded && !me.flapped && !stunned) { me.vy = 8; me.flapped = true; jumpQueued = 0; }   // a glider's one flap up
     me.vy = (me.vy || 0) - GRAV * dt;

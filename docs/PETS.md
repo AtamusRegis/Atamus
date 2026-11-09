@@ -86,7 +86,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): **on the ground they walk** (like a
+    land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
+    to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
+    shows only while flying. In the air only two controls go up and down:
     hold Space (or Fly ▲) to keep rising, hold Ctrl (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
     hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
@@ -279,7 +282,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
   price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
   windows and a roof).
-- **Inside a house** (on its floors or steps with a ceiling or roof above you; on open-air floors and roofs you keep riding, owner 2026-11-09) you're off your pet, walking (5.5 m/s); walls (4.5 m)
+- **On any plot** (owner, 2026-11-09: in its yard too, anyone's plot, up to 1.5 m over its top level; flying higher you keep riding), and **inside a house** elsewhere (under a ceiling or roof), you're off your pet, walking (5.5 m/s); walls (4.5 m)
   block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
   see in. Others see you walking too.
 - **Shut in** (owner, 2026-11-09): pushing on for 1.5 s without getting anywhere, in a room with no doorway or open side to the plot and no stairs or slope, puts you out in front of the plot (not on a flier, which can fly up).
