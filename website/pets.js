@@ -616,7 +616,7 @@ const walker = walkerModel(save.shirt);
 function flightPitch(m, x, y, z, dt, airborne) {
   const f = m.fp || (m.fp = { x, y, z, a: 0 }), d = Math.max(dt, 1e-3), hs = hyp(x - f.x, z - f.z) / d, vy = (y - f.y) / d;
   f.x = x; f.y = y; f.z = z;
-  const want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(-Math.atan2(vy, hs + 3), -0.7, 0.7) : 0;   // not on a teleport
+  const a = -Math.atan2(vy, hs + 3), want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(a > 0 ? a * 1.4 : a, -0.7, 0.95) : 0;   // not on a teleport; (owner, 2026-11-09) going down tips further
   f.a += (want - f.a) * Math.min(1, dt * 5);
   const c = (m.top / m.g.scale.y) * 0.45;   // the middle of pet and rider
   m.body.rotation.x = f.a; m.body.position.y += c * (1 - Math.cos(f.a)); m.body.position.z = -c * Math.sin(f.a);
