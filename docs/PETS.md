@@ -112,6 +112,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   points to the nearest one (or back to the post office when the bag's empty).
 - Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
   for an island house**, **+20% per wanted star**, and sometimes an item: Speed Candy 12%, Training Ribbon 4%, Egg Ticket 1%.
+- After each delivery, a brief popup shows how many parcels remain in the bag, including zero. The Settings panel has a
+  per-account option to hide the follow arrow when the bag is empty; it is on by default.
 
 ## Items
 

@@ -59,6 +59,9 @@
     #toast { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 9; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
     #toast div { padding: 8px 14px; border-radius: 999px; background: var(--card); font-weight: 800; animation: up 1.6s ease-out forwards; }
     @keyframes up { 0% { opacity: 0; transform: translateY(10px); } 15% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
+    #delivery { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; pointer-events: none; background: rgba(20,30,45,.18); }
+    #delivery b { padding: 18px 26px; border-radius: 20px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.25); font: 800 30px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; animation: deliveryIn .2s ease-out; }
+    @keyframes deliveryIn { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
     #hatch { position: fixed; inset: 0; z-index: 10; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; background: rgba(20,30,45,.55); }
     #hatch canvas { width: 220px; height: 220px; }
     #hatch .nm { font: 800 34px "Big Shoulders Display", Impact, sans-serif; color: #fff; letter-spacing: .04em; text-shadow: 0 3px 0 rgba(0,0,0,.25); }
@@ -108,6 +111,8 @@
     .field { width: 100%; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; font: 600 15px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; outline: none; }
     .field:focus { border-color: var(--blue); }
     .field.small { width: auto; padding: 6px 8px; font-size: 13px; min-width: 0; }
+    .setting { display: flex; align-items: center; gap: 12px; padding: 12px 0; font-size: 16px; }
+    .setting input { width: 22px; height: 22px; accent-color: var(--blue); }
     input.field.small { width: 80px; }
     .arows { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
     .arow { border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -170,6 +175,7 @@
     <button class="btn" id="btn-admin" type="button" style="display:none">Admin</button>
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
     <button class="btn ghost" id="btn-chat" type="button">Chat</button>
+    <button class="btn ghost" id="btn-settings" type="button">Settings</button>
     <button class="btn green" id="btn-jump" type="button">Jump</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
   </div>
@@ -182,6 +188,7 @@
   <div id="buildbar"></div>
   <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
+  <div class="panel" id="p-settings"><h2>Settings <button class="x" type="button">✕</button></h2><div id="settings"></div></div>
   <div id="chatlog"></div>
   <div id="chathist"></div>
   <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"><button class="btn" type="submit">Send</button></form>
@@ -193,8 +200,9 @@
     <div class="row2"><button class="btn green" id="lgo" type="submit" style="flex:1">Log in</button><button class="btn" id="lnew" type="button" style="flex:1">Create account</button></div>
   </div></form>
   <div id="toast"></div>
+  <div id="delivery"><b id="delivery-count"></b></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100017"></script>
+  <script type="module" src="pets.js?v=1793100018"></script>
 </body>
 </html>

@@ -293,7 +293,7 @@ function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.l
 
 // ---- a player's data (owner, 2026-11-08: saved on the server) and house rules, the same on both sides ----
 // data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,
-//   shirt, home: { pieces: [...] } }
+//   shirt, settings: { followArrowWhenEmpty }, home: { pieces: [...] } }
 // (owner, 2026-11-08: houses on plots, built however you like) a house is a list of pieces on a 5 x 5 grid of 4 m
 // squares, up to 3 floors (levels) of 4.5 m:
 //   cell pieces { k: floor | roof | slope | stairs, x, z (square 0-4), l (level 0-2), r (quarter turns), c (colour) }
@@ -373,6 +373,7 @@ export function cleanData(d, species) {
   return {
     coins: Math.max(0, Math.min(1e9, (Number.isFinite(+d.coins) ? +d.coins : 0) + refund)), pets: uniq, ride: uniq.some((p) => p.id === d.ride) ? d.ride : uniq[0].id,
     items: { snack: int(items.snack, 0, 1e6), ribbon: int(items.ribbon, 0, 1e6), ticket: int(items.ticket, 0, 1e6) }, treats,
-    delivered: int(d.delivered, 0, 1e9), nextId, shirt: /^#[0-9a-f]{6}$/i.test(d.shirt) ? d.shirt : "#3a8ee6", home,
+    delivered: int(d.delivered, 0, 1e9), nextId, shirt: /^#[0-9a-f]{6}$/i.test(d.shirt) ? d.shirt : "#3a8ee6",
+    settings: { followArrowWhenEmpty: !(d.settings && d.settings.followArrowWhenEmpty === false) }, home,
   };
 }
