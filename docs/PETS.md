@@ -73,6 +73,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
   arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
   40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
+- **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
+  with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
+  Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
+  when a courier approaches and pets bump against them instead of passing through them. Close by, press F (or tap the
+  person) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
+  more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
+  F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
+  conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
