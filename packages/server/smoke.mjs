@@ -32,6 +32,18 @@ const testBeam = { lx: 0, ly: 20, lz: 0, dx: 0, dy: -1, dz: 0 }, beamPlayer = { 
 ok(!W.beamHits(testBeam, beamPlayer) && W.beamHits(testBeam, { ...beamPlayer, airMount: true }), "helicopter beam is wider for flying mounts");
 let caught = false; for (let i = 0; i < 200 && !caught; i++) caught = W.stepVehicles(vs, [player], 0.1, 100 + i * 0.1).some((e) => e.k === "caught");
 ok(caught, "animal control catches a parcel carrier");
+const heliEventsAt = (start) => {
+  const heli = W.makeVehicles().find((v) => v.kind === 1), litPlayer = { id: 2, bag: 1, stars: 0, lastChased: start, lastStar: 0, immuneUntil: 0 }, events = [];
+  for (let i = 0; i < 8; i++) {
+    const b = W.beamOf(heli), along = 12;
+    Object.assign(litPlayer, { x: b.lx + b.dx * along, y: b.ly + b.dy * along - 1, z: b.lz + b.dz * along });
+    events.push(...W.stepVehicles([heli], [litPlayer], 0.1, start + i * 0.1));
+  }
+  return events;
+};
+ok(W.isDaylight(300) && !W.isDaylight(900), "the shared clock identifies daylight and night");
+ok(!heliEventsAt(300).some((e) => e.k === "chase" || e.k === "caught"), "helicopter searchlights do not work in daylight");
+ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers at night");
 
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
