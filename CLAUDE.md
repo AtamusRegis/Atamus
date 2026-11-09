@@ -56,10 +56,12 @@ packages/server/src/
   pets-world.js       copy of website/pets-world.js (keep identical)
   build.js            SERVER_BUILD, website build polling (a new site build reloads players), the update countdown
   gamehttp.js         the deploy workflows' calls; db.js the schema (Pet Delivery Co.'s tables); config.js; hash.js
-packages/server/smoke.mjs   the smoke test (npm run smoke)
+packages/server/smoke.mjs   the smoke test (npm run smoke); smoke-browser.mjs the game page in headless Chrome
+                            (npm run smoke:browser)
 scripts/
   check.sh            syntax-check every JS file and compare the two pets-world.js copies
   task.sh             the task workflow: start a task worktree, finish (merge main, check, PR, squash-merge, verify)
+  protect-main.sh     the GitHub settings below, applied by an admin (owner), or checked by anyone with --verify
   ptr.sh              start|stop|reset|status for a local copy (local Postgres :5433, server :8090 serving website/)
   ptr-run.mjs         run a JS snippet in headless Chromium against the local copy
   deploy.sh           server-side redeploy (the forced command for the deploy key); setup.sh server provisioning
@@ -117,12 +119,16 @@ and run finish again. Report done only once finish says the change is on `main`.
 the current `main`): `scripts/task.sh checks`, which is `bash scripts/check.sh` (every JS file parses, the two
 `pets-world.js` copies match) and `cd packages/server && npm run smoke` (the world's rules, and the real `/pets` server in
 memory with two players: register, welcome with plots, positions, saves and stale saves, house changes, chat, logging
-in again). A few seconds. For gameplay changes also look at the game itself when it's worth it (`scripts/ptr.sh start`).
+in again) and `npm run smoke:browser` (the same in-memory server serving `website/`; `pets.html` in headless Chrome
+loads, creates an account and rides, with no page or console errors or failed requests: the only check that runs
+`website/pets.js`; set `CHROME` if it can't find Chrome, it skips locally without one but never in CI). Seconds. For gameplay changes also look at the game itself when it's worth it (`scripts/ptr.sh start`).
 
-**GitHub settings this relies on** (set once by an owner; a Claude session here can't change repository settings or
-branch protection): `main` protected with pull requests required (0 approvals), the status check `check` required with
-branches up to date before merging, force pushes and deletion blocked, applied to admins too; squash merging and
-auto-merge allowed; head branches deleted automatically after merging.
+**GitHub settings this relies on** (set once by an owner with admin rights: `scripts/protect-main.sh`; a Claude session
+with write access can't change repository settings or branch protection, and GitHub answers it 404): `main` protected
+with pull requests required (0 approvals), the status check `check` required with branches up to date before merging,
+force pushes and deletion blocked, applied to admins too; squash merging only, auto-merge allowed; head branches
+deleted automatically after merging. `scripts/protect-main.sh --verify` checks them (any access); until it passes,
+nothing enforces these rules, so follow them anyway and say so in reports.
 
 ## Patch checklist (inside every task)
 

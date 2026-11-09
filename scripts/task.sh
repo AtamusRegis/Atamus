@@ -20,7 +20,7 @@ die() { printf '\n\033[1;31m%s\033[0m\n' "$*" >&2; exit "${2:-1}"; }
 
 checks() {
   bash scripts/check.sh
-  (cd packages/server && { [ -d node_modules ] || npm ci --no-audit --no-fund >/dev/null; } && npm run -s smoke)
+  (cd packages/server && { [ -d node_modules ] || npm ci --no-audit --no-fund >/dev/null; } && npm run -s smoke && npm run -s smoke:browser)
 }
 
 case "${1:-}" in
