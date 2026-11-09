@@ -68,6 +68,18 @@ try {
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
+  // talk to someone in town: lines type out, a click skips ahead, an answer is picked, walking away ends it
+  step = "talk to someone in town";
+  const talked = await page.evaluate(async () => {
+    const P = window.Pets, wait = (ms) => new Promise((r) => setTimeout(r, ms)), n = P.folk.find((f) => f.id === "mabel");
+    if (!n) return "Mabel isn't in town";
+    P.startTalk(n); if (!P.talk) return "the talk didn't start";
+    for (let i = 0; i < 12 && !document.querySelector("#tkopts button"); i++) { P.talkNext(); await wait(150); }
+    if (!document.querySelector("#tkopts button")) return "no answers to pick";
+    P.talkPick(1); P.talkNext(); await wait(50); if (!P.talk || !document.getElementById("tktext").textContent) return "the answer didn't go on";
+    P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
+  });
+  if (talked) problems.push(talked);
   // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
   step = "buy a pet in the mount shop";
   await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
