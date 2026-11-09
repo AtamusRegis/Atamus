@@ -127,7 +127,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): **on the ground they walk** (like a
+  - **Fliers** (Butterfly, Parrot, Owl, Dragon, Pegasus, Phoenix, Pterodactyl, Ice Dragon; the gliders became fliers,
+    owner 2026-11-09): **on the ground they walk** (like a
     land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
     to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
     shows only while flying. In the air, hold Space (or Fly ▲) to rise straight up and hold Shift (or Fly ▼, shown
@@ -135,9 +136,6 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     standing still holds height. Space / Shift override the camera. Up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
     "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
-  - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
-    up in the air; they glide, sinking 1.6 m/s (faster
-    looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
 - **Every kind has its own build (owner, 2026-11-08):** body shape and size (boxy, round, upright birds, two-legged
   dinosaurs), leg length, a neck on horses, deer and dragons, head and snout, ears, tail and extras: floppy ears and a
   wagging tail (Pup), cat ears, whiskers and a curled tail (Kitten), a round body, long ears, a puff tail and a hop
@@ -226,9 +224,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   big pet looks big under its rider.
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
-- **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
-  Glider: teal with spread wings) and the card's frame and tint in that color, also when an egg hatches. **Swimmers
-  (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
+- **Three types (owner, 2026-11-09):** every pet is **Ground**, **Air** or **Water**, with a badge on every card (and
+  when an egg hatches) and the card's frame and tint in its color: Ground brown with a peak, Air sky blue with flapping
+  wings (every flying pet), Water indigo with waves (Duck, Otter, Penguin, Sea Turtle). The
   Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
@@ -419,6 +417,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
+- Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.
 - Building on the lot itself on a 5 x 5 grid with a level picker (owner, 2026-11-09): replaced by the 5 houses outside and freeform building inside.
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.

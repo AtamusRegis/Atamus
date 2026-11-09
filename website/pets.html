@@ -178,12 +178,12 @@
     @keyframes glow { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
     .mbadge { display: inline-flex; align-items: center; gap: 4px; font: 800 11px ui-rounded, system-ui, sans-serif; padding: 3px 8px; border-radius: 999px; color: #fff; letter-spacing: .02em; }
-    .mbadge.fly { background: #3a8ee6; box-shadow: 0 0 0 2px #cfe6ff; }
-    .mbadge.swim { background: #4f5bd5; box-shadow: 0 0 0 2px #d9dcfb; }
-    .mbadge.glide { background: #18a39a; box-shadow: 0 0 0 2px #c9f2ee; }
-    .card.fly { border-color: #9cc9f5; background: linear-gradient(#f0f7ff, #fff 60%); }
-    .card.swim { border-color: #aab1f0; background: linear-gradient(#f1f2ff, #fff 60%); }
-    .card.glide { border-color: #8fdcd4; background: linear-gradient(#ecfbf9, #fff 60%); }
+    .mbadge.air { background: #3a8ee6; box-shadow: 0 0 0 2px #cfe6ff; }
+    .mbadge.water { background: #4f5bd5; box-shadow: 0 0 0 2px #d9dcfb; }
+    .mbadge.ground { background: #9a6b3f; box-shadow: 0 0 0 2px #f0dcc6; }
+    .card.air { border-color: #9cc9f5; background: linear-gradient(#f0f7ff, #fff 60%); }
+    .card.water { border-color: #aab1f0; background: linear-gradient(#f1f2ff, #fff 60%); }
+    .card.ground { border-color: #dcc3a6; background: linear-gradient(#fbf5ee, #fff 60%); }
     .pick .mbadge { margin-left: auto; }   /* the admin give list: fliers and gliders tagged at the right */
     #hatch .nm .mbadge { font-size: 14px; vertical-align: middle; }
     #buildbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; display: none; flex-direction: column; gap: 6px; padding: 8px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: var(--card); box-shadow: 0 -6px 20px rgba(0,0,0,.18); }
@@ -296,6 +296,6 @@
   <div id="banner"></div>
   <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1794200022"></script>
+  <script type="module" src="pets.js?v=1794200025"></script>
 </body>
 </html>
