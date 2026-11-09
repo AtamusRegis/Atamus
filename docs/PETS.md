@@ -214,9 +214,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
   price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
   windows and a roof).
-- **Inside a house** (standing on its floors, steps or roof) you're off your pet, walking (5.5 m/s); walls (4.5 m)
+- **Inside a house** (on its floors or steps with a ceiling or roof above you; on open-air floors and roofs you keep riding, owner 2026-11-09) you're off your pet, walking (5.5 m/s); walls (4.5 m)
   block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
   see in. Others see you walking too.
+- **Shut in** (owner, 2026-11-09): pushing on for 1.5 s without getting anywhere, in a room with no doorway or open side to the plot and no stairs or slope, puts you out in front of the plot (not on a flier, which can fly up).
 - **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one on your plot to choose its pet (not
   the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 3.5 / 5.5 / 8 by
   rarity, +5% per level), up to 8 hours' worth, collected when you come onto your plot. A pet in a playpen can't be

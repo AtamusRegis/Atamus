@@ -1437,6 +1437,33 @@ function houseSurface(x, z, y) {
   }
   return best;
 }
+// a ceiling over me (a floor or roof above my head): inside a house means under one
+function houseCeiling(x, z, y) {
+  for (const col of nearPlots(x, z, 0)) {
+    for (const s2 of col.surfaces) if (x > s2[0] && x < s2[1] && z > s2[2] && z < s2[3] && s2[4] > y + 2) return true;
+    for (const r of col.ramps) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && r.y0 > y + 2) return true;
+  }
+  return false;
+}
+// (owner, 2026-11-09: stuck inside houses) is the room I'm in shut: no doorway or open side to the outside of the plot
+// and no stairs or slope to another level, going square by square through anything that isn't a wall or window?
+function enclosed() {
+  const pl = World.plotAt(me.x, me.z), st = pl && plotState.get(pl.id); if (!st) return false;
+  const o = plotOrigin(pl), l = clamp(Math.floor((me.y - pl.y + 0.6) / LEVEL_H), 0, LEVELS - 1), sx = Math.floor((me.x - o.x) / CELL), sz = Math.floor((me.z - o.z) / CELL);
+  const shut = new Set(); for (const t of st.pieces) if ((t.k === "wall" || t.k === "window") && t.l === l) { const [dx, dz] = SIDE[t.s]; shut.add((t.x * 2 + 1 + dx) + "," + (t.z * 2 + 1 + dz)); }
+  const seen = new Set([sx + "," + sz]), q = [[sx, sz]];
+  while (q.length) {
+    const [x, z] = q.pop();
+    if (st.pieces.some((t) => (t.k === "stairs" || t.k === "slope") && t.x === x && t.z === z && (t.l === l || t.l === l - 1))) return false;
+    for (const [dx, dz] of SIDE) {
+      if (shut.has((x * 2 + 1 + dx) + "," + (z * 2 + 1 + dz))) continue;
+      const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= GRID || nz >= GRID) return false;   // out to the open plot
+      const k = nx + "," + nz; if (!seen.has(k)) { seen.add(k); q.push([nx, nz]); }
+    }
+  }
+  return true;
+}
+let stuckFor = 0;
 function houseWall(x, z, y) {
   const R = 0.45;
   for (const col of nearPlots(x, z)) for (const w of col.walls) if (x > w[0] - R && x < w[1] + R && z > w[4] - R && z < w[5] + R && y + 0.3 < w[3] && y + 1.9 > w[2]) return true;
@@ -1680,13 +1707,15 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05;
+  // (owner, 2026-11-09) on foot only inside: on a house's floor with a ceiling over it; open-air floors keep you riding
+  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y);
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   if (grounded) me.flapped = false;
   let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
   me.moving = ml > 0.08 && !stunned;
+  if (!me.moving) stuckFor = 0;
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
@@ -1696,7 +1725,11 @@ function step(dt) {
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
     };
+    const bx = me.x, bz = me.z;
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
+    // shut in a room with no way out (walled over, or dropped in from above): pushing on, you're put out in front of the plot
+    if (hyp(me.x - bx, me.z - bz) < v * 0.2 && kind !== "fly") stuckFor += dt; else stuckFor = 0;
+    if (stuckFor > 1.5) { stuckFor = 0; if (enclosed()) { const pl = World.plotAt(me.x, me.z); me.x = pl.x; me.z = pl.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, pl.y + 3); me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 24, 4, ["#7fd8ff", "#ffffff"], 0.7, -1); sendPos(true); } }
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
