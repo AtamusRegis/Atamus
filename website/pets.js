@@ -2889,10 +2889,8 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  // (owner, 2026-11-09) on foot inside a house, and on a player's lot (its house is on it), up to just over the house;
-  // flying higher over it you keep riding. Nowhere else.
-  const pl0 = inHouse() ? null : World.plotAt(me.x, me.z), st0 = pl0 && plotState.get(pl0.id);
-  me.foot = inHouse() || !!(st0 && me.y < pl0.y + 16);
+  // (owner, 2026-11-09) on foot only inside a house (through its front door); riding everywhere outside, lots too
+  me.foot = inHouse();
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   waterMode = kind !== "foot" && swims() ? "swim" : kind === "fly" || kind === "glide" ? "hover" : "float";
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
