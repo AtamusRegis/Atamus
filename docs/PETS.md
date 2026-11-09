@@ -34,6 +34,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
   out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
   low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
+- **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
+  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
+  Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
+  clear within 45 m and fading out by 70 m, growing a little with distance; hidden while building.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
