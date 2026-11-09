@@ -58,6 +58,13 @@ try {
   await waitForLights(true);
   await setSkyPhase(0.75);
   await waitForLights(false);
+  step = "check the airborne wind speed rules";
+  const windFactors = await page.evaluate(() => {
+    const f = window.Pets.windRideFactor;
+    return [f("fly", true, 1, 0, 1, 0), f("glide", true, -1, 0, 1, 0), f("fly", true, 0, 1, 1, 0), f("land", true, 1, 0, 1, 0), f("fly", false, 1, 0, 1, 0)];
+  });
+  const expectedWindFactors = [1.1, 0.95, 1, 1, 1];
+  if (windFactors.some((n, i) => Math.abs(n - expectedWindFactors[i]) > 0.0001)) problems.push(`airborne wind speed factors are wrong (${windFactors.join(", ")})`);
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
