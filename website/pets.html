@@ -34,6 +34,7 @@
     #contract .bar { height: 10px; border-radius: 6px; background: #e3eaf0; overflow: hidden; }
     #contract .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #ffd35a); }
     #contract .row { display: flex; justify-content: space-between; font-size: 13px; }
+    #packageevent { position: fixed; top: calc(max(10px, env(safe-area-inset-top)) + 118px); left: 50%; transform: translateX(-50%); z-index: 5; color: #6d2aa8; background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(248,224,255,.96)); white-space: nowrap; }
     #flykeys { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 4; pointer-events: none; gap: 10px; }
     #side { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; align-items: flex-end; z-index: 5; }
     .btn { border: 0; border-radius: 16px; padding: 12px 16px; min-width: 64px; min-height: 52px; font: 800 15px ui-rounded, system-ui, sans-serif; color: #fff; background: var(--blue); box-shadow: 0 4px 0 rgba(0,0,0,.18); cursor: pointer; position: relative; }
@@ -71,6 +72,15 @@
     #banner small { display: block; font: 800 18px ui-rounded, system-ui, sans-serif; letter-spacing: .02em; color: #fff; margin-top: 4px; }
     #banner.go { animation: ban 2.4s ease-out forwards; }
     @keyframes ban { 0% { opacity: 0; transform: scale(.4) rotate(-6deg); } 12% { opacity: 1; transform: scale(1.15) rotate(2deg); } 22% { transform: scale(1) rotate(0); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-20px); } }
+    #eventflash { position: fixed; inset: 0; z-index: 12; display: none; place-items: center; pointer-events: none; overflow: hidden; background: radial-gradient(circle, rgba(255,255,255,.5), rgba(107,38,170,.16) 35%, transparent 68%); }
+    #eventflash.go { display: grid; animation: eventfade 3.2s ease-out forwards; }
+    #eventflash .rays { position: absolute; width: min(110vmin, 820px); aspect-ratio: 1; background: repeating-conic-gradient(from 8deg, rgba(255,219,86,.72) 0 8deg, transparent 8deg 20deg); border-radius: 50%; animation: eventspin 7s linear infinite; }
+    #eventflash .cardfx { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 20px 34px 22px; border: 4px solid #fff; border-radius: 30px; background: linear-gradient(145deg, #9a4bd1, #5c2394); color: #fff; box-shadow: 0 12px 0 #3c1761, 0 20px 60px rgba(45,12,75,.45), inset 0 0 30px rgba(255,255,255,.25); animation: eventpop 3.2s ease-out forwards; }
+    #eventflash .parcel { position: relative; width: 74px; height: 58px; margin-bottom: 8px; border: 5px solid #8a5a2b; border-radius: 8px; background: #d99a54; box-shadow: 0 0 30px #ffd84a; }
+    #eventflash .parcel::before, #eventflash .parcel::after { content: ""; position: absolute; background: #ffd84a; } #eventflash .parcel::before { left: 27px; top: -5px; width: 12px; height: 58px; } #eventflash .parcel::after { left: -5px; top: 20px; width: 74px; height: 12px; }
+    #eventflash b { font: 800 clamp(42px, 10vw, 76px) "Big Shoulders Display", Impact, sans-serif; letter-spacing: .04em; line-height: .95; text-transform: uppercase; text-shadow: 0 4px 0 #3c1761; }
+    #eventflash span { font-size: clamp(14px, 3vw, 20px); font-weight: 800; }
+    @keyframes eventspin { to { transform: rotate(360deg); } } @keyframes eventfade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } } @keyframes eventpop { 0% { transform: scale(.1) rotate(-12deg); } 12% { transform: scale(1.18) rotate(3deg); } 22%, 75% { transform: scale(1) rotate(0); } 100% { transform: scale(.8) translateY(-30px); } }
     .card.wide { flex-direction: row; text-align: left; margin-bottom: 10px; }
     .card.wide .col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .card.wide .stats { justify-content: flex-start; }
@@ -179,6 +189,7 @@
       <span class="pill" id="wanted" style="display:none"></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
       <span class="pill" id="contract" style="display:none"><span class="row"><b id="cname">Contract</b><span id="ctime"></span></span><span class="bar"><i id="cbar"></i></span><span class="row"><span id="cdone"></span><span id="cmine"></span></span></span>
+      <span class="pill" id="packageevent" style="display:none"><span class="box"></span><b>Package Rush</b><span id="packageleft"></span></span>
     </div>
   </div>
   <div id="joy"><i></i></div>
@@ -215,7 +226,8 @@
   </div></form>
   <div id="toast"></div>
   <div id="banner"></div>
+  <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100036"></script>
+  <script type="module" src="pets.js?v=1793100037"></script>
 </body>
 </html>

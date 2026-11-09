@@ -783,6 +783,8 @@ function fxStep(dt) {
 // a big word across the screen
 // (owner, 2026-11-09) sub: a small line under it (whose update it is)
 function banner(txt, color, sub) { const b = $("banner"); b.textContent = txt; if (sub) { const s = document.createElement("small"); s.textContent = sub; b.appendChild(s); } b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
+let eventFlashTimer = 0;
+function eventFlash(title, sub) { const e = $("eventflash"); $("eventtitle").textContent = title; $("eventsub").textContent = sub; clearTimeout(eventFlashTimer); e.classList.remove("go"); void e.offsetWidth; e.classList.add("go"); eventFlashTimer = setTimeout(() => e.classList.remove("go"), 3250); }
 
 
 // ---- me ----
@@ -833,6 +835,47 @@ function syncBeams() {
   const want = new Set(me.bag);
   for (const [i, b] of beams) if (!want.has(i)) { scene.remove(b); beams.delete(i); }
   for (const i of want) if (!beams.has(i)) { const h = houses[i], g = new THREE.Group(); const m = new THREE.Mesh(BEAMG, h.sky ? skyBeamM : beamM); m.position.y = 15; g.add(m); const p = box(0.9, 0.7, 0.9, "#c98b4f", 0, 3, 0, g, false); g.userData.parcel = p; g.position.set(h.mx, h.my, h.mz); scene.add(g); beams.set(i, g); }
+}
+
+// Every ten minutes the room gets a Package Rush for a random one to two minutes. Packages are shared and the server
+// awards them once; the page only draws what the server says is still available.
+const prizeBeamM = new THREE.MeshBasicMaterial({ color: "#c75cff", transparent: true, opacity: 0.27, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+const prizeRingM = new THREE.MeshBasicMaterial({ color: "#ffd84a", transparent: true, opacity: 0.9, depthWrite: false });
+let packageEvent = null;
+const packageMeshes = new Map(), packageClaiming = new Set();
+function prizePackage(at) {
+  const g = new THREE.Group(), beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 28, 16, 1, true), prizeBeamM);
+  beam.position.y = 14; g.add(beam);
+  const parcel = new THREE.Group(); box(1.5, 1.1, 1.35, "#d99a54", 0, 0.7, 0, parcel); box(0.22, 1.16, 1.42, "#ffd84a", 0, 0.72, 0, parcel); box(1.56, 0.22, 1.42, "#ffd84a", 0, 0.72, 0, parcel);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.12, 8, 28).rotateX(Math.PI / 2), prizeRingM); ring.position.y = 0.12; g.add(parcel, ring);
+  g.position.set(at.x, at.y, at.z); g.userData.parcel = parcel; g.userData.ring = ring; scene.add(g); return g;
+}
+function dropPrize(id) { const g = packageMeshes.get(id); if (g) scene.remove(g); packageMeshes.delete(id); packageClaiming.delete(id); }
+function setPackageEvent(event, announce = false) {
+  for (const id of [...packageMeshes.keys()]) dropPrize(id);
+  packageClaiming.clear(); packageEvent = event ? { id: event.id, ends: performance.now() + event.left * 1000, boxes: new Map() } : null;
+  if (packageEvent) {
+    for (const box of event.boxes || []) { packageEvent.boxes.set(box.id, box); packageMeshes.set(box.id, prizePackage(box)); }
+    if (announce) { eventFlash("Package Rush!", "Prize packages are falling!"); emitConfetti(me.x, me.y + 5, me.z, 120, 7, 11); for (let i = 0; i < 4; i++) firework(me.x + (Math.random() - 0.5) * 14, me.y + 1, me.z + (Math.random() - 0.5) * 14, i * 0.25, ["#c75cff", "#ffd84a", "#ffffff"]); }
+  }
+  hudKey = "";
+}
+function rewardText(r) {
+  if (!r) return "Mystery prize!";
+  if (r.kind === "pet") return SPECIES[r.sp].name + " pet!";
+  if (r.kind === "xp") return "+" + r.n + " training points!";
+  if (r.kind === "coins") return "+" + fmt(r.n) + " coins!";
+  if (r.kind === "item") return r.n + "x " + ITEMS[r.item].name + "!";
+  return "Mystery prize!";
+}
+function packageStep() {
+  if (!packageEvent || me.inst || !netOk) return;
+  for (const [id, box] of packageEvent.boxes) if (!packageClaiming.has(id) && hyp(me.x - box.x, me.z - box.z) < 2.8 && Math.abs(me.y - box.y) < 4) {
+    packageClaiming.add(id); sendPos(true); netSend({ t: "package", id }); break;
+  }
+}
+function drawPackages() {
+  for (const [id, g] of packageMeshes) { const k = id * 0.7; g.userData.parcel.rotation.y = clock * 1.8 + k; g.userData.parcel.position.y = 0.4 + Math.sin(clock * 3 + k) * 0.25; g.userData.ring.rotation.z = clock * 0.8 + k; const s = 1 + Math.sin(clock * 4 + k) * 0.12; g.userData.ring.scale.setScalar(s); }
 }
 
 // ---- smooth playback of what the server sends (owner, 2026-11-08: no rubber-banding): each update is stamped with the
@@ -1064,7 +1107,8 @@ const CANDY = `<svg class="ico" viewBox="0 0 24 24"><path d="M2 8l4 4-4 4zM22 8l
 let hudKey = "", windKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
-  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
+  const packageLeft = packageEvent ? Math.max(0, Math.ceil((packageEvent.ends - performance.now()) / 1000)) : 0;
+  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind], packageEvent && [packageEvent.boxes.size, packageLeft]].join("|");
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
   const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
@@ -1077,6 +1121,8 @@ function hud() {
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
   $("contract").style.display = c ? "flex" : "none";
   if (c) { $("cname").textContent = (CONTRACTS.find((k) => k.id === c.kind) || CONTRACTS[2]).name; $("ctime").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"); $("cbar").style.width = Math.min(100, (c.done / c.goal) * 100) + "%"; $("cdone").textContent = c.done + " / " + c.goal; $("cmine").textContent = "You: " + c.mine; }
+  $("packageevent").style.display = packageEvent ? "inline-flex" : "none";
+  if (packageEvent) $("packageleft").textContent = packageEvent.boxes.size + " · " + Math.floor(packageLeft / 60) + ":" + String(packageLeft % 60).padStart(2, "0");
   const items = $("items"); items.innerHTML = "";
   if (save.items.snack > 0) { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; b.title = ITEMS.snack.name; b.disabled = me.boostUntil > performance.now(); b.onclick = useSnack; items.appendChild(b); }
 }
@@ -1389,7 +1435,7 @@ function connect() {
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
   ws.onclose = () => {
     if (ws === sock) ws = null;
-    const was = netOk; netOk = false; myId = null; clockOff = null; saving = false; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = "";
+    const was = netOk; netOk = false; myId = null; clockOff = null; saving = false; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; setPackageEvent(null); hudKey = "";
     party = []; renderParty(); if (trading) { trading = null; if (openPanel === "p-trade") closePanels(); }
     if (building) closeBuild(); for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = -1;
     $("lgo").disabled = $("lnew").disabled = true;
@@ -1469,7 +1515,7 @@ function onNet(m) {
       myRole = m.role || "player";
       isVip = !!m.vip; for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = m.plot >= 0 ? m.plot : -1;
       for (const q of m.plots || []) if (q.id !== myId) setPlot(q.plot, q.id, q.name, q.pieces, q.penSp); refreshMyPlot();
-      for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; uiKey = "";
+      for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); setPackageEvent(m.packageEvent, !!m.packageEvent); me.stars = m.stars || 0; hudKey = ""; uiKey = "";
       break;
     }
     case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? banText(m.until) : ERR[m.why] || ERR.server); break;
@@ -1505,6 +1551,9 @@ function onNet(m) {
     case "reload": stale(m.web, true, m.by); break;
     case "contract": setContract(m.c); break;
     case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
+    case "package_event": setPackageEvent(m.event, !!m.event); break;
+    case "package_taken": if (packageEvent) packageEvent.boxes.delete(m.id); dropPrize(m.id); hudKey = ""; break;
+    case "package_reward": { const text = rewardText(m.reward); eventFlash("Prize package!", text); toast(text, "#8b3fbd"); emitConfetti(me.x, me.y + 3, me.z, 90, 5, 9); firework(me.x, me.y + 2, me.z, 0, ["#c75cff", "#ffd84a", "#ffffff"]); hudKey = ""; break; }
     case "invited": invites.push({ from: m.from, name: m.name, kind: m.kind, until: performance.now() + 28000 }); renderInvite(); break;
     case "declined": toast(m.name + " ✕"); break;
     case "party": party = m.members || []; renderParty(); uiKey = ""; break;
@@ -2127,6 +2176,7 @@ function step(dt) {
     // the post office fills my bag; a mailbox I have a parcel for takes it
     if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && low) fillBag();
     for (const i of me.bag) { const h = houses[i]; if (hyp(me.x - h.mx, me.z - h.mz) < 3.6 && Math.abs(me.y - h.my) < 4.5) { deliver(i); break; } }
+    packageStep();
   }
   // animal control: offline this page runs it
   if (!netOk) {
@@ -2174,6 +2224,7 @@ function draw(dt) {
   for (const i of me.bag) { const h = houses[i], d = hyp(h.mx - me.x, h.mz - me.z); if (d < best) { best = d; tx = h.mx; tz = h.mz; } }
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
+  drawPackages();
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
   cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && hyp(gd[0] - me.x, gd[2] - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
@@ -2192,4 +2243,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get packageEvent() { return packageEvent; }, get packageMeshes() { return packageMeshes; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, setPackageEvent, eventFlash, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
