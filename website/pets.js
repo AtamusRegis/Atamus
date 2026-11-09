@@ -315,28 +315,34 @@ function roundBox(w, h, d, r, seg) {   // a box with rounded edges; the front (+
   }
   RBOX.set(key, g); return g;
 }
-const FACE_M = (() => {   // the head's front: skin with two tall oval eyes and a smile
+const FACES = new Map();
+function faceMat(skin, blush) {   // the head's front: skin with two tall oval eyes and a smile (townsfolk: their own skin, maybe rosy cheeks)
+  const key = skin + (blush ? "b" : ""); if (FACES.has(key)) return FACES.get(key);
   const cv = document.createElement("canvas"); cv.width = cv.height = 256; const x = cv.getContext("2d");
-  x.fillStyle = SKIN; x.fillRect(0, 0, 256, 256); x.fillStyle = x.strokeStyle = "#16181a";
+  x.fillStyle = skin; x.fillRect(0, 0, 256, 256);
+  if (blush) { x.fillStyle = "rgba(240,110,120,.45)"; for (const bx of [70, 186]) { x.beginPath(); x.ellipse(bx, 140, 20, 12, 0, 0, TAU); x.fill(); } }
+  x.fillStyle = x.strokeStyle = "#16181a";
   for (const ex of [103, 153]) { x.beginPath(); x.ellipse(ex, 88, 8.5, 18, 0, 0, TAU); x.fill(); }
   x.lineWidth = 10; x.lineCap = "round"; x.beginPath(); x.moveTo(86, 172); x.quadraticCurveTo(128, 254, 170, 172); x.stroke();
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return new THREE.MeshLambertMaterial({ map: t });
-})();
-function courierModel(shirt, seated) {
+  const m = new THREE.MeshLambertMaterial({ map: t }); FACES.set(key, m); return m;
+}
+const FACE_M = faceMat(SKIN);
+// look (townsfolk only): { skin, pants, sleeve (the arms' colour: long sleeves), blush }
+function courierModel(shirt, seated, look) {
   const g = new THREE.Group(), legs = [], arms = [];
   const part = (w, h, d, m, x, y, z, parent, r = 0.025, seg = 2) => { const o = new THREE.Mesh(roundBox(w, h, d, r, seg), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
   for (const x of [-0.2, 0.2]) {   // legs hang from the hips (y 0.8)
-    const l = new THREE.Group(); l.position.set(x, 0.8, 0); g.add(l); legs.push(l); part(0.4, 0.8, 0.4, mat(PANTS), 0, -0.4, 0, l);
+    const l = new THREE.Group(); l.position.set(x, 0.8, 0); g.add(l); legs.push(l); part(0.4, 0.8, 0.4, mat((look && look.pants) || PANTS), 0, -0.4, 0, l);
     if (seated) l.rotation.set(-1.05, 0, Math.sign(x) * 0.5);   // astride the pet: forward, down and out
   }
   part(0.8, 0.8, 0.4, mat(shirt), 0, 1.2, 0, g);
   for (const x of [-0.6, 0.6]) {   // arms swing from the shoulders, a quarter of the way down
-    const a = new THREE.Group(); a.position.set(x, 1.4, 0); g.add(a); arms.push(a); part(0.4, 0.8, 0.4, mat(SKIN), 0, -0.2, 0, a);
+    const a = new THREE.Group(); a.position.set(x, 1.4, 0); g.add(a); arms.push(a); part(0.4, 0.8, 0.4, mat((look && (look.sleeve || look.skin)) || SKIN), 0, -0.2, 0, a);
     if (seated) a.rotation.x = -0.55;   // reaching forward to hold on
   }
-  const sk = mat(SKIN); part(0.5, 0.48, 0.5, [sk, sk, sk, sk, FACE_M, sk], 0, 1.84, 0, g, 0.12, 4);
-  return { g, legs, arms };
+  const skin = (look && look.skin) || SKIN, sk = mat(skin), head = part(0.5, 0.48, 0.5, [sk, sk, sk, sk, look ? faceMat(skin, look.blush) : FACE_M, sk], 0, 1.84, 0, g, 0.12, 4);
+  return { g, legs, arms, head };
 }
 
 // ---- a pet (built from simple shapes; it faces +z) with its rider ----
@@ -774,7 +780,11 @@ function placeCamera(dt) {
   }
   if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
   const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
-  camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
+  // (owner, 2026-11-09) talking to someone in town, the camera moves in close on them and back out after
+  let lx = me.x, ly = cam.y + 1.8, lz = me.z;
+  shot.k += ((talk ? 1 : 0) - shot.k) * Math.min(1, dt * 3.2);
+  if (shot.n && shot.k > 0.002) { const k = smooth(clamp(shot.k, 0, 1)); shotAt(shot.n); cx += (SH.cx - cx) * k; cy += (SH.cy - cy) * k; cz += (SH.cz - cz) * k; lx += (SH.lx - lx) * k; ly += (SH.ly - ly) * k; lz += (SH.lz - lz) * k; }
+  camera.position.set(cx, cy, cz); camera.lookAt(lx, ly, lz);
   sun.position.set(me.x + skyNow.sun.x * 90, me.y + Math.max(20, skyNow.sun.y * 90), me.z + skyNow.sun.z * 90); sun.target.position.set(me.x, me.y, me.z);
   fadeHouses(dt, cx, cy, cz);
 }
@@ -811,7 +821,13 @@ canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
 const typing = () => { const a = document.activeElement; return !!a && a.tagName === "INPUT" && a.offsetParent !== null; };
 addEventListener("keydown", (e) => {
-  if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
+  if (typing()) return;
+  if (talk) {   // talking: Space, Enter or F goes on, 1-4 picks an answer, Escape walks away
+    e.preventDefault(); if (e.repeat) return;
+    if (e.code === "Escape") endTalk(); else if (e.code === "Space" || e.code === "Enter" || e.code === "NumpadEnter" || e.code === "KeyF") talkNext(); else if (/^(Digit|Numpad)[1-9]$/.test(e.code)) talkPick(+e.code.slice(-1) - 1);
+    return;
+  }
+  keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
@@ -1058,7 +1074,7 @@ function deliver(i) {
 }
 // caught by animal control (owner, 2026-11-08): taken straight to the pound (no stun), parcels gone, wanted cleared
 function caught() {
-  me.stars = 0;
+  me.stars = 0; endTalk();
   if (me.bag.length) { me.bag = []; syncBeams(); }
   me.x = RELEASE.x + (Math.random() - 0.5) * 10; me.z = RELEASE.z + (Math.random() - 0.5) * 3; me.y = terrain(me.x, me.z); cam.y = me.y; cam.yaw = Math.PI;
   toast("Caught!", "#e5534b"); emitSparks(me.x, me.y + 2, me.z, 24, 4, ["#ffd84a", "#ffffff"], 0.8, 1); hudKey = "";
@@ -1365,9 +1381,303 @@ function poiBubble(name, what) {
 for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
 function poiStep() {
   for (const q of POIS) {
-    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), a = building || (q.extra && !extraIsland.visible) ? 0 : clamp((70 - d) / 25, 0, 1);
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : clamp((70 - d) / 25, 0, 1);
     q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 20) / 60, 0, 1); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
+}
+// ---- townsfolk (owner, 2026-11-09): people who live in town: a keeper at each shop and a few folk around the post
+// office, each dressed their own way, standing about their own way, with their own things to talk about. Their name
+// shows in their colour with a speech bubble over it. F next to one (or a tap on them) talks: the camera moves in on
+// them, black bars slide in, and what they say types out a line at a time; a typed line waits 2.5 s, then the next (a
+// click or tap finishes the line, or goes straight on to the next); after their last line, answers to pick. They live
+// on this page only, the same people in the same places for everyone. ----
+const TALK_RANGE = 4.5, LINE_WAIT = 2.5, TYPE_MAX = 1.5;
+function cyl(r, h, c, x, y, z, parent, rx = 0, rz = 0) { const m = new THREE.Mesh(CYL, mat(c)); m.scale.set(r, h, r); m.position.set(x, y, z); m.rotation.set(rx, 0, rz); m.castShadow = true; parent.add(m); return m; }
+const GLASS_M = new THREE.MeshLambertMaterial({ color: "#d6eeff", transparent: true, opacity: 0.4 });
+// what each one wears (on the courier's build: head 0.5 m at 1.84, its front at z 0.25; torso 0.8 x 0.8 x 0.4 at 1.2)
+const DRESS = {
+  hazel(w, g) {   // apron with an egg in its pocket, hair in a bun
+    box(0.66, 0.92, 0.05, "#fffaf2", 0, 1.02, 0.215, g); ball(0.07, "#ffd35a", 0.16, 0.92, 0.25, g, 1, 1.3, 0.6);
+    box(0.54, 0.12, 0.54, "#6b3f22", 0, 2.07, 0, g); box(0.54, 0.36, 0.08, "#6b3f22", 0, 1.9, -0.25, g); ball(0.15, "#6b3f22", 0, 2.2, -0.2, g);
+  },
+  rusty(w, g) {   // cowboy hat, vest, bandana, mustache, belt buckle
+    for (const x of [-0.27, 0.27]) box(0.27, 0.8, 0.43, "#7a4f28", x, 1.2, 0, g);
+    box(0.52, 0.1, 0.44, "#2bb3c0", 0, 1.6, 0, g); cone(0.13, 0.2, "#2bb3c0", 0, 1.47, 0.2, g, Math.PI);
+    box(0.84, 0.08, 0.44, "#2b1d12", 0, 0.84, 0, g); box(0.16, 0.11, 0.04, "#f2b01e", 0, 0.84, 0.22, g);
+    cyl(0.5, 0.04, "#8a5a3a", 0, 2.1, 0, g); cyl(0.27, 0.28, "#8a5a3a", 0, 2.25, 0, g); cyl(0.275, 0.06, "#2b1d12", 0, 2.15, 0, g);
+    box(0.28, 0.06, 0.04, "#4a2f1c", 0, 1.76, 0.26, g);
+  },
+  mabel(w, g) {   // postal cap and badge, glasses, a mail bag, a letter in hand
+    cyl(0.27, 0.16, "#23395e", 0, 2.13, 0, g); box(0.42, 0.04, 0.2, "#16263f", 0, 2.07, 0.3, g); box(0.1, 0.08, 0.02, "#f2b01e", 0, 2.15, 0.27, g);
+    for (const x of [-0.065, 0.065]) { const l = new THREE.Mesh(BOX, GLASS_M); l.scale.set(0.11, 0.09, 0.02); l.position.set(x, 1.915, 0.262); g.add(l); }
+    box(0.3, 0.025, 0.025, "#222222", 0, 1.965, 0.262, g);
+    const strap = box(0.06, 1.05, 0.03, "#7a4f28", 0, 1.2, 0.215, g); strap.rotation.z = 0.62;
+    box(0.3, 0.26, 0.12, "#8a5a3a", 0.25, 0.86, 0.27, g); box(0.3, 0.06, 0.13, "#f2b01e", 0.25, 0.95, 0.27, g);
+    box(0.24, 0.03, 0.17, "#fffaf2", 0, -0.6, 0.12, w.arms[1]);
+  },
+  gus(w, g) {   // straw hat, overalls over a shirt, white beard, a broom
+    box(0.82, 0.22, 0.42, "#e8dcc0", 0, 1.5, 0, g); for (const x of [-0.25, 0.25]) box(0.07, 0.07, 0.03, "#f2b01e", x, 1.36, 0.21, g);
+    cyl(0.56, 0.03, "#e8c56a", 0, 2.1, 0, g); cyl(0.26, 0.18, "#e8c56a", 0, 2.2, 0, g); cyl(0.265, 0.05, "#c8553d", 0, 2.14, 0, g);
+    box(0.42, 0.2, 0.08, "#f2f2f2", 0, 1.67, 0.25, g); box(0.3, 0.06, 0.05, "#f2f2f2", 0, 1.77, 0.27, g);
+    const b = new THREE.Group(); b.position.set(0, 0.95, 0.42); b.rotation.x = 0.5; g.add(b); w.broom = b;
+    box(0.05, 1.4, 0.05, "#a07040", 0, -0.45, 0, b); box(0.42, 0.18, 0.12, "#d8b25a", 0, -1.18, 0, b);
+  },
+  ziggy(w, g) {   // backwards cap, headphones, hood, white sneakers
+    cyl(0.27, 0.14, "#e5534b", 0, 2.12, 0, g); box(0.36, 0.04, 0.2, "#e5534b", 0, 2.07, -0.3, g);
+    box(0.6, 0.05, 0.07, "#23303b", 0, 2.21, 0, g); for (const x of [-0.29, 0.29]) { cyl(0.11, 0.09, "#23303b", x, 1.88, 0, g, 0, Math.PI / 2); cyl(0.07, 0.1, "#ffd35a", x * 1.03, 1.88, 0, g, 0, Math.PI / 2); }
+    box(0.56, 0.18, 0.12, "#7a36b0", 0, 1.62, -0.24, g);
+    for (const l of w.legs) box(0.42, 0.12, 0.5, "#ffffff", 0, -0.76, 0.04, l);
+  },
+  penny(w, g) {   // a striped shirt, pigtails, a red balloon
+    for (const y of [0.98, 1.2, 1.42]) box(0.82, 0.08, 0.42, "#e5534b", 0, y, 0, g);
+    box(0.54, 0.12, 0.54, "#d2642a", 0, 2.07, 0, g); box(0.54, 0.3, 0.08, "#d2642a", 0, 1.93, -0.25, g); for (const x of [-0.32, 0.32]) ball(0.12, "#d2642a", x, 1.95, -0.1, g);
+    const b = new THREE.Group(); b.position.set(-0.62, 0.85, 0.05); g.add(b); w.balloon = b;
+    box(0.015, 2, 0.015, "#ffffff", 0, 1, 0, b); ball(0.34, "#e5534b", 0, 2.25, 0, b, 1, 1.2, 1);
+  },
+};
+function townTag(name, color) {   // their name in their colour, with a speech bubble over it
+  const c = document.createElement("canvas"); c.width = 256; c.height = 160; const g = c.getContext("2d");
+  g.font = "800 30px system-ui, sans-serif"; const w = Math.min(250, g.measureText(name).width + 32);
+  g.fillStyle = "#ffffff"; g.beginPath(); g.roundRect((256 - w) / 2 - 3, 103, w + 6, 50, 25); g.fill();
+  g.fillStyle = color; g.beginPath(); g.roundRect((256 - w) / 2, 106, w, 44, 22); g.fill();
+  g.fillStyle = "#ffffff"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 128, 129);
+  g.fillStyle = "#ffffff"; g.strokeStyle = color; g.lineWidth = 5; g.beginPath(); g.roundRect(94, 8, 68, 50, 22); g.moveTo(118, 58); g.lineTo(128, 78); g.lineTo(138, 58); g.fill(); g.stroke();
+  g.fillStyle = "#ffffff"; g.fillRect(116, 52, 24, 9); g.fillStyle = color; for (const x of [111, 128, 145]) { g.beginPath(); g.arc(x, 33, 6, 0, TAU); g.fill(); }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(3.6, 2.25, 1); s.renderOrder = 5; return s;
+}
+const RPS = ["Rock", "Paper", "Scissors"];
+function rpsNode(n) { return { say: [pick(["Rock, paper, scissors...", "Ready? Rock, paper, scissors..."])], opts: RPS.map((r, i) => [r, () => rpsGo(n, i)]) }; }
+function rpsGo(n, i) {
+  const j = Math.floor(Math.random() * 3), r = (i - j + 3) % 3;   // 0 a tie, 1 I win, 2 they win
+  if (r === 1) emitConfetti(n.x, n.y + 2.6 * n.s, n.z, 40, 2.5, 5); else if (r === 2) n.dance = 1.6;
+  return { say: [RPS[j] + "!", pick(r === 0 ? ["A tie!", "Great minds think alike!"] : r === 1 ? n.rpsLose : n.rpsWin)], opts: [["Again!", "rps"], ["Something else", "menu"]] };
+}
+const fastest = () => Object.values(SPECIES).reduce((a, b) => (b.speed > a.speed ? b : a)).name;
+let hopFor = 0;
+// where Penny hides in hide and seek: around the plaza, clear of the buildings and rings
+const HIDES = [[-14, -16], [16, -16], [22, -4], [-22, 20], [12, 33], [-12, 31], [-40, -14], [24, -19], [-18, -2], [40, 12]];
+const TOWN = [
+  {
+    id: "hazel", name: "Hazel", color: "#e5739d", x: SHOP_B.x - 3.4, z: SHOP_B.z + 5.3, yaw: 0, s: 1, idle: "shop", cps: 42,
+    look: { skin: "#e3b089", shirt: "#e5739d", pants: "#7a5a6a", blush: true },
+    more: ["Anything else, dear?", "What else can I do for you?"],
+    menu: [["Show me the eggs", () => openShop("egg")], ["Which egg is best?", "best"], ["Where do the eggs come from?", "where"], ["Bye", "bye"]],
+    says: {
+      hello: { say: ["Oh! A customer!", "Welcome to the Egg Shop, {name}. Every egg in here is warm and ready to hatch."], opts: "menu" },
+      again: { say: [() => pick(["Back for another egg, {name}?", "Hello again, {name}!", "Shh... I think one of them just wiggled."])], opts: "menu" },
+      best: { say: ["Basic Eggs are cheap and cheerful.", "Golden Eggs never hatch a Common, and every so often a Legendary pops out!"], opts: "menu" },
+      where: { say: ["Ha! That's a family secret.", "Let's just say a certain Phoenix owes me a favor."], opts: "menu" },
+      bye: { say: [() => pick(["Come back soon!", "Keep them warm!", "Bye bye, {name}!"])] },
+    },
+  },
+  {
+    id: "rusty", name: "Rusty", color: "#2bb3c0", x: World.MOUNT_B ? World.MOUNT_B.x + 3.7 : 0, z: World.MOUNT_B ? World.MOUNT_B.z - 5.4 : 0, yaw: Math.PI, s: 1, idle: "shop", cps: 36,
+    only: () => !!World.MOUNT_B && !!SHOP_OPEN.mount,   // the mount shop's keeper, once there's a mount shop
+    look: { skin: "#b9805a", shirt: "#e9dcc0", sleeve: "#e9dcc0", pants: "#3b5b8a" },
+    more: ["What else, partner?", "Anything else on your mind?"],
+    menu: [["Show me the pets", () => openShop("mount")], ["Which pet is fastest?", "fast"], ["Got any stories?", "story"], ["Bye", "bye"]],
+    says: {
+      hello: { say: ["Well, howdy there, partner!", "Every critter in this town, right here. Pick one and ride it out the door."], opts: "menu" },
+      again: { say: [() => pick(["Howdy again, {name}!", "Back in the saddle, I see.", "Well, look who it is!"])], opts: "menu" },
+      fast: { say: [() => `Fastest one I've got is the ${fastest()}.`, "Though a well-trained Pup has surprised me more than once."], opts: "menu" },
+      story: { say: () => pick([["Once rode a T-Rex clear across town.", "Animal control took one look and turned their van right around."], ["Had a Goat once that ate my hat.", "This here's my third hat."], ["They say there's an island so high up only the bravest fliers reach it.", "Never been myself. I get dizzy on a ladder."]]), opts: "menu" },
+      bye: { say: [() => pick(["Happy trails!", "Ride safe, partner.", "See you down the road!"])] },
+    },
+  },
+  {
+    id: "mabel", name: "Mabel", color: "#3a8ee6", x: -6.2, z: -2.8, yaw: 0.35, s: 1, idle: "sort", cps: 48,
+    look: { skin: "#8d5a3b", shirt: "#2f5d9e", sleeve: "#2f5d9e", pants: "#23395e" },
+    more: ["Anything else? Quickly now!", "What else, {name}?"],
+    menu: [["Any tips?", "tips"], ["Tell me a joke", "joke"], ["Can I have a raise?", "raise"], ["Bye", "bye"]],
+    says: {
+      hello: { say: ["Hey you! Yes, you!", "We've got parcels stacked to the ceiling. Grab some from the gold ring and get them out the door!"], opts: "menu" },
+      again: { say: [() => pick(["Back already? Splendid.", "Busy day, {name}. Busy, busy day.", "Those parcels won't deliver themselves!"])], opts: "menu" },
+      tips: { say: () => [pick(["Parcels for the floating islands pay double. You'll want something with wings.", "Animal control only bothers couriers carrying parcels. Keep your head down.", "The further away the house, the more it pays.", "Wanted stars make you easier to spot, but each one adds to your delivery pay.", "Start a contract at the board and the whole town pitches in."])], opts: "menu" },
+      joke: { say: () => pick([["What do you call a dinosaur that delivers mail?", "A Postosaurus!"], ["What did the stamp say to the envelope?", "Stick with me and we'll go places!"], ["What's a cat's favorite thing to deliver?", "Purr-cels!"], ["Why did the parcel go to school?", "To get a little more address-ucation!"]]), opts: "menu" },
+      raise: { say: ["A raise? Ha!", "Train that pet of yours and deliver faster. There's your raise."], opts: "menu" },
+      bye: { say: [() => pick(["Off you go!", "Mind the mailboxes!", "Deliver safely!"])] },
+    },
+  },
+  {
+    id: "gus", name: "Gus", color: "#5a8f3e", x: 7.5, z: -2.6, yaw: -0.4, s: 1, idle: "sweep", wander: 2.5, speed: 0.6, cps: 30,
+    look: { skin: "#f0c8a8", shirt: "#4f7f3a", sleeve: "#e8dcc0", pants: "#4f7f3a" },
+    more: ["Anything else, young one?", "Hm? Something else?"],
+    menu: [["How's the weather?", "weather"], ["Tell me a story", "story"], ["Need a hand?", "help"], ["Bye", "bye"]],
+    says: {
+      hello: { say: ["Hm? Oh, hello there.", "Don't mind me. Just keeping the plaza tidy."], opts: "menu" },
+      again: { say: [() => pick(["Ah, {name}. Good to see you.", "Back again? Mind the dust.", "Hello, hello."])], opts: "menu" },
+      weather: { say: () => skyNow.rain > 0.2 ? ["Wet one today.", "Good for the flowers. Bad for the paper."] : skyNow.day < 0.3 ? ["Clear night. Look at all those stars.", "Best time for a quiet sweep."] : ["Lovely day for it.", "Not a cloud in the sky... well, a few hundred. We do float, after all."], opts: "menu" },
+      story: { say: () => pick([["I once found a parcel addressed to the moon.", "Still have it. Haven't met a pet that flies that high."], ["Forty years I've swept this plaza.", "Found a lot of feathers. Found a Dragon scale once, too."], ["Back in my day we delivered on foot.", "Uphill. Both ways. On a floating island!"]]), opts: "menu" },
+      help: { say: ["Kind of you to offer.", "Just keep that confetti off my clean plaza, eh?"], opts: "menu" },
+      bye: { say: [() => pick(["Take care now.", "Mind the cliffs.", "Off you go, then."])] },
+    },
+  },
+  {
+    id: "ziggy", name: "Ziggy", color: "#a352e0", x: -13, z: 9, yaw: 1.2, s: 1, idle: "groove", wander: 3.5, speed: 1.6, cps: 60,
+    look: { skin: "#c99070", shirt: "#8e44c9", sleeve: "#8e44c9", pants: "#2b2f36" },
+    more: ["What else, what else?", "Yo, anything else?"],
+    menu: [["Dance with me!", "dance"], ["Rock, paper, scissors", "rps"], ["What are you listening to?", "music"], ["Bye", "bye"]],
+    rpsWin: ["Ha! Gotcha!", "Too easy!"], rpsLose: ["No way! You're good!", "Okay, okay, you got me."],
+    says: {
+      hello: { say: ["Yo! Can you hear it?", "The beat! The whole town's got a beat!"], opts: "menu" },
+      again: { say: [() => pick(["Yo yo yo, {name}!", "Back for more moves?", "My favorite courier!"])], opts: "menu" },
+      dance: (n) => { n.dance = 5; hopFor = 4.5; emitSparks(n.x, n.y + 2.2, n.z, 24, 3, ["#a352e0", "#ffd35a", "#ffffff"], 1, 1); return { say: ["Yeah! Let's go!", "Look at you go, {name}!"], opts: "menu" }; },
+      rps: rpsNode,
+      music: { say: () => pick([["Lo-fi delivery beats. Very chill.", "Perfect for long rides."], ["Mostly just the sound of mailboxes clanking.", "It's a whole vibe."]]), opts: "menu" },
+      bye: { say: [() => pick(["Stay funky!", "Peace!", "Keep it moving!"])] },
+    },
+  },
+  {
+    id: "penny", name: "Penny", color: "#e5534b", x: 7, z: 16, yaw: -2.6, s: 0.72, idle: "bounce", wander: 5, speed: 2.4, cps: 55,
+    look: { skin: "#f3d2b5", shirt: "#ffd35a", pants: "#3a8ee6", blush: true },
+    more: ["What now? What now?", "Wanna do something else?"],
+    menu: [["High five!", "high5"], ["Hide and seek!", "hide"], ["What's your favorite pet?", "fav"], ["Bye", "bye"]],
+    rpsWin: ["I win!"], rpsLose: ["Aww!"],
+    says: {
+      hello: { say: ["Hi! Hi! Is that your pet?", "It's SO cool. When I grow up I'm gonna ride a Dragon!"], opts: "menu" },
+      again: { say: [() => pick(["{name}! You came back!", "Hi again!", "Yay, it's you!"])], opts: "menu" },
+      found: { say: ["Aww, you found me!", "You're really good at this!"], opts: "menu" },
+      high5: (n) => { n.high5 = 1.4; setTimeout(() => emitSparks(n.x, n.y + 2.4 * n.s, n.z, 20, 3, ["#ffd35a", "#ffffff"], 0.7, 1), 300); return { say: ["Up high!", "Woo! Best high five ever!"], opts: "menu" }; },
+      hide: { say: ["Okay! Close your eyes and count to ten!", "No peeking!"], then: (n) => blink(() => { const [hx, hz] = pick(HIDES.filter(([x, z]) => hyp(x - n.x, z - n.z) > 10)); n.x = n.tx = n.hx = hx; n.z = n.tz = n.hz = hz; n.hidden = true; n.wait = 0; }) },
+      fav: { say: () => ["Ummm...", `The ${pick(Object.values(SPECIES)).name}! No wait... all of them!`], opts: "menu" },
+      bye: { say: [() => pick(["Bye bye!", "See ya later, alligator!", "Come play again!"])] },
+    },
+  },
+];
+// opening a shop from its keeper (the mount shop's opener comes with the mount shop)
+const SHOP_OPEN = { egg: () => show("p-shop") };
+function openShop(kind) { endTalk(); SHOP_OPEN[kind](); return null; }
+for (const n of TOWN) {
+  if (n.only && !n.only()) { n.off = true; continue; }
+  Object.assign(n, { hx: n.x, hz: n.z, home: [n.x, n.z], tx: n.x, tz: n.z, wait: Math.random() * 3, talks: 0, ph: Math.random() * 10, dance: 0, high5: 0, wave: 0, waved: false, cool: 0, walking: false, y: terrain(n.x, n.z), face: n.yaw });
+  n.w = courierModel(n.look.shirt, false, n.look); DRESS[n.id](n.w, n.w.g);
+  n.tag = townTag(n.name, n.color); n.tag.position.y = 3.05; n.w.g.add(n.tag);
+  n.w.g.scale.setScalar(n.s); n.w.g.position.set(n.x, n.y, n.z); n.w.g.rotation.y = n.yaw; n.w.g.traverse((o) => { o.userData.npc = n; }); scene.add(n.w.g);
+}
+const folk = TOWN.filter((n) => !n.off);
+function nearFolk() { let best = null, bd = TALK_RANGE; if (me.inst) return null; for (const n of folk) { const d = hyp(n.x - me.x, n.z - me.z); if (d < bd && Math.abs(n.y - me.y) < 3 && n.cool <= 0) { bd = d; best = n; } } return best; }
+// (owner, 2026-11-09) pets bump into them rather than through them (but can always step away)
+function folkBlock(x, z, y) { for (const n of folk) { const r = 0.9, d = hyp(x - n.x, z - n.z); if (d < r && d < hyp(me.x - n.x, me.z - n.z) && y < n.y + 2.2 * n.s) return true; } return false; }
+function folkHit(px, py) {
+  if (me.inst) return null;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  for (const h of ray.intersectObjects(folk.map((n) => n.w.g), true)) { const n = h.object.userData.npc; if (n && !h.object.isSprite && hyp(n.x - me.x, n.z - me.z) < 14 && n.cool <= 0) return n; }
+  return null;
+}
+function folkStep(dt) {
+  if (hopFor > 0) { hopFor -= dt; const fl = floorAt(me.x, me.z, me.y); if (me.vy === 0 && me.y - fl < 0.05 && moveKind() !== "fly" && !me.foot) me.vy = 5.5; }
+  for (const n of folk) {
+    const w = n.w, g = w.g, t = clock + n.ph, dme = hyp(me.x - n.x, me.z - n.z); g.visible = !me.inst; if (me.inst) continue;
+    n.cool -= dt; n.dance -= dt; n.high5 -= dt; n.wave -= dt;
+    const talking = talk && talk.n === n;
+    // walking about (Penny hides where she's put until she's found)
+    n.walking = false;
+    if (n.wander && !talking && !n.hidden) {
+      if (n.wait > 0) n.wait -= dt;
+      else {
+        const dx = n.tx - n.x, dz = n.tz - n.z, d = hyp(dx, dz);
+        if (d < 0.15) {
+          for (let k = 0; k < 8; k++) { const a = Math.random() * TAU, r = Math.random() * n.wander, x = n.hx + Math.cos(a) * r, z = n.hz + Math.sin(a) * r; if (!blocked(x, z, 0)) { n.tx = x; n.tz = z; break; } }
+          n.wait = 2 + Math.random() * 4;
+        } else { const s2 = Math.min(d, dt * n.speed); n.x += (dx / d) * s2; n.z += (dz / d) * s2; n.face = Math.atan2(dx, dz); n.walking = true; }
+      }
+    }
+    if (talking) n.face = Math.atan2(me.x - n.x, me.z - n.z);
+    else if (!n.walking && dme < 7 && !n.hidden) n.face = Math.atan2(me.x - n.x, me.z - n.z);
+    else if (!n.walking && !n.wander) n.face = n.yaw;
+    g.rotation.y = lerpYaw(g.rotation.y, n.face, Math.min(1, dt * 5));
+    if (n.dance > 0) g.rotation.y += Math.sin(t * 3) * dt * 2;
+    // a wave when someone first comes near
+    if (dme < 9 && !n.waved && !talking) { n.waved = true; n.wave = 1.6; } else if (dme > 16) n.waved = false;
+    // how they stand about, walk, talk and play
+    let la = Math.sin(t * 1.6) * 0.04, ra = -la, laz = 0, raz = 0, ll = 0, rl = 0, bob = 0, hx = 0, hy = 0;
+    if (n.idle === "sort") { ra = -1.05 + Math.sin(t * 2) * 0.08; la = -0.7; hx = 0.18 + Math.sin(t * 0.7) * 0.05; }
+    else if (n.idle === "groove") { const b = Math.sin(t * 4.2); bob = Math.abs(b) * 0.06; la = -0.35 + b * 0.45; ra = -0.35 - b * 0.45; hx = Math.sin(t * 8.4) * 0.1; }
+    else if (n.idle === "bounce") { bob = Math.max(0, Math.sin(t * 5)) * 0.1 * (Math.sin(t * 0.9) > 0.3 ? 1 : 0); hy = Math.sin(t * 1.3) * 0.25; }
+    if (n.walking) { const sw = Math.sin(t * 9) * 0.7; ll = sw; rl = -sw; if (n.idle !== "sweep") { la = -sw; ra = sw; } }
+    if (n.idle === "sweep") { const s = Math.sin(t * 2.4); la = ra = -0.75; laz = raz = s * 0.18; if (w.broom) w.broom.rotation.z = s * 0.35; if (talking) { la = ra = -0.2; if (w.broom) w.broom.rotation.z = 0; } }
+    if (talking && talk.shown < (talk.q[talk.i] || "").length) { hx = Math.sin(t * 11) * 0.07; ra = -0.55 + Math.sin(t * 3) * 0.25; }
+    if (n.wave > 0) { ra = -2.7; raz = Math.sin(t * 12) * 0.35; }
+    if (n.high5 > 0) { ra = -2.95; raz = 0; bob = 0.08; }
+    if (n.dance > 0) { const b = Math.sin(t * 8); la = -2.6 + b * 0.4; ra = -2.6 - b * 0.4; ll = b * 0.3; rl = -b * 0.3; bob = Math.abs(b) * 0.15; hx = b * 0.12; }
+    w.arms[0].rotation.set(la, 0, laz); w.arms[1].rotation.set(ra, 0, raz); w.legs[0].rotation.x = ll; w.legs[1].rotation.x = rl; w.head.rotation.set(hx, hy, 0);
+    if (w.balloon) { w.balloon.rotation.set(Math.sin(t * 1.1) * 0.12, 0, Math.sin(t * 1.4) * 0.12); }
+    n.y = terrain(n.x, n.z); g.position.set(n.x, n.y + bob * n.s, n.z);
+    n.tag.visible = !talk && !building && dme < 40; n.tag.position.y = 3.05 + Math.sin(t * 2.5) * 0.06;
+  }
+}
+// the talk: what they say, a line at a time, then the answers
+let talk = null;
+const talkEl = $("talk"), talkWho = $("tkwho"), talkText = $("tktext"), talkOpts = $("tkopts"), shot = { k: 0, n: null, side: 1 }, SH = {};
+function startTalk(n) {
+  if (talk || building || !loggedIn || n.cool > 0) return;
+  closePanels(); if (chatBar.style.display === "flex") closeChat();
+  joy.x = joy.y = 0; keys.clear(); hopFor = 0;
+  me.yaw = Math.atan2(n.x - me.x, n.z - me.z);
+  talk = { n, q: [], i: 0, shown: 0, hold: 0, opts: null, then: null };
+  // the camera comes round from whichever side it's nearer
+  const toMe = Math.atan2(me.x - n.x, me.z - n.z); shot.n = n; shot.yaw = toMe;
+  const c = camera.position, side = (k) => hyp(n.x + Math.sin(toMe + 0.75 * k) * 3 - c.x, n.z + Math.cos(toMe + 0.75 * k) * 3 - c.z); shot.side = side(1) < side(-1) ? 1 : -1;
+  talkWho.textContent = n.name; talkWho.style.background = n.color;
+  document.body.classList.add("talking"); talkEl.style.display = "block";
+  const first = n.hidden ? "found" : n.talks++ ? "again" : "hello";
+  if (n.hidden) { n.hidden = false; n.hx = n.home[0]; n.hz = n.home[1]; }
+  goTalk(first);
+}
+function goTalk(target) {
+  const n = talk && talk.n; if (!n) return;
+  let node = typeof target === "function" ? target(n) : target;
+  if (!talk) return;   // the answer ended the talk itself (opening a shop)
+  if (typeof node === "string") node = node === "menu" ? { say: [pick(n.more)], opts: "menu" } : n.says[node];
+  if (typeof node === "function") node = node(n);
+  if (!node) return endTalk();
+  const say = typeof node.say === "function" ? node.say(n) : node.say || [];
+  talk.q = say.map((l) => (typeof l === "function" ? l(n) : l).replace(/\{name\}/g, save.name));
+  talk.opts = node.opts === "menu" ? n.menu : node.opts || null; talk.then = node.then || null; talk.i = -1;
+  nextLine();
+}
+function nextLine() {
+  const t = talk; t.i++; talkOpts.innerHTML = ""; talkEl.classList.remove("more");
+  if (t.i >= t.q.length) { if (t.opts) return showOpts(); return endTalk(t.then); }
+  const line = t.q[t.i]; t.shown = 0; t.hold = 0; t.cps = Math.max(t.n.cps || 45, line.length / TYPE_MAX); talkText.textContent = "";
+}
+function lineDone() {
+  const t = talk; talkText.textContent = t.q[t.i];
+  if (t.i === t.q.length - 1 && t.opts) showOpts(); else talkEl.classList.add("more");
+}
+function showOpts() {
+  talkOpts.innerHTML = ""; talkEl.classList.remove("more");
+  talk.opts.forEach(([label, target], k) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn ghost small"; b.innerHTML = touchy ? "" : `<kbd>${k + 1}</kbd>`; b.append(document.createTextNode(label));
+    b.onclick = (e) => { e.stopPropagation(); goTalk(target); }; talkOpts.appendChild(b);
+  });
+}
+function talkStep(dt) {
+  const t = talk; if (!t || t.i < 0 || t.i >= t.q.length) return;
+  const line = t.q[t.i];
+  if (t.shown < line.length) { const was = Math.floor(t.shown); t.shown = Math.min(line.length, t.shown + dt * t.cps); if (Math.floor(t.shown) !== was) talkText.textContent = line.slice(0, Math.floor(t.shown)); if (t.shown >= line.length) lineDone(); return; }
+  if (t.i < t.q.length - 1 || !t.opts) { t.hold += dt; if (t.hold >= LINE_WAIT) nextLine(); }
+}
+function talkNext() {   // a click or tap: finish the line, or on to the next
+  const t = talk; if (!t || t.i < 0 || t.i >= t.q.length) return;
+  const line = t.q[t.i];
+  if (t.shown < line.length) { t.shown = line.length; lineDone(); return; }
+  if (t.i < t.q.length - 1 || !t.opts) nextLine();
+}
+function talkPick(k) { if (talk && talk.opts && talkOpts.children[k]) talkOpts.children[k].click(); }
+function endTalk(then) {
+  const t = talk; if (!t) return; talk = null; t.n.cool = 0.6;
+  document.body.classList.remove("talking"); talkEl.style.display = "none"; talkOpts.innerHTML = ""; talkText.textContent = "";
+  if (then) then(t.n);
+}
+talkEl.addEventListener("click", talkNext);
+// the screen blinks to black and back (Penny hiding)
+function blink(fn) { const f = $("fade"); f.classList.add("on"); setTimeout(fn, 450); setTimeout(() => f.classList.remove("on"), 1100); }
+// the camera close on them, from the front and a little to one side, their head above the middle of the screen
+function shotAt(n) {
+  const a = shot.yaw + 0.75 * shot.side, D = 2.3 + 1.4 * n.s;
+  SH.cx = n.x + Math.sin(a) * D; SH.cz = n.z + Math.cos(a) * D; SH.cy = n.y + 1.95 * n.s + 0.25;
+  SH.lx = n.x; SH.ly = n.y + 1.5 * n.s; SH.lz = n.z;
 }
 // each plot: a pale outline on the ground and a sign with its owner's name
 const plotLines = PLOTS.map((p) => {
@@ -1612,6 +1922,8 @@ function buildTap(px, py) {
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 function tapAt(px, py) {
   if (building) return buildTap(px, py);
+  if (talk) { talkNext(); return true; }
+  const fk = folkHit(px, py); if (fk) { startTalk(fk); return true; }
   // tap a playpen on your plot to choose its pet
   if (myPlot >= 0 && onMyPlot(4)) {
     const o = plotOrigin(PLOTS[myPlot]);
@@ -1637,7 +1949,9 @@ function ride_lift(l) {   // up to my plot (in front of it), or back down to the
 }
 function context() {
   const a = [], pl = netOk ? nearPlayer() : null;
+  if (talk) return a;
   if (pl !== null) { const o = others.get(pl); a.push({ key: "F", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
+  const fk = pl === null && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "F", label: fk.name, fn: () => startTalk(fk) });
   const l = loggedIn && nearLift(); if (l) a.push({ key: "E", label: l.to === "plaza" ? "▼" : "Home ▲", fn: () => ride_lift(l) });
   return a;
 }
@@ -1737,6 +2051,7 @@ function step(dt) {
     if (keys.has("KeyW") || keys.has("ArrowUp")) jy -= 1; if (keys.has("KeyS") || keys.has("ArrowDown")) jy += 1;
     if (keys.has("KeyA") || keys.has("ArrowLeft")) jx -= 1; if (keys.has("KeyD") || keys.has("ArrowRight")) jx += 1;
   }
+  if (talk) jx = jy = 0;
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
@@ -1752,7 +2067,7 @@ function step(dt) {
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
-      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y)) return false;
+      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || (!me.inst && folkBlock(x, z, me.y))) return false;
       if (kind === "fly") return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
@@ -1835,7 +2150,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); poiStep(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  folkStep(dt); talkStep(dt); cutaway(); poiStep(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && !talk && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -1850,4 +2165,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
