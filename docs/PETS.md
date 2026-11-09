@@ -332,26 +332,36 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Each player in a room gets a plot when they join (the server decides): VIPs one of the VIP island's two; then the
   three near the middle, first come first served; then one of the five around town at random; then the extra island.
   It's freed when they leave. **VIP** is given or taken by admins in the Admin panel (from their next login).
-- Everyone's house stands on their plot and **everyone sees it** (the server sends each house, and changes to it).
+- **Outside (owner, 2026-11-09):** every lot with an owner has one of **5 ready-made houses**: Cottage, Cabin, Modern,
+  Barn or Tower, chosen by its owner (Build, outside on your lot: the 5 names; free to change). **Everyone sees it** (the
+  server sends each house, and changes). They're solid, and their roofs can be walked on. Its front door faces the
+  front of the lot.
+- **Inside (owner, 2026-11-09):** at the front door, **E (Enter)** takes you inside: your own, or a party member's.
+  Inside is the house's own space: a 20 x 20 m floor and the front door, which are always there, with a black void
+  round them; whoever is in the same house sees each other there (the server passes on whose house you're in), and
+  nobody outside sees them. **E (Leave)** at the front door inside takes you back out in front of it. Pushing against
+  walls for 3 s without getting anywhere puts you back by the front door.
 - **Lifts:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your plot; lifts on the
   VIP and extra islands (E or ▼) bring you back to the plaza.
-- **Building** (Build, on your own plot; the camera rises over it): a bar of pieces with prices: Floor 20, Wall 30,
-  Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100, Shelf 90,
-  Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colours. The chosen piece follows the pointer on the level you're
-  building (green, or red when you can't afford it): floors, roofs, slopes and stairs snap to a 4 m square of the 5 x 5
-  grid, walls, windows and doors to the nearest edge of one, furniture to half a metre; a tap puts it down (the same
-  structural piece in the same place isn't doubled). ⟳ (or R) turns it; ▲ ▼ change the level (3 floors of 4.5 m);
-  the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
-  price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
-  windows and a roof).
-- **On any plot** (owner, 2026-11-09: in its yard too, anyone's plot, up to 1.5 m over its top level; flying higher you keep riding), and **inside a house** elsewhere (under a ceiling or roof), you're off your pet, walking (5.5 m/s); walls (4.5 m)
-  block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
-  see in. Others see you walking too.
-- **Shut in** (owner, 2026-11-09): pushing on for 1.5 s without getting anywhere, in a room with no doorway or open side to the plot and no stairs or slope, puts you out in front of the plot (not on a flier, which can fly up).
-- **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one on your plot to choose its pet (not
+- **Building (owner, 2026-11-09)** (Build, inside your own house; Done or ✕ stops): a bar of pieces with prices: Floor
+  20, Wall 30, Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100,
+  Shelf 90, Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colors. The chosen piece follows the pointer **on the floor
+  you're on** (no level picker), shown **as it will look**, see-through (reddish when you can't afford it), anywhere and
+  at any angle (**freeform**, no grid): R or ⟳ turns it 15° (Shift+R back); a wall brought within 0.9 m of another
+  wall's end, or a tile of a tile's side, meets it. A tap puts it down. Floors, roofs, slopes and stairs are 4 x 4 m,
+  walls, windows and doors 4 m long; walls are 5.5 m high (3 floors of 5.5 m). **Windows** look out on a view chosen in
+  the bar: Meadow, Beach, Mountains, Night sky, Forest or City (a selected window's view can be changed too).
+  **Delete:** what you point at shows red; a tap selects it (stronger red); **Del** (the key, or the Del button)
+  removes it for half its price. **Paint** recolors what you tap. Up to 300 pieces. The floors above yours (and the
+  roof) hide while you're inside, and a wall between the camera and you goes see-through. Everyone starts with a 12 x
+  12 m room round the front door, two windows and a roof.
+- **On a player's lot** (owner, 2026-11-09: anyone's lot with a house, its yard too, up to 16 m over it; flying higher
+  you keep riding) and inside houses you're off your pet, walking (5.5 m/s); others see you walking too.
+- **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one in your house to choose its pet (not
   the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 3.5 / 5.5 / 8 by
-  rarity, +5% per level), up to 8 hours' worth, collected when you come onto your plot. A pet in a playpen can't be
+  rarity, +5% per level), up to 8 hours' worth, collected when you come into your house. A pet in a playpen can't be
   ridden, traded or sent to the farm.
+- Houses built on the old 5 x 5 grid (before 2026-11-09) moved inside as they were (each piece where it stood, turned as it was), behind the front door; their lot shows the Cottage.
 - Homes from before plots (bought houses with rooms inside) became the starter house, their pet beds and pens moved
   into it (with their pets), and what was paid for the house, rooms and windows given back, once.
 
@@ -397,6 +407,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
+- Building on the lot itself on a 5 x 5 grid with a level picker (owner, 2026-11-09): replaced by the 5 houses outside and freeform building inside.
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Space as a single rise per press on a flier (owner, 2026-11-09): replaced by holding Space / Shift.

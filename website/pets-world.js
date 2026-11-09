@@ -135,7 +135,7 @@ function flatten(x, z, yaw, hw, hd, h) {
 // seen by everyone: 3 near the middle of town (first come, first served), 5 around town (given out at random), 2 on
 // an island above the middle (VIP), and 6 on an island off the edge that appears when a room has more than 10 players.
 // The land under a town plot is flattened and kept clear of houses and trees. ----
-export const PLOT = 20, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 4.5;
+export const PLOT = 20, CELL = 4, GRID = 5, LEVELS = 3, LEVEL_H = 5.5;   // (owner, 2026-11-09) taller walls, so the camera fits
 export const PLOTS = [];
 {
   const clear = (x, z, r) => { for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) if (roadDist(x + a * r, z + b * r) < 5.6 || !inside(x + a * r, z + b * r, 6)) return false; return roadDist(x, z) > 12; };
@@ -412,15 +412,19 @@ function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.l
 // ---- a player's data (owner, 2026-11-08: saved on the server) and house rules, the same on both sides ----
 // data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,
 //   shirt, settings: { followArrowWhenEmpty }, home: { pieces: [...] } }
-// (owner, 2026-11-08: houses on plots, built however you like) a house is a list of pieces on a 5 x 5 grid of 4 m
-// squares, up to 3 floors (levels) of 4.5 m:
-//   cell pieces { k: floor | roof | slope | stairs, x, z (square 0-4), l (level 0-2), r (quarter turns), c (colour) }
-//   edge pieces { k: wall | window | door, x, z, l, s (side of the square: 0 west, 1 east, 2 south, 3 north), c }
-//   furniture   { k: bed | pen | chair | shelf | table | cabinet | plant | rug | poster, x, z (metres 0-20, half-metre
-//                 steps), l, r, c, pet? (a pen's pet), since? }
+// (owner, 2026-11-09: houses rebuilt) outside, every lot has one of 5 ready-made houses (ext); its front door leads
+// inside, to the house's own space (a 20 x 20 m floor with a black void around it), built freely: pieces anywhere,
+// at any angle, up to 3 floors (levels) of 5.5 m. The floor and the front door (in the middle of the front edge, z 0)
+// are always there and aren't pieces.
+//   { k, x, z (metres 0-20), l (level 0-2), a (degrees 0-359), c (colour), w? (a window's view 0-5), pet?, since? }
+//   floor | roof | slope | stairs: a 4 x 4 m tile; wall | window | door: 4 m long; the rest furniture
+// (Houses from before, on a 5 x 5 grid of 4 m squares, are moved over as they were: home.v 2 marks the new kind.)
+export const EXTERIORS = ["Cottage", "Cabin", "Modern", "Barn", "Tower"];
+export const VIEWS = ["Meadow", "Beach", "Mountains", "Night sky", "Forest", "City"];
+export const HOME_SIZE = 20, FRONT_DOOR = { x: 10, z: 0 };
 export const PIECES = {
-  floor: { p: 20, t: "cell" }, roof: { p: 25, t: "cell" }, slope: { p: 35, t: "cell" }, stairs: { p: 80, t: "cell" },
-  wall: { p: 30, t: "edge" }, window: { p: 50, t: "edge" }, door: { p: 60, t: "edge" },
+  floor: { p: 20, t: "tile" }, roof: { p: 25, t: "tile" }, slope: { p: 35, t: "tile" }, stairs: { p: 80, t: "tile" },
+  wall: { p: 30, t: "wall" }, window: { p: 50, t: "wall" }, door: { p: 60, t: "wall" },
   bed: { p: 400, t: "free" }, pen: { p: 800, t: "free" }, chair: { p: 60, t: "free" }, shelf: { p: 90, t: "free" }, table: { p: 100, t: "free" },
   cabinet: { p: 120, t: "free" }, plant: { p: 40, t: "free" }, rug: { p: 50, t: "free" }, poster: { p: 30, t: "free" },
 };
@@ -431,15 +435,21 @@ export const petCap = (d) => HOME.baseCap + HOME.perBed * (d.home ? d.home.piece
 export const penPets = (d) => new Set(d.home ? d.home.pieces.filter((t) => t.k === "pen" && t.pet).map((t) => t.pet) : []);
 // coins a minute a pet earns in a playpen: by rarity, more with level; it banks up to 8 hours
 export const PEN_RATE = [2, 3.5, 5.5, 8], PEN_MAX_H = 8;
-// a house to start with: a 3 x 3 room with a door, two windows and a roof
+// a house to start with: a 12 x 12 m room round the front door, two windows, a roof
 export function starterHouse() {
   const ps = [];
-  for (let x = 1; x <= 3; x++) for (let z = 1; z <= 3; z++) { ps.push({ k: "floor", x, z, l: 0, r: 0, c: 10 }); ps.push({ k: "roof", x, z, l: 0, r: 0, c: 7 }); }
-  for (let i = 1; i <= 3; i++) {
-    ps.push({ k: i === 2 ? "door" : "wall", x: i, z: 1, l: 0, s: 2, c: 0 }); ps.push({ k: i === 2 ? "window" : "wall", x: i, z: 3, l: 0, s: 3, c: 0 });
-    ps.push({ k: i === 2 ? "window" : "wall", x: 1, z: i, l: 0, s: 0, c: 0 }); ps.push({ k: "wall", x: 3, z: i, l: 0, s: 1, c: 0 });
-  }
+  for (const x of [6, 10, 14]) for (const z of [2, 6, 10]) ps.push({ k: "roof", x, z, l: 0, a: 0, c: 7 });
+  ps.push({ k: "wall", x: 6, z: 0, l: 0, a: 0, c: 0 }, { k: "wall", x: 14, z: 0, l: 0, a: 0, c: 0 });
+  for (const x of [6, 10, 14]) ps.push({ k: x === 10 ? "window" : "wall", x, z: 12, l: 0, a: 0, c: 0, ...(x === 10 ? { w: 0 } : {}) });
+  for (const z of [2, 6, 10]) { ps.push({ k: z === 6 ? "window" : "wall", x: 4, z, l: 0, a: 90, c: 0, ...(z === 6 ? { w: 2 } : {}) }); ps.push({ k: "wall", x: 16, z, l: 0, a: 90, c: 0 }); }
   return ps;
+}
+// a house from the 5 x 5 grid, piece by piece in metres
+function fromGrid(t) {
+  const ty = PIECES[t.k] && PIECES[t.k].t;
+  if (ty === "tile") return { ...t, x: (t.x | 0) * 4 + 2, z: (t.z | 0) * 4 + 2, a: ((t.r | 0) % 4) * 90 };
+  if (ty === "wall") { const [dx, dz] = [[-1, 0], [1, 0], [0, -1], [0, 1]][(t.s | 0) % 4]; return { ...t, x: (t.x | 0) * 4 + 2 + dx * 2, z: (t.z | 0) * 4 + 2 + dz * 2, a: dx ? 90 : 0 }; }
+  return { ...t, a: ((t.r | 0) % 4) * 90 };
 }
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
@@ -465,28 +475,19 @@ export function cleanData(d, species) {
       if (!at) { refund += t.k === "bed" ? HOME.bed : HOME.pen; continue; }
       pieces.push({ k: t.k, x: at[0], z: at[1], l: 0, r: 0, c: 0, pet: t.pet, since: t.since });
     }
-  } else if (H && Array.isArray(H.pieces)) pieces = H.pieces;
+  } else if (H && Array.isArray(H.pieces)) pieces = H.v === 2 ? H.pieces : H.pieces.map((t) => (t && typeof t === "object" ? fromGrid(t) : t));
   else if (!H) pieces = starterHouse();   // everyone starts with a little house
-  const out = [], seen = new Set();
+  const out = [], seen = new Set(), m = (v) => (Number.isFinite(+v) ? Math.round(Math.max(0, Math.min(HOME_SIZE, +v)) * 20) / 20 : HOME_SIZE / 2);
   for (const t of pieces) {
     if (!t || !PIECES[t.k] || out.length >= MAX_PIECES) continue;
-    const ty = PIECES[t.k].t, l = int(t.l, 0, LEVELS - 1), c = int(t.c, 0, COLORS.length - 1, 0);
-    let it;
-    if (ty === "cell") it = { k: t.k, x: int(t.x, 0, GRID - 1), z: int(t.z, 0, GRID - 1), l, r: int(t.r, 0, 3), c };
-    else if (ty === "edge") it = { k: t.k, x: int(t.x, 0, GRID - 1), z: int(t.z, 0, GRID - 1), l, s: int(t.s, 0, 3), c };
-    else {
-      const x = Number.isFinite(+t.x) ? Math.round(Math.max(0, Math.min(PLOT, +t.x)) * 2) / 2 : 10, z = Number.isFinite(+t.z) ? Math.round(Math.max(0, Math.min(PLOT, +t.z)) * 2) / 2 : 10;
-      it = { k: t.k, x, z, l, r: int(t.r, 0, 3), c };
-      if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
-    }
-    if (ty !== "free") {   // one of each structural piece per place (an edge belongs to the squares either side of it)
-      let key = it.k === "floor" || it.k === "roof" || it.k === "slope" ? "c" + it.x + "," + it.z + "," + it.l + (it.k === "floor" ? "f" : "r") : ty === "cell" ? "s" + it.x + "," + it.z + "," + it.l : null;
-      if (ty === "edge") { const [dx, dz] = [[-1, 0], [1, 0], [0, -1], [0, 1]][it.s], ex = it.x * 2 + 1 + dx, ez = it.z * 2 + 1 + dz; key = "e" + ex + "," + ez + "," + it.l; }
-      if (seen.has(key)) continue; seen.add(key);
-    }
+    const it = { k: t.k, x: m(t.x), z: m(t.z), l: int(t.l, 0, LEVELS - 1), a: Number.isFinite(+t.a) ? ((Math.round(+t.a) % 360) + 360) % 360 : (int(t.r, 0, 3) * 90), c: int(t.c, 0, COLORS.length - 1, 0) };
+    if (t.k === "window") it.w = int(t.w, 0, VIEWS.length - 1, 0);
+    if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
+    const key = [it.k, it.x, it.z, it.l, it.a].join(",");   // the very same piece twice is once
+    if (seen.has(key)) continue; seen.add(key);
     out.push(it);
   }
-  const home = { pieces: out };
+  const home = { v: 2, ext: int(H && H.ext, 0, EXTERIORS.length - 1, 0), pieces: out };
   const nextId = Math.max(int(d.nextId, 1, 1e9, 1), ...uniq.map((p) => p.id + 1));
   return {
     coins: Math.max(0, Math.min(1e9, (Number.isFinite(+d.coins) ? +d.coins : 0) + refund)), pets: uniq, ride: uniq.some((p) => p.id === d.ride) ? d.ride : uniq[0].id,
