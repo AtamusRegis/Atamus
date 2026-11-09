@@ -342,7 +342,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     for (const r of rooms) {
       const dt = Math.min(0.5, (now - r.last) / 1000); r.last = now;
       const players = [...r.players.values()];
-      for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
+      const daylight = environment.time === "auto" ? undefined : environment.time === "day";
+      for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000, daylight)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
       if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => v.kind ? [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target, r2(v.ba), r2(v.bd)] : [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second (a helicopter adds its searchlight)
       if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);

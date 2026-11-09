@@ -51,7 +51,26 @@ try {
   let changed = false;
   for (let i = 0; i < 50 && !changed; i++) { await page.waitForTimeout(100); changed = await page.evaluate(() => window.Pets.environment.weather === "snow" && window.Pets.environment.time === "night" && window.Pets.sky.snow > 0.9); }
   if (!changed) throw new Error("the snow and night settings did not reach the game");
+  await page.selectOption("#admin-weather", "auto");
+  await page.selectOption("#admin-time", "auto");
+  let restored = false;
+  for (let i = 0; i < 50 && !restored; i++) { restored = await page.evaluate(() => window.Pets.environment.weather === "auto" && window.Pets.environment.time === "auto"); if (!restored) await page.waitForTimeout(100); }
+  if (!restored) throw new Error("the automatic environment settings were not restored");
   await page.click("#p-admin .x");
+  step = "check animal-control lights by day and night";
+  const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
+  const waitForLights = async (day) => {
+    for (let i = 0; i < 50; i++) {
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      if (ready) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`animal-control lights did not turn ${day ? "off in daylight" : "on at night"}`);
+  };
+  await setSkyPhase(0.25);
+  await waitForLights(true);
+  await setSkyPhase(0.75);
+  await waitForLights(false);
   step = "check the airborne wind speed rules";
   const windFactors = await page.evaluate(() => {
     const f = window.Pets.windRideFactor;
@@ -62,10 +81,23 @@ try {
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
+  // talk to someone in town: lines type out, a click skips ahead, an answer is picked, walking away ends it
+  step = "talk to someone in town";
+  const talked = await page.evaluate(async () => {
+    const P = window.Pets, wait = (ms) => new Promise((r) => setTimeout(r, ms)), n = P.folk.find((f) => f.id === "mabel");
+    if (!n) return "Mabel isn't in town";
+    P.startTalk(n); if (!P.talk) return "the talk didn't start";
+    for (let i = 0; i < 12 && !document.querySelector("#tkopts button"); i++) { P.talkNext(); await wait(150); }
+    if (!document.querySelector("#tkopts button")) return "no answers to pick";
+    P.talkPick(1); P.talkNext(); await wait(50); if (!P.talk || !document.getElementById("tktext").textContent) return "the answer didn't go on";
+    P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
+  });
+  if (talked) problems.push(talked);
   // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
   step = "buy a pet in the mount shop";
   await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
-  await page.waitForTimeout(800);
+  await page.locator("#shopname", { hasText: "Mount Shop" }).waitFor({ timeout: 5000 });
+  await page.locator("#shopcash", { hasText: "3,000" }).waitFor({ timeout: 5000 });
   const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
   if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
   await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });

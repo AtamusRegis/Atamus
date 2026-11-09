@@ -108,6 +108,11 @@
     .card.off { opacity: .6; cursor: default; }
     #chathist { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 62px); width: min(440px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; display: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 16px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 9; font-size: 13px; }
     #chathist div { overflow-wrap: anywhere; }
+    #news { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; background: var(--card); border-radius: 22px; padding: 14px 18px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); z-index: 11; display: none; }
+    #news h2 { margin: 0 0 4px; font: 800 26px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; display: flex; justify-content: space-between; align-items: center; }
+    #news .x { border: 0; background: #e9eef3; width: 36px; height: 36px; border-radius: 50%; font: 800 18px system-ui; color: var(--ink); cursor: pointer; }
+    #news time { font: 700 13px ui-rounded, system-ui, sans-serif; opacity: .65; }
+    #news ul { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font: 600 15px/1.35 ui-rounded, system-ui, sans-serif; }
     .panel.wide { width: min(560px, calc(100vw - 24px)); }
     .panel.shop { top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(600px, calc(100vw - 24px)); max-height: min(80vh, 680px); }
     .shophead { display: flex; align-items: center; gap: 10px; }
@@ -136,6 +141,7 @@
     .pick { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; text-align: left; padding: 6px 8px; border-radius: 8px; font: 600 14px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
     .pick img { width: 28px; height: 28px; }
     .pick.on, .pick:hover { background: #fff6dc; }
+    #map { display: block; width: clamp(112px, 24vmin, 184px); height: clamp(112px, 24vmin, 184px); border-radius: 16px; border: 3px solid #fff; background: #6fb6e0; box-shadow: 0 2px 0 rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.18); pointer-events: auto; cursor: pointer; touch-action: manipulation; }
     #guide { position: fixed; left: 0; top: 0; margin-top: -18px; transform-origin: 0 50%; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 14px rgba(255,190,40,.8)); animation: glow 1.2s ease-in-out infinite; }
     #pin { position: fixed; left: 0; top: 0; margin: -54px 0 0 -20px; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 16px rgba(255,190,40,.9)); }
     #pin svg { animation: bob 1s ease-in-out infinite; }
@@ -162,6 +168,23 @@
     .bbbtn.on { background: var(--blue); color: #fff; } .bbbtn.red.on { background: var(--red); }
     .bbbtn:disabled { opacity: .4; }
     .bblevel { font: 800 16px ui-rounded, system-ui, sans-serif; min-width: 18px; text-align: center; }
+    /* (owner, 2026-11-09) talking to townsfolk: black bars slide in, the HUD steps aside, what they say types out in a box at the bottom */
+    #bars::before, #bars::after { content: ""; position: fixed; left: 0; right: 0; height: 0; background: #0b0f14; z-index: 6; pointer-events: none; transition: height .45s ease; }
+    #bars::before { top: 0; } #bars::after { bottom: 0; }
+    .talking #bars::before, .talking #bars::after { height: 9vh; }
+    #top, #side, #chatlog { transition: opacity .3s; }
+    .talking #top, .talking #side, .talking #chatlog, .talking #pin, .talking #guide { opacity: 0; pointer-events: none; }
+    .talking #side * { pointer-events: none; }
+    #talk { position: fixed; left: 50%; bottom: calc(9vh + 12px); transform: translateX(-50%); width: min(600px, calc(100vw - 24px)); z-index: 8; display: none; padding: 22px 18px 14px; border-radius: 20px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.3); cursor: pointer; animation: talkin .35s ease-out; }
+    @keyframes talkin { from { opacity: 0; transform: translate(-50%, 16px); } to { opacity: 1; transform: translateX(-50%); } }
+    #tkwho { position: absolute; top: -16px; left: 16px; padding: 5px 14px; border-radius: 999px; color: #fff; font: 800 20px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .04em; box-shadow: 0 0 0 3px #fff, 0 3px 0 3px rgba(0,0,0,.12); }
+    #tktext { min-height: 2.8em; font: 700 18px/1.4 ui-rounded, system-ui, sans-serif; overflow-wrap: anywhere; }
+    #talk.more::after { content: ""; position: absolute; right: 18px; bottom: 12px; border: 8px solid transparent; border-top: 10px solid var(--ink); border-bottom: 0; animation: bob .8s ease-in-out infinite; }
+    #tkopts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    #tkopts:empty { display: none; }
+    #tkopts .btn { flex: 1 1 auto; text-align: left; }
+    #fade { position: fixed; inset: 0; background: #0b0f14; opacity: 0; pointer-events: none; z-index: 12; transition: opacity .4s; }
+    #fade.on { opacity: 1; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -169,13 +192,14 @@
   <canvas id="gl"></canvas>
   <div id="top">
     <div>
-      <span class="pill"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="who"></span>
       <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
       <div id="party"></div>
     </div>
     <div>
+      <span class="pill" id="coinp"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="trainp" style="display:none" title="Training"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z" fill="#f2b01e"/></svg><b id="trainn"></b></span>
+      <canvas id="map"></canvas>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
       <span class="pill" id="wanted" style="display:none"></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
@@ -184,7 +208,7 @@
   </div>
   <div id="joy"><i></i></div>
   <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
-  <div class="pill" id="flykeys" style="display:none"><span><kbd>Space</kbd>Up</span><span><kbd>Ctrl</kbd>Down</span></div>
+  <div class="pill" id="flykeys" style="display:none"><span><kbd>Space</kbd>Up</span><span><kbd>Shift</kbd>Down</span></div>
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
@@ -202,6 +226,7 @@
   <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
   <div class="panel" id="p-build"><h2>Pet pen <button class="x" type="button">✕</button></h2><div id="build"></div></div>
   <div id="buildbar"></div>
+  <div id="news"><h2>What's New <button class="x" id="newsx" type="button">✕</button></h2><time id="newsd"></time><ul id="newsl"></ul></div>
   <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="chatlog"></div>
@@ -214,6 +239,9 @@
     <span id="lerr"></span>
     <div class="row2"><button class="btn green" id="lgo" type="submit" style="flex:1">Log in</button><button class="btn" id="lnew" type="button" style="flex:1">Create account</button></div>
   </div></form>
+  <div id="bars"></div>
+  <div id="talk"><span id="tkwho"></span><div id="tktext"></div><div id="tkopts"></div></div>
+  <div id="fade"></div>
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
