@@ -38,7 +38,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Mount Shop: Buy pets to ride; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
-  clear within 45 m and fading out by 70 m, growing a little with distance; hidden while building.
+  clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
+  middle of town; growing a little with distance; hidden while building.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -87,15 +88,23 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- Each spots a player near it (vans 16 m, helicopters 22 m, plus 7 m per wanted star; vans only see players on or near
-  the ground) and chases them straight for a short while (vans 3 s, helicopters 3.5 s, plus 0.8 s per star), lights
-  flashing (a helicopter shines a searchlight). Vans chase at 9.5 m/s, helicopters 11, plus 1.3 / 1.6 per star, so a
-  faster pet gets away.
-- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken straight to the
+- **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
+  gets away.
+- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
+  light on the road; faint by day, bright at night.
+- **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
+  searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
+  every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
+  lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
+  beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
+  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
+  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
+- **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
-- **Wanted level (0–5 stars):** each chase you get away from adds a star (at most one every 4 s); a star drops every
-  25 s nobody's chasing you. Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
+- **Wanted level (0–5 stars):** each van chase you get away from adds a star (at most one every 4 s); a star drops
+  every 25 s nobody's chasing you (a searchlight on you counts as chasing). Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
 
 ## Delivering
 
@@ -164,9 +173,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (animal control 10, stamped with its clock). Pages replay each player 170 ms in the past on that player's own clock
   (so speeds stay even), guessing ahead up to 0.2 s if an update's late (not if they'd stopped) and easing any
   correction in. Nothing is checked by the server (no anti-cheat).
-- **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
-  the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
+- **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
+  tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
+  connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
@@ -268,3 +279,4 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Rejected / removed
 
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
+- Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
