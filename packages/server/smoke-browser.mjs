@@ -76,7 +76,7 @@ try {
     P.startTalk(n); if (!P.talk) return "the talk didn't start";
     for (let i = 0; i < 12 && !document.querySelector("#tkopts button"); i++) { P.talkNext(); await wait(150); }
     if (!document.querySelector("#tkopts button")) return "no answers to pick";
-    P.talkPick(1); await wait(200); if (!P.talk || !document.getElementById("tktext").textContent) return "the answer didn't go on";
+    P.talkPick(1); P.talkNext(); await wait(50); if (!P.talk || !document.getElementById("tktext").textContent) return "the answer didn't go on";
     P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
   });
   if (talked) problems.push(talked);
