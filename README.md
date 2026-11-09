@@ -25,7 +25,9 @@ The server reads `DATABASE_URL` (required), `PORT` (8080), `ALLOWED_ORIGINS` (th
 
 ## Deploys (CI/CD)
 
-Every push to `main` deploys:
+Changes reach `main` only through pull requests that pass the **Check** workflow (syntax check, server start-up and a
+headless game smoke on the merge with current `main`) and are squash-merged automatically; see `CLAUDE.md`, "Getting
+changes into main". Every push to `main` deploys:
 
 - `website/**` → **Deploy website**: syntax check, stamp `version.json`, publish to GitHub Pages, then tell the game
   server a new build is live (connected players reload onto it).

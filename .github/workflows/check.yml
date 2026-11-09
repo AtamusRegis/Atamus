@@ -1,0 +1,61 @@
+name: Check
+
+# The required check for merging into main (see CLAUDE.md, "Getting changes into main"). On a pull request it runs on
+# GitHub's merge of the branch with current main, so it validates the integration, not just the branch.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: atamus
+        ports: ["5433:5432"]
+        options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/server/package-lock.json
+      - name: Syntax check and shared world copies
+        run: bash scripts/check.sh
+      - name: Install server dependencies
+        working-directory: packages/server
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: Start the server (creates its tables, serves website/)
+        working-directory: packages/server
+        env:
+          ATAMUS_PTR: "1"
+          PORT: "8090"
+          DATABASE_URL: postgres://postgres@127.0.0.1:5433/atamus
+          ALLOWED_ORIGINS: http://localhost:8090
+        run: |
+          nohup node src/index.js > "$RUNNER_TEMP/server.log" 2>&1 &
+          for _ in $(seq 1 40); do curl -sf http://localhost:8090/healthz && exit 0; sleep 0.5; done
+          cat "$RUNNER_TEMP/server.log"; exit 1
+      - name: Game smoke (load, create an account, play)
+        run: |
+          npm install --prefix "$RUNNER_TEMP/pw" --no-audit --no-fund --silent playwright-core@1.49.1
+          PLAYWRIGHT="$RUNNER_TEMP/pw/node_modules/playwright-core" CHROME="$(command -v google-chrome)" node scripts/smoke.mjs
+      - name: Server log
+        if: failure()
+        run: cat "$RUNNER_TEMP/server.log" || true
