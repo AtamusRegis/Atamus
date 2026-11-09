@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Tap people; phone buttons in one row (owner).** The name buttons for players and townsfolk and the player panel are gone: tap a townsperson to talk, tap a player for Trade / Party right by them. Held sideways on a phone, the buttons stay in one row along the bottom instead of stacking into the map.
 - **Bright characters at night; baked shadows (owner).** Pets, riders and townsfolk stay bright at night; live shadows are gone, replaced by darker ground under houses, buildings and trees and a soft spot under everyone moving.
 - **Pet types: Ground, Air, Water; no more gliders (owner).** Every pet carries a Ground, Air or Water badge; the Parrot, Pegasus, Phoenix and Pterodactyl now fly like the other fliers.
 - **Roblox-style chat and menu, players in the map, candy on phones, place labels, training arena prompt and guide (owner).** The chat is a window at the top left (with a gear menu for Settings and the Admin Panel beside it), replacing your name, the Chat/Settings/Admin buttons and the distance home; the player count sits in the map; the candy button can be tapped while moving; the Egg Shop and Mount Shop labels sit over their circles; the arena is an E prompt in the yard, and its guide points through a gate's gap (it used to point at a post, so you got stuck there).

@@ -1271,10 +1271,10 @@ function hud() {
   let cb = $("candybtn"); if (!cb) { cb = document.createElement("button"); cb.id = "candybtn"; cb.className = "btn gold"; cb.type = "button"; cb.title = ITEMS.snack.name; cb.addEventListener("pointerdown", (e) => { e.preventDefault(); if (!cb.disabled) useSnack(); }); $("items").appendChild(cb); }
   cb.style.display = save.items.snack > 0 ? "" : "none"; cb.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; cb.disabled = me.boostUntil > performance.now();
 }
-const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-admin", "p-settings"];
+const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-trade", "p-build", "p-admin", "p-settings"];
 let openPanel = null;
 function show(id) { if (id === "p-train" && !inArena()) return; showPanel(id); }   // (owner, 2026-11-09) the arena is an E prompt in the yard, not a teleport
-function showPanel(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); if (id === "p-settings") renderSettings(); }
+function showPanel(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); if (id === "p-settings") renderSettings(); }
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
@@ -1756,13 +1756,23 @@ function sendPos(force) {
 // invites pop up to accept or turn down. A party can visit each other's homes. ----
 let party = [], invites = [], target = null;
 function nearPlayer() { let best = null, bd = 5; for (const [id, o] of others) { if (o.inst !== me.inst) continue; const d = hyp(o.x - me.x, o.z - me.z, o.y - me.y); if (d < bd) { bd = d; best = id; } } return best; }
-function renderPlayer() {
-  const o = others.get(target), el = $("player"); if (!o) { closePanels(); return; }
-  $("pname").textContent = o.name; el.innerHTML = "";
-  const inParty = party.some((q) => q.id === target);
-  const t = document.createElement("button"); t.className = "btn gold"; t.type = "button"; t.textContent = "Trade"; t.disabled = !!trading; t.onclick = () => { netSend({ t: "invite", id: target, kind: "trade" }); toast("→ " + o.name); closePanels(); };
-  const p = document.createElement("button"); p.className = "btn green"; p.type = "button"; p.textContent = inParty ? "Party ✓" : "Party"; p.disabled = inParty; p.onclick = () => { netSend({ t: "invite", id: target, kind: "party" }); toast("→ " + o.name); closePanels(); };
-  el.append(t, p);
+// (owner, 2026-11-09: no player panel) tapping another player opens two buttons right there: Trade and Party
+const pmenu = $("pmenu");
+function playerMenu(id, px, py) {
+  const o = others.get(id); if (!o) return; target = id; pmenu.innerHTML = "";
+  const inParty = party.some((q) => q.id === id);
+  const t = document.createElement("button"); t.className = "btn gold"; t.type = "button"; t.textContent = "Trade"; t.disabled = !!trading; t.onclick = () => { netSend({ t: "invite", id, kind: "trade" }); toast("→ " + o.name); closePlayerMenu(); };
+  const p = document.createElement("button"); p.className = "btn green"; p.type = "button"; p.textContent = inParty ? "Party ✓" : "Party"; p.disabled = inParty; p.onclick = () => { netSend({ t: "invite", id, kind: "party" }); toast("→ " + o.name); closePlayerMenu(); };
+  pmenu.append(t, p); pmenu.style.display = "flex";
+  pmenu.style.left = clamp(px, 90, innerWidth - 90) + "px"; pmenu.style.top = clamp(py, 70, innerHeight - 40) + "px";
+}
+function closePlayerMenu() { pmenu.style.display = "none"; target = null; }
+// a tap on another player (in reach)
+function playerHit(px, py) {
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const objs = []; for (const [id, o] of others) { if (o.inst !== me.inst || hyp(o.x - me.x, o.z - me.z) > 20) continue; for (const g of [o.m.g, o.walker && o.walker.g]) if (g && g.visible) { g.userData.pid = id; objs.push(g); } }
+  for (const h of ray.intersectObjects(objs, true)) { if (h.object.isSprite) continue; let g = h.object; while (g && g.userData.pid === undefined) g = g.parent; if (g) return g.userData.pid; }
+  return null;
 }
 const KIND_NAME = { party: "Party", trade: "Trade", home: "Visit home" };
 function renderInvite() {
@@ -2557,7 +2567,9 @@ const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.
 function tapAt(px, py) {
   if (building) return buildTap(px, py);
   if (talk) { talkNext(); return true; }
-  const fk = folkHit(px, py); if (fk) { startTalk(fk); return true; }
+  const fk = folkHit(px, py); if (fk) { closePlayerMenu(); startTalk(fk); return true; }
+  const ph = netOk ? playerHit(px, py) : null; if (ph !== null) { playerMenu(ph, px, py); return true; }
+  if (pmenu.style.display === "flex") { closePlayerMenu(); return true; }
   // tap a playpen in your house to choose its pet
   if (me.inst === myId && save.home) {
     const o = INT;
@@ -2755,25 +2767,27 @@ function ride_lift(l) {   // up to my plot (in front of it), or back down to the
   me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#7fd8ff", "#ffffff"], 0.8, -1); sendPos(true);
 }
 function context() {
-  const a = [], pl = netOk ? nearPlayer() : null;
+  const a = [];
   if (talk) return a;
-  if (pl !== null) { const o = others.get(pl); a.push({ key: "E", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
-  const fk = pl === null && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "E", label: fk.name, fn: () => startTalk(fk) });
   const l = loggedIn && nearLift(); if (l) a.push({ key: "E", label: l.to === "plaza" ? "▼" : "Home ▲", fn: () => ride_lift(l) });
   if (!a.length && loggedIn && !me.inst && !inArena() && hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r && me.y - terrain(me.x, me.z) < 3.5) a.push({ key: "E", label: "Training Arena", fn: enterArena });
   const dr = !a.length ? nearDoor() : null; if (dr !== null) a.push({ key: "E", label: "Enter", fn: () => enterHouse(dr) });   // (owner, 2026-11-09) into the house
   if (!a.length && nearFrontDoor()) a.push({ key: "E", label: "Leave", fn: () => leaveHouse() });
   const pen = !a.length ? nearPen() : null; if (pen !== null) a.push({ key: "E", label: "Pet pen", fn: () => { picking = pen; show("p-build"); } });
+  // (owner, 2026-11-09) people have no buttons: tap them (E still works on a computer, after the places above)
+  const pl = !a.length && netOk ? nearPlayer() : null; if (pl !== null) a.push({ key: "E", hidden: true, label: "", fn: () => { const o = others.get(pl), v = new THREE.Vector3(o.x, o.y + 2, o.z).project(camera); playerMenu(pl, (v.x + 1) / 2 * innerWidth, (1 - v.y) / 2 * innerHeight); } });
+  const fk = !a.length && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "E", hidden: true, label: "", fn: () => startTalk(fk) });
   return a;
 }
 function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn(); }
 function ui() {
   acts = context();
+  if (pmenu.style.display === "flex" && (!others.has(target) || hyp(others.get(target).x - me.x, others.get(target).z - me.z) > 14)) closePlayerMenu();
   const kind = me.foot ? "foot" : moveKind(), mine2 = onMyPlot();
-  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + me.inst + "|" + !!building + "|" + party.length + "|" + myRole;
+  const key = acts.filter((a) => !a.hidden).map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + me.inst + "|" + !!building + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
-  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd class="interact-key">${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
+  for (const a of acts) { if (a.hidden) continue; const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd class="interact-key">${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = me.swim ? "Swim ▲" : kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
   $("btn-down").textContent = me.swim ? "Swim ▼" : "Fly ▼";

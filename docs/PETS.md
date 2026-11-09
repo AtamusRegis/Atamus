@@ -96,8 +96,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
   with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
   Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
-  when a courier approaches and pets bump against them instead of passing through them. Close by, press E (or tap the
-  person) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
+  when a courier approaches and pets bump against them instead of passing through them. Close by, tap the person (or press E;
+  no name button, owner 2026-11-09) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
   more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
   F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
   conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
@@ -286,8 +286,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   entry of the front page's Updates list (its date and lines) until you close it (✕); it shows again only when that
   entry changes. A browser that has never logged in doesn't get it.
 - **Phones first (owner, 2026-11-09):** on touch screens the HUD, the map and the buttons are sized to the screen's short
-  side; Jump (and Fly / Swim ▼) are big round buttons at the bottom right; held sideways the buttons sit in a row along
-  the bottom right under the map, and panels use the screen's height.
+  side; Jump (and Fly / Swim ▼) are big round buttons at the bottom right; held sideways the buttons sit in one row along
+  the bottom right under the map (owner, 2026-11-09: they used to stack into the map), and panels use the screen's height.
 - **Wind readout (owner, 2026-11-09):** shown only riding a flier or glider (the wind doesn't move other pets).
 - **Coins (owner, 2026-11-09):** the coin pill sits at the top right (above the map), leaving the top left clear (as
   Roblox's chat would).
@@ -331,8 +331,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Players (owner, 2026-11-08)
 
-- Next to another player (5 m), **F** (or the button with their name) opens a menu: **Trade** or **Party**, which sends
-  them an invite; invites pop up with ✓ / ✕ (30 s).
+- **Tap another player** (owner, 2026-11-09: no player panel, no name buttons; within 20 m; on a computer also F or E
+  next to them) for two buttons right there: **Trade** or **Party**, which sends them an invite (a tap elsewhere or
+  walking off closes them); invites pop up with ✓ / ✕ (30 s).
 - **Party:** up to 6; members show under your name (✕ leaves). A party can visit each other's homes.
 - **Trade:** both see each other's offer: tap your pets to offer them (not ones in a playpen) and type coins; when both
   press Ready (any change un-readies both) the server swaps them. Everyone keeps at least one pet, and nobody goes over
