@@ -37,13 +37,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
-  clear within 45 m and fading out by 70 m, growing a little with distance; hidden while building.
+  clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
+  middle of town; growing a little with distance; hidden while building.
 - **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
   every 3 minutes (about 17 mph on average; up to 10 mph more in the rain) with gusts on top, its direction swinging
   slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
   and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
-  1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it); never on the ground, while stunned
-  or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
+  1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
   pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
   home.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
@@ -94,15 +95,23 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- Each spots a player near it (vans 16 m, helicopters 22 m, plus 7 m per wanted star; vans only see players on or near
-  the ground) and chases them straight for a short while (vans 3 s, helicopters 3.5 s, plus 0.8 s per star), lights
-  flashing (a helicopter shines a searchlight). Vans chase at 9.5 m/s, helicopters 11, plus 1.3 / 1.6 per star, so a
-  faster pet gets away.
-- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken straight to the
+- **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
+  gets away.
+- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
+  light on the road; faint by day, bright at night.
+- **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
+  searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
+  every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
+  lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
+  beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
+  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
+  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
+- **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
-- **Wanted level (0–5 stars):** each chase you get away from adds a star (at most one every 4 s); a star drops every
-  25 s nobody's chasing you. Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
+- **Wanted level (0–5 stars):** each van chase you get away from adds a star (at most one every 4 s); a star drops
+  every 25 s nobody's chasing you (a searchlight on you counts as chasing). Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
 
 ## Delivering
 
@@ -171,7 +180,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
-  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
+  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
+  2026-11-09):** under Updating! a small line says "Derek's Update" when it's Derek's (the merge commit's `Update-By`
+  trailer, put in version.json by the website deploy; nothing shows without one).
 - **Chat history (owner, 2026-11-08):** while the chat line is open, everything said since you logged in shows above
   it (scrollable); a new login starts it fresh.
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
@@ -270,3 +281,4 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Rejected / removed
 
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
+- Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.

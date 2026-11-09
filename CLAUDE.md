@@ -176,4 +176,6 @@ nothing enforces these rules, so follow them anyway and say so in reports.
 4. Update `docs/PETS.md` and `docs/CHANGELOG.md` (and the front page for a new feature).
 5. Commit, ending the message with the attribution lines, then `scripts/task.sh finish`. Merging into `main` deploys
    (website to GitHub Pages, server over the deploy key); a new website build reloads connected players onto it.
-6. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/pets.html.
+6. Whose update: a clone with `git config pets.updateBy <name>` (Derek's clone: `Derek`) gets an `Update-By: <name>`
+   trailer on its squash commits from `finish`, and players see "<name>'s Update" under Updating! (owner, 2026-11-09).
+7. A quick local look when it's worth it: `scripts/ptr.sh start`, then open http://localhost:8090/pets.html.

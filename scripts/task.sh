@@ -66,6 +66,12 @@ case "${1:-}" in
 
   finish)
     title="${2:?usage: scripts/task.sh finish \"<title>\" <body-file> [<commit-message-file>]}"; body_file="${3:?body file}"; msg_file="${4:-$3}"
+    # (owner, 2026-11-09) whose update it is: this clone's `git config pets.updateBy <name>` adds an Update-By trailer to
+    # the squash commit; the website deploy puts it in version.json and players see "<name>'s Update" under Updating!
+    by="$(git config --get pets.updateBy || true)"
+    if [ -n "$by" ] && ! grep -q '^Update-By:' "$msg_file"; then
+      tmp="$(mktemp)"; awk -v by="$by" '!done && /^Co-Authored-By:/ { print "Update-By: " by; done = 1 } { print } END { if (!done) print "\nUpdate-By: " by }' "$msg_file" > "$tmp"; msg_file="$tmp"
+    fi
     pr=""
     for round in 1 2 3 4 5 6; do
       say "Round $round: integrate the latest main"
