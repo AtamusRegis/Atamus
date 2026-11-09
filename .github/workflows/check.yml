@@ -1,7 +1,8 @@
 name: check
 
 # (owner, 2026-11-08) the required check for every pull request into main: syntax of every JS file, the two copies of
-# pets-world.js identical, and the smoke test (the world's rules and the real /pets server with two players, in memory).
+# pets-world.js identical, the smoke test (the world's rules and the real /pets server with two players, in memory) and
+# the browser smoke test (pets.html runs in headless Chrome: loads, makes an account, rides; no errors).
 # On a pull request GitHub runs it on the merge of the branch with the current main.
 on:
   pull_request:
@@ -34,4 +35,7 @@ jobs:
         run: bash scripts/check.sh
       - name: Smoke test (world rules, /pets server with two players)
         run: npm run smoke
+        working-directory: packages/server
+      - name: Browser smoke test (the game page loads, an account is made, the town runs)
+        run: npm run smoke:browser
         working-directory: packages/server
