@@ -97,6 +97,7 @@ const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1000);
 scene.add(new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1));
 const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); scene.add(sun, sun.target);
+const dummy = new THREE.Object3D();
 const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.MeshLambertMaterial({ color: c })); return MATS.get(c); };
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
@@ -109,10 +110,36 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
   for (let i = 0; i < NA; i++) idx.push(0, V(1, i + 1), V(1, i));
   for (let j = 1; j < NR; j++) for (let i = 0; i < NA; i++) { const a = V(j, i), b = V(j, i + 1), c = V(j + 1, i), d = V(j + 1, i + 1); idx.push(a, b, c, b, d, c); }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-  const n = g.attributes.normal, cols = new Float32Array(n.count * 3), grass = new THREE.Color("#86c95f"), high = new THREE.Color("#a6d46a"), rock = new THREE.Color("#9a8a76"), c = new THREE.Color();
-  for (let i = 0; i < n.count; i++) { const y = pos[i * 3 + 1], ny = n.getY(i); c.copy(grass).lerp(high, clamp(y / 40, 0, 1)); if (ny < 0.8) c.lerp(rock, clamp((0.8 - ny) / 0.15, 0, 1)); cols.set([c.r, c.g, c.b], i * 3); }
-  g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; scene.add(m);
+  // (owner, 2026-11-08: smooth it out) colors blend gradually: by the slope of the land over a few metres (so cliffs
+  // fade into rock), by height, and in broad patches; a fine speckled texture on top
+  const cols = new Float32Array((pos.length / 3) * 3), uvs = new Float32Array((pos.length / 3) * 2), c = new THREE.Color(), c2 = new THREE.Color();
+  const GRASS = [new THREE.Color("#7fc25a"), new THREE.Color("#96cf63"), new THREE.Color("#a9d46e")], ROCK = new THREE.Color("#a08f7a"), ROCK2 = new THREE.Color("#8a7a68");
+  for (let i = 0; i < pos.length / 3; i++) {
+    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
+    const patch = 0.5 + 0.25 * Math.sin(x / 23 + Math.cos(z / 31)) + 0.25 * Math.sin(z / 19 - x / 41);
+    c.copy(GRASS[0]).lerp(GRASS[1], patch).lerp(GRASS[2], smooth(clamp(y / 45, 0, 1)) * 0.7);
+    c2.copy(ROCK).lerp(ROCK2, patch);
+    c.lerp(c2, smooth(clamp((slope - 0.3) / 0.7, 0, 1)));
+    cols.set([c.r, c.g, c.b], i * 3); uvs.set([x / 9, z / 9], i * 2);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  const speck = (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 128; const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 128, 128); for (let k = 0; k < 900; k++) { const v = 205 + Math.floor(Math.random() * 50); x.fillStyle = `rgb(${v},${v},${v})`; x.fillRect(Math.random() * 128, Math.random() * 128, 1 + Math.random() * 2, 1 + Math.random() * 2); } const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: speck })); m.receiveShadow = true; scene.add(m);
+  // (owner, 2026-11-08) tall rocks standing on the cliffs and steep slopes, and boulders at their feet
+  const rocks = [], rr = World.rng(77);
+  for (let n = 0; n < 9000 && rocks.length < 320; n++) {
+    const a = rr() * TAU, r = Math.sqrt(rr()) * (World.R_TOWN - 6), x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9) continue;
+    const slope = hyp(terrain(x + 2, z) - terrain(x - 2, z), terrain(x, z + 2) - terrain(x, z - 2)) / 4; if (slope < 0.9) continue;
+    if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 9)) continue;
+    const lo = Math.min(terrain(x + 2, z), terrain(x - 2, z), terrain(x, z + 2), terrain(x, z - 2)), tall = rr() < 0.55;
+    rocks.push({ x, z, y: lo, w: tall ? 1.4 + rr() * 1.8 : 1 + rr() * 1.4, h: tall ? 4 + rr() * 9 : 1 + rr() * 1.5, rot: rr() * TAU, c: rr() });
+  }
+  const rockG = new THREE.DodecahedronGeometry(1, 0); rockG.translate(0, 0.8, 0);
+  const rockM = new THREE.InstancedMesh(rockG, new THREE.MeshLambertMaterial({ color: "#ffffff", flatShading: true }), rocks.length); rockM.castShadow = true; rockM.receiveShadow = true;
+  rocks.forEach((k, i) => { dummy.position.set(k.x, k.y - 0.4, k.z); dummy.rotation.set(0, k.rot, 0); dummy.scale.set(k.w, k.h / 1.6, k.w * (0.8 + k.c * 0.4)); dummy.updateMatrix(); rockM.setMatrixAt(i, dummy.matrix); rockM.setColorAt(i, new THREE.Color().setHSL(0.08, 0.14 + k.c * 0.08, 0.5 + k.c * 0.12)); });
+  scene.add(rockM);
   // its underside: a cliff face at the edge, then rock tapering away below
   const RINGS = [[1, 0], [1.01, -9], [0.9, -30], [0.72, -62], [0.48, -98], [0.22, -132]], up = [], ui = [];
   for (let k = 0; k < RINGS.length; k++) for (let i = 0; i < NA; i += 3) {
@@ -141,7 +168,6 @@ ROADS.forEach((R, k) => {
   const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
 });
 // houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
-const dummy = new THREE.Object3D();
 function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
 const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
 const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1, 1, 1); d.rotation.y = h.yaw; };
@@ -152,6 +178,9 @@ const roofs = instanced(ROOFG, "#ffffff", houses.length, (i, d) => roofAt(houses
 const doors = instanced(BOX, "#7a4f28", houses.length, (i, d) => doorAt(houses[i], d));
 const houseParts = [[walls, wallAt], [roofs, roofAt], [doors, doorAt]];
 function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(0.0001, 0.0001, 0.0001); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
+// windows either side of the door: they light up at night
+const windowM = new THREE.MeshBasicMaterial({ color: "#6b7f99" }), WINDOW_ON = new THREE.Color("#ffd76a");
+{ const wm = new THREE.InstancedMesh(BOX, windowM, houses.length * 2); houses.forEach((h, i) => { for (const sd of [-1, 1]) { const lx = sd * 2.8, lz = 4.53; dummy.position.set(h.x + lx * Math.cos(h.yaw) + lz * Math.sin(h.yaw), h.base + 2.5, h.z - lx * Math.sin(h.yaw) + lz * Math.cos(h.yaw)); dummy.rotation.set(0, h.yaw, 0); dummy.scale.set(1.5, 1.3, 0.1); dummy.updateMatrix(); wm.setMatrixAt(i * 2 + (sd > 0 ? 1 : 0), dummy.matrix); } }); scene.add(wm); }
 instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); });
 instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; });
 // trees
@@ -164,8 +193,81 @@ for (const isl of ISLANDS) {
   const rock = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.94, isl.r * 1.4, 10).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(isl.x, isl.y - 1.6 - isl.r * 0.7, isl.z); rock.castShadow = true; scene.add(rock);
   for (let k = 0; k < 4; k++) { const a = k * 1.7 + isl.r, x = isl.x + Math.cos(a) * isl.r * 0.55, z = isl.z + Math.sin(a) * isl.r * 0.55; const b = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 + (k % 2), 0), mat("#9a8f80")); b.position.set(x, isl.y - 4 - k * 2.5, z); scene.add(b); }
 }
-const clouds = [];
-for (let k = 0; k < 26; k++) { const g = new THREE.Group(); for (let j = 0; j < 4; j++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + srnd() * 4, 8, 6), mat("#ffffff")); s.position.set(j * 5 - 8, srnd() * 2, srnd() * 4); g.add(s); } const below = k % 2; g.position.set(-380 + srnd() * 760, below ? -40 - srnd() * 60 : 60 + srnd() * 25, -380 + srnd() * 760); scene.add(g); clouds.push(g); }
+// ---- the sky (owner, 2026-11-08): a day and night cycle, rain now and then, wind, god rays, more clouds; the same for
+// everyone (all timed off the clock) ----
+const clouds = [], cloudM = new THREE.MeshLambertMaterial({ color: "#ffffff" });
+for (let k = 0; k < 56; k++) {
+  const g = new THREE.Group(), n = 3 + Math.floor(srnd() * 4);
+  for (let j = 0; j < n; j++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + srnd() * 5, 8, 6), cloudM); s.position.set(j * 5 - n * 2.5, srnd() * 3, srnd() * 6 - 3); s.scale.y = 0.7; g.add(s); }
+  const band = k % 3; g.position.set(-420 + srnd() * 840, band === 0 ? -40 - srnd() * 70 : band === 1 ? 140 + srnd() * 30 : 60 + srnd() * 20, -420 + srnd() * 840);
+  if (band === 2 && hyp(g.position.x, g.position.z) < 260) g.position.y = 150 + srnd() * 20;   // clear of the high islands
+  scene.add(g); clouds.push(g);
+}
+const DAY_S = 1200, RAIN_BLOCK = 240;   // a day lasts 20 minutes; the weather is decided every 4
+const hemi = scene.children.find((o) => o.isHemisphereLight);
+const SKY = { day: new THREE.Color("#8fd3ff"), dusk: new THREE.Color("#f2a46a"), night: new THREE.Color("#0c1530"), rain: new THREE.Color("#7d8b99") };
+const FOG = { day: new THREE.Color("#bfe6ff"), dusk: new THREE.Color("#f6c08e"), night: new THREE.Color("#101a36"), rain: new THREE.Color("#8d99a5") };
+const skyNow = { sun: new THREE.Vector3(0, 1, 0), day: 1, rain: 0 };
+// stars, shown at night
+const stars = (() => { const n = 700, p = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const u = Math.random(), a = Math.random() * TAU, r = Math.sqrt(1 - u * u); p.set([Math.cos(a) * r * 600, u * 600, Math.sin(a) * r * 600], i * 3); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(p, 3)); const m = new THREE.Points(g, new THREE.PointsMaterial({ color: "#ffffff", size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); m.renderOrder = -1; scene.add(m); return m; })();
+// rain: streaks falling around the camera
+const RAIN_N = 1400, rainPos = new Float32Array(RAIN_N * 6), rainG = new THREE.BufferGeometry(); rainG.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: "#c8dcf0", transparent: true, opacity: 0, depthWrite: false })); rain.frustumCulled = false; scene.add(rain);
+const drops = Array.from({ length: RAIN_N }, () => ({ x: (Math.random() - 0.5) * 70, y: Math.random() * 40, z: (Math.random() - 0.5) * 70, v: 26 + Math.random() * 10 }));
+// wind: pale streaks blowing past
+const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
+const winds = Array.from({ length: 36 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.12), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
+const WIND = new THREE.Vector3(1, 0, 0.35).normalize();
+// god rays: long soft beams slanting down from the sun
+const rayTex = (() => { const cv = document.createElement("canvas"); cv.width = 32; cv.height = 128; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, "rgba(255,240,200,0)"); gr.addColorStop(0.35, "rgba(255,240,200,1)"); gr.addColorStop(1, "rgba(255,240,200,0)"); x.fillStyle = gr; x.fillRect(0, 0, 32, 128); const g2 = x.createLinearGradient(0, 0, 32, 0); x.globalCompositeOperation = "destination-in"; g2.addColorStop(0, "rgba(0,0,0,0)"); g2.addColorStop(0.5, "rgba(0,0,0,1)"); g2.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g2; x.fillRect(0, 0, 32, 128); return new THREE.CanvasTexture(cv); })();
+const rays = Array.from({ length: 7 }, (_, i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(10 + i * 2, 170), new THREE.MeshBasicMaterial({ map: rayTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); return { m, off: new THREE.Vector3((Math.random() - 0.5) * 110, 0, (Math.random() - 0.5) * 110) }; });
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpM = new THREE.Matrix4(), tmpCol = new THREE.Color();
+function weatherAt(t) {   // how hard it's raining (0..1): some 4-minute blocks rain, easing in and out
+  const b = Math.floor(t / RAIN_BLOCK), f = (t / RAIN_BLOCK) - b, h = Math.abs(Math.sin(b * 12.9898) * 43758.5453) % 1;
+  return h < 0.28 ? Math.min(1, f * 5, (1 - f) * 5) : 0;
+}
+let skyOffset = 0;   // tests only
+function skyStep(dt, cx, cy, cz) {
+  const t = Date.now() / 1000 + skyOffset, ph = (t % DAY_S) / DAY_S, a = ph * TAU;
+  const el = Math.sin(a) + 0.2;   // the sun's height: a little more day than night
+  skyNow.sun.set(Math.cos(a), Math.max(-0.4, el), 0.35).normalize();
+  const day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
+  skyNow.day = day; skyNow.rain = rainK;
+  tmpCol.copy(SKY.night).lerp(SKY.day, day).lerp(SKY.dusk, dusk * 0.55).lerp(SKY.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.background.copy(tmpCol);
+  tmpCol.copy(FOG.night).lerp(FOG.day, day).lerp(FOG.dusk, dusk * 0.5).lerp(FOG.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.fog.color.copy(tmpCol);
+  scene.fog.far = 560 - rainK * 300; scene.fog.near = 150 - rainK * 90;
+  sun.intensity = 1.6 * day * (1 - rainK * 0.6); sun.color.set("#fff6e0").lerp(SKY.dusk, dusk * 0.6);
+  if (hemi) { hemi.intensity = 0.35 + 0.75 * day - rainK * 0.15; hemi.color.set("#ffffff").lerp(SKY.night, (1 - day) * 0.5); }
+  cloudM.color.set("#ffffff").lerp(SKY.rain, rainK * 0.7).lerp(SKY.night, (1 - day) * 0.75).lerp(SKY.dusk, dusk * 0.35);
+  stars.position.set(cx, 0, cz); stars.material.opacity = (1 - day) * (1 - rainK);
+  windowM.color.set("#6b7f99").lerp(WINDOW_ON, 1 - day);
+  // rain
+  rain.material.opacity = rainK * 0.55; rain.visible = rainK > 0.01;
+  if (rain.visible) for (let i = 0; i < RAIN_N; i++) {
+    const d = drops[i]; d.y -= d.v * dt; d.x += WIND.x * 4 * dt; if (d.y < -8) { d.y = 30 + Math.random() * 10; d.x = (Math.random() - 0.5) * 70; d.z = (Math.random() - 0.5) * 70; }
+    const x = cx + d.x, y = cy + d.y, z = cz + d.z; rainPos.set([x, y, z, x - WIND.x * 0.15, y + 1.1, z - WIND.z * 0.15], i * 6);
+  }
+  if (rain.visible) rainG.attributes.position.needsUpdate = true;
+  // wind streaks, more of them up high and in the rain
+  const windK = 0.35 + rainK * 0.4 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  for (const w of winds) {
+    w.life -= dt;
+    if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 1 + Math.random() * 1.2; w.x = cx + (Math.random() - 0.5) * 60 - WIND.x * 20; w.y = cy - 6 + Math.random() * 14; w.z = cz + (Math.random() - 0.5) * 60 - WIND.z * 20; }
+    w.x += WIND.x * 22 * dt; w.z += WIND.z * 22 * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
+    tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
+    tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
+    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.35 * (0.4 + 0.6 * day);
+  }
+  // god rays: brightest with the sun low, gone at night and in the rain
+  const rk = day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
+  for (const r of rays) {
+    r.m.visible = rk > 0.005; if (!r.m.visible) continue;
+    tmpV.set(cx + r.off.x, 0, cz + r.off.z); tmpV.addScaledVector(skyNow.sun, 60); tmpV.y = Math.max(tmpV.y, cy + 40); r.m.position.copy(tmpV);
+    const axis = skyNow.sun, view = tmpV2.copy(camera.position).sub(r.m.position).normalize(), xAxis = new THREE.Vector3().crossVectors(axis, view).normalize(), zAxis = new THREE.Vector3().crossVectors(xAxis, axis);
+    tmpM.makeBasis(xAxis, axis, zAxis); r.m.quaternion.setFromRotationMatrix(tmpM);
+    r.m.material.opacity = rk * (0.6 + 0.4 * Math.sin(t * 0.3 + r.off.x));
+  }
+}
 // the post office, its pickup ring and the contract board
 box(18, 7, 10, "#d9e4ee", POST.x, 3.5, POST.z); box(19, 0.8, 11, "#3a8ee6", POST.x, 7.4, POST.z); box(4, 3.6, 0.2, "#3a6ea8", POST.x, 1.8, POST.z + 5.05);
 box(8, 1.6, 0.3, "#f2b01e", POST.x, 5.4, POST.z + 5.1); box(1.6, 1.1, 0.35, "#e5534b", POST.x, 5.4, POST.z + 5.2);
@@ -430,7 +532,7 @@ function placeCamera(dt) {
   if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
   const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
   camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
-  sun.position.set(me.x + 30, me.y + 60, me.z + 20); sun.target.position.set(me.x, me.y, me.z);
+  sun.position.set(me.x + skyNow.sun.x * 90, me.y + Math.max(20, skyNow.sun.y * 90), me.z + skyNow.sun.z * 90); sun.target.position.set(me.x, me.y, me.z);
   const hide = new Set();
   for (let k = 1; k <= 20; k++) {
     const t = k / 20, x = me.x + (cx - me.x) * t, z = me.z + (cz - me.z) * t, y = cam.y + 1.5 + (cy - cam.y - 1.5) * t;
@@ -494,9 +596,9 @@ function hud() {
   const items = $("items"); items.innerHTML = "";
   if (save.items.snack > 0) { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; b.title = ITEMS.snack.name; b.disabled = me.boostUntil > performance.now(); b.onclick = useSnack; items.appendChild(b); }
 }
-const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-home"];
+const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-home", "p-admin"];
 let openPanel = null;
-function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderBuild(); if (id === "p-home") renderHomeBuy(); }
+function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderBuild(); if (id === "p-home") renderHomeBuy(); if (id === "p-admin") renderAdmin(); }
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; picking = -1; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
@@ -678,11 +780,20 @@ function contractOver(won, payN, progress, helped) {
 const STAR_PAY = 0.2;
 function fillBag() {
   const cap = petBag(riding()), before = me.bag.length; if (before >= cap) return;
-  // island parcels: any island on a flapping flier, only the low ones (off the edge) on a glider
-  const kind = moveKind(), taken = new Set(me.bag), sky = kind !== "land", town = houses.map((h, i) => i).filter((i) => !houses[i].sky), isl = houses.map((h, i) => i).filter((i) => houses[i].sky && (kind === "fly" || houses[i].base < 20));
-  while (me.bag.length < cap) { const i = sky && Math.random() < 0.3 ? pick(isl) : pick(town); if (!taken.has(i)) { taken.add(i); me.bag.push(i); } }
+  // (owner, 2026-11-08) how far parcels go: a new courier's stay near the post office; the faster your best pet of the
+  // kind you're riding (land pets, or fliers and gliders), the further out they go. Riding a flier or glider some go to
+  // islands in reach (any on a flapping flier, only the low ones off the edge on a glider).
+  const kind = moveKind(), air = kind !== "land", taken = new Set(me.bag), far = reach(air);
+  let town = houses.map((h, i) => i).filter((i) => !houses[i].sky && houses[i].d <= far);
+  const isl = air ? houses.map((h, i) => i).filter((i) => houses[i].sky && houses[i].d <= far && (kind === "fly" || houses[i].base < 20)) : [];
+  if (town.length < cap + 6) town = houses.map((h, i) => i).filter((i) => !houses[i].sky).sort((a, b) => houses[a].d - houses[b].d).slice(0, cap + 6);
+  for (let tries = 0; me.bag.length < cap && tries < 500; tries++) { const i = isl.length && Math.random() < 0.3 ? pick(isl) : pick(town); if (!taken.has(i)) { taken.add(i); me.bag.push(i); } }
   toast("+" + (cap - before)); syncBeams(); hudKey = "";
   emitSparks(me.x, me.y + 2, me.z, 20, 4, ["#ffd35a", "#ffffff"], 0.7, -1, 0.8);
+}
+function reach(air) {
+  const best = Math.max(0, ...save.pets.filter((p) => !!SPECIES[p.sp].fly === air).map(petSpeed));
+  return air ? 90 + Math.max(0, best - 9) * 40 : 75 + Math.max(0, best - 7) * 32;
 }
 function deliver(i) {
   const h = houses[i]; me.bag.splice(me.bag.indexOf(i), 1); syncBeams();
@@ -708,8 +819,15 @@ function caught() {
 
 // ---- chat (owner, 2026-11-08): say something to the room; it shows in the list at the bottom and over your head ----
 const chatBar = $("chatbar"), chatIn = $("chatin");
-function openChat() { chatBar.style.display = "flex"; chatIn.focus(); }
-function closeChat() { chatBar.style.display = "none"; chatIn.blur(); }
+// (owner, 2026-11-08) the chat's history since you logged in shows while the chat's open
+const chatHist = [];
+function openChat() { chatBar.style.display = "flex"; renderHist(); $("chathist").style.display = chatHist.length ? "flex" : "none"; chatIn.focus(); }
+function closeChat() { chatBar.style.display = "none"; $("chathist").style.display = "none"; chatIn.blur(); }
+function renderHist() {
+  const el = $("chathist"); el.innerHTML = "";
+  for (const h of chatHist) { const d = document.createElement("div"), b = document.createElement("b"); b.textContent = h.name + ": "; if (h.mine) b.style.color = "#3a8ee6"; d.append(b, document.createTextNode(h.text)); el.appendChild(d); }
+  el.scrollTop = el.scrollHeight;
+}
 $("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
 chatBar.addEventListener("submit", (e) => {
   e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
@@ -718,6 +836,7 @@ chatBar.addEventListener("submit", (e) => {
 });
 chatIn.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChat(); e.stopPropagation(); });
 function chatLine(name, text, mineToo) {
+  chatHist.push({ name, text, mine: !!mineToo }); if (chatHist.length > 300) chatHist.shift(); if (chatBar.style.display === "flex") { $("chathist").style.display = "flex"; renderHist(); }
   const d = document.createElement("div"), b = document.createElement("b"); b.textContent = name + ": "; if (mineToo) b.style.color = "#3a8ee6"; d.appendChild(b); d.appendChild(document.createTextNode(text));
   const log = $("chatlog"); log.appendChild(d); while (log.children.length > 6) log.firstChild.remove();
   setTimeout(() => d.classList.add("old"), 12000); setTimeout(() => d.remove(), 13000);
@@ -829,12 +948,18 @@ function onNet(m) {
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
+      if (!again) { chatHist.length = 0; $("chatlog").innerHTML = ""; }   // a fresh login starts a fresh chat history
+      myRole = m.role || "player";
       if (me.inst) leaveHouseLocal();
       for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; uiKey = "";
       break;
     }
-    case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(ERR[m.why] || ERR.server); break;
-    case "kicked": kicked = true; loggedIn = false; showLogin(ERR.kicked); break;
+    case "auth_err": if (m.why === "expired") { setTok(null); showLogin(); } else showLogin(m.why === "banned" ? banText(m.until) : ERR[m.why] || ERR.server); break;
+    case "kicked": kicked = true; loggedIn = false; showLogin(m.why === "kick" ? "Kicked" : m.why === "banned" ? banText(m.until) : ERR.kicked); break;
+    case "muted": if (m.until) toast(m.until === -1 ? "Muted" : "Muted " + untilText(m.until), "#e5534b"); break;
+    case "role": myRole = m.role; uiKey = ""; break;
+    case "admin_list": adminList = m.list; renderAdmin(); break;
+    case "admin_msg": toast(m.msg); break;
     case "saved": rev = m.rev; saving = false; break;
     case "data": saving = false; adopt(m.data, m.rev); break;
     case "join": addOther(m.p); online = others.size + 1; hudKey = ""; break;
@@ -1089,14 +1214,70 @@ function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn();
 function ui() {
   acts = context();
   const kind = me.inst ? "land" : moveKind();
-  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!(house && house.mine) + "|" + party.length;
+  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!(house && house.mine) + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = kind === "fly" ? "none" : "";
   $("btn-build").style.display = house && house.mine ? "" : "none";
+  $("btn-admin").style.display = isStaff() ? "" : "none";
   myRing.visible = !!save.home; if (save.home) { const d = doorOf(save.home.house); myRing.position.set(d.x, d.y + 0.12, d.z); }
 }
+
+// ---- staff (owner, 2026-11-08): Nyssary is admin and makes admins; admins make moderators and give items; moderators
+// mute, kick and ban. The Admin button opens the panel: everyone online, and any account by name. ----
+let myRole = "player", adminList = [], adminQ = "", giveTo = null, giveWhat = null;
+const untilText = (u) => { const m = Math.round((u - Date.now()) / 60000); return m < 60 ? m + "m" : m < 2880 ? Math.round(m / 60) + "h" : Math.round(m / 1440) + "d"; };
+const banText = (u) => (u === -1 ? "Banned" : "Banned " + untilText(u));
+const isStaff = () => myRole === "moderator" || myRole === "admin";
+const GIVES = () => [{ id: "coins", name: "Coins" }, ...Object.entries(ITEMS).map(([id, it]) => ({ id, name: it.name })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "pet:" + id, name: sp.name, pet: true })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "treat:" + id, name: sp.name + " Treats" }))];
+let adminTimer = 0;
+function adminSend(o) { netSend(Object.assign({ t: "admin", q: adminQ }, o)); }
+function renderAdmin() {
+  const el = $("admin"); if (!el) return;
+  if (giveTo) return renderGive();
+  el.innerHTML = "";
+  const q = document.createElement("input"); q.className = "field"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
+  q.oninput = () => { adminQ = q.value.trim(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
+  el.appendChild(q);
+  const owner = myName.toLowerCase() === "nyssary";
+  const sel = (opts, val, on) => { const s = document.createElement("select"); s.className = "field small"; for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === val) o.selected = true; s.appendChild(o); } s.onchange = () => on(s.value); return s; };
+  const TIMES = [["", "—"], ["10", "10m"], ["60", "1h"], ["1440", "1d"], ["10080", "7d"], ["43200", "30d"], ["perma", "Perma"], ["off", "Off"]];
+  const rows = document.createElement("div"); rows.className = "arows";
+  for (const p of adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase()))) {
+    const r = document.createElement("div"); r.className = "arow";
+    const nm = document.createElement("div"); nm.className = "aname";
+    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
+    nm.querySelector("b").textContent = p.name; r.appendChild(nm);
+    const acts = document.createElement("div"); acts.className = "aacts";
+    const canRole = owner ? p.role !== "owner" : myRole === "admin" && (p.role === "player" || p.role === "moderator");
+    if (canRole && p.name !== myName) acts.appendChild(sel(owner ? [["player", "Player"], ["moderator", "Moderator"], ["admin", "Admin"]] : [["player", "Player"], ["moderator", "Moderator"]], p.role, (v) => adminSend({ op: "role", id: p.id, role: v })));
+    const mute = sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })); acts.appendChild(mute);
+    const ban = sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })); acts.appendChild(ban);
+    if (p.online) { const k = document.createElement("button"); k.className = "btn small"; k.type = "button"; k.textContent = "Kick"; k.onclick = () => adminSend({ op: "kick", id: p.id }); acts.appendChild(k); }
+    if (myRole === "admin") { const g = document.createElement("button"); g.className = "btn gold small"; g.type = "button"; g.textContent = "Give"; g.onclick = () => { giveTo = p; giveWhat = null; renderAdmin(); }; acts.appendChild(g); }
+    r.appendChild(acts); rows.appendChild(r);
+  }
+  el.appendChild(rows);
+}
+// give someone an item, coins, Treats or a pet: type to narrow the list, pick one
+function renderGive() {
+  const el = $("admin"); el.innerHTML = "";
+  const head = document.createElement("div"); head.className = "row2"; head.style.marginTop = "0";
+  const back = document.createElement("button"); back.className = "btn ghost small"; back.type = "button"; back.textContent = "←"; back.onclick = () => { giveTo = null; renderAdmin(); };
+  const who = document.createElement("b"); who.textContent = giveTo.name; who.style.flex = "1"; head.append(back, who); el.appendChild(head);
+  const q = document.createElement("input"); q.className = "field"; q.placeholder = "Item or pet"; q.value = giveWhat ? giveWhat.name : "";
+  const list = document.createElement("div"); list.className = "picklist";
+  const fill = () => { list.innerHTML = ""; const t = q.value.trim().toLowerCase(); for (const o of GIVES().filter((o) => !t || o.name.toLowerCase().includes(t)).slice(0, 40)) { const b = document.createElement("button"); b.type = "button"; b.className = "pick" + (giveWhat && giveWhat.id === o.id ? " on" : ""); b.innerHTML = o.pet ? `<img alt="" src="${portrait(o.id.slice(4))}">` : ""; b.append(document.createTextNode(o.name)); b.onclick = () => { giveWhat = o; q.value = o.name; fill(); lv.style.display = o.pet ? "" : "none"; }; list.appendChild(b); } };
+  q.oninput = () => { giveWhat = null; fill(); };
+  const row = document.createElement("div"); row.className = "row2";
+  const n = document.createElement("input"); n.className = "field small"; n.type = "number"; n.min = 1; n.value = 1; n.inputMode = "numeric"; n.title = "Amount";
+  const lv = document.createElement("input"); lv.className = "field small"; lv.type = "number"; lv.min = 1; lv.max = MAXLV; lv.value = 1; lv.inputMode = "numeric"; lv.title = "Lv"; lv.style.display = giveWhat && giveWhat.pet ? "" : "none";
+  const go = document.createElement("button"); go.className = "btn gold"; go.type = "button"; go.textContent = "Give"; go.style.flex = "1";
+  go.onclick = () => { if (!giveWhat) return; adminSend({ op: "give", id: giveTo.id, what: giveWhat.id, n: +n.value || 1, lv: +lv.value || 1 }); };
+  row.append(n, lv, go); el.append(q, list, row); fill();
+}
+$("btn-admin").onclick = () => { if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
 
 // ---- the loop ----
 let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
@@ -1196,7 +1377,7 @@ function draw(dt) {
   arrow.position.set(me.x, me.y + mine.top + 1.4 + Math.sin(clock * 3) * 0.15, me.z); arrow.rotation.y = Math.atan2(tx - me.x, tz - me.z);
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  placeCamera(dt);
+  placeCamera(dt); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -1211,4 +1392,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

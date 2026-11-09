@@ -99,6 +99,24 @@
     .buildrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .buildrow .btn { padding: 8px; line-height: 1.3; }
     .card.off { opacity: .6; cursor: default; }
+    #chathist { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 62px); width: min(440px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; display: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 16px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 9; font-size: 13px; }
+    #chathist div { overflow-wrap: anywhere; }
+    .panel.wide { width: min(560px, calc(100vw - 24px)); }
+    .field { width: 100%; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; font: 600 15px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; outline: none; }
+    .field:focus { border-color: var(--blue); }
+    .field.small { width: auto; padding: 6px 8px; font-size: 13px; min-width: 0; }
+    input.field.small { width: 80px; }
+    .arows { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+    .arow { border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .aname { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .aacts { display: flex; gap: 6px; flex-wrap: wrap; }
+    .role { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #e9eef3; text-transform: capitalize; }
+    .role.admin, .role.owner { background: #ffe7a8; color: #8a5a00; } .role.moderator { background: #d7ecff; color: #1f5ea8; }
+    .tag { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #ffd9d6; color: #a3261d; }
+    .picklist { display: flex; flex-direction: column; gap: 2px; max-height: 34vh; overflow-y: auto; margin: 8px 0; border: 2px solid var(--line); border-radius: 12px; padding: 4px; }
+    .pick { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; text-align: left; padding: 6px 8px; border-radius: 8px; font: 600 14px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
+    .pick img { width: 28px; height: 28px; }
+    .pick.on, .pick:hover { background: #fff6dc; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -121,6 +139,7 @@
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
+    <button class="btn" id="btn-admin" type="button" style="display:none">Admin</button>
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
     <button class="btn ghost" id="btn-chat" type="button">Chat</button>
     <button class="btn green" id="btn-jump" type="button">Jump</button>
@@ -133,8 +152,10 @@
   <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
   <div class="panel" id="p-build"><h2>Build <button class="x" type="button">✕</button></h2><div id="build"></div></div>
   <div class="panel" id="p-home"><h2>Home <button class="x" type="button">✕</button></h2><div id="homebuy"></div></div>
+  <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="chatlog"></div>
+  <div id="chathist"></div>
   <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"><button class="btn" type="submit">Send</button></form>
   <div id="invite"><b id="iname"></b><span id="ikind"></span><button class="btn green" id="iyes" type="button">✓</button><button class="btn ghost" id="ino" type="button">✕</button></div>
   <form id="login" autocomplete="on"><div class="lbox"><h1>Pet Delivery Co.</h1>
@@ -146,6 +167,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100005"></script>
+  <script type="module" src="pets.js?v=1793100006"></script>
 </body>
 </html>

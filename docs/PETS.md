@@ -26,6 +26,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Floating islands (owner, 2026-11-08: more, some above the town):** 10 off the town's edge, low (−10 to 16 m) so
   gliders can reach them, and 8 high above the town (84–124 m) that only flapping fliers reach; each has 3 houses and
   trees. Falling off into the clouds brings you back to the plaza.
+- **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass by height and in broad patches, fading into
+  rock on steep slopes over a few metres) with a fine speckled texture; tall rocks and boulders stand on the cliffs
+  and steep slopes (about 320).
+- **Sky (owner, 2026-11-08), the same for everyone (timed off the clock):** a day lasts 20 minutes (a little more day
+  than night): the sun moves, the sky and fog go through dusk to night (stars, house windows light up, lights dim).
+  Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
+  out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
+  low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
 - Houses and buildings are solid (you slide along their walls); a house between the camera and you is hidden while
   it's in the way.
 
@@ -60,8 +68,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Delivering
 
-- Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a random house;
-  on a flapping flier about 3 in 10 are for island houses (any island), on a glider for the low ones only. Switching to a pet that can't fly hands island parcels back.
+- **How far parcels go (owner, 2026-11-08):** by your best pet of the kind you're riding (land pets, or fliers and
+  gliders): houses up to 75 m + 32 m per m/s your best land pet goes over 7 (riding a land pet), or 90 m + 40 m per m/s
+  your best flier or glider goes over 9 (riding one), from the post office; a new courier's stay close (at least the
+  nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too.
+- Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a house in reach;
+  on a flapping flier about 3 in 10 are for island houses in reach (any island), on a glider the low ones only. Switching to a pet that can't fly hands island parcels back.
 - Each house you have a parcel for shows a gold beam (pink for an island house) with a spinning parcel over its mailbox; a gold arrow over your pet
   points to the nearest one (or back to the post office when the bag's empty).
 - Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
@@ -112,6 +124,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
+- **Chat history (owner, 2026-11-08):** while the chat line is open, everything said since you logged in shows above
+  it (scrollable); a new login starts it fresh.
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
   one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
   6 s. Online only.
@@ -156,6 +170,21 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   ($400, 2 more pets) or a **Playpen** ($800), each in the next free spot (4 a room). Tap a playpen to put a pet in it
   (not the one you ride): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
   to 8 hours' worth, collected when you come home. A pet in a playpen can't be ridden, traded or sent to the farm.
+
+## Staff (owner, 2026-11-08)
+
+- Roles: player, moderator, admin. The account **Nyssary** is always admin (the owner) and is the only one who makes or
+  removes admins; admins make (and remove) moderators and give things; moderators and up mute, kick and ban anyone
+  below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
+  (`pet_admin_log`).
+- **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
+  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
+  Ban (the same), Kick (online), Give (admins).
+- **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
+  kind's Treats), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
+  not).
+- Muted: chat messages are dropped ("Muted"). Kicked: back to the login screen ("Kicked"). Banned: kicked and can't log
+  in until it ends ("Banned" with the time left).
 
 ## Celebrations (owner, 2026-11-08)
 

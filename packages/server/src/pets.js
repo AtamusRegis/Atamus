@@ -28,6 +28,11 @@ const num = (v, lim) => (Number.isFinite(+v) ? Math.max(-lim, Math.min(lim, +v))
 const color = (c) => (/^#[0-9a-f]{6}$/i.test(c) ? c : "#3a8ee6");
 const r2 = (v) => Math.round(v * 100) / 100;
 const NAME_RE = /^[A-Za-z0-9_]{3,16}$/;
+// (owner, 2026-11-08) staff: Nyssary is always admin and the only one who makes or removes admins; admins make
+// moderators and give items; moderators (and up) mute, kick and ban those below them
+const OWNER = "nyssary", RANK = { player: 0, moderator: 1, admin: 2 };
+const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
+const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
 
 function roomFor() {
   let r = rooms.find((q) => q.players.size < ROOM_MAX);
@@ -102,6 +107,53 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   }
   function visitorsOf(host) { return host.room ? [...host.room.players.values()].filter((q) => q !== host && q.inst === host.acct.id) : []; }
 
+  // ---- the admin panel (owner, 2026-11-08) ----
+  const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
+  async function admin(me, m) {
+    const my = rankOf(me.acct); if (my < 1) return;
+    const reply = (msg) => send(me.ws, { t: "admin_msg", msg });
+    if (m.op === "list") {
+      const list = [...online.values()].map((p) => staffView(p.acct, p));
+      if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
+      send(me.ws, { t: "admin_list", list, q: m.q || "" }); return;
+    }
+    const id = +m.id, p = online.get(id), a = p ? p.acct : await store.byId(id);
+    if (!a) return reply("Not found");
+    const theirs = rankOf(a);
+    if (theirs >= my && a.id !== me.acct.id) return reply("Not allowed");
+    const log = (action, detail) => { store.log(me.name, a.name, action, detail).catch(() => {}); console.log(`[pets] ${me.name} ${action} ${a.name} ${detail || ""}`); };
+    const until = (mins) => (mins === "perma" ? Infinity : Date.now() + Math.max(1, Math.min(525600, +mins || 60)) * 60000);
+    switch (m.op) {
+      case "role": {
+        const role = RANK[m.role] !== undefined ? m.role : null; if (!role || a.id === me.acct.id) return reply("Not allowed");
+        if (my < 3 && (role === "admin" || a.role === "admin" || my < 2)) return reply("Not allowed");   // only the owner makes / removes admins; admins make moderators
+        a.role = role; await store.setRole(a.id, role); if (p) send(p.ws, { t: "role", role }); log("role", role); break;
+      }
+      case "mute": { const u = m.mins === "off" ? 0 : until(m.mins); a.muteUntil = u; await store.setMute(a.id, u); if (p) send(p.ws, { t: "muted", until: u === Infinity ? -1 : u }); log("mute", String(m.mins)); break; }
+      case "kick": if (p) { send(p.ws, { t: "kicked", why: "kick" }); p.ws.terminate(); } log("kick"); break;
+      case "ban": {
+        const u = m.mins === "off" ? 0 : until(m.mins); a.banUntil = u; await store.setBan(a.id, u);
+        if (u && p) { send(p.ws, { t: "kicked", why: "banned", until: u === Infinity ? -1 : u }); p.ws.terminate(); }
+        log("ban", String(m.mins)); break;
+      }
+      case "give": {   // admins: coins, an item, Treats or a pet
+        if (my < 2) return reply("Not allowed");
+        const n = Math.max(1, Math.min(1e7, Math.floor(+m.n || 1))), what = String(m.what || ""), d = cleanData(a.data, SPECIES);
+        if (what === "coins") d.coins += n;
+        else if (GIVE_ITEMS.has(what)) d.items[what] += n;
+        else if (what.startsWith("treat:") && SPECIES.has(what.slice(6))) d.treats[what.slice(6)] = (d.treats[what.slice(6)] || 0) + n;
+        else if (what.startsWith("pet:") && SPECIES.has(what.slice(4))) { const lv = Math.max(1, Math.min(20, Math.floor(+m.lv || 1))); for (let k = 0; k < Math.min(n, 50); k++) d.pets.push({ id: d.nextId++, sp: what.slice(4), lv }); }
+        else return reply("Unknown");
+        a.data = d;
+        if (p) { changed(p); pushData(p); flush(p.acct); } else { a.rev++; await store.save(a.id, a.data, a.rev); }
+        log("give", what + " x" + n); break;
+      }
+      default: return;
+    }
+    reply("Done");
+    admin(me, { op: "list", q: m.q }).catch(() => {});
+  }
+
   const wss = new WebSocketServer({
     server, path: "/pets", maxPayload: 65536,
     verifyClient: ({ origin }) => !origin || origins.includes(origin) || (allowLocal && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)),
@@ -109,7 +161,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
   wss.on("connection", (ws) => {
     let me = null, room = null, busy = false, lastAuth = 0;
     ws.alive = true; ws.on("pong", () => (ws.alive = true));
-    const authErr = (why) => send(ws, { t: "auth_err", why });
+    const authErr = (why, until) => send(ws, { t: "auth_err", why, until });
     async function auth(m) {
       const now = Date.now(); if (busy || now - lastAuth < 800) return; busy = true; lastAuth = now;
       try {
@@ -129,6 +181,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           token = await store.tokenFor(acct.id);
         }
         if (!acct || ws.readyState !== 1) return;
+        if (acct.banUntil > Date.now()) return authErr("banned", acct.banUntil === Infinity ? -1 : acct.banUntil);
+        if (acct.name.toLowerCase() === OWNER && acct.role !== "admin") { acct.role = "admin"; store.setRole(acct.id, "admin"); }
         acct.data = cleanData(acct.data, SPECIES);
         const old = online.get(acct.id);
         if (old) { send(old.ws, { t: "kicked" }); old.ws.terminate(); gone(old); acct = old.acct; }   // logged in again: the old connection goes
@@ -136,7 +190,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         me = { id: nextId++, ws, room, acct, name: acct.name, sp: SPECIES.has(m.sp) ? m.sp : "pup", lv: Math.max(1, Math.min(20, m.lv | 0)), shirt: color(m.shirt),
           x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null };
         online.set(acct.id, me);
-        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, name: me.name, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars });
+        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         send(ws, { t: "contract", c: contractFor(room, me) });
@@ -172,6 +226,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         }
         case "chat": {   // (owner, 2026-11-08)
           const now = Date.now(), text = cleanChat(m.text); if (!text || now - me.lastChat < CHAT_GAP_MS) break;
+          if (me.acct.muteUntil > now) { send(ws, { t: "muted", until: me.acct.muteUntil === Infinity ? -1 : me.acct.muteUntil }); break; }
           me.lastChat = now; all(room, { t: "chat", id: me.id, name: me.name, text }, me); break;
         }
         case "start": if (!room.contract) {
@@ -212,6 +267,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           break;
         }
         case "party_leave": leaveParty(me); break;
+        case "admin": admin(me, m).catch((e) => { console.error("[pets] admin", e.message); send(ws, { t: "admin_msg", msg: "Failed" }); }); break;
         case "trade_offer": {
           const T = me.trade; if (!T) break; const s = T.a.p === me ? T.a : T.b, pens = penPets(d), mine = new Set(d.pets.map((q) => q.id));
           s.pets = [...new Set((Array.isArray(m.pets) ? m.pets : []).filter((id) => mine.has(id) && !pens.has(id)))].slice(0, 12);

@@ -160,6 +160,14 @@ export async function migrate() {
       data JSONB NOT NULL DEFAULT '{}', rev INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    -- (owner, 2026-11-08) staff roles (player / moderator / admin), mutes and bans (until; 'infinity' for ever)
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'player';
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS mute_until TIMESTAMPTZ;
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS pet_admin_log (
+      id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), by_name TEXT NOT NULL, target_name TEXT NOT NULL,
+      action TEXT NOT NULL, detail TEXT
+    );
     CREATE TABLE IF NOT EXISTS pet_tokens (
       token TEXT PRIMARY KEY, account_id BIGINT NOT NULL REFERENCES pet_accounts(id) ON DELETE CASCADE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(), last_used TIMESTAMPTZ NOT NULL DEFAULT now()
