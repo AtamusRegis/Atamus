@@ -60,6 +60,18 @@ try {
   a.send({ t: "save", rev: wa.rev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
   // chat
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
+  // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
+  const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
+  ok((await n.wait((m) => m.t === "welcome", "owner welcome")).role === "admin", "the owner is admin");
+  n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
+  const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
+  ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
+  b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
+  n.send({ t: "admin", op: "quick", cmd: "coins", n: 2500, name: "Nyssary" });
+  ok((await n.wait((m) => m.t === "data", "owner's own coins")).data.coins === 2500, "quick coins on yourself");
+  n.send({ t: "admin", op: "quick", cmd: "unwanted", name: "smokeB" }); await b.wait((m) => m.t === "stars" && m.stars === 0, "wanted cleared");
+  ok(b.inbox.every((m) => m.t !== "data" || m.data.coins === db1.coins), "a player's quick command is ignored");
+  n.ws.close();
   // logging in again replaces the old connection
   const a2 = client("A2"); await a2.open; a2.send({ t: "resume", token: wa.token, sp: "pup" });
   await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");

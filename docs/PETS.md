@@ -16,6 +16,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Terrain:** rolling ground stepped into plateaus whose steps are cliffs (up to about 48 m high), and four big hills.
   Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
   ledges.
+- **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
+  two rivers from it that run off the island's edge in waterfalls (a sheet pouring down and away under the island, spray
+  at the lip), and a stream that steps down the terraces into the lake, foaming white at each little fall. Deeper water
+  is darker. Houses, trees and rocks keep clear of it. In the water everyone floats (sunk about half a meter):
+  **swimmers** swim at 1.35× their speed and walk straight in from the shore; anyone else can't wade in from the shore
+  (they can jump in) and paddles at 0.4×, climbing out at the bank. Nobody goes over a waterfall. Fliers fly over it.
+- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads on the roads (about every 115 m, not in the plaza),
+  20 cyan rings in the air over town (16 to 82 m up), and 7 indigo rings on the lake, the rivers and the stream. Run, fly
+  or swim through one and your pet goes 1.6× for 5 s (on top of Speed Candy), leaving a trail in the boost's color; not
+  on foot or at home.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
@@ -141,16 +151,18 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Pets
 
-- Start: a Pup. 23 kinds in 4 rarities (speed m/s / bag; ✈ flies):
-  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck 6.5/3
-  - Rare: Fox 9.5/3, Penguin 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
-  - Epic: Deer 11.5/3, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
+- Start: a Pup. 25 kinds in 4 rarities (speed m/s / bag; ✈ flies; ≈ swims):
+  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck ≈ 6.5/3
+  - Rare: Fox 9.5/3, Otter ≈ 9/3, Penguin ≈ 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
+  - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
-  Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
+  Glider: teal with spread wings) and the card's frame and tint in that color, also when an egg hatches. **Swimmers
+  (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
+  Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
@@ -260,8 +272,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
-  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
-  Ban (the same), Kick (online), Give (admins).
+  online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
+  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  ban or kick. The search box keeps its focus while the list refreshes.
+- **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
+  row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
+  pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every
+  kind), Clear wanted (stars to 0, online only), Everything (a million coins, every missing kind at level 20, all
+  pets to 20, the items and the Treats). Logged like every other action.
+- **Chat commands (staff):** a chat line starting with "/" from a moderator or admin is a command, never sent as chat
+  (a player's "/" line is ordinary chat). `/coins 50k` (k / m), `/allpets`, `/maxlv`, `/items`, `/treats`,
+  `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
+  `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
+  Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).
