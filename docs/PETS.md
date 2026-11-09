@@ -231,7 +231,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
   Ban (the same), Kick (online), Give (admins).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
-  kind's Treats), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
+  kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).
 - Muted: chat messages are dropped ("Muted"). Kicked: back to the login screen ("Kicked"). Banned: kicked and can't log
   in until it ends ("Banned" with the time left).
