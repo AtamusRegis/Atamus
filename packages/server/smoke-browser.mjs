@@ -44,19 +44,6 @@ try {
   await page.fill("input[placeholder=Password]", "smoke-check-1");
   await page.click("text=Create account");
   await user.waitFor({ state: "hidden", timeout: 20000 });
-  step = "change the weather from the admin panel";
-  await page.click("#btn-admin");
-  await page.selectOption("#admin-weather", "snow");
-  await page.selectOption("#admin-time", "night");
-  let changed = false;
-  for (let i = 0; i < 50 && !changed; i++) { await page.waitForTimeout(100); changed = await page.evaluate(() => window.Pets.environment.weather === "snow" && window.Pets.environment.time === "night" && window.Pets.sky.snow > 0.9); }
-  if (!changed) throw new Error("the snow and night settings did not reach the game");
-  await page.selectOption("#admin-weather", "auto");
-  await page.selectOption("#admin-time", "auto");
-  let restored = false;
-  for (let i = 0; i < 50 && !restored; i++) { restored = await page.evaluate(() => window.Pets.environment.weather === "auto" && window.Pets.environment.time === "auto"); if (!restored) await page.waitForTimeout(100); }
-  if (!restored) throw new Error("the automatic environment settings were not restored");
-  await page.click("#p-admin .x");
   step = "see and claim a Package Rush prize";
   for (let i = 0; i < 50 && !(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0)); i++) await page.waitForTimeout(100);
   if (!(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0))) throw new Error("Package Rush did not start");
@@ -75,6 +62,19 @@ try {
   const packagePrize = await page.evaluate(() => ({ title: document.getElementById("eventtitle").textContent, sub: document.getElementById("eventsub").textContent, flash: document.getElementById("eventflash").classList.contains("go") }));
   if (packagePrize.title !== "Prize package!" || !packagePrize.sub || !packagePrize.flash) problems.push("package reward celebration is missing: " + JSON.stringify(packagePrize));
   await page.evaluate(() => window.Pets.teleport(0, 14));
+  step = "change the weather from the admin panel";
+  await page.click("#btn-admin");
+  await page.selectOption("#admin-weather", "snow");
+  await page.selectOption("#admin-time", "night");
+  let changed = false;
+  for (let i = 0; i < 50 && !changed; i++) { await page.waitForTimeout(100); changed = await page.evaluate(() => window.Pets.environment.weather === "snow" && window.Pets.environment.time === "night" && window.Pets.sky.snow > 0.9); }
+  if (!changed) throw new Error("the snow and night settings did not reach the game");
+  await page.selectOption("#admin-weather", "auto");
+  await page.selectOption("#admin-time", "auto");
+  let restored = false;
+  for (let i = 0; i < 50 && !restored; i++) { restored = await page.evaluate(() => window.Pets.environment.weather === "auto" && window.Pets.environment.time === "auto"); if (!restored) await page.waitForTimeout(100); }
+  if (!restored) throw new Error("the automatic environment settings were not restored");
+  await page.click("#p-admin .x");
   step = "check animal-control lights by day and night";
   const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
   const waitForLights = async (day) => {
