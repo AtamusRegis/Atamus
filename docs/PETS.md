@@ -147,7 +147,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Items
 
 - **Speed Candy** (was Speed Snack): a button by Pets (with its count); 30 s at 1.5× speed.
-- **Training Ribbon:** a free training level (a button in the training yard).
+- **Training Ribbon:** a free training level (a button on the training arena's gold circle).
 - **Egg Ticket:** a free Basic Egg (a button in the egg shop).
 
 ## Pets
@@ -179,11 +179,20 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
   you're not riding it) shows **Pet Farm +N** in the Pets list; tap it, then **Sure?**, and it goes to live on the farm,
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
-  Treats button trains the pet you ride a level for Treats instead of coins: 1 per level up to level 4, 2 up to 8, 3 up
+  Treats button (on the training arena's gold circle) trains the pet you ride a level for Treats: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
 - **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs and mounts show Full when you're at the limit.
-- **Training yard** (ride into its ring): trains the pet you ride a level for coins (40 × 1.32 per level, × 1 / 1.6 / 2.6
-  / 4 by rarity), up to level 20: each level +5% speed; every 5 levels one more parcel in the bag.
+- **Training arena (owner, 2026-11-09):** riding into the training yard's ring takes you to a floating arena (80 m
+  across, off the island's south edge, `AR` in pets.js) with a track and an obstacle course round it, in order: a
+  hurdle, a hoop, a platform, two slalom gates (inner half, then outer half), a tunnel, a higher hurdle, a higher hoop.
+  The next one glows (a gold beam and diamond, and the arrow points to it). Clearing it, going round the track's way
+  (counterclockwise from above), gives the pet you ride a **training point**: jump the hurdles (the bars are solid),
+  jump through the hoops (over their low sill), land on the platform, pass between a gate's posts, ride through the
+  tunnel. **20 points** for level 2, **4 more for each level after** (level 19 to 20: 92); spare points carry over. A
+  star pill shows points / needed in the arena. Each pet keeps its own points (saved; a traded pet starts fresh). Up to
+  level 20: each level +5% speed; every 5 levels one more parcel in the bag. The gold circle in the middle opens the
+  Training Yard panel (the pet, its points, Treats and Training Ribbon buttons); the purple arch takes you back to town
+  beside the yard. Land pets can't walk off the arena's edge.
 
 ## Co-op
 
@@ -313,6 +322,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
+- Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
   2026-11-09): replaced by holding Space / Ctrl.
