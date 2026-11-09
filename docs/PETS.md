@@ -81,6 +81,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you).
+- **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
+  you're not riding it) shows **Pet Farm +N** in the Pets list; tap it, then **Sure?**, and it goes to live on the farm,
+  leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
+  Treats button trains the pet you ride a level for Treats instead of coins: 1 per level up to level 4, 2 up to 8, 3 up
+  to 12, 4 up to 16, 5 after.
 - **Training yard** (ride into its ring): trains the pet you ride a level for coins (40 × 1.32 per level, × 1 / 1.6 / 2.6
   / 4 by rarity), up to level 20: each level +5% speed; every 5 levels one more parcel in the bag.
 
@@ -96,6 +101,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
   the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
+  reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
+  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
   one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
   6 s. Online only.

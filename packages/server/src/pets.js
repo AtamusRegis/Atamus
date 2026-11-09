@@ -4,9 +4,10 @@
 // contracts (anyone starts one, every delivery in the room counts, the reward is split by deliveries) and its chat.
 // Everything else (parcels, coins, pets) lives in the players' browsers.
 // Connections that go quiet are dropped, and a page that reconnects (same session key) replaces its old connection,
-// so nobody's left standing in town after they've gone.
+// so nobody's left standing in town after they've gone. A new website build sends everyone to it (owner, 2026-11-08).
 import { WebSocketServer } from "ws";
 import { makeVehicles, stepVehicles } from "./pets-world.js";
+import { onWebsiteUpdate, websiteBuild } from "./build.js";
 
 const ROOM_MAX = 16, SNAP_MS = 100, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS = 10000;
 const SPECIES = new Set(["pup", "kitten", "bunny", "duck", "fox", "penguin", "goat", "butterfly", "parrot", "stego", "deer", "bear", "horse", "owl", "trike", "raptor",
@@ -71,7 +72,7 @@ export function attachPets(server, { origins = [], allowLocal = false } = {}) {
         me = { id: nextId++, key, ws, room, name: clean(m.name, 18) || "Courier", sp: SPECIES.has(m.sp) ? m.sp : "pup", lv: Math.max(1, Math.min(20, m.lv | 0)), shirt: color(m.shirt), x: num(m.x, 400), y: num(m.y, 200), z: num(m.z, 400), yaw: 0, mv: 0, lastDel: 0, lastChat: 0,
           stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
         if (key) byKey.set(key, me);
-        send(ws, { t: "welcome", id: me.id, players: [...room.players.values()].map(pub), contract: null, stars: me.stars });
+        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, players: [...room.players.values()].map(pub), contract: null, stars: me.stars });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         send(ws, { t: "contract", c: contractFor(room, me) });
@@ -100,6 +101,8 @@ export function attachPets(server, { origins = [], allowLocal = false } = {}) {
     ws.on("close", () => { if (me) leave(me, room); });
     ws.on("error", () => {});
   });
+  // (owner, 2026-11-08) a new website build is live: everyone reloads onto it
+  onWebsiteUpdate((v) => { const s = JSON.stringify({ t: "reload", web: v }); for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s); });
   // a connection that doesn't answer a ping within 10 s is dropped
   setInterval(() => { for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch { /* closing */ } } }, BEAT_MS).unref();
   // animal control, where everyone is, and contracts running out of time

@@ -10,6 +10,7 @@ try { SERVER_BUILD = fs.readFileSync(new URL("../BUILD", import.meta.url), "utf8
 const SITE = "https://atamus.io/version.json";
 let webBuild = null, onChange = () => {}, burstUntil = 0, burstTimer = 0;
 export const onWebsiteUpdate = (fn) => { onChange = fn; };
+export const websiteBuild = () => webBuild;
 export async function checkWebsiteBuild() {
   try {
     const r = await fetch(SITE + "?t=" + Date.now(), { cache: "no-store" });

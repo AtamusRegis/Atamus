@@ -55,13 +55,19 @@ const petScale = (lv) => 1 + 0.015 * ((lv || 1) - 1);
 const trainCost = (p) => Math.round(40 * Math.pow(1.32, p.lv - 1) * [1, 1.6, 2.6, 4][SPECIES[p.sp].r]);
 // items dropped by deliveries (and contracts that fall short)
 const ITEMS = { snack: { name: "Speed Candy", c: "#ff5aa0" }, ribbon: { name: "Training Ribbon", c: "#e5534b" }, ticket: { name: "Egg Ticket", c: "#f2b01e" } };
+// (owner, 2026-11-08) Treats, like a kind's candy: a spare pet (you have another of its kind) can go live on the Pet
+// Farm, leaving Treats for its kind (5, plus 1 per level it had); Treats train any pet of that kind instead of coins
+// (1 per level up to level 4, 2 up to 8, and so on)
+const tradeGives = (p) => 5 + (p.lv - 1);
+const treatCost = (p) => Math.ceil(p.lv / 4);
+const TREAT = `<svg class="ico" viewBox="0 0 24 24"><path d="M6 7a3 3 0 1 1 3-3l6 6a3 3 0 1 1 3 3 3 3 0 1 1-3 3l-6-6a3 3 0 1 1-3-3z" fill="#f6e3c0" stroke="#a0703f" stroke-width="1.6" stroke-linejoin="round"/></svg>`;
 const SNACK_TIME = 30, SNACK_BOOST = 1.5;
 
 // ---- the save (this browser) ----
 const SAVE = "petdelivery.v1";
 const N1 = ["Swift", "Sunny", "Brave", "Zippy", "Lucky", "Happy", "Mighty", "Cozy", "Speedy", "Jolly", "Rapid", "Breezy"];
 const N2 = ["Otter", "Robin", "Badger", "Panda", "Comet", "Pebble", "Maple", "Biscuit", "Rocket", "Clover", "Sparrow", "Mochi"];
-function fresh() { return { coins: 0, pets: [{ id: 1, sp: "pup", lv: 1 }], ride: 1, items: { snack: 0, ribbon: 0, ticket: 0 }, name: pick(N1) + " " + pick(N2), delivered: 0, nextId: 2, shirt: pick(["#3a8ee6", "#e5534b", "#3fb36b", "#a352e0", "#f2b01e", "#2bb3c0"]) }; }
+function fresh() { return { coins: 0, pets: [{ id: 1, sp: "pup", lv: 1 }], ride: 1, items: { snack: 0, ribbon: 0, ticket: 0 }, treats: {}, name: pick(N1) + " " + pick(N2), delivered: 0, nextId: 2, shirt: pick(["#3a8ee6", "#e5534b", "#3fb36b", "#a352e0", "#f2b01e", "#2bb3c0"]) }; }
 function load() { try { const s = JSON.parse(localStorage.getItem(SAVE)); if (s && Array.isArray(s.pets) && s.pets.length) { const f = Object.assign(fresh(), s); f.pets = f.pets.filter((p) => SPECIES[p.sp]); if (!f.pets.length) f.pets = fresh().pets; return f; } } catch (e) { /* none yet */ } return fresh(); }
 let save = load();
 const persist = () => { try { localStorage.setItem(SAVE, JSON.stringify(save)); } catch (e) { /* private mode */ } };
@@ -492,7 +498,22 @@ function card(sp, lines, on, onclick) {
 const statLine = (p) => `<span class="stats"><span>Lv ${p.lv}</span><span>${petSpeed(p).toFixed(1)} m/s</span><span>${petBag(p)} bag</span></span>`;
 function renderPets() {
   const el = $("petlist"); el.innerHTML = "";
-  for (const p of save.pets.slice().sort((a, b) => SPECIES[b.sp].r - SPECIES[a.sp].r || petSpeed(b) - petSpeed(a))) el.appendChild(card(p.sp, statLine(p), p.id === save.ride, () => ride(p.id)));
+  for (const p of save.pets.slice().sort((a, b) => SPECIES[b.sp].r - SPECIES[a.sp].r || a.sp.localeCompare(b.sp) || petSpeed(b) - petSpeed(a))) {
+    const t = save.treats[p.sp] || 0, d = card(p.sp, statLine(p) + (t ? `<span class="stats"><span>${TREAT} ${t}</span></span>` : ""), p.id === save.ride, () => ride(p.id));
+    if (p.id !== save.ride && save.pets.some((q) => q !== p && q.sp === p.sp)) {   // a spare: it can go to the farm
+      const b = document.createElement("button"); b.className = "btn ghost small"; b.type = "button"; b.innerHTML = `Pet Farm +${tradeGives(p)} ${TREAT}`;
+      b.onclick = (ev) => { ev.stopPropagation(); if (b.dataset.sure) trade(p); else { b.dataset.sure = 1; b.className = "btn gold small"; b.textContent = "Sure?"; } };
+      d.appendChild(b);
+    }
+    el.appendChild(d);
+  }
+}
+function trade(p) {
+  if (p.id === save.ride || !save.pets.some((q) => q !== p && q.sp === p.sp)) return;
+  const n = tradeGives(p), name = SPECIES[p.sp].name;
+  save.pets = save.pets.filter((q) => q !== p); save.treats[p.sp] = (save.treats[p.sp] || 0) + n; persist();
+  toast(name + " → Pet Farm", "#3fb36b"); toast("+" + n + " " + name + " Treats", "#a0703f");
+  emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7); renderPets();
 }
 function ride(id) {
   if (save.ride === id) return; save.ride = id; persist(); mount(); netSend({ t: "pet", sp: riding().sp, lv: riding().lv });
@@ -569,13 +590,17 @@ function renderTrain() {
   el.innerHTML = ""; el.appendChild(card(p.sp, statLine(p), true));
   const row = document.createElement("div"); row.className = "row2";
   const b = document.createElement("button"); b.className = "btn green"; b.type = "button"; b.style.flex = "1";
-  b.innerHTML = max ? "Lv " + MAXLV : `Train <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(cost)}`; b.disabled = max || save.coins < cost; b.onclick = () => train(false); row.appendChild(b);
-  if (save.items.ribbon > 0 && !max) { const r = document.createElement("button"); r.className = "btn"; r.type = "button"; r.textContent = ITEMS.ribbon.name + " ×" + save.items.ribbon; r.onclick = () => train(true); row.appendChild(r); }
+  b.innerHTML = max ? "Lv " + MAXLV : `Train <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(cost)}`; b.disabled = max || save.coins < cost; b.onclick = () => train("coins"); row.appendChild(b);
+  const t = save.treats[p.sp] || 0;
+  if (t > 0 && !max) { const r = document.createElement("button"); r.className = "btn gold"; r.type = "button"; r.innerHTML = `${TREAT} ${treatCost(p)} <span class="n">${t}</span>`; r.title = SPECIES[p.sp].name + " Treats"; r.disabled = t < treatCost(p); r.onclick = () => train("treat"); row.appendChild(r); }
+  if (save.items.ribbon > 0 && !max) { const r = document.createElement("button"); r.className = "btn"; r.type = "button"; r.textContent = ITEMS.ribbon.name + " ×" + save.items.ribbon; r.onclick = () => train("ribbon"); row.appendChild(r); }
   el.appendChild(row);
 }
-function train(ribbon) {
+function train(how) {
   const p = riding(); if (p.lv >= MAXLV) return;
-  if (ribbon) { if (save.items.ribbon <= 0) return; save.items.ribbon--; } else { const c = trainCost(p); if (save.coins < c) return; save.coins -= c; }
+  if (how === "ribbon" || how === true) { if (save.items.ribbon <= 0) return; save.items.ribbon--; }
+  else if (how === "treat") { const c = treatCost(p); if ((save.treats[p.sp] || 0) < c) return; save.treats[p.sp] -= c; }
+  else { const c = trainCost(p); if (save.coins < c) return; save.coins -= c; }
   p.lv++; persist(); mount(); netSend({ t: "pet", sp: p.sp, lv: p.lv }); toast(SPECIES[p.sp].name + " Lv " + p.lv, "#3fb36b"); if (openPanel === "p-train") renderTrain();
   emitSparks(me.x, me.y + 1.5, me.z, 50, 6, ["#3fb36b", "#ffd35a", "#ffffff"], 1.1, -3); emitConfetti(me.x, me.y + 2, me.z, 30, 3, 6);
 }
@@ -740,7 +765,7 @@ function setContract(c) {
   hudKey = ""; if (openPanel === "p-board") renderBoard();
 }
 function onNet(m) {
-  if (m.t === "welcome") { myId = m.id; netOk = true; for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; }
+  if (m.t === "welcome") { if (stale(m.web)) return; myId = m.id; netOk = true; for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; }
   else if (m.t === "join") { addOther(m.p); online = others.size + 1; hudKey = ""; }
   else if (m.t === "leave") { dropOther(m.id); online = others.size + 1; hudKey = ""; }
   else if (m.t === "snap") {
@@ -756,8 +781,20 @@ function onNet(m) {
   else if (m.t === "fx") { const o = others.get(m.id); if (o) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); }
   else if (m.t === "chat") { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); }
   else if (m.t === "chase" || m.t === "caught" || m.t === "escaped" || m.t === "stars") onVehEvent(m.t, m.stars || 0);
+  else if (m.t === "reload") stale(m.web, true);
   else if (m.t === "contract") setContract(m.c);
   else if (m.t === "done") contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped);
+}
+// (owner, 2026-11-08) updates: when a new build of the page is live, everyone reloads onto it (progress is saved in the
+// browser); this page's own build is read from version.json when it loads
+let myBuild = null;
+fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.v) myBuild = j.v; }).catch(() => {});
+function stale(web, told) {
+  if (!told && (!web || !myBuild || web === myBuild)) return false;
+  let lastR = 0; try { lastR = +sessionStorage.getItem("petdelivery.reload") || 0; } catch (e) { /* none */ }
+  if (Date.now() - lastR < 60000) return false;   // never loop
+  try { sessionStorage.setItem("petdelivery.reload", String(Date.now())); } catch (e) { /* private mode */ }
+  persist(); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
   const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0].join();
@@ -857,4 +894,4 @@ me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get others() { return others; }, step, deliver, fillBag, buyEgg, train, startContract, ride, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, emitConfetti, firework, caught, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get others() { return others; }, step, deliver, fillBag, buyEgg, train, startContract, ride, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, emitConfetti, firework, caught, trade, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; } };
