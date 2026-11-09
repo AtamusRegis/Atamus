@@ -1059,7 +1059,6 @@ addEventListener("keydown", (e) => {
   if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
-  if (e.ctrlKey && !me.foot && moveKind() === "fly" && /^(Key|Arrow|Digit)/.test(e.code)) e.preventDefault();   // Ctrl held to fly down: keep the browser's Ctrl shortcuts out of the way
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -2262,8 +2261,8 @@ function step(dt) {
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Ctrl / Fly ▼ (down); hovers otherwise
-    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ControlLeft") || keys.has("ControlRight")));
+  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Shift / Fly ▼ (down); hovers otherwise
+    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ShiftLeft") || keys.has("ShiftRight")));
     me.vy = 0; jumpQueued = 0;
     if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
     me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
