@@ -40,9 +40,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
 - No flicker: shadows are biased against acne and the vans' overlapping faces are offset.
 
+## The courier
+
+- (owner, 2026-11-09) A blocky R6-style figure matched to the owner's reference picture: a 2 x 2 x 1 stud torso, 1 x 2 x
+  1 arms and legs with softened edges and a rounded 1.25-stud head with two tall oval eyes and a smile (1 stud = 0.4 m,
+  about 2.1 m tall). Head and arms are skin, the torso is the player's shirt color, the legs are dark. On foot its arms
+  swing against its legs; riding, it sits at 0.8x size with its legs astride the pet and its arms reaching forward.
+
 ## Riding
 
-- You ride your pet (the courier on its back: shirt, cap, mail bag). **Phone:** put a thumb down on the left half of
+- You ride your pet (the courier on its back). **Phone:** put a thumb down on the left half of
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
 - **How pets move (owner, 2026-11-08):** a pet only turns to face where it's going (it never tilts up or down).
@@ -243,4 +250,4 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
-- (nothing yet)
+- The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.

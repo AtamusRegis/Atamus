@@ -294,6 +294,51 @@ for (let k = -4; k <= 4; k++) { box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + k * 2,
 for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + sx * 8, 0.65, POUND.z - 9 + k * 2.4);
 box(16, 0.12, 0.12, "#9aa7b2", POUND.x, 1.2, POUND.z - 9);
 
+// ---- the courier (owner, 2026-11-09): a blocky R6-style figure, matched to the owner's reference. 1 stud = 0.4 m:
+// torso 2 x 2 x 1 studs, arms and legs 1 x 2 x 1 with softened edges, a rounded 1.25-stud head with two oval eyes and
+// a smile; head and arms skin, torso the shirt, legs dark. It faces +z, feet at y 0; arms and legs swing from the
+// shoulders and hips ----
+const SKIN = "#f1c9a5", PANTS = "#3d4650", RBOX = new Map();
+function roundBox(w, h, d, r, seg) {   // a box with rounded edges; the front (+z) face's UVs are flat, for the face
+  const key = [w, h, d, r, seg].join(); if (RBOX.has(key)) return RBOX.get(key);
+  const S = seg * 2 + 2, g = new THREE.BoxGeometry(w, h, d, S, S, S), p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv, half = [w / 2, h / 2, d / 2], c = [0, 0, 0], v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    const front = n.getZ(i) > 0.5;
+    for (let a = 0; a < 3; a++) {   // bunch the grid toward the edges: seg steps across each rounded edge, the rest flat
+      const hf = half[a], k = Math.round(((p.getComponent(i, a) / hf + 1) / 2) * S);
+      c[a] = k <= seg ? -hf + (k / seg) * r : k >= S - seg ? hf - ((S - k) / seg) * r : -(hf - r) + ((k - seg) / (S - 2 * seg)) * 2 * (hf - r);
+    }
+    const ix = clamp(c[0], r - half[0], half[0] - r), iy = clamp(c[1], r - half[1], half[1] - r), iz = clamp(c[2], r - half[2], half[2] - r);
+    v.set(c[0] - ix, c[1] - iy, c[2] - iz).normalize(); n.setXYZ(i, v.x, v.y, v.z); v.multiplyScalar(r);
+    p.setXYZ(i, ix + v.x, iy + v.y, iz + v.z);
+    if (front) uv.setXY(i, (ix + v.x) / w + 0.5, (iy + v.y) / h + 0.5);
+  }
+  RBOX.set(key, g); return g;
+}
+const FACE_M = (() => {   // the head's front: skin with two tall oval eyes and a smile
+  const cv = document.createElement("canvas"); cv.width = cv.height = 256; const x = cv.getContext("2d");
+  x.fillStyle = SKIN; x.fillRect(0, 0, 256, 256); x.fillStyle = x.strokeStyle = "#16181a";
+  for (const ex of [103, 153]) { x.beginPath(); x.ellipse(ex, 88, 8.5, 18, 0, 0, TAU); x.fill(); }
+  x.lineWidth = 10; x.lineCap = "round"; x.beginPath(); x.moveTo(86, 172); x.quadraticCurveTo(128, 254, 170, 172); x.stroke();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return new THREE.MeshLambertMaterial({ map: t });
+})();
+function courierModel(shirt, seated) {
+  const g = new THREE.Group(), legs = [], arms = [];
+  const part = (w, h, d, m, x, y, z, parent, r = 0.025, seg = 2) => { const o = new THREE.Mesh(roundBox(w, h, d, r, seg), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
+  for (const x of [-0.2, 0.2]) {   // legs hang from the hips (y 0.8)
+    const l = new THREE.Group(); l.position.set(x, 0.8, 0); g.add(l); legs.push(l); part(0.4, 0.8, 0.4, mat(PANTS), 0, -0.4, 0, l);
+    if (seated) l.rotation.set(-1.05, 0, Math.sign(x) * 0.5);   // astride the pet: forward, down and out
+  }
+  part(0.8, 0.8, 0.4, mat(shirt), 0, 1.2, 0, g);
+  for (const x of [-0.6, 0.6]) {   // arms swing from the shoulders, a quarter of the way down
+    const a = new THREE.Group(); a.position.set(x, 1.4, 0); g.add(a); arms.push(a); part(0.4, 0.8, 0.4, mat(SKIN), 0, -0.2, 0, a);
+    if (seated) a.rotation.x = -0.55;   // reaching forward to hold on
+  }
+  const sk = mat(SKIN); part(0.5, 0.48, 0.5, [sk, sk, sk, sk, FACE_M, sk], 0, 1.84, 0, g, 0.12, 4);
+  return { g, legs, arms };
+}
+
 // ---- a pet (built from simple shapes; it faces +z) with its rider ----
 // (owner, 2026-11-08: they all looked alike) each kind has its own build: body shape and size, legs, neck, head and
 // snout, ears, tail and its own extras, so each reads at a glance
@@ -465,10 +510,8 @@ function petModel(sp, rider) {
     seat = legH + bh;
   }
   let top = seat;
-  if (rider) {   // the courier: a shirt, a cap and a mail bag
-    const r = new THREE.Group(); r.position.set(0, seat, seatZ); body.add(r);
-    box(0.55, 0.75, 0.35, rider, 0, 0.45, 0, r); box(0.45, 0.45, 0.45, "#f1c9a5", 0, 1.08, 0, r); box(0.5, 0.15, 0.55, "#3a6ea8", 0, 1.36, 0.05, r); box(0.5, 0.06, 0.3, "#3a6ea8", 0, 1.3, 0.32, r);
-    box(0.25, 0.42, 0.5, "#a0703f", 0.38, 0.35, -0.02, r); top = seat + 1.6;
+  if (rider) {   // the courier, seated (a little smaller): hips just above the pet's back
+    const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4;
   }
   return { g, body, legs, wings, head, tails, k, top, butterfly: L.plan === "butterfly", fly: !!s.fly, hop: !!L.hop, plan: L.plan };
 }
@@ -564,18 +607,10 @@ function drawGuide(tx, ty, tz, on) {
   if (v.z < -0.5) { gt.project(camera); const vis = gt.x > -0.94 && gt.x < 0.94 && gt.y > -0.9 && gt.y < 0.86; pinEl.style.display = vis ? "block" : "none"; if (vis) pinEl.style.transform = `translate(${((gt.x + 1) / 2) * innerWidth}px, ${((1 - gt.y) / 2) * innerHeight}px)`; }
   else pinEl.style.display = "none";
 }
-// the courier on foot (inside houses): legs that walk
-function walkerModel(shirt) {
-  const g = new THREE.Group(), legs = [];
-  for (const x of [-0.14, 0.14]) { const l = new THREE.Group(); l.position.set(x, 0.75, 0); box(0.2, 0.75, 0.22, "#3d4650", 0, -0.37, 0, l); g.add(l); legs.push(l); }
-  box(0.55, 0.75, 0.35, shirt, 0, 1.12, 0, g); box(0.45, 0.45, 0.45, "#f1c9a5", 0, 1.75, 0, g); box(0.5, 0.15, 0.55, "#3a6ea8", 0, 2.03, 0.05, g); box(0.5, 0.06, 0.3, "#3a6ea8", 0, 1.97, 0.32, g);
-  box(0.25, 0.42, 0.5, "#a0703f", 0.38, 1.0, -0.02, g);
-  for (const x of [-0.36, 0.36]) box(0.14, 0.6, 0.16, shirt, x, 1.15, 0, g);
-  g.traverse((o) => (o.castShadow = true)); scene.add(g); g.visible = false;
-  return { g, legs };
-}
+// the courier on foot (inside houses): legs that walk, arms that swing against them
+function walkerModel(shirt) { const w = courierModel(shirt); scene.add(w.g); w.g.visible = false; return w; }
 const walker = walkerModel(save.shirt);
-function animateWalker(w, t, moving) { const sw = moving ? Math.sin(t * 9) * 0.7 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; }
+function animateWalker(w, t, moving) { const sw = moving ? Math.sin(t * 9) * 0.7 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; w.arms[0].rotation.x = -sw; w.arms[1].rotation.x = sw; }
 // dizzy stars when animal control catches me
 const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos((k * TAU) / 4) * 0.8, 0, Math.sin((k * TAU) / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
 // a beam over each house I have a parcel for (pink over the islands: double pay)
