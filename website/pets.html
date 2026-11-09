@@ -117,6 +117,11 @@
     .pick { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; text-align: left; padding: 6px 8px; border-radius: 8px; font: 600 14px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
     .pick img { width: 28px; height: 28px; }
     .pick.on, .pick:hover { background: #fff6dc; }
+    #guide { position: fixed; left: 0; top: 0; margin-top: -18px; transform-origin: 0 50%; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 14px rgba(255,190,40,.8)); animation: glow 1.2s ease-in-out infinite; }
+    #pin { position: fixed; left: 0; top: 0; margin: -54px 0 0 -20px; pointer-events: none; z-index: 3; display: none; filter: drop-shadow(0 0 6px #ffb800) drop-shadow(0 0 16px rgba(255,190,40,.9)); }
+    #pin svg { animation: bob 1s ease-in-out infinite; }
+    @keyframes glow { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -136,6 +141,8 @@
     </div>
   </div>
   <div id="joy"><i></i></div>
+  <div id="guide"><svg viewBox="0 0 120 36" width="120" height="36"><defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#ffd35a" stop-opacity="0"/><stop offset=".35" stop-color="#ffd35a"/><stop offset="1" stop-color="#fff3c0"/></linearGradient></defs><path d="M2 14h82V3l34 15-34 15V22H2z" fill="url(#gg)" stroke="#fff8dc" stroke-width="2" stroke-linejoin="round"/></svg></div>
+  <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
@@ -167,6 +174,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100008"></script>
+  <script type="module" src="pets.js?v=1793100009"></script>
 </body>
 </html>

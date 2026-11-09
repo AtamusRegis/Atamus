@@ -546,7 +546,20 @@ let mine = null, myBubble = null;
 function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // a gold arrow over my pet pointing to the nearest house I have a parcel for (or the post office when the bag's empty)
-const arrow = new THREE.Group(); { const c = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 10), mat("#f2b01e")); c.rotation.x = Math.PI / 2; c.position.z = 0.8; arrow.add(c); box(0.3, 0.3, 1.1, "#f2b01e", 0, 0, 0, arrow, false); } scene.add(arrow);
+// (owner, 2026-11-08: the 3D arrow could look like a circle) a long glowing arrow drawn on the screen around my pet,
+// always pointing toward where to go, and a glowing marker over the place itself when it's in view
+const guideEl = $("guide"), pinEl = $("pin"), gv = new THREE.Vector3(), gp = new THREE.Vector3(), gt = new THREE.Vector3();
+function drawGuide(tx, ty, tz, on) {
+  if (!on) { guideEl.style.display = pinEl.style.display = "none"; return; }
+  const W = innerWidth, H = innerHeight;
+  gp.set(me.x, me.y + mine.top * 0.55, me.z).project(camera); const px = ((gp.x + 1) / 2) * W, py = ((1 - gp.y) / 2) * H;
+  gt.set(tx, ty + 2.5, tz); gv.copy(gt).applyMatrix4(camera.matrixWorldInverse);
+  let ang;
+  if (gv.z < -0.5) { gt.project(camera); const qx = ((gt.x + 1) / 2) * W, qy = ((1 - gt.y) / 2) * H; ang = Math.atan2(qy - py, qx - px); const vis = gt.x > -0.94 && gt.x < 0.94 && gt.y > -0.9 && gt.y < 0.86; pinEl.style.display = vis ? "block" : "none"; if (vis) pinEl.style.transform = `translate(${qx}px, ${qy}px)`; }
+  else { pinEl.style.display = "none"; ang = Math.atan2(1, gv.x / Math.max(1, Math.abs(gv.z))); }   // behind the camera: point down and to its side
+  guideEl.style.display = "block"; guideEl.style.transform = `translate(${px + Math.cos(ang) * 46}px, ${py + Math.sin(ang) * 46}px) rotate(${ang}rad)`;
+}
+const arrow = new THREE.Group(); arrow.visible = false;
 // dizzy stars when animal control catches me
 const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos((k * TAU) / 4) * 0.8, 0, Math.sin((k * TAU) / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
 // a beam over each house I have a parcel for (pink over the islands: double pay)
@@ -691,9 +704,14 @@ function fadeHouses(dt, cx, cy, cz) {
   }
 }
 function placeCamera(dt) {
+  if (me.inst && house && !placing) { cam.pitch = Math.min(cam.pitch, 0.45); cam.goalDist = Math.min(cam.goalDist, 9); }
   cam.dist += (cam.goalDist - cam.dist) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 10);
-  const cx = me.x + Math.sin(cam.yaw) * cam.dist * Math.cos(cam.pitch), cz = me.z + Math.cos(cam.yaw) * cam.dist * Math.cos(cam.pitch);
-  let cy = cam.y + 1.5 + cam.dist * Math.sin(cam.pitch);
+  let d = cam.dist, cx, cz, cy;
+  for (let i = 0; i < 14; i++) {   // at home (not while building) the camera stays inside the walls and under the roof
+    cx = me.x + Math.sin(cam.yaw) * d * Math.cos(cam.pitch); cz = me.z + Math.cos(cam.yaw) * d * Math.cos(cam.pitch); cy = cam.y + 1.5 + d * Math.sin(cam.pitch);
+    if (!me.inst || !house || placing || (inHouse(cx, cz, 0.45) && cy < WALL_H - 0.25)) break; d *= 0.82;
+  }
+  if (house) house.ceiling.visible = cy < WALL_H - 0.1;
   if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
   const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
   camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
@@ -736,7 +754,7 @@ addEventListener("keydown", (e) => {
   if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (placing) stopPlacing(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); jumpQueued = performance.now() + 150; }
-  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G");
+  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR") runAct("R");
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
@@ -893,9 +911,9 @@ function useSnack() { if (save.items.snack <= 0 || me.boostUntil > performance.n
 // run it alone. ----
 let contract = null;   // { kind, goal, done, mine, ends, pool }
 const CONTRACTS = [
-  { id: "rush", name: "Rush Order", time: 60, base: 3, per: 3, pay: 22 },
-  { id: "quick", name: "Quick Contract", time: 90, base: 5, per: 4, pay: 26 },
-  { id: "big", name: "Big Contract", time: 180, base: 10, per: 8, pay: 30 },
+  { id: "rush", name: "Rush Order", time: 150, base: 3, per: 3, pay: 22 },   // (owner, 2026-11-08: more time)
+  { id: "quick", name: "Quick Contract", time: 240, base: 5, per: 4, pay: 26 },
+  { id: "big", name: "Big Contract", time: 420, base: 10, per: 8, pay: 30 },
 ];
 function renderBoard() {
   const el = $("board"); el.innerHTML = "";
@@ -1227,51 +1245,83 @@ function renderTrade() {
 }
 
 // ---- homes (owner, 2026-11-08): buy a house in town; its door (E) takes you into your own copy of it, far off in the
-// sky where nobody else is. Build rooms for space, beds (each holds 2 more pets) and playpens: a pet put in one earns
-// coins while you're away, collected when you come home. Invite your party in. ----
-const HOME = World.HOME, RS = HOME.roomSize, IN = { x: 5000, z: 5000 };
+// sky where nobody else is: walled rooms under a roof. Freebuild: rooms on any free square next to one you have, beds
+// (each holds 2 more pets), playpens (a pet in one earns coins while you're away, collected when you come home) and
+// windows anywhere they fit; anything can be taken away again for half its price. Tap a playpen to choose its pet.
+// Invite your party in. ----
+const HOME = World.HOME, RS = HOME.roomSize, IN = { x: 5000, z: 5000 }, WALL_H = 3.6;
 const cellsOf = (home) => home.cells || Array.from({ length: home.rooms }, (_, k) => [k % 3, Math.floor(k / 3)]);
 const roomAt = (k, home = house ? house.msg.home : save.home) => { const c = cellsOf(home)[k] || [0, 0]; return { x: IN.x + c[0] * RS, z: IN.z + c[1] * RS }; };
 const hasCell = (home, x, z) => cellsOf(home).some(([a, b]) => a === x && b === z);
-const SLOTS = [[3.6, 4.2], [10.4, 4.2], [3.6, 10.4], [10.4, 10.4]];
-let house = null;   // { msg, mine, g, rects, pens: [{ m, cx, cz, x, z, yaw, tx, tz }] }
+const SIZE = { bed: [2.4, 3.2], pen: [5.6, 5.6] };
+const footprint = (t) => { const [w, d] = SIZE[t.k], sw = t.r % 2 ? d : w, sd = t.r % 2 ? w : d; return [IN.x + t.x - sw / 2, IN.x + t.x + sw / 2, IN.z + t.z - sd / 2, IN.z + t.z + sd / 2]; };
+let house = null;   // { msg, mine, g, rects, pens, picks (meshes to tap), ceiling }
 const doorOf = (i) => { const h = houses[i]; return { x: h.x + Math.sin(h.yaw) * 5.4, z: h.z + Math.cos(h.yaw) * 5.4, y: h.base }; };
 const houseMsgMine = () => ({ host: myId, hostName: myName, home: save.home, pens: save.home ? save.home.items.map((t) => { const p = t.k === "pen" && t.pet && save.pets.find((q) => q.id === t.pet); return p ? { sp: p.sp, lv: p.lv } : null; }) : [], inst: -1, mine: true });
 const myRing = new THREE.Mesh(RINGG(1.6), ringM("#3fb36b")); myRing.visible = false; scene.add(myRing);
+const glassM = new THREE.MeshBasicMaterial({ color: "#bfe6ff", transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide });
+// a wall along one side of a room, in thirds: plain, a window, or (the front of the first room) the door
+function wallSide(g, cx, cz, side, wins, door) {
+  const o = { x: IN.x + cx * RS, z: IN.z + cz * RS }, third = RS / 3, C = "#f4ead8", T = 0.3;
+  for (let p = 0; p < 3; p++) {
+    // centre of this third along the wall, and which way the wall runs
+    const along = (p + 0.5) * third, alongX = side >= 2;
+    const at = (a, y, w, h) => { const x = alongX ? o.x + a : o.x + (side === 1 ? RS : 0), z = alongX ? o.z + (side === 3 ? RS : 0) : o.z + a; return box(alongX ? w : T, h, alongX ? T : w, C, x, y, z, g); };
+    if (door && p === 1) { at(along - third / 2 + 0.6, WALL_H / 2, 1.2, WALL_H); at(along + third / 2 - 0.6, WALL_H / 2, 1.2, WALL_H); at(along, 2.6 + (WALL_H - 2.6) / 2, third - 2.4, WALL_H - 2.6); continue; }
+    if (wins.has(p)) {
+      at(along, 0.55, third, 1.1); at(along, 2.9 + (WALL_H - 2.9) / 2, third, WALL_H - 2.9);
+      at(along - third / 2 + 0.4, 2.0, 0.8, 1.8); at(along + third / 2 - 0.4, 2.0, 0.8, 1.8);
+      const gl = new THREE.Mesh(BOX, glassM); gl.scale.set(alongX ? third - 1.6 : 0.06, 1.8, alongX ? 0.06 : third - 1.6); gl.position.set(alongX ? o.x + along : o.x + (side === 1 ? RS : 0), 2.0, alongX ? o.z + (side === 3 ? RS : 0) : o.z + along); g.add(gl);
+      const sill = at(along, 1.12, third - 1.4, 0.08); sill.material = mat("#c98b4f");
+      continue;
+    }
+    at(along, WALL_H / 2, third, WALL_H);
+  }
+}
 function buildHouse(msg) {
   if (house) scene.remove(house.g);
-  const g = new THREE.Group(), home = msg.home, rects = [], pens = [];
-  cellsOf(home).forEach(([cx, cz], k) => {   // rooms: open to their neighbors, walled outside, the door in the first room's front
+  const g = new THREE.Group(), home = msg.home, rects = [], pens = [], picks = [], cells = cellsOf(home), ceiling = new THREE.Group();
+  cells.forEach(([cx, cz], k) => {
     const o = roomAt(k, home), has = (dx, dz) => hasCell(home, cx + dx, cz + dz);
-    box(RS, 0.3, RS, (cx + cz) % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false);
-    if (!has(-1, 0)) box(0.3, 1.3, RS, "#f4ead8", o.x, 0.65, o.z + RS / 2, g);
-    if (!has(1, 0)) box(0.3, 1.3, RS, "#f4ead8", o.x + RS, 0.65, o.z + RS / 2, g);
-    if (!has(0, -1)) { if (k === 0) { box(5, 1.3, 0.3, "#f4ead8", o.x + 2.5, 0.65, o.z, g); box(5, 1.3, 0.3, "#f4ead8", o.x + RS - 2.5, 0.65, o.z, g); } else box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z, g); }
-    if (!has(0, 1)) box(RS, 1.3, 0.3, "#f4ead8", o.x + RS / 2, 0.65, o.z + RS, g);
+    const floor = box(RS, 0.3, RS, (cx + cz) % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false); floor.userData.cell = [cx, cz]; picks.push(floor);
+    box(RS + 0.3, 0.3, RS + 0.3, "#efe6d4", o.x + RS / 2, WALL_H + 0.15, o.z + RS / 2, ceiling, false);   // the roof (a light ceiling from inside)
+    [[-1, 0, 0], [1, 0, 1], [0, -1, 2], [0, 1, 3]].forEach(([dx, dz, side]) => {
+      if (has(dx, dz)) return;
+      const wins = new Set(home.items.filter((t) => t.k === "window" && t.c[0] === cx && t.c[1] === cz && t.s === side).map((t) => t.p));
+      wallSide(g, cx, cz, side, wins, k === 0 && side === 2);
+    });
   });
+  g.add(ceiling);
   box(3.6, 0.06, 1.6, "#c8553d", IN.x + RS / 2, 0.03, IN.z + 1, g, false);   // the doormat: E here to go back out
   home.items.forEach((t, i) => {
-    const o = roomAt(t.room, home), [sx, sz] = SLOTS[t.slot], x = o.x + sx, z = o.z + sz;
-    if (t.k === "bed") {
-      box(2.4, 0.5, 3.2, "#8a5a3a", x, 0.25, z, g); box(2.2, 0.35, 3, "#9ad0ff", x, 0.65, z, g); box(1.6, 0.3, 0.7, "#ffffff", x, 0.95, z - 1.05, g);
-      rects.push([x - 1.4, x + 1.4, z - 1.8, z + 1.8]);
-    } else {
-      for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; box(0.15, 1, 0.15, "#c98b4f", x + Math.cos(a) * 2.6, 0.5, z + Math.sin(a) * 2.6, g); }
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.07, 6, 32).rotateX(Math.PI / 2), mat("#c98b4f")); ring.position.set(x, 0.85, z); g.add(ring);
-      const grass = new THREE.Mesh(new THREE.CircleGeometry(2.5, 24).rotateX(-Math.PI / 2), mat("#9bd66f")); grass.position.set(x, 0.02, z); g.add(grass);
-      rects.push([x - 2.8, x + 2.8, z - 2.8, z + 2.8]);
-      const pp = msg.pens && msg.pens[i];
-      if (pp && SPECIES[pp.sp]) { const m = petModel(pp.sp); m.g.scale.setScalar(0.8 * petScale(pp.lv)); g.add(m.g); pens.push({ m, cx: x, cz: z, x, z, yaw: 0, tx: x, tz: z, wait: 0 }); }
+    if (t.k === "window") {   // something to tap when taking it away
+      const side = t.s, alongX = side >= 2, a = (t.p + 0.5) * (RS / 3), o = { x: IN.x + t.c[0] * RS, z: IN.z + t.c[1] * RS };
+      const m = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ visible: false })); m.scale.set(alongX ? 3 : 0.6, 1.9, alongX ? 0.6 : 3); m.position.set(alongX ? o.x + a : o.x + (side === 1 ? RS : 0), 2, alongX ? o.z + (side === 3 ? RS : 0) : o.z + a); m.userData.item = i; g.add(m); picks.push(m);
+      return;
     }
+    const it = new THREE.Group(); it.position.set(IN.x + t.x, 0, IN.z + t.z); it.rotation.y = (t.r * Math.PI) / 2; g.add(it);
+    if (t.k === "bed") { box(2.4, 0.5, 3.2, "#8a5a3a", 0, 0.25, 0, it); box(2.2, 0.35, 3, "#9ad0ff", 0, 0.65, 0, it); box(1.6, 0.3, 0.7, "#ffffff", 0, 0.95, -1.05, it); box(2.4, 1.1, 0.2, "#8a5a3a", 0, 0.55, -1.6, it); }
+    else {
+      for (let n = 0; n < 12; n++) { const a = (n / 12) * TAU; box(0.15, 1, 0.15, "#c98b4f", Math.cos(a) * 2.6, 0.5, Math.sin(a) * 2.6, it); }
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.07, 6, 32).rotateX(Math.PI / 2), mat("#c98b4f")); ring.position.y = 0.85; it.add(ring);
+      const grass = new THREE.Mesh(new THREE.CircleGeometry(2.5, 24).rotateX(-Math.PI / 2), mat("#9bd66f")); grass.position.y = 0.02; it.add(grass);
+      const pp = msg.pens && msg.pens[i];
+      if (pp && SPECIES[pp.sp]) { const m = petModel(pp.sp); m.g.scale.setScalar(0.8 * petScale(pp.lv)); g.add(m.g); pens.push({ m, cx: IN.x + t.x, cz: IN.z + t.z, x: IN.x + t.x, z: IN.z + t.z, yaw: 0, tx: IN.x + t.x, tz: IN.z + t.z, wait: 0 }); }
+    }
+    const hit = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ visible: false })); const [w, d] = SIZE[t.k]; hit.scale.set(w, 1.4, d); hit.position.y = 0.7; hit.userData.item = i; it.add(hit); picks.push(hit);
+    rects.push(footprint(t));
   });
-  scene.add(g); house = { msg, mine: !!msg.mine || msg.host === myId, g, rects, pens };
+  scene.add(g); house = { msg, mine: !!msg.mine || msg.host === myId, g, rects, pens, picks, ceiling };
 }
 // (owner, 2026-11-08: couldn't walk into new rooms) inside any room, kept off its outside walls only
-function inHouse(x, z) {
+function inHouse(x, z, m = 0.7) {
   if (!house) return false;
-  const home = house.msg.home, cx = Math.floor((x - IN.x) / RS), cz = Math.floor((z - IN.z) / RS);
+  return inRooms(house.msg.home, x, z, m);
+}
+function inRooms(home, x, z, m) {
+  const cx = Math.floor((x - IN.x) / RS), cz = Math.floor((z - IN.z) / RS);
   if (!hasCell(home, cx, cz)) return false;
-  const lx = x - IN.x - cx * RS, lz = z - IN.z - cz * RS, m = 0.7;
+  const lx = x - IN.x - cx * RS, lz = z - IN.z - cz * RS;
   if (lx < m && !hasCell(home, cx - 1, cz)) return false; if (lx > RS - m && !hasCell(home, cx + 1, cz)) return false;
   if (lz < m && !hasCell(home, cx, cz - 1)) return false; if (lz > RS - m && !hasCell(home, cx, cz + 1)) return false;
   return true;
@@ -1280,7 +1330,7 @@ const houseBlocked = (x, z) => house.rects.some((r) => x > r[0] - 0.6 && x < r[1
 function enterHome(msg) {
   const mineToo = msg.host === myId; if (mineToo) msg.mine = true;
   closePanels(); buildHouse(msg); me.inst = msg.inst || -1; me.bagBefore = me.bag.slice();
-  me.x = IN.x + RS / 2; me.z = IN.z + 2.6; me.y = 0; me.vy = 0; me.yaw = 0; cam.yaw = Math.PI; cam.pitch = Math.max(0.5, cam.pitch); cam.y = 0;
+  me.x = IN.x + RS / 2; me.z = IN.z + 2.6; me.y = 0; me.vy = 0; me.yaw = 0; cam.yaw = Math.PI; cam.pitch = 0.3; cam.goalDist = 7; cam.y = 0;
   if (mineToo) collectPens();
   else toast(msg.hostName);
   uiKey = ""; sendPos(true);
@@ -1289,7 +1339,7 @@ function leaveHouseLocal() {
   if (!house) { me.inst = 0; return; }
   const i = house.msg.home.house, d = doorOf(i), h = houses[i];
   stopPlacing(); scene.remove(house.g); house = null; me.inst = 0;
-  me.x = d.x + Math.sin(h.yaw) * 2; me.z = d.z + Math.cos(h.yaw) * 2; me.y = floorAt(me.x, me.z, d.y + 1); me.vy = 0; me.yaw = h.yaw; cam.yaw = h.yaw + Math.PI; cam.y = me.y;
+  me.x = d.x + Math.sin(h.yaw) * 2; me.z = d.z + Math.cos(h.yaw) * 2; me.y = floorAt(me.x, me.z, d.y + 1); me.vy = 0; me.yaw = h.yaw; cam.yaw = h.yaw + Math.PI; cam.y = me.y; cam.goalDist = 14; cam.pitch = 0.5;
   if (openPanel === "p-build") closePanels(); uiKey = ""; sendPos(true);
 }
 function exitHome() { netSend({ t: "home_exit" }); leaveHouseLocal(); }
@@ -1308,7 +1358,7 @@ function collectPens() {
 }
 function buyHouse(i) {
   const price = World.housePrice(i); if (save.home || save.coins < price) return;
-  save.coins -= price; save.home = { house: i, rooms: 1, items: [] }; persist(); flushSave(true);
+  save.coins -= price; save.home = { house: i, rooms: 1, cells: [[0, 0]], items: [] }; persist(); flushSave(true);
   closePanels(); banner("Home!", "#3fb36b"); firework(me.x, me.y + 2, me.z); emitConfetti(me.x, me.y + 3, me.z, 80, 5, 8); uiKey = ""; hudKey = "";
 }
 function renderHomeBuy() {
@@ -1318,78 +1368,134 @@ function renderHomeBuy() {
   el.appendChild(b);
 }
 let homeTarget = -1, picking = -1;
-// building (owner, 2026-11-08: choose where): a room on any free square next to one you have (not in front of the door),
-// furniture on any free spot; pick it on the floor
+// ---- building ----
 function freeCells() {
   const h = save.home, out = [];
   for (const [x, z] of cellsOf(h)) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = x + dx, b = z + dz; if (Math.abs(a) > 4 || Math.abs(b) > 4 || (a === 0 && b === -1) || hasCell(h, a, b) || out.some((c) => c[0] === a && c[1] === b)) continue; out.push([a, b]); }
   return out;
 }
-function freeSlots() {
-  const used = new Set(save.home.items.map((t) => t.room * 10 + t.slot)), out = [];
-  for (let r = 0; r < cellsOf(save.home).length; r++) for (let sl = 0; sl < HOME.slots; sl++) if (!used.has(r * 10 + sl)) out.push({ room: r, slot: sl });
+function freeWindows() {
+  const h = save.home, cells = cellsOf(h), out = [];
+  for (const c of cells) for (let side = 0; side < 4; side++) {
+    if (!World.outerSide(cells, c, side)) continue;
+    for (let p = 0; p < 3; p++) { if (c[0] === 0 && c[1] === 0 && side === 2 && p === 1) continue; if (h.items.some((t) => t.k === "window" && t.c[0] === c[0] && t.c[1] === c[1] && t.s === side && t.p === p)) continue; out.push({ c: [c[0], c[1]], s: side, p }); }
+  }
   return out;
 }
-function build(kind, where) {
-  const h = save.home; if (!h) return;
-  const price = kind === "room" ? World.roomPrice(h.rooms) : HOME[kind];
-  if (save.coins < price) return;
-  if (kind === "room") {
-    if (h.rooms >= HOME.maxRooms) return; const c = where || freeCells()[0]; if (!c || !freeCells().some((q) => q[0] === c[0] && q[1] === c[1])) return;
-    h.cells = cellsOf(h).concat([[c[0], c[1]]]); h.rooms = h.cells.length;
-  } else { const sl = where || freeSlots()[0]; if (!sl || !freeSlots().some((q) => q.room === sl.room && q.slot === sl.slot)) return; h.items.push({ k: kind, room: sl.room, slot: sl.slot }); }
-  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); if (openPanel === "p-build") renderBuild(); hudKey = "";
-  emitConfetti(me.x, me.y + 2.5, me.z, 30, 3, 6);
+// can furniture go here? on the floor, clear of walls, the doormat and other furniture
+function fits(t, skip) {
+  const r = footprint(t), home = save.home;
+  for (const [x, z] of [[r[0], r[2]], [r[1], r[2]], [r[0], r[3]], [r[1], r[3]], [(r[0] + r[1]) / 2, (r[2] + r[3]) / 2], [(r[0] + r[1]) / 2, r[2]], [(r[0] + r[1]) / 2, r[3]], [r[0], (r[2] + r[3]) / 2], [r[1], (r[2] + r[3]) / 2]]) if (!inRooms(home, x, z, 0.3)) return false;
+  if (r[0] < IN.x + RS / 2 + 2.3 && r[1] > IN.x + RS / 2 - 2.3 && r[2] < IN.z + 2.8) return false;   // the doormat and the way in
+  return home.items.every((o, i) => i === skip || o.k === "window" || (() => { const q = footprint(o); return r[1] <= q[0] + 0.1 || r[0] >= q[1] - 0.1 || r[3] <= q[2] + 0.1 || r[2] >= q[3] - 0.1; })());
 }
-let placing = null;   // { kind, g, picks: [{ mesh, where }] }
+function priceOf(t) { return t.k === "room" ? World.roomPrice(cellsOf(save.home).length - 1) : HOME[t.k]; }
+function build(kind, where) {
+  const h = save.home; if (!h) return false;
+  const price = kind === "room" ? World.roomPrice(h.rooms) : HOME[kind];
+  if (save.coins < price) return false;
+  if (kind === "room") {
+    if (h.rooms >= HOME.maxRooms || !where || !freeCells().some((q) => q[0] === where[0] && q[1] === where[1])) return false;
+    h.cells = cellsOf(h).concat([[where[0], where[1]]]); h.rooms = h.cells.length;
+  } else if (kind === "window") {
+    if (!where || !freeWindows().some((q) => q.c[0] === where.c[0] && q.c[1] === where.c[1] && q.s === where.s && q.p === where.p)) return false;
+    h.items.push({ k: "window", c: where.c, s: where.s, p: where.p });
+  } else {
+    if (h.items.length >= HOME.maxItems) return false;
+    const t = { k: kind, x: where.x, z: where.z, r: where.r || 0 }; if (!fits(t, -1)) return false; h.items.push(t);
+  }
+  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); hudKey = "";
+  emitConfetti(me.x, me.y + 2.5, me.z, 30, 3, 6); return true;
+}
+// take something away: half its price back; a room only when it's empty, isn't the first and the rest stay joined up
+function demolish(target) {
+  const h = save.home; if (!h) return false;
+  if (target.cell) {
+    const [x, z] = target.cell, cells = cellsOf(h); if ((!x && !z) || cells.length < 2) return false;
+    const rest = cells.filter(([a, b]) => a !== x || b !== z);
+    if (h.items.some((t) => t.k !== "window" && (() => { const r = footprint(t); return r[1] > IN.x + x * RS && r[0] < IN.x + (x + 1) * RS && r[3] > IN.z + z * RS && r[2] < IN.z + (z + 1) * RS; })())) { toast("✕"); return false; }
+    const seen = new Set(["0,0"]), q = [[0, 0]]; while (q.length) { const [a, b] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = a + dx + "," + (b + dz); if (!seen.has(k) && rest.some(([c, d]) => c === a + dx && d === b + dz)) { seen.add(k); q.push([a + dx, b + dz]); } } }
+    if (seen.size !== rest.length) { toast("✕"); return false; }
+    h.cells = rest; h.rooms = rest.length; save.coins += Math.floor(World.roomPrice(rest.length) / 2);
+    h.items = h.items.filter((t) => t.k !== "window" || (rest.some(([a, b]) => a === t.c[0] && b === t.c[1]) && World.outerSide(rest, t.c, t.s)));
+  } else {
+    const t = h.items[target.item]; if (!t) return false;
+    if (t.k === "pen") collectPens();
+    h.items.splice(target.item, 1); save.coins += Math.floor(HOME[t.k] / 2);
+  }
+  persist(); flushSave(true); buildHouse(houseMsgMine()); hudKey = ""; emitSparks(me.x, me.y + 1.5, me.z, 20, 4, ["#ffffff", "#ffd35a"], 0.7, 1); return true;
+}
+// placing: furniture follows the pointer (green where it fits, red where not; R or ⟳ turns it) and a tap puts it down;
+// rooms and windows show green markers to tap; removing: tap what to take away
+let placing = null;   // { kind, g, picks?, ghost?, r, at }
 const pickM = new THREE.MeshBasicMaterial({ color: "#3fb36b", transparent: true, opacity: 0.45, depthWrite: false });
+const badM = new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.45, depthWrite: false });
+let camBefore = null;
 function startPlacing(kind) {
   stopPlacing(); closePanels();
   const g = new THREE.Group(), picks = [];
   if (kind === "room") for (const c of freeCells()) { const m = new THREE.Mesh(new THREE.BoxGeometry(RS - 1, 0.2, RS - 1), pickM); m.position.set(IN.x + c[0] * RS + RS / 2, 0.1, IN.z + c[1] * RS + RS / 2); g.add(m); picks.push({ mesh: m, where: c }); }
-  else for (const sl of freeSlots()) { const o = roomAt(sl.room, save.home), [sx, sz] = SLOTS[sl.slot], m = new THREE.Mesh(new THREE.CylinderGeometry(kind === "pen" ? 2.6 : 1.6, kind === "pen" ? 2.6 : 1.6, 0.2, 24), pickM); m.position.set(o.x + sx, 0.1, o.z + sz); g.add(m); picks.push({ mesh: m, where: sl }); }
-  if (!picks.length) return;
-  scene.add(g); placing = { kind, g, picks }; uiKey = "";
-  if (kind === "room") { cam.goalDist = Math.max(cam.goalDist, 34); cam.pitch = Math.max(cam.pitch, 0.9); }
+  else if (kind === "window") for (const w of freeWindows()) { const alongX = w.s >= 2, a = (w.p + 0.5) * (RS / 3), o = { x: IN.x + w.c[0] * RS, z: IN.z + w.c[1] * RS }; const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 3 : 0.7, 1.8, alongX ? 0.7 : 3), pickM); m.position.set(alongX ? o.x + a : o.x + (w.s === 1 ? RS : 0), 2, alongX ? o.z + (w.s === 3 ? RS : 0) : o.z + a); g.add(m); picks.push({ mesh: m, where: w }); }
+  else if (kind !== "remove") { const [w, d] = SIZE[kind]; const ghostM = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, d), pickM); ghostM.position.set(me.x, 0.45, me.z + 4); g.add(ghostM); placing = { kind, g, ghost: ghostM, r: 0, at: null }; }
+  if ((kind === "room" || kind === "window") && !picks.length) return;
+  scene.add(g); if (!placing) placing = { kind, g, picks };
+  camBefore = camBefore || { d: cam.goalDist, p: cam.pitch }; cam.goalDist = Math.max(cam.goalDist, kind === "room" ? 36 : 26); cam.pitch = Math.max(cam.pitch, 1.0); uiKey = "";
 }
-function stopPlacing() { if (placing) { scene.remove(placing.g); placing = null; uiKey = ""; } }
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-function tapAt(px, py) {   // a tap on the floor while placing: build there
-  if (!placing) return false;
-  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  const hit = ray.intersectObjects(placing.picks.map((p) => p.mesh))[0]; if (!hit) return false;
-  const p = placing.picks.find((q) => q.mesh === hit.object), kind = placing.kind; stopPlacing(); build(kind, p.where); return true;
+function stopPlacing() { if (placing) { scene.remove(placing.g); placing = null; uiKey = ""; } if (camBefore) { cam.goalDist = camBefore.d; cam.pitch = camBefore.p; camBefore = null; } }
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
+function aim(px, py) { ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); }
+function moveGhost(px, py) {   // furniture under the pointer, on a half-metre grid
+  if (!placing || !placing.ghost) return null;
+  aim(px, py); if (!ray.ray.intersectPlane(floorPlane, hitV)) return null;
+  const at = { x: Math.round((hitV.x - IN.x) * 2) / 2, z: Math.round((hitV.z - IN.z) * 2) / 2, r: placing.r };
+  placing.at = at; placing.ghost.position.set(IN.x + at.x, 0.45, IN.z + at.z); placing.ghost.rotation.y = (at.r * Math.PI) / 2;
+  placing.ghost.material = fits({ k: placing.kind, ...at }, -1) ? pickM : badM; return at;
 }
+function turnGhost() { if (placing && placing.ghost) { placing.r = (placing.r + 1) % 4; if (placing.at) { placing.at.r = placing.r; placing.ghost.rotation.y = (placing.r * Math.PI) / 2; placing.ghost.material = fits({ k: placing.kind, ...placing.at }, -1) ? pickM : badM; } } }
+function tapAt(px, py) {
+  if (!house) return false;
+  aim(px, py);
+  if (placing) {
+    if (placing.ghost) { const at = moveGhost(px, py); if (at && build(placing.kind, at)) { const k = placing.kind, r = placing.r; stopPlacing(); if (save.coins >= HOME[k]) { startPlacing(k); placing.r = r; } } return true; }
+    if (placing.kind === "remove") {
+      const hit = ray.intersectObjects(house.picks)[0]; if (!hit) return true;
+      if (hit.object.userData.item !== undefined) { demolish({ item: hit.object.userData.item }); return true; }
+      const c = hit.object.userData.cell, key = c.join();   // a whole room: tap it twice
+      if (placing.armed === key) { placing.armed = null; demolish({ cell: c }); } else { placing.armed = key; toast("Sure?", "#e5534b"); }
+      return true;
+    }
+    const hit = ray.intersectObjects(placing.picks.map((p) => p.mesh))[0]; if (!hit) return false;
+    const p = placing.picks.find((q) => q.mesh === hit.object), kind = placing.kind; stopPlacing(); build(kind, p.where); return true;
+  }
+  if (house.mine) {   // (owner, 2026-11-08) tap a playpen to choose which pet lives in it
+    const hit = ray.intersectObjects(house.picks)[0], i = hit && hit.object.userData.item;
+    if (i !== undefined && save.home.items[i] && save.home.items[i].k === "pen") { picking = i; show("p-build"); return true; }
+  }
+  return false;
+}
+canvas.addEventListener("pointermove", (e) => { if (placing && placing.ghost && e.pointerType === "mouse") moveGhost(e.clientX, e.clientY); });
 function renderBuild() {
   const el = $("build"), h = save.home; el.innerHTML = ""; if (!h) return;
-  if (picking >= 0) {   // choosing a pet for a playpen
+  if (picking >= 0 && h.items[picking]) {   // choosing a pet for a playpen
     const pens = World.penPets(save), grid = document.createElement("div"); grid.className = "grid";
     const none = document.createElement("div"); none.className = "card"; none.innerHTML = `<span class="nm">—</span>`; none.onclick = () => setPen(picking, null); grid.appendChild(none);
     for (const p of save.pets) if (p.id !== save.ride && (!pens.has(p.id) || h.items[picking].pet === p.id)) grid.appendChild(card(p.sp, statLine(p), h.items[picking].pet === p.id, () => setPen(picking, p.id)));
     el.appendChild(grid); return;
   }
+  picking = -1;
   const row = document.createElement("div"); row.className = "buildrow";
   const opt = (label, kind, price, ok) => { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${label}<br><span class="coin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px"></span> ${fmt(price)}`; b.disabled = !ok || save.coins < price; b.onclick = () => startPlacing(kind); row.appendChild(b); };
-  const slot = freeSlots().length > 0;
-  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms && freeCells().length > 0); opt("Bed", "bed", HOME.bed, slot); opt("Playpen", "pen", HOME.pen, slot);
+  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms && freeCells().length > 0); opt("Bed", "bed", HOME.bed, h.items.length < HOME.maxItems); opt("Playpen", "pen", HOME.pen, h.items.length < HOME.maxItems); opt("Window", "window", HOME.window, freeWindows().length > 0);
+  const rm = document.createElement("button"); rm.className = "btn"; rm.type = "button"; rm.textContent = "Remove"; rm.style.background = "var(--red)"; rm.onclick = () => startPlacing("remove"); row.appendChild(rm);
   el.appendChild(row);
   const cap = document.createElement("div"); cap.className = "stats"; cap.style.margin = "10px 0"; cap.innerHTML = `<span>${save.pets.length} / ${World.petCap(save)}</span>`; el.appendChild(cap);
-  const grid = document.createElement("div"); grid.className = "grid";
-  h.items.forEach((t, i) => {
-    if (t.k !== "pen") return;
-    const p = t.pet && save.pets.find((q) => q.id === t.pet);
-    const d = p ? card(p.sp, statLine(p), false, () => { picking = i; renderBuild(); }) : document.createElement("div");
-    if (!p) { d.className = "card"; d.innerHTML = `<span class="nm">Playpen</span><span class="stats">+</span>`; d.onclick = () => { picking = i; renderBuild(); }; }
-    grid.appendChild(d);
-  });
-  el.appendChild(grid);
 }
 function setPen(i, id) {
   collectPens(); const t = save.home.items[i]; if (!t) return;
   if (id) { t.pet = id; t.since = Date.now(); } else { delete t.pet; delete t.since; }
-  picking = -1; persist(); flushSave(true); buildHouse(houseMsgMine()); renderBuild();
+  picking = -1; persist(); flushSave(true); buildHouse(houseMsgMine()); closePanels();
 }
-$("btn-build").onclick = () => { picking = -1; if (openPanel === "p-build") closePanels(); else show("p-build"); };
+$("btn-build").onclick = () => { picking = -1; stopPlacing(); if (openPanel === "p-build") closePanels(); else show("p-build"); };
 
 // ---- what I can do where I am: talk to someone (F), a door or the doormat (E); buttons for them on a phone ----
 let uiKey = "", acts = [];
@@ -1404,6 +1510,7 @@ function context() {
   if (me.inst && house) {
     if (hyp(me.x - (IN.x + RS / 2), me.z - (IN.z + 1)) < 2.4) a.push({ key: "E", label: "Exit", fn: exitHome });
     if (house.mine && party.length > 1) a.push({ key: "G", label: "Invite", fn: () => { netSend({ t: "home_invite" }); toast("→ Party"); } });
+    if (placing && placing.ghost) a.push({ key: "R", label: "⟳", fn: turnGhost });
     if (placing) a.push({ key: "Escape", label: "✕", fn: stopPlacing });
   } else if (loggedIn) {
     const i = nearDoor();
@@ -1578,11 +1685,10 @@ function draw(dt) {
   // the arrow: to the nearest house in my bag, else back to the post office
   let tx = PICKUP.x, tz = PICKUP.z, best = 1e9;
   for (const i of me.bag) { const h = houses[i], d = hyp(h.mx - me.x, h.mz - me.z); if (d < best) { best = d; tx = h.mx; tz = h.mz; } }
-  arrow.visible = !me.inst && hyp(tx - me.x, tz - me.z) > 6;
-  arrow.position.set(me.x, me.y + mine.top + 1.4 + Math.sin(clock * 3) * 0.15, me.z); arrow.rotation.y = Math.atan2(tx - me.x, tz - me.z);
+  const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  placeCamera(dt); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !me.inst && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -1597,4 +1703,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, placingPicks: () => (placing ? placing.picks : []), inHouseTest: (x, z) => inHouse(x, z) && !houseBlocked(x, z), teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, placingPicks: () => (placing ? placing.picks : []), inHouseTest: (x, z) => inHouse(x, z) && !houseBlocked(x, z), startPlacingTest: startPlacing, stopPlacingTest: stopPlacing, demolishTest: demolish, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

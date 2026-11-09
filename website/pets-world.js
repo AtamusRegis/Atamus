@@ -265,10 +265,17 @@ function nearestS(R, x, z) { let best = 0, bd = 1e9; for (let i = 0; i < R.pts.l
 // ---- a player's data (owner, 2026-11-08: saved on the server) and home rules, the same on both sides ----
 // data: { coins, pets: [{ id, sp, lv }], ride, items: { snack, ribbon, ticket }, treats: { sp: n }, delivered, nextId,
 //   shirt, home: null | { house (index in houses), rooms, cells: [[x, z], ...] (where each room is, 14 m squares; the
-//   first, with the front door, at [0, 0]), items: [{ k: "bed" | "pen", room, slot, pet?, since? }] } }
+//   first, with the front door, at [0, 0]), items: [{ k: "bed" | "pen", x, z (metres from the home's corner), r (quarter
+//   turns), pet?, since? } | { k: "window", c: [x, z] (its room), s (side: 0 west, 1 east, 2 front, 3 back), p (0-2 along
+//   the wall) }] } }
+// (owner, 2026-11-08: freebuild) furniture goes anywhere on the floor, windows in any outside wall, and anything (rooms
+// too) can be taken away again for half its price back
 // (owner, 2026-11-08) homes: buy a house in town, then its door takes you to your own copy of it inside; build rooms
 // for space, beds for more pets and playpens where a pet earns coins while you're away
-export const HOME = { price: 2500, skyPrice: 5000, room: 1500, bed: 400, pen: 800, maxRooms: 6, slots: 4, baseCap: 6, perBed: 2, roomSize: 14 };
+export const HOME = { price: 2500, skyPrice: 5000, room: 1500, bed: 400, pen: 800, window: 200, maxRooms: 6, maxItems: 60, baseCap: 6, perBed: 2, roomSize: 14 };
+const OLD_SLOTS = [[3.6, 4.2], [10.4, 4.2], [3.6, 10.4], [10.4, 10.4]];
+// is a wall side of a room on the outside (no room next to it)? the front of the first room has the door in its middle
+export const outerSide = (cells, c, side) => { const [dx, dz] = [[-1, 0], [1, 0], [0, -1], [0, 1]][side]; return !cells.some(([a, b]) => a === c[0] + dx && b === c[1] + dz); };
 export const housePrice = (i) => (houses[i] && houses[i].sky ? HOME.skyPrice : HOME.price);
 export const roomPrice = (rooms) => HOME.room * rooms;
 export const petCap = (d) => HOME.baseCap + HOME.perBed * (d.home ? d.home.items.filter((t) => t.k === "bed").length : 0);
@@ -294,11 +301,22 @@ export function cleanData(d, species) {
       cells.push([x, z]);
     }
     if (!cells.length) for (let k = 0; k < int(d.home.rooms, 1, HOME.maxRooms, 1); k++) cells.push([k % 3, Math.floor(k / 3)]);   // homes from before
-    const rooms = cells.length, used = new Set(), its = [];
+    const rooms = cells.length, its = [], wins = new Set(), RSZ = HOME.roomSize;
     for (const t of Array.isArray(d.home.items) ? d.home.items : []) {
-      if (!t || (t.k !== "bed" && t.k !== "pen")) continue;
-      const room = int(t.room, 0, rooms - 1), slot = int(t.slot, 0, HOME.slots - 1), key = room * 10 + slot; if (used.has(key)) continue; used.add(key);
-      const it = { k: t.k, room, slot }; if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
+      if (!t || its.length >= HOME.maxItems) continue;
+      if (t.k === "window") {
+        const c = Array.isArray(t.c) ? [int(t.c[0], -4, 4), int(t.c[1], -4, 4)] : null, side = int(t.s, 0, 3), pos = int(t.p, 0, 2);
+        if (!c || !cells.some(([a, b]) => a === c[0] && b === c[1]) || !outerSide(cells, c, side) || (c[0] === 0 && c[1] === 0 && side === 2 && pos === 1)) continue;
+        const key = c.join() + ":" + side + ":" + pos; if (wins.has(key)) continue; wins.add(key);
+        its.push({ k: "window", c, s: side, p: pos }); continue;
+      }
+      if (t.k !== "bed" && t.k !== "pen") continue;
+      let x = +t.x, z = +t.z;
+      if (!Number.isFinite(x) || !Number.isFinite(z)) {   // from before freebuild: a room and a spot in it
+        const c = cells[int(t.room, 0, rooms - 1)], sl = OLD_SLOTS[int(t.slot, 0, 3)]; x = c[0] * RSZ + sl[0]; z = c[1] * RSZ + sl[1];
+      }
+      const it = { k: t.k, x: Math.max(-4 * RSZ, Math.min(5 * RSZ, Math.round(x * 10) / 10)), z: Math.max(-4 * RSZ, Math.min(5 * RSZ, Math.round(z * 10) / 10)), r: int(t.r, 0, 3) };
+      if (t.k === "pen" && t.pet && ids.has(t.pet)) { it.pet = t.pet; it.since = Number.isFinite(+t.since) ? +t.since : Date.now(); }
       its.push(it);
     }
     home = { house: d.home.house, rooms, cells, items: its };

@@ -88,6 +88,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too.
 - Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a house in reach;
   on a flapping flier about 3 in 10 are for island houses in reach (any island), on a glider the low ones only. Switching to a pet that can't fly hands island parcels back.
+- **The guide (owner, 2026-11-08):** a long glowing arrow drawn on the screen around your pet always points toward the
+  nearest house you have a parcel for (or the post office when the bag's empty), and a glowing marker bobs over the
+  place when it's in view; hidden within 6 m and at home.
 - Each house you have a parcel for shows a gold beam (pink for an island house) with a spinning parcel over its mailbox; a gold arrow over your pet
   points to the nearest one (or back to the post office when the bag's empty).
 - Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
@@ -145,9 +148,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
   6 s. Online only.
 - **Contracts** (the contract board, owner 2026-11-08: shorter ones too): anyone starts one when none is running:
-  - **Rush Order:** 3 + 3 per player parcels in 1 minute, 22 coins per parcel of the goal.
-  - **Quick Contract:** 5 + 4 per player in 1:30, 26 per parcel.
-  - **Big Contract:** 10 + 8 per player in 3 minutes, 30 per parcel. Every delivery by anyone in the room counts (the server
+  - **Rush Order:** 3 + 3 per player parcels in 2:30, 22 coins per parcel of the goal.
+  - **Quick Contract:** 5 + 4 per player in 4 minutes, 26 per parcel.
+  - **Big Contract:** 10 + 8 per player in 7 minutes, 30 per parcel. (Times lengthened, owner 2026-11-08.) Every delivery by anyone in the room counts (the server
   takes at most one per player every 0.9 s). Met in time, each player who delivered gets a share of the reward by how
   many they delivered; out of time, nobody gets the reward, but each player who delivered gets a
   consolation by how close the room came (owner, 2026-11-08): **a Training Ribbon at 75%+ of the goal, 3 Speed Candies
@@ -181,12 +184,17 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   One house each; a green ring marks your door.
 - **E** at your door (Enter) takes you into your own copy of it, far off in the sky; only people in it see each other.
   **E** on the doormat (Exit) takes you back out. **G** (Invite) asks your party in (Visit home).
-- **Build** (inside your home): a **Room** ($1,500 × rooms so far, up to 6, 14 m squares open to each other), a
-  **Bed** ($400, 2 more pets) or a **Playpen** ($800). **You choose where (owner, 2026-11-08):** green markers show
-  where it can go (a room on any free square next to one you have, not in front of the door; furniture on any free
-  spot, 4 a room); tap one to build there, ✕ (or Escape) to stop. You walk freely between rooms. Homes are always
-  bright and dry inside. Tap a playpen to put a pet in it
-  (not the one you ride): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
+- Inside, rooms are 14 m squares with full walls (3.6 m) under a roof, open to each other; the door is in the middle of
+  the first room's front. The camera stays inside the walls and under the roof (the roof hides when the camera's
+  above it, while building). Homes are always bright and dry inside.
+- **Build (freebuild, owner 2026-11-08):** **Room** ($1,500 × rooms so far, up to 6) on any free square next to one you
+  have (not in front of the door) and **Window** ($200) in any third of an outside wall (not the door): tap a green
+  marker. **Bed** ($400, 2 more pets) and **Playpen** ($800) go anywhere on the floor: the piece follows the pointer
+  (green where it fits, red where not: clear of walls, the doormat and other furniture; half-metre steps), R or ⟳ turns
+  it, a tap puts it down (and you can keep placing). **Remove:** tap furniture or a window to take it away, a room twice
+  (only an empty room, never the first, and the rest must stay joined); you get half its price back. ✕ or Escape stops.
+  Up to 60 pieces.
+- **Playpens:** tap one in your home to choose its pet (not the one you ride, or — to empty it): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
   to 8 hours' worth, collected when you come home. A pet in a playpen can't be ridden, traded or sent to the farm.
 
 ## Staff (owner, 2026-11-08)

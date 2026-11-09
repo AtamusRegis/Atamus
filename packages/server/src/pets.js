@@ -19,7 +19,7 @@ const ROOM_MAX = 16, SNAP_MS = 50, DEL_GAP_MS = 900, CHAT_GAP_MS = 1200, BEAT_MS
 const SPECIES = new Set(["pup", "kitten", "bunny", "duck", "fox", "penguin", "goat", "butterfly", "parrot", "stego", "deer", "bear", "horse", "owl", "trike", "raptor",
   "dragon", "unicorn", "pegasus", "phoenix", "trex", "ptero", "icedragon"]);
 // (owner, 2026-11-08) three kinds of contract: the goal grows with the room; the reward is per parcel of the goal
-const CONTRACTS = { rush: { time: 60, base: 3, per: 3, pay: 22 }, quick: { time: 90, base: 5, per: 4, pay: 26 }, big: { time: 180, base: 10, per: 8, pay: 30 } };
+const CONTRACTS = { rush: { time: 150, base: 3, per: 3, pay: 22 }, quick: { time: 240, base: 5, per: 4, pay: 26 }, big: { time: 420, base: 10, per: 8, pay: 30 } };   // (owner, 2026-11-08: more time)
 const rooms = [], online = new Map();   // account id -> player
 let nextId = 1;
 
