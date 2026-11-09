@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Fliers go up and down only by held keys (owner).** On a flapping flier, hold Space (or Fly ▲) to keep rising and hold Ctrl (or the new Fly ▼ button) to keep sinking; otherwise it holds its height. The camera's angle no longer makes it climb or dive. A "Space Up · Ctrl Down" strip shows at the bottom of the screen only while riding a flier (computers; phones have the two buttons). Land pets and gliders are unchanged.
 - **Place labels (owner).** A speech bubble over each place in town (post office, contract board, egg shop, training yard, animal control, sky lifts) says what it is, fading with distance.
 - **Pet Delivery Co.: players who just joined no longer look frozen to others (#7).** If the server shared where they were before their first position arrived, that one update (on the server's clock) made every later one look older, so they stood still at the spot where they joined. The browser smoke test now has a second player join and fly up, and checks the first sees it.
 - **Pet Delivery Co.: fliers and gliders pitch with their flight (owner).** In the air they point nose-up while climbing and nose-down while diving or gliding down (by how they actually move, up to about 40°, for your pet and everyone else's); level on the ground. Land pets still never tilt.
