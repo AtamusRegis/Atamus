@@ -71,7 +71,8 @@ try {
   // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
   step = "buy a pet in the mount shop";
   await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
-  await page.waitForFunction(() => document.getElementById("shopname").textContent === "Mount Shop" && document.getElementById("shopcash").textContent === "3,000", null, { timeout: 5000 });
+  await page.locator("#shopname", { hasText: "Mount Shop" }).waitFor({ timeout: 5000 });
+  await page.locator("#shopcash", { hasText: "3,000" }).waitFor({ timeout: 5000 });
   const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
   if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
   await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });
