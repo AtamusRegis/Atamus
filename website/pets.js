@@ -629,7 +629,7 @@ const walker = walkerModel(save.shirt);
 function flightPitch(m, x, y, z, dt, airborne) {
   const f = m.fp || (m.fp = { x, y, z, a: 0 }), d = Math.max(dt, 1e-3), hs = hyp(x - f.x, z - f.z) / d, vy = (y - f.y) / d;
   f.x = x; f.y = y; f.z = z;
-  const want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(-Math.atan2(vy, hs + 3), -0.7, 0.7) : 0;   // not on a teleport
+  const a = -Math.atan2(vy, hs + 3), want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(a > 0 ? a * 1.4 : a, -0.7, 0.95) : 0;   // not on a teleport; (owner, 2026-11-09) going down tips further
   f.a += (want - f.a) * Math.min(1, dt * 5);
   const c = (m.top / m.g.scale.y) * 0.45;   // the middle of pet and rider
   m.body.rotation.x = f.a; m.body.position.y += c * (1 - Math.cos(f.a)); m.body.position.z = -c * Math.sin(f.a);
@@ -1129,7 +1129,7 @@ let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 
 const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function connect() {
-  if (hidden || ws || kicked) return;
+  if (ws || kicked) return;
   try { ws = new WebSocket(WS_URL); } catch (e) { ws = null; setTimeout(connect, retry); return; }
   const sock = ws;
   ws.onopen = () => {
@@ -1146,13 +1146,14 @@ function connect() {
     if (building) closeBuild(); for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = -1;
     $("lgo").disabled = $("lnew").disabled = true;
     if (was && !hidden) toast("Offline");
-    if (!hidden && !kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
+    if (!kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
   };
   ws.onerror = () => {};
 }
+// (owner, 2026-11-09) a tab that's put away (minimized, behind another window) stays in the game: you stop where you are
 document.addEventListener("visibilitychange", () => {
   hidden = document.hidden;
-  if (hidden) { flushSave(true); if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
+  if (hidden) { keys.clear(); joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; drags.clear(); me.moving = false; sendPos(true); flushSave(true); } else { retry = 1000; last = performance.now(); connect(); }
 });
 addEventListener("pagehide", () => flushSave(true));
 
