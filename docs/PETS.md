@@ -17,15 +17,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
   ledges.
 - **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
-  two rivers from it that run off the island's edge in waterfalls (a sheet pouring down and away under the island, spray
-  at the lip), and a stream that steps down the terraces into the lake, foaming white at each little fall. Deeper water
-  is darker. Houses, trees and rocks keep clear of it. In the water everyone floats (sunk about half a meter):
-  **swimmers** swim at 1.35× their speed and walk straight in from the shore; anyone else can't wade in from the shore
-  (they can jump in) and paddles at 0.4×, climbing out at the bank. Nobody goes over a waterfall. Fliers fly over it.
-- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads on the roads (about every 115 m, not in the plaza),
-  20 cyan rings in the air over town (16 to 82 m up), and 7 indigo rings on the lake, the rivers and the stream. Run, fly
-  or swim through one and your pet goes 1.6× for 5 s (on top of Speed Candy), leaving a trail in the boost's color; not
-  on foot or at home.
+  two rivers from it that run off the island's edge in waterfalls, and a stream that steps down the terraces into the
+  lake, foaming white at each little fall. Its banks always stand a little above the water beside them, so the stream
+  runs in its own channel. The water stops at the island's edge; the falls pour **down** from the lip, out and clear of
+  the rock (the rock under each fall is tucked in), with spray at the lip. Ripples drift slowly on the lake and **run
+  downstream** on the rivers and the stream, faster where it's steep. Deeper water is darker; the bed is sand. Houses,
+  trees and rocks keep clear of it.
+  - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
+    ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
+    their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
+    hazy blue.
+  - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
+    up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
+    don't land); nobody goes over a waterfall.
+- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
+  about every 115 m, not in the plaza) for any pet; 20 cyan rings in the air over town (16 to 82 m up), there only for
+  fliers and gliders; and 7 small spinning whirlpools on the lake, the rivers and the stream, there only for swimmers
+  (surface or underwater). Rings and whirlpools fade out with distance (gone past 120 m). Going through one: 1.6× for
+  5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
@@ -60,6 +69,27 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
   **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
   camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
+- **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
+  sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
+  It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
+  track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
+  while it's in use. Live on it: everyone's built houses (each square's top piece in its colour; your plot outlined gold),
+  the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
+  pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
+  their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
+  they face; party members ringed green, wanted ones ringed flashing red; a small ▲ / ▼ when more than 6 m above or
+  below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
+  arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
+  40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
+- **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
+  with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
+  Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
+  when a courier approaches and pets bump against them instead of passing through them. Close by, press F (or tap the
+  person) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
+  more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
+  F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
+  conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -86,7 +116,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
     flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): **on the ground they walk** (like a
+    land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
+    to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
+    shows only while flying. In the air only two controls go up and down:
     hold Space (or Fly ▲) to keep rising, hold Shift (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
     hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
@@ -176,6 +209,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
+- **Riders stay their size (owner, 2026-11-09):** a pet grows with its level but the courier on it doesn't, so a
+  big pet looks big under its rider.
 - **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
   player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
@@ -230,6 +265,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
   tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
+- **What's New (owner, 2026-11-09):** after an update, a small panel in the middle of the screen shows the newest
+  entry of the front page's Updates list (its date and lines) until you close it (✕); it shows again only when that
+  entry changes. A browser that has never logged in doesn't get it.
+- **Coins (owner, 2026-11-09):** the coin pill sits at the top right (above the map), leaving the top left clear (as
+  Roblox's chat would).
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
@@ -292,7 +332,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
   price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
   windows and a roof).
-- **Inside a house** (on its floors or steps with a ceiling or roof above you; on open-air floors and roofs you keep riding, owner 2026-11-09) you're off your pet, walking (5.5 m/s); walls (4.5 m)
+- **On any plot** (owner, 2026-11-09: in its yard too, anyone's plot, up to 1.5 m over its top level; flying higher you keep riding), and **inside a house** elsewhere (under a ceiling or roof), you're off your pet, walking (5.5 m/s); walls (4.5 m)
   block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
   see in. Others see you walking too.
 - **Shut in** (owner, 2026-11-09): pushing on for 1.5 s without getting anywhere, in a room with no doorway or open side to the plot and no stairs or slope, puts you out in front of the plot (not on a flier, which can fly up).
