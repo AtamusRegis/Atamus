@@ -60,7 +60,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Mount Shop: Buy pets to ride; Training Yard:
-  Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
+  Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza;
+  the Egg Shop's and Mount Shop's over their circles, Animal Control's in front of its door, owner 2026-11-09),
   clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
   middle of town; growing a little with distance; hidden while building.
 - **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
@@ -247,10 +248,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   Treats button (on the training arena's gold circle) trains the pet you ride a level for Treats: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
 - **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs and mounts show Full when you're at the limit.
-- **Training arena (owner, 2026-11-09):** riding into the training yard's ring takes you to a floating arena (80 m
+- **Training arena (owner, 2026-11-09):** in the training yard's ring, **E (Training Arena)** takes you to a floating arena (no longer
+  riding in teleports you; owner, 2026-11-09) (80 m
   across, off the island's south edge, `AR` in pets.js) with a track and an obstacle course round it, in order: a
   hurdle, a hoop, a platform, two slalom gates (inner half, then outer half), a tunnel, a higher hurdle, a higher hoop.
-  The next one glows (a gold beam and diamond, and the arrow points to it). Clearing it, going round the track's way
+  The next one glows (a gold beam and diamond, and the arrow points to it: at a gate, between its posts; owner, 2026-11-09). Clearing it, going round the track's way
   (counterclockwise from above), gives the pet you ride a **training point**: jump the hurdles (the bars are solid),
   jump through the hoops (over their low sill), land on the platform, pass between a gate's posts, ride through the
   tunnel. **20 points** for level 2, **4 more for each level after** (level 19 to 20: 92); spare points carry over. A
@@ -291,11 +293,17 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
   2026-11-09):** under Updating! a small line says "Derek's Update" when it's Derek's (the merge commit's `Update-By`
   trailer, put in version.json by the website deploy; nothing shows without one).
-- **Chat history (owner, 2026-11-08):** while the chat line is open, everything said since you logged in shows above
-  it (scrollable); a new login starts it fresh.
-- **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
-  one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
-  6 s. Online only.
+- **Chat (owner, 2026-11-08; like Roblox's, 2026-11-09):** a window at the top left (where your name used to be):
+  everything said since you logged in (a new login starts it fresh; names in colors), scrolling, with the line to type
+  in at its foot (a tap on it, or Enter or / on a computer; up to 120 characters, one message per 1.2 s). Left alone 6 s
+  its dark background and the typing line fade (the messages stay). The chat button shows or hides the window. Messages
+  also show as a speech bubble over the sender for 6 s. Online only.
+- **Menu (owner, 2026-11-09):** a gear left of the chat button opens a menu: **Settings**, and for staff **Admin
+  Panel** (the side buttons Chat, Settings and Admin are gone).
+- **Players online (owner, 2026-11-09):** a green dot (grey offline) and the count in white at the bottom right inside
+  the map (the online pill is gone). The distance-to-home pill is gone too.
+- **Candy (owner, 2026-11-09):** its button stays put (only its count changes), so it can be tapped while moving on a
+  phone.
 - **Contracts** (the contract board, owner 2026-11-08: shorter ones too): anyone starts one when none is running:
   - **Rush Order:** 3 + 3 per player parcels in 2:30, 22 coins per parcel of the goal.
   - **Quick Contract:** 5 + 4 per player in 4 minutes, 26 per parcel.
