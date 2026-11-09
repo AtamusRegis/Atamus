@@ -7,7 +7,7 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
 3. **A second game, Pet Delivery Co. (owner, 2026-11-08):** a co-op, phone-first 3D game on its own page
-   (`website/pets.html` + `pets.js`, co-op in `packages/server/src/pets.js`, WebSocket /pets on play.atamus.io). Its
+   (`website/pets.html` + `pets.js`, world in `pets-world.js` (also copied to the server; keep the two identical), co-op in `packages/server/src/pets.js`, WebSocket /pets on play.atamus.io). Its
    rules live in `docs/PETS.md` (that game's FEATURES.md); its changes go in the same CHANGELOG. Everything below about
    the cargo game (including "no multiplayer") is about the cargo game only.
 4. **The redo (owner, 2026-10-31), in space since 2026-11-05: Atamus is a single-player cargo station game** in the

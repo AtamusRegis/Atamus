@@ -65,6 +65,12 @@
     .card.wide { flex-direction: row; text-align: left; margin-bottom: 10px; }
     .card.wide .col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .card.wide .stats { justify-content: flex-start; }
+    #wanted { color: var(--red); font-size: 17px; letter-spacing: 1px; text-shadow: 0 1px 0 #fff; }
+    #chatlog { position: fixed; left: max(10px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); width: min(320px, calc(100vw - 120px)); display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 4; }
+    #chatlog div { padding: 5px 10px; border-radius: 12px; background: rgba(255,255,255,.82); font-size: 13px; overflow-wrap: anywhere; transition: opacity 1s; }
+    #chatlog div.old { opacity: 0; }
+    #chatbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); width: min(440px, calc(100vw - 24px)); display: none; gap: 8px; z-index: 9; }
+    #chatbar input { flex: 1; min-width: 0; border: 0; border-radius: 16px; padding: 0 14px; font: 600 16px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; box-shadow: 0 4px 0 rgba(0,0,0,.18); outline: none; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -77,6 +83,7 @@
     </div>
     <div>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
+      <span class="pill" id="wanted" style="display:none"></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
       <span class="pill" id="contract" style="display:none"><span class="row"><b id="cname">Contract</b><span id="ctime"></span></span><span class="bar"><i id="cbar"></i></span><span class="row"><span id="cdone"></span><span id="cmine"></span></span></span>
     </div>
@@ -84,15 +91,18 @@
   <div id="joy"><i></i></div>
   <div id="side">
     <div id="items"></div>
+    <button class="btn ghost" id="btn-chat" type="button">Chat</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
   </div>
   <div class="panel" id="p-pets"><h2>Pets <button class="x" type="button">✕</button></h2><div class="grid" id="petlist"></div></div>
   <div class="panel" id="p-shop"><h2>Egg Shop <button class="x" type="button">✕</button></h2><div class="grid" id="eggs"></div></div>
   <div class="panel" id="p-train"><h2>Training Yard <button class="x" type="button">✕</button></h2><div id="train"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
+  <div id="chatlog"></div>
+  <form id="chatbar" autocomplete="off"><input id="chatin" maxlength="120" enterkeyhint="send"><button class="btn" type="submit">Send</button></form>
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100002"></script>
+  <script type="module" src="pets.js?v=1793100003"></script>
 </body>
 </html>

@@ -1,9 +1,10 @@
 // Pet Delivery Co. (owner, 2026-11-08): ride your pet around town delivering mail. Pick up parcels at the post office,
 // ride up to the glowing houses to deliver them, earn coins (and sometimes an item), buy eggs to hatch faster pets,
-// train them. Fliers reach the floating islands; animal control trucks roam the roads. Co-op: everyone in a room rides
-// the same town, and contracts are worked on together.
-// The town and all rules run here; the server (packages/server/src/pets.js) only shares players and runs contracts.
+// train them. The town is a floating island (pets-world.js, shared with the server); fliers reach the small islands off
+// its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
+// chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
+import * as World from "./pets-world.js?v=1793100003";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -49,6 +50,8 @@ const EGGS = [
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
 const petBag = (p) => SPECIES[p.sp].bag + Math.floor((p.lv - 1) / 5);
+// (owner, 2026-11-08) a pet grows a little with each level: 1.5% bigger per level
+const petScale = (lv) => 1 + 0.015 * ((lv || 1) - 1);
 const trainCost = (p) => Math.round(40 * Math.pow(1.32, p.lv - 1) * [1, 1.6, 2.6, 4][SPECIES[p.sp].r]);
 // items dropped by deliveries (and contracts that fall short)
 const ITEMS = { snack: { name: "Speed Candy", c: "#ff5aa0" }, ribbon: { name: "Training Ribbon", c: "#e5534b" }, ticket: { name: "Egg Ticket", c: "#f2b01e" } };
@@ -65,56 +68,14 @@ const persist = () => { try { localStorage.setItem(SAVE, JSON.stringify(save)); 
 const riding = () => save.pets.find((p) => p.id === save.ride) || save.pets[0];
 const flies = () => !!SPECIES[riding().sp].fly;
 
-// ---- the land (owner, 2026-11-08: some elevation): rolling hills, flat along the middle row (plaza, egg shop,
-// training yard), rising at the edge of town ----
-const HALF = 124;
-const HILLS = [[72, -72, 6, 24], [-72, 72, 5, 22], [-100, -40, 7, 20], [96, 60, 5.5, 20], [20, 100, 4, 24], [-30, -100, 4.5, 22], [-100, 100, 4, 18], [100, -110, 5, 18], [60, 110, 3.5, 16]];
-function terrain(x, z) {
-  let h = 0.8 * Math.sin(x / 31) * Math.cos(z / 27);
-  for (const [hx, hz, a, s] of HILLS) h += a * Math.exp(-((x - hx) ** 2 + (z - hz) ** 2) / (2 * s * s));
-  const d = hyp(Math.max(0, Math.abs(x) - 70), Math.max(0, Math.abs(z) - 26));
-  h *= smooth(clamp(d / 20, 0, 1));
-  const out = Math.max(Math.abs(x), Math.abs(z)) - HALF - 4; if (out > 0) h += Math.min(18, out * 0.35);
-  return Math.max(0, h);
-}
-// floating islands (owner, 2026-11-08): only fliers get there; their parcels pay double
-const ISLANDS = [{ x: -96, z: -96, y: 22, r: 15 }, { x: 100, z: -92, y: 26, r: 14 }, { x: 98, z: 98, y: 20, r: 15 }, { x: -98, z: 96, y: 24, r: 14 }, { x: 0, z: -100, y: 30, r: 12 }];
-const islandAt = (x, z) => ISLANDS.find((i) => hyp(x - i.x, z - i.z) < i.r - 0.6) || null;
-
-// ---- the town: a 5 x 5 grid of blocks between roads; the middle one is the plaza (post office, contract board), the
-// one east of it the egg shop, west the training yard; the rest are houses, 4 to a block, each with a mailbox ----
-const BLOCKS = [-96, -48, 0, 48, 96], ROADS = [-120, -72, -24, 24, 72, 120];
-const POST = { x: 0, z: -8 }, PICKUP = { x: 0, z: 5, r: 4 }, BOARD = { x: 10, z: 5, r: 3 }, SHOP = { x: 48, z: 5, r: 5 }, TRAIN = { x: -48, z: 0, r: 9 };
-const SPAWN = { x: 0, z: 13 };
-const houses = [], solids = [], trees = [];   // solids: [x0, x1, z0, z1, y0, y1]
+// ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
+// winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
-function addHouse(x, z, base, mx, mz, my, face, sky) {
-  houses.push({ x, z, base, mx, mz, my, face, sky, c: pick2(HOUSE_C), roof: pick2(ROOF_C), d: hyp(x - POST.x, z - POST.z) });
-  solids.push([x - 4.5, x + 4.5, z - 4.5, z + 4.5, base - 4, base + 8]);
-}
-for (const bx of BLOCKS) for (const bz of BLOCKS) {
-  if ((bx === 0 || Math.abs(bx) === 48) && bz === 0) continue;
-  for (const ox of [-10, 10]) for (const oz of [-10, 10]) {
-    const x = bx + ox, z = bz + oz, base = Math.min(terrain(x - 4.5, z - 4.5), terrain(x + 4.5, z - 4.5), terrain(x - 4.5, z + 4.5), terrain(x + 4.5, z + 4.5));
-    const mx = x + Math.sign(ox) * 2.5, mz = bz + Math.sign(oz) * 18.5;
-    addHouse(x, z, base, mx, mz, terrain(mx, mz), Math.sign(oz), false);
-  }
-  for (const [cx, cz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) if (srnd() < 0.8) { const x = bx + cx * (2 + srnd() * 3), z = bz + cz * (2 + srnd() * 3); trees.push({ x, z, y: terrain(x, z), s: 0.8 + srnd() * 0.5 }); }
-}
-for (const isl of ISLANDS) {   // 3 houses on each island, mailboxes toward its edge
-  for (let k = 0; k < 3; k++) {
-    const a = k * TAU / 3 + isl.x * 0.01, hr = isl.r * 0.38, x = isl.x + Math.cos(a) * hr, z = isl.z + Math.sin(a) * hr;
-    const mr = Math.min(isl.r - 1.5, hr + 6.5), mx = isl.x + Math.cos(a) * mr, mz = isl.z + Math.sin(a) * mr;
-    addHouse(x, z, isl.y, mx, mz, isl.y, 1, true);
-  }
-  for (let k = 0; k < 3; k++) { const a = k * TAU / 3 + 1, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + srnd() * 0.4 }); }
-}
-solids.push([POST.x - 9, POST.x + 9, POST.z - 5, POST.z + 5, -1, 8]);   // the post office
-solids.push([42, 54, -12, -4, -1, 9]);   // the egg shop
-const RIDER_R = 0.7;
-const blocked = (x, z, y) => solids.some((s) => x > s[0] - RIDER_R && x < s[1] + RIDER_R && z > s[2] - RIDER_R && z < s[3] + RIDER_R && y < s[5] - 0.3 && y > s[4] - 2);
+for (const h of houses) { h.c = pick2(HOUSE_C); h.roof = pick2(ROOF_C); }
+const LIMIT = 360;   // how far out anyone can go
 
 // ---- 3D ----
 const canvas = $("gl");
@@ -122,31 +83,60 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !touchy });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchy ? 1.6 : 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 80, 220);
-const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 500);
+scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 150, 560);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1000);
 scene.add(new THREE.HemisphereLight("#ffffff", "#7aa35a", 1.1));
 const sun = new THREE.DirectionalLight("#fff6e0", 1.6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 160 }); scene.add(sun, sun.target);
+Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 200 }); scene.add(sun, sun.target);
 const MATS = new Map(), mat = (c) => { if (!MATS.has(c)) MATS.set(c, new THREE.MeshLambertMaterial({ color: c })); return MATS.get(c); };
 const BOX = new THREE.BoxGeometry(1, 1, 1);
 function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.Mesh(BOX, mat(c)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = shadow; m.receiveShadow = true; (parent || scene).add(m); return m; }
-// a flat sheet laid over the land
-function drape(geo, lift) { const p = geo.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, terrain(p.getX(i), p.getZ(i)) + lift); geo.computeVertexNormals(); return geo; }
-const ground = new THREE.Mesh(drape(new THREE.PlaneGeometry(560, 560, 224, 224).rotateX(-Math.PI / 2), 0), mat("#86c95f")); ground.receiveShadow = true; scene.add(ground);
-for (const bx of BLOCKS) for (const bz of BLOCKS) { const m = new THREE.Mesh(drape(new THREE.PlaneGeometry(40, 40, 16, 16).rotateX(-Math.PI / 2).translate(bx, 0, bz), 0.05), mat(bx === 0 && bz === 0 ? "#e8dcc4" : "#9bd66f")); m.receiveShadow = true; scene.add(m); }
-// roads: one texture with the dashed center line, draped over the hills
-const roadTex = (() => { const c = document.createElement("canvas"); c.width = 32; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#5c6670"; g.fillRect(0, 0, 32, 64); g.fillStyle = "#6c757e"; g.fillRect(0, 0, 2, 64); g.fillRect(30, 0, 2, 64); g.fillStyle = "#f4f1e6"; g.fillRect(14.5, 8, 3, 30); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 2 * HALF / 8); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
-const roadM = new THREE.MeshLambertMaterial({ map: roadTex });
-for (const r of ROADS) for (const across of [false, true]) {
-  const g = new THREE.PlaneGeometry(8, 2 * HALF + 8, 1, 128).rotateX(-Math.PI / 2); if (across) g.rotateY(Math.PI / 2); g.translate(across ? 0 : r, 0, across ? r : 0);
-  const m = new THREE.Mesh(drape(g, across ? 0.1 : 0.09), roadM); m.receiveShadow = true; scene.add(m);
+// the ground: rings out from the middle to the island's edge, grass on the flat, rock on the cliffs
+{
+  const NA = 360, NR = 116, pos = [], idx = [];
+  pos.push(0, terrain(0, 0), 0);
+  for (let j = 1; j <= NR; j++) for (let i = 0; i < NA; i++) { const a = (i / NA) * TAU, r = (edgeR(a) * j) / NR, x = Math.cos(a) * r, z = Math.sin(a) * r; pos.push(x, terrain(x, z), z); }
+  const V = (j, i) => (j === 0 ? 0 : 1 + (j - 1) * NA + (((i % NA) + NA) % NA));
+  for (let i = 0; i < NA; i++) idx.push(0, V(1, i + 1), V(1, i));
+  for (let j = 1; j < NR; j++) for (let i = 0; i < NA; i++) { const a = V(j, i), b = V(j, i + 1), c = V(j + 1, i), d = V(j + 1, i + 1); idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+  const n = g.attributes.normal, cols = new Float32Array(n.count * 3), grass = new THREE.Color("#86c95f"), high = new THREE.Color("#a6d46a"), rock = new THREE.Color("#9a8a76"), c = new THREE.Color();
+  for (let i = 0; i < n.count; i++) { const y = pos[i * 3 + 1], ny = n.getY(i); c.copy(grass).lerp(high, clamp(y / 40, 0, 1)); if (ny < 0.8) c.lerp(rock, clamp((0.8 - ny) / 0.15, 0, 1)); cols.set([c.r, c.g, c.b], i * 3); }
+  g.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })); m.receiveShadow = true; scene.add(m);
+  // its underside: a cliff face at the edge, then rock tapering away below
+  const RINGS = [[1, 0], [1.01, -9], [0.9, -30], [0.72, -62], [0.48, -98], [0.22, -132]], up = [], ui = [];
+  for (let k = 0; k < RINGS.length; k++) for (let i = 0; i < NA; i += 3) {
+    const a = (i / NA) * TAU, e = edgeR(a), top = terrain(Math.cos(a) * e, Math.sin(a) * e), j = k ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * RINGS[k][0] * j;
+    up.push(Math.cos(a) * r, k ? Math.min(top - 2, 0) + RINGS[k][1] - (k > 1 ? Math.abs(Math.sin(i * 0.37 + k)) * 12 : 0) : top, Math.sin(a) * r);
+  }
+  up.push(0, -165, 0); const NU = NA / 3, apex = up.length / 3 - 1;
+  for (let k = 0; k < RINGS.length - 1; k++) for (let i = 0; i < NU; i++) { const a = k * NU + i, b = k * NU + ((i + 1) % NU), c2 = (k + 1) * NU + i, d = (k + 1) * NU + ((i + 1) % NU); ui.push(a, c2, b, b, c2, d); }
+  for (let i = 0; i < NU; i++) ui.push((RINGS.length - 1) * NU + i, apex, (RINGS.length - 1) * NU + ((i + 1) % NU));
+  const ug = new THREE.BufferGeometry(); ug.setAttribute("position", new THREE.Float32BufferAttribute(up, 3)); ug.setIndex(ui); ug.computeVertexNormals();
+  scene.add(new THREE.Mesh(ug, new THREE.MeshLambertMaterial({ color: "#8a7a68", flatShading: true, side: THREE.DoubleSide })));
 }
-// houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes
+// the plaza's paving
+{ const m = new THREE.Mesh(new THREE.CircleGeometry(PLAZA - 4, 64).rotateX(-Math.PI / 2), mat("#e8dcc4")); m.position.y = 0.06; m.receiveShadow = true; scene.add(m); }
+// roads: a ribbon along each, laid on the land, with the dashed center line
+const roadTex = (() => { const c = document.createElement("canvas"); c.width = 32; c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#5c6670"; g.fillRect(0, 0, 32, 64); g.fillStyle = "#6c757e"; g.fillRect(0, 0, 2, 64); g.fillRect(30, 0, 2, 64); g.fillStyle = "#f4f1e6"; g.fillRect(14.5, 8, 3, 30); const t = new THREE.CanvasTexture(c); t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; })();
+const roadM = new THREE.MeshLambertMaterial({ map: roadTex, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+ROADS.forEach((R, k) => {
+  const P = R.loop ? [...R.pts, R.pts[0]] : R.pts, S = R.loop ? [...R.S, R.len] : R.S, pos = [], uv = [], idx = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], fx = b[0] - a[0], fz = b[1] - a[1], fl = hyp(fx, fz) || 1, rx = -fz / fl, rz = fx / fl;
+    for (const sd of [-1, 1]) { const x = P[i][0] + rx * ROAD_HALF * sd, z = P[i][1] + rz * ROAD_HALF * sd; pos.push(x, Math.max(terrain(x, z), terrain(P[i][0], P[i][1])) + 0.18 + k * 0.01, z); uv.push(sd < 0 ? 0 : 1, S[i] / 8); }
+    if (i) { const q = (i - 1) * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
+});
+// houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
 const dummy = new THREE.Object3D();
-function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
-const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); };
-const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1, 1, 1); };
-const doorAt = (h, d) => { d.position.set(h.x, h.base + 1.1, h.z + h.face * 4.55); d.scale.set(1.6, 2.2, 0.15); };
+function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
+const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
+const roofAt = (h, d) => { d.position.set(h.x, h.base + 6.1, h.z); d.scale.set(1, 1, 1); d.rotation.y = h.yaw; };
+const doorAt = (h, d) => { d.position.set(h.x + Math.sin(h.yaw) * 4.55, h.base + 1.1, h.z + Math.cos(h.yaw) * 4.55); d.scale.set(1.6, 2.2, 0.15); d.rotation.y = h.yaw; };
 const walls = instanced(BOX, "#ffffff", houses.length, (i, d) => wallAt(houses[i], d)); houses.forEach((h, i) => walls.setColorAt(i, new THREE.Color(h.c)));
 const ROOFG = new THREE.ConeGeometry(7.2, 3.4, 4); ROOFG.rotateY(Math.PI / 4);
 const roofs = instanced(ROOFG, "#ffffff", houses.length, (i, d) => roofAt(houses[i], d)); houses.forEach((h, i) => roofs.setColorAt(i, new THREE.Color(h.roof)));
@@ -154,19 +144,19 @@ const doors = instanced(BOX, "#7a4f28", houses.length, (i, d) => doorAt(houses[i
 const houseParts = [[walls, wallAt], [roofs, roofAt], [doors, doorAt]];
 function setHouse(i, on) { for (const [m, f] of houseParts) { dummy.rotation.set(0, 0, 0); f(houses[i], dummy); if (!on) dummy.scale.set(0.0001, 0.0001, 0.0001); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); m.instanceMatrix.needsUpdate = true; } }
 instanced(BOX, "#6b7680", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 0.55, h.mz); d.scale.set(0.15, 1.1, 0.15); });
-instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.6, 0.45, 0.8); });
+instanced(BOX, "#e5534b", houses.length, (i, d) => { const h = houses[i]; d.position.set(h.mx, h.my + 1.25, h.mz); d.scale.set(0.8, 0.45, 0.6); d.rotation.y = h.yaw; });
 // trees
 const TRUNK = new THREE.CylinderGeometry(0.25, 0.3, 2, 6), LEAF = new THREE.SphereGeometry(1.6, 8, 6);
 instanced(TRUNK, "#7a4f28", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + t.s, t.z); d.scale.set(t.s, t.s, t.s); });
 instanced(LEAF, "#4fae4a", trees.length, (i, d) => { const t = trees[i]; d.position.set(t.x, t.y + 2.6 * t.s, t.z); d.scale.set(t.s, t.s, t.s); });
-// the islands: a grassy top on a rock that tapers away beneath it, and clouds drifting around
+// the small islands: a grassy top on a rock that tapers away beneath it; clouds drifting around and below
 for (const isl of ISLANDS) {
   const top = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 0.94, 1.6, 28), mat("#86c95f")); top.position.set(isl.x, isl.y - 0.8, isl.z); top.receiveShadow = true; top.castShadow = true; scene.add(top);
   const rock = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.94, isl.r * 1.4, 10).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(isl.x, isl.y - 1.6 - isl.r * 0.7, isl.z); rock.castShadow = true; scene.add(rock);
   for (let k = 0; k < 4; k++) { const a = k * 1.7 + isl.r, x = isl.x + Math.cos(a) * isl.r * 0.55, z = isl.z + Math.sin(a) * isl.r * 0.55; const b = new THREE.Mesh(new THREE.DodecahedronGeometry(1.2 + (k % 2), 0), mat("#9a8f80")); b.position.set(x, isl.y - 4 - k * 2.5, z); scene.add(b); }
 }
 const clouds = [];
-for (let k = 0; k < 14; k++) { const g = new THREE.Group(); for (let j = 0; j < 4; j++) { const s = new THREE.Mesh(new THREE.SphereGeometry(3 + srnd() * 3, 8, 6), mat("#ffffff")); s.position.set(j * 4 - 6, srnd() * 2, srnd() * 3); g.add(s); } g.position.set(-200 + srnd() * 400, 42 + srnd() * 18, -200 + srnd() * 400); scene.add(g); clouds.push(g); }
+for (let k = 0; k < 26; k++) { const g = new THREE.Group(); for (let j = 0; j < 4; j++) { const s = new THREE.Mesh(new THREE.SphereGeometry(4 + srnd() * 4, 8, 6), mat("#ffffff")); s.position.set(j * 5 - 8, srnd() * 2, srnd() * 4); g.add(s); } const below = k % 2; g.position.set(-380 + srnd() * 760, below ? -40 - srnd() * 60 : 60 + srnd() * 25, -380 + srnd() * 760); scene.add(g); clouds.push(g); }
 // the post office, its pickup ring and the contract board
 box(18, 7, 10, "#d9e4ee", POST.x, 3.5, POST.z); box(19, 0.8, 11, "#3a8ee6", POST.x, 7.4, POST.z); box(4, 3.6, 0.2, "#3a6ea8", POST.x, 1.8, POST.z + 5.05);
 box(8, 1.6, 0.3, "#f2b01e", POST.x, 5.4, POST.z + 5.1); box(1.6, 1.1, 0.35, "#e5534b", POST.x, 5.4, POST.z + 5.2);
@@ -176,13 +166,20 @@ const pickRing = new THREE.Mesh(RINGG(PICKUP.r), ringM("#f2b01e")); pickRing.pos
 box(2.6, 2, 0.25, "#8a5a3a", BOARD.x, 2.2, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x - 1, 0.7, BOARD.z - 1.5); box(0.2, 1.4, 0.2, "#7a4f28", BOARD.x + 1, 0.7, BOARD.z - 1.5); box(2.2, 1.5, 0.05, "#fbf3dc", BOARD.x, 2.25, BOARD.z - 1.35);
 const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.position.set(BOARD.x, 0.16, BOARD.z); scene.add(boardRing);
 // the egg shop, with a giant egg on top
-box(12, 5, 8, "#f7cfd8", 48, 2.5, -8); box(13, 0.6, 9, "#e5739d", 48, 5.3, -8); box(3, 3, 0.2, "#7a4f28", 48, 1.5, -3.95);
-const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(48, 8.3, -8); bigEgg.castShadow = true; scene.add(bigEgg);
+box(12, 5, 8, "#f7cfd8", SHOP_B.x, 2.5, SHOP_B.z); box(13, 0.6, 9, "#e5739d", SHOP_B.x, 5.3, SHOP_B.z); box(3, 3, 0.2, "#7a4f28", SHOP_B.x, 1.5, SHOP_B.z + 4.05);
+const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
 const trainRing = new THREE.Mesh(RINGG(TRAIN.r - 1), ringM("#3fb36b")); trainRing.position.set(TRAIN.x, 0.16, TRAIN.z); scene.add(trainRing);
+// the pound (animal control): a building with a striped front and a fenced yard where the caught are let out
+box(16, 6, 8, "#dfe6ec", POUND.x, 3, POUND.z + 3); box(16.4, 0.7, 8.4, "#e08a00", POUND.x, 4.6, POUND.z + 3); box(17, 0.6, 9, "#3d4650", POUND.x, 6.3, POUND.z + 3);
+box(4, 3.4, 0.2, "#3d4650", POUND.x, 1.7, POUND.z - 1.05);
+for (let k = 0; k < 9; k++) box(0.12, 2.6, 0.12, "#3d4650", POUND.x - 7 + k * 0.5 + (k > 4 ? 9.5 : 0) - (k > 4 ? 2.5 : 0), 1.6, POUND.z - 1.1);
+for (let k = -4; k <= 4; k++) { box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + k * 2, 0.65, POUND.z - 9); }
+for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) box(0.15, 1.3, 0.15, "#9aa7b2", POUND.x + sx * 8, 0.65, POUND.z - 9 + k * 2.4);
+box(16, 0.12, 0.12, "#9aa7b2", POUND.x, 1.2, POUND.z - 9);
 
 // ---- a pet (built from boxes; it faces +z) with its rider ----
 function petModel(sp, rider) {
@@ -317,15 +314,16 @@ function fxStep(dt) {
 // a big word across the screen
 function banner(txt, color) { const b = $("banner"); b.textContent = txt; b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
 
+
 // ---- me ----
-const me = { x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, boostUntil: 0, bag: [], stunUntil: 0, safeUntil: 0 };
-let mine = null;
-function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); }
+const me = { x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, airborne: false, boostUntil: 0, bag: [], stunUntil: 0, stars: 0 };
+let mine = null, myBubble = null;
+function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // a gold arrow over my pet pointing to the nearest house I have a parcel for (or the post office when the bag's empty)
 const arrow = new THREE.Group(); { const c = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 10), mat("#f2b01e")); c.rotation.x = Math.PI / 2; c.position.z = 0.8; arrow.add(c); box(0.3, 0.3, 1.1, "#f2b01e", 0, 0, 0, arrow, false); } scene.add(arrow);
 // dizzy stars when animal control catches me
-const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos(k * TAU / 4) * 0.8, 0, Math.sin(k * TAU / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
+const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos((k * TAU) / 4) * 0.8, 0, Math.sin((k * TAU) / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
 // a beam over each house I have a parcel for (pink over the islands: double pay)
 const BEAMG = new THREE.CylinderGeometry(1.1, 1.1, 30, 16, 1, true), beamM = new THREE.MeshBasicMaterial({ color: "#ffd35a", transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }), skyBeamM = new THREE.MeshBasicMaterial({ color: "#ff8ad8", transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide });
 const beams = new Map();
@@ -335,54 +333,96 @@ function syncBeams() {
   for (const i of want) if (!beams.has(i)) { const h = houses[i], g = new THREE.Group(); const m = new THREE.Mesh(BEAMG, h.sky ? skyBeamM : beamM); m.position.y = 15; g.add(m); const p = box(0.9, 0.7, 0.9, "#c98b4f", 0, 3, 0, g, false); g.userData.parcel = p; g.position.set(h.mx, h.my, h.mz); scene.add(g); beams.set(i, g); }
 }
 
-// ---- animal control (owner, 2026-11-08): trucks driving set loops around the roads, the same for everyone (timed off
-// the clock); one that touches me (unless I'm flying high) stuns me and takes my parcels back to the post office ----
-const TRUCKS = [
-  { loop: [-72, -72, 72, 72], speed: 9, dir: 1, off: 0 }, { loop: [-72, -72, 72, 72], speed: 9, dir: -1, off: 290 },
-  { loop: [-120, -120, -24, -24], speed: 8, dir: 1, off: 50 }, { loop: [24, 24, 120, 120], speed: 8, dir: -1, off: 120 },
-  { loop: [24, -120, 120, -24], speed: 8.5, dir: 1, off: 200 }, { loop: [-120, 24, -24, 120], speed: 8.5, dir: -1, off: 20 },
-  { loop: [-24, -120, 24, 120], speed: 7.5, dir: 1, off: 90 },
-];
+// ---- smooth playback of what the server sends (owner, 2026-11-08: no rubber-banding): each update is stamped with the
+// server's clock; others and vehicles are drawn a little in the past, gliding between the two updates around that
+// moment (a short guess ahead if the next is late) ----
+let clockOff = null;   // my clock minus the server's (ms), from the quickest-arriving updates
+const DELAY = 140;
+function serverTime(ts) { const est = performance.now() - ts; if (clockOff === null || est < clockOff) clockOff = est; else clockOff += (est - clockOff) * 0.01; }
+const renderTime = () => performance.now() - (clockOff || 0) - DELAY;
+function pushSample(buf, ts, s) { if (buf.length && ts <= buf[buf.length - 1].t) return; buf.push(Object.assign({ t: ts }, s)); while (buf.length > 30) buf.shift(); }
+function lerpYaw(a, b, k) { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return a + d * k; }
+function sampleAt(buf, t, out) {
+  if (!buf.length) return false;
+  let i = buf.length - 1; while (i > 0 && buf[i - 1].t > t) i--;
+  const b = buf[i], a = i > 0 ? buf[i - 1] : b;
+  if (t >= b.t) {   // past the newest: guess ahead a little along its last motion
+    const p = buf.length > 1 ? buf[buf.length - 2] : b, span = Math.max(1, b.t - p.t), k = Math.min(t - b.t, 200) / span;
+    out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; return true;
+  }
+  const k = a === b ? 1 : clamp((t - a.t) / (b.t - a.t), 0, 1);
+  out.x = a.x + (b.x - a.x) * k; out.y = a.y + (b.y - a.y) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = lerpYaw(a.yaw, b.yaw, k); return true;
+}
+
+// ---- animal control (owner, 2026-11-08): vans on the roads and helicopters over town (pets-world.js); online the
+// server runs them for the whole room, offline this page does ----
 const lightR = new THREE.MeshBasicMaterial({ color: "#ff3a3a" }), lightB = new THREE.MeshBasicMaterial({ color: "#3a7aff" });
-for (const T of TRUCKS) {
+function vanModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.4, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.7, body); box(2.2, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.52, body);
   box(2.45, 0.35, 3.2, "#e08a00", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
   for (const [x, z] of [[-1.1, 1.5], [1.1, 1.5], [-1.1, -1.4], [1.1, -1.4]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.35, 12), mat("#1d232a")); w.rotation.z = Math.PI / 2; w.position.set(x, 0.45, z); body.add(w); }
-  for (let k = 0; k < 4; k++) box(0.06, 1.1, 0.06, "#1d232a", -1.21, 1.5, -1.9 + k * 0.7, body), box(0.06, 1.1, 0.06, "#1d232a", 1.21, 1.5, -1.9 + k * 0.7, body);   // the cage
-  T.red = new THREE.Mesh(BOX, lightR); T.red.scale.set(0.8, 0.25, 0.35); T.red.position.set(-0.45, 2.15, 1.6); body.add(T.red);
-  T.blue = new THREE.Mesh(BOX, lightB); T.blue.scale.set(0.8, 0.25, 0.35); T.blue.position.set(0.45, 2.15, 1.6); body.add(T.blue);
-  g.traverse((o) => (o.castShadow = true)); scene.add(g); T.g = g;
+  for (let k = 0; k < 4; k++) { box(0.06, 1.1, 0.06, "#1d232a", -1.21, 1.5, -1.9 + k * 0.7, body); box(0.06, 1.1, 0.06, "#1d232a", 1.21, 1.5, -1.9 + k * 0.7, body); }
+  const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
+  const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.8, 0.25, 0.35); blue.position.set(0.45, 2.15, 1.6); body.add(blue);
+  g.traverse((o) => (o.castShadow = true));
+  return { g, body, red, blue };
 }
-// where a truck is now: along its loop of road (driving on the right), its heading
-function truckAt(T, now) {
-  const [x0, z0, x1, z1] = T.loop, w = x1 - x0, d = z1 - z0, L = 2 * (w + d);
-  let s = ((T.dir * now * T.speed + T.off) % L + L) % L;
-  const legs = T.dir > 0 ? [[x0, z0, 1, 0, w], [x1, z0, 0, 1, d], [x1, z1, -1, 0, w], [x0, z1, 0, -1, d]] : [[x0, z0, 0, 1, d], [x0, z1, 1, 0, w], [x1, z1, 0, -1, d], [x1, z0, -1, 0, w]];
-  for (const [sx, sz, dx, dz, len] of legs) { if (s <= len) { const x = sx + dx * s - dz * 2, z = sz + dz * s + dx * 2; return { x, z, yaw: Math.atan2(dx, dz) }; } s -= len; }
-  return { x: x0, z: z0, yaw: 0 };
+function heliModel() {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  box(2.4, 2, 4, "#f4f4f0", 0, 0, 0, body); box(2.2, 1.2, 1.4, "#3a5a7a", 0, 0.2, 1.9, body); box(2.46, 0.4, 4.05, "#e08a00", 0, -0.3, 0, body);
+  box(0.5, 0.5, 4.5, "#f4f4f0", 0, 0.4, -4, body); box(0.15, 1.5, 0.9, "#e08a00", 0, 0.9, -6.1, body);
+  for (const x of [-1, 1]) { box(0.15, 0.15, 4, "#3d4650", x * 1.2, -1.5, 0, body); box(0.12, 0.6, 0.12, "#3d4650", x * 1.1, -1.2, 1, body); box(0.12, 0.6, 0.12, "#3d4650", x * 1.1, -1.2, -1, body); }
+  const rotor = new THREE.Group(); rotor.position.y = 1.25; body.add(rotor); box(0.3, 0.4, 0.3, "#3d4650", 0, -0.1, 0, rotor); box(11, 0.08, 0.5, "#2b3440", 0, 0.1, 0, rotor); box(0.5, 0.08, 11, "#2b3440", 0, 0.1, 0, rotor);
+  const tail = new THREE.Group(); tail.position.set(0.3, 0.9, -6.1); body.add(tail); box(0.05, 2, 0.25, "#2b3440", 0, 0, 0, tail);
+  const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.5, 0.2, 0.5); red.position.set(-0.5, 1.05, 0.6); body.add(red);
+  const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.5, 0.2, 0.5); blue.position.set(0.5, 1.05, 0.6); body.add(blue);
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#fff6c0", transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })); beam.position.y = -8; body.add(beam);
+  g.traverse((o) => { if (o !== beam) o.castShadow = true; });
+  return { g, body, red, blue, rotor, tail, beam };
 }
-function trucksStep(now, flash) {
-  for (const T of TRUCKS) {
-    const p = truckAt(T, now), y = terrain(p.x, p.z), ahead = terrain(p.x + Math.sin(p.yaw) * 2, p.z + Math.cos(p.yaw) * 2);
-    T.x = p.x; T.z = p.z; T.g.position.set(p.x, y, p.z); T.g.rotation.set(0, p.yaw, 0); T.g.children[0].rotation.x = -Math.atan2(ahead - y, 2) * 0.9;
-    T.red.material.color.set(flash ? "#ff3a3a" : "#5a1010"); T.blue.material.color.set(flash ? "#1a2a5a" : "#3a7aff");
-  }
+const localVs = World.makeVehicles();
+const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
+const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
+const tmpS = {};
+function vehiclesDraw(dt) {
+  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0;
+  vehs.forEach((m, i) => {
+    if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; } }
+    else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; }
+    m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
+    const chasing = m.mode === 1;
+    if (!m.kind) { const ahead = terrain(m.x + Math.sin(m.yaw) * 2, m.z + Math.cos(m.yaw) * 2); m.pitch += (-Math.atan2(ahead - m.y, 2) * 0.9 - m.pitch) * Math.min(1, dt * 8); m.body.rotation.x = m.pitch; }
+    else { m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06; m.beam.visible = chasing; }
+    m.red.material.color.set(chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020"); m.blue.material.color.set(chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
+  });
 }
+// what animal control did to me
+function onVehEvent(k, stars) {
+  if (k === "chase") { if (performance.now() - lastChaseToast > 4000) toast("Animal control!", "#e5534b"); lastChaseToast = performance.now(); }
+  else if (k === "escaped") { me.stars = stars; toast("Got away! " + "★".repeat(stars), "#e08a00"); hudKey = ""; }
+  else if (k === "stars") { me.stars = stars; hudKey = ""; }
+  else if (k === "caught") caught();
+}
+let lastChaseToast = 0;
 
-// ---- the camera: behind and above me; drag to turn it, pinch (or the wheel) to zoom ----
+// ---- the camera: behind and above me (below too, on a flier); drag to turn it, pinch (or the wheel) to zoom ----
 const cam = { yaw: 0, pitch: 0.5, dist: 14, goalDist: 14, y: 0 };
+const pitchMin = () => (flies() ? -0.75 : 0.18);
 // (owner, 2026-11-08) a house between the camera and me is hidden while it's in the way
 const hiddenH = new Set();
 function placeCamera(dt) {
-  cam.dist += (cam.goalDist - cam.dist) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 5);
-  const cx = me.x + Math.sin(cam.yaw) * cam.dist * Math.cos(cam.pitch), cz = me.z + Math.cos(cam.yaw) * cam.dist * Math.cos(cam.pitch), cy = Math.max(cam.y + 1.5 + cam.dist * Math.sin(cam.pitch), terrain(cx, cz) + 1.5);
+  cam.dist += (cam.goalDist - cam.dist) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 10);
+  const cx = me.x + Math.sin(cam.yaw) * cam.dist * Math.cos(cam.pitch), cz = me.z + Math.cos(cam.yaw) * cam.dist * Math.cos(cam.pitch);
+  let cy = cam.y + 1.5 + cam.dist * Math.sin(cam.pitch);
+  if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
+  const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
   camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
-  sun.position.set(me.x + 30, me.y + 50, me.z + 20); sun.target.position.set(me.x, me.y, me.z);
+  sun.position.set(me.x + 30, me.y + 60, me.z + 20); sun.target.position.set(me.x, me.y, me.z);
   const hide = new Set();
   for (let k = 1; k <= 20; k++) {
     const t = k / 20, x = me.x + (cx - me.x) * t, z = me.z + (cz - me.z) * t, y = cam.y + 1.5 + (cy - cam.y - 1.5) * t;
-    houses.forEach((h, i) => { if (Math.abs(x - h.x) < 5.6 && Math.abs(z - h.z) < 5.6 && y < h.base + 8.5 && y > h.base - 1) hide.add(i); });
+    houses.forEach((h, i) => { if (Math.abs(x - h.x) < 6.4 && Math.abs(z - h.z) < 6.4 && y < h.base + 8.5 && y > h.base - 4) hide.add(i); });
   }
   if (hide.size === hiddenH.size && [...hide].every((i) => hiddenH.has(i))) return;
   for (const i of new Set([...hide, ...hiddenH])) setHouse(i, !hide.has(i));
@@ -392,11 +432,13 @@ function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h
 addEventListener("resize", resize); resize();
 
 // ---- controls: a thumb joystick on the left of the screen (where you put your thumb down), drag elsewhere to turn
-// the camera, two fingers to zoom; keys WASD / arrows, mouse drag and the wheel on a computer ----
+// the camera, two fingers to zoom; keys WASD / arrows, mouse drag and the wheel on a computer. On a flier, moving
+// forward climbs or dives the way the camera looks (owner, 2026-11-08). ----
 const joy = { id: null, ox: 0, oy: 0, x: 0, y: 0 }, drags = new Map(), keys = new Set();
 const joyEl = $("joy"), knob = joyEl.firstElementChild;
 canvas.addEventListener("pointerdown", (e) => {
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not a live pointer */ }
+  if (document.activeElement === $("chatin")) $("chatin").blur();
   if (e.pointerType !== "mouse" && joy.id === null && e.clientX < innerWidth * 0.5 && drags.size === 0) { Object.assign(joy, { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 }); joyEl.style.display = "block"; joyEl.style.left = e.clientX + "px"; joyEl.style.top = e.clientY + "px"; knob.style.transform = ""; return; }
   drags.set(e.pointerId, { x: e.clientX, y: e.clientY });
 });
@@ -405,14 +447,15 @@ canvas.addEventListener("pointermove", (e) => {
   const d = drags.get(e.pointerId); if (!d) return;
   if (drags.size >= 2) {   // pinch
     const [a, b] = [...drags.values()], before = hyp(a.x - b.x, a.y - b.y); d.x = e.clientX; d.y = e.clientY; const after = hyp(a.x - b.x, a.y - b.y);
-    if (before > 0) cam.goalDist = clamp(cam.goalDist * before / after, 7, 40); return;
+    if (before > 0) cam.goalDist = clamp((cam.goalDist * before) / after, 7, 45); return;
   }
-  cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.004, 0.18, 1.2); d.x = e.clientX; d.y = e.clientY;
+  cam.yaw -= (e.clientX - d.x) * 0.006; cam.pitch = clamp(cam.pitch + (e.clientY - d.y) * 0.004, pitchMin(), 1.25); d.x = e.clientX; d.y = e.clientY;
 });
 const up = (e) => { if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; } drags.delete(e.pointerId); };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
-canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 40); }, { passive: false });
-addEventListener("keydown", (e) => { keys.add(e.code); if (e.code === "Escape") closePanels(); });
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
+const typing = () => document.activeElement && document.activeElement.tagName === "INPUT";
+addEventListener("keydown", (e) => { if (typing()) return; keys.add(e.code); if (e.code === "Escape") closePanels(); if (e.code === "Enter" || e.code === "Slash") { e.preventDefault(); openChat(); } });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -424,10 +467,11 @@ const CANDY = `<svg class="ico" viewBox="0 0 24 24"><path d="M2 8l4 4-4 4zM22 8l
 let hudKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
-  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
+  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
   if (key === hudKey) return; hudKey = key;
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
-  $("onlinen").textContent = online; $("net").classList.toggle("on", netOk);
+  $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
+  $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
   $("contract").style.display = c ? "flex" : "none";
   if (c) { $("cname").textContent = (CONTRACTS.find((k) => k.id === c.kind) || CONTRACTS[2]).name; $("ctime").textContent = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0"); $("cbar").style.width = Math.min(100, (c.done / c.goal) * 100) + "%"; $("cdone").textContent = c.done + " / " + c.goal; $("cmine").textContent = "You: " + c.mine; }
   const items = $("items"); items.innerHTML = "";
@@ -451,8 +495,11 @@ function renderPets() {
   for (const p of save.pets.slice().sort((a, b) => SPECIES[b.sp].r - SPECIES[a.sp].r || petSpeed(b) - petSpeed(a))) el.appendChild(card(p.sp, statLine(p), p.id === save.ride, () => ride(p.id)));
 }
 function ride(id) {
-  if (save.ride === id) return; save.ride = id; persist(); mount(); netSend({ t: "pet", sp: riding().sp });
-  if (!flies()) me.bag = me.bag.filter((i) => !houses[i].sky);   // island parcels need wings: they go back
+  if (save.ride === id) return; save.ride = id; persist(); mount(); netSend({ t: "pet", sp: riding().sp, lv: riding().lv });
+  if (!flies()) {   // island parcels need wings: they go back; off the town island, back to the plaza
+    me.bag = me.bag.filter((i) => !houses[i].sky); cam.pitch = Math.max(cam.pitch, 0.18);
+    if (!inside(me.x, me.z, 1.5)) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); }
+  }
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
 }
 function renderShop() {
@@ -529,7 +576,7 @@ function renderTrain() {
 function train(ribbon) {
   const p = riding(); if (p.lv >= MAXLV) return;
   if (ribbon) { if (save.items.ribbon <= 0) return; save.items.ribbon--; } else { const c = trainCost(p); if (save.coins < c) return; save.coins -= c; }
-  p.lv++; persist(); toast(SPECIES[p.sp].name + " Lv " + p.lv, "#3fb36b"); if (openPanel === "p-train") renderTrain();
+  p.lv++; persist(); mount(); netSend({ t: "pet", sp: p.sp, lv: p.lv }); toast(SPECIES[p.sp].name + " Lv " + p.lv, "#3fb36b"); if (openPanel === "p-train") renderTrain();
   emitSparks(me.x, me.y + 1.5, me.z, 50, 6, ["#3fb36b", "#ffd35a", "#ffffff"], 1.1, -3); emitConfetti(me.x, me.y + 2, me.z, 30, 3, 6);
 }
 function useSnack() { if (save.items.snack <= 0 || me.boostUntil > performance.now()) return; save.items.snack--; persist(); me.boostUntil = performance.now() + SNACK_TIME * 1000; toast(ITEMS.snack.name, ITEMS.snack.c); emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#ff5aa0", "#ffffff"], 0.8, 0); hudKey = ""; }
@@ -586,7 +633,8 @@ function contractOver(won, payN, progress, helped) {
 
 // ---- delivering: the post office fills my bag with parcels for houses around town (and, on a flier, the islands);
 // riding up to a house's mailbox delivers its parcel: coins (more the further from the post office, double on an
-// island) and sometimes an item ----
+// island, more with a wanted level) and sometimes an item ----
+const STAR_PAY = 0.2;
 function fillBag() {
   const cap = petBag(riding()), before = me.bag.length; if (before >= cap) return;
   const taken = new Set(me.bag), sky = flies(), town = houses.map((h, i) => i).filter((i) => !houses[i].sky), isl = houses.map((h, i) => i).filter((i) => houses[i].sky);
@@ -596,7 +644,7 @@ function fillBag() {
 }
 function deliver(i) {
   const h = houses[i]; me.bag.splice(me.bag.indexOf(i), 1); syncBeams();
-  const coins = (8 + Math.round(h.d / 10)) * (h.sky ? 2 : 1); save.coins += coins; save.delivered++;
+  const coins = Math.round((8 + Math.round(h.d / 10)) * (h.sky ? 2 : 1) * (1 + STAR_PAY * me.stars)); save.coins += coins; save.delivered++;
   toast("+" + coins, "#e08a00");
   emitConfetti(h.mx, h.my + 1.8, h.mz, h.sky ? 80 : 45, 4, 7); emitSparks(h.mx, h.my + 1.5, h.mz, 14, 5, ["#ffd35a", "#fff4c0"], 0.8, 2);
   if (h.sky) firework(h.mx, h.my + 1, h.mz);
@@ -607,38 +655,84 @@ function deliver(i) {
   if (netOk) netSend({ t: "del" });
   if (contract && contract.local) { contract.done++; contract.mine++; }
 }
-// caught by animal control: dizzy for a moment, parcels gone back to the post office
+// caught by animal control (owner, 2026-11-08): taken to the pound, dizzy for a moment, parcels gone, wanted cleared
 function caught() {
-  me.stunUntil = performance.now() + 1500; me.safeUntil = performance.now() + 4500;
+  me.stunUntil = performance.now() + 2200; me.stars = 0;
   if (me.bag.length) { me.bag = []; syncBeams(); }
-  toast("Animal control!", "#e5534b"); emitSparks(me.x, me.y + 2, me.z, 24, 4, ["#ffd84a", "#ffffff"], 0.8, 1); hudKey = "";
+  me.x = RELEASE.x + (Math.random() - 0.5) * 10; me.z = RELEASE.z + (Math.random() - 0.5) * 3; me.y = terrain(me.x, me.z); cam.y = me.y; cam.yaw = Math.PI;
+  toast("Caught!", "#e5534b"); emitSparks(me.x, me.y + 2, me.z, 24, 4, ["#ffd84a", "#ffffff"], 0.8, 1); hudKey = "";
+  sendPos(true);
 }
 
-// ---- co-op: everyone in a room sees the others riding; the server shares where everyone is and runs contracts ----
+// ---- chat (owner, 2026-11-08): say something to the room; it shows in the list at the bottom and over your head ----
+const chatBar = $("chatbar"), chatIn = $("chatin");
+function openChat() { chatBar.style.display = "flex"; chatIn.focus(); }
+function closeChat() { chatBar.style.display = "none"; chatIn.blur(); }
+$("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
+chatBar.addEventListener("submit", (e) => {
+  e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
+  if (text) { netSend({ t: "chat", text }); chatLine(save.name, text, true); myBubble = bubble(text, myBubble, mine.g, mine.top); }
+  closeChat();
+});
+chatIn.addEventListener("keydown", (e) => { if (e.key === "Escape") closeChat(); e.stopPropagation(); });
+function chatLine(name, text, mineToo) {
+  const d = document.createElement("div"), b = document.createElement("b"); b.textContent = name + ": "; if (mineToo) b.style.color = "#3a8ee6"; d.appendChild(b); d.appendChild(document.createTextNode(text));
+  const log = $("chatlog"); log.appendChild(d); while (log.children.length > 6) log.firstChild.remove();
+  setTimeout(() => d.classList.add("old"), 12000); setTimeout(() => d.remove(), 13000);
+}
+// a speech bubble over a rider for a few seconds
+function bubble(text, old, parent, top) {
+  if (old) { parent.remove(old.s); clearTimeout(old.timer); }
+  const c = document.createElement("canvas"); c.width = 512; c.height = 128; const g = c.getContext("2d");
+  g.font = "700 30px system-ui, sans-serif"; const words = text.split(" "), lines = [""];
+  for (const w of words) { const t = (lines[lines.length - 1] + " " + w).trim(); if (g.measureText(t).width > 460 && lines[lines.length - 1]) { if (lines.length === 2) { lines[1] += "…"; break; } lines.push(w); } else lines[lines.length - 1] = t; }
+  const w = Math.min(500, Math.max(...lines.map((l) => g.measureText(l).width)) + 36), h = lines.length * 36 + 22;
+  g.fillStyle = "rgba(255,255,255,.95)"; g.beginPath(); g.roundRect((512 - w) / 2, 116 - h, w, h - 10, 20); g.fill(); g.beginPath(); g.moveTo(244, 106); g.lineTo(256, 122); g.lineTo(268, 106); g.fill();
+  g.fillStyle = "#23303b"; g.textAlign = "center"; g.textBaseline = "middle"; lines.forEach((l, i) => g.fillText(l, 256, 116 - h + 22 + i * 36));
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(6, 1.5, 1); s.renderOrder = 6; s.position.y = top + 2.4; parent.add(s);
+  const o = { s }; o.timer = setTimeout(() => { parent.remove(s); if (myBubble === o) myBubble = null; }, 6000); return o;
+}
+
+// ---- co-op: everyone in a room sees the others riding; the server shares where everyone is, runs animal control,
+// contracts and chat. A tab that's put away disconnects (and reconnects when it's back), and a reload replaces its old
+// connection, so nobody's left standing in town after they've gone (owner, 2026-11-08). ----
 const WS_URL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? `ws://${location.host}/pets` : "wss://play.atamus.io/pets";
-let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 0, lastPos = "";
-const others = new Map();   // id -> { name, sp, x, y, z, yaw, tx, ty, tz, tyaw, moving, m, tag }
+let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 0, lastPos = "", hidden = document.hidden;
+const KEY = (() => { try { let k = sessionStorage.getItem("petdelivery.key"); if (!k) { k = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem("petdelivery.key", k); } return k; } catch (e) { return Math.random().toString(36).slice(2); } })();
+const others = new Map();   // id -> { name, sp, shirt, stars, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function connect() {
-  try { ws = new WebSocket(WS_URL); } catch (e) { setTimeout(connect, retry); return; }
-  ws.onopen = () => { retry = 1000; netSend({ t: "hi", name: save.name, sp: riding().sp, shirt: save.shirt, x: me.x, y: me.y, z: me.z }); };
+  if (hidden || ws) return;
+  try { ws = new WebSocket(WS_URL); } catch (e) { ws = null; setTimeout(connect, retry); return; }
+  const sock = ws;
+  ws.onopen = () => { retry = 1000; netSend({ t: "hi", key: KEY, name: save.name, sp: riding().sp, lv: riding().lv, shirt: save.shirt, x: me.x, y: me.y, z: me.z }); };
   ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
-  ws.onclose = () => { const was = netOk; netOk = false; myId = null; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = ""; if (was) toast("Offline"); setTimeout(connect, retry); retry = Math.min(15000, retry * 2); };
+  ws.onclose = () => {
+    if (ws === sock) ws = null;
+    const was = netOk; netOk = false; myId = null; clockOff = null; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = "";
+    if (was && !hidden) toast("Offline");
+    if (!hidden) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
+  };
   ws.onerror = () => {};
 }
-function nameTag(name) {
-  const c = document.createElement("canvas"); c.width = 256; c.height = 64; const g = c.getContext("2d");
+document.addEventListener("visibilitychange", () => {
+  hidden = document.hidden;
+  if (hidden) { if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
+});
+function nameTag(name, stars) {
+  const c = document.createElement("canvas"); c.width = 256; c.height = 96; const g = c.getContext("2d");
   g.font = "800 30px system-ui, sans-serif"; const w = Math.min(250, g.measureText(name).width + 28);
-  g.fillStyle = "rgba(255,255,255,.92)"; g.beginPath(); g.roundRect((256 - w) / 2, 10, w, 44, 22); g.fill(); g.fillStyle = "#23303b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 128, 33);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(4, 1, 1); s.renderOrder = 5; return s;
+  g.fillStyle = "rgba(255,255,255,.92)"; g.beginPath(); g.roundRect((256 - w) / 2, 42, w, 44, 22); g.fill(); g.fillStyle = "#23303b"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 128, 65);
+  if (stars) { g.font = "800 30px system-ui, sans-serif"; g.fillStyle = "#e5534b"; g.strokeStyle = "#fff"; g.lineWidth = 6; const st = "★".repeat(stars); g.strokeText(st, 128, 20); g.fillText(st, 128, 20); }
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false })); s.scale.set(4, 1.5, 1); s.renderOrder = 5; return s;
 }
 function addOther(p) {
-  if (p.id === myId) return; dropOther(p.id);
-  const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), tag = nameTag(String(p.name || "Courier").slice(0, 18));
-  tag.position.y = m.top + 1.2; m.g.add(tag); const y = p.y || terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g);
-  others.set(p.id, { name: p.name, sp, shirt: p.shirt, x: p.x, y, z: p.z, yaw: p.yaw || 0, tx: p.x, ty: y, tz: p.z, tyaw: p.yaw || 0, moving: false, m, tag });
+  if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
+  const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); m.g.scale.setScalar(sc); m.top *= sc; const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
+  tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g);
+  others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
 }
-function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); others.delete(id); }
+function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); if (o.bub) clearTimeout(o.bub.timer); others.delete(id); }
 function setContract(c) {
   const before = contract;
   contract = c ? { kind: c.kind || "big", goal: c.goal, done: c.done, mine: c.mine || 0, ends: performance.now() + c.left * 1000, pool: c.pool } : null;
@@ -646,22 +740,37 @@ function setContract(c) {
   hudKey = ""; if (openPanel === "p-board") renderBoard();
 }
 function onNet(m) {
-  if (m.t === "welcome") { myId = m.id; netOk = true; for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); }
-  else if (m.t === "join") { addOther(m.p); online++; hudKey = ""; }
-  else if (m.t === "leave") { if (others.has(m.id)) online--; dropOther(m.id); hudKey = ""; }
-  else if (m.t === "snap") { for (const [id, x, z, yaw, mv, y] of m.ps) { const o = others.get(id); if (o) { o.tx = x; o.tz = z; o.tyaw = yaw; o.moving = !!mv; o.ty = Number.isFinite(y) ? y : terrain(x, z); } } }
-  else if (m.t === "pet") { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, shirt: o.shirt, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); }
+  if (m.t === "welcome") { myId = m.id; netOk = true; for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; }
+  else if (m.t === "join") { addOther(m.p); online = others.size + 1; hudKey = ""; }
+  else if (m.t === "leave") { dropOther(m.id); online = others.size + 1; hudKey = ""; }
+  else if (m.t === "snap") {
+    serverTime(m.ts);
+    for (const [id, x, z, yaw, mv, y, st] of m.ps) {
+      const o = others.get(id); if (!o) continue;
+      pushSample(o.buf, m.ts, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw }); o.moving = !!mv;
+      if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
+    }
+  }
+  else if (m.t === "veh") { serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); }
+  else if (m.t === "pet") { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, lv: m.lv, shirt: o.shirt, stars: o.stars, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); }
   else if (m.t === "fx") { const o = others.get(m.id); if (o) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); }
+  else if (m.t === "chat") { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); }
+  else if (m.t === "chase" || m.t === "caught" || m.t === "escaped" || m.t === "stars") onVehEvent(m.t, m.stars || 0);
   else if (m.t === "contract") setContract(m.c);
   else if (m.t === "done") contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped);
+}
+function sendPos(force) {
+  const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0].join();
+  if (!force && s === lastPos) return;
+  netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0 }); lastPos = s;
 }
 
 // ---- the loop ----
 let last = performance.now(), clock = 0, zone = null;
-const CRUISE = 11;   // how high a flier goes above the land (and over islands it's near)
-function nearTarget(r) {
-  if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < r || hyp(me.x - SHOP.x, me.z - SHOP.z) < r || hyp(me.x - TRAIN.x, me.z - TRAIN.z) < r + 4 || hyp(me.x - BOARD.x, me.z - BOARD.z) < r) return true;
-  return me.bag.some((i) => hyp(me.x - houses[i].mx, me.z - houses[i].mz) < r);
+const SLOPE = 0.8, FLY_TOP = 95, FLY_SPEED_UP = 0.85;
+function floorAt(x, z, y) {
+  const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
+  return inside(x, z) ? terrain(x, z) : -60;
 }
 function step(dt) {
   clock += dt;
@@ -676,42 +785,58 @@ function step(dt) {
   const p = riding(), sp = petSpeed(p) * (me.boostUntil > now ? SNACK_BOOST : 1), fly = flies(), stunned = me.stunUntil > now;
   me.moving = ml > 0.08 && !stunned;
   if (me.moving) {
-    const v = sp * Math.min(1, ml) * dt, nx = clamp(me.x + (mx / ml) * v, -HALF, HALF), nz = clamp(me.z + (mz / ml) * v, -HALF, HALF);
-    if (!blocked(nx, me.z, me.y)) me.x = nx; if (!blocked(me.x, nz, me.y)) me.z = nz;   // slide along walls
-    const want = Math.atan2(mx, mz); let d = want - me.yaw; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; me.yaw += d * Math.min(1, dt * 12);
+    const v = sp * Math.min(1, ml) * dt;
+    const nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
+    const ok = (x, z) => {
+      if (hyp(x, z) > LIMIT || blocked(x, z, me.y)) return false;
+      if (fly) return true;
+      if (!inside(x, z, 1.5)) return false;   // the edge of the island
+      return terrain(x, z) - terrain(me.x, me.z) <= SLOPE * v + 0.03;   // cliffs are too steep to climb
+    };
+    if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
+    const want = Math.atan2(mx, mz); me.yaw = lerpYaw(me.yaw, want, Math.min(1, dt * 12));
   }
-  // height: on the land; a flier climbs to cruise when moving and comes down near where it's going (or onto an island)
-  const land = terrain(me.x, me.z), isl = islandAt(me.x, me.z), floor = isl && me.y > isl.y - 3 ? isl.y : land;
+  // height: a ground pet keeps to the land (dropping off ledges); a flier climbs or dives as it flies forward, the way
+  // the camera looks, and hovers when stopped
+  const floor = floorAt(me.x, me.z, me.y);
   if (fly) {
-    let cruise = land + CRUISE; for (const i of ISLANDS) if (hyp(me.x - i.x, me.z - i.z) < i.r + 16) cruise = Math.max(cruise, i.y + 4);
-    const low = nearTarget(10) || !me.moving, want = low ? floor + 0.9 : cruise;
-    me.y += (want - me.y) * Math.min(1, dt * (low ? 4 : 2.2)); if (me.y < floor) me.y = floor;
-  } else me.y += (land - me.y) * Math.min(1, dt * 14);
-  me.airborne = fly && me.y - floor > 1.6;
+    const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
+    me.y += climb * fwd * sp * FLY_SPEED_UP * dt; me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
+  } else {
+    if (!inside(me.x, me.z) && !islandAt(me.x, me.z)) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); }
+    const f = floorAt(me.x, me.z, me.y); me.y = me.y > f ? Math.max(f, me.y - dt * 22) : f;
+  }
+  me.airborne = me.y - floor > 1.2;
+  const low = me.y - floor < 3.5;
   // the post office fills my bag; a mailbox I have a parcel for takes it
-  if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && me.y < 4) fillBag();
+  if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && low) fillBag();
   for (const i of me.bag) { const h = houses[i]; if (hyp(me.x - h.mx, me.z - h.mz) < 3.6 && Math.abs(me.y - h.my) < 4.5) { deliver(i); break; } }
-  // animal control
-  const tnow = Date.now() / 1000; trucksStep(tnow, Math.floor(tnow * 4) % 2 === 0);
-  if (me.safeUntil < now && me.y - land < 3) for (const T of TRUCKS) if (hyp(T.x - me.x, T.z - me.z) < 2.6) { caught(); break; }
+  // animal control: offline this page runs it
+  if (!netOk) {
+    Object.assign(meP, { x: me.x, y: me.y, z: me.z, stars: me.stars });
+    for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
+  }
   // the egg shop, the training yard and the board open their panel when I ride in
-  const z = me.y > 4 ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  const z = !low ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
   if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
   contractStep(); fxStep(dt);
-  for (const c of clouds) { c.position.x += dt * 1.2; if (c.position.x > 220) c.position.x = -220; }
-  // send where I am, 10 times a second when it changes
-  if (netOk && clock - lastSent > 0.1) { const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0].join(); if (s !== lastPos) { netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0 }); lastPos = s; } lastSent = clock; }
+  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
+  // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless
+  if (netOk && now - lastSent > 100) { sendPos(now - lastSent > 2000); lastSent = now; }
 }
 function draw(dt) {
   const now = performance.now();
   mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.y = me.yaw; mine.g.rotation.z = me.airborne && me.moving ? Math.sin(clock * 1.3) * 0.05 : 0;
+  mine.g.rotation.x = me.airborne && me.moving ? -clamp((0.42 - cam.pitch) * 0.6, -0.4, 0.4) * clamp(-joy.y + (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0), 0, 1) : 0;
   animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne);
   dizzy.visible = me.stunUntil > now; if (dizzy.visible) { dizzy.position.set(me.x, me.y + mine.top + 0.5, me.z); dizzy.rotation.y = clock * 6; }
+  const rt = renderTime();
   for (const o of others.values()) {
-    const k = Math.min(1, dt * 10); o.x += (o.tx - o.x) * k; o.y += (o.ty - o.y) * k; o.z += (o.tz - o.z) * k;
-    let d = o.tyaw - o.yaw; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; o.yaw += d * k;
-    o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw; animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - terrain(o.x, o.z) > 1.6);
+    if (sampleAt(o.buf, rt, tmpS)) { o.x = tmpS.x; o.y = tmpS.y; o.z = tmpS.z; o.yaw = tmpS.yaw; }
+    o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw;
+    animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2);
   }
+  vehiclesDraw(dt);
   // the arrow: to the nearest house in my bag, else back to the post office
   let tx = PICKUP.x, tz = PICKUP.z, best = 1e9;
   for (const i of me.bag) { const h = houses[i], d = hyp(h.mx - me.x, h.mz - me.z); if (d < best) { best = d; tx = h.mx; tz = h.mz; } }
@@ -723,12 +848,13 @@ function draw(dt) {
   renderer.render(scene, camera);
 }
 function frame(now) {
-  const dt = clamp((now - last) / 1000, 0, 0.05); last = now;
-  step(dt); draw(dt); hud();
+  const dt = clamp((now - last) / 1000, 0, 0.1); last = now;
+  if (dt > 0.05) { step(dt / 2); step(dt / 2); } else step(dt);
+  draw(dt); hud();
   requestAnimationFrame(frame);
 }
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get others() { return others; }, step, deliver, fillBag, buyEgg, train, startContract, ride, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, TRUCKS, cam, terrain, truckAt, contractOver, emitConfetti, firework, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get others() { return others; }, step, deliver, fillBag, buyEgg, train, startContract, ride, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, emitConfetti, firework, caught, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; } };

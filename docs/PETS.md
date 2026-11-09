@@ -10,19 +10,21 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## The town
 
-- A 5 × 5 grid of 40 m blocks between roads (8 m wide, dashed center lines), about 250 m across, the same for everyone.
-- The middle block is the plaza: the **post office** (blue roof) with its **pickup ring** (gold) in front and the
-  **contract board** (red ring) beside it. East of it the **egg shop** (pink, a giant egg on top, pink ring); west the
-  **training yard** (a running track with hurdles, green ring). The other 22 blocks have 4 houses each (88), each with a
-  red mailbox by the road, and trees.
-- **Hills (owner, 2026-11-08):** rolling hills across town, roads and lawns draped over them; the middle row (plaza, egg
-  shop, training yard) stays flat, and the land rises past the edge of town.
-- **Floating islands (owner, 2026-11-08):** 5 above the corners and north edge of town (20–30 m up), each with 3 houses
-  and trees. Only fliers reach them.
-- **Animal control (owner, 2026-11-08):** 7 white vans with flashing lights drive set loops along the roads (on the right
-  side), the same for everyone (timed off the clock). One touching you (unless you're flying more than 3 m up) stuns you
-  for 1.5 s (dizzy stars) and your parcels go back to the post office; then 3 s before another can catch you.
-- Houses and the two shops are solid (you slide along their walls); a house between the camera and you is hidden while
+- **A big floating island (owner, 2026-11-08)**, about 465 m across with a ragged edge and rock tapering away beneath it;
+  clouds above and below. Built from `website/pets-world.js`, which the server uses too (the two copies must match;
+  `scripts/check.sh` compares them).
+- **Terrain:** rolling ground stepped into plateaus whose steps are cliffs (up to about 48 m high), and four big hills.
+  Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
+  ledges.
+- **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
+  cut into the slopes so they climb gently through the cliffs.
+- **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
+  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard**
+  (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
+- **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
+  open ground.
+- **Floating islands:** 5 off the town's edge (20–38 m up), each with 3 houses and trees. Only fliers reach them.
+- Houses and buildings are solid (you slide along their walls); a house between the camera and you is hidden while
   it's in the way.
 
 ## Riding
@@ -30,7 +32,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - You ride your pet (the courier on its back: shirt, cap, mail bag). **Phone:** put a thumb down on the left half of
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
-- The camera follows behind and above (tilt and zoom kept between limits).
+- **Flying (owner, 2026-11-08):** on a flier, moving forward climbs or dives the way the camera looks (look up, from
+  below, to climb; look down to dive; the camera can go below a flier); it hovers when stopped and walks when on the
+  ground. Up to 95 m.
+- A pet grows 1.5% bigger with each level (owner, 2026-11-08), so a level 20 pet is about 29% bigger; others see it too.
+
+## Animal control (owner, 2026-11-08)
+
+- 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
+  helicopters circle over town. Online the server runs them for the whole room; offline the page does.
+- Each spots a player near it (vans 16 m, helicopters 22 m, plus 7 m per wanted star; vans only see players on or near
+  the ground) and chases them straight for a short while (vans 3 s, helicopters 3.5 s, plus 0.8 s per star), lights
+  flashing (a helicopter shines a searchlight). Vans chase at 9.5 m/s, helicopters 11, plus 1.3 / 1.6 per star, so a
+  faster pet gets away.
+- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken to the pound's yard,
+  dizzy for 2.2 s, your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
+  caught again.
+- **Wanted level (0–5 stars):** each chase you get away from adds a star (at most one every 4 s); a star drops every
+  25 s nobody's chasing you. Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
 
 ## Delivering
 
@@ -38,8 +57,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   on a flier about 3 in 10 are for island houses. Switching to a pet that can't fly hands island parcels back.
 - Each house you have a parcel for shows a gold beam (pink for an island house) with a spinning parcel over its mailbox; a gold arrow over your pet
   points to the nearest one (or back to the post office when the bag's empty).
-- Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office** (about 8–25), **double
-  for an island house**, and sometimes an item: Speed Candy 12%, Training Ribbon 4%, Egg Ticket 1%.
+- Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
+  for an island house**, **+20% per wanted star**, and sometimes an item: Speed Candy 12%, Training Ribbon 4%, Egg Ticket 1%.
 
 ## Items
 
@@ -70,6 +89,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - The game connects to the Atamus server (`wss://play.atamus.io/pets`) and puts you in a room of up to 16. Everyone in
   the room rides the same town and sees the others (their pet, shirt and name over their head), moving smoothly. Top
   right: a green dot when connected and how many are in the room. Offline, it keeps trying and you play alone.
+- **Smooth movement (owner, 2026-11-08: rubber-banding):** the server sends everyone's position and animal control 10
+  times a second stamped with its clock; pages draw others and vehicles 140 ms in the past, gliding between updates
+  (guessing ahead up to 0.2 s if one's late). Your own position is sent 10 times a second by the real clock (and every
+  2 s regardless).
+- **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
+  the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
+  old connection (keeping its wanted level).
+- **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
+  one message per 1.2 s); messages show in a list at the bottom left for 12 s and as a speech bubble over the sender for
+  6 s. Online only.
 - Your name is a random two words (kept in the browser).
 - **Contracts** (the contract board, owner 2026-11-08: shorter ones too): anyone starts one when none is running:
   - **Rush Order:** 3 + 3 per player parcels in 1 minute, 22 coins per parcel of the goal.
