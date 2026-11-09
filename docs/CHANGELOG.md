@@ -7,6 +7,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 ## 2026-11-09
 
 - **Fliers walk until you take off; on foot on any plot (owner).** A flying pet walks on the ground until you press Space, then holding Space climbs; landing puts it back to walking. On any plot, in the yard as well as the house, you're off your pet.
+- **Flight down key (owner).** Hold Shift instead of Ctrl to descend on a flapping flier; the on-screen key strip now shows Shift.
 - **Fix: others sometimes saw a different pet than you ride (owner).** When your data came back from the server (logging in, or after a stale save) your page redrew your pet but never told the room; now any change to the pet you ride is sent.
 - **Smarter animal control (owner).** Animal control cars now have compact, van and SUV styles with slow, standard and fast speed tiers, and they watch farther ahead and to their sides than behind. Helicopters circle slightly faster and use a wider searchlight against couriers riding flying mounts. They still leave couriers alone unless they carry parcels.
 - **Wind is easier to see and affects flight (owner).** More numerous, longer and brighter streaks make the wind clear around town. Airborne fliers and gliders gain up to 10% speed with the wind and lose up to 5% against it; the wind pill shows the active percentage in green or red.
