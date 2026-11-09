@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Building: one color circle; no doubled pieces (owner).** The colors open from a single circle; placing a piece on the same piece recolors it instead of stacking a second.
 - **Fix: dismount only inside houses (owner).** Lots on the VIP island put anyone below or above them on foot (the lot check had no lower limit); now you're only off your pet inside a house.
 - **Houses rebuilt (owner).** Outside, each lot has one of 5 ready-made houses (Cottage, Cabin, Modern, Barn, Tower); its front door leads inside, to the house's own space (a floor and the front door in a black void) for you and your party. Building is inside only and freeform (any spot, any angle, on the floor you're on), with a true-to-life preview, window views, and Delete that marks red, selects and removes with Del. Walls are taller (5.5 m). Old houses moved inside as they were (home.v 2). Others see whose house you're in (pos carries inst).
 - **Dismount only on built lots, walkable roofs, wind readout only when it matters, phone layout (owner).** You're off your pet only on a player's lot with something built on it (no longer under any roof); pets that jump or fly onto town houses walk on their roofs; the wind pill shows only on fliers and gliders; on touch screens the HUD and buttons are sized to the screen, with big round Jump buttons and, sideways, a row of buttons along the bottom.
