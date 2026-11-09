@@ -47,10 +47,10 @@ const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(
 const all = (r, o, skip) => { const s = JSON.stringify(o); for (const p of r.players.values()) if (p !== skip && p.ws.readyState === 1) p.ws.send(s); };
 const pub = (p) => ({ id: p.id, name: p.name, sp: p.sp, lv: p.lv, shirt: p.shirt, x: p.x, y: p.y, z: p.z, yaw: p.yaw, stars: p.stars, inst: p.inst, ft: p.ft });
 const plotMsg = (plot, p) => {
-  if (!p) return { t: "plot", plot, id: 0, name: "", pieces: [] };
+  if (!p) return { t: "plot", plot, id: 0, name: "", pieces: [], ext: 0 };
   const d = p.acct.data, penSp = {};   // which kind of pet is in each playpen, so others see it
   for (const t of d.home.pieces) if (t.k === "pen" && t.pet) { const q = d.pets.find((x) => x.id === t.pet); if (q) penSp[t.pet] = q.sp; }
-  return { t: "plot", plot, id: p.id, name: p.name, pieces: d.home.pieces, penSp };
+  return { t: "plot", plot, id: p.id, name: p.name, pieces: d.home.pieces, ext: d.home.ext | 0, penSp };   // ext: the house outside (owner, 2026-11-09)
 };
 function assignPlot(r, p) {
   const free = (ids) => ids.filter((i) => !r.plots[i]);
@@ -266,7 +266,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const d = me.acct.data;
       switch (m.t) {
         // (owner, 2026-11-08: rubber-banding) each position carries the sender's own clock, passed on so others replay it at its true pace
-        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.ft = m.ft ? 1 : 0; me.fresh = true; break;
+        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.ft = m.ft ? 1 : 0; me.inst = Math.max(0, Math.min(1e9, m.inst | 0)); me.fresh = true; break;   // inst: whose house I'm inside (0 outside)
         case "pet": if (SPECIES.has(m.sp)) { me.sp = m.sp; me.airMount = AIR_MOUNTS.has(me.sp); me.lv = Math.max(1, Math.min(20, m.lv | 0)); all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); } break;
         case "save": {
           if (m.rev !== me.acct.rev) { pushData(me); break; }
