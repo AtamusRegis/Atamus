@@ -189,6 +189,18 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Training Ribbon:** a free training level (a button on the training arena's gold circle).
 - **Egg Ticket:** a free Basic Egg (a button in the egg shop).
 
+## Package Rush
+
+- Every room starts a **Package Rush** every 10 minutes. It lasts a random 1–2 minutes and scatters shared prize
+  packages at random town mailboxes: 8 plus 3 per player, up to 28. A purple beam and gold ring mark each one, and the
+  event pill shows how many remain and the time left.
+- Riding over a package claims it once for the whole room. Its server-owned random prize is **40–100 training points**
+  (which can cross several levels), **1,500–6,000 coins**, **3–10** of a random item, or a **12% chance of a random
+  pet** when there is room. Pet rarity is 50% Common, 32% Rare, 14% Epic and 4% Legendary. A training-points prize for
+  a level-20 pet becomes coins.
+- The start and each prize use a large purple-and-gold announcement in the middle of the screen, confetti and
+  fireworks. The server checks proximity, removes claimed packages and owns all rewards.
+
 ## Pets
 
 - Start: a Pup. 25 kinds in 4 rarities (speed m/s / bag; ✈ flies; ≈ swims):

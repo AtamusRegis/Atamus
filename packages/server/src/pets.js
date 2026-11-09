@@ -13,6 +13,7 @@
 // everyone onto it.
 import { WebSocketServer } from "ws";
 import { makeVehicles, stepVehicles, cleanData, petCap, penPets } from "./pets-world.js";
+import { PACKAGE_EVENT_EVERY_MS, makePackageEvent, packageEventView, packageReward, takePackage } from "./package-events.js";
 import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
@@ -37,9 +38,9 @@ const OWNER = "nyssary", RANK = { player: 0, moderator: 1, admin: 2 };
 const rankOf = (a) => (a.name.toLowerCase() === OWNER ? 3 : RANK[a.role] || 0);
 const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
 
-function roomFor() {
+function roomFor(packageEveryMs) {
   let r = rooms.find((q) => q.players.size < ROOM_MAX);
-  if (!r) { r = { players: new Map(), contract: null, vs: makeVehicles(), last: Date.now(), plots: new Array(16).fill(null) }; rooms.push(r); }
+  if (!r) { const now = Date.now(); r = { players: new Map(), contract: null, packageEvent: null, nextPackageEvent: now + packageEveryMs, packageEveryMs, vs: makeVehicles(), last: now, plots: new Array(16).fill(null) }; rooms.push(r); }
   return r;
 }
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
@@ -76,7 +77,7 @@ function finish(r, won) {
   sendContract(r);
 }
 
-export function attachPets(server, { origins = [], allowLocal = false, store = memStore() } = {}) {
+export function attachPets(server, { origins = [], allowLocal = false, store = memStore(), packageEveryMs = PACKAGE_EVENT_EVERY_MS } = {}) {
   // ---- saving: changed accounts are written every few seconds (and when their player leaves) ----
   const dirty = new Set();
   const flush = async (acct) => { dirty.delete(acct); try { await store.save(acct.id, acct.data, acct.rev); } catch (e) { console.error("[pets] save", e.message); dirty.add(acct); } };
@@ -219,13 +220,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         acct.data = cleanData(acct.data, SPECIES); if (wasOld) { acct.rev++; dirty.add(acct); }   // a home from before plots, turned into a house (and the refund) once
         const old = online.get(acct.id);
         if (old) { send(old.ws, { t: "kicked" }); old.ws.terminate(); gone(old); acct = old.acct; }   // logged in again: the old connection goes
-        room = roomFor();
+        room = roomFor(packageEveryMs);
         me = { id: nextId++, ws, room, acct, name: acct.name, sp: SPECIES.has(m.sp) ? m.sp : "pup", lv: Math.max(1, Math.min(20, m.lv | 0)), shirt: color(m.shirt),
           x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null, plot: -1, ft: 0 };
         me.airMount = AIR_MOUNTS.has(me.sp);
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
+        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, packageEvent: packageEventView(room.packageEvent), stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
@@ -277,6 +278,15 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           const c = room.contract; if (!c) break;
           c.done++; c.by.set(me.id, (c.by.get(me.id) || 0) + 1);
           if (c.done >= c.goal) finish(room, true); else sendContract(room);
+          break;
+        }
+        case "package": {
+          const event = room.packageEvent, box = event && event.boxes.get(m.id | 0);
+          if (!box || me.inst || Math.hypot(me.x - box.x, me.y - box.y, me.z - box.z) > 4) break;
+          takePackage(event, m.id); const reward = packageReward(d, petCap(d));
+          if (reward.kind === "xp") { me.sp = reward.sp; me.lv = reward.lv; all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); }
+          changed(me); pushData(me); flush(me.acct);
+          all(room, { t: "package_taken", id: box.id, by: me.id }); send(ws, { t: "package_reward", reward });
           break;
         }
         // (owner, 2026-11-08) inviting another player (F next to them): to a party or a trade; to your house (your party)
@@ -333,6 +343,11 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => v.kind ? [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target, r2(v.ba), r2(v.bd)] : [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second (a helicopter adds its searchlight)
       if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);
+      if (r.packageEvent && (now > r.packageEvent.ends || !r.packageEvent.boxes.size)) { r.packageEvent = null; all(r, { t: "package_event", event: null }); }
+      if (!r.packageEvent && now >= r.nextPackageEvent) {
+        r.packageEvent = makePackageEvent(now, players.length); r.nextPackageEvent = now + r.packageEveryMs;
+        all(r, { t: "package_event", event: packageEventView(r.packageEvent, now) });
+      }
     }
   }, SNAP_MS).unref();
   return wss;

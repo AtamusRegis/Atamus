@@ -11,6 +11,7 @@ setTimeout(() => fail("timed out"), 20000).unref();
 
 // ---- the world ----
 const W = await import("./src/pets-world.js");
+const E = await import("./src/package-events.js");
 const SPECIES = new Set(["pup", "fox", "dragon"]);
 const fresh = W.cleanData({}, SPECIES);
 ok(fresh.pets.length === 1 && fresh.home.pieces.length > 0, "a new player has a pet and a starter house");
@@ -32,6 +33,17 @@ const testBeam = { lx: 0, ly: 20, lz: 0, dx: 0, dy: -1, dz: 0 }, beamPlayer = { 
 ok(!W.beamHits(testBeam, beamPlayer) && W.beamHits(testBeam, { ...beamPlayer, airMount: true }), "helicopter beam is wider for flying mounts");
 let caught = false; for (let i = 0; i < 200 && !caught; i++) caught = W.stepVehicles(vs, [player], 0.1, 100 + i * 0.1).some((e) => e.k === "caught");
 ok(caught, "animal control catches a parcel carrier");
+const event = E.makePackageEvent(1000, 3, () => 0);
+ok(event.boxes.size === 17 && new Set([...event.boxes.values()].map((b) => `${b.x},${b.y},${b.z}`)).size === 17, "Package Rush uses unique town mailboxes");
+ok(event.ends >= 61_000 && event.ends <= 121_000, "Package Rush lasts one to two minutes");
+const firstPackage = event.boxes.keys().next().value;
+ok(E.takePackage(event, firstPackage) && !E.takePackage(event, firstPackage), "a package can be taken only once");
+const seq = (...values) => () => values.shift() ?? 0;
+const rewardData = { coins: 0, nextId: 2, ride: 1, pets: [{ id: 1, sp: "pup", lv: 1 }], items: { snack: 0, ribbon: 0, ticket: 0 } };
+const xp = E.packageReward(rewardData, 20, seq(0.2, 0.999));
+ok(xp.kind === "xp" && xp.n === 100 && rewardData.pets[0].lv === 4 && rewardData.pets[0].tp === 28, "training-point prizes can cross several levels");
+const pet = E.packageReward(rewardData, 20, seq(0.01, 0.99, 0, 0));
+ok(pet.kind === "pet" && pet.sp === "dragon" && rewardData.pets.length === 2, "a package can award a legendary pet");
 const heliEventsAt = (start) => {
   const heli = W.makeVehicles().find((v) => v.kind === 1), litPlayer = { id: 2, bag: 1, stars: 0, lastChased: start, lastStar: 0, immuneUntil: 0 }, events = [];
   for (let i = 0; i < 8; i++) {
@@ -48,7 +60,7 @@ ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights cat
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
 const server = http.createServer((_q, s) => s.end("ok"));
-attachPets(server, { allowLocal: true });
+attachPets(server, { allowLocal: true, packageEveryMs: 25 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const url = `ws://127.0.0.1:${server.address().port}/pets`;
 function client(name) {
@@ -75,12 +87,22 @@ try {
   // positions reach the other player
   a.send({ t: "pos", x: 5, y: 0, z: 14, yaw: 0, mv: 1, ct: 1000, bag: 0, ft: 0 });
   await b.wait((m) => m.t === "snap" && m.ps.some((r) => r[0] === wa.id && r[1] === 5), "A's position");
+  // Package Rush is shared, proximity-checked and gives one server-owned reward.
+  const rush = await a.wait((m) => m.t === "package_event" && m.event && m.event.boxes.length, "Package Rush");
+  const box = rush.event.boxes[0];
+  a.send({ t: "pos", x: box.x, y: box.y, z: box.z, yaw: 0, mv: 0, ct: 1100, bag: 0, ft: 0 });
+  a.send({ t: "package", id: box.id });
+  await b.wait((m) => m.t === "package_taken" && m.id === box.id, "shared package removal");
+  const prize = await a.wait((m) => m.t === "package_reward", "package reward");
+  ok(["pet", "xp", "coins", "item"].includes(prize.reward.kind), "a package gives a supported reward");
+  const prizeData = await a.wait((m) => m.t === "data" && m.rev > wa.rev, "reward data");
+  let arev = prizeData.rev, adata = prizeData.data;
   // a save is taken, and a house change reaches the other player
-  const d = wa.data; d.home.pieces.push({ k: "chair", x: 10, z: 10, l: 0, r: 0, c: 0 });
-  a.send({ t: "save", rev: wa.rev, data: d });
-  const sv = await a.wait((m) => m.t === "saved", "saved"); ok(sv.rev === wa.rev + 1, "save rev");
+  const d = adata; d.home.pieces.push({ k: "chair", x: 10, z: 10, l: 0, r: 0, c: 0 });
+  a.send({ t: "save", rev: arev, data: d });
+  const sv = await a.wait((m) => m.t === "saved", "saved"); ok(sv.rev === arev + 1, "save rev");
   await b.wait((m) => m.t === "plot" && m.id === wa.id && m.pieces.some((t) => t.k === "chair"), "A's new chair");
-  a.send({ t: "save", rev: wa.rev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
+  a.send({ t: "save", rev: arev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
   // chat
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
