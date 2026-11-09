@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100047";
+import * as World from "./pets-world.js?v=1793100050";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -1122,7 +1122,7 @@ function fadeHouses(dt, cx, cy, cz) {
     const sx = cx - me.x, sz = cz - me.z, L2 = sx * sx + sz * sz || 1;
     houses.forEach((h, i) => {
       const t = clamp(((h.x - me.x) * sx + (h.z - me.z) * sz) / L2, 0, 1), d = hyp(me.x + sx * t - h.x, me.z + sz * t - h.z);
-      if (d < 8) { const f = hiddenBy(h, cx, cy, cz); if (f > 0) want.set(i, f); }
+      if (d < 8 && !(me.y > h.base + 4 && hyp(me.x - h.x, me.z - h.z) < 6.5)) { const f = hiddenBy(h, cx, cy, cz); if (f > 0) want.set(i, f); }   // not the roof I'm standing on
     });
   }
   for (const i of new Set([...want.keys(), ...fades.keys()])) {
@@ -1218,8 +1218,9 @@ function hud() {
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
   const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
-  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3 + "|" + pct;
-  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg, effect] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winde").textContent = +effect ? (+effect > 0 ? "+" : "") + effect + "%" : ""; $("windp").classList.toggle("tailwind", +effect > 0); $("windp").classList.toggle("headwind", +effect < 0); $("winda").style.transform = `rotate(${deg}deg)`; } }
+  const windOn = !me.inst && !me.foot && (moveKind() === "fly" || moveKind() === "glide");   // (owner, 2026-11-09) only on a pet the wind moves
+  const wkey = !windOn ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3 + "|" + pct;
+  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = windOn ? "inline-flex" : "none"; if (windOn) { const [mph, deg, effect] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winde").textContent = +effect ? (+effect > 0 ? "+" : "") + effect + "%" : ""; $("windp").classList.toggle("tailwind", +effect > 0); $("windp").classList.toggle("headwind", +effect < 0); $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
   if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
@@ -2716,8 +2717,21 @@ function windRideFactor(kind, airborne, dx, dz, wx = WIND.x, wz = WIND.z) {
   const along = clamp((dx * wx + dz * wz) / d, -1, 1);
   return 1 + along * (along >= 0 ? 0.1 : 0.05);
 }
+// (owner, 2026-11-09) the town's roofs: a pet that jumps or flies up onto one stands on it (a pyramid over the walls)
+const ROOF_HALF = 7.2 * Math.SQRT1_2, ROOF_RISE = 3.4;
+function roofTop(x, z, y) {
+  let best = -Infinity;
+  for (const h of houses) {
+    const dx = x - h.x, dz = z - h.z; if (dx * dx + dz * dz > 60) continue;
+    const top = h.base + 4.4; if (y < top - 0.6) continue;
+    const c = Math.cos(h.yaw), s = Math.sin(h.yaw), lx = Math.abs(dx * c - dz * s), lz = Math.abs(dx * s + dz * c), m = Math.max(lx, lz);
+    if (m < ROOF_HALF) best = Math.max(best, top + ROOF_RISE * (1 - m / ROOF_HALF));
+  }
+  return best;
+}
 function groundAt(x, z, y) {
-  const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
+  const isl = islandAt(x, z); if (isl && y > isl.y - 3) return Math.max(isl.y, roofTop(x, z, y));
+  const rf = roofTop(x, z, y); if (rf > -Infinity) return rf;
   if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
   if (!inside(x, z)) return -200;
   // (owner, 2026-11-09) in the water: a swimmer goes down to the bottom (it swims, below), a flier or glider hovers
@@ -2746,10 +2760,10 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  // (owner, 2026-11-09) on foot on any plot (in its house or out in its yard), up to just over its top level; flying
-  // higher over it you keep riding. Elsewhere, on foot only under a ceiling.
-  const hs0 = houseSurface(me.x, me.z, me.y), pl0 = me.inst ? null : World.plotAt(me.x, me.z);
-  me.foot = (pl0 && me.y < pl0.y + LEVELS * LEVEL_H + 1.5) || (hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y));
+  // (owner, 2026-11-09) on foot only on a player's lot with something built on it (in its house or out in its yard), up
+  // to just over its top level; flying higher over it you keep riding. Nowhere else (a roof over you doesn't matter).
+  const pl0 = me.inst ? null : World.plotAt(me.x, me.z), st0 = pl0 && plotState.get(pl0.id);
+  me.foot = !!(st0 && st0.pieces && st0.pieces.length && me.y < pl0.y + LEVELS * LEVEL_H + 1.5);
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   waterMode = kind !== "foot" && swims() ? "swim" : kind === "fly" || kind === "glide" ? "hover" : "float";
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;

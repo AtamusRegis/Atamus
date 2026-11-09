@@ -238,7 +238,7 @@ for (const R of ROADS) {
 }
 for (const h of houses) { flatten(h.x, h.z, h.yaw, 4.5, 4.5, h.base); }
 for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") flatten(p.x, p.z, 0, PLOT / 2 + 0.5, PLOT / 2 + 0.5, p.y);
-for (const h of houses) { h.my = terrain(h.mx, h.mz); h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 8); }
+for (const h of houses) { h.my = terrain(h.mx, h.mz); h.d = hyp(h.mx - POST.x, h.mz - POST.z); solid(h.x, h.z, h.yaw, 4.5, 4.5, h.base - 4, h.base + 4.4); }   // up to the eaves: the roof above is walked on (owner, 2026-11-09)
 // the small floating islands, off the town's edge; only fliers get there
 // (owner, 2026-11-08: more, some above the town) off the edge, low enough to glide down to, and a ring high above
 // the town that only flapping fliers reach
@@ -251,7 +251,7 @@ for (const isl of ISLANDS) {
     const a = (k * TAU) / 3 + isl.x * 0.01, hr = isl.r * 0.36, x = isl.x + Math.cos(a) * hr, z = isl.z + Math.sin(a) * hr;
     const mr = Math.min(isl.r - 1.5, hr + 6.5), mx = isl.x + Math.cos(a) * mr, mz = isl.z + Math.sin(a) * mr, yaw = Math.atan2(Math.cos(a), Math.sin(a));
     houses.push({ x, z, yaw, base: isl.y, mx, mz, my: isl.y, sky: true, r: rand(), d: hyp(mx - POST.x, mz - POST.z) });
-    solid(x, z, yaw, 4.5, 4.5, isl.y - 1, isl.y + 8);
+    solid(x, z, yaw, 4.5, 4.5, isl.y - 1, isl.y + 4.4);
   }
   for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + 1, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
 }
