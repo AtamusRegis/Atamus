@@ -1629,7 +1629,8 @@ function renderAdmin() {
   }
   el.appendChild(rows);
 }
-// give someone an item, coins, Treats or a pet: type to narrow the list, pick one
+// give someone an item, coins, Treats or a pet: type to narrow the list, pick one (owner, 2026-11-09: pets show the
+// Flier / Glider badge here too)
 function renderGive() {
   const el = $("admin"); el.innerHTML = "";
   const head = document.createElement("div"); head.className = "row2"; head.style.marginTop = "0";
@@ -1637,7 +1638,7 @@ function renderGive() {
   const who = document.createElement("b"); who.textContent = giveTo.name; who.style.flex = "1"; head.append(back, who); el.appendChild(head);
   const q = document.createElement("input"); q.className = "field"; q.placeholder = "Item or pet"; q.value = giveWhat ? giveWhat.name : "";
   const list = document.createElement("div"); list.className = "picklist";
-  const fill = () => { list.innerHTML = ""; const t = q.value.trim().toLowerCase(); for (const o of GIVES().filter((o) => !t || o.name.toLowerCase().includes(t)).slice(0, 40)) { const b = document.createElement("button"); b.type = "button"; b.className = "pick" + (giveWhat && giveWhat.id === o.id ? " on" : ""); b.innerHTML = o.pet ? `<img alt="" src="${portrait(o.id.slice(4))}">` : ""; b.append(document.createTextNode(o.name)); b.onclick = () => { giveWhat = o; q.value = o.name; fill(); lv.style.display = o.pet ? "" : "none"; }; list.appendChild(b); } };
+  const fill = () => { list.innerHTML = ""; const t = q.value.trim().toLowerCase(); for (const o of GIVES().filter((o) => !t || o.name.toLowerCase().includes(t)).slice(0, 40)) { const b = document.createElement("button"); b.type = "button"; b.className = "pick" + (giveWhat && giveWhat.id === o.id ? " on" : ""); b.innerHTML = o.pet ? `<img alt="" src="${portrait(o.id.slice(4))}">` : ""; b.append(document.createTextNode(o.name)); if (o.pet) b.insertAdjacentHTML("beforeend", moveBadge(o.id.slice(4))); b.onclick = () => { giveWhat = o; q.value = o.name; fill(); lv.style.display = o.pet ? "" : "none"; }; list.appendChild(b); } };
   q.oninput = () => { giveWhat = null; fill(); };
   const row = document.createElement("div"); row.className = "row2";
   const n = document.createElement("input"); n.className = "field small"; n.type = "number"; n.min = 1; n.value = 1; n.inputMode = "numeric"; n.title = "Amount";
