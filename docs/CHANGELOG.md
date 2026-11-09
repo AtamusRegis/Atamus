@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Pet Delivery Co.: players who just joined no longer look frozen to others (#7).** If the server shared where they were before their first position arrived, that one update (on the server's clock) made every later one look older, so they stood still at the spot where they joined. The browser smoke test now has a second player join and fly up, and checks the first sees it.
 - **Pet Delivery Co.: fliers and gliders pitch with their flight (owner).** In the air they point nose-up while climbing and nose-down while diving or gliding down (by how they actually move, up to about 40°, for your pet and everyone else's); level on the ground. Land pets still never tilt.
 - **Pet Delivery Co.: the admin Give list tags fliers and gliders (owner).** Pets in the list carry the same blue Flier / teal Glider badge as their cards.
 - **Working together: the required check also plays the game page.** A browser smoke test (pets.html in headless Chrome against the in-memory server: loads, creates an account, rides, no errors) joins the syntax check and the server smoke test, so a runtime error in the game page can't merge. `scripts/protect-main.sh` applies the GitHub settings the workflow relies on (run once by an owner with admin rights) and `--verify` checks them. No player-facing change.

@@ -1222,7 +1222,10 @@ function onNet(m) {
         // stamped with the sender's own clock: how far it is from mine, from the quickest-arriving updates
         const t = ct || m.ts, est = performance.now() - t;
         if (o.off === undefined || est < o.off || o.ctMode !== !!ct) { o.off = est; o.ctMode = !!ct; } else o.off += (est - o.off) * 0.005;
-        pushSample(o.buf, t, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw, mv: !!mv }); o.moving = !!mv;
+        // a sample stamped by the server's clock (sent before their first position) can't be ordered against ones on
+        // their own clock: start the buffer again, or every later sample looks older and they freeze (issue #7)
+        const lastS = o.buf[o.buf.length - 1]; if (lastS && lastS.c !== !!ct) o.buf.length = 0;
+        pushSample(o.buf, t, { x, y: Number.isFinite(y) ? y : terrain(x, z), z, yaw, mv: !!mv, c: !!ct }); o.moving = !!mv;
         if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
       }
       break;
