@@ -29,7 +29,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
-  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard**
+  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **mount shop** (teal,
+  a giant golden horseshoe on top, teal ring, facing the egg shop; owner, 2026-11-09), the **training yard**
   (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
 - **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
   open ground.
@@ -45,7 +46,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   out). Wind (below); god rays slant down from the sun (strongest with it
   low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
-  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
+  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Mount Shop: Buy pets to ride; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
   clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
   middle of town; growing a little with distance; hidden while building.
@@ -54,9 +55,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
   and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
   1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
-  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
-  pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
-  home.
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. Wind
+  streaks are long, bright and common enough to make its direction clear around town. **Airborne fliers and gliders**
+  gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
+  **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
+  camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -105,21 +108,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
-- 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
+- 8 white animal control cars with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
-  straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
-  gets away.
-- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
+- **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
+  fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
+  either side (18 m) than behind (14 m), plus 7 m per wanted star; only players on or near the ground. They chase
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing; the standard car chases at 9.5 m/s plus
+  1.3 per star, so a faster pet can get away.
+- **Vehicle headlights (owner, 2026-11-09):** on while a car is moving: lit lamps, two beams reaching ahead and a pool of
   light on the road; faint by day, bright at night.
 - **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
   searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
   every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
-  beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
-  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
-  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
+  beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
+  or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
+  shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the same
+  cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
 - **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
@@ -164,6 +170,13 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
   Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
+- **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
+  at the top and each item's price on its buy button (grayed out when you can't afford it; Full at the pet limit).
+- **Mount shop** (ride into its ring): every pet, any number of times, at level 1; buying one puts you on it (with
+  confetti). Legendary pets cost $2,500; each rarity below costs a random 500–750 less than the one above, drawn once per
+  pet: Pup $775, Kitten $625, Bunny $675, Duck $800; Fox $1,250, Penguin $1,300, Goat $1,325, Butterfly $1,150, Parrot
+  $1,325, Stegosaurus $1,200; Deer $1,925, Bear $1,775, Horse $1,775, Owl $1,850, Triceratops $1,975, Raptor $1,925; every
+  Legendary $2,500.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
@@ -173,7 +186,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
   Treats button (on the training arena's gold circle) trains the pet you ride a level for Treats: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
-- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs show Full when you're at the limit.
+- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs and mounts show Full when you're at the limit.
 - **Training arena (owner, 2026-11-09):** riding into the training yard's ring takes you to a floating arena (80 m
   across, off the island's south edge, `AR` in pets.js) with a track and an obstacle course round it, in order: a
   hurdle, a hoop, a platform, two slalom gates (inner half, then outer half), a tunnel, a higher hurdle, a higher hoop.
