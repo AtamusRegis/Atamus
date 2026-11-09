@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Training arena (owner).** The training yard now takes you to a big floating arena with an obstacle course: each obstacle you clear (hurdles, hoops, a platform, slalom gates, a tunnel) is a training point, and 20 points (4 more each level after) level your pet up. Training for coins is gone; Treats and Training Ribbons still work there. Saved pets keep a `tp` (points) field.
 - **Fliers go up and down only by held keys (owner).** On a flapping flier, hold Space (or Fly ▲) to keep rising and hold Ctrl (or the new Fly ▼ button) to keep sinking; otherwise it holds its height. The camera's angle no longer makes it climb or dive. A "Space Up · Ctrl Down" strip shows at the bottom of the screen only while riding a flier (computers; phones have the two buttons). Land pets and gliders are unchanged.
 - **Speed boosts (owner).** Arrow pads on the roads, rings in the air and rings on the water give your pet a short burst of speed when you go through them.
 - **Water: a lake, rivers and waterfalls; swimmers (owner).** A small lake out past the outer road, two rivers running off the island's edge in waterfalls, and a stream stepping down the terraces into it. Swimmers (Duck, Penguin, and two new pets: Otter, Rare, and Sea Turtle, Epic) swim fast and walk straight in; other pets can't wade in from the shore and paddle slowly if they jump in. Swimmers have an indigo Swimmer badge.
