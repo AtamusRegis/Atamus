@@ -580,7 +580,8 @@ function fxStep(dt) {
   sparks.count = n; sparks.instanceMatrix.needsUpdate = true; if (sparks.instanceColor) sparks.instanceColor.needsUpdate = true;
 }
 // a big word across the screen
-function banner(txt, color) { const b = $("banner"); b.textContent = txt; b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
+// (owner, 2026-11-09) sub: a small line under it (whose update it is)
+function banner(txt, color, sub) { const b = $("banner"); b.textContent = txt; if (sub) { const s = document.createElement("small"); s.textContent = sub; b.appendChild(s); } b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
 
 
 // ---- me ----
@@ -1230,7 +1231,7 @@ function setContract(c) {
 function onNet(m) {
   switch (m.t) {
     case "welcome": {
-      if (stale(m.web)) return;
+      if (stale(m.web, false, m.by)) return;
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
@@ -1271,7 +1272,7 @@ function onNet(m) {
     case "fx": { const o = others.get(m.id); if (o && o.inst === me.inst) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); break; }
     case "chase": case "caught": case "escaped": case "stars": onVehEvent(m.t, m.stars || 0); break;
-    case "reload": stale(m.web, true); break;
+    case "reload": stale(m.web, true, m.by); break;
     case "contract": setContract(m.c); break;
     case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
     case "invited": invites.push({ from: m.from, name: m.name, kind: m.kind, until: performance.now() + 28000 }); renderInvite(); break;
@@ -1287,12 +1288,12 @@ function onNet(m) {
 // server); this page's own build is read from version.json when it loads
 let myBuild = null;
 fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.v) myBuild = j.v; }).catch(() => {});
-function stale(web, told) {
+function stale(web, told, by) {
   if (!told && (!web || !myBuild || web === myBuild)) return false;
   let lastR = 0; try { lastR = +sessionStorage.getItem("petdelivery.reload") || 0; } catch (e) { /* none */ }
   if (Date.now() - lastR < 60000) return false;   // never loop
   try { sessionStorage.setItem("petdelivery.reload", String(Date.now())); } catch (e) { /* private mode */ }
-  flushSave(true); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
+  flushSave(true); banner("Updating!", "#ffd35a", by ? by + "'s Update" : ""); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
   const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0, me.bag.length, me.foot ? 1 : 0].join();

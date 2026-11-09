@@ -13,7 +13,7 @@
 // everyone onto it.
 import { WebSocketServer } from "ws";
 import { makeVehicles, stepVehicles, cleanData, petCap, penPets } from "./pets-world.js";
-import { onWebsiteUpdate, websiteBuild } from "./build.js";
+import { onWebsiteUpdate, websiteBuild, websiteBy } from "./build.js";
 import { hashSecret, verifySecret } from "./hash.js";
 import { memStore } from "./petstore.js";
 
@@ -206,7 +206,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null, plot: -1, ft: 0 };
         online.set(acct.id, me);
         assignPlot(room, me);
-        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
+        send(ws, { t: "welcome", web: websiteBuild(), by: websiteBy(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
         if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
@@ -300,7 +300,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     ws.on("error", () => {});
   });
   // (owner, 2026-11-08) a new website build is live: everyone reloads onto it
-  onWebsiteUpdate((v) => { const s = JSON.stringify({ t: "reload", web: v }); for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s); });
+  onWebsiteUpdate((v, by) => { const s = JSON.stringify({ t: "reload", web: v, by }); for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s); });
   // a connection that doesn't answer a ping within 10 s is dropped
   setInterval(() => { for (const ws of wss.clients) { if (!ws.alive) { ws.terminate(); continue; } ws.alive = false; try { ws.ping(); } catch { /* closing */ } } }, BEAT_MS).unref();
   // animal control (for those out in town), where everyone is, and contracts running out of time
