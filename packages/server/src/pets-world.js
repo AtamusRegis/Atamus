@@ -271,16 +271,17 @@ export function blocked(x, z, y) {
 // in the light for half a second is caught (wherever they are, in the air too). Caught: off to the pound, wanted level
 // cleared. Getting away from a van raises your wanted level (up to 5); it drops a star every 25 s nobody's after you.
 export const WANTED_MAX = 5, WANTED_COOL = 25, IMMUNE = 7;
-const VAN = { patrol: 8, chase: 9.5, perStar: 1.3, spot: 16, time: 3, timeStar: 0.8, catch: 2.6 };
-const HELI = { patrol: 10, alt: 26 };
+const VAN = { patrol: 8, chase: 9.5, perStar: 1.3, spot: 16, front: 5, side: 2, rear: 2, time: 3, timeStar: 0.8, catch: 2.6 };
+const VAN_SPEEDS = [0.85, 1, 1.15];   // compact / van / SUV: deliberately slower, standard and faster patrol cars
+const HELI = { patrol: 11.5, alt: 26 };
 // the searchlight: cone half-angle (rad), turning speed (rad/s, a random 60-140% of it, flipping every 3-8 s), how far
 // out the spot goes (m, sideways from under the helicopter), seconds in the light before you're caught
-export const BEAM = { half: 0.14, turn: 0.45, near: 6, far: 24, hold: 0.5 };
+export const BEAM = { half: 0.14, flyHalf: 0.2, turn: 0.45, near: 6, far: 24, hold: 0.5 };
 export function makeVehicles() {
   const vs = [];
-  const van = (road, s, dir) => vs.push({ kind: 0, road, s, dir, x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
-  van(0, 0, 1); van(0, ROADS[0].len / 2, -1); van(1, 0, 1); van(1, ROADS[1].len / 3, -1); van(1, (ROADS[1].len * 2) / 3, 1);
-  van(2, 20, 1); van(4, 60, 1); van(6, 40, -1);
+  const van = (road, s, dir, style) => vs.push({ kind: 0, road, s, dir, style, speed: VAN_SPEEDS[style], x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
+  van(0, 0, 1, 1); van(0, ROADS[0].len / 2, -1, 0); van(1, 0, 1, 2); van(1, ROADS[1].len / 3, -1, 1); van(1, (ROADS[1].len * 2) / 3, 1, 0);
+  van(2, 20, 1, 2); van(4, 60, 1, 1); van(6, 40, -1, 2);
   for (const ph of [0, Math.PI]) vs.push({ kind: 1, ph, x: 0, y: 40, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph });
   for (const v of vs) placePatrol(v, 0, true);
   return vs;
@@ -288,7 +289,7 @@ export function makeVehicles() {
 function placePatrol(v, dt, snap) {
   let tx, tz, ty, yaw;
   if (v.kind === 0) {
-    const R = ROADS[v.road]; v.s += v.dir * VAN.patrol * dt;
+    const R = ROADS[v.road]; v.s += v.dir * VAN.patrol * v.speed * dt;
     if (R.loop) v.s = ((v.s % R.len) + R.len) % R.len; else if (v.s > R.len) { v.s = R.len; v.dir = -1; } else if (v.s < 0) { v.s = 0; v.dir = 1; }
     const p = roadAt(R, v.s), fx = p.fx * v.dir, fz = p.fz * v.dir;
     tx = p.x - fz * 2; tz = p.z + fx * 2; yaw = Math.atan2(fx, fz); ty = terrain(tx, tz);
@@ -308,11 +309,11 @@ export function beamOf(v, out = {}) {
   out.lx = lx; out.ly = ly; out.lz = lz; out.dx = dx / d; out.dy = dy / d; out.dz = dz / d; return out;
 }
 const beamTmp = {};
-function lit(b, p) {   // is the player (a 1.6 m ball around their middle) in this light?
+export function beamHits(b, p) {   // is the player (a 1.6 m ball around their middle) in this light?
   const wx = p.x - b.lx, wy = p.y + 1 - b.ly, wz = p.z - b.lz, along = wx * b.dx + wy * b.dy + wz * b.dz;
   if (along <= 0) return false;
   const off = hyp(wx - b.dx * along, wy - b.dy * along, wz - b.dz * along);
-  return off < along * Math.tan(BEAM.half) + 0.8;
+  return off < along * Math.tan(p.airMount ? BEAM.flyHalf : BEAM.half) + 0.8;
 }
 function stepHeli(v, dt, now) {
   placePatrol(v, dt, false);
@@ -336,7 +337,7 @@ export function stepVehicles(vs, players, dt, now) {
     if (v.kind !== 1) continue;
     stepHeli(v, dt, now); beamOf(v, beamTmp); v.mode = 0;
     for (const p of players) {
-      if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !lit(beamTmp, p)) continue;
+      if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !beamHits(beamTmp, p)) continue;
       inLight.add(p); v.mode = 1; v.target = p.id;
     }
   }
@@ -354,7 +355,7 @@ export function stepVehicles(vs, players, dt, now) {
       if (!p || p.immuneUntil > now || !insideWorld(p) || !p.bag) { v.mode = 2; v.cool = now + 4; }
       else {
         v.t -= dt; p.lastChased = now;
-        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = C.chase + C.perStar * p.stars;
+        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = (C.chase + C.perStar * p.stars) * v.speed;
         if (d > 0.01) { const m = Math.min(d, sp * dt); v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 10)); }
         v.y = terrain(v.x, v.z);
         if (d < C.catch && p.y - terrain(p.x, p.z) < 3) catchPlayer(p, vs, now, ev);
@@ -368,7 +369,7 @@ export function stepVehicles(vs, players, dt, now) {
     }
     if (v.mode === 2) {   // back to its road
       const p = roadAt(ROADS[v.road], v.rs), fx = p.fx * v.dir, fz = p.fz * v.dir, tx = p.x - fz * 2, tz = p.z + fx * 2;
-      const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * 1.4 * dt);
+      const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * v.speed * 1.4 * dt);
       if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       v.y = terrain(v.x, v.z);
       if (d < 1) { v.mode = 0; v.s = v.rs; }
@@ -378,8 +379,12 @@ export function stepVehicles(vs, players, dt, now) {
       for (const p of players) {
         if (p.immuneUntil > now || !insideWorld(p) || !p.bag) continue;
         if (p.y - terrain(p.x, p.z) > 6) continue;
-        const d = hyp(p.x - v.x, p.z - v.z);
-        if (d < C.spot + 7 * p.stars && d < bd) { bd = d; best = p; }
+        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz);
+        if (d < 0.01) { best = p; bd = 0; continue; }
+        const forward = (dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw)) / d;
+        const sideways = Math.abs(dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw)) / d;
+        const sight = C.spot + Math.max(0, forward) * C.front + sideways * C.side - Math.max(0, -forward) * C.rear + 7 * p.stars;
+        if (d < sight && d < bd) { bd = d; best = p; }
       }
       if (best) { v.mode = 1; v.target = best.id; v.t = C.time + C.timeStar * best.stars; ev.push({ k: "chase", id: best.id }); }
     }

@@ -19,6 +19,17 @@ ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.
 ok(W.houses.length > 50 && W.ROADS.length >= 8, "town generated");
 const again = W.cleanData(fresh, SPECIES); ok(JSON.stringify(again) === JSON.stringify(fresh), "cleanData is stable");
 const vs = W.makeVehicles(), player = { id: 1, x: vs[0].x + 3, y: W.terrain(vs[0].x + 3, vs[0].z), z: vs[0].z, bag: 2, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+const vans = vs.filter((v) => v.kind === 0);
+ok(new Set(vans.map((v) => v.style)).size === 3 && new Set(vans.map((v) => v.speed)).size === 3, "animal control has three vehicle styles and speeds");
+const spottedAt = (angle, distance, bag = 1) => {
+  const v = W.makeVehicles()[0], a = v.yaw + angle, x = v.x + Math.sin(a) * distance, z = v.z + Math.cos(a) * distance;
+  const p = { id: 2, x, y: W.terrain(x, z), z, bag, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+  W.stepVehicles([v], [p], 0, 100); return v.mode === 1;
+};
+ok(spottedAt(0, 20) && spottedAt(Math.PI / 2, 17), "vans see farther ahead and to the sides");
+ok(!spottedAt(Math.PI, 15) && !spottedAt(0, 10, 0), "vans see less behind and ignore couriers without parcels");
+const testBeam = { lx: 0, ly: 20, lz: 0, dx: 0, dy: -1, dz: 0 }, beamPlayer = { x: 4, y: 0, z: 0 };
+ok(!W.beamHits(testBeam, beamPlayer) && W.beamHits(testBeam, { ...beamPlayer, airMount: true }), "helicopter beam is wider for flying mounts");
 let caught = false; for (let i = 0; i < 200 && !caught; i++) caught = W.stepVehicles(vs, [player], 0.1, 100 + i * 0.1).some((e) => e.k === "caught");
 ok(caught, "animal control catches a parcel carrier");
 
