@@ -19,7 +19,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
-  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard**
+  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **mount shop** (teal,
+  a giant golden horseshoe on top, teal ring, facing the egg shop; owner, 2026-11-09), the **training yard**
   (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
 - **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
   open ground.
@@ -129,6 +130,13 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
   Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
+- **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
+  at the top and each item's price on its buy button (grayed out when you can't afford it; Full at the pet limit).
+- **Mount shop** (ride into its ring): every pet, any number of times, at level 1; buying one puts you on it (with
+  confetti). Legendary pets cost $2,500; each rarity below costs a random 500–750 less than the one above, drawn once per
+  pet: Pup $775, Kitten $625, Bunny $675, Duck $800; Fox $1,250, Penguin $1,300, Goat $1,325, Butterfly $1,150, Parrot
+  $1,325, Stegosaurus $1,200; Deer $1,925, Bear $1,775, Horse $1,775, Owl $1,850, Triceratops $1,975, Raptor $1,925; every
+  Legendary $2,500.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you).
@@ -137,7 +145,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
   Treats button trains the pet you ride a level for Treats instead of coins: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
-- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs show Full when you're at the limit.
+- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs and mounts show Full when you're at the limit.
 - **Training yard** (ride into its ring): trains the pet you ride a level for coins (40 × 1.32 per level, × 1 / 1.6 / 2.6
   / 4 by rarity), up to level 20: each level +5% speed; every 5 levels one more parcel in the bag.
 

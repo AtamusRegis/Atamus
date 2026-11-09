@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Pet Delivery Co.: shops open in the middle of the screen, and a new mount shop (owner).** The shop window now sits in the middle of the screen and shows your coins beside its name; every item shows its price. The mount shop (teal, a golden horseshoe on top, across from the egg shop) sells every pet at level 1: Legendary $2,500, and each rarity below a random 500–750 less per pet (prices fixed in `MOUNT_PRICE`). Buying one rides it. The browser smoke test now buys a Dragon there.
 - **Pet Delivery Co.: players who just joined no longer look frozen to others (#7).** If the server shared where they were before their first position arrived, that one update (on the server's clock) made every later one look older, so they stood still at the spot where they joined. The browser smoke test now has a second player join and fly up, and checks the first sees it.
 - **Pet Delivery Co.: fliers and gliders pitch with their flight (owner).** In the air they point nose-up while climbing and nose-down while diving or gliding down (by how they actually move, up to about 40°, for your pet and everyone else's); level on the ground. Land pets still never tilt.
 - **Pet Delivery Co.: the admin Give list tags fliers and gliders (owner).** Pets in the list carry the same blue Flier / teal Glider badge as their cards.

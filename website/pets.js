@@ -46,6 +46,9 @@ const EGGS = [
   { id: "basic", name: "Basic Egg", price: 150, odds: [72, 24, 4, 0], c: "#f4ead8", s: "#d8c39c" },
   { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 60, 32, 8], c: "#ffd35a", s: "#e89a10" },
 ];
+// (owner, 2026-11-09) the mount shop sells every pet: Legendary 2,500, and each rarity below a random 500-750 less
+// than the one above (drawn once per pet, so each pet keeps its price)
+const MOUNT_PRICE = { pup: 775, kitten: 625, bunny: 675, duck: 800, fox: 1250, penguin: 1300, goat: 1325, butterfly: 1150, parrot: 1325, stego: 1200, deer: 1925, bear: 1775, horse: 1775, owl: 1850, trike: 1975, raptor: 1925, dragon: 2500, unicorn: 2500, pegasus: 2500, phoenix: 2500, trex: 2500, ptero: 2500, icedragon: 2500 };
 // training: each level +5% speed (up to level 20), every 5 levels one more parcel in the bag
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
@@ -79,7 +82,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
 // winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, RELEASE, SPAWN } = World;
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
@@ -282,6 +285,10 @@ const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.po
 box(12, 5, 8, "#f7cfd8", SHOP_B.x, 2.5, SHOP_B.z); box(13, 0.6, 9, "#e5739d", SHOP_B.x, 5.3, SHOP_B.z); box(3, 3, 0.2, "#7a4f28", SHOP_B.x, 1.5, SHOP_B.z + 4.05);
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
+// the mount shop (owner, 2026-11-09), facing the egg shop, with a giant golden horseshoe on top
+box(12, 5, 8, "#cfeef1", MOUNT_B.x, 2.5, MOUNT_B.z); box(13, 0.6, 9, "#2bb3c0", MOUNT_B.x, 5.3, MOUNT_B.z); box(3, 3, 0.2, "#7a4f28", MOUNT_B.x, 1.5, MOUNT_B.z - 4.05);
+{ const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(MOUNT_B.x, 8, MOUNT_B.z); shoe.castShadow = true; scene.add(shoe); }
+const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(mountRing);
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
@@ -829,6 +836,7 @@ function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
   const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
   if (key === hudKey) return; hudKey = key;
+  if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
@@ -885,8 +893,22 @@ function ride(id) {
   }
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
 }
+// (owner, 2026-11-09) the shops share one window in the middle of the screen, showing your coins and each item's price
+const SHOPS = { egg: "Egg Shop", mount: "Mount Shop" };
+let shopKind = "egg", shopCoins = -1;
 function renderShop() {
-  const el = $("eggs"); el.innerHTML = "";
+  $("shopname").textContent = SHOPS[shopKind]; shopCoins = Math.floor(save.coins); $("shopcash").textContent = fmt(save.coins);
+  const el = $("shopitems"); el.innerHTML = "";
+  if (shopKind === "mount") {
+    const full = save.pets.length >= World.petCap(save);
+    for (const sp of Object.keys(SPECIES)) {
+      const s = SPECIES[sp], price = MOUNT_PRICE[sp], d = card(sp, `<span class="stats"><span>${s.speed.toFixed(1)} m/s</span><span>${s.bag} bag</span></span>`, false, null);
+      const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = full || save.coins < price; b.onclick = (ev) => { ev.stopPropagation(); buyMount(sp); };
+      if (full) b.textContent = "Full";
+      d.appendChild(b); el.appendChild(d);
+    }
+    return;
+  }
   for (const egg of EGGS) {
     const d = document.createElement("div"); d.className = "card";
     d.innerHTML = `<svg width="84" height="84" viewBox="0 0 84 84"><ellipse cx="42" cy="46" rx="24" ry="31" fill="${egg.c}" stroke="${egg.s}" stroke-width="4"/><circle cx="34" cy="38" r="4" fill="${egg.s}"/><circle cx="50" cy="52" r="5" fill="${egg.s}"/></svg><span class="nm">${egg.name}</span>`
@@ -896,6 +918,13 @@ function renderShop() {
     if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
     el.appendChild(d);
   }
+}
+function buyMount(sp) {
+  const price = MOUNT_PRICE[sp];
+  if (!price || save.coins < price || save.pets.length >= World.petCap(save)) return;
+  save.coins -= price; const p = { id: save.nextId++, sp, lv: 1 }; save.pets.push(p); persist();
+  toast(SPECIES[sp].name, RARITY[SPECIES[sp].r].c); emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7);
+  ride(p.id); hudKey = ""; renderShop();
 }
 function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
@@ -1728,9 +1757,9 @@ function step(dt) {
     Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars, bag: me.bag.length });
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
   }
-  // the egg shop, the training yard and the board open their panel when I ride in
-  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
-  if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
+  // the shops, the training yard and the board open their panel when I ride in
+  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop:egg" : hyp(me.x - MOUNT.x, me.z - MOUNT.z) < MOUNT.r ? "p-shop:mount" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  if (z !== zone) { if (zone && openPanel === zone.split(":")[0]) closePanels(); zone = z; if (z) { const [id, kind] = z.split(":"); if (kind) shopKind = kind; show(id); } }
   contractStep(); fxStep(dt);
   for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
   // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless; save now and then
@@ -1784,4 +1813,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
