@@ -910,7 +910,7 @@ function buyEgg(egg, ticket) {
 function hatch(p, egg) {
   const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
-  $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
+  $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
   const pop = (x, y, n, sp, cols) => { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = sp * (0.3 + Math.random() * 0.7); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 + Math.random() * 0.6, c: pick(cols), r: 3 + Math.random() * 5, star: Math.random() < 0.3 }); } };
   const cols = s.r === 3 ? ["#ffd35a", "#ffb020", "#fff4c0", "#ff7ac8"] : s.r === 2 ? ["#c58bff", "#a352e0", "#fff", "#ff7ac8"] : s.r === 1 ? ["#7fc0ff", "#3a8ee6", "#fff", "#3fb36b"] : PARTY;
@@ -940,14 +940,16 @@ function hatch(p, egg) {
       else { g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
       g.globalAlpha = 1;
     }
-    if (t > 1.7) { $("hatchn").style.visibility = "visible"; $("hatchr").style.visibility = "visible"; $("hatchok").style.visibility = "visible"; }
+    if (t > 1.7) { $("hatchn").style.visibility = "visible"; $("hatchr").style.visibility = "visible"; $("hatchok").style.visibility = "visible"; $("hatchno").style.visibility = "visible"; }
     if (t < 5 || parts.length) requestAnimationFrame(anim);
   };
   anim();
-  $("hatchok").onclick = () => {
-    $("hatch").style.display = "none"; ride(p.id); if (openPanel === "p-shop") renderShop();
+  // (owner, 2026-11-09) Not now keeps you on the pet you're riding; the new one waits in your Pets list
+  const done = (go) => {
+    $("hatch").style.display = "none"; if (go) ride(p.id); if (openPanel === "p-shop") renderShop();
     emitConfetti(me.x, me.y + 3, me.z, 90, 6, 9); firework(me.x - 4, me.y + 2, me.z); if (s.r >= 2) { firework(me.x + 4, me.y + 2, me.z, 0.3); firework(me.x, me.y + 2, me.z - 4, 0.6, [rc, "#ffffff"]); }
   };
+  $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
 }
 function renderTrain() {
   const p = riding(), el = $("train"), cost = trainCost(p), max = p.lv >= MAXLV;
