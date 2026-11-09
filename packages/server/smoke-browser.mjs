@@ -7,6 +7,7 @@ process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import { chromium } from "playwright-core";
 
@@ -20,9 +21,9 @@ if (!chrome) {
 }
 
 const { attachPets } = await import("./src/pets.js");
-const app = express(); app.use(express.static(new URL("../../website/", import.meta.url).pathname));
+const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
-attachPets(server, { allowLocal: true });
+attachPets(server, { allowLocal: true, packageEveryMs: 50 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -39,13 +40,98 @@ try {
   const user = page.locator("input[placeholder=Username]");
   await user.waitFor({ state: "visible", timeout: 20000 });
   step = "create an account";
-  await user.fill("smoke" + Date.now().toString(36).slice(-7));
+  await user.fill("Nyssary");
   await page.fill("input[placeholder=Password]", "smoke-check-1");
   await page.click("text=Create account");
   await user.waitFor({ state: "hidden", timeout: 20000 });
+  step = "see and claim a Package Rush prize";
+  for (let i = 0; i < 50 && !(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0)); i++) await page.waitForTimeout(100);
+  if (!(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0))) throw new Error("Package Rush did not start");
+  for (let i = 0; i < 100 && (await page.evaluate(() => getComputedStyle(document.getElementById("packageevent")).display === "none")); i++) await page.waitForTimeout(50);
+  const packageUi = await page.evaluate(() => ({
+    title: document.getElementById("eventtitle").textContent,
+    pill: getComputedStyle(document.getElementById("packageevent")).display,
+    count: window.Pets.packageMeshes.size,
+  }));
+  if (packageUi.title !== "Package Rush!" || packageUi.pill === "none" || !packageUi.count) problems.push("Package Rush UI is missing: " + JSON.stringify(packageUi));
+  const beforePackages = packageUi.count;
+  await page.evaluate(() => { const P = window.Pets, b = P.packageEvent.boxes.values().next().value; P.teleport(b.x, b.z, b.y); });
+  for (let i = 0; i < 50 && !(await page.evaluate((before) => window.Pets.packageMeshes.size < before, beforePackages)); i++) await page.waitForTimeout(100);
+  if (!(await page.evaluate((before) => window.Pets.packageMeshes.size < before, beforePackages))) throw new Error("package was not claimed");
+  const packagePrize = await page.evaluate(() => ({ title: document.getElementById("eventtitle").textContent, sub: document.getElementById("eventsub").textContent, flash: document.getElementById("eventflash").classList.contains("go") }));
+  if (packagePrize.title !== "Prize package!" || !packagePrize.sub || !packagePrize.flash) problems.push("package reward celebration is missing: " + JSON.stringify(packagePrize));
+  await page.evaluate(() => window.Pets.teleport(0, 14));
+  step = "change the weather from the admin panel";
+  await page.click("#btn-admin");
+  await page.selectOption("#admin-weather", "snow");
+  await page.selectOption("#admin-time", "night");
+  let changed = false;
+  for (let i = 0; i < 50 && !changed; i++) { await page.waitForTimeout(100); changed = await page.evaluate(() => window.Pets.environment.weather === "snow" && window.Pets.environment.time === "night" && window.Pets.sky.snow > 0.9); }
+  if (!changed) throw new Error("the snow and night settings did not reach the game");
+  await page.selectOption("#admin-weather", "auto");
+  await page.selectOption("#admin-time", "auto");
+  let restored = false;
+  for (let i = 0; i < 50 && !restored; i++) { restored = await page.evaluate(() => window.Pets.environment.weather === "auto" && window.Pets.environment.time === "auto"); if (!restored) await page.waitForTimeout(100); }
+  if (!restored) throw new Error("the automatic environment settings were not restored");
+  await page.click("#p-admin .x");
+  step = "check animal-control lights by day and night";
+  const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
+  const waitForLights = async (day) => {
+    for (let i = 0; i < 50; i++) {
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      if (ready) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`animal-control lights did not turn ${day ? "off in daylight" : "on at night"}`);
+  };
+  await setSkyPhase(0.25);
+  await waitForLights(true);
+  await setSkyPhase(0.75);
+  await waitForLights(false);
+  step = "check the airborne wind speed rules";
+  const windFactors = await page.evaluate(() => {
+    const f = window.Pets.windRideFactor;
+    return [f("fly", true, 1, 0, 1, 0), f("glide", true, -1, 0, 1, 0), f("fly", true, 0, 1, 1, 0), f("land", true, 1, 0, 1, 0), f("fly", false, 1, 0, 1, 0)];
+  });
+  const expectedWindFactors = [1.1, 0.95, 1, 1, 1];
+  if (windFactors.some((n, i) => Math.abs(n - expectedWindFactors[i]) > 0.0001)) problems.push(`airborne wind speed factors are wrong (${windFactors.join(", ")})`);
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
+  // talk to someone in town: lines type out, a click skips ahead, an answer is picked, walking away ends it
+  step = "talk to someone in town";
+  const talked = await page.evaluate(async () => {
+    const P = window.Pets, wait = (ms) => new Promise((r) => setTimeout(r, ms)), n = P.folk.find((f) => f.id === "mabel");
+    if (!n) return "Mabel isn't in town";
+    P.startTalk(n); if (!P.talk) return "the talk didn't start";
+    for (let i = 0; i < 12 && !document.querySelector("#tkopts button"); i++) { P.talkNext(); await wait(150); }
+    if (!document.querySelector("#tkopts button")) return "no answers to pick";
+    P.talkPick(1); P.talkNext(); await wait(50); if (!P.talk || !document.getElementById("tktext").textContent) return "the answer didn't go on";
+    P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
+  });
+  if (talked) problems.push(talked);
+  // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
+  step = "buy a pet in the mount shop";
+  await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
+  await page.locator("#shopname", { hasText: "Mount Shop" }).waitFor({ timeout: 5000 });
+  await page.locator("#shopcash", { hasText: "3,000" }).waitFor({ timeout: 5000 });
+  const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
+  if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
+  await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });
+  const bought = await page.evaluate(() => { const s = window.Pets.save; return { coins: s.coins, sp: s.pets.find((p) => p.id === s.ride).sp, cash: document.getElementById("shopcash").textContent }; });
+  if (bought.coins !== 500 || bought.sp !== "dragon" || bought.cash !== "500") problems.push("buying a Dragon for 2,500: " + JSON.stringify(bought));
+  step = "fly and pitch with the camera";
+  const flightStart = await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14, 40); P.cam.pitch = -0.5; return P.me.y; });
+  await page.waitForTimeout(300);
+  await page.keyboard.down("KeyW");
+  let flightHigh;
+  for (let i = 0; i < 50; i++) { flightHigh = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x })); if (flightHigh.y > flightStart + 2 && flightHigh.pitch < -0.2) break; await page.waitForTimeout(100); }
+  await page.evaluate(() => { window.Pets.cam.pitch = 1; });
+  let flightLow;
+  for (let i = 0; i < 50; i++) { flightLow = await page.evaluate(() => ({ y: window.Pets.me.y, pitch: window.Pets.mine.body.rotation.x })); if (flightLow.y < flightHigh.y - 2 && flightLow.pitch > 0.2) break; await page.waitForTimeout(100); }
+  await page.keyboard.up("KeyW");
+  if (!(flightHigh.y > flightStart + 2) || !(flightHigh.pitch < -0.2) || !(flightLow.y < flightHigh.y - 2) || !(flightLow.pitch > 0.2)) problems.push(`camera-directed flight is wrong (${JSON.stringify({ flightStart, flightHigh, flightLow })})`);
+  await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14); });
   // a second player joins and flies off: the first must see them move (issue #7: a joiner could look frozen)
   step = "see a second player move";
   browser2 = await chromium.launch({ executablePath: chrome, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });   // its own browser, so neither page is a background tab
@@ -72,5 +158,5 @@ try {
 } catch (e) { problems.push(`could not ${step}: ${e.message.split("\n")[0]}`); }
 await browser.close(); if (browser2) await browser2.close(); server.close();
 if (problems.length) { console.error("SMOKE FAILED (browser)\n" + problems.map((p) => "  " + p).join("\n")); process.exit(1); }
-console.log("browser smoke passed: the game loads, an account is created, the town runs without errors and a second player is seen moving");
+console.log("browser smoke passed: the game loads, Package Rush works, the town runs without errors and a second player is seen moving");
 process.exit(0);

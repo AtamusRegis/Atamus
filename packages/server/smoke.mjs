@@ -11,6 +11,7 @@ setTimeout(() => fail("timed out"), 20000).unref();
 
 // ---- the world ----
 const W = await import("./src/pets-world.js");
+const E = await import("./src/package-events.js");
 const SPECIES = new Set(["pup", "fox", "dragon"]);
 const fresh = W.cleanData({}, SPECIES);
 ok(fresh.pets.length === 1 && fresh.home.pieces.length > 0, "a new player has a pet and a starter house");
@@ -19,13 +20,48 @@ ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.
 ok(W.houses.length > 50 && W.ROADS.length >= 8, "town generated");
 const again = W.cleanData(fresh, SPECIES); ok(JSON.stringify(again) === JSON.stringify(fresh), "cleanData is stable");
 const vs = W.makeVehicles(), player = { id: 1, x: vs[0].x + 3, y: W.terrain(vs[0].x + 3, vs[0].z), z: vs[0].z, bag: 2, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+const vans = vs.filter((v) => v.kind === 0);
+ok(new Set(vans.map((v) => v.style)).size === 3 && new Set(vans.map((v) => v.speed)).size === 3, "animal control has three vehicle styles and speeds");
+const spottedAt = (angle, distance, bag = 1) => {
+  const v = W.makeVehicles()[0], a = v.yaw + angle, x = v.x + Math.sin(a) * distance, z = v.z + Math.cos(a) * distance;
+  const p = { id: 2, x, y: W.terrain(x, z), z, bag, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+  W.stepVehicles([v], [p], 0, 100); return v.mode === 1;
+};
+ok(spottedAt(0, 20) && spottedAt(Math.PI / 2, 17), "vans see farther ahead and to the sides");
+ok(!spottedAt(Math.PI, 15) && !spottedAt(0, 10, 0), "vans see less behind and ignore couriers without parcels");
+const testBeam = { lx: 0, ly: 20, lz: 0, dx: 0, dy: -1, dz: 0 }, beamPlayer = { x: 4, y: 0, z: 0 };
+ok(!W.beamHits(testBeam, beamPlayer) && W.beamHits(testBeam, { ...beamPlayer, airMount: true }), "helicopter beam is wider for flying mounts");
 let caught = false; for (let i = 0; i < 200 && !caught; i++) caught = W.stepVehicles(vs, [player], 0.1, 100 + i * 0.1).some((e) => e.k === "caught");
 ok(caught, "animal control catches a parcel carrier");
+const event = E.makePackageEvent(1000, 3, () => 0);
+ok(event.boxes.size === 17 && new Set([...event.boxes.values()].map((b) => `${b.x},${b.y},${b.z}`)).size === 17, "Package Rush uses unique town mailboxes");
+ok(event.ends >= 61_000 && event.ends <= 121_000, "Package Rush lasts one to two minutes");
+const firstPackage = event.boxes.keys().next().value;
+ok(E.takePackage(event, firstPackage) && !E.takePackage(event, firstPackage), "a package can be taken only once");
+const seq = (...values) => () => values.shift() ?? 0;
+const rewardData = { coins: 0, nextId: 2, ride: 1, pets: [{ id: 1, sp: "pup", lv: 1 }], items: { snack: 0, ribbon: 0, ticket: 0 } };
+const xp = E.packageReward(rewardData, 20, seq(0.2, 0.999));
+ok(xp.kind === "xp" && xp.n === 100 && rewardData.pets[0].lv === 4 && rewardData.pets[0].tp === 28, "training-point prizes can cross several levels");
+const pet = E.packageReward(rewardData, 20, seq(0.01, 0.99, 0, 0));
+ok(pet.kind === "pet" && pet.sp === "dragon" && rewardData.pets.length === 2, "a package can award a legendary pet");
+const heliEventsAt = (start, daylightOverride) => {
+  const heli = W.makeVehicles().find((v) => v.kind === 1), litPlayer = { id: 2, bag: 1, stars: 0, lastChased: start, lastStar: 0, immuneUntil: 0 }, events = [];
+  for (let i = 0; i < 8; i++) {
+    const b = W.beamOf(heli), along = 12;
+    Object.assign(litPlayer, { x: b.lx + b.dx * along, y: b.ly + b.dy * along - 1, z: b.lz + b.dz * along });
+    events.push(...W.stepVehicles([heli], [litPlayer], 0.1, start + i * 0.1, daylightOverride));
+  }
+  return events;
+};
+ok(W.isDaylight(300) && !W.isDaylight(900), "the shared clock identifies daylight and night");
+ok(!heliEventsAt(300).some((e) => e.k === "chase" || e.k === "caught"), "helicopter searchlights do not work in daylight");
+ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers at night");
+ok(heliEventsAt(300, false).some((e) => e.k === "caught") && !heliEventsAt(900, true).some((e) => e.k === "caught"), "admin time overrides control searchlights too");
 
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
 const server = http.createServer((_q, s) => s.end("ok"));
-attachPets(server, { allowLocal: true });
+attachPets(server, { allowLocal: true, packageEveryMs: 25 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const url = `ws://127.0.0.1:${server.address().port}/pets`;
 function client(name) {
@@ -52,17 +88,46 @@ try {
   // positions reach the other player
   a.send({ t: "pos", x: 5, y: 0, z: 14, yaw: 0, mv: 1, ct: 1000, bag: 0, ft: 0 });
   await b.wait((m) => m.t === "snap" && m.ps.some((r) => r[0] === wa.id && r[1] === 5), "A's position");
+  // Package Rush is shared, proximity-checked and gives one server-owned reward.
+  const rush = await a.wait((m) => m.t === "package_event" && m.event && m.event.boxes.length, "Package Rush");
+  const box = rush.event.boxes[0];
+  a.send({ t: "pos", x: box.x, y: box.y, z: box.z, yaw: 0, mv: 0, ct: 1100, bag: 0, ft: 0 });
+  a.send({ t: "package", id: box.id });
+  await b.wait((m) => m.t === "package_taken" && m.id === box.id, "shared package removal");
+  const prize = await a.wait((m) => m.t === "package_reward", "package reward");
+  ok(["pet", "xp", "coins", "item"].includes(prize.reward.kind), "a package gives a supported reward");
+  const prizeData = await a.wait((m) => m.t === "data" && m.rev > wa.rev, "reward data");
+  let arev = prizeData.rev, adata = prizeData.data;
   // a save is taken, and a house change reaches the other player
-  const d = wa.data; d.home.pieces.push({ k: "chair", x: 10, z: 10, l: 0, r: 0, c: 0 });
-  a.send({ t: "save", rev: wa.rev, data: d });
-  const sv = await a.wait((m) => m.t === "saved", "saved"); ok(sv.rev === wa.rev + 1, "save rev");
+  const d = adata; d.home.pieces.push({ k: "chair", x: 10, z: 10, l: 0, r: 0, c: 0 });
+  a.send({ t: "save", rev: arev, data: d });
+  const sv = await a.wait((m) => m.t === "saved", "saved"); ok(sv.rev === arev + 1, "save rev");
   await b.wait((m) => m.t === "plot" && m.id === wa.id && m.pieces.some((t) => t.k === "chair"), "A's new chair");
-  a.send({ t: "save", rev: wa.rev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
+  a.send({ t: "save", rev: arev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
   // chat
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
+  // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
+  const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
+  const wn = await n.wait((m) => m.t === "welcome", "owner welcome");
+  ok(wn.role === "admin" && wn.environment.weather === "auto" && wn.environment.time === "auto", "the owner is admin and sees the automatic environment");
+  n.send({ t: "admin", op: "environment", weather: "storm", time: "night" });
+  const env = await b.wait((m) => m.t === "environment", "admin environment change");
+  ok(env.environment.weather === "storm" && env.environment.time === "night", "an admin changes weather and time for everyone");
+  await n.wait((m) => m.t === "environment", "owner's environment change");
+  b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
+  n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
+  const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
+  ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
+  b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
+  n.send({ t: "admin", op: "quick", cmd: "coins", n: 2500, name: "Nyssary" });
+  ok((await n.wait((m) => m.t === "data", "owner's own coins")).data.coins === 2500, "quick coins on yourself");
+  n.send({ t: "admin", op: "quick", cmd: "unwanted", name: "smokeB" }); await b.wait((m) => m.t === "stars" && m.stars === 0, "wanted cleared");
+  ok(b.inbox.every((m) => m.t !== "data" || m.data.coins === db1.coins), "a player's quick command is ignored");
+  n.ws.close();
   // logging in again replaces the old connection
   const a2 = client("A2"); await a2.open; a2.send({ t: "resume", token: wa.token, sp: "pup" });
-  await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  const wa2 = await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  ok(wa2.environment.weather === "storm" && wa2.environment.time === "night", "a player's environment command is ignored and new logins see the admin setting");
   await a.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a2, b]) c.ws.close();
 } catch (e) { fail(e.message); }

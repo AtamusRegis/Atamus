@@ -66,6 +66,12 @@ case "${1:-}" in
 
   finish)
     title="${2:?usage: scripts/task.sh finish \"<title>\" <body-file> [<commit-message-file>]}"; body_file="${3:?body file}"; msg_file="${4:-$3}"
+    # (owner, 2026-11-09) whose update it is: this clone's `git config pets.updateBy <name>` adds an Update-By trailer to
+    # the squash commit; the website deploy puts it in version.json and players see "<name>'s Update" under Updating!
+    by="$(git config --get pets.updateBy || true)"
+    if [ -n "$by" ] && ! grep -q '^Update-By:' "$msg_file"; then
+      tmp="$(mktemp)"; awk -v by="$by" '!done && /^Co-Authored-By:/ { print "Update-By: " by; done = 1 } { print } END { if (!done) print "\nUpdate-By: " by }' "$msg_file" > "$tmp"; msg_file="$tmp"
+    fi
     pr=""
     for round in 1 2 3 4 5 6; do
       say "Round $round: integrate the latest main"
@@ -82,8 +88,12 @@ case "${1:-}" in
       for _ in $(seq 1 120); do
         state="$(gh api "repos/$REPO/commits/$sha/check-runs?check_name=check" --jq '[.check_runs[] | .conclusion // .status] | first // "none"')"
         case "$state" in success|failure|cancelled|timed_out|action_required) break ;; esac
+        # main moved meanwhile: GitHub doesn't start the check on a pull request that no longer merges cleanly, so
+        # waiting could only time out; integrate again now
+        git fetch -q origin; if ! git merge-base --is-ancestor origin/main "$sha"; then state=moved; break; fi
         sleep 5
       done
+      if [ "$state" = moved ]; then say "main moved while waiting for the check: again"; continue; fi
       [ "$state" = success ] || die "check ended: $state (see the pull request #$pr); fix it, commit, and run finish again"
       # only what was checked merges: the branch must still hold the latest main (until branch protection enforces it)
       git fetch -q origin

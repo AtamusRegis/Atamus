@@ -16,10 +16,30 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Terrain:** rolling ground stepped into plateaus whose steps are cliffs (up to about 48 m high), and four big hills.
   Ground pets can't climb anything steeper than about 39° (cliffs) and can't go past the edge; they can drop off
   ledges.
+- **Water (owner, 2026-11-09):** a small lake in the low ground out past the outer road (west-northwest of the plaza),
+  two rivers from it that run off the island's edge in waterfalls, and a stream that steps down the terraces into the
+  lake, foaming white at each little fall. Its banks always stand a little above the water beside them, so the stream
+  runs in its own channel. The water stops at the island's edge; the falls pour **down** from the lip, out and clear of
+  the rock (the rock under each fall is tucked in), with spray at the lip. Ripples drift slowly on the lake and **run
+  downstream** on the rivers and the stream, faster where it's steep. Deeper water is darker; the bed is sand. Houses,
+  trees and rocks keep clear of it.
+  - **Swimmers** walk straight in and **swim underwater** (owner, 2026-11-09): Space (or Swim ▲) rises, Shift (or Swim
+    ▼) dives, down to the bottom; with neither they drift up to the surface; Space at the surface leaps out. 1.35×
+    their speed in the water. Bubbles trail behind them under water; with the camera under water everything goes a
+    hazy blue.
+  - **Land and air pets never go in or on the water** (owner, 2026-11-09): they can't walk into it, and anyone who ends
+    up on it (a jump, a glide, a teleport) is put on the nearest shore. Fliers fly over it (low over it they hover and
+    don't land); nobody goes over a waterfall.
+- **Speed boosts (owner, 2026-11-09):** glowing orange arrow pads laid on the roads (following the road's surface;
+  about every 115 m, not in the plaza) for any pet; 20 cyan rings in the air over town (16 to 82 m up), there only for
+  fliers and gliders; and 7 small spinning whirlpools on the lake, the rivers and the stream, there only for swimmers
+  (surface or underwater). Rings and whirlpools fade out with distance (gone past 120 m). Going through one: 1.6× for
+  5 s (on top of Speed Candy), with a trail in the boost's color; not on foot or at home.
 - **Winding roads:** two winding rings and six winding spokes out from the plaza, 8 m wide with dashed center lines,
   cut into the slopes so they climb gently through the cliffs.
 - **The plaza** (flat, paved, in the middle): the **post office** (blue roof) with its **pickup ring** (gold) in front,
-  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **training yard**
+  the **contract board** (red ring), the **egg shop** (pink, a giant egg on top, pink ring), the **mount shop** (teal,
+  a giant golden horseshoe on top, teal ring, facing the egg shop; owner, 2026-11-09), the **training yard**
   (a running track with hurdles, green ring) and the **pound** (animal control, striped front, a fenced yard).
 - **Houses** (about 130) line the roads on both sides, facing them, each with a red mailbox at the roadside; trees on
   open ground.
@@ -29,15 +49,51 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Looks (owner, 2026-11-08):** the ground's colors blend smoothly (grass by height and in broad patches, fading into
   rock on steep slopes over a few metres) with a fine speckled texture; tall rocks and boulders stand on the cliffs
   and steep slopes (about 320).
-- **Sky (owner, 2026-11-08), the same for everyone (timed off the clock):** a day lasts 20 minutes (a little more day
-  than night): the sun moves, the sky and fog go through dusk to night (stars, house windows light up, lights dim).
-  Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
-  out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
-  low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
+- **Sky (owner, 2026-11-08), the same for everyone:** normally a day lasts 20 minutes (a little more day than night):
+  the sun moves, and the sky and fog go through dusk to night (stars, house windows light up, lights dim). Every 4
+  minutes the automatic weather decides whether it rains (streaks around you, a gray sky, shorter fog, easing in and
+  out). **Admins can override it for everyone from the Admin panel (owner, 2026-11-09):** Weather is Auto, Clear,
+  Rain, Snow, Storm or Fog; time is Auto, Sunrise, Day, Sunset or Night. Snow falls and covers the land; storms bring
+  heavy rain, full wind and lightning; Fog shortens sight. The chosen time also controls animal-control headlights and
+  searchlights. Overrides last until an admin changes them or the server restarts. Wind (below); god rays slant down
+  from the sun (strongest with it low, none at night or in rain); 56 clouds
+  in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
-  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
+  parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Mount Shop: Buy pets to ride; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
-  clear within 45 m and fading out by 70 m, growing a little with distance; hidden while building.
+  clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
+  middle of town; growing a little with distance; hidden while building.
+- **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
+  every 3 minutes (about 17 mph on average; up to 10 mph more in the rain) with gusts on top, its direction swinging
+  slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
+  and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
+  1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. Wind
+  streaks are long, bright and common enough to make its direction clear around town. **Airborne fliers and gliders**
+  gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
+  **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
+  camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
+- **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
+  sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
+  It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
+  track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
+  while it's in use. Live on it: everyone's built houses (each square's top piece in its colour; your plot outlined gold),
+  the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
+  pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
+  their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
+  they face; party members ringed green, wanted ones ringed flashing red; a small ▲ / ▼ when more than 6 m above or
+  below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
+  arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
+  40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
+- **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
+  with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
+  Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
+  when a courier approaches and pets bump against them instead of passing through them. Close by, press F (or tap the
+  person) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
+  more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
+  F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
+  conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -57,15 +113,21 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
 - **How pets move (owner, 2026-11-08; pitch 2026-11-09):** a pet turns to face where it's going. Fliers and gliders in the
-  air also pitch with how they're really moving: nose-up climbing, nose-down diving or gliding down, up to about 40°,
-  eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
+  air also pitch with how they're really moving: nose-up climbing (up to about 40°), nose-down diving or gliding down (1.4× steeper than
+  the path, up to about 55°: owner, 2026-11-09), eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
   tilt. (The tilt removed on 2026-11-08 followed the camera, not the flight.)
-  - **Space (or the Jump / Fly ▲ / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08).**
+  - **Space (or the Jump / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08)**, except on a flapping
+    flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): Space rises straight up; moving forward climbs or dives the way the camera looks
-    (look up, from below, to climb; the camera can go below them); they hover when stopped; up to 130 m. They fly at
-    0.75× and walk at 0.7× their speed.
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): **on the ground they walk** (like a
+    land pet: no climbing cliffs, no jumping) **until Space (or Fly ▲) takes them up**; back down on the ground (sinking
+    to it, or flying into rising ground) they walk again; off the ground (walking off a ledge too) they're flying. Fly ▼
+    shows only while flying. In the air, hold Space (or Fly ▲) to rise straight up and hold Shift (or Fly ▼, shown
+    only on a flier) to sink straight down. With neither held, moving forward climbs or dives where the camera looks;
+    standing still holds height. Space / Shift override the camera. Up to 130 m, down to the ground.
+    Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
+    "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
     up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
@@ -83,18 +145,30 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
-- 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
+- 8 white animal control cars with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- Each spots a player near it (vans 16 m, helicopters 22 m, plus 7 m per wanted star; vans only see players on or near
-  the ground) and chases them straight for a short while (vans 3 s, helicopters 3.5 s, plus 0.8 s per star), lights
-  flashing (a helicopter shines a searchlight). Vans chase at 9.5 m/s, helicopters 11, plus 1.3 / 1.6 per star, so a
-  faster pet gets away.
-- **Caught** (a van touching you on the ground, a helicopter reaching you anywhere): you're taken straight to the
+- **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
+  fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
+  either side (18 m) than behind (14 m), plus 7 m per wanted star; only players on or near the ground. They chase
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing; the standard car chases at 9.5 m/s plus
+  1.3 per star, so a faster pet can get away.
+- **Vehicle headlights (owner, 2026-11-09):** on after daylight fades while a car is moving: lit lamps, two beams
+  reaching ahead and a pool of light on the road. Headlights and the red/blue light bars do not work in daylight.
+- **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
+  searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
+  every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
+  lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
+  beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
+  or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
+  shows "Animal control!". Helicopters keep circling in daylight, but their searchlights and red/blue lights are off
+  and cannot spot or catch anyone until daylight fades. The server and the page test the same cone (pets-world.js
+  `beamOf`), the server sending each helicopter's beam heading and reach.
+- **Caught** (an animal control car touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
-- **Wanted level (0–5 stars):** each chase you get away from adds a star (at most one every 4 s); a star drops every
-  25 s nobody's chasing you. Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
+- **Wanted level (0–5 stars):** each car chase you get away from adds a star (at most one every 4 s); a star drops
+  every 25 s nobody's chasing you (a searchlight on you counts as chasing). Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
 
 ## Delivering
 
@@ -118,23 +192,45 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Items
 
 - **Speed Candy** (was Speed Snack): a button by Pets (with its count); 30 s at 1.5× speed.
-- **Training Ribbon:** a free training level (a button in the training yard).
+- **Training Ribbon:** a free training level (a button on the training arena's gold circle).
 - **Egg Ticket:** a free Basic Egg (a button in the egg shop).
+
+## Package Rush
+
+- Every room starts a **Package Rush** every 10 minutes. It lasts a random 1–2 minutes and scatters shared prize
+  packages at random town mailboxes: 8 plus 3 per player, up to 28. A purple beam and gold ring mark each one, and the
+  event pill shows how many remain and the time left.
+- Riding over a package claims it once for the whole room. Its server-owned random prize is **40–100 training points**
+  (which can cross several levels), **1,500–6,000 coins**, **3–10** of a random item, or a **12% chance of a random
+  pet** when there is room. Pet rarity is 50% Common, 32% Rare, 14% Epic and 4% Legendary. A training-points prize for
+  a level-20 pet becomes coins.
+- The start and each prize use a large purple-and-gold announcement in the middle of the screen, confetti and
+  fireworks. The server checks proximity, removes claimed packages and owns all rewards.
 
 ## Pets
 
-- Start: a Pup. 23 kinds in 4 rarities (speed m/s / bag; ✈ flies):
-  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck 6.5/3
-  - Rare: Fox 9.5/3, Penguin 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
-  - Epic: Deer 11.5/3, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
+- Start: a Pup. 25 kinds in 4 rarities (speed m/s / bag; ✈ flies; ≈ swims):
+  - Common: Pup 7/2, Kitten 7.5/2, Bunny 8/2, Duck ≈ 6.5/3
+  - Rare: Fox 9.5/3, Otter ≈ 9/3, Penguin ≈ 8.5/4, Goat 9/4, Butterfly ✈ 9/2, Parrot ✈ 9.5/3, Stegosaurus 8.5/5
+  - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
-- **Fliers (owner, 2026-11-08):** climb to 11 m above the land while moving (higher near an island), over houses and
-  trucks, and come down when stopped or within 10 m of a parcel's house, the post office, the shops or the board; they
-  land on islands. Shown with a wing by their name in the menus.
+- **Riders stay their size (owner, 2026-11-09):** a pet grows with its level but the courier on it doesn't, so a
+  big pet looks big under its rider.
+- **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
+  player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
-  Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
+  Glider: teal with spread wings) and the card's frame and tint in that color, also when an egg hatches. **Swimmers
+  (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
+  Otter is long and low with a thick tail and whiskers; the Sea Turtle has a brown patterned shell over a green body.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
+- **Shops (owner, 2026-11-09):** riding into a shop's ring opens its window in the middle of the screen, with your coins
+  at the top and each item's price on its buy button (grayed out when you can't afford it; Full at the pet limit).
+- **Mount shop** (ride into its ring): every pet, any number of times, at level 1; buying one puts you on it (with
+  confetti). Legendary pets cost $2,500; each rarity below costs a random 500–750 less than the one above, drawn once per
+  pet: Pup $775, Kitten $625, Bunny $675, Duck $800; Fox $1,250, Penguin $1,300, Goat $1,325, Butterfly $1,150, Parrot
+  $1,325, Stegosaurus $1,200; Deer $1,925, Bear $1,775, Horse $1,775, Owl $1,850, Triceratops $1,975, Raptor $1,925; every
+  Legendary $2,500.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
   in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
@@ -142,11 +238,20 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
   you're not riding it) shows **Pet Farm +N** in the Pets list; tap it, then **Sure?**, and it goes to live on the farm,
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
-  Treats button trains the pet you ride a level for Treats instead of coins: 1 per level up to level 4, 2 up to 8, 3 up
+  Treats button (on the training arena's gold circle) trains the pet you ride a level for Treats: 1 per level up to level 4, 2 up to 8, 3 up
   to 12, 4 up to 16, 5 after.
-- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs show Full when you're at the limit.
-- **Training yard** (ride into its ring): trains the pet you ride a level for coins (40 × 1.32 per level, × 1 / 1.6 / 2.6
-  / 4 by rarity), up to level 20: each level +5% speed; every 5 levels one more parcel in the bag.
+- **Beds:** you can have 6 pets plus 2 for each bed in your home; eggs and mounts show Full when you're at the limit.
+- **Training arena (owner, 2026-11-09):** riding into the training yard's ring takes you to a floating arena (80 m
+  across, off the island's south edge, `AR` in pets.js) with a track and an obstacle course round it, in order: a
+  hurdle, a hoop, a platform, two slalom gates (inner half, then outer half), a tunnel, a higher hurdle, a higher hoop.
+  The next one glows (a gold beam and diamond, and the arrow points to it). Clearing it, going round the track's way
+  (counterclockwise from above), gives the pet you ride a **training point**: jump the hurdles (the bars are solid),
+  jump through the hoops (over their low sill), land on the platform, pass between a gate's posts, ride through the
+  tunnel. **20 points** for level 2, **4 more for each level after** (level 19 to 20: 92); spare points carry over. A
+  star pill shows points / needed in the arena. Each pet keeps its own points (saved; a traded pet starts fresh). Up to
+  level 20: each level +5% speed; every 5 levels one more parcel in the bag. The gold circle in the middle opens the
+  Training Yard panel (the pet, its points, Treats and Training Ribbon buttons); the purple arch takes you back to town
+  beside the yard. Land pets can't walk off the arena's edge.
 
 ## Co-op
 
@@ -158,12 +263,24 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (animal control 10, stamped with its clock). Pages replay each player 170 ms in the past on that player's own clock
   (so speeds stay even), guessing ahead up to 0.2 s if an update's late (not if they'd stopped) and easing any
   correction in. Nothing is checked by the server (no anti-cheat).
-- **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
-  the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
+- **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Everyone sees the pet you ride (owner, 2026-11-09: wrong pets):** whenever the pet you ride (or its level) changes,
+  however it changed (riding another, training, a trade, your data coming back from the server at login or after a
+  stale save), your page redraws it and tells the room; after logging in it tells the room again.
+- **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
+  tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
+  connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
+- **What's New (owner, 2026-11-09):** after an update, a small panel in the middle of the screen shows the newest
+  entry of the front page's Updates list (its date and lines) until you close it (✕); it shows again only when that
+  entry changes. A browser that has never logged in doesn't get it.
+- **Coins (owner, 2026-11-09):** the coin pill sits at the top right (above the map), leaving the top left clear (as
+  Roblox's chat would).
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
-  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
+  once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag. **Whose update (owner,
+  2026-11-09):** under Updating! a small line says "Derek's Update" when it's Derek's (the merge commit's `Update-By`
+  trailer, put in version.json by the website deploy; nothing shows without one).
 - **Chat history (owner, 2026-11-08):** while the chat line is open, everything said since you logged in shows above
   it (scrollable); a new login starts it fresh.
 - **Chat (owner, 2026-11-08):** Chat (the button, or Enter or / on a computer) opens a line to type in (up to 120 characters,
@@ -221,7 +338,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
   price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
   windows and a roof).
-- **Inside a house** (on its floors or steps with a ceiling or roof above you; on open-air floors and roofs you keep riding, owner 2026-11-09) you're off your pet, walking (5.5 m/s); walls (4.5 m)
+- **On any plot** (owner, 2026-11-09: in its yard too, anyone's plot, up to 1.5 m over its top level; flying higher you keep riding), and **inside a house** elsewhere (under a ceiling or roof), you're off your pet, walking (5.5 m/s); walls (4.5 m)
   block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
   see in. Others see you walking too.
 - **Shut in** (owner, 2026-11-09): pushing on for 1.5 s without getting anywhere, in a room with no doorway or open side to the plot and no stairs or slope, puts you out in front of the plot (not on a flier, which can fly up).
@@ -239,8 +356,21 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
-  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
-  Ban (the same), Kick (online), Give (admins).
+  online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
+  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  ban or kick. The search box keeps its focus while the list refreshes.
+- **Environment controls (owner, 2026-11-09, admins):** the top of the panel changes the shared weather (Auto, Clear,
+  Rain, Snow, Storm or Fog) and time of day (Auto, Sunrise, Day, Sunset or Night). Moderators don't get these controls.
+- **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
+  row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
+  pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every
+  kind), Clear wanted (stars to 0, online only), Everything (a million coins, every missing kind at level 20, all
+  pets to 20, the items and the Treats). Logged like every other action.
+- **Chat commands (staff):** a chat line starting with "/" from a moderator or admin is a command, never sent as chat
+  (a player's "/" line is ordinary chat). `/coins 50k` (k / m), `/allpets`, `/maxlv`, `/items`, `/treats`,
+  `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
+  `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
+  Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).
@@ -261,4 +391,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
+- Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
+- Space as a single rise per press on a flier (owner, 2026-11-09): replaced by holding Space / Shift.
+- Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
