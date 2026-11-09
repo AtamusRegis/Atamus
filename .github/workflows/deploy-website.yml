@@ -38,7 +38,11 @@ jobs:
         run: bash scripts/check.sh
       - uses: actions/configure-pages@v5
       - name: Stamp build id (players' pages compare it to reload onto new versions)
-        run: echo "{\"v\":\"${GITHUB_SHA}\"}" > website/version.json
+        # (owner, 2026-11-09) "by": the merge commit's Update-By trailer (letters, digits, spaces), shown under Updating!
+        run: |
+          BY="$(git log -1 --format='%(trailers:key=Update-By,valueonly)' "$GITHUB_SHA" | head -1 | tr -cd 'A-Za-z0-9 ._-' | cut -c1-24)"
+          echo "{\"v\":\"${GITHUB_SHA}\",\"by\":\"${BY}\"}" > website/version.json
+          cat website/version.json
       - uses: actions/upload-pages-artifact@v3
         with:
           path: website
