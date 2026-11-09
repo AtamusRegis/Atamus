@@ -110,13 +110,21 @@
     .field:focus { border-color: var(--blue); }
     .field.small { width: auto; padding: 6px 8px; font-size: 13px; min-width: 0; }
     input.field.small { width: 80px; }
-    .arows { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-    .arow { border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .arows { display: flex; flex-direction: column; gap: 8px; }
+    .arow { border: 2px solid var(--line); border-radius: 14px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; background: #fff; }
+    .arow.on { border-color: #bfe5cc; background: #f6fcf8; } .arow.me { border-color: var(--blue); }
+    .asearch { position: sticky; top: -14px; z-index: 1; box-shadow: 0 6px 10px -6px rgba(0,0,0,.15); }
+    .ahead { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font: 800 12px ui-rounded, system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #6b7c8a; }
+    .ahead .cnt { font-size: 11px; letter-spacing: 0; text-transform: none; padding: 2px 8px; border-radius: 999px; background: #d8f3e2; color: #1e7a45; }
+    .qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+    .qgrid .btn { min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .qgrid .btn.ghost { box-shadow: 0 0 0 2px var(--line), 0 3px 0 rgba(0,0,0,.12); } .qgrid .coin { width: 14px; height: 14px; }
     .aname { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .aacts { display: flex; gap: 6px; flex-wrap: wrap; }
     .role { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #e9eef3; text-transform: capitalize; }
     .role.admin, .role.owner { background: #ffe7a8; color: #8a5a00; } .role.moderator { background: #d7ecff; color: #1f5ea8; }
     .tag { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: #ffd9d6; color: #a3261d; }
+    .tag.vip { background: #ffe7a8; color: #8a5a00; }
     .picklist { display: flex; flex-direction: column; gap: 2px; max-height: 34vh; overflow-y: auto; margin: 8px 0; border: 2px solid var(--line); border-radius: 12px; padding: 4px; }
     .pick { display: flex; align-items: center; gap: 8px; border: 0; background: #fff; text-align: left; padding: 6px 8px; border-radius: 8px; font: 600 14px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
     .pick img { width: 28px; height: 28px; }
@@ -156,6 +164,7 @@
     <div>
       <span class="pill"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="who"></span>
+      <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b></span>
       <div id="party"></div>
     </div>
     <div>
@@ -198,6 +207,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100024"></script>
+  <script type="module" src="pets.js?v=1793100026"></script>
 </body>
 </html>

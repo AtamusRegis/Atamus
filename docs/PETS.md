@@ -38,13 +38,21 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Sky (owner, 2026-11-08), the same for everyone (timed off the clock):** a day lasts 20 minutes (a little more day
   than night): the sun moves, the sky and fog go through dusk to night (stars, house windows light up, lights dim).
   Every 4 minutes the weather's decided: about 1 in 4 rain (streaks around you, a grey sky, shorter fog, easing in and
-  out). Wind streaks blow past (more up high and in the rain); god rays slant down from the sun (strongest with it
+  out). Wind (below); god rays slant down from the sun (strongest with it
   low, none at night or in rain); 56 clouds in three layers (below the island, around it and high above).
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
   clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
   middle of town; growing a little with distance; hidden while building.
+- **Wind (owner, 2026-11-09), the same for everyone (timed off the clock):** 3 to 40 mph, easing to a new strength
+  every 3 minutes (about 17 mph on average; up to 10 mph more in the rain) with gusts on top, its direction swinging
+  slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
+  and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
+  1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
+  pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
+  home.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -258,8 +266,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
-  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
-  Ban (the same), Kick (online), Give (admins).
+  online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
+  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  ban or kick. The search box keeps its focus while the list refreshes.
+- **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
+  row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
+  pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every
+  kind), Clear wanted (stars to 0, online only), Everything (a million coins, every missing kind at level 20, all
+  pets to 20, the items and the Treats). Logged like every other action.
+- **Chat commands (staff):** a chat line starting with "/" from a moderator or admin is a command, never sent as chat
+  (a player's "/" line is ordinary chat). `/coins 50k` (k / m), `/allpets`, `/maxlv`, `/items`, `/treats`,
+  `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
+  `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
+  Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).

@@ -261,7 +261,19 @@ const drops = Array.from({ length: RAIN_N }, () => ({ x: (Math.random() - 0.5) *
 // wind: pale streaks blowing past
 const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
 const winds = Array.from({ length: 36 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.12), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
-const WIND = new THREE.Vector3(1, 0, 0.35).normalize();
+// (owner, 2026-11-09) the wind, the same for everyone (timed off the clock): 3 to 40 mph, easing to a new strength every
+// 3 minutes (windier in the rain) with gusts on top, its direction swinging slowly round. WIND is where it blows to.
+const WIND_BLOCK = 180, WIND_MIN = 3, WIND_MAX = 40;
+const WIND = new THREE.Vector3(), windNow = { mph: WIND_MIN };
+const windBase = (b) => WIND_MIN + (WIND_MAX - WIND_MIN) * 0.85 * (Math.abs(Math.sin(b * 78.233 + 1.7) * 43758.5453) % 1) ** 1.5;
+function windAt(t) {
+  const b = Math.floor(t / WIND_BLOCK), f = smooth(t / WIND_BLOCK - b);
+  let mph = windBase(b) + (windBase(b + 1) - windBase(b)) * f + weatherAt(t) * 10;
+  mph *= 1 + 0.18 * Math.sin(t * 0.9) * Math.sin(t * 0.37 + 2) + 0.08 * Math.sin(t * 2.3);   // gusts
+  return { mph: clamp(mph, WIND_MIN, WIND_MAX), ang: 0.35 + 1.4 * Math.sin(t / 1300) + 0.5 * Math.sin(t / 410 + 1) };
+}
+function windStep(t) { const w = windAt(t); windNow.mph = w.mph; WIND.set(Math.cos(w.ang), 0, Math.sin(w.ang)); }
+windStep(Date.now() / 1000);
 // god rays: long soft beams slanting down from the sun
 const rayTex = (() => { const cv = document.createElement("canvas"); cv.width = 32; cv.height = 128; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, "rgba(255,240,200,0)"); gr.addColorStop(0.35, "rgba(255,240,200,1)"); gr.addColorStop(1, "rgba(255,240,200,0)"); x.fillStyle = gr; x.fillRect(0, 0, 32, 128); const g2 = x.createLinearGradient(0, 0, 32, 0); x.globalCompositeOperation = "destination-in"; g2.addColorStop(0, "rgba(0,0,0,0)"); g2.addColorStop(0.5, "rgba(0,0,0,1)"); g2.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g2; x.fillRect(0, 0, 32, 128); return new THREE.CanvasTexture(cv); })();
 const rays = Array.from({ length: 7 }, (_, i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(10 + i * 2, 170), new THREE.MeshBasicMaterial({ map: rayTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); return { m, off: new THREE.Vector3((Math.random() - 0.5) * 110, 0, (Math.random() - 0.5) * 110) }; });
@@ -277,7 +289,8 @@ function skyStep(dt, cx, cy, cz) {
   skyNow.sun.set(Math.cos(a), Math.max(-0.4, el), 0.35).normalize();
   let day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
   if (me.inst) { day = 1; dusk = 0; rainK = 0; }   // inside a home it's always bright and dry
-  skyNow.day = day; skyNow.rain = rainK;
+  skyNow.day = day; skyNow.rain = rainK; windStep(t);
+  const wsp = 3 + windNow.mph * 0.4;   // how fast streaks, rain and clouds go with the wind
   tmpCol.copy(SKY.night).lerp(SKY.day, day).lerp(SKY.dusk, dusk * 0.55).lerp(SKY.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.background.copy(tmpCol);
   tmpCol.copy(FOG.night).lerp(FOG.day, day).lerp(FOG.dusk, dusk * 0.5).lerp(FOG.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.fog.color.copy(tmpCol);
   scene.fog.far = 560 - rainK * 300; scene.fog.near = 150 - rainK * 90;
@@ -289,16 +302,16 @@ function skyStep(dt, cx, cy, cz) {
   // rain
   rain.material.opacity = rainK * 0.55; rain.visible = rainK > 0.01;
   if (rain.visible) for (let i = 0; i < RAIN_N; i++) {
-    const d = drops[i]; d.y -= d.v * dt; d.x += WIND.x * 4 * dt; if (d.y < -8) { d.y = 30 + Math.random() * 10; d.x = (Math.random() - 0.5) * 70; d.z = (Math.random() - 0.5) * 70; }
+    const d = drops[i]; d.y -= d.v * dt; d.x += WIND.x * wsp * 0.45 * dt; d.z += WIND.z * wsp * 0.45 * dt; if (d.y < -8) { d.y = 30 + Math.random() * 10; d.x = (Math.random() - 0.5) * 70; d.z = (Math.random() - 0.5) * 70; }
     const x = cx + d.x, y = cy + d.y, z = cz + d.z; rainPos.set([x, y, z, x - WIND.x * 0.15, y + 1.1, z - WIND.z * 0.15], i * 6);
   }
   if (rain.visible) rainG.attributes.position.needsUpdate = true;
-  // wind streaks, more of them up high and in the rain
-  const windK = me.inst ? 0 : 0.35 + rainK * 0.4 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  // wind streaks, more of them the windier it is, up high and in the rain
+  const windK = me.inst ? 0 : 0.1 + windNow.mph / WIND_MAX * 0.45 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
     w.life -= dt;
     if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 2 + Math.random() * 2; const a = Math.random() * TAU, r = 20 + Math.random() * 30; w.x = cx + Math.cos(a) * r - WIND.x * 10; w.y = cy - 6 + Math.random() * 16; w.z = cz + Math.sin(a) * r - WIND.z * 10; }   // (owner, 2026-11-08) out of the way, never right at the camera
-    w.x += WIND.x * 9 * dt; w.z += WIND.z * 9 * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
+    w.x += WIND.x * wsp * dt; w.z += WIND.z * wsp * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
     w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.4 + 0.6 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
@@ -905,10 +918,14 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 const fmt = (n) => Math.floor(n).toLocaleString();
 function toast(txt, color) { const d = document.createElement("div"); d.textContent = txt; if (color) d.style.color = color; $("toast").appendChild(d); setTimeout(() => d.remove(), 1700); }
 const CANDY = `<svg class="ico" viewBox="0 0 24 24"><path d="M2 8l4 4-4 4zM22 8l-4 4 4 4z" fill="#ff9ccf" stroke="#a3226a" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="6" fill="#ff5aa0" stroke="#a3226a" stroke-width="1.5"/><path d="M9 9.5c2 1 4 3 6 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-let hudKey = "";
+let hudKey = "", windKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
   const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
+  // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
+  const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
+  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3;
+  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
@@ -1161,6 +1178,7 @@ function renderHist() {
 $("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
 chatBar.addEventListener("submit", (e) => {
   e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
+  if (text[0] === "/" && isStaff()) { slash(text); closeChat(); return; }   // (owner, 2026-11-09) staff commands
   if (text) { netSend({ t: "chat", text }); chatLine(save.name, text, true); myBubble = bubble(text, myBubble, mine.g, mine.top); }
   closeChat();
 });
@@ -1746,33 +1764,59 @@ const isStaff = () => myRole === "moderator" || myRole === "admin";
 const GIVES = () => [{ id: "coins", name: "Coins" }, ...Object.entries(ITEMS).map(([id, it]) => ({ id, name: it.name })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "pet:" + id, name: sp.name, pet: true })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "treat:" + id, name: sp.name + " Treats" }))];
 let adminTimer = 0;
 function adminSend(o) { netSend(Object.assign({ t: "admin", q: adminQ }, o)); }
+// (owner, 2026-11-09) admins' quick commands: on yourself from the top of the panel, on anyone from their row's Quick
+// menu, or typed in chat (slash below)
+const QUICK = [["coins:10000", "+10K"], ["coins:100000", "+100K"], ["coins:1000000", "+1M"], ["allpets", "All pets"], ["maxlv", "Max levels"], ["items", "Items"], ["treats", "Treats"], ["unwanted", "Clear wanted"], ["everything", "Everything"]];
+const quick = (target, v) => { const [cmd, n] = v.split(":"); adminSend(Object.assign({ op: "quick", cmd, n: +n || 0 }, target)); };
+let adminBuilt = "";
 function renderAdmin() {
   const el = $("admin"); if (!el) return;
-  if (giveTo) return renderGive();
-  el.innerHTML = "";
-  const q = document.createElement("input"); q.className = "field"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
-  q.oninput = () => { adminQ = q.value.trim(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
-  el.appendChild(q);
+  if (giveTo) { adminBuilt = ""; return renderGive(); }
+  if (adminBuilt !== myRole) {   // the search box and quick commands are built once, so typing keeps its focus while the list refreshes
+    adminBuilt = myRole; el.innerHTML = "";
+    const q = document.createElement("input"); q.className = "field asearch"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
+    q.oninput = () => { adminQ = q.value.trim(); renderAdmin(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
+    el.appendChild(q);
+    if (myRole === "admin") {
+      const h = document.createElement("div"); h.className = "ahead"; h.textContent = "Me";
+      const g = document.createElement("div"); g.className = "qgrid";
+      for (const [v, t] of QUICK) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (v.startsWith("coins") ? " gold" : v === "everything" ? " green" : " ghost");
+        b.innerHTML = v.startsWith("coins") ? `<span class="coin"></span>` : ""; b.append(document.createTextNode(t)); b.onclick = () => quick({ name: myName }, v); g.appendChild(b);
+      }
+      el.append(h, g);
+    }
+    const h = document.createElement("div"); h.className = "ahead"; h.innerHTML = `Players <span class="cnt" id="admin-n"></span>`;
+    const rows = document.createElement("div"); rows.className = "arows"; rows.id = "arows";
+    el.append(h, rows);
+  }
   const owner = myName.toLowerCase() === "nyssary";
   const sel = (opts, val, on) => { const s = document.createElement("select"); s.className = "field small"; for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === val) o.selected = true; s.appendChild(o); } s.onchange = () => on(s.value); return s; };
   const TIMES = [["", "—"], ["10", "10m"], ["60", "1h"], ["1440", "1d"], ["10080", "7d"], ["43200", "30d"], ["perma", "Perma"], ["off", "Off"]];
-  const rows = document.createElement("div"); rows.className = "arows";
-  for (const p of adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase()))) {
-    const r = document.createElement("div"); r.className = "arow";
+  const btn = (txt, cls, on) => { const b = document.createElement("button"); b.className = "btn small " + cls; b.type = "button"; b.textContent = txt; b.onclick = on; return b; };
+  const rows = $("arows"); rows.innerHTML = "";
+  const list = adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase())).sort((x, y) => y.online - x.online || x.name.localeCompare(y.name));
+  $("admin-n").textContent = adminList.filter((r) => r.online).length + " online";
+  for (const p of list) {
+    const r = document.createElement("div"); r.className = "arow" + (p.online ? " on" : "") + (p.name === myName ? " me" : "");
     const nm = document.createElement("div"); nm.className = "aname";
-    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
+    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.vip ? `<span class="tag vip">VIP</span>` : ""}${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
     nm.querySelector("b").textContent = p.name; r.appendChild(nm);
     const acts = document.createElement("div"); acts.className = "aacts";
     const canRole = owner ? p.role !== "owner" : myRole === "admin" && (p.role === "player" || p.role === "moderator");
     if (canRole && p.name !== myName) acts.appendChild(sel(owner ? [["player", "Player"], ["moderator", "Moderator"], ["admin", "Admin"]] : [["player", "Player"], ["moderator", "Moderator"]], p.role, (v) => adminSend({ op: "role", id: p.id, role: v })));
-    const mute = sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })); acts.appendChild(mute);
-    const ban = sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })); acts.appendChild(ban);
-    if (p.online) { const k = document.createElement("button"); k.className = "btn small"; k.type = "button"; k.textContent = "Kick"; k.onclick = () => adminSend({ op: "kick", id: p.id }); acts.appendChild(k); }
-    if (myRole === "admin") { const v = document.createElement("button"); v.className = "btn small" + (p.vip ? " gold" : ""); v.type = "button"; v.textContent = p.vip ? "VIP ★" : "VIP"; v.onclick = () => adminSend({ op: "vip", id: p.id, on: !p.vip }); acts.appendChild(v); }
-    if (myRole === "admin") { const g = document.createElement("button"); g.className = "btn gold small"; g.type = "button"; g.textContent = "Give"; g.onclick = () => { giveTo = p; giveWhat = null; renderAdmin(); }; acts.appendChild(g); }
+    if (p.name !== myName) {
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })));
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })));
+      if (p.online) acts.appendChild(btn("Kick", "", () => adminSend({ op: "kick", id: p.id })));
+    }
+    if (myRole === "admin") {
+      acts.appendChild(sel([["", "Quick"], ...QUICK], "", (v) => v && quick({ id: p.id }, v)));
+      acts.appendChild(btn(p.vip ? "VIP ★" : "VIP", p.vip ? "gold" : "ghost", () => adminSend({ op: "vip", id: p.id, on: !p.vip })));
+      acts.appendChild(btn("Give", "gold", () => { giveTo = p; giveWhat = null; renderAdmin(); }));
+    }
     r.appendChild(acts); rows.appendChild(r);
   }
-  el.appendChild(rows);
 }
 // give someone an item, coins, Treats or a pet: type to narrow the list, pick one (owner, 2026-11-09: pets show the
 // Flier / Glider badge here too)
@@ -1793,6 +1837,18 @@ function renderGive() {
   row.append(n, lv, go); el.append(q, list, row); fill();
 }
 $("btn-admin").onclick = () => { if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
+// (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
+// (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
+// Name 7d (minutes, or m / h / d, perma, off)
+function slash(text) {
+  const [c, ...a] = text.slice(1).split(" "), cmd = c.toLowerCase(), who = (s) => (s && /^[A-Za-z0-9_]{3,16}$/.test(s) ? s : null);
+  const QC = { allpets: "allpets", maxlv: "maxlv", items: "items", treats: "treats", everything: "everything", all: "everything", unwanted: "unwanted" };
+  const dur = (s) => { s = (s || "").toLowerCase(); if (s === "perma" || s === "off") return s; const r = /^(\d+)([mhd]?)$/.exec(s); return r ? String(+r[1] * { "": 1, m: 1, h: 60, d: 1440 }[r[2]]) : "60"; };
+  if (cmd === "coins") { const r = /^(\d+(?:\.\d+)?)([km]?)$/i.exec(a[0] || ""); if (!r) return toast("Unknown"); return adminSend({ op: "quick", cmd: "coins", n: Math.floor(+r[1] * { "": 1, k: 1e3, m: 1e6 }[r[2].toLowerCase()]), name: who(a[1]) || myName }); }
+  if (QC[cmd]) return adminSend({ op: "quick", cmd: QC[cmd], name: who(a[0]) || myName });
+  if ((cmd === "kick" || cmd === "mute" || cmd === "ban") && who(a[0])) return adminSend(cmd === "kick" ? { op: "kick", name: a[0] } : { op: cmd, name: a[0], mins: dur(a[1]) });
+  toast("Unknown");
+}
 
 // ---- the loop ----
 let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
@@ -1873,6 +1929,17 @@ function step(dt) {
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
   if (wet && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
+  // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
+  // and bumps it about a little; never on the ground, at home or inside
+  const gust = me.inst || stunned || !me.airborne || (kind !== "fly" && kind !== "glide") ? 0 : clamp((windNow.mph - 12) / 28, 0, 1);
+  if (gust > 0) {
+    const dr = gust * 1.4 * dt, side = gust * 0.7 * Math.sin(clock * 1.3) * Math.sin(clock * 0.47 + 1) * dt;
+    const free = (x, z) => hyp(x, z) <= LIMIT && !blocked(x, z, me.y) && !houseWall(x, z, me.y) && floorAt(x, z, me.y) < me.y - 0.5;
+    const nx = me.x + WIND.x * dr - WIND.z * side, nz = me.z + WIND.z * dr + WIND.x * side;
+    if (free(nx, me.z)) me.x = nx; if (free(me.x, nz)) me.z = nz;
+    me.y = Math.max(floorAt(me.x, me.z, me.y), me.y + gust * 0.6 * (Math.sin(clock * 2.1) + 0.5 * Math.sin(clock * 3.7 + 2)) * dt);
+    if (kind === "fly") me.y = Math.min(me.y, FLY_TOP);
+  }
   me.airborne = me.y - floor > 1.2;
   const low = me.y - floor < 3.5;
   const atHome = onMyPlot(1); if (atHome && !me.atHome) collectPens(); me.atHome = atHome;   // playpen coins, collected on coming home
@@ -1890,7 +1957,8 @@ function step(dt) {
   const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
   if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
   contractStep(); fxStep(dt);
-  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
+  const cs = (0.5 + windNow.mph * 0.08) * dt;   // clouds drift with the wind
+  for (const c of clouds) { c.position.x += WIND.x * cs; c.position.z += WIND.z * cs; for (const ax of ["x", "z"]) { if (c.position[ax] > 420) c.position[ax] -= 840; else if (c.position[ax] < -420) c.position[ax] += 840; } }
   // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless; save now and then
   if (netOk && now - lastSent > 50) { sendPos(now - lastActual > 1000); lastSent = now; }
   flushSave(false);
@@ -1942,4 +2010,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

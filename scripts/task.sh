@@ -88,8 +88,12 @@ case "${1:-}" in
       for _ in $(seq 1 120); do
         state="$(gh api "repos/$REPO/commits/$sha/check-runs?check_name=check" --jq '[.check_runs[] | .conclusion // .status] | first // "none"')"
         case "$state" in success|failure|cancelled|timed_out|action_required) break ;; esac
+        # main moved meanwhile: GitHub doesn't start the check on a pull request that no longer merges cleanly, so
+        # waiting could only time out; integrate again now
+        git fetch -q origin; if ! git merge-base --is-ancestor origin/main "$sha"; then state=moved; break; fi
         sleep 5
       done
+      if [ "$state" = moved ]; then say "main moved while waiting for the check: again"; continue; fi
       [ "$state" = success ] || die "check ended: $state (see the pull request #$pr); fix it, commit, and run finish again"
       # only what was checked merges: the branch must still hold the latest main (until branch protection enforces it)
       git fetch -q origin
