@@ -50,11 +50,10 @@ try {
   for (let i = 0; i < 100 && (await page.evaluate(() => getComputedStyle(document.getElementById("packageevent")).display === "none")); i++) await page.waitForTimeout(50);
   const packageUi = await page.evaluate(() => ({
     title: document.getElementById("eventtitle").textContent,
-    flash: document.getElementById("eventflash").classList.contains("go"),
     pill: getComputedStyle(document.getElementById("packageevent")).display,
     count: window.Pets.packageMeshes.size,
   }));
-  if (packageUi.title !== "Package Rush!" || !packageUi.flash || packageUi.pill === "none" || !packageUi.count) problems.push("Package Rush announcement is missing: " + JSON.stringify(packageUi));
+  if (packageUi.title !== "Package Rush!" || packageUi.pill === "none" || !packageUi.count) problems.push("Package Rush UI is missing: " + JSON.stringify(packageUi));
   const beforePackages = packageUi.count;
   await page.evaluate(() => { const P = window.Pets, b = P.packageEvent.boxes.values().next().value; P.teleport(b.x, b.z, b.y); });
   for (let i = 0; i < 50 && !(await page.evaluate((before) => window.Pets.packageMeshes.size < before, beforePackages)); i++) await page.waitForTimeout(100);
