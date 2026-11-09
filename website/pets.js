@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100003";
+import * as World from "./pets-world.js?v=1793100004";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -218,7 +218,19 @@ const drops = Array.from({ length: RAIN_N }, () => ({ x: (Math.random() - 0.5) *
 // wind: pale streaks blowing past
 const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
 const winds = Array.from({ length: 36 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.12), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
-const WIND = new THREE.Vector3(1, 0, 0.35).normalize();
+// (owner, 2026-11-09) the wind, the same for everyone (timed off the clock): 3 to 40 mph, easing to a new strength every
+// 3 minutes (windier in the rain) with gusts on top, its direction swinging slowly round. WIND is where it blows to.
+const WIND_BLOCK = 180, WIND_MIN = 3, WIND_MAX = 40;
+const WIND = new THREE.Vector3(), windNow = { mph: WIND_MIN };
+const windBase = (b) => WIND_MIN + (WIND_MAX - WIND_MIN) * 0.85 * (Math.abs(Math.sin(b * 78.233 + 1.7) * 43758.5453) % 1) ** 1.5;
+function windAt(t) {
+  const b = Math.floor(t / WIND_BLOCK), f = smooth(t / WIND_BLOCK - b);
+  let mph = windBase(b) + (windBase(b + 1) - windBase(b)) * f + weatherAt(t) * 10;
+  mph *= 1 + 0.18 * Math.sin(t * 0.9) * Math.sin(t * 0.37 + 2) + 0.08 * Math.sin(t * 2.3);   // gusts
+  return { mph: clamp(mph, WIND_MIN, WIND_MAX), ang: 0.35 + 1.4 * Math.sin(t / 1300) + 0.5 * Math.sin(t / 410 + 1) };
+}
+function windStep(t) { const w = windAt(t); windNow.mph = w.mph; WIND.set(Math.cos(w.ang), 0, Math.sin(w.ang)); }
+windStep(Date.now() / 1000);
 // god rays: long soft beams slanting down from the sun
 const rayTex = (() => { const cv = document.createElement("canvas"); cv.width = 32; cv.height = 128; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, "rgba(255,240,200,0)"); gr.addColorStop(0.35, "rgba(255,240,200,1)"); gr.addColorStop(1, "rgba(255,240,200,0)"); x.fillStyle = gr; x.fillRect(0, 0, 32, 128); const g2 = x.createLinearGradient(0, 0, 32, 0); x.globalCompositeOperation = "destination-in"; g2.addColorStop(0, "rgba(0,0,0,0)"); g2.addColorStop(0.5, "rgba(0,0,0,1)"); g2.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g2; x.fillRect(0, 0, 32, 128); return new THREE.CanvasTexture(cv); })();
 const rays = Array.from({ length: 7 }, (_, i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(10 + i * 2, 170), new THREE.MeshBasicMaterial({ map: rayTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide })); m.frustumCulled = false; scene.add(m); return { m, off: new THREE.Vector3((Math.random() - 0.5) * 110, 0, (Math.random() - 0.5) * 110) }; });
@@ -234,7 +246,8 @@ function skyStep(dt, cx, cy, cz) {
   skyNow.sun.set(Math.cos(a), Math.max(-0.4, el), 0.35).normalize();
   let day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
   if (me.inst) { day = 1; dusk = 0; rainK = 0; }   // inside a home it's always bright and dry
-  skyNow.day = day; skyNow.rain = rainK;
+  skyNow.day = day; skyNow.rain = rainK; windStep(t);
+  const wsp = 3 + windNow.mph * 0.4;   // how fast streaks, rain and clouds go with the wind
   tmpCol.copy(SKY.night).lerp(SKY.day, day).lerp(SKY.dusk, dusk * 0.55).lerp(SKY.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.background.copy(tmpCol);
   tmpCol.copy(FOG.night).lerp(FOG.day, day).lerp(FOG.dusk, dusk * 0.5).lerp(FOG.rain, rainK * 0.6 * (0.4 + 0.6 * day)); scene.fog.color.copy(tmpCol);
   scene.fog.far = 560 - rainK * 300; scene.fog.near = 150 - rainK * 90;
@@ -246,16 +259,16 @@ function skyStep(dt, cx, cy, cz) {
   // rain
   rain.material.opacity = rainK * 0.55; rain.visible = rainK > 0.01;
   if (rain.visible) for (let i = 0; i < RAIN_N; i++) {
-    const d = drops[i]; d.y -= d.v * dt; d.x += WIND.x * 4 * dt; if (d.y < -8) { d.y = 30 + Math.random() * 10; d.x = (Math.random() - 0.5) * 70; d.z = (Math.random() - 0.5) * 70; }
+    const d = drops[i]; d.y -= d.v * dt; d.x += WIND.x * wsp * 0.45 * dt; d.z += WIND.z * wsp * 0.45 * dt; if (d.y < -8) { d.y = 30 + Math.random() * 10; d.x = (Math.random() - 0.5) * 70; d.z = (Math.random() - 0.5) * 70; }
     const x = cx + d.x, y = cy + d.y, z = cz + d.z; rainPos.set([x, y, z, x - WIND.x * 0.15, y + 1.1, z - WIND.z * 0.15], i * 6);
   }
   if (rain.visible) rainG.attributes.position.needsUpdate = true;
-  // wind streaks, more of them up high and in the rain
-  const windK = me.inst ? 0 : 0.35 + rainK * 0.4 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  // wind streaks, more of them the windier it is, up high and in the rain
+  const windK = me.inst ? 0 : 0.1 + windNow.mph / WIND_MAX * 0.45 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
     w.life -= dt;
     if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 2 + Math.random() * 2; const a = Math.random() * TAU, r = 20 + Math.random() * 30; w.x = cx + Math.cos(a) * r - WIND.x * 10; w.y = cy - 6 + Math.random() * 16; w.z = cz + Math.sin(a) * r - WIND.z * 10; }   // (owner, 2026-11-08) out of the way, never right at the camera
-    w.x += WIND.x * 9 * dt; w.z += WIND.z * 9 * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
+    w.x += WIND.x * wsp * dt; w.z += WIND.z * wsp * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
     w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.4 + 0.6 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
@@ -586,7 +599,8 @@ function fxStep(dt) {
   sparks.count = n; sparks.instanceMatrix.needsUpdate = true; if (sparks.instanceColor) sparks.instanceColor.needsUpdate = true;
 }
 // a big word across the screen
-function banner(txt, color) { const b = $("banner"); b.textContent = txt; b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
+// (owner, 2026-11-09) sub: a small line under it (whose update it is)
+function banner(txt, color, sub) { const b = $("banner"); b.textContent = txt; if (sub) { const s = document.createElement("small"); s.textContent = sub; b.appendChild(s); } b.style.color = color || "#fff"; b.classList.remove("go"); void b.offsetWidth; b.classList.add("go"); }
 
 
 // ---- me ----
@@ -654,15 +668,28 @@ function sampleAt(buf, t, out) {
   const b = buf[i], a = i > 0 ? buf[i - 1] : b;
   if (t >= b.t) {   // past the newest: guess ahead a little along its last motion (not if it had stopped)
     const p = buf.length > 1 ? buf[buf.length - 2] : b, span = Math.max(1, b.t - p.t), k = b.mv === false ? 0 : Math.min(t - b.t, 200) / span;
-    out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; return true;
+    out.x = b.x + (b.x - p.x) * k; out.y = b.y + (b.y - p.y) * k; out.z = b.z + (b.z - p.z) * k; out.yaw = b.yaw; out.ba = b.ba; out.bd = b.bd; return true;
   }
   const k = a === b ? 1 : clamp((t - a.t) / (b.t - a.t), 0, 1);
-  out.x = a.x + (b.x - a.x) * k; out.y = a.y + (b.y - a.y) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = lerpYaw(a.yaw, b.yaw, k); return true;
+  out.x = a.x + (b.x - a.x) * k; out.y = a.y + (b.y - a.y) * k; out.z = a.z + (b.z - a.z) * k; out.yaw = lerpYaw(a.yaw, b.yaw, k);
+  if (b.ba !== undefined && a.ba !== undefined) { out.ba = lerpYaw(a.ba, b.ba, k); out.bd = a.bd + (b.bd - a.bd) * k; }   // a helicopter's searchlight
+  return true;
 }
 
 // ---- animal control (owner, 2026-11-08): vans on the roads and helicopters over town (pets-world.js); online the
 // server runs them for the whole room, offline this page does ----
 const lightR = new THREE.MeshBasicMaterial({ color: "#ff3a3a" }), lightB = new THREE.MeshBasicMaterial({ color: "#3a7aff" });
+// (owner, 2026-11-09) beams of light: an open cone from the lamp (its tip) down -y, brightest at the lamp and down the
+// middle, soft at the edges; the ground and anything in the way hides the rest of it
+const BEAM_CONE = new THREE.ConeGeometry(1, 1, 24, 1, true).translate(0, -0.5, 0);
+const beamMat = (c) => new THREE.ShaderMaterial({
+  uniforms: { c: { value: new THREE.Color(c) }, o: { value: 0.2 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  vertexShader: "varying vec3 vN; varying vec3 vV; varying float vT; void main() { vT = -position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalMatrix * normal; vV = -mv.xyz; gl_Position = projectionMatrix * mv; }",
+  fragmentShader: "uniform vec3 c; uniform float o; varying vec3 vN; varying vec3 vV; varying float vT; void main() { float e = abs(dot(normalize(vN), normalize(vV))); gl_FragColor = vec4(c * o * pow(e, 2.5) * (1.0 - 0.8 * clamp(vT, 0.0, 1.0)), 1.0);\n#include <colorspace_fragment>\n}",
+});
+const headBeamM = beamMat("#fff1c8"), searchBeamM = beamMat("#f4f7ff");
+const POOL_G = new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2);
+const headPoolM = new THREE.MeshBasicMaterial({ color: "#fff1c8", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })(), polygonOffset: true, polygonOffsetFactor: -2 });
 function vanModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
@@ -672,7 +699,14 @@ function vanModel() {
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
   const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.8, 0.25, 0.35); blue.position.set(0.45, 2.15, 1.6); body.add(blue);
   g.traverse((o) => (o.castShadow = true));
-  return { g, body, red, blue };
+  // (owner, 2026-11-09) headlights, on while it's moving: lamps, two beams reaching ahead and a pool of light on the road
+  const lamp = new THREE.MeshBasicMaterial({ color: "#6d6a5c" }), lit = new THREE.Group(), cones = [];
+  for (const x of [-0.78, 0.78]) {
+    const l = new THREE.Mesh(BOX, lamp); l.scale.set(0.42, 0.26, 0.08); l.position.set(x, 0.95, 2.55); body.add(l);
+    const c = new THREE.Mesh(BEAM_CONE, headBeamM); c.position.set(x, 0.95, 2.6); c.rotation.x = -(Math.PI / 2 - 0.09); c.scale.set(1.5, 10, 1.5); lit.add(c); cones.push(c);
+  }
+  const pool = new THREE.Mesh(POOL_G, headPoolM); pool.position.set(0, -0.12, 8.2); lit.add(pool); body.add(lit);
+  return { g, body, red, blue, lamp, lit, spd: 0 };
 }
 function heliModel() {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
@@ -683,25 +717,39 @@ function heliModel() {
   const tail = new THREE.Group(); tail.position.set(0.3, 0.9, -6.1); body.add(tail); box(0.05, 2, 0.25, "#2b3440", 0, 0, 0, tail);
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.5, 0.2, 0.5); red.position.set(-0.5, 1.05, 0.6); body.add(red);
   const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.5, 0.2, 0.5); blue.position.set(0.5, 1.05, 0.6); body.add(blue);
-  const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#fff6c0", transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide })); beam.position.y = -8; body.add(beam);
-  g.traverse((o) => { if (o !== beam) o.castShadow = true; });
-  return { g, body, red, blue, rotor, tail, beam };
+  g.traverse((o) => (o.castShadow = true));
+  // (owner, 2026-11-09) the searchlight (pets-world.js aims it): a lamp under the nose, a real light where it lands and
+  // the beam down to it; the light is always there (only its strength changes) so nothing has to recompile
+  box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#fffdf2" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
+  const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); scene.add(spot, spot.target);
+  const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
+  return { g, body, red, blue, rotor, tail, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
 const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
-const tmpS = {};
+const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
-  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0;
+  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0, dark = 1 - skyNow.day;
+  headBeamM.uniforms.o.value = 0.02 + 0.07 * dark; headPoolM.opacity = 0.04 + 0.5 * dark; searchBeamM.uniforms.o.value = me.inst ? 0 : 0.06 + 0.09 * dark;
   vehs.forEach((m, i) => {
-    if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; } }
-    else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; }
+    const px = m.x, pz = m.z;
+    if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; if (tmpS.ba !== undefined) { m.ba = tmpS.ba; m.bd = tmpS.bd; } } }
+    else { const v = localVs[i]; m.x = v.x; m.y = v.y; m.z = v.z; m.yaw = v.yaw; m.mode = v.mode; m.target = v.target; if (v.kind) { m.ba = v.ba; m.bd = v.bd; } }
     const chasing = m.mode === 1;
     if (!m.kind) {   // (owner, 2026-11-08: rear clipping into the road) sit on the front and rear wheels, a little above the road
       const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), front = terrain(m.x + sx * 1.6, m.z + sz * 1.6), rear = terrain(m.x - sx * 1.5, m.z - sz * 1.5);
       m.y = Math.max((front + rear) / 2, terrain(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
+      if (dt > 0) m.spd += (Math.min(40, hyp(m.x - px, m.z - pz) / dt) - m.spd) * Math.min(1, dt * 4);   // headlights while it's moving
+      const on = m.spd > 1.5; m.lit.visible = on; m.lamp.color.set(on ? "#fff8dc" : "#6d6a5c");
     }
-    else { m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06; m.beam.visible = chasing; }
+    else {
+      m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06;
+      const b = World.beamOf(m, beamB), len = (terrain(m.x + Math.sin(m.ba) * m.bd, m.z + Math.cos(m.ba) * m.bd) - b.ly) / Math.min(-0.05, b.dy) + 6;   // to the ground (and a little on: the ground hides it)
+      tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(World.BEAM.half); m.beam.scale.set(r, len, r);
+      m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
+      m.spot.intensity = me.inst ? 0 : 5 + 3 * dark;   // strong enough to see by day too
+    }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
     m.red.material.color.set(chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020"); m.blue.material.color.set(chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
   });
@@ -840,10 +888,14 @@ canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 const fmt = (n) => Math.floor(n).toLocaleString();
 function toast(txt, color) { const d = document.createElement("div"); d.textContent = txt; if (color) d.style.color = color; $("toast").appendChild(d); setTimeout(() => d.remove(), 1700); }
 const CANDY = `<svg class="ico" viewBox="0 0 24 24"><path d="M2 8l4 4-4 4zM22 8l-4 4 4 4z" fill="#ff9ccf" stroke="#a3226a" stroke-width="1.5" stroke-linejoin="round"/><circle cx="12" cy="12" r="6" fill="#ff5aa0" stroke="#a3226a" stroke-width="1.5"/><path d="M9 9.5c2 1 4 3 6 5" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-let hudKey = "";
+let hudKey = "", windKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
   const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
+  // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
+  const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
+  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3;
+  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
@@ -1212,7 +1264,7 @@ function setContract(c) {
 function onNet(m) {
   switch (m.t) {
     case "welcome": {
-      if (stale(m.web)) return;
+      if (stale(m.web, false, m.by)) return;
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
@@ -1248,12 +1300,12 @@ function onNet(m) {
         if ((st || 0) !== o.stars) { o.stars = st || 0; o.m.g.remove(o.tag); o.tag = nameTag(String(o.name || "Courier").slice(0, 18), o.stars); o.tag.position.y = o.m.top + 1.2; o.m.g.add(o.tag); }
       }
       break;
-    case "veh": serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); break;
+    case "veh": serverTime(m.ts); m.v.forEach((r, i) => { const h = vehs[i]; if (!h) return; pushSample(h.buf, m.ts, r.length > 6 ? { x: r[0], y: r[1], z: r[2], yaw: r[3], ba: r[6], bd: r[7] } : { x: r[0], y: r[1], z: r[2], yaw: r[3] }); h.mode = r[4]; h.target = r[5]; }); break;
     case "pet": { const o = others.get(m.id); if (o) addOther({ id: m.id, name: o.name, sp: m.sp, lv: m.lv, shirt: o.shirt, stars: o.stars, inst: o.inst, x: o.x, y: o.y, z: o.z, yaw: o.yaw }); break; }
     case "fx": { const o = others.get(m.id); if (o && o.inst === me.inst) emitConfetti(o.x, o.y + 2.5, o.z, 35, 4, 7); break; }
     case "chat": { const o = others.get(m.id); chatLine(o ? o.name : m.name, m.text); if (o) o.bub = bubble(m.text, o.bub, o.m.g, o.m.top); break; }
     case "chase": case "caught": case "escaped": case "stars": onVehEvent(m.t, m.stars || 0); break;
-    case "reload": stale(m.web, true); break;
+    case "reload": stale(m.web, true, m.by); break;
     case "contract": setContract(m.c); break;
     case "done": contractOver(m.won, m.pay || 0, m.progress || 0, !!m.helped); break;
     case "invited": invites.push({ from: m.from, name: m.name, kind: m.kind, until: performance.now() + 28000 }); renderInvite(); break;
@@ -1269,12 +1321,12 @@ function onNet(m) {
 // server); this page's own build is read from version.json when it loads
 let myBuild = null;
 fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.v) myBuild = j.v; }).catch(() => {});
-function stale(web, told) {
+function stale(web, told, by) {
   if (!told && (!web || !myBuild || web === myBuild)) return false;
   let lastR = 0; try { lastR = +sessionStorage.getItem("petdelivery.reload") || 0; } catch (e) { /* none */ }
   if (Date.now() - lastR < 60000) return false;   // never loop
   try { sessionStorage.setItem("petdelivery.reload", String(Date.now())); } catch (e) { /* private mode */ }
-  flushSave(true); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
+  flushSave(true); banner("Updating!", "#ffd35a", by ? by + "'s Update" : ""); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
   const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0, me.bag.length, me.foot ? 1 : 0].join();
@@ -1381,8 +1433,8 @@ function poiBubble(name, what) {
 for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
 function poiStep() {
   for (const q of POIS) {
-    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : clamp((70 - d) / 25, 0, 1);
-    q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 20) / 60, 0, 1); q.s.scale.set(6.4 * k, 2.2 * k, 1);
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : f * f;   // (owner, 2026-11-09) fainter the further, gone past 45 m
+    q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 15) / 60, 0, 0.3); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
 }
 // ---- townsfolk (owner, 2026-11-09): people who live in town: a keeper at each shop and a few folk around the post
@@ -2096,6 +2148,17 @@ function step(dt) {
     if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
+  // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
+  // and bumps it about a little; never on the ground, at home or inside
+  const gust = me.inst || stunned || !me.airborne || (kind !== "fly" && kind !== "glide") ? 0 : clamp((windNow.mph - 12) / 28, 0, 1);
+  if (gust > 0) {
+    const dr = gust * 1.4 * dt, side = gust * 0.7 * Math.sin(clock * 1.3) * Math.sin(clock * 0.47 + 1) * dt;
+    const free = (x, z) => hyp(x, z) <= LIMIT && !blocked(x, z, me.y) && !houseWall(x, z, me.y) && floorAt(x, z, me.y) < me.y - 0.5;
+    const nx = me.x + WIND.x * dr - WIND.z * side, nz = me.z + WIND.z * dr + WIND.x * side;
+    if (free(nx, me.z)) me.x = nx; if (free(me.x, nz)) me.z = nz;
+    me.y = Math.max(floorAt(me.x, me.z, me.y), me.y + gust * 0.6 * (Math.sin(clock * 2.1) + 0.5 * Math.sin(clock * 3.7 + 2)) * dt);
+    if (kind === "fly") me.y = Math.min(me.y, FLY_TOP);
+  }
   me.airborne = me.y - floor > 1.2;
   const low = me.y - floor < 3.5;
   const atHome = onMyPlot(1); if (atHome && !me.atHome) collectPens(); me.atHome = atHome;   // playpen coins, collected on coming home
@@ -2113,7 +2176,8 @@ function step(dt) {
   const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
   if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
   contractStep(); fxStep(dt);
-  for (const c of clouds) { c.position.x += dt * 1.5; if (c.position.x > 400) c.position.x = -400; }
+  const cs = (0.5 + windNow.mph * 0.08) * dt;   // clouds drift with the wind
+  for (const c of clouds) { c.position.x += WIND.x * cs; c.position.z += WIND.z * cs; for (const ax of ["x", "z"]) { if (c.position[ax] > 420) c.position[ax] -= 840; else if (c.position[ax] < -420) c.position[ax] += 840; } }
   // send where I am, 10 times a second (by the real clock) when it changes, and every 2 s regardless; save now and then
   if (netOk && now - lastSent > 50) { sendPos(now - lastActual > 1000); lastSent = now; }
   flushSave(false);
@@ -2165,4 +2229,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
