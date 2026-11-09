@@ -7,6 +7,12 @@
 
 export const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot, smooth = (t) => t * t * (3 - 2 * t);
+export const DAY_S = 1200;
+export function daylightAt(t) {
+  const el = Math.sin(((t % DAY_S) / DAY_S) * TAU) + 0.2;
+  return smooth(clamp((el + 0.08) / 0.35, 0, 1));
+}
+export const isDaylight = (t) => daylightAt(t) >= 0.5;
 
 // ---- noise ----
 function hash(ix, iz) { let h = (Math.imul(ix, 374761393) + Math.imul(iz, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -27,6 +33,7 @@ export const inside = (x, z, margin = 0) => hyp(x, z) < edgeR(Math.atan2(z, x)) 
 export const PLAZA = 50;
 export const POST = { x: 0, z: -10 }, PICKUP = { x: 0, z: 4, r: 4 }, BOARD = { x: 11, z: 4, r: 3 };
 export const SHOP = { x: 32, z: 2, r: 5 }, SHOP_B = { x: 32, z: -9 }, TRAIN = { x: -31, z: 2, r: 9 };
+export const MOUNT = { x: 28, z: 15, r: 5 }, MOUNT_B = { x: 28, z: 26 };   // the mount shop (owner, 2026-11-09)
 export const POUND = { x: 0, z: 36 }, RELEASE = { x: 0, z: 26 }, SPAWN = { x: 0, z: 14 };
 
 // ---- the land: rolling ground stepped into plateaus (the steps are cliffs), two big hills, flat at the plaza ----
@@ -152,6 +159,60 @@ export const PLOTS = [];
 export const VIP_ISLAND = { x: 0, z: 30, y: 62, r: 30 }, EXTRA_ISLAND = { x: 400, z: 0, y: 8, r: 48 };
 export const plotAt = (x, z) => PLOTS.find((p) => Math.abs(x - p.x) < PLOT / 2 && Math.abs(z - p.z) < PLOT / 2) || null;
 const nearPlot = (x, z, m) => PLOTS.some((p) => Math.abs(p.x - x) < PLOT / 2 + m && Math.abs(p.z - z) < PLOT / 2 + m);
+// ---- water (owner, 2026-11-09): a small lake in the low ground out past the outer road, two rivers from it running off
+// the island's edge in waterfalls, and a stream stepping down the terraces into it (small falls at each step). WAT holds
+// the water's surface on the height grid (also a little past the shore, so it reads smoothly); water is wherever the
+// land is under it. Swimmers swim in it; everyone else can't wade in from the shore. ----
+const WAT = new Float32Array(GN * GN).fill(-1e9);
+const polar = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
+export const LAKE = { x: polar(2.42, 208)[0], z: polar(2.42, 208)[1], r: 15, y: -0.4 };
+const lakeR = (a) => LAKE.r + 3 * Math.sin(2 * a + 1) + 2 * Math.sin(3 * a + 0.4);
+// each: the path (downstream), its half width and depth; outflows end past the edge
+export const RIVERS = [
+  { pts: [polar(2.4, 196), polar(2.3, 206), polar(2.22, 218), polar(2.17, 232), polar(2.15, 252)], hw: 4.2, deep: 2, fall: true },
+  { pts: [polar(2.4, 216), polar(2.37, 228), polar(2.32, 238), polar(2.29, 262)], hw: 3.6, deep: 1.8, fall: true },
+  { pts: [polar(2.84, 204), polar(2.75, 209), polar(2.66, 210), polar(2.56, 211), polar(2.47, 209), polar(2.43, 208)], hw: 3, deep: 1.2 },
+].map((R) => Object.assign(R, sampleRoad(R.pts, false)));
+{
+  const ORIG = HGT.slice(), at = (A, x, z) => sample(A, x, z);
+  // the surface along each river: it never rises going downstream; outflows leave at the lake's level
+  for (const R of RIVERS) {
+    let y = R.fall ? LAKE.y : at(ORIG, R.pts[0][0], R.pts[0][1]) - 0.4;
+    R.y = R.pts.map(([x, z]) => (y = Math.min(y, Math.max(LAKE.y, at(ORIG, x, z) - 0.4))));
+    if (!R.fall) R.y[R.y.length - 1] = LAKE.y;
+    if (!R.fall) R.y = R.y.map((_, n) => { let t = 0, c = 0; for (let m = n - 2; m <= n + 2; m++) if (m >= 0 && m < R.y.length) { t += R.y[m]; c++; } return t / c; });   // falls spread over a few metres
+  }
+  const lower = (k, v) => { if (v < HGT[k]) HGT[k] = v; };
+  const wet = (k, y) => { if (WAT[k] < -1e8 || y < WAT[k]) WAT[k] = y; };
+  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) {
+    const x = G0 + i * G, z = G0 + j * G, k = j * GN + i;
+    // the lake: a bowl, its banks sloping down to the water
+    const dl = hyp(x - LAKE.x, z - LAKE.z) - lakeR(Math.atan2(z - LAKE.z, x - LAKE.x));
+    if (dl < 14) {
+      if (dl < 0) lower(k, LAKE.y - 3 * smooth(clamp(-dl / 7, 0, 1)) - 0.3);
+      else lower(k, LAKE.y + 0.25 + dl * 1.1);
+      if (dl < 5) wet(k, LAKE.y);
+    }
+    for (const R of RIVERS) {
+      let bd = 1e9, bi = 0; for (let n = 0; n < R.pts.length; n++) { const d = hyp(R.pts[n][0] - x, R.pts[n][1] - z); if (d < bd) { bd = d; bi = n; } }
+      if (bd > R.hw + 14) continue;
+      const y = R.y[bi], d = bd - R.hw;
+      if (d < 0) lower(k, y - R.deep * smooth(clamp(-d / R.hw, 0, 1)) - 0.3);
+      else lower(k, y + 0.25 + d * 1.1);
+      if (d < 5) wet(k, y);
+    }
+  }
+}
+// the water's surface here, or -Infinity on dry land
+export function waterAt(x, z) {
+  const fx = (x - G0) / G, fz = (z - G0) / G; if (fx < 0 || fz < 0 || fx >= GN - 1 || fz >= GN - 1) return -Infinity;
+  const i = Math.floor(fx), j = Math.floor(fz), k = j * GN + i;
+  if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + GN] < -1e8 || WAT[k + GN + 1] < -1e8) return -Infinity;
+  const y = sample(WAT, x, z); return terrain(x, z) < y - 0.05 ? y : -Infinity;
+}
+// the water grid, for drawing it: [x0, step, n, surface heights (-1e9 where there's none)]
+export const waterGrid = () => ({ x0: G0, step: G, n: GN, w: WAT });
+const nearWater = (x, z, m) => { for (const [a, b] of [[0, 0], [-m, 0], [m, 0], [0, -m], [0, m], [-m, -m], [m, m], [-m, m], [m, -m]]) if (waterAt(x + a, z + b) > -Infinity) return true; return false; };
 for (const R of ROADS) {
   for (let s = 12; s < R.len - 8; s += 15) {
     const p = roadAt(R, s);
@@ -161,6 +222,7 @@ for (const R of ROADS) {
       if (houses.some((h) => hyp(h.x - x, h.z - z) < 12.5) || nearPlot(x, z, 7)) continue;
       const yaw = Math.atan2(-rx, -rz), c = Math.cos(yaw), sn = Math.sin(yaw), corners = [[-5, -5], [5, -5], [-5, 5], [5, 5], [0, 0]].map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c]);
       if (corners.some(([cx, cz]) => roadDist(cx, cz) < 5.2)) continue;
+      if (nearWater(x, z, 9) || nearWater(p.x + rx * 6, p.z + rz * 6, 3)) continue;   // (owner, 2026-11-09) not by the water
       const hs = corners.map(([cx, cz]) => terrain(cx, cz)), lo = Math.min(...hs);
       if (Math.max(...hs) - lo > 5) continue;
       const mx = p.x + rx * 6, mz = p.z + rz * 6;
@@ -188,11 +250,11 @@ for (const isl of ISLANDS) {
   for (let k = 0; k < 3; k++) { const a = (k * TAU) / 3 + 1, x = isl.x + Math.cos(a) * isl.r * 0.75, z = isl.z + Math.sin(a) * isl.r * 0.75; trees.push({ x, z, y: isl.y, s: 0.7 + rand() * 0.4 }); }
 }
 // the plaza's buildings
-solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9); solid(POUND.x, POUND.z + 3, 0, 8, 4, -1, 7);
+solid(POST.x, POST.z, 0, 9, 5, -1, 8); solid(SHOP_B.x, SHOP_B.z, 0, 6, 4, -1, 9); solid(MOUNT_B.x, MOUNT_B.z, 0, 6, 4, -1, 9); solid(POUND.x, POUND.z + 3, 0, 8, 4, -1, 7);
 // trees on open ground
 for (let n = 0; n < 1400 && trees.length < 340; n++) {
   const a = rand() * TAU, r = Math.sqrt(rand()) * R_TOWN, x = Math.cos(a) * r, z = Math.sin(a) * r;
-  if (!inside(x, z, 5) || r < PLAZA + 4 || roadDist(x, z) < 7.5) continue;
+  if (!inside(x, z, 5) || r < PLAZA + 4 || roadDist(x, z) < 7.5 || nearWater(x, z, 3)) continue;
   if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 8.5) || nearPlot(x, z, 3)) continue;
   const y = terrain(x, z); if (Math.abs(terrain(x + 2, z) - y) + Math.abs(terrain(x, z + 2) - y) > 1.6) continue;
   trees.push({ x, z, y, s: 0.8 + rand() * 0.6 });
@@ -215,16 +277,17 @@ export function blocked(x, z, y) {
 // in the light for half a second is caught (wherever they are, in the air too). Caught: off to the pound, wanted level
 // cleared. Getting away from a van raises your wanted level (up to 5); it drops a star every 25 s nobody's after you.
 export const WANTED_MAX = 5, WANTED_COOL = 25, IMMUNE = 7;
-const VAN = { patrol: 8, chase: 9.5, perStar: 1.3, spot: 16, time: 3, timeStar: 0.8, catch: 2.6 };
-const HELI = { patrol: 10, alt: 26 };
+const VAN = { patrol: 8, chase: 9.5, perStar: 1.3, spot: 16, front: 5, side: 2, rear: 2, time: 3, timeStar: 0.8, catch: 2.6 };
+const VAN_SPEEDS = [0.85, 1, 1.15];   // compact / van / SUV: deliberately slower, standard and faster patrol cars
+const HELI = { patrol: 11.5, alt: 26 };
 // the searchlight: cone half-angle (rad), turning speed (rad/s, a random 60-140% of it, flipping every 3-8 s), how far
 // out the spot goes (m, sideways from under the helicopter), seconds in the light before you're caught
-export const BEAM = { half: 0.14, turn: 0.45, near: 6, far: 24, hold: 0.5 };
+export const BEAM = { half: 0.14, flyHalf: 0.2, turn: 0.45, near: 6, far: 24, hold: 0.5 };
 export function makeVehicles() {
   const vs = [];
-  const van = (road, s, dir) => vs.push({ kind: 0, road, s, dir, x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
-  van(0, 0, 1); van(0, ROADS[0].len / 2, -1); van(1, 0, 1); van(1, ROADS[1].len / 3, -1); van(1, (ROADS[1].len * 2) / 3, 1);
-  van(2, 20, 1); van(4, 60, 1); van(6, 40, -1);
+  const van = (road, s, dir, style) => vs.push({ kind: 0, road, s, dir, style, speed: VAN_SPEEDS[style], x: 0, y: 0, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0 });
+  van(0, 0, 1, 1); van(0, ROADS[0].len / 2, -1, 0); van(1, 0, 1, 2); van(1, ROADS[1].len / 3, -1, 1); van(1, (ROADS[1].len * 2) / 3, 1, 0);
+  van(2, 20, 1, 2); van(4, 60, 1, 1); van(6, 40, -1, 2);
   for (const ph of [0, Math.PI]) vs.push({ kind: 1, ph, x: 0, y: 40, z: 0, yaw: 0, mode: 0, target: 0, t: 0, cool: 0, ba: ph, bd: 15, bw: 0, bt: 0, bn: 0, bp: ph });
   for (const v of vs) placePatrol(v, 0, true);
   return vs;
@@ -232,7 +295,7 @@ export function makeVehicles() {
 function placePatrol(v, dt, snap) {
   let tx, tz, ty, yaw;
   if (v.kind === 0) {
-    const R = ROADS[v.road]; v.s += v.dir * VAN.patrol * dt;
+    const R = ROADS[v.road]; v.s += v.dir * VAN.patrol * v.speed * dt;
     if (R.loop) v.s = ((v.s % R.len) + R.len) % R.len; else if (v.s > R.len) { v.s = R.len; v.dir = -1; } else if (v.s < 0) { v.s = 0; v.dir = 1; }
     const p = roadAt(R, v.s), fx = p.fx * v.dir, fz = p.fz * v.dir;
     tx = p.x - fz * 2; tz = p.z + fx * 2; yaw = Math.atan2(fx, fz); ty = terrain(tx, tz);
@@ -252,11 +315,11 @@ export function beamOf(v, out = {}) {
   out.lx = lx; out.ly = ly; out.lz = lz; out.dx = dx / d; out.dy = dy / d; out.dz = dz / d; return out;
 }
 const beamTmp = {};
-function lit(b, p) {   // is the player (a 1.6 m ball around their middle) in this light?
+export function beamHits(b, p) {   // is the player (a 1.6 m ball around their middle) in this light?
   const wx = p.x - b.lx, wy = p.y + 1 - b.ly, wz = p.z - b.lz, along = wx * b.dx + wy * b.dy + wz * b.dz;
   if (along <= 0) return false;
   const off = hyp(wx - b.dx * along, wy - b.dy * along, wz - b.dz * along);
-  return off < along * Math.tan(BEAM.half) + 0.8;
+  return off < along * Math.tan(p.airMount ? BEAM.flyHalf : BEAM.half) + 0.8;
 }
 function stepHeli(v, dt, now) {
   placePatrol(v, dt, false);
@@ -274,13 +337,16 @@ function catchPlayer(p, vs, now, ev) {
 export function stepVehicles(vs, players, dt, now) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
-  // the helicopters' searchlights
+  // The helicopters keep circling by day, but their searchlights only work once daylight has faded.
+  const daylight = isDaylight(now);
   const inLight = new Set();
   for (const v of vs) {
     if (v.kind !== 1) continue;
-    stepHeli(v, dt, now); beamOf(v, beamTmp); v.mode = 0;
+    stepHeli(v, dt, now); v.mode = 0;
+    if (daylight) continue;
+    beamOf(v, beamTmp);
     for (const p of players) {
-      if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !lit(beamTmp, p)) continue;
+      if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !beamHits(beamTmp, p)) continue;
       inLight.add(p); v.mode = 1; v.target = p.id;
     }
   }
@@ -298,7 +364,7 @@ export function stepVehicles(vs, players, dt, now) {
       if (!p || p.immuneUntil > now || !insideWorld(p) || !p.bag) { v.mode = 2; v.cool = now + 4; }
       else {
         v.t -= dt; p.lastChased = now;
-        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = C.chase + C.perStar * p.stars;
+        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz), sp = (C.chase + C.perStar * p.stars) * v.speed;
         if (d > 0.01) { const m = Math.min(d, sp * dt); v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 10)); }
         v.y = terrain(v.x, v.z);
         if (d < C.catch && p.y - terrain(p.x, p.z) < 3) catchPlayer(p, vs, now, ev);
@@ -312,7 +378,7 @@ export function stepVehicles(vs, players, dt, now) {
     }
     if (v.mode === 2) {   // back to its road
       const p = roadAt(ROADS[v.road], v.rs), fx = p.fx * v.dir, fz = p.fz * v.dir, tx = p.x - fz * 2, tz = p.z + fx * 2;
-      const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * 1.4 * dt);
+      const dx = tx - v.x, dz = tz - v.z, d = hyp(dx, dz), m = Math.min(d, C.patrol * v.speed * 1.4 * dt);
       if (d > 0.01) { v.x += (dx / d) * m; v.z += (dz / d) * m; v.yaw = turn(v.yaw, Math.atan2(dx, dz), Math.min(1, dt * 8)); }
       v.y = terrain(v.x, v.z);
       if (d < 1) { v.mode = 0; v.s = v.rs; }
@@ -322,8 +388,12 @@ export function stepVehicles(vs, players, dt, now) {
       for (const p of players) {
         if (p.immuneUntil > now || !insideWorld(p) || !p.bag) continue;
         if (p.y - terrain(p.x, p.z) > 6) continue;
-        const d = hyp(p.x - v.x, p.z - v.z);
-        if (d < C.spot + 7 * p.stars && d < bd) { bd = d; best = p; }
+        const dx = p.x - v.x, dz = p.z - v.z, d = hyp(dx, dz);
+        if (d < 0.01) { best = p; bd = 0; continue; }
+        const forward = (dx * Math.sin(v.yaw) + dz * Math.cos(v.yaw)) / d;
+        const sideways = Math.abs(dx * Math.cos(v.yaw) - dz * Math.sin(v.yaw)) / d;
+        const sight = C.spot + Math.max(0, forward) * C.front + sideways * C.side - Math.max(0, -forward) * C.rear + 7 * p.stars;
+        if (d < sight && d < bd) { bd = d; best = p; }
       }
       if (best) { v.mode = 1; v.target = best.id; v.t = C.time + C.timeStar * best.stars; ev.push({ k: "chase", id: best.id }); }
     }
@@ -368,7 +438,7 @@ export function starterHouse() {
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
   d = d && typeof d === "object" ? d : {};
-  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => ({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }));
+  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => Object.assign({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }, int(p.tp, 0, 999, 0) ? { tp: int(p.tp, 0, 999, 0) } : {}));   // tp: training points toward the next level (owner, 2026-11-09)
   const ids = new Set(); const uniq = pets.filter((p) => !ids.has(p.id) && ids.add(p.id));
   if (!uniq.length) uniq.push({ id: 1, sp: "pup", lv: 1 });
   const items = d.items || {}, treats = {};

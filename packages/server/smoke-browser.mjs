@@ -7,6 +7,7 @@ process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import { chromium } from "playwright-core";
 
@@ -20,7 +21,7 @@ if (!chrome) {
 }
 
 const { attachPets } = await import("./src/pets.js");
-const app = express(); app.use(express.static(new URL("../../website/", import.meta.url).pathname));
+const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
 attachPets(server, { allowLocal: true });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -43,6 +44,27 @@ try {
   await page.fill("input[placeholder=Password]", "smoke-check-1");
   await page.click("text=Create account");
   await user.waitFor({ state: "hidden", timeout: 20000 });
+  step = "check animal-control lights by day and night";
+  const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
+  const waitForLights = async (day) => {
+    for (let i = 0; i < 50; i++) {
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      if (ready) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`animal-control lights did not turn ${day ? "off in daylight" : "on at night"}`);
+  };
+  await setSkyPhase(0.25);
+  await waitForLights(true);
+  await setSkyPhase(0.75);
+  await waitForLights(false);
+  step = "check the airborne wind speed rules";
+  const windFactors = await page.evaluate(() => {
+    const f = window.Pets.windRideFactor;
+    return [f("fly", true, 1, 0, 1, 0), f("glide", true, -1, 0, 1, 0), f("fly", true, 0, 1, 1, 0), f("land", true, 1, 0, 1, 0), f("fly", false, 1, 0, 1, 0)];
+  });
+  const expectedWindFactors = [1.1, 0.95, 1, 1, 1];
+  if (windFactors.some((n, i) => Math.abs(n - expectedWindFactors[i]) > 0.0001)) problems.push(`airborne wind speed factors are wrong (${windFactors.join(", ")})`);
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
@@ -58,6 +80,17 @@ try {
     P.endTalk(); await wait(100); return P.talk ? "the talk didn't end" : "";
   });
   if (talked) problems.push(talked);
+  // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
+  step = "buy a pet in the mount shop";
+  await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
+  await page.locator("#shopname", { hasText: "Mount Shop" }).waitFor({ timeout: 5000 });
+  await page.locator("#shopcash", { hasText: "3,000" }).waitFor({ timeout: 5000 });
+  const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
+  if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
+  await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });
+  const bought = await page.evaluate(() => { const s = window.Pets.save; return { coins: s.coins, sp: s.pets.find((p) => p.id === s.ride).sp, cash: document.getElementById("shopcash").textContent }; });
+  if (bought.coins !== 500 || bought.sp !== "dragon" || bought.cash !== "500") problems.push("buying a Dragon for 2,500: " + JSON.stringify(bought));
+  await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14); });
   // a second player joins and flies off: the first must see them move (issue #7: a joiner could look frozen)
   step = "see a second player move";
   browser2 = await chromium.launch({ executablePath: chrome, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });   // its own browser, so neither page is a background tab

@@ -19,8 +19,31 @@ ok(W.PLOTS.length === 16 && W.PLOTS.every((p) => Number.isFinite(p.x) && Number.
 ok(W.houses.length > 50 && W.ROADS.length >= 8, "town generated");
 const again = W.cleanData(fresh, SPECIES); ok(JSON.stringify(again) === JSON.stringify(fresh), "cleanData is stable");
 const vs = W.makeVehicles(), player = { id: 1, x: vs[0].x + 3, y: W.terrain(vs[0].x + 3, vs[0].z), z: vs[0].z, bag: 2, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+const vans = vs.filter((v) => v.kind === 0);
+ok(new Set(vans.map((v) => v.style)).size === 3 && new Set(vans.map((v) => v.speed)).size === 3, "animal control has three vehicle styles and speeds");
+const spottedAt = (angle, distance, bag = 1) => {
+  const v = W.makeVehicles()[0], a = v.yaw + angle, x = v.x + Math.sin(a) * distance, z = v.z + Math.cos(a) * distance;
+  const p = { id: 2, x, y: W.terrain(x, z), z, bag, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };
+  W.stepVehicles([v], [p], 0, 100); return v.mode === 1;
+};
+ok(spottedAt(0, 20) && spottedAt(Math.PI / 2, 17), "vans see farther ahead and to the sides");
+ok(!spottedAt(Math.PI, 15) && !spottedAt(0, 10, 0), "vans see less behind and ignore couriers without parcels");
+const testBeam = { lx: 0, ly: 20, lz: 0, dx: 0, dy: -1, dz: 0 }, beamPlayer = { x: 4, y: 0, z: 0 };
+ok(!W.beamHits(testBeam, beamPlayer) && W.beamHits(testBeam, { ...beamPlayer, airMount: true }), "helicopter beam is wider for flying mounts");
 let caught = false; for (let i = 0; i < 200 && !caught; i++) caught = W.stepVehicles(vs, [player], 0.1, 100 + i * 0.1).some((e) => e.k === "caught");
 ok(caught, "animal control catches a parcel carrier");
+const heliEventsAt = (start) => {
+  const heli = W.makeVehicles().find((v) => v.kind === 1), litPlayer = { id: 2, bag: 1, stars: 0, lastChased: start, lastStar: 0, immuneUntil: 0 }, events = [];
+  for (let i = 0; i < 8; i++) {
+    const b = W.beamOf(heli), along = 12;
+    Object.assign(litPlayer, { x: b.lx + b.dx * along, y: b.ly + b.dy * along - 1, z: b.lz + b.dz * along });
+    events.push(...W.stepVehicles([heli], [litPlayer], 0.1, start + i * 0.1));
+  }
+  return events;
+};
+ok(W.isDaylight(300) && !W.isDaylight(900), "the shared clock identifies daylight and night");
+ok(!heliEventsAt(300).some((e) => e.k === "chase" || e.k === "caught"), "helicopter searchlights do not work in daylight");
+ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers at night");
 
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
@@ -60,6 +83,18 @@ try {
   a.send({ t: "save", rev: wa.rev, data: d }); await a.wait((m) => m.t === "data", "stale save answered with the latest copy");
   // chat
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
+  // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
+  const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
+  ok((await n.wait((m) => m.t === "welcome", "owner welcome")).role === "admin", "the owner is admin");
+  n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
+  const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
+  ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
+  b.send({ t: "admin", op: "quick", cmd: "coins", n: 5000, name: "smokeB" });   // a player: nothing happens
+  n.send({ t: "admin", op: "quick", cmd: "coins", n: 2500, name: "Nyssary" });
+  ok((await n.wait((m) => m.t === "data", "owner's own coins")).data.coins === 2500, "quick coins on yourself");
+  n.send({ t: "admin", op: "quick", cmd: "unwanted", name: "smokeB" }); await b.wait((m) => m.t === "stars" && m.stars === 0, "wanted cleared");
+  ok(b.inbox.every((m) => m.t !== "data" || m.data.coins === db1.coins), "a player's quick command is ignored");
+  n.ws.close();
   // logging in again replaces the old connection
   const a2 = client("A2"); await a2.open; a2.send({ t: "resume", token: wa.token, sp: "pup" });
   await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");

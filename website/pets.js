@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100004";
+import * as World from "./pets-world.js?v=1793100042";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -20,14 +20,16 @@ const SPECIES = {
   pup: { name: "Pup", r: 0, speed: 7, bag: 2, c: "#c98b4f", a: "#7a4f28", body: "quad", ears: "flop", size: 1 },
   kitten: { name: "Kitten", r: 0, speed: 7.5, bag: 2, c: "#f2a65a", a: "#fff1e0", body: "quad", ears: "point", size: 0.9 },
   bunny: { name: "Bunny", r: 0, speed: 8, bag: 2, c: "#f4f1ee", a: "#f3a7b5", body: "quad", ears: "long", size: 0.9 },
-  duck: { name: "Duck", r: 0, speed: 6.5, bag: 3, c: "#ffd84a", a: "#f08a24", body: "bird", size: 0.9 },
+  duck: { name: "Duck", r: 0, speed: 6.5, bag: 3, swim: true, c: "#ffd84a", a: "#f08a24", body: "bird", size: 0.9 },
   fox: { name: "Fox", r: 1, speed: 9.5, bag: 3, c: "#e8722c", a: "#fff4ea", body: "quad", ears: "point", size: 1 },
-  penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
+  otter: { name: "Otter", r: 1, speed: 9, bag: 3, swim: true, c: "#7a5232", a: "#e2c29a", body: "quad", ears: "round", size: 1 },
+  penguin: { name: "Penguin", r: 1, speed: 8.5, bag: 4, swim: true, c: "#2b3440", a: "#f4f4f4", body: "bird", size: 1 },
   goat: { name: "Goat", r: 1, speed: 9, bag: 4, c: "#e6e1d6", a: "#9b8f7a", body: "quad", ears: "horns", size: 1.05 },
   butterfly: { name: "Butterfly", r: 1, speed: 9, bag: 2, fly: "fly", c: "#3a8ee6", a: "#ffd84a", c2: "#e5534b", body: "butterfly", size: 1.1 },
   parrot: { name: "Parrot", r: 1, speed: 9.5, bag: 3, fly: "glide", c: "#3fb36b", a: "#e5534b", body: "bird", wings: true, size: 1 },
   stego: { name: "Stegosaurus", r: 1, speed: 8.5, bag: 5, c: "#7fae5a", a: "#e08a3a", body: "quad", plates: true, tail: "long", size: 1.25 },
   deer: { name: "Deer", r: 2, speed: 11.5, bag: 3, c: "#b9824e", a: "#f3e3cc", body: "quad", ears: "antlers", size: 1.15 },
+  turtle: { name: "Sea Turtle", r: 2, speed: 10.5, bag: 6, swim: true, c: "#7cb85a", a: "#8a6a3a", body: "quad", size: 1.15 },
   bear: { name: "Bear", r: 2, speed: 10, bag: 6, c: "#6b4a32", a: "#c9a27e", body: "quad", ears: "round", size: 1.3 },
   horse: { name: "Horse", r: 2, speed: 12.5, bag: 4, c: "#8a5a3a", a: "#2b1d14", body: "quad", ears: "point", legs: 1.4, size: 1.2 },
   owl: { name: "Owl", r: 2, speed: 11, bag: 4, fly: "fly", c: "#9b7a55", a: "#f3e3cc", body: "bird", wings: true, ears: "tufts", size: 1.15 },
@@ -46,13 +48,15 @@ const EGGS = [
   { id: "basic", name: "Basic Egg", price: 150, odds: [72, 24, 4, 0], c: "#f4ead8", s: "#d8c39c" },
   { id: "gold", name: "Golden Egg", price: 1500, odds: [0, 60, 32, 8], c: "#ffd35a", s: "#e89a10" },
 ];
+// (owner, 2026-11-09) the mount shop sells every pet: Legendary 2,500, and each rarity below a random 500-750 less
+// than the one above (drawn once per pet, so each pet keeps its price)
+const MOUNT_PRICE = { pup: 775, kitten: 625, bunny: 675, duck: 800, fox: 1250, penguin: 1300, goat: 1325, butterfly: 1150, parrot: 1325, stego: 1200, deer: 1925, bear: 1775, horse: 1775, owl: 1850, trike: 1975, raptor: 1925, dragon: 2500, unicorn: 2500, pegasus: 2500, phoenix: 2500, trex: 2500, ptero: 2500, icedragon: 2500 };
 // training: each level +5% speed (up to level 20), every 5 levels one more parcel in the bag
 const MAXLV = 20;
 const petSpeed = (p) => SPECIES[p.sp].speed * (1 + 0.05 * (p.lv - 1));
 const petBag = (p) => SPECIES[p.sp].bag + Math.floor((p.lv - 1) / 5);
 // (owner, 2026-11-08) a pet grows a little with each level: 1.5% bigger per level
 const petScale = (lv) => 1 + 0.015 * ((lv || 1) - 1);
-const trainCost = (p) => Math.round(40 * Math.pow(1.32, p.lv - 1) * [1, 1.6, 2.6, 4][SPECIES[p.sp].r]);
 // items dropped by deliveries (and contracts that fall short)
 const ITEMS = { snack: { name: "Speed Candy", c: "#ff5aa0" }, ribbon: { name: "Training Ribbon", c: "#e5534b" }, ticket: { name: "Egg Ticket", c: "#f2b01e" } };
 // (owner, 2026-11-08) Treats, like a kind's candy: a spare pet (you have another of its kind) can go live on the Pet
@@ -79,7 +83,7 @@ const flies = () => !!SPECIES[riding().sp].fly;
 
 // ---- the world (shared with the server: pets-world.js): the town is a big floating island of plateaus and cliffs with
 // winding roads, houses along them and the plaza in the middle; small islands float off its edge ----
-const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, TRAIN, POUND, RELEASE, SPAWN } = World;
+const { terrain, smoothTerrain, inside, edgeR, ROADS, ROAD_HALF, houses, trees, ISLANDS, islandAt, blocked, PLAZA, POST, PICKUP, BOARD, SHOP, SHOP_B, MOUNT, MOUNT_B, TRAIN, POUND, RELEASE, SPAWN } = World;
 let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
@@ -130,7 +134,7 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
   const rocks = [], rr = World.rng(77);
   for (let n = 0; n < 9000 && rocks.length < 320; n++) {
     const a = rr() * TAU, r = Math.sqrt(rr()) * (World.R_TOWN - 6), x = Math.cos(a) * r, z = Math.sin(a) * r;
-    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9) continue;
+    if (!inside(x, z, 4) || r < PLAZA + 6 || World.roadDist(x, z) < 9 || World.waterAt(x, z) > -Infinity || World.waterAt(x + 3, z) > -Infinity || World.waterAt(x - 3, z) > -Infinity || World.waterAt(x, z + 3) > -Infinity || World.waterAt(x, z - 3) > -Infinity) continue;
     const slope = hyp(terrain(x + 2, z) - terrain(x - 2, z), terrain(x, z + 2) - terrain(x, z - 2)) / 4; if (slope < 0.9) continue;
     if (houses.some((h) => !h.sky && hyp(h.x - x, h.z - z) < 9)) continue;
     const lo = Math.min(terrain(x + 2, z), terrain(x - 2, z), terrain(x, z + 2), terrain(x, z - 2)), tall = rr() < 0.55;
@@ -168,6 +172,183 @@ ROADS.forEach((R, k) => {
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
   const m = new THREE.Mesh(g, roadM); m.receiveShadow = true; scene.add(m);
 });
+// ---- water (owner, 2026-11-09): the lake, its rivers and the stream (pets-world.js), drawn over the height grid: deeper
+// is darker, steep runs (the stream's small falls) foam white; ripples drift across. Where a river runs off the edge it
+// pours over in a waterfall with spray at the lip. ----
+const waterTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ffffff"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "rgba(255,255,255,0.0)"; for (let k = 0; k < 40; k++) { const x = Math.random() * 128, y = Math.random() * 128, w = 8 + Math.random() * 18; g.strokeStyle = `rgba(190,225,255,${0.5 + Math.random() * 0.5})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + w / 2, y - 3, x + w, y); g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const fallTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#cfeaff"; g.fillRect(0, 0, 64, 128); for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`; g.fillRect(Math.random() * 64, Math.random() * 128, 1 + Math.random() * 3, 10 + Math.random() * 40); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const mistTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+const mists = [];
+{
+  const { x0, step: G, n, w: WAT } = World.waterGrid(), pos = [], col = [], uv = [], idx = [], vid = new Map(), c = new THREE.Color();
+  const DEEP = new THREE.Color("#2f7fc4"), SHALLOW = new THREE.Color("#5cc3e8"), FOAM = new THREE.Color("#f2fbff");
+  const vert = (i, j) => {
+    const k = j * n + i; if (vid.has(k)) return vid.get(k);
+    const x = x0 + i * G, z = x0 + j * G, y = WAT[k], d = clamp((y - terrain(x, z)) / 2.5, 0, 1);
+    const sl = Math.max(Math.abs((WAT[k + 1] > -1e8 ? WAT[k + 1] : y) - y), Math.abs((WAT[k + n] > -1e8 ? WAT[k + n] : y) - y), Math.abs((WAT[k - 1] > -1e8 ? WAT[k - 1] : y) - y), Math.abs((WAT[k - n] > -1e8 ? WAT[k - n] : y) - y)) / G;
+    c.copy(SHALLOW).lerp(DEEP, d).lerp(FOAM, smooth(clamp((sl - 0.25) / 0.6, 0, 1)));
+    pos.push(x, y + 0.02, z); col.push(c.r, c.g, c.b); uv.push(x / 14, z / 14); vid.set(k, pos.length / 3 - 1); return pos.length / 3 - 1;
+  };
+  for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+    const k = j * n + i; if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + n] < -1e8 || WAT[k + n + 1] < -1e8) continue;
+    const x = x0 + i * G, z = x0 + j * G; if (![[0, 0], [G, 0], [0, G], [G, G]].some(([a, b]) => terrain(x + a, z + b) < WAT[k] - 0.05)) continue;
+    const a = vert(i, j), b = vert(i + 1, j), cc = vert(i, j + 1), d = vert(i + 1, j + 1); idx.push(a, cc, b, b, cc, d);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: waterTex, transparent: true, opacity: 0.86, depthWrite: false })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
+  // the waterfalls: where each outflowing river crosses the edge, a sheet of water pours over and down, thinning out
+  const fallM = new THREE.MeshBasicMaterial({ map: fallTex, transparent: true, vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
+  for (const R of World.RIVERS) if (R.fall) {
+    let e = R.pts.findIndex(([x, z]) => !inside(x, z)); if (e < 1) continue; e--;
+    const [ex, ez] = R.pts[e], [px, pz] = R.pts[Math.max(0, e - 3)], dl = hyp(ex - px, ez - pz) || 1, fx = (ex - px) / dl, fz = (ez - pz) / dl, rx = -fz, rz = fx, y0 = R.y[e];
+    const fp = [], fc = [], fu = [], fi = [], COLS = 6, ROWS = 18;
+    for (let r = 0; r <= ROWS; r++) { const t = r / ROWS, drop = t * t * 130 + t * 6, out = 1 + Math.sqrt(t) * 9; for (let q = 0; q <= COLS; q++) { const s = (q / COLS - 0.5) * 2 * R.hw * (1 + t * 0.6); fp.push(ex + fx * out + rx * s, y0 - drop, ez + fz * out + rz * s); fc.push(1, 1, 1, (1 - t) * (0.95 - Math.abs(q / COLS - 0.5) * 0.6)); fu.push(q / COLS, t * 6); } }
+    for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) { const a = r * (COLS + 1) + q, b = a + 1, c2 = a + COLS + 1, d = c2 + 1; fi.push(a, c2, b, b, c2, d); }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute("color", new THREE.Float32BufferAttribute(fc, 4)); fg.setAttribute("uv", new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi);
+    const fm = new THREE.Mesh(fg, fallM); fm.renderOrder = 2; scene.add(fm);
+    for (let k = 0; k < 7; k++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.55, depthWrite: false })), t = k / 6, out = 2 + Math.sqrt(t) * 9; s.position.set(ex + fx * out + rx * (Math.random() - 0.5) * R.hw, y0 - t * t * 60 - 1, ez + fz * out + rz * (Math.random() - 0.5) * R.hw); s.userData = { y: s.position.y, ph: k * 1.3, sz: 5 + t * 10 }; s.scale.setScalar(s.userData.sz); scene.add(s); mists.push(s); }
+  }
+}
+function waterStep(dt) {
+  waterTex.offset.x += dt * 0.015; waterTex.offset.y += dt * 0.01; fallTex.offset.y += dt * 1.6;
+  for (const s of mists) { const u = s.userData; s.position.y = u.y + Math.sin(clock * 0.8 + u.ph) * 0.6; s.scale.setScalar(u.sz * (1 + Math.sin(clock * 1.3 + u.ph) * 0.12)); }
+}
+// ---- speed boosts (owner, 2026-11-09): glowing arrow pads on the roads, rings in the air and rings on the water; run,
+// fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too) ----
+const PAD_BOOST = 1.6, PAD_TIME = 5000;
+const BOOSTS = [];
+{
+  for (const R of ROADS) for (let s = 45; s < R.len - 20; s += 115) { const p = World.roadAt(R, s); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
+  for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
+  for (const [x, z, y] of [[0, 8, 34], [0, 18, 48], [-40, -20, 60], [60, 40, 70], [-90, -70, 80], [20, 110, 82]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
+  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 3 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 3 });
+  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)], q2 = R.pts[Math.floor(R.pts.length * f) + 1]; BOOSTS.push({ k: "water", x: q[0], z: q[1], yaw: Math.atan2(q2[0] - q[0], q2[1] - q[1]), r: 3 }); }
+  for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); if (b.yaw === undefined) b.yaw = 0; }
+  const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
+  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
+  const ringM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff" }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff" }) };
+  const glowM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }) };
+  const padG = new THREE.PlaneGeometry(3.4, 5).rotateX(-Math.PI / 2), ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), wringG = new THREE.TorusGeometry(2.4, 0.3, 8, 28);
+  for (const b of BOOSTS) {
+    const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
+    if (b.k === "pad") { const m = new THREE.Mesh(padG, padM); m.position.y = 0.04; g.add(m); }
+    else { const big = b.k === "air", m = new THREE.Mesh(big ? ringG : wringG, ringM[b.k]), gl = new THREE.Mesh(big ? glowG : wringG, glowM[b.k]); if (!big) gl.scale.setScalar(1.25); m.position.y = gl.position.y = big ? 0 : 0.6; g.add(m, gl); }
+  }
+  BOOSTS.tex = arrowTex;
+}
+function boostStep(dt) { BOOSTS.tex.offset.y -= dt * 1.5; for (const b of BOOSTS) if (b.k !== "pad") b.g.children[1].material.opacity = 0.18 + Math.sin(clock * 4) * 0.1; }
+function boostTouch(now) {
+  for (const b of BOOSTS) {
+    const dy = b.k === "pad" ? me.y - b.y : b.k === "water" ? me.y - b.y + 0.4 : me.y + 0.8 - b.y;
+    if (hyp(me.x - b.x, me.z - b.z) < b.r && dy > -1.5 && dy < (b.k === "pad" ? 1.5 : 2.5)) {
+      if (me.padUntil < now - 600 || !me.padUntil) emitSparks(me.x, me.y + 1, me.z, 26, 6, b.k === "pad" ? ["#ff9f1a", "#fff4c2"] : b.k === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.7, 0);
+      me.padUntil = now + PAD_TIME; me.padC = b.k; return;
+    }
+  }
+}
+// ---- the training arena (owner, 2026-11-09): riding into the training yard takes you to a big floating arena with an
+// obstacle course round a track. Clear the glowing obstacle (in order, round the track the way the arrow points) for a
+// training point; enough points and your pet goes up a level: 20 for level 2, 4 more for each level after. The gold
+// circle in the middle has the Training Yard panel (Treats, Training Ribbons); the purple arch takes you back to town. ----
+const AR = { x: 0, z: -405, y: 20, r: 40 }, TR0 = 20, TR1 = 28, TRM = 24;
+const trainNeed = (lv) => 20 + 4 * (lv - 1);
+const OBS = [
+  { k: "hurdle", a: 0, top: 0.7 },
+  { k: "hoop", a: TAU / 8, bot: 0.5, c: 1.9, rr: 1.4 },
+  { k: "plat", a: (2 * TAU) / 8, h: 0.9, da: 0.12 },
+  { k: "gate", a: (3 * TAU) / 8, r0: TR0, r1: TRM },
+  { k: "gate", a: (4 * TAU) / 8, r0: TRM, r1: TR1 },
+  { k: "tunnel", a: (5 * TAU) / 8, da: 0.13, w0: 22, w1: 26, roof: 2.6 },
+  { k: "hurdle", a: (6 * TAU) / 8, top: 0.85 },
+  { k: "hoop", a: (7 * TAU) / 8, bot: 0.7, c: 2.3, rr: 1.6 },
+];
+const PODIUM = 3, EXIT = { x: 0, z: -9 };
+const wrapA = (d) => { while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+const arLocal = (x, z) => { const lx = x - AR.x, lz = z - AR.z; return { lx, lz, r: hyp(lx, lz), a: Math.atan2(lz, lx) }; };
+const inArena = (x = me.x, z = me.z, m = 0) => hyp(x - AR.x, z - AR.z) < AR.r - m;
+// the floor's height above the arena (a platform where there is one)
+function arenaFloor(x, z) { const q = arLocal(x, z); for (const o of OBS) if (o.k === "plat" && q.r > TR0 + 1 && q.r < TR1 - 1 && Math.abs(wrapA(q.a - o.a)) < o.da) return o.h; return 0; }
+// solid parts: hurdle bars (and the sill under a hoop), gate poles, tunnel walls
+function arenaBlocked(x, z, y) {
+  const q = arLocal(x, z); if (q.r > AR.r) return false; const h = y - AR.y;
+  for (const o of OBS) {
+    const along = wrapA(q.a - o.a) * q.r;
+    if ((o.k === "hurdle" || o.k === "hoop") && Math.abs(along) < 0.7 && q.r > TR0 && q.r < TR1 && h < (o.k === "hurdle" ? o.top : o.bot)) return true;
+    if (o.k === "gate") for (const r of [o.r0, o.r1]) if (hyp(q.lx - Math.cos(o.a) * r, q.lz - Math.sin(o.a) * r) < 0.9 && h < 3) return true;
+    if (o.k === "tunnel" && Math.abs(wrapA(q.a - o.a)) < o.da && h < o.roof + 0.4) for (const r of [o.w0, o.w1]) if (Math.abs(q.r - r) < 0.75) return true;
+  }
+  return false;
+}
+let arNext = 0, arPrev = null, arPanel = false, trainPill = "";
+{
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(AR.r, AR.r * 0.95, 2, 48), mat("#86c95f")); top.position.set(AR.x, AR.y - 1, AR.z); top.receiveShadow = true; scene.add(top);
+  const rock = new THREE.Mesh(new THREE.ConeGeometry(AR.r * 0.95, AR.r * 1.3, 12).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(AR.x, AR.y - 2 - AR.r * 0.65, AR.z); scene.add(rock);
+  const flat = (g, c, y) => { const m = new THREE.Mesh(g.rotateX(-Math.PI / 2), mat(c)); m.position.set(AR.x, AR.y + y, AR.z); m.receiveShadow = true; scene.add(m); return m; };
+  flat(new THREE.RingGeometry(TR0, TR1, 72), "#d98b5f", 0.03); flat(new THREE.RingGeometry(TR0 - 0.3, TR0, 72), "#ffffff", 0.04); flat(new THREE.RingGeometry(TR1, TR1 + 0.3, 72), "#ffffff", 0.04);
+  flat(new THREE.CircleGeometry(PODIUM, 32), "#ffd35a", 0.06);
+  const W = (lx, lz) => [AR.x + lx, AR.z + lz];
+  for (let n = 0; n < 40; n++) { const a = (n / 40) * TAU, [x, z] = W(Math.cos(a) * (AR.r - 1), Math.sin(a) * (AR.r - 1)); box(0.25, 1.2, 0.25, "#ffffff", x, AR.y + 0.6, z); if (n % 2 === 0) { const g = new THREE.Group(); g.position.set(x, AR.y + 1, z); g.rotation.y = -a; scene.add(g); box(0.1, 0.15, (TAU / 40) * (AR.r - 1) * 2, "#ffffff", 0, 0, 0, g); } }
+  // the exit: a purple arch back to town
+  { const [x, z] = W(EXIT.x, EXIT.z), g = new THREE.Group(); g.position.set(x, AR.y, z); scene.add(g); const arch = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.35, 10, 32, Math.PI), new THREE.MeshBasicMaterial({ color: "#b67cff" })); arch.position.y = 0; g.add(arch); const glow = new THREE.Mesh(new THREE.CircleGeometry(2.3, 32, 0, Math.PI), new THREE.MeshBasicMaterial({ color: "#d9b8ff", transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false })); g.add(glow); }
+  for (const o of OBS) {
+    const g = new THREE.Group(), [x, z] = W(Math.cos(o.a) * TRM, Math.sin(o.a) * TRM); g.position.set(x, AR.y, z); g.rotation.y = -o.a; scene.add(g); o.g = g;   // local x: out across the track, z: along it
+    const span = TR1 - TR0;
+    if (o.k === "hurdle") { for (const s of [-1, 1]) box(0.25, o.top + 0.4, 0.25, "#ffffff", s * span / 2, (o.top + 0.4) / 2, 0, g); for (let n = 0; n < 8; n++) box(span / 8, 0.22, 0.22, n % 2 ? "#ffffff" : "#e5534b", -span / 2 + span / 16 + (n * span) / 8, o.top - 0.11, 0, g); }
+    if (o.k === "hoop") { box(span, o.bot, 0.3, "#3a8ee6", 0, o.bot / 2, 0, g); const ring = new THREE.Mesh(new THREE.TorusGeometry(o.rr, 0.18, 10, 32), mat("#ffd35a")); ring.position.set(0, o.c, 0); g.add(ring); for (const s of [-1, 1]) box(0.2, o.c, 0.2, "#ffffff", s * (o.rr + 0.2), o.c / 2, 0, g); }
+    if (o.k === "plat") { const len = 2 * o.da * TRM; box(span - 2, o.h, len, "#3a8ee6", 0, o.h / 2, 0, g); box(span - 1.8, 0.08, len + 0.2, "#ffffff", 0, o.h, 0, g); }
+    if (o.k === "gate") for (const r of [o.r0, o.r1]) { box(0.35, 3, 0.35, "#ffd35a", r - TRM, 1.5, 0, g); if (r === o.r0) { const b = box(Math.abs(o.r1 - o.r0), 0.6, 0.06, "#a352e0", (o.r0 + o.r1) / 2 - TRM, 2.7, 0, g); void b; } }
+    if (o.k === "tunnel") { const len = 2 * o.da * TRM; for (const r of [o.w0, o.w1]) box(0.4, o.roof, len, "#e08a00", r - TRM, o.roof / 2, 0, g); box(o.w1 - o.w0 + 0.4, 0.3, len, "#c8553d", (o.w0 + o.w1) / 2 - TRM, o.roof + 0.15, 0, g); }
+  }
+  // the next obstacle: a gold beam and a bobbing diamond over it
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 14, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#ffd35a", transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), new THREE.MeshBasicMaterial({ color: "#ffd35a" }));
+  scene.add(beam, gem); AR.beam = beam; AR.gem = gem;
+}
+function enterArena() {
+  const a = -0.35; me.x = AR.x + Math.cos(a) * TRM; me.z = AR.z + Math.sin(a) * TRM; me.y = AR.y; me.vy = 0; cam.y = me.y;
+  me.yaw = Math.atan2(-Math.sin(a), Math.cos(a)); cam.yaw = me.yaw + Math.PI; arPrev = null; arNext = 0;
+  emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#ffd35a", "#ffffff"], 0.8, 0); sendPos(true);
+}
+function leaveArena() {
+  me.x = TRAIN.x; me.z = TRAIN.z + TRAIN.r + 5; me.y = terrain(me.x, me.z); me.vy = 0; cam.y = me.y; me.yaw = 0; cam.yaw = Math.PI; arPrev = null;
+  if (openPanel === "p-train") closePanels(); arPanel = false; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#b67cff", "#ffffff"], 0.8, 0); sendPos(true);
+}
+function trainPoint() {
+  const p = riding(); if (p.lv >= MAXLV) return;
+  p.tp = (p.tp || 0) + 1; persist();
+  emitSparks(me.x, me.y + 1.5, me.z, 18, 5, ["#ffd35a", "#ffffff"], 0.7, -2);
+  if (p.tp >= trainNeed(p.lv)) { p.tp -= trainNeed(p.lv); train("points"); }
+  else if (openPanel === "p-train") renderTrain();
+}
+function arenaStep() {
+  const here = inArena(), pill = $("trainp");
+  AR.beam.visible = AR.gem.visible = here;
+  if (!here) { arPrev = null; if (trainPill) { trainPill = ""; pill.style.display = "none"; } return; }
+  const p = riding(), s = p.lv >= MAXLV ? "Lv " + MAXLV : `${p.tp || 0}/${trainNeed(p.lv)}`;
+  if (s !== trainPill) { trainPill = s; $("trainn").textContent = s; pill.style.display = ""; }
+  const o = OBS[arNext], [bx, bz] = [AR.x + Math.cos(o.a) * TRM, AR.z + Math.sin(o.a) * TRM];
+  AR.beam.position.set(bx, AR.y + 7, bz); AR.gem.position.set(bx, AR.y + 5 + Math.sin(clock * 3) * 0.4, bz); AR.gem.rotation.y = clock * 2;
+  const q = arLocal(me.x, me.z), h = me.y - AR.y;
+  // the middle: the panel on the gold circle, the arch back to town
+  const onPod = q.r < PODIUM && h < 1.5;
+  if (onPod && !arPanel) { arPanel = true; show("p-train"); } else if (!onPod && arPanel) { arPanel = false; if (openPanel === "p-train") closePanels(); }
+  if (hyp(q.lx - EXIT.x, q.lz - EXIT.z) < 1.8 && h < 3) { leaveArena(); return; }
+  if (p.lv < MAXLV) {
+    let hit = false;
+    if (o.k === "plat") hit = Math.abs(wrapA(q.a - o.a)) < o.da && q.r > TR0 + 1 && q.r < TR1 - 1 && Math.abs(h - o.h) < 0.12;
+    else if (arPrev) {
+      const d0 = wrapA(arPrev.a - o.a), d1 = wrapA(q.a - o.a);
+      if (d0 < 0 && d1 >= 0 && d1 - d0 < 0.5) {   // went past it, the way round the track
+        if (o.k === "hurdle") hit = q.r > TR0 && q.r < TR1 && h > o.top - 0.05;
+        if (o.k === "hoop") hit = Math.abs(q.r - TRM) < o.rr && h > o.bot - 0.05 && h < o.c + o.rr;
+        if (o.k === "gate") hit = q.r > o.r0 && q.r < o.r1;
+        if (o.k === "tunnel") hit = q.r > o.w0 && q.r < o.w1 && h < o.roof;
+      }
+    }
+    if (hit) { arNext = (arNext + 1) % OBS.length; trainPoint(); }
+  }
+  arPrev = q;
+}
 // houses as instances: walls (reaching down into the slope), roofs, doors, mailboxes; each faces its road
 function instanced(geo, color, n, each) { const m = new THREE.InstancedMesh(geo, mat(color), n); m.castShadow = true; m.receiveShadow = true; for (let i = 0; i < n; i++) { dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); each(i, dummy); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); } scene.add(m); return m; }
 const wallAt = (h, d) => { d.position.set(h.x, h.base + 2.2 - (h.sky ? 0 : 2), h.z); d.scale.set(9, 4.4 + (h.sky ? 0 : 4), 9); d.rotation.y = h.yaw; };
@@ -204,7 +385,7 @@ for (let k = 0; k < 56; k++) {
   if (band === 2 && hyp(g.position.x, g.position.z) < 260) g.position.y = 150 + srnd() * 20;   // clear of the high islands
   scene.add(g); clouds.push(g);
 }
-const DAY_S = 1200, RAIN_BLOCK = 240;   // a day lasts 20 minutes; the weather is decided every 4
+const DAY_S = World.DAY_S, RAIN_BLOCK = 240;   // a day lasts 20 minutes; the weather is decided every 4
 const hemi = scene.children.find((o) => o.isHemisphereLight);
 const SKY = { day: new THREE.Color("#8fd3ff"), dusk: new THREE.Color("#f2a46a"), night: new THREE.Color("#0c1530"), rain: new THREE.Color("#7d8b99") };
 const FOG = { day: new THREE.Color("#bfe6ff"), dusk: new THREE.Color("#f6c08e"), night: new THREE.Color("#101a36"), rain: new THREE.Color("#8d99a5") };
@@ -217,7 +398,7 @@ const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: 
 const drops = Array.from({ length: RAIN_N }, () => ({ x: (Math.random() - 0.5) * 70, y: Math.random() * 40, z: (Math.random() - 0.5) * 70, v: 26 + Math.random() * 10 }));
 // wind: pale streaks blowing past
 const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
-const winds = Array.from({ length: 36 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.12), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
+const winds = Array.from({ length: 72 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.18), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
 // (owner, 2026-11-09) the wind, the same for everyone (timed off the clock): 3 to 40 mph, easing to a new strength every
 // 3 minutes (windier in the rain) with gusts on top, its direction swinging slowly round. WIND is where it blows to.
 const WIND_BLOCK = 180, WIND_MIN = 3, WIND_MAX = 40;
@@ -244,7 +425,7 @@ function skyStep(dt, cx, cy, cz) {
   const t = Date.now() / 1000 + skyOffset, ph = (t % DAY_S) / DAY_S, a = ph * TAU;
   const el = Math.sin(a) + 0.2;   // the sun's height: a little more day than night
   skyNow.sun.set(Math.cos(a), Math.max(-0.4, el), 0.35).normalize();
-  let day = smooth(clamp((el + 0.08) / 0.35, 0, 1)), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
+  let day = World.daylightAt(t), dusk = clamp(1 - Math.abs(el - 0.05) / 0.3, 0, 1) * day, rainK = weatherAt(t);
   if (me.inst) { day = 1; dusk = 0; rainK = 0; }   // inside a home it's always bright and dry
   skyNow.day = day; skyNow.rain = rainK; windStep(t);
   const wsp = 3 + windNow.mph * 0.4;   // how fast streaks, rain and clouds go with the wind
@@ -264,14 +445,14 @@ function skyStep(dt, cx, cy, cz) {
   }
   if (rain.visible) rainG.attributes.position.needsUpdate = true;
   // wind streaks, more of them the windier it is, up high and in the rain
-  const windK = me.inst ? 0 : 0.1 + windNow.mph / WIND_MAX * 0.45 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  const windK = me.inst ? 0 : 0.3 + windNow.mph / WIND_MAX * 0.65 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
     w.life -= dt;
     if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 2 + Math.random() * 2; const a = Math.random() * TAU, r = 20 + Math.random() * 30; w.x = cx + Math.cos(a) * r - WIND.x * 10; w.y = cy - 6 + Math.random() * 16; w.z = cz + Math.sin(a) * r - WIND.z * 10; }   // (owner, 2026-11-08) out of the way, never right at the camera
     w.x += WIND.x * wsp * dt; w.z += WIND.z * wsp * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
-    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.4 + 0.6 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
+    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.34 * (0.75 + 0.25 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
   }
   // god rays: brightest with the sun low, gone at night and in the rain
   const rk = me.inst ? 0 : day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
@@ -295,6 +476,10 @@ const boardRing = new THREE.Mesh(RINGG(BOARD.r), ringM("#e5534b")); boardRing.po
 box(12, 5, 8, "#f7cfd8", SHOP_B.x, 2.5, SHOP_B.z); box(13, 0.6, 9, "#e5739d", SHOP_B.x, 5.3, SHOP_B.z); box(3, 3, 0.2, "#7a4f28", SHOP_B.x, 1.5, SHOP_B.z + 4.05);
 const bigEgg = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 12), mat("#fff3d6")); bigEgg.scale.set(1, 1.3, 1); bigEgg.position.set(SHOP_B.x, 8.3, SHOP_B.z); bigEgg.castShadow = true; scene.add(bigEgg);
 const shopRing = new THREE.Mesh(RINGG(SHOP.r), ringM("#e5739d")); shopRing.position.set(SHOP.x, 0.16, SHOP.z); scene.add(shopRing);
+// the mount shop (owner, 2026-11-09), facing the egg shop, with a giant golden horseshoe on top
+box(12, 5, 8, "#cfeef1", MOUNT_B.x, 2.5, MOUNT_B.z); box(13, 0.6, 9, "#2bb3c0", MOUNT_B.x, 5.3, MOUNT_B.z); box(3, 3, 0.2, "#7a4f28", MOUNT_B.x, 1.5, MOUNT_B.z - 4.05);
+{ const shoe = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.45, 10, 28, TAU * 0.7), mat("#f2b01e")); shoe.rotation.z = Math.PI * 1.5 - TAU * 0.35; shoe.position.set(MOUNT_B.x, 8, MOUNT_B.z); shoe.castShadow = true; scene.add(shoe); }
+const mountRing = new THREE.Mesh(RINGG(MOUNT.r), ringM("#2bb3c0")); mountRing.position.set(MOUNT.x, 0.16, MOUNT.z); scene.add(mountRing);
 // the training yard: a track with hurdles
 const track = new THREE.Mesh(new THREE.RingGeometry(9, 14, 48).rotateX(-Math.PI / 2), mat("#d98b5f")); track.position.set(TRAIN.x, 0.12, TRAIN.z); track.receiveShadow = true; scene.add(track);
 for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU, x = TRAIN.x + Math.cos(a) * 11.5, z = TRAIN.z + Math.sin(a) * 11.5, g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = -a; box(0.15, 1, 0.15, "#ffffff", 0, 0.5, -1.8, g); box(0.15, 1, 0.15, "#ffffff", 0, 0.5, 1.8, g); box(0.2, 0.25, 3.8, "#e5534b", 0, 1, 0, g); scene.add(g); }
@@ -375,6 +560,8 @@ const LOOK = {
   fox: { plan: "quad", body: [0.62, 0.55, 1.35], leg: 0.6, head: 0.55, snout: 0.5, snoutC: "a", ears: "big", tail: "bushy", nose: "#1d232a", socks: "#2b1d14" },
   goat: { plan: "quad", body: [0.85, 0.75, 1.25], leg: 0.72, head: 0.5, snout: 0.35, ears: "side", horns: "curl", beard: true, tail: "stub", hooves: "#4a3a2a" },
   deer: { plan: "quad", body: [0.72, 0.68, 1.35], leg: 1.05, neck: 0.65, head: 0.48, snout: 0.38, ears: "side", antlers: true, tail: "stub", spots: true, hooves: "#3a2a1a" },
+  otter: { plan: "quad", body: [0.62, 0.5, 1.5], leg: 0.28, head: 0.5, roundHead: true, snout: 0.18, snoutC: "a", ears: "round", tail: "thick", nose: "#1d232a", whiskers: true, low: true },
+  turtle: { plan: "quad", round: true, body: [1.25, 0.7, 1.45], leg: 0.3, legW: 0.34, head: 0.46, roundHead: true, snout: 0.08, ears: "none", tail: "stub", shell: true, low: true },
   bear: { plan: "quad", round: true, body: [1.3, 1.1, 1.65], leg: 0.48, legW: 0.42, head: 0.85, roundHead: true, snout: 0.3, snoutC: "a", ears: "round", tail: "none", nose: "#1d232a" },
   horse: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "a", tail: "hair", hooves: "#2b1d14" },
   unicorn: { plan: "quad", body: [0.82, 0.85, 1.7], leg: 1.25, neck: 0.95, head: 0.45, snout: 0.6, ears: "point", mane: "rainbow", tail: "rainbow", horn: true, hooves: "#e0c070" },
@@ -430,6 +617,7 @@ function petModel(sp, rider) {
     if (L.round) { ball(1, C, 0, by, 0, body, bw / 2, bh / 2, bl / 2); ball(1, A, 0, by - bh * 0.18, bl * 0.08, body, bw * 0.38, bh * 0.32, bl * 0.4); }
     else { box(bw, bh, bl, C, 0, by, 0, body); box(bw * 0.72, bh * 0.3, bl * 0.62, A, 0, legH + 0.05 * k, 0, body); }
     if (L.spots) for (const [x, y, z] of [[1, 0.25, 0.1], [1, 0.1, -0.25], [-1, 0.2, -0.05], [-1, 0.05, 0.3], [1, -0.05, 0.35]]) ball(0.07 * k, "#fff4e0", x * bw / 2, by + y * bh, z * bl, body);
+    if (L.shell) { ball(1, A, 0, by + bh * 0.12, 0, body, bw * 0.56, bh * 0.62, bl * 0.56); for (const [x, z] of [[0, 0], [0.5, 0.45], [-0.5, 0.45], [0.5, -0.45], [-0.5, -0.45], [0, 0.85], [0, -0.85]]) ball(bw * 0.12, "#6b4f2a", x * bw * 0.28, by + bh * (0.62 - 0.12 * hyp(x, z)), z * bl * 0.25, body, 1, 0.35, 1); }   // (owner, 2026-11-09) a turtle's shell
     if (L.plates) for (let n = 0; n < 6; n++) { const p = box(0.08 * k, (0.45 + 0.2 * Math.sin((n / 5) * Math.PI)) * k, 0.4 * k, A, 0, by + bh / 2 + 0.15 * k, (n - 2.5) * bl * 0.17, body); p.rotation.y = Math.PI / 4; }
     if (L.spikes) for (let n = 0; n < 5; n++) cone(0.09 * k, 0.32 * k, L.spikes === "ice" ? "#e8f8ff" : A, 0, by + bh / 2 + 0.12 * k, (n - 2) * bl * 0.2, body);
     // neck and head
@@ -606,7 +794,12 @@ function banner(txt, color, sub) { const b = $("banner"); b.textContent = txt; i
 // ---- me ----
 const me = { inst: 0, vy: 0, longJump: false, x: SPAWN.x + (Math.random() - 0.5) * 8, y: 0, z: SPAWN.z + Math.random() * 3, yaw: Math.PI, moving: false, airborne: false, boostUntil: 0, bag: [], stunUntil: 0, stars: 0 };
 let mine = null, myBubble = null;
-function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
+// (owner, 2026-11-09: others saw the wrong pet) what I ride is drawn and told to the room whenever it changes, however
+// it changed (riding another, training, a trade, my data coming back from the server at login or after a stale save)
+let mountKey = "", sentPet = "";
+const petKey = () => riding().sp + "|" + riding().lv;
+function petSync() { const k = petKey(); if (k !== mountKey) mount(); if (netOk && k !== sentPet) { sentPet = k; netSend({ t: "pet", sp: riding().sp, lv: riding().lv }); } }
+function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
 // only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
@@ -690,7 +883,7 @@ const beamMat = (c) => new THREE.ShaderMaterial({
 const headBeamM = beamMat("#fff1c8"), searchBeamM = beamMat("#f4f7ff");
 const POOL_G = new THREE.PlaneGeometry(5.5, 11).rotateX(-Math.PI / 2);
 const headPoolM = new THREE.MeshBasicMaterial({ color: "#fff1c8", transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, map: (() => { const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })(), polygonOffset: true, polygonOffsetFactor: -2 });
-function vanModel() {
+function vanModel(style = 1) {
   const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   box(2.4, 1.8, 3.2, "#f4f4f0", 0, 1.5, -0.6, body); box(2.34, 1.4, 1.6, "#f4f4f0", 0, 1.3, 1.72, body); box(2.1, 0.7, 0.1, "#3a5a7a", 0, 1.6, 2.58, body);
   box(2.46, 0.35, 3.24, "#e08a00", 0, 1.2, -0.6, body); box(2.5, 0.3, 4.9, "#3d4650", 0, 0.55, 0.2, body);
@@ -699,13 +892,16 @@ function vanModel() {
   const red = new THREE.Mesh(BOX, lightR.clone()); red.scale.set(0.8, 0.25, 0.35); red.position.set(-0.45, 2.15, 1.6); body.add(red);
   const blue = new THREE.Mesh(BOX, lightB.clone()); blue.scale.set(0.8, 0.25, 0.35); blue.position.set(0.45, 2.15, 1.6); body.add(blue);
   g.traverse((o) => (o.castShadow = true));
-  // (owner, 2026-11-09) headlights, on while it's moving: lamps, two beams reaching ahead and a pool of light on the road
+  // (owner, 2026-11-09) headlights, on while it's moving at night: lamps, two beams ahead and a pool on the road
   const lamp = new THREE.MeshBasicMaterial({ color: "#6d6a5c" }), lit = new THREE.Group(), cones = [];
   for (const x of [-0.78, 0.78]) {
     const l = new THREE.Mesh(BOX, lamp); l.scale.set(0.42, 0.26, 0.08); l.position.set(x, 0.95, 2.55); body.add(l);
     const c = new THREE.Mesh(BEAM_CONE, headBeamM); c.position.set(x, 0.95, 2.6); c.rotation.x = -(Math.PI / 2 - 0.09); c.scale.set(1.5, 10, 1.5); lit.add(c); cones.push(c);
   }
   const pool = new THREE.Mesh(POOL_G, headPoolM); pool.position.set(0, -0.12, 8.2); lit.add(pool); body.add(lit);
+  // Three animal-control silhouettes share the same equipment: a compact car, the standard van and a taller SUV.
+  if (style === 0) body.scale.set(0.86, 0.8, 0.84);
+  else if (style === 2) { body.scale.set(1.05, 1.1, 0.92); box(2.1, 0.12, 2.5, "#3d4650", 0, 2.28, -0.25, body); }
   return { g, body, red, blue, lamp, lit, spd: 0 };
 }
 function heliModel() {
@@ -720,18 +916,18 @@ function heliModel() {
   g.traverse((o) => (o.castShadow = true));
   // (owner, 2026-11-09) the searchlight (pets-world.js aims it): a lamp under the nose, a real light where it lands and
   // the beam down to it; the light is always there (only its strength changes) so nothing has to recompile
-  box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#fffdf2" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
+  box(0.6, 0.45, 0.6, "#2b3440", 0, -1.15, 1.6, body); const lens = new THREE.Mesh(new THREE.CircleGeometry(0.26, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: "#35363a" })); lens.position.set(0, -1.39, 1.6); body.add(lens);
   const spot = new THREE.SpotLight("#f4f7ff", 0, 0, World.BEAM.half * 1.15, 0.45, 0); scene.add(spot, spot.target);
   const beam = new THREE.Mesh(BEAM_CONE, searchBeamM); beam.frustumCulled = false; scene.add(beam);
-  return { g, body, red, blue, rotor, tail, spot, beam, ba: 0, bd: 15 };
+  return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
-const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
+const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
 const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
-  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0, dark = 1 - skyNow.day;
-  headBeamM.uniforms.o.value = 0.02 + 0.07 * dark; headPoolM.opacity = 0.04 + 0.5 * dark; searchBeamM.uniforms.o.value = me.inst ? 0 : 0.06 + 0.09 * dark;
+  const online = netOk, rt = renderTime(), flash = Math.floor(performance.now() / 120) % 2 === 0, lightsOn = !me.inst && skyNow.day < 0.5;
+  headBeamM.uniforms.o.value = 0.09; headPoolM.opacity = 0.54; searchBeamM.uniforms.o.value = 0.15;
   vehs.forEach((m, i) => {
     const px = m.x, pz = m.z;
     if (online) { if (sampleAt(m.buf, rt, tmpS)) { m.x = tmpS.x; m.y = tmpS.y; m.z = tmpS.z; m.yaw = tmpS.yaw; if (tmpS.ba !== undefined) { m.ba = tmpS.ba; m.bd = tmpS.bd; } } }
@@ -741,17 +937,19 @@ function vehiclesDraw(dt) {
       const sx = Math.sin(m.yaw), sz = Math.cos(m.yaw), front = terrain(m.x + sx * 1.6, m.z + sz * 1.6), rear = terrain(m.x - sx * 1.5, m.z - sz * 1.5);
       m.y = Math.max((front + rear) / 2, terrain(m.x, m.z)) + 0.22; m.pitch += (-Math.atan2(front - rear, 3.1) - m.pitch) * Math.min(1, dt * 10); m.body.rotation.x = m.pitch;
       if (dt > 0) m.spd += (Math.min(40, hyp(m.x - px, m.z - pz) / dt) - m.spd) * Math.min(1, dt * 4);   // headlights while it's moving
-      const on = m.spd > 1.5; m.lit.visible = on; m.lamp.color.set(on ? "#fff8dc" : "#6d6a5c");
+      const on = lightsOn && m.spd > 1.5; m.lit.visible = on; m.lamp.color.set(on ? "#fff8dc" : "#6d6a5c");
     }
     else {
       m.rotor.rotation.y += dt * 28; m.tail.rotation.x += dt * 34; m.body.rotation.x = chasing ? 0.18 : 0.06;
       const b = World.beamOf(m, beamB), len = (terrain(m.x + Math.sin(m.ba) * m.bd, m.z + Math.cos(m.ba) * m.bd) - b.ly) / Math.min(-0.05, b.dy) + 6;   // to the ground (and a little on: the ground hides it)
-      tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(World.BEAM.half); m.beam.scale.set(r, len, r);
+      const beamHalf = SPECIES[riding().sp].fly ? World.BEAM.flyHalf : World.BEAM.half;
+      tmpV.set(b.dx, b.dy, b.dz); m.beam.position.set(b.lx, b.ly, b.lz); m.beam.quaternion.setFromUnitVectors(DOWN, tmpV); const r = len * Math.tan(beamHalf); m.beam.scale.set(r, len, r);
       m.spot.position.set(b.lx, b.ly, b.lz); m.spot.target.position.set(b.lx + b.dx * len, b.ly + b.dy * len, b.lz + b.dz * len); m.spot.target.updateMatrixWorld();
-      m.spot.intensity = me.inst ? 0 : 5 + 3 * dark;   // strong enough to see by day too
+      m.spot.angle = beamHalf * 1.15; m.beam.visible = lightsOn; m.spot.intensity = lightsOn ? 8 : 0; m.lens.material.color.set(lightsOn ? "#fffdf2" : "#35363a");
     }
     m.g.position.set(m.x, m.y, m.z); m.g.rotation.y = m.yaw;
-    m.red.material.color.set(chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020"); m.blue.material.color.set(chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
+    m.red.material.color.set(!lightsOn ? "#4a2929" : chasing ? (flash ? "#ff3a3a" : "#5a1010") : "#7a2020");
+    m.blue.material.color.set(!lightsOn ? "#293447" : chasing ? (flash ? "#1a2a5a" : "#3a7aff") : "#203a7a");
   });
 }
 // what animal control did to me
@@ -877,7 +1075,7 @@ addEventListener("keydown", (e) => {
   }
   keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
-  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -894,9 +1092,11 @@ function hud() {
   const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
-  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3;
-  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winda").style.transform = `rotate(${deg}deg)`; } }
+  const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
+  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3 + "|" + pct;
+  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg, effect] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winde").textContent = +effect ? (+effect > 0 ? "+" : "") + effect + "%" : ""; $("windp").classList.toggle("tailwind", +effect > 0); $("windp").classList.toggle("headwind", +effect < 0); $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
+  if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
@@ -907,7 +1107,8 @@ function hud() {
 }
 const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-admin"];
 let openPanel = null;
-function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); }
+function show(id) { if (id === "p-train" && !inArena()) { enterArena(); return; } showPanel(id); }
+function showPanel(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); }
 function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
@@ -916,9 +1117,10 @@ const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px
 // or Glider (teal, spread wings), and the card's frame in that colour
 const GLIDE_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 6c4-3 7-4 11-1 4-3 7-2 11 1-4 0-7 1-11 4C8 7 5 6 1 6z" fill="currentColor"/></svg>`;
 const FLY_ICO = `<svg class="ico" viewBox="0 0 24 16" style="width:20px;height:14px"><path d="M12 13C9 6 5 2 1 2c1 5 4 9 11 11zm0 0c3-7 7-11 11-11-1 5-4 9-11 11z" fill="currentColor"/></svg>`;
-const moveBadge = (sp) => { const f = SPECIES[sp].fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : ""; };
+const SWIM_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 5c3-3 5-3 7 0s4 3 7 0 5-3 8 0M1 11c3-3 5-3 7 0s4 3 7 0 5-3 8 0" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`;
+const moveBadge = (sp) => { const s = SPECIES[sp], f = s.fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : s.swim ? `<span class="mbadge swim">${SWIM_ICO}Swimmer</span>` : ""; };
 function card(sp, lines, on, onclick) {
-  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : "");
+  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : s.swim ? " swim" : "");
   d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84">${moveBadge(sp)}<span class="nm">${s.name}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
   if (onclick) d.onclick = onclick; return d;
 }
@@ -953,8 +1155,22 @@ function ride(id) {
   }
   syncBeams(); if (openPanel === "p-pets") renderPets(); hudKey = "";
 }
+// (owner, 2026-11-09) the shops share one window in the middle of the screen, showing your coins and each item's price
+const SHOPS = { egg: "Egg Shop", mount: "Mount Shop" };
+let shopKind = "egg", shopCoins = -1;
 function renderShop() {
-  const el = $("eggs"); el.innerHTML = "";
+  $("shopname").textContent = SHOPS[shopKind]; shopCoins = Math.floor(save.coins); $("shopcash").textContent = fmt(save.coins);
+  const el = $("shopitems"); el.innerHTML = "";
+  if (shopKind === "mount") {
+    const full = save.pets.length >= World.petCap(save);
+    for (const sp of Object.keys(SPECIES)) {
+      const s = SPECIES[sp], price = MOUNT_PRICE[sp], d = card(sp, `<span class="stats"><span>${s.speed.toFixed(1)} m/s</span><span>${s.bag} bag</span></span>`, false, null);
+      const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `<span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = full || save.coins < price; b.onclick = (ev) => { ev.stopPropagation(); buyMount(sp); };
+      if (full) b.textContent = "Full";
+      d.appendChild(b); el.appendChild(d);
+    }
+    return;
+  }
   for (const egg of EGGS) {
     const d = document.createElement("div"); d.className = "card";
     d.innerHTML = `<svg width="84" height="84" viewBox="0 0 84 84"><ellipse cx="42" cy="46" rx="24" ry="31" fill="${egg.c}" stroke="${egg.s}" stroke-width="4"/><circle cx="34" cy="38" r="4" fill="${egg.s}"/><circle cx="50" cy="52" r="5" fill="${egg.s}"/></svg><span class="nm">${egg.name}</span>`
@@ -964,6 +1180,13 @@ function renderShop() {
     if (egg.id === "basic" && save.items.ticket > 0) { const t = document.createElement("button"); t.className = "btn"; t.type = "button"; t.textContent = ITEMS.ticket.name + " ×" + save.items.ticket; t.onclick = (ev) => { ev.stopPropagation(); buyEgg(egg, true); }; d.appendChild(t); }
     el.appendChild(d);
   }
+}
+function buyMount(sp) {
+  const price = MOUNT_PRICE[sp];
+  if (!price || save.coins < price || save.pets.length >= World.petCap(save)) return;
+  save.coins -= price; const p = { id: save.nextId++, sp, lv: 1 }; save.pets.push(p); persist();
+  toast(SPECIES[sp].name, RARITY[SPECIES[sp].r].c); emitConfetti(me.x, me.y + 3, me.z, 50, 4, 7);
+  ride(p.id); hudKey = ""; renderShop();
 }
 function buyEgg(egg, ticket) {
   if (ticket ? save.items.ticket <= 0 : save.coins < egg.price) return;
@@ -976,7 +1199,7 @@ function buyEgg(egg, ticket) {
 // (owner, 2026-11-08) hatching: the egg shakes harder and cracks, then bursts in a flash of fireworks to the pet, rays
 // behind it in its rarity's color
 function hatch(p, egg) {
-  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
+  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly || s.swim ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
   $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
@@ -1020,11 +1243,9 @@ function hatch(p, egg) {
   $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
 }
 function renderTrain() {
-  const p = riding(), el = $("train"), cost = trainCost(p), max = p.lv >= MAXLV;
-  el.innerHTML = ""; el.appendChild(card(p.sp, statLine(p), true));
+  const p = riding(), el = $("train"), max = p.lv >= MAXLV;
+  el.innerHTML = ""; el.appendChild(card(p.sp, statLine(p) + `<span class="stats"><span>${max ? "Lv " + MAXLV : `★ ${p.tp || 0}/${trainNeed(p.lv)}`}</span></span>`, true));
   const row = document.createElement("div"); row.className = "row2";
-  const b = document.createElement("button"); b.className = "btn green"; b.type = "button"; b.style.flex = "1";
-  b.innerHTML = max ? "Lv " + MAXLV : `Train <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(cost)}`; b.disabled = max || save.coins < cost; b.onclick = () => train("coins"); row.appendChild(b);
   const t = save.treats[p.sp] || 0;
   if (t > 0 && !max) { const r = document.createElement("button"); r.className = "btn gold"; r.type = "button"; r.innerHTML = `${TREAT} ${treatCost(p)} <span class="n">${t}</span>`; r.title = SPECIES[p.sp].name + " Treats"; r.disabled = t < treatCost(p); r.onclick = () => train("treat"); row.appendChild(r); }
   if (save.items.ribbon > 0 && !max) { const r = document.createElement("button"); r.className = "btn"; r.type = "button"; r.textContent = ITEMS.ribbon.name + " ×" + save.items.ribbon; r.onclick = () => train("ribbon"); row.appendChild(r); }
@@ -1034,7 +1255,7 @@ function train(how) {
   const p = riding(); if (p.lv >= MAXLV) return;
   if (how === "ribbon" || how === true) { if (save.items.ribbon <= 0) return; save.items.ribbon--; }
   else if (how === "treat") { const c = treatCost(p); if ((save.treats[p.sp] || 0) < c) return; save.treats[p.sp] -= c; }
-  else { const c = trainCost(p); if (save.coins < c) return; save.coins -= c; }
+  else if (how !== "points") return;
   p.lv++; persist(); mount(); netSend({ t: "pet", sp: p.sp, lv: p.lv }); toast(SPECIES[p.sp].name + " Lv " + p.lv, "#3fb36b"); if (openPanel === "p-train") renderTrain();
   emitSparks(me.x, me.y + 1.5, me.z, 50, 6, ["#3fb36b", "#ffd35a", "#ffffff"], 1.1, -3); emitConfetti(me.x, me.y + 2, me.z, 30, 3, 6);
 }
@@ -1147,6 +1368,7 @@ function renderHist() {
 $("btn-chat").onclick = () => (chatBar.style.display === "flex" ? closeChat() : openChat());
 chatBar.addEventListener("submit", (e) => {
   e.preventDefault(); const text = chatIn.value.replace(/\s+/g, " ").trim().slice(0, 120); chatIn.value = "";
+  if (text[0] === "/" && isStaff()) { slash(text); closeChat(); return; }   // (owner, 2026-11-09) staff commands
   if (text) { netSend({ t: "chat", text }); chatLine(save.name, text, true); myBubble = bubble(text, myBubble, mine.g, mine.top); }
   closeChat();
 });
@@ -1265,6 +1487,7 @@ function onNet(m) {
   switch (m.t) {
     case "welcome": {
       if (stale(m.web, false, m.by)) return;
+      sentPet = "";   // tell the room again what I ride once I'm in
       setTok(m.token); if (registering) { try { localStorage.setItem("petdelivery.claimed", "1"); } catch (e) { /* private mode */ } registering = false; }
       const again = loggedIn && myName === m.name; myName = m.name; myId = m.id; netOk = true; loggedIn = true; $("login").style.display = "none"; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
@@ -1413,6 +1636,7 @@ const POIS = [
   { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
   { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
   { x: SHOP_B.x, y: 12, z: SHOP_B.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
+  { x: MOUNT_B.x, y: 11.5, z: MOUNT_B.z, name: "Mount Shop", what: "Buy pets to ride" },
   { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
   { x: POUND.x, y: 8.5, z: POUND.z + 3, name: "Animal Control", what: "Where caught couriers end up" },
   { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
@@ -1596,8 +1820,11 @@ const TOWN = [
     },
   },
 ];
-// opening a shop from its keeper (the mount shop's opener comes with the mount shop)
-const SHOP_OPEN = { egg: () => show("p-shop") };
+// opening a shop from its keeper uses the same centered shop window as riding into its ring
+const SHOP_OPEN = {
+  egg: () => { shopKind = "egg"; show("p-shop"); },
+  mount: () => { shopKind = "mount"; show("p-shop"); },
+};
 function openShop(kind) { endTalk(); SHOP_OPEN[kind](); return null; }
 for (const n of TOWN) {
   if (n.only && !n.only()) { n.off = true; continue; }
@@ -1991,6 +2218,167 @@ function tapAt(px, py) {
 canvas.addEventListener("pointermove", (e) => { if (building && e.pointerType === "mouse") showGhost(e.clientX, e.clientY); });
 $("btn-build").onclick = () => (building ? closeBuild() : openBuild());
 
+// ---- the minimap (owner, 2026-11-09): a square map in the top right, turned with the camera so up on it is always the
+// way the camera looks. The town drawn once (land shaded by height and slope, roads, the plaza, houses, trees, the
+// islands; the ones above the town fade in as you climb), then live: everyone's plots and houses, the houses in my bag,
+// animal control and the searchlights, the other players (party green; above or below me marked; on the edge when
+// they're off the map), the way the camera sees, me in the middle and where the guide points. A tap zooms. ----
+const MAP_PX = 2, MAP_R = 460, MAP_N = MAP_R * 2 * MAP_PX;   // the drawn world: 2 px a metre, out to 460 m
+function mapLayer() { const c = document.createElement("canvas"); c.width = c.height = MAP_N; const g = c.getContext("2d"); g.setTransform(MAP_PX, 0, 0, MAP_PX, MAP_R * MAP_PX, MAP_R * MAP_PX); g.lineJoin = g.lineCap = "round"; return [c, g]; }
+const [mapGround, mgG] = mapLayer(), [mapSky, mgS] = mapLayer();
+const SKY_Y = 60;   // above this, the sky layer (the town tops out under 50 m; the VIP island is at 62)
+function mapHouse(g, h) {   // seen from above: its roof (a pyramid), the door at the front, the mailbox
+  g.save(); g.translate(h.x, h.z); g.rotate(-h.yaw);
+  g.fillStyle = h.roof; g.fillRect(-4.5, -4.5, 9, 9); g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 0.5; g.strokeRect(-4.5, -4.5, 9, 9);
+  g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 0.4; g.beginPath(); g.moveTo(-4.5, -4.5); g.lineTo(4.5, 4.5); g.moveTo(4.5, -4.5); g.lineTo(-4.5, 4.5); g.stroke();
+  g.fillStyle = "#7a4f28"; g.fillRect(-0.9, 4.3, 1.8, 0.9);
+  g.restore(); g.fillStyle = "#e5534b"; g.fillRect(h.mx - 0.6, h.mz - 0.6, 1.2, 1.2);
+}
+function mapTree(g, t) { g.fillStyle = "#3f8f3c"; g.beginPath(); g.arc(t.x, t.z, 1.7 * t.s, 0, TAU); g.fill(); g.fillStyle = "#5cb855"; g.beginPath(); g.arc(t.x - 0.4 * t.s, t.z - 0.4 * t.s, 1.05 * t.s, 0, TAU); g.fill(); }
+function mapIsland(g, isl, shadow) {
+  g.save(); if (shadow) { g.shadowColor = "rgba(10,30,60,.45)"; g.shadowBlur = 14; g.shadowOffsetX = 6; g.shadowOffsetY = 8; }
+  g.fillStyle = "#8a7f72"; g.beginPath(); g.arc(isl.x, isl.z, isl.r, 0, TAU); g.fill(); g.restore();
+  g.fillStyle = "#86c95f"; g.beginPath(); g.arc(isl.x, isl.z, isl.r - 1.2, 0, TAU); g.fill();
+}
+const mapRing = (g, x, z, r, c, w = 0.9) => { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(x, z, r, 0, TAU); g.stroke(); };
+const mapPlotLine = (g, p, c, w) => { g.save(); g.setLineDash([2, 1.5]); g.strokeStyle = c; g.lineWidth = w; g.strokeRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); g.restore(); };
+{
+  const g = mgG;
+  for (const isl of ISLANDS) if (isl.y < SKY_Y) mapIsland(g, isl, true);
+  // the town's rock rim (and its shadow over the clouds), then the land: grass by height and in broad patches, rock on
+  // steep slopes (as on the ground itself), lit from the north-west
+  g.save(); g.shadowColor = "rgba(10,30,60,.5)"; g.shadowBlur = 24; g.shadowOffsetX = 10; g.shadowOffsetY = 14; g.fillStyle = "#8a7a68";
+  g.beginPath(); for (let i = 0; i <= 360; i++) { const a = (i / 360) * TAU, r = edgeR(a) + 1; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.fill(); g.restore();
+  const n = MAP_R, cv = document.createElement("canvas"); cv.width = cv.height = n; const cx = cv.getContext("2d"), img = cx.createImageData(n, n), d = img.data;
+  const GRASS = [[127, 194, 90], [150, 207, 99], [169, 212, 110]], ROCK = [160, 143, 122], ROCK2 = [138, 122, 104], mix = (a, b, k) => a + (b - a) * k;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = -MAP_R + (i + 0.5) * 2, z = -MAP_R + (j + 0.5) * 2; if (!inside(x, z)) continue;
+    const y = terrain(x, z), hx = terrain(x + 2, z) - terrain(x - 2, z), hz = terrain(x, z + 2) - terrain(x, z - 2);
+    const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
+    const patch = 0.5 + 0.25 * Math.sin(x / 23 + Math.cos(z / 31)) + 0.25 * Math.sin(z / 19 - x / 41), up = smooth(clamp(y / 45, 0, 1)) * 0.7, rk = smooth(clamp((slope - 0.3) / 0.7, 0, 1));
+    const lit = clamp(1 + (hx + hz) * 0.11, 0.55, 1.3), k = (j * n + i) * 4;
+    for (let c = 0; c < 3; c++) d[k + c] = clamp(mix(mix(mix(GRASS[0][c], GRASS[1][c], patch), GRASS[2][c], up), mix(ROCK[c], ROCK2[c], patch), rk) * lit, 0, 255);
+    d[k + 3] = 255;
+  }
+  cx.putImageData(img, 0, 0); g.imageSmoothingEnabled = true; g.drawImage(cv, -MAP_R, -MAP_R, MAP_R * 2, MAP_R * 2);
+  // the plaza, the roads (with their dashed middle), the plots in town
+  g.fillStyle = "#e8dcc4"; g.beginPath(); g.arc(0, 0, PLAZA - 4, 0, TAU); g.fill();
+  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.strokeStyle = "#4f5861"; g.lineWidth = ROAD_HALF * 2 + 0.6; g.stroke(); g.strokeStyle = "#5c6670"; g.lineWidth = ROAD_HALF * 2 - 0.6; g.stroke(); }
+  g.save(); g.setLineDash([3.75, 4.25]); g.strokeStyle = "#f4f1e6"; g.lineWidth = 0.45; g.lineCap = "butt";
+  for (const R of ROADS) { g.beginPath(); for (const [x, z] of R.pts) g.lineTo(x, z); if (R.loop) g.closePath(); g.stroke(); } g.restore();
+  for (const p of PLOTS) if (p.kind === "center" || p.kind === "random") { g.fillStyle = "rgba(255,255,255,.14)"; g.fillRect(p.x - PLOT / 2, p.z - PLOT / 2, PLOT, PLOT); mapPlotLine(g, p, "rgba(255,255,255,.75)", 0.6); }
+  // the plaza's buildings and rings: post office, egg shop, training track, pound, contract board, the lift
+  g.fillStyle = "#d98b5f"; g.beginPath(); g.arc(TRAIN.x, TRAIN.z, 14, 0, TAU); g.arc(TRAIN.x, TRAIN.z, 9, 0, TAU, true); g.fill();
+  g.fillStyle = "#3a8ee6"; g.fillRect(POST.x - 9.5, POST.z - 5.5, 19, 11); g.fillStyle = "#d9e4ee"; g.fillRect(POST.x - 7.5, POST.z - 3.5, 15, 7); g.fillStyle = "#f2b01e"; g.fillRect(POST.x - 4, POST.z + 4.6, 8, 0.9);
+  g.fillStyle = "#e5739d"; g.fillRect(SHOP_B.x - 6.5, SHOP_B.z - 4.5, 13, 9); g.fillStyle = "#fff3d6"; g.beginPath(); g.ellipse(SHOP_B.x, SHOP_B.z, 2, 2.6, 0, 0, TAU); g.fill();
+  g.fillStyle = "#3d4650"; g.fillRect(POUND.x - 8.5, POUND.z - 1.5, 17, 9); g.fillStyle = "#e08a00"; g.fillRect(POUND.x - 8.2, POUND.z - 1.2, 16.4, 1.2);
+  g.strokeStyle = "#9aa7b2"; g.lineWidth = 0.4; g.strokeRect(POUND.x - 8, POUND.z - 9, 16, 7.9);
+  g.fillStyle = "#8a5a3a"; g.fillRect(BOARD.x - 1.3, BOARD.z - 1.8, 2.6, 0.6);
+  mapRing(g, PICKUP.x, PICKUP.z, PICKUP.r, "#f2b01e"); mapRing(g, BOARD.x, BOARD.z, BOARD.r, "#e5534b"); mapRing(g, SHOP.x, SHOP.z, SHOP.r, "#e5739d"); mapRing(g, TRAIN.x, TRAIN.z, TRAIN.r - 1, "#3fb36b"); mapRing(g, LIFTS[0].x, LIFTS[0].z, 2.2, "#2bb3c0");
+  for (const h of houses) if (h.base < SKY_Y) mapHouse(g, h);
+  for (const t of trees) if (t.y < SKY_Y) mapTree(g, t);
+  // above the town: the high islands and the VIP island (its plots and lift)
+  const s = mgS;
+  for (const isl of [...ISLANDS.filter((i) => i.y >= SKY_Y), VIP_ISLAND]) mapIsland(s, isl, true);
+  for (const p of PLOTS) if (p.kind === "vip") mapPlotLine(s, p, "rgba(255,255,255,.8)", 0.6);
+  mapRing(s, LIFTS[1].x, LIFTS[1].z, 2.2, "#2bb3c0");
+  for (const h of houses) if (h.base >= SKY_Y) mapHouse(s, h);
+  for (const t of trees) if (t.y >= SKY_Y) mapTree(s, t);
+}
+const mapEl = $("map"), mapG = mapEl.getContext("2d"), MAP_ZOOMS = [40, 80, 170, 300];   // half the map's width, in metres
+let mapZoom = 1, mapHalf = 80, mapLast = 0;
+try { const v = localStorage.getItem("pets-map-zoom"); if (v !== null) mapZoom = clamp(Math.floor(+v) || 0, 0, MAP_ZOOMS.length - 1); } catch (err) { /* no storage */ }
+mapHalf = MAP_ZOOMS[mapZoom];
+mapEl.addEventListener("click", () => { mapZoom = (mapZoom + 1) % MAP_ZOOMS.length; try { localStorage.setItem("pets-map-zoom", String(mapZoom)); } catch (err) { /* no storage */ } });
+const mapCells = new WeakMap();   // a plot's pieces -> its squares seen from above (the roof, else the floor)
+function plotCells(pieces) {
+  let c = mapCells.get(pieces); if (c) return c;
+  const top = new Map();
+  for (const t of pieces) { if (!PIECES[t.k] || PIECES[t.k].t !== "cell") continue; const key = t.x + "," + t.z, h = t.l * 2 + (t.k === "floor" || t.k === "stairs" ? 0 : 1), o = top.get(key); if (!o || h >= o.h) top.set(key, { x: t.x, z: t.z, h, c: t.k === "floor" && t.c === 0 ? "#c9a27e" : COLORS[t.c] || COLORS[0], roof: h % 2 === 1 }); }
+  c = [...top.values()]; mapCells.set(pieces, c); return c;
+}
+const mapLerp = (a, b, k) => "rgb(" + a.map((v, i) => Math.round(v + (b[i] - v) * k)).join(",") + ")";
+function drawMap(now, tx, tz, tsky, guide) {
+  const off = !!me.inst; mapEl.style.display = off ? "none" : ""; if (off || now - mapLast < 33) return; mapLast = now;
+  const dpr = Math.min(2, devicePixelRatio || 1), px = Math.round(mapEl.clientWidth * dpr); if (!px) return;
+  if (mapEl.width !== px) mapEl.width = mapEl.height = px;
+  const g = mapG, H = px / 2; mapHalf += (MAP_ZOOMS[mapZoom] - mapHalf) * 0.25;
+  const s = H / mapHalf, cyw = Math.cos(cam.yaw), syw = Math.sin(cam.yaw), u = dpr, dark = 1 - skyNow.day;
+  const toMap = (x, z) => { const dx = x - me.x, dz = z - me.z; return [H + (dx * cyw - dz * syw) * s, H + (dx * syw + dz * cyw) * s]; };
+  const edge = (p, m) => { const ex = p[0] - H, ey = p[1] - H, k = (H - m) / Math.max(Math.abs(ex), Math.abs(ey), 1e-6); return k < 1 ? [H + ex * k, H + ey * k, true] : [p[0], p[1], false]; };
+  const ang = (a) => Math.PI + cam.yaw - a;   // a heading in the world -> turn on the map (0: up)
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1;
+  g.fillStyle = mapLerp([111, 182, 224], [22, 40, 70], dark * 0.85); g.fillRect(0, 0, px, px);
+  // the world, turned with the camera
+  g.setTransform(1, 0, 0, 1, H, H); g.rotate(cam.yaw); g.scale(s, s); g.translate(-me.x, -me.z);
+  const rr = mapHalf * 1.45 + 4, sub = (img) => { const x0 = clamp(me.x - rr, -MAP_R, MAP_R), z0 = clamp(me.z - rr, -MAP_R, MAP_R), x1 = clamp(me.x + rr, -MAP_R, MAP_R), z1 = clamp(me.z + rr, -MAP_R, MAP_R); if (x1 > x0 && z1 > z0) g.drawImage(img, (x0 + MAP_R) * MAP_PX, (z0 + MAP_R) * MAP_PX, (x1 - x0) * MAP_PX, (z1 - z0) * MAP_PX, x0, z0, x1 - x0, z1 - z0); };
+  g.imageSmoothingEnabled = true; sub(mapGround);
+  if (extraIsland.visible) { mapIsland(g, EXTRA_ISLAND, true); for (const p of PLOTS) if (p.kind === "extra") mapPlotLine(g, p, "rgba(255,255,255,.8)", 0.6); mapRing(g, LIFTS[2].x, LIFTS[2].z, 2.2, "#2bb3c0"); }
+  const skyA = 0.3 + 0.7 * smooth(clamp((me.y - 8) / 45, 0, 1));   // the islands above fade in as I climb
+  const plots = (sky) => { for (const [id, st] of plotState) { const p = PLOTS[id]; if ((p.y >= SKY_Y) !== sky) continue; const o = plotOrigin(p); for (const c of plotCells(st.pieces)) { g.fillStyle = c.c; g.fillRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); g.strokeStyle = c.roof ? "rgba(0,0,0,.3)" : "rgba(0,0,0,.18)"; g.lineWidth = 0.3; g.strokeRect(o.x + c.x * CELL, o.z + c.z * CELL, CELL, CELL); } if (id === myPlot) mapPlotLine(g, p, "#f2b01e", 1.1); } };
+  plots(false);
+  g.globalAlpha = skyA; sub(mapSky); plots(true); g.globalAlpha = 1;
+  // the helicopters' searchlights: the beam out to its spot on the ground
+  for (const m of vehs) {
+    if (!m.kind) continue; const gx = m.x + Math.sin(m.ba) * m.bd, gz = m.z + Math.cos(m.ba) * m.bd, r = Math.max(2, hyp(m.bd, m.y - terrain(gx, gz)) * Math.tan(World.BEAM.half));
+    const a = Math.atan2(gz - m.z, gx - m.x), gr = g.createRadialGradient(gx, gz, 0, gx, gz, r * 1.3);
+    gr.addColorStop(0, `rgba(255,252,220,${0.55 + 0.3 * dark})`); gr.addColorStop(1, "rgba(255,252,220,0)");
+    g.fillStyle = `rgba(255,252,220,${0.14 + 0.16 * dark})`; g.beginPath(); g.moveTo(m.x, m.z); g.lineTo(gx + Math.cos(a + 1.5708) * r, gz + Math.sin(a + 1.5708) * r); g.lineTo(gx + Math.cos(a - 1.5708) * r, gz + Math.sin(a - 1.5708) * r); g.closePath(); g.fill();
+    g.fillStyle = gr; g.beginPath(); g.arc(gx, gz, r * 1.3, 0, TAU); g.fill();
+  }
+  // night falls on the map too
+  g.setTransform(1, 0, 0, 1, 0, 0); if (dark > 0.05) { g.fillStyle = `rgba(8,16,40,${dark * 0.42})`; g.fillRect(0, 0, px, px); }
+  // the way the camera sees (always up)
+  const fov = Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect), vg = g.createLinearGradient(H, H, H, 0);
+  vg.addColorStop(0, "rgba(255,255,255,.32)"); vg.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = vg;
+  g.beginPath(); g.moveTo(H, H); g.lineTo(H - Math.tan(fov) * H, 0); g.lineTo(H + Math.tan(fov) * H, 0); g.closePath(); g.fill();
+  const flash = Math.floor(now / 150) % 2 === 0, pulse = 0.5 + 0.5 * Math.sin(now / 160);
+  // the houses in my bag (pink: an island house)
+  for (const i of me.bag) { const h = houses[i], [x, y] = toMap(h.mx, h.mz); if (x < -8 || y < -8 || x > px + 8 || y > px + 8) continue; g.fillStyle = h.sky ? "#ff5aa0" : "#f2b01e"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(x, y, 3.6 * u, 0, TAU); g.fill(); g.stroke(); }
+  // animal control: vans (lights flashing when they chase) and helicopters (rotors turning)
+  for (const m of vehs) {
+    const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;
+    g.save(); g.translate(x, y); g.rotate(ang(m.yaw));
+    if (!m.kind) {
+      g.fillStyle = "#f4f4f0"; g.strokeStyle = chasing ? (flash ? "#ff3a3a" : "#3a7aff") : "#3d4650"; g.lineWidth = (chasing ? 2 : 1.2) * u;
+      g.fillRect(-3 * u, -5 * u, 6 * u, 10 * u); g.strokeRect(-3 * u, -5 * u, 6 * u, 10 * u); g.fillStyle = "#e08a00"; g.fillRect(-3 * u, 0, 6 * u, 1.5 * u);
+      g.fillStyle = chasing && flash ? "#ff3a3a" : "#7a2020"; g.fillRect(-2.4 * u, -3 * u, 2.2 * u, 1.3 * u); g.fillStyle = chasing && !flash ? "#3a7aff" : "#203a7a"; g.fillRect(0.2 * u, -3 * u, 2.2 * u, 1.3 * u);
+    } else {
+      g.fillStyle = "#f4f4f0"; g.strokeStyle = "#3d4650"; g.lineWidth = 1.2 * u; g.beginPath(); g.ellipse(0, -1 * u, 3.2 * u, 4.6 * u, 0, 0, TAU); g.fill(); g.stroke();
+      g.fillRect(-0.8 * u, 3 * u, 1.6 * u, 5 * u); g.strokeRect(-0.8 * u, 3 * u, 1.6 * u, 5 * u);
+      g.rotate(now / 60); g.strokeStyle = "rgba(43,52,64,.75)"; g.lineWidth = 1.3 * u; g.beginPath(); g.moveTo(-7 * u, 0); g.lineTo(7 * u, 0); g.moveTo(0, -7 * u); g.lineTo(0, 7 * u); g.stroke();
+    }
+    g.restore();
+  }
+  // the others: a dot in their shirt's colour facing their way; my party ringed green, wanted ones red; above or below
+  // me marked; on the edge when they're off the map
+  const inParty = new Set(party.map((q) => q.id));
+  for (const [id, o] of others) {
+    if (o.inst !== me.inst) continue; const [x, y, out] = edge(toMap(o.x, o.z), 7 * u), r = (out ? 3.4 : 4.6) * u;
+    g.save(); g.translate(x, y); g.globalAlpha = out ? 0.85 : 1;
+    if (!out) { g.save(); g.rotate(ang(o.yaw)); g.fillStyle = "#fff"; g.beginPath(); g.moveTo(0, -r - 3.2 * u); g.lineTo(2.6 * u, -r + 0.6 * u); g.lineTo(-2.6 * u, -r + 0.6 * u); g.closePath(); g.fill(); g.restore(); }
+    const ring = inParty.has(id) ? "#3fb36b" : o.stars ? (flash ? "#e5534b" : "#ff9a94") : null;
+    if (ring) { g.fillStyle = ring; g.beginPath(); g.arc(0, 0, r + 2.2 * u, 0, TAU); g.fill(); }
+    g.fillStyle = o.shirt || "#3a8ee6"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill(); g.stroke();
+    const dy = o.y - me.y; if (Math.abs(dy) > 6) { g.fillStyle = "#fff"; g.strokeStyle = "#23303b"; g.lineWidth = 1 * u; const sgn = dy > 0 ? -1 : 1, bx = r + 2 * u, by = -r; g.beginPath(); g.moveTo(bx, by + sgn * 2.4 * u); g.lineTo(bx + 2.8 * u, by - sgn * 2 * u); g.lineTo(bx - 2.8 * u, by - sgn * 2 * u); g.closePath(); g.fill(); g.stroke(); }
+    g.restore();
+  }
+  // where the guide points: a glowing marker, or a chevron on the edge pointing the way
+  if (guide) {
+    const p = toMap(tx, tz), [x, y, out] = edge(p, 8 * u);
+    g.save(); g.translate(x, y); g.shadowColor = "#ffb800"; g.shadowBlur = 8 * u; g.fillStyle = tsky ? "#ff5aa0" : "#ffd35a"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u;
+    if (out) { g.rotate(Math.atan2(p[0] - H, H - p[1])); g.beginPath(); g.moveTo(0, -6 * u); g.lineTo(5 * u, 3 * u); g.lineTo(0, 0.5 * u); g.lineTo(-5 * u, 3 * u); g.closePath(); g.fill(); g.stroke(); }
+    else { g.beginPath(); g.arc(0, 0, (4.5 + pulse * 1.5) * u, 0, TAU); g.fill(); g.stroke(); g.shadowBlur = 0; g.strokeStyle = tsky ? "rgba(255,90,160,.6)" : "rgba(255,211,90,.7)"; g.beginPath(); g.arc(0, 0, (8 + pulse * 5) * u, 0, TAU); g.stroke(); }
+    g.restore();
+  }
+  // me: an arrow the way my pet faces, in my shirt's colour
+  g.save(); g.translate(H, H); g.rotate(ang(me.yaw)); g.shadowColor = "rgba(0,0,0,.4)"; g.shadowBlur = 3 * u; g.fillStyle = save.shirt || "#3a8ee6"; g.strokeStyle = "#fff"; g.lineWidth = 2 * u;
+  g.beginPath(); g.moveTo(0, -7.5 * u); g.lineTo(5.5 * u, 5.5 * u); g.lineTo(0, 2.5 * u); g.lineTo(-5.5 * u, 5.5 * u); g.closePath(); g.stroke(); g.fill(); g.restore();
+  // north, on the edge
+  const [nx, ny] = edge([H + syw * H * 4, H - cyw * H * 4], 9 * u);
+  g.fillStyle = "rgba(35,48,59,.85)"; g.beginPath(); g.arc(nx, ny, 7 * u, 0, TAU); g.fill(); g.fillStyle = "#fff"; g.font = `800 ${9 * u}px ui-rounded, system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("N", nx, ny + 0.5 * u);
+}
+
 // ---- what I can do where I am: talk to someone (F), take a lift (E); buttons for them on a phone ----
 let uiKey = "", acts = [];
 function nearLift() { return LIFTS.find((l) => hyp(me.x - l.x, me.z - l.z) < 2.6 && Math.abs(me.y - l.y) < 3 && (l.to === "plaza" || myPlot >= 0)); }
@@ -2017,6 +2405,8 @@ function ui() {
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
+  $("btn-down").style.display = kind === "fly" && !building ? "" : "none";
+  $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
 }
@@ -2030,33 +2420,59 @@ const isStaff = () => myRole === "moderator" || myRole === "admin";
 const GIVES = () => [{ id: "coins", name: "Coins" }, ...Object.entries(ITEMS).map(([id, it]) => ({ id, name: it.name })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "pet:" + id, name: sp.name, pet: true })), ...Object.entries(SPECIES).map(([id, sp]) => ({ id: "treat:" + id, name: sp.name + " Treats" }))];
 let adminTimer = 0;
 function adminSend(o) { netSend(Object.assign({ t: "admin", q: adminQ }, o)); }
+// (owner, 2026-11-09) admins' quick commands: on yourself from the top of the panel, on anyone from their row's Quick
+// menu, or typed in chat (slash below)
+const QUICK = [["coins:10000", "+10K"], ["coins:100000", "+100K"], ["coins:1000000", "+1M"], ["allpets", "All pets"], ["maxlv", "Max levels"], ["items", "Items"], ["treats", "Treats"], ["unwanted", "Clear wanted"], ["everything", "Everything"]];
+const quick = (target, v) => { const [cmd, n] = v.split(":"); adminSend(Object.assign({ op: "quick", cmd, n: +n || 0 }, target)); };
+let adminBuilt = "";
 function renderAdmin() {
   const el = $("admin"); if (!el) return;
-  if (giveTo) return renderGive();
-  el.innerHTML = "";
-  const q = document.createElement("input"); q.className = "field"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
-  q.oninput = () => { adminQ = q.value.trim(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
-  el.appendChild(q);
+  if (giveTo) { adminBuilt = ""; return renderGive(); }
+  if (adminBuilt !== myRole) {   // the search box and quick commands are built once, so typing keeps its focus while the list refreshes
+    adminBuilt = myRole; el.innerHTML = "";
+    const q = document.createElement("input"); q.className = "field asearch"; q.placeholder = "Search"; q.value = adminQ; q.maxLength = 16;
+    q.oninput = () => { adminQ = q.value.trim(); renderAdmin(); clearTimeout(adminTimer); adminTimer = setTimeout(() => adminSend({ op: "list" }), 250); };
+    el.appendChild(q);
+    if (myRole === "admin") {
+      const h = document.createElement("div"); h.className = "ahead"; h.textContent = "Me";
+      const g = document.createElement("div"); g.className = "qgrid";
+      for (const [v, t] of QUICK) {
+        const b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (v.startsWith("coins") ? " gold" : v === "everything" ? " green" : " ghost");
+        b.innerHTML = v.startsWith("coins") ? `<span class="coin"></span>` : ""; b.append(document.createTextNode(t)); b.onclick = () => quick({ name: myName }, v); g.appendChild(b);
+      }
+      el.append(h, g);
+    }
+    const h = document.createElement("div"); h.className = "ahead"; h.innerHTML = `Players <span class="cnt" id="admin-n"></span>`;
+    const rows = document.createElement("div"); rows.className = "arows"; rows.id = "arows";
+    el.append(h, rows);
+  }
   const owner = myName.toLowerCase() === "nyssary";
   const sel = (opts, val, on) => { const s = document.createElement("select"); s.className = "field small"; for (const [v, t] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = t; if (v === val) o.selected = true; s.appendChild(o); } s.onchange = () => on(s.value); return s; };
   const TIMES = [["", "—"], ["10", "10m"], ["60", "1h"], ["1440", "1d"], ["10080", "7d"], ["43200", "30d"], ["perma", "Perma"], ["off", "Off"]];
-  const rows = document.createElement("div"); rows.className = "arows";
-  for (const p of adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase()))) {
-    const r = document.createElement("div"); r.className = "arow";
+  const btn = (txt, cls, on) => { const b = document.createElement("button"); b.className = "btn small " + cls; b.type = "button"; b.textContent = txt; b.onclick = on; return b; };
+  const rows = $("arows"); rows.innerHTML = "";
+  const list = adminList.filter((r) => !adminQ || r.name.toLowerCase().startsWith(adminQ.toLowerCase())).sort((x, y) => y.online - x.online || x.name.localeCompare(y.name));
+  $("admin-n").textContent = adminList.filter((r) => r.online).length + " online";
+  for (const p of list) {
+    const r = document.createElement("div"); r.className = "arow" + (p.online ? " on" : "") + (p.name === myName ? " me" : "");
     const nm = document.createElement("div"); nm.className = "aname";
-    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
+    nm.innerHTML = `<span class="dot${p.online ? " on" : ""}"></span><b></b><span class="role ${p.role}">${p.role}</span>${p.vip ? `<span class="tag vip">VIP</span>` : ""}${p.muted ? `<span class="tag">Muted ${p.muted === -1 ? "" : untilText(p.muted)}</span>` : ""}${p.banned ? `<span class="tag">Banned ${p.banned === -1 ? "" : untilText(p.banned)}</span>` : ""}`;
     nm.querySelector("b").textContent = p.name; r.appendChild(nm);
     const acts = document.createElement("div"); acts.className = "aacts";
     const canRole = owner ? p.role !== "owner" : myRole === "admin" && (p.role === "player" || p.role === "moderator");
     if (canRole && p.name !== myName) acts.appendChild(sel(owner ? [["player", "Player"], ["moderator", "Moderator"], ["admin", "Admin"]] : [["player", "Player"], ["moderator", "Moderator"]], p.role, (v) => adminSend({ op: "role", id: p.id, role: v })));
-    const mute = sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })); acts.appendChild(mute);
-    const ban = sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })); acts.appendChild(ban);
-    if (p.online) { const k = document.createElement("button"); k.className = "btn small"; k.type = "button"; k.textContent = "Kick"; k.onclick = () => adminSend({ op: "kick", id: p.id }); acts.appendChild(k); }
-    if (myRole === "admin") { const v = document.createElement("button"); v.className = "btn small" + (p.vip ? " gold" : ""); v.type = "button"; v.textContent = p.vip ? "VIP ★" : "VIP"; v.onclick = () => adminSend({ op: "vip", id: p.id, on: !p.vip }); acts.appendChild(v); }
-    if (myRole === "admin") { const g = document.createElement("button"); g.className = "btn gold small"; g.type = "button"; g.textContent = "Give"; g.onclick = () => { giveTo = p; giveWhat = null; renderAdmin(); }; acts.appendChild(g); }
+    if (p.name !== myName) {
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })));
+      acts.appendChild(sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })));
+      if (p.online) acts.appendChild(btn("Kick", "", () => adminSend({ op: "kick", id: p.id })));
+    }
+    if (myRole === "admin") {
+      acts.appendChild(sel([["", "Quick"], ...QUICK], "", (v) => v && quick({ id: p.id }, v)));
+      acts.appendChild(btn(p.vip ? "VIP ★" : "VIP", p.vip ? "gold" : "ghost", () => adminSend({ op: "vip", id: p.id, on: !p.vip })));
+      acts.appendChild(btn("Give", "gold", () => { giveTo = p; giveWhat = null; renderAdmin(); }));
+    }
     r.appendChild(acts); rows.appendChild(r);
   }
-  el.appendChild(rows);
 }
 // give someone an item, coins, Treats or a pet: type to narrow the list, pick one (owner, 2026-11-09: pets show the
 // Flier / Glider badge here too)
@@ -2077,9 +2493,21 @@ function renderGive() {
   row.append(n, lv, go); el.append(q, list, row); fill();
 }
 $("btn-admin").onclick = () => { if (openPanel === "p-admin") closePanels(); else { giveTo = null; show("p-admin"); adminSend({ op: "list" }); } };
+// (owner, 2026-11-09) staff chat commands, never sent as chat: /coins 1m, /allpets, /maxlv, /items, /treats, /everything
+// (or /all), /unwanted, each on yourself or a player named after it (/coins 50k Name); /kick Name, /mute Name 1h, /ban
+// Name 7d (minutes, or m / h / d, perma, off)
+function slash(text) {
+  const [c, ...a] = text.slice(1).split(" "), cmd = c.toLowerCase(), who = (s) => (s && /^[A-Za-z0-9_]{3,16}$/.test(s) ? s : null);
+  const QC = { allpets: "allpets", maxlv: "maxlv", items: "items", treats: "treats", everything: "everything", all: "everything", unwanted: "unwanted" };
+  const dur = (s) => { s = (s || "").toLowerCase(); if (s === "perma" || s === "off") return s; const r = /^(\d+)([mhd]?)$/.exec(s); return r ? String(+r[1] * { "": 1, m: 1, h: 60, d: 1440 }[r[2]]) : "60"; };
+  if (cmd === "coins") { const r = /^(\d+(?:\.\d+)?)([km]?)$/i.exec(a[0] || ""); if (!r) return toast("Unknown"); return adminSend({ op: "quick", cmd: "coins", n: Math.floor(+r[1] * { "": 1, k: 1e3, m: 1e6 }[r[2].toLowerCase()]), name: who(a[1]) || myName }); }
+  if (QC[cmd]) return adminSend({ op: "quick", cmd: QC[cmd], name: who(a[0]) || myName });
+  if ((cmd === "kick" || cmd === "mute" || cmd === "ban") && who(a[0])) return adminSend(cmd === "kick" ? { op: "kick", name: a[0] } : { op: cmd, name: a[0], mins: dur(a[1]) });
+  toast("Unknown");
+}
 
 // ---- the loop ----
-let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
+let last = performance.now(), clock = 0, zone = null, jumpQueued = 0, flyUp = false, flyDown = false;   // flyUp / flyDown: Fly ▲ / Fly ▼ held
 const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // (owner, 2026-11-08) how each pet gets around: land pets jump (high from standing, far on the run); flapping fliers go
 // anywhere but fly and walk slower; gliders are fast but can't climb, sinking slowly as they glide, and walk well
@@ -2088,13 +2516,26 @@ const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // walk, off your pet.
 const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, glide: { ground: 0.95, air: 1.25 }, foot: { ground: 1, air: 1 } };
 const FOOT_SPEED = 5.5;
+// (owner, 2026-11-09) airborne fliers and gliders gain up to 10% pointing downwind and lose up to 5% pointing into it.
+// The dot product makes the change taper smoothly to no change while crossing the wind.
+function windRideFactor(kind, airborne, dx, dz, wx = WIND.x, wz = WIND.z) {
+  const d = hyp(dx, dz); if (!airborne || (kind !== "fly" && kind !== "glide") || d < 0.08) return 1;
+  const along = clamp((dx * wx + dz * wz) / d, -1, 1);
+  return 1 + along * (along >= 0 ? 0.1 : 0.05);
+}
 function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
-  return inside(x, z) ? terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0) : -200;
+  if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
+  if (!inside(x, z)) return -200;
+  const w = World.waterAt(x, z); if (w > -Infinity) return w - SWIM_SINK;   // (owner, 2026-11-09) in the water you float
+  return terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0);
 }
+// (owner, 2026-11-09) swimmers swim fast; anyone else paddles slowly, and can't wade in from the shore (they can jump in)
+const SWIM_SINK = 0.55, SWIM_FAST = 1.35, PADDLE = 0.4;
+const swims = () => !!SPECIES[riding().sp].swim;
 function floorAt(x, z, y) { return Math.max(groundAt(x, z, y), houseSurface(x, z, y)); }
 function step(dt) {
-  clock += dt;
+  clock += dt; petSync();
   const now = performance.now();
   if (!loggedIn) { joy.x = joy.y = 0; }
   // where the joystick (or keys) point, turned by the camera
@@ -2112,18 +2553,24 @@ function step(dt) {
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   if (grounded) me.flapped = false;
-  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
+  if (!me.inst && kind !== "foot") boostTouch(now);
+  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
+  sp *= windRideFactor(kind, me.y - floor0 > 1.2, mx, mz);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
+  const wNow = World.waterAt(me.x, me.z), wet = wNow > -Infinity && me.y < wNow - 0.2;
+  if (wet && kind !== "foot") sp *= swims() ? SWIM_FAST : PADDLE;
   me.moving = ml > 0.08 && !stunned;
   if (!me.moving) stuckFor = 0;
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
-      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || (!me.inst && folkBlock(x, z, me.y))) return false;
+      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y) || arenaBlocked(x, z, me.y) || (!me.inst && folkBlock(x, z, me.y))) return false;
       if (kind === "fly") return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
-      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
-      return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
+      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
+      if (!wet && !swims() && World.waterAt(x, z) > me.y - 0.3) return false;   // the shore: only swimmers walk in
+      if (wet && !inside(x, z, 2.5)) return false;   // not over the waterfall
+      return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05 + (wet ? 1.1 : 0);   // too steep to climb (a jump gets you up a ledge; out of the water too)
     };
     const bx = me.x, bz = me.z;
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
@@ -2133,10 +2580,10 @@ function step(dt) {
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped; Space rises straight up
-    const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
-    if (jumpQueued > now && !stunned) { me.vy = 10; jumpQueued = 0; }
-    me.y += (climb * fwd * sp * FLY_SPEED_UP + (me.vy || 0)) * dt; me.vy = (me.vy || 0) * Math.exp(-2.5 * dt); if (me.vy < 0.2) me.vy = 0;
+  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Shift / Fly ▼ (down); hovers otherwise
+    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ShiftLeft") || keys.has("ShiftRight")));
+    me.vy = 0; jumpQueued = 0;
+    if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
     me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
   } else {
     if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
@@ -2148,6 +2595,8 @@ function step(dt) {
     if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
+  if (me.padUntil > now && me.moving && Math.random() < dt * 24) emitSparks(me.x - Math.sin(me.yaw) * 0.8, me.y + 0.8, me.z - Math.cos(me.yaw) * 0.8, 2, 1.2, me.padC === "pad" ? ["#ff9f1a", "#fff4c2"] : me.padC === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.45, 0, 0.8);   // a boost's trail
+  if (wet && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
   // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
   // and bumps it about a little; never on the ground, at home or inside
   const gust = me.inst || stunned || !me.airborne || (kind !== "fly" && kind !== "glide") ? 0 : clamp((windNow.mph - 12) / 28, 0, 1);
@@ -2160,6 +2609,7 @@ function step(dt) {
     if (kind === "fly") me.y = Math.min(me.y, FLY_TOP);
   }
   me.airborne = me.y - floor > 1.2;
+  arenaStep();
   const low = me.y - floor < 3.5;
   const atHome = onMyPlot(1); if (atHome && !me.atHome) collectPens(); me.atHome = atHome;   // playpen coins, collected on coming home
   if (!me.inst) {
@@ -2169,12 +2619,12 @@ function step(dt) {
   }
   // animal control: offline this page runs it
   if (!netOk) {
-    Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars, bag: me.bag.length });
+    Object.assign(meP, { x: me.inst ? 9999 : me.x, y: me.y, z: me.z, stars: me.stars, bag: me.bag.length, airMount: !!SPECIES[riding().sp].fly });
     for (const e of World.stepVehicles(localVs, [meP], dt, now / 1000)) onVehEvent(e.k, e.stars || 0);
   }
-  // the egg shop, the training yard and the board open their panel when I ride in
-  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
-  if (z !== zone) { if (zone && openPanel === zone) closePanels(); zone = z; if (z) show(z); }
+  // the shops, the training yard and the board open their panel when I ride in
+  const z = !low || me.inst ? null : hyp(me.x - SHOP.x, me.z - SHOP.z) < SHOP.r ? "p-shop:egg" : hyp(me.x - MOUNT.x, me.z - MOUNT.z) < MOUNT.r ? "p-shop:mount" : hyp(me.x - TRAIN.x, me.z - TRAIN.z) < TRAIN.r ? "p-train" : hyp(me.x - BOARD.x, me.z - BOARD.z) < BOARD.r ? "p-board" : null;
+  if (z !== zone) { if (zone && openPanel === zone.split(":")[0]) closePanels(); zone = z; if (z) { const [id, kind] = z.split(":"); if (kind) shopKind = kind; show(id); } }
   contractStep(); fxStep(dt);
   const cs = (0.5 + windNow.mph * 0.08) * dt;   // clouds drift with the wind
   for (const c of clouds) { c.position.x += WIND.x * cs; c.position.z += WIND.z * cs; for (const ax of ["x", "z"]) { if (c.position[ax] > 420) c.position[ax] -= 840; else if (c.position[ax] < -420) c.position[ax] += 840; } }
@@ -2214,7 +2664,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  folkStep(dt); talkStep(dt); cutaway(); poiStep(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && !talk && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -2223,10 +2673,12 @@ function frame(now) {
   draw(dt); hud(); ui(); if (invites.length && invites[0].until < now) renderInvite();
   requestAnimationFrame(frame);
 }
-$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; });
+$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; flyUp = true; });
+$("btn-down").addEventListener("pointerdown", (e) => { e.preventDefault(); flyDown = true; });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) { $("btn-jump").addEventListener(ev, () => { flyUp = false; }); $("btn-down").addEventListener(ev, () => { flyDown = false; }); }
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, folk, startTalk, talkNext, talkPick, endTalk, get talk() { return talk; }, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
