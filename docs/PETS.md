@@ -50,9 +50,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   slowly round. Streaks blow past faster and more often the windier it is (and more up high and in the rain); rain
   and clouds drift with it. **From 12 mph (most at 40), a flier or glider in the air** drifts gently downwind (up to
   1.4 m/s) and bobs a little (under a metre up and down, a little side to side; flying pets nod slightly with it);
-  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
-  pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
-  home.
+  never on the ground, while stunned or in a home, and the wind never pushes you into a cliff, wall or house. Wind
+  streaks are long, bright and common enough to make its direction clear around town. **Airborne fliers and gliders**
+  gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
+  **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
+  camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.

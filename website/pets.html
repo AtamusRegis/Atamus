@@ -24,6 +24,8 @@
     #coins { font: 800 24px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; }
     .coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe38a, var(--gold) 60%, #c98a0a); border: 2px solid #b47a07; }
     #who { font-size: 12px; opacity: .85; }
+    #windp { transition: background .2s; } #windp.tailwind { background: #dff6e7; } #windp.headwind { background: #ffe5df; }
+    #winde { font-size: 12px; color: #247a47; } #windp.headwind #winde { color: #a43d31; }
     #bag b, #online b { font-size: 16px; }
     .box { width: 16px; height: 13px; background: #c98b4f; border: 2px solid #8a5a2b; border-radius: 3px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: #9aa7b2; }
@@ -164,7 +166,7 @@
     <div>
       <span class="pill"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="who"></span>
-      <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b></span>
+      <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
       <div id="party"></div>
     </div>
     <div>
@@ -207,6 +209,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100026"></script>
+  <script type="module" src="pets.js?v=1793100030"></script>
 </body>
 </html>
