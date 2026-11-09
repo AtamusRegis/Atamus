@@ -156,9 +156,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (animal control 10, stamped with its clock). Pages replay each player 170 ms in the past on that player's own clock
   (so speeds stay even), guessing ahead up to 0.2 s if an update's late (not if they'd stopped) and easing any
   correction in. Nothing is checked by the server (no anti-cheat).
-- **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
-  the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
+- **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
+  tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
+  connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
