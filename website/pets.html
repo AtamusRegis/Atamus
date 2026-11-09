@@ -21,6 +21,7 @@
     #top { position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; pointer-events: none; z-index: 5; }
     #top > div { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
     #top > div:last-child { align-items: flex-end; }
+    #home { color: #8a5a00; background: #fff6dc; }
     #coins { font: 800 24px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; }
     .coin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe38a, var(--gold) 60%, #c98a0a); border: 2px solid #b47a07; }
     #who { font-size: 12px; opacity: .85; }
@@ -195,6 +196,7 @@
     #tkopts .btn { flex: 1 1 auto; text-align: left; }
     #fade { position: fixed; inset: 0; background: #0b0f14; opacity: 0; pointer-events: none; z-index: 12; transition: opacity .4s; }
     #fade.on { opacity: 1; }
+    @media (pointer: fine) { #btn-jump { display: none !important; } }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -203,6 +205,7 @@
   <div id="top">
     <div>
       <span class="pill" id="who"></span>
+      <span class="pill" id="home" style="display:none"></span>
       <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
       <div id="party"></div>
     </div>
@@ -257,6 +260,6 @@
   <div id="banner"></div>
   <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1794200003"></script>
+  <script type="module" src="pets.js?v=1794200004"></script>
 </body>
 </html>

@@ -1210,7 +1210,9 @@ let hudKey = "", windKey = "";
 function hud() {
   const p = riding(), cap = petBag(p), c = contract, left = c ? Math.max(0, Math.ceil((c.ends - performance.now()) / 1000)) : 0;
   const packageLeft = packageEvent ? Math.max(0, Math.ceil((packageEvent.ends - performance.now()) / 1000)) : 0;
-  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind], packageEvent && [packageEvent.boxes.size, packageLeft]].join("|");
+  const home = myPlot >= 0 ? PLOTS[myPlot] : null, homeDist = home ? Math.round(hyp(me.x - home.x, me.z - home.z)) : -1;
+  const homeDir = home && homeDist ? ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round((Math.atan2(home.x - me.x, -(home.z - me.z)) + Math.PI * 2) / (Math.PI / 4)) % 8] : "";
+  const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, homeDist, homeDir, c && [c.done, c.goal, c.mine, left, c.kind], packageEvent && [packageEvent.boxes.size, packageLeft]].join("|");
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
   const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
@@ -1219,6 +1221,7 @@ function hud() {
   if (key === hudKey) return; hudKey = key;
   if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
+  $("home").style.display = home ? "inline-flex" : "none"; if (home) $("home").textContent = homeDist ? "Home · " + homeDist + "m " + homeDir : "Home · Here";
   $("onlinen").textContent = online; $("net").classList.toggle("on", netOk); $("btn-chat").disabled = !netOk;
   $("wanted").style.display = me.stars ? "inline-flex" : "none"; $("wanted").textContent = "★".repeat(me.stars) + "☆".repeat(World.WANTED_MAX - me.stars);
   $("contract").style.display = c ? "flex" : "none";
@@ -2476,6 +2479,8 @@ function drawMap(now, tx, tz, tsky, guide) {
   const flash = Math.floor(now / 150) % 2 === 0, pulse = 0.5 + 0.5 * Math.sin(now / 160);
   // the houses in my bag (pink: an island house)
   for (const i of me.bag) { const h = houses[i], [x, y] = toMap(h.mx, h.mz); if (x < -8 || y < -8 || x > px + 8 || y > px + 8) continue; g.fillStyle = h.sky ? "#ff5aa0" : "#f2b01e"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(x, y, 3.6 * u, 0, TAU); g.fill(); g.stroke(); }
+  // my home: a small gold house marker, kept on the edge when it is out of view
+  if (myPlot >= 0) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); }
   // animal control: vans (lights flashing when they chase) and helicopters (rotors turning)
   for (const m of vehs) {
     const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;

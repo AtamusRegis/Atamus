@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Home marker and desktop controls (owner).** A small Home distance/direction pill and gold home marker make your plot easy to find; desktop players use Space to jump without a right-side Jump button.
 - **Camera-directed flight restored (owner).** In the air, a flapping flier moving forward climbs or dives where the camera looks; its mount pitches with that direction. Holding Space or Shift still flies straight up or down and overrides the camera.
 - **Admin environment controls (owner).** Admins can set the weather for everyone to Auto, Clear, Rain, Snow, Storm or Fog and the time to Auto, Sunrise, Day, Sunset or Night from the Admin panel. Snow falls and covers the land; storms bring heavy rain, full wind and lightning; fog cuts visibility. New logins get the current setting; moderators and players can't change it.
 - **Package Rush events (owner).** Every 10 minutes, prize packages appear at random town mailboxes for 1–2 minutes. Shared packages give large training-point, coin or item prizes, with a chance of a random pet, and arrive with a purple-and-gold announcement, beams, confetti and fireworks.
