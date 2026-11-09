@@ -46,6 +46,16 @@ try {
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");
+  // the mount shop: riding into its ring opens it, showing your coins; buying a pet takes its price and rides it
+  step = "buy a pet in the mount shop";
+  await page.evaluate(() => { const P = window.Pets; P.save.coins = 3000; P.teleport(P.MOUNT.x, P.MOUNT.z); });
+  await page.waitForTimeout(800);
+  const shop = await page.evaluate(() => [document.getElementById("shopname").textContent, document.getElementById("shopcash").textContent]);
+  if (shop[0] !== "Mount Shop" || shop[1] !== "3,000") problems.push(`the mount shop didn't open with the coins shown (${shop.join(", ")})`);
+  await page.locator("#shopitems .card", { hasText: "Dragon" }).first().locator("button").click({ timeout: 5000 });
+  const bought = await page.evaluate(() => { const s = window.Pets.save; return { coins: s.coins, sp: s.pets.find((p) => p.id === s.ride).sp, cash: document.getElementById("shopcash").textContent }; });
+  if (bought.coins !== 500 || bought.sp !== "dragon" || bought.cash !== "500") problems.push("buying a Dragon for 2,500: " + JSON.stringify(bought));
+  await page.evaluate(() => { const P = window.Pets; P.teleport(0, 14); });
   // a second player joins and flies off: the first must see them move (issue #7: a joiner could look frozen)
   step = "see a second player move";
   browser2 = await chromium.launch({ executablePath: chrome, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });   // its own browser, so neither page is a background tab
