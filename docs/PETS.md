@@ -100,7 +100,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
   F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
   conversations also include tips, stories and jokes, dancing, rock-paper-scissors, high fives and hide-and-seek.
-- Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
+- Houses and buildings are solid (you slide along their walls). **Roofs (owner, 2026-11-09):** a pet that jumps or flies up onto a town house stands and walks on its roof (a pyramid over the walls; that house doesn't fade while you're on it). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
@@ -280,6 +280,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **What's New (owner, 2026-11-09):** after an update, a small panel in the middle of the screen shows the newest
   entry of the front page's Updates list (its date and lines) until you close it (✕); it shows again only when that
   entry changes. A browser that has never logged in doesn't get it.
+- **Phones first (owner, 2026-11-09):** on touch screens the HUD, the map and the buttons are sized to the screen's short
+  side; Jump (and Fly / Swim ▼) are big round buttons at the bottom right; held sideways the buttons sit in a row along
+  the bottom right under the map, and panels use the screen's height.
+- **Wind readout (owner, 2026-11-09):** shown only riding a flier or glider (the wind doesn't move other pets).
 - **Coins (owner, 2026-11-09):** the coin pill sits at the top right (above the map), leaving the top left clear (as
   Roblox's chat would).
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it

@@ -203,6 +203,27 @@
     #fade { position: fixed; inset: 0; background: #0b0f14; opacity: 0; pointer-events: none; z-index: 12; transition: opacity .4s; }
     #fade.on { opacity: 1; }
     @media (pointer: fine) { #btn-jump { display: none !important; } }
+    /* (owner, 2026-11-09: phones first) on touch screens everything is sized to the screen's short side; the action
+       buttons sit in a tight cluster at the bottom right, Jump (and Fly / Swim ▼) as big round thumb buttons */
+    @media (pointer: coarse) {
+      .pill { padding: clamp(4px, 1.1vmin, 6px) clamp(8px, 2.2vmin, 12px); font-size: clamp(11px, 3.1vmin, 14px); }
+      #coins { font-size: clamp(18px, 5.4vmin, 24px); } .coin { width: clamp(14px, 4vmin, 18px); height: clamp(14px, 4vmin, 18px); }
+      #map { width: clamp(96px, 26vmin, 170px); height: clamp(96px, 26vmin, 170px); border-radius: 14px; }
+      #top > div { gap: clamp(4px, 1.2vmin, 6px); }
+      #side { gap: clamp(6px, 1.6vmin, 10px); }
+      #side .btn { min-height: clamp(38px, 10.5vmin, 50px); min-width: clamp(52px, 14vmin, 64px); padding: 0 clamp(10px, 2.8vmin, 15px); font-size: clamp(12px, 3.5vmin, 15px); border-radius: clamp(12px, 3.4vmin, 16px); }
+      #side #btn-jump, #side #btn-down { order: 10; width: clamp(66px, 19vmin, 92px); height: clamp(66px, 19vmin, 92px); min-width: 0; padding: 0; border-radius: 50%; font-size: clamp(13px, 3.8vmin, 17px); }
+      #acts .btn { min-height: clamp(36px, 9.5vmin, 44px); }
+      .panel { max-height: min(70vh, calc(100vh - 32px)); }
+    }
+    @media (pointer: coarse) and (orientation: landscape) {
+      /* a short screen: the buttons go in a row along the bottom right instead of up the side, under the map */
+      #side { flex-direction: row; flex-wrap: wrap-reverse; justify-content: flex-end; align-items: flex-end; max-width: 58vw; }
+      #side > #items, #side > #acts { flex-basis: 100%; display: flex; flex-direction: row; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+      #side #btn-jump, #side #btn-down { order: 10; }
+      .panel { width: min(520px, calc(100vw - 24px)); max-height: calc(100vh - 24px); bottom: max(10px, env(safe-area-inset-bottom)); }
+      #chatlog { width: min(300px, 38vw); }
+    }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -269,6 +290,6 @@
   <div id="banner"></div>
   <div id="eventflash"><div class="rays"></div><div class="cardfx"><i class="parcel"></i><b id="eventtitle">Package Rush!</b><span id="eventsub">Prize packages are falling!</span></div></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1794200012"></script>
+  <script type="module" src="pets.js?v=1794200013"></script>
 </body>
 </html>
