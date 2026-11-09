@@ -42,6 +42,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   or in a home, and the wind never pushes you into a cliff, wall or house. **On screen** (the owner asked for it): a
   pill under your name with an arrow the way the wind blows (turned with the camera) and its speed in mph; hidden in a
   home.
+- **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
+  sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
+  It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
+  track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
+  while it's in use. Live on it: everyone's built houses (each square's top piece in its colour; your plot outlined gold),
+  the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
+  pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
+  their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
+  they face; party members ringed green, wanted ones ringed flashing red; a small ▲ / ▼ when more than 6 m above or
+  below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
+  arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
+  40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -54,12 +67,15 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
 - **How pets move (owner, 2026-11-08):** a pet only turns to face where it's going (it never tilts up or down).
-  - **Space (or the Jump / Fly ▲ / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08).**
+  - **Space (or the Jump / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08)**, except on a flapping
+    flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): Space rises straight up; moving forward climbs or dives the way the camera looks
-    (look up, from below, to climb; the camera can go below them); they hover when stopped; up to 130 m. They fly at
-    0.75× and walk at 0.7× their speed.
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
+    hold Space (or Fly ▲) to keep rising, hold Ctrl (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
+    hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
+    Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
+    "Space Up · Ctrl Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
     up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
@@ -129,9 +145,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - Epic: Deer 11.5/3, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
-- **Fliers (owner, 2026-11-08):** climb to 11 m above the land while moving (higher near an island), over houses and
-  trucks, and come down when stopped or within 10 m of a parcel's house, the post office, the shops or the board; they
-  land on islands. Shown with a wing by their name in the menus.
+- **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
+  player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
   Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
@@ -237,8 +252,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
-  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
-  Ban (the same), Kick (online), Give (admins).
+  online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
+  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  ban or kick. The search box keeps its focus while the list refreshes.
+- **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
+  row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
+  pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every
+  kind), Clear wanted (stars to 0, online only), Everything (a million coins, every missing kind at level 20, all
+  pets to 20, the items and the Treats). Logged like every other action.
+- **Chat commands (staff):** a chat line starting with "/" from a moderator or admin is a command, never sent as chat
+  (a player's "/" line is ordinary chat). `/coins 50k` (k / m), `/allpets`, `/maxlv`, `/items`, `/treats`,
+  `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
+  `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
+  Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).
@@ -260,4 +286,5 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 ## Rejected / removed
 
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
-- (nothing yet)
+- Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
+  2026-11-09): replaced by holding Space / Ctrl.

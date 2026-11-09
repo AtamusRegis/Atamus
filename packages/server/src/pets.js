@@ -127,11 +127,14 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (m.q && /^[A-Za-z0-9_]{1,16}$/.test(m.q)) for (const a of await store.search(m.q)) if (!online.has(a.id)) list.push(staffView(a, null));
       send(me.ws, { t: "admin_list", list, q: m.q || "" }); return;
     }
-    const id = +m.id, p = online.get(id), a = p ? p.acct : await store.byId(id);
+    // the target: by account id (the panel) or by name (chat commands)
+    const nm = typeof m.name === "string" && NAME_RE.test(m.name) ? m.name.toLowerCase() : null;
+    const p = nm ? [...online.values()].find((q) => q.name.toLowerCase() === nm) : online.get(+m.id), a = p ? p.acct : nm ? await store.byName(nm) : await store.byId(+m.id);
     if (!a) return reply("Not found");
     const theirs = rankOf(a);
     if (theirs >= my && a.id !== me.acct.id) return reply("Not allowed");
     const log = (action, detail) => { store.log(me.name, a.name, action, detail).catch(() => {}); console.log(`[pets] ${me.name} ${action} ${a.name} ${detail || ""}`); };
+    const putData = async (d) => { a.data = d; if (p) { changed(p); pushData(p); flush(p.acct); } else { a.rev++; await store.save(a.id, a.data, a.rev); } };
     const until = (mins) => (mins === "perma" ? Infinity : Date.now() + Math.max(1, Math.min(525600, +mins || 60)) * 60000);
     switch (m.op) {
       case "role": {
@@ -158,9 +161,23 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         else if (what.startsWith("treat:") && SPECIES.has(what.slice(6))) d.treats[what.slice(6)] = (d.treats[what.slice(6)] || 0) + n;
         else if (what.startsWith("pet:") && SPECIES.has(what.slice(4))) { const lv = Math.max(1, Math.min(20, Math.floor(+m.lv || 1))); for (let k = 0; k < Math.min(n, 50); k++) d.pets.push({ id: d.nextId++, sp: what.slice(4), lv }); }
         else return reply("Unknown");
-        a.data = d;
-        if (p) { changed(p); pushData(p); flush(p.acct); } else { a.rev++; await store.save(a.id, a.data, a.rev); }
-        log("give", what + " x" + n); break;
+        await putData(d); log("give", what + " x" + n); break;
+      }
+      // (owner, 2026-11-09) admins' quick commands, on themselves or anyone below them: coins, one of every pet they don't
+      // have, every pet to the top level, 100 of each item, 100 Treats of every kind, everything at once (with a million
+      // coins), and clearing wanted stars (online only)
+      case "quick": {
+        if (my < 2) return reply("Not allowed");
+        const cmd = String(m.cmd || ""), every = cmd === "everything";
+        if (cmd === "unwanted") { if (!p) return reply("Offline"); p.stars = 0; p.lastChased = Date.now(); send(p.ws, { t: "stars", stars: 0 }); log("quick", cmd); break; }
+        if (!["coins", "allpets", "maxlv", "items", "treats", "everything"].includes(cmd)) return reply("Unknown");
+        const d = cleanData(a.data, SPECIES);
+        if (cmd === "coins" || every) d.coins = Math.min(1e9, d.coins + (every ? 1e6 : Math.max(1, Math.min(1e9, Math.floor(+m.n || 0)))));
+        if (cmd === "allpets" || every) { const have = new Set(d.pets.map((q) => q.sp)); for (const sp of SPECIES) if (!have.has(sp)) d.pets.push({ id: d.nextId++, sp, lv: every ? 20 : 1 }); }
+        if (cmd === "maxlv" || every) for (const q of d.pets) q.lv = 20;
+        if (cmd === "items" || every) for (const k of GIVE_ITEMS) d.items[k] = Math.min(1e6, d.items[k] + 100);
+        if (cmd === "treats" || every) for (const sp of SPECIES) d.treats[sp] = Math.min(1e6, (d.treats[sp] || 0) + 100);
+        await putData(d); log("quick", cmd + (cmd === "coins" ? " " + m.n : "")); break;
       }
       default: return;
     }
