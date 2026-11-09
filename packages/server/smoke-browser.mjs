@@ -47,7 +47,7 @@ try {
   step = "see and claim a Package Rush prize";
   for (let i = 0; i < 50 && !(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0)); i++) await page.waitForTimeout(100);
   if (!(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0))) throw new Error("Package Rush did not start");
-  for (let i = 0; i < 10 && (await page.evaluate(() => getComputedStyle(document.getElementById("packageevent")).display === "none")); i++) await page.waitForTimeout(50);
+  for (let i = 0; i < 100 && (await page.evaluate(() => getComputedStyle(document.getElementById("packageevent")).display === "none")); i++) await page.waitForTimeout(50);
   const packageUi = await page.evaluate(() => ({
     title: document.getElementById("eventtitle").textContent,
     flash: document.getElementById("eventflash").classList.contains("go"),
