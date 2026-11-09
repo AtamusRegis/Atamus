@@ -2,6 +2,10 @@
 
 Newest first. Add one entry per patch in the same commit, and keep it short: what changed for players and any rule decided. Use `git log` for the code detail.
 
+## 2026-11-08
+
+- **New game: Pet Delivery Co. (owner).** A co-op, phone-first 3D game on its own page (pets.html): ride your pet around a small town delivering mail from the post office for coins and items (Speed Snack, Training Ribbon, Egg Ticket), hatch eggs for faster pets (12 kinds, 4 rarities), train them (speed and bag). Co-op through the Atamus server (WebSocket /pets): rooms of 16, everyone sees each other, and big contracts the room works on together with the reward split by deliveries. Progress is kept in the browser. The cargo game is unchanged. See docs/PETS.md.
+
 ## 2026-11-06
 
 - **Fix: haulers parking with a container when there was room (owner).** The last two spaces of each shape were always held back for digging; now only the room actually needed to dig out containers someone's waiting for is kept, deliveries never bury a wanted container, and customers only come for containers that can be dug out.

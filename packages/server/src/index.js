@@ -5,6 +5,7 @@ import cors from "cors";
 import { config } from "./config.js";
 import { migrate, cleanupExpired } from "./db.js";
 import { game } from "./gamehttp.js";
+import { attachPets } from "./pets.js";
 
 import { SERVER_BUILD as BUILD } from "./build.js";
 
@@ -35,7 +36,8 @@ app.use(cors({
 if (process.env.ATAMUS_PTR === "1") app.use(express.static(new URL("../../../website/", import.meta.url).pathname));
 app.get("/healthz", (_req, res) => res.json({ ok: true, build: BUILD })); // live health + build marker
 
-// (owner, 2026-10-31) the game is single player in the browser now: the server only answers the deploy workflows
+// (owner, 2026-10-31) the cargo game is single player in the browser: the server answers the deploy workflows (and, since
+// 2026-11-08, runs Pet Delivery Co.'s co-op, below)
 app.use("/game", game);
 
 app.use((err, _req, res, _next) => {
@@ -53,6 +55,8 @@ async function main() {
   setInterval(() => cleanupExpired().catch((e) => console.error("cleanup", e)), 3600_000).unref();
 
   const server = http.createServer(app);
+  // (owner, 2026-11-08) Pet Delivery Co. co-op: rooms, positions and contracts over a WebSocket at /pets
+  attachPets(server, { origins: config.allowedOrigins, allowLocal: process.env.ATAMUS_PTR === "1" });
   server.listen(config.port, "127.0.0.1", () => {
     console.log(`Atamus server listening on 127.0.0.1:${config.port} (http + ws)`);
   });

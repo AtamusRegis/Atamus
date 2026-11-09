@@ -6,7 +6,11 @@ Atamus is a browser-based single-player game. Claude writes all the code and run
 
 1. Read `docs/FEATURES.md`. It describes how the game behaves today: every implemented rule and decision, plus things the owner rejected.
 2. Skim the top of `docs/CHANGELOG.md` to see what changed recently.
-3. **The redo (owner, 2026-10-31), in space since 2026-11-05: Atamus is a single-player cargo station game** in the
+3. **A second game, Pet Delivery Co. (owner, 2026-11-08):** a co-op, phone-first 3D game on its own page
+   (`website/pets.html` + `pets.js`, co-op in `packages/server/src/pets.js`, WebSocket /pets on play.atamus.io). Its
+   rules live in `docs/PETS.md` (that game's FEATURES.md); its changes go in the same CHANGELOG. Everything below about
+   the cargo game (including "no multiplayer") is about the cargo game only.
+4. **The redo (owner, 2026-10-31), in space since 2026-11-05: Atamus is a single-player cargo station game** in the
    browser with no server, in 3D (Three.js, 1 unit = 1 m): one freighter (small, medium or large, on a timer) docks at a
    time and loader arms (placed along the spine, one loading spot each) unload its containers (circle, square or hex, 9
    colors) onto haulers; haulers, customer ships and export ships fly freely (climb to cruise height, fly over, settle
@@ -53,12 +57,15 @@ website/          GitHub Pages site (atamus.io) and the game
                   turn, zoom), 3D colliders for picking, the screen overlay
   index.html      the front page (Updates list), style.css + theme.css + front-updates.js for it
   play.html       forwards to game.html (old links)
+  pets.html       Pet Delivery Co. (owner, 2026-11-08): the page and HUD; pets.js the whole client (town, riding,
+                  parcels, eggs, training, items, co-op client); save in localStorage
   fonts/, assets/ self-hosted fonts and the logo
 packages/server/src/
   index.js        Express bootstrap: /healthz {build} and the deploy workflows' /game routes; in the PTR it also
-                  serves website/. There is no game socket anymore.
+                  serves website/. Its one socket is Pet Delivery Co.'s (/pets, pets.js).
   build.js        SERVER_BUILD, website build polling, the update countdown the workflows call (announceUpdate)
   gamehttp.js     the deploy workflows' calls (build-check, update-countdown, update-status)
+  pets.js         Pet Delivery Co. co-op: WebSocket /pets, rooms of 16, positions, big contracts
   db.js           the schema migrations (old tables stay untouched, unused), config.js, hash.js
 reference/        old snapshots, for reference only (never deployed); 2026-10-31-pre-spaceport/ is the last
                   multiplayer game and Salvage
