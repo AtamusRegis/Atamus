@@ -60,6 +60,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   gain up to 10% speed flying with the wind and lose up to 5% flying against it, tapering to no change across it.
   **On screen** (the owner asked for it): a pill under your name with an arrow the way the wind blows (turned with the
   camera), its speed in mph, and the active flight speed percentage in green or red; hidden in a home.
+- **Minimap (owner, 2026-11-09):** a square map in the top right corner (the bag, wanted, players and contract pills
+  sit under it), turned with the camera so up on it is always the way the camera looks; N marks north (−z) on its edge.
+  It shows the land (shaded by height and slope, as on the ground), roads, the plaza (post office, egg shop, training
+  track, pound, board and the rings), houses (roof, door, mailbox), trees, the town plots and the islands; the islands
+  above the town (and the VIP island) are faint until you climb (fully shown from about 50 m), the extra island only
+  while it's in use. Live on it: everyone's built houses (each square's top piece in its colour; your plot outlined gold),
+  the houses in your bag (gold, pink for an island) and where the guide points (a glowing dot, or a chevron on the edge
+  pointing the way when it's off the map), vans (lights flashing while they chase), helicopters (rotors turning) and
+  their searchlight beams and spots, the other players in your world (a dot in their shirt colour with a notch the way
+  they face; party members ringed green, wanted ones ringed flashing red; a small ▲ / ▼ when more than 6 m above or
+  below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
+  arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
+  40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
