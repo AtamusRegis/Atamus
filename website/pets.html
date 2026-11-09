@@ -32,6 +32,7 @@
     #contract .bar { height: 10px; border-radius: 6px; background: #e3eaf0; overflow: hidden; }
     #contract .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #ffd35a); }
     #contract .row { display: flex; justify-content: space-between; font-size: 13px; }
+    #flykeys { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 4; pointer-events: none; gap: 10px; }
     #side { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; align-items: flex-end; z-index: 5; }
     .btn { border: 0; border-radius: 16px; padding: 12px 16px; min-width: 64px; min-height: 52px; font: 800 15px ui-rounded, system-ui, sans-serif; color: #fff; background: var(--blue); box-shadow: 0 4px 0 rgba(0,0,0,.18); cursor: pointer; position: relative; }
     .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.18); }
@@ -106,6 +107,9 @@
     #chathist { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 62px); width: min(440px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; display: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 16px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 9; font-size: 13px; }
     #chathist div { overflow-wrap: anywhere; }
     .panel.wide { width: min(560px, calc(100vw - 24px)); }
+    .panel.shop { top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(600px, calc(100vw - 24px)); max-height: min(80vh, 680px); }
+    .shophead { display: flex; align-items: center; gap: 10px; }
+    .panel .cash { font: 800 17px ui-rounded, system-ui, sans-serif; letter-spacing: 0; background: #f4f6f8; box-shadow: none; }
     .field { width: 100%; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; font: 600 15px ui-rounded, system-ui, sans-serif; color: var(--ink); background: #fff; outline: none; }
     .field:focus { border-color: var(--blue); }
     .field.small { width: auto; padding: 6px 8px; font-size: 13px; min-width: 0; }
@@ -168,6 +172,7 @@
       <div id="party"></div>
     </div>
     <div>
+      <span class="pill" id="trainp" style="display:none" title="Training"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z" fill="#f2b01e"/></svg><b id="trainn"></b></span>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
       <span class="pill" id="wanted" style="display:none"></span>
       <span class="pill" id="online"><span class="dot" id="net"></span><b id="onlinen">1</b></span>
@@ -176,6 +181,7 @@
   </div>
   <div id="joy"><i></i></div>
   <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
+  <div class="pill" id="flykeys" style="display:none"><span><kbd>Space</kbd>Up</span><span><kbd>Ctrl</kbd>Down</span></div>
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
@@ -183,10 +189,11 @@
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
     <button class="btn ghost" id="btn-chat" type="button">Chat</button>
     <button class="btn green" id="btn-jump" type="button">Jump</button>
+    <button class="btn green" id="btn-down" type="button" style="display:none">Fly ▼</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
   </div>
   <div class="panel" id="p-pets"><h2>Pets <button class="x" type="button">✕</button></h2><div class="grid" id="petlist"></div></div>
-  <div class="panel" id="p-shop"><h2>Egg Shop <button class="x" type="button">✕</button></h2><div class="grid" id="eggs"></div></div>
+  <div class="panel shop" id="p-shop"><h2><span id="shopname">Egg Shop</span> <span class="shophead"><span class="pill cash"><span class="coin"></span><span id="shopcash">0</span></span><button class="x" type="button">✕</button></span></h2><div class="grid" id="shopitems"></div></div>
   <div class="panel" id="p-train"><h2>Training Yard <button class="x" type="button">✕</button></h2><div id="train"></div></div>
   <div class="panel" id="p-player"><h2><span id="pname"></span> <button class="x" type="button">✕</button></h2><div class="row2" id="player"></div></div>
   <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
@@ -207,6 +214,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100031"></script>
+  <script type="module" src="pets.js?v=1793100037"></script>
 </body>
 </html>
