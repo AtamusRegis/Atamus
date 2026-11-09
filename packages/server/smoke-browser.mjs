@@ -62,6 +62,20 @@ try {
   const packagePrize = await page.evaluate(() => ({ title: document.getElementById("eventtitle").textContent, sub: document.getElementById("eventsub").textContent, flash: document.getElementById("eventflash").classList.contains("go") }));
   if (packagePrize.title !== "Prize package!" || !packagePrize.sub || !packagePrize.flash) problems.push("package reward celebration is missing: " + JSON.stringify(packagePrize));
   await page.evaluate(() => window.Pets.teleport(0, 14));
+  step = "check animal-control lights by day and night";
+  const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
+  const waitForLights = async (day) => {
+    for (let i = 0; i < 50; i++) {
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      if (ready) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`animal-control lights did not turn ${day ? "off in daylight" : "on at night"}`);
+  };
+  await setSkyPhase(0.25);
+  await waitForLights(true);
+  await setSkyPhase(0.75);
+  await waitForLights(false);
   step = "check the airborne wind speed rules";
   const windFactors = await page.evaluate(() => {
     const f = window.Pets.windRideFactor;

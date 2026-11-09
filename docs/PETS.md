@@ -87,10 +87,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
   - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
-    hold Space (or Fly ▲) to keep rising, hold Ctrl (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
+    hold Space (or Fly ▲) to keep rising, hold Shift (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
     hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
     Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
-    "Space Up · Ctrl Down" key strip shows at the bottom of the screen only while riding one (not while building).
+    "Space Up · Shift Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
     up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
@@ -108,25 +108,29 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Animal control (owner, 2026-11-08)
 
-- 8 white vans with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
+- 8 white animal control cars with light bars patrol the roads (driving on the right, turning round at a road's end) and 2
   helicopters circle over town. Online the server runs them for the whole room; offline the page does.
 - They only go after players carrying parcels (owner, 2026-11-08); a chase ends if the bag empties (no star).
-- **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
-  straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
-  gets away.
-- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
-  light on the road; faint by day, bright at night.
+- **Animal control cars** come in three silhouettes (compact, van and SUV) and matching speed tiers: slow, standard and
+  fast (0.85× / 1× / 1.15× their patrol and chase speeds). They spot parcel carriers farther ahead (21 m) and to
+  either side (18 m) than behind (14 m), plus 7 m per wanted star; only players on or near the ground. They chase
+  straight for a short while (3 s, plus 0.8 s per star), lights flashing; the standard car chases at 9.5 m/s plus
+  1.3 per star, so a faster pet can get away.
+- **Vehicle headlights (owner, 2026-11-09):** on after daylight fades while a car is moving: lit lamps, two beams
+  reaching ahead and a pool of light on the road. Headlights and the red/blue light bars do not work in daylight.
 - **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
   searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
   every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
-  beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
-  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
-  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
-- **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
+  beam (anywhere along it, in the air too) for half a second is caught**; the cone is wider for anyone riding a flier
+  or glider. Helicopters circle about 15% faster than before. Entering the beam flashes the helicopter's lights and
+  shows "Animal control!". Helicopters keep circling in daylight, but their searchlights and red/blue lights are off
+  and cannot spot or catch anyone until daylight fades. The server and the page test the same cone (pets-world.js
+  `beamOf`), the server sending each helicopter's beam heading and reach.
+- **Caught** (an animal control car touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.
-- **Wanted level (0–5 stars):** each van chase you get away from adds a star (at most one every 4 s); a star drops
+- **Wanted level (0–5 stars):** each car chase you get away from adds a star (at most one every 4 s); a star drops
   every 25 s nobody's chasing you (a searchlight on you counts as chasing). Shown top right, and over your name for others. Each star adds **20% to delivery pay**.
 
 ## Delivering
@@ -220,6 +224,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   correction in. Nothing is checked by the server (no anti-cheat).
 - **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Everyone sees the pet you ride (owner, 2026-11-09: wrong pets):** whenever the pet you ride (or its level) changes,
+  however it changed (riding another, training, a trade, your data coming back from the server at login or after a
+  stale save), your page redraws it and tells the room; after logging in it tells the room again.
 - **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
   tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
   connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
@@ -339,5 +346,5 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
 - Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
-  2026-11-09): replaced by holding Space / Ctrl.
+  2026-11-09): replaced by holding Space / Shift.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.
