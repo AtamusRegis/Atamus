@@ -157,7 +157,7 @@ the current `main`): `scripts/task.sh checks`, which is `bash scripts/check.sh` 
 `pets-world.js` copies match) and `cd packages/server && npm run smoke` (the world's rules, and the real `/pets` server in
 memory with two players: register, welcome with plots, positions, saves and stale saves, house changes, chat, logging
 in again) and `npm run smoke:browser` (the same in-memory server serving `website/`; `pets.html` in headless Chrome
-loads, creates an account and rides, with no page or console errors or failed requests: the only check that runs
+loads, creates an account and rides, and a second player who joins is seen moving, with no page or console errors or failed requests: the only check that runs
 `website/pets.js`; set `CHROME` if it can't find Chrome, it skips locally without one but never in CI). Seconds. For gameplay changes also look at the game itself when it's worth it (`scripts/ptr.sh start`).
 
 **GitHub settings this relies on** (set once by an owner with admin rights: `scripts/protect-main.sh`; a Claude session
