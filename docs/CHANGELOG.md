@@ -6,6 +6,7 @@ and any rule decided. Use `git log` for the code detail (and for the older Atamu
 
 ## 2026-11-09
 
+- **Home and interaction prompts (owner).** Your plot now has a small Home label on the minimap and a world-space YOUR HOME sign with a house icon; nearby people, lifts and pet pens can be activated with E while taps still work.
 - **Pet Delivery Co.:** deliveries briefly show how many parcels remain, and Settings can hide the follow arrow when the bag is empty.
 - **Home marker and desktop controls (owner).** A small Home distance/direction pill and gold home marker make your plot easy to find; desktop players use Space to jump without a right-side Jump button.
 - **Camera-directed flight restored (owner).** In the air, a flapping flier moving forward climbs or dives where the camera looks; its mount pitches with that direction. Holding Space or Shift still flies straight up or down and overrides the camera.

@@ -1196,7 +1196,7 @@ addEventListener("keydown", (e) => {
   keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
   if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
-  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
+  if (e.code === "KeyF") runAct("E"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
@@ -1803,11 +1803,31 @@ function poiBubble(name, what) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(6.4, 2.2, 1); sp.renderOrder = 4; return sp;
 }
 for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
+let homeMarker = null;
+function makeHomeMarker() {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 176; const g = c.getContext("2d");
+  g.fillStyle = "rgba(255,255,255,.96)"; g.beginPath(); g.roundRect(8, 8, 496, 136, 28); g.fill();
+  g.beginPath(); g.moveTo(236, 142); g.lineTo(256, 170); g.lineTo(276, 142); g.fill();
+  g.fillStyle = "#f2b01e"; g.strokeStyle = "#8a5a00"; g.lineWidth = 6; g.beginPath(); g.moveTo(48, 74); g.lineTo(86, 42); g.lineTo(124, 74); g.lineTo(118, 74); g.lineTo(118, 116); g.lineTo(54, 116); g.lineTo(54, 74); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = "#8a5a00"; g.fillRect(78, 88, 16, 28);
+  g.fillStyle = "#23303b"; g.textAlign = "left"; g.textBaseline = "middle"; g.font = "800 42px system-ui, sans-serif"; g.fillText("YOUR HOME", 150, 82);
+  g.fillStyle = "#5a6a78"; g.font = "600 27px system-ui, sans-serif"; g.fillText("Your plot", 150, 119);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(7.2, 2.45, 1); s.renderOrder = 4; return s;
+}
+function homeStep() {
+  if (myPlot < 0 || !PLOTS[myPlot]) { if (homeMarker) homeMarker.visible = false; return; }
+  if (!homeMarker) { homeMarker = makeHomeMarker(); scene.add(homeMarker); }
+  const p = PLOTS[myPlot]; homeMarker.position.set(p.x, p.y + 5.1, p.z - PLOT / 2 - 0.8);
+  const d = hyp(p.x - me.x, p.z - me.z, (p.y - me.y) * 0.5), a = building || talk ? 0 : clamp((100 - d) / 65, 0, 1);
+  homeMarker.visible = a > 0.01; homeMarker.material.opacity = a;
+}
 function poiStep() {
   for (const q of POIS) {
     const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1), a = building || talk || (q.extra && !extraIsland.visible) ? 0 : f * f;   // (owner, 2026-11-09) fainter the further, gone past 45 m
     q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 15) / 60, 0, 0.3); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
+  homeStep();
 }
 // ---- townsfolk (owner, 2026-11-09): people who live in town: a keeper at each shop and a few folk around the post
 // office, each dressed their own way, standing about their own way, with their own things to talk about. Their name
@@ -2484,7 +2504,7 @@ function drawMap(now, tx, tz, tsky, guide) {
   // the houses in my bag (pink: an island house)
   for (const i of me.bag) { const h = houses[i], [x, y] = toMap(h.mx, h.mz); if (x < -8 || y < -8 || x > px + 8 || y > px + 8) continue; g.fillStyle = h.sky ? "#ff5aa0" : "#f2b01e"; g.strokeStyle = "#fff"; g.lineWidth = 1.5 * u; g.beginPath(); g.arc(x, y, 3.6 * u, 0, TAU); g.fill(); g.stroke(); }
   // my home: a small gold house marker, kept on the edge when it is out of view
-  if (myPlot >= 0) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); }
+  if (myPlot >= 0) { const p = PLOTS[myPlot], [x, y, out] = edge(toMap(p.x, p.z), 8 * u); g.save(); g.translate(x, y); g.fillStyle = "#f2b01e"; g.strokeStyle = "#fff8dc"; g.lineWidth = 1.5 * u; g.beginPath(); g.moveTo(0, -5 * u); g.lineTo(5 * u, 0); g.lineTo(4 * u, 5 * u); g.lineTo(-4 * u, 5 * u); g.lineTo(-5 * u, 0); g.closePath(); g.fill(); g.stroke(); g.fillStyle = "#8a5a00"; g.fillRect(-1 * u, 1 * u, 2 * u, 4 * u); if (out) { g.strokeStyle = "#8a5a00"; g.beginPath(); g.moveTo(0, -8 * u); g.lineTo(0, 8 * u); g.stroke(); } g.restore(); g.save(); g.font = `800 ${Math.max(9, 10 * u)}px system-ui, sans-serif`; g.textAlign = "center"; g.textBaseline = "top"; g.lineWidth = 3 * u; g.strokeStyle = "rgba(35,48,59,.9)"; g.strokeText("Home", x, y + 7 * u); g.fillStyle = "#fff8dc"; g.fillText("Home", x, y + 7 * u); g.restore(); }
   // animal control: vans (lights flashing when they chase) and helicopters (rotors turning)
   for (const m of vehs) {
     const [x, y] = toMap(m.x, m.z); if (x < -10 || y < -10 || x > px + 10 || y > px + 10) continue; const chasing = m.mode === 1;
@@ -2532,6 +2552,16 @@ function drawMap(now, tx, tz, tsky, guide) {
 // ---- what I can do where I am: talk to someone (F), take a lift (E); buttons for them on a phone ----
 let uiKey = "", acts = [];
 function nearLift() { return LIFTS.find((l) => hyp(me.x - l.x, me.z - l.z) < 2.6 && Math.abs(me.y - l.y) < 3 && (l.to === "plaza" || myPlot >= 0)); }
+function nearPen() {
+  if (myPlot < 0 || !onMyPlot(4) || !save.home) return null;
+  const o = plotOrigin(PLOTS[myPlot]); let best = null, bd = 3.2;
+  for (let i = 0; i < save.home.pieces.length; i++) {
+    const t = save.home.pieces[i]; if (t.k !== "pen") continue;
+    const d = hyp(me.x - (o.x + t.x), me.z - (o.z + t.z));
+    if (d < bd && Math.abs(me.y - (o.y + t.l * LEVEL_H)) < 3) { bd = d; best = i; }
+  }
+  return best;
+}
 function ride_lift(l) {   // up to my plot (in front of it), or back down to the plaza
   if (l.to === "plaza") { me.x = LIFT.x + 3; me.z = LIFT.z; me.y = terrain(me.x, me.z); }
   else { const p = PLOTS[myPlot]; me.x = p.x; me.z = p.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI; }
@@ -2540,9 +2570,10 @@ function ride_lift(l) {   // up to my plot (in front of it), or back down to the
 function context() {
   const a = [], pl = netOk ? nearPlayer() : null;
   if (talk) return a;
-  if (pl !== null) { const o = others.get(pl); a.push({ key: "F", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
-  const fk = pl === null && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "F", label: fk.name, fn: () => startTalk(fk) });
+  if (pl !== null) { const o = others.get(pl); a.push({ key: "E", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
+  const fk = pl === null && loggedIn ? nearFolk() : null; if (fk) a.push({ key: "E", label: fk.name, fn: () => startTalk(fk) });
   const l = loggedIn && nearLift(); if (l) a.push({ key: "E", label: l.to === "plaza" ? "▼" : "Home ▲", fn: () => ride_lift(l) });
+  const pen = !a.length ? nearPen() : null; if (pen !== null) a.push({ key: "E", label: "Pet pen", fn: () => { picking = pen; show("p-build"); } });
   return a;
 }
 function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn(); }
@@ -2552,7 +2583,7 @@ function ui() {
   const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
-  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
+  for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd class="interact-key">${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = me.swim ? "Swim ▲" : kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
   $("btn-down").textContent = me.swim ? "Swim ▼" : "Fly ▼";

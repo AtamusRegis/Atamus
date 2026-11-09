@@ -87,12 +87,15 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
   40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
 - **Home marker (owner, 2026-11-09):** a compact Home pill shows the distance and compass direction to your plot (or Here
-  when you are there), and a gold house marker shows that plot on the minimap, including at its edge when out of view.
+  when you are there), a gold house marker with a small Home label shows that plot on the minimap, including at its edge
+  when out of view, and a world-space house sign says YOUR HOME over your plot.
+- **Interaction (owner, 2026-11-09):** nearby townsfolk, players, lifts and pet pens show a circular E prompt and can
+  be activated with E; F remains an alias for the same interaction. Tapping an NPC or object still activates it.
   On a computer, jumping uses Space rather than a right-side Jump button; touch controls keep the button.
 - **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
   with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
   Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
-  when a courier approaches and pets bump against them instead of passing through them. Close by, press F (or tap the
+  when a courier approaches and pets bump against them instead of passing through them. Close by, press E (or tap the
   person) to talk: movement stops, black bars come in and the camera moves to a close-up of them. A line types in no
   more than 1.5 seconds and waits 2.5 seconds before the next one (about 4 seconds total); click, tap, Space, Enter or
   F finishes or advances it, number keys pick an answer, and Escape ends it. Hazel and Rusty can open their shop;
