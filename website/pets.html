@@ -108,6 +108,11 @@
     .card.off { opacity: .6; cursor: default; }
     #chathist { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 62px); width: min(440px, calc(100vw - 24px)); max-height: 40vh; overflow-y: auto; display: none; flex-direction: column; gap: 4px; padding: 10px; border-radius: 16px; background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.2); z-index: 9; font-size: 13px; }
     #chathist div { overflow-wrap: anywhere; }
+    #news { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(400px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; background: var(--card); border-radius: 22px; padding: 14px 18px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); z-index: 11; display: none; }
+    #news h2 { margin: 0 0 4px; font: 800 26px "Big Shoulders Display", Impact, sans-serif; letter-spacing: .03em; display: flex; justify-content: space-between; align-items: center; }
+    #news .x { border: 0; background: #e9eef3; width: 36px; height: 36px; border-radius: 50%; font: 800 18px system-ui; color: var(--ink); cursor: pointer; }
+    #news time { font: 700 13px ui-rounded, system-ui, sans-serif; opacity: .65; }
+    #news ul { margin: 10px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font: 600 15px/1.35 ui-rounded, system-ui, sans-serif; }
     .panel.wide { width: min(560px, calc(100vw - 24px)); }
     .panel.shop { top: 50%; bottom: auto; transform: translate(-50%, -50%); width: min(600px, calc(100vw - 24px)); max-height: min(80vh, 680px); }
     .shophead { display: flex; align-items: center; gap: 10px; }
@@ -169,12 +174,12 @@
   <canvas id="gl"></canvas>
   <div id="top">
     <div>
-      <span class="pill"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="who"></span>
       <span class="pill" id="windp" title="Wind"><svg id="winda" viewBox="0 0 16 16" width="16" height="16" style="transition: transform .3s"><path d="M8 1l6 8h-4v6H6V9H2z" fill="#3a8ee6"/></svg><b id="windn"></b><b id="winde"></b></span>
       <div id="party"></div>
     </div>
     <div>
+      <span class="pill" id="coinp"><span class="coin"></span><span id="coins">0</span></span>
       <span class="pill" id="trainp" style="display:none" title="Training"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2l3 6.5 7 .8-5.2 4.8 1.5 7L12 17.6 5.7 21.1l1.5-7L2 9.3l7-.8z" fill="#f2b01e"/></svg><b id="trainn"></b></span>
       <canvas id="map"></canvas>
       <span class="pill" id="bag"><span class="box"></span><b id="bagn">0/2</b></span>
@@ -203,6 +208,7 @@
   <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
   <div class="panel" id="p-build"><h2>Pet pen <button class="x" type="button">✕</button></h2><div id="build"></div></div>
   <div id="buildbar"></div>
+  <div id="news"><h2>What's New <button class="x" id="newsx" type="button">✕</button></h2><time id="newsd"></time><ul id="newsl"></ul></div>
   <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="chatlog"></div>
@@ -218,6 +224,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100051"></script>
+  <script type="module" src="pets.js?v=1793100056"></script>
 </body>
 </html>

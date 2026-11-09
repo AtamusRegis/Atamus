@@ -4,7 +4,7 @@
 // its edge; animal control chases you. Co-op: everyone in a room rides the same town, works on contracts together and
 // chats. The server (packages/server/src/pets.js) shares players, runs animal control, contracts and chat.
 import * as THREE from "./vendor/three.module.min.js";
-import * as World from "./pets-world.js?v=1793100042";
+import * as World from "./pets-world.js?v=1793100047";
 
 const $ = (id) => document.getElementById(id);
 const TAU = Math.PI * 2, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot;
@@ -117,7 +117,7 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
   // (owner, 2026-11-08: smooth it out) colors blend gradually: by the slope of the land over a few metres (so cliffs
   // fade into rock), by height, and in broad patches; a fine speckled texture on top
   const cols = new Float32Array((pos.length / 3) * 3), uvs = new Float32Array((pos.length / 3) * 2), c = new THREE.Color(), c2 = new THREE.Color();
-  const GRASS = [new THREE.Color("#7fc25a"), new THREE.Color("#96cf63"), new THREE.Color("#a9d46e")], ROCK = new THREE.Color("#a08f7a"), ROCK2 = new THREE.Color("#8a7a68");
+  const LAKEBED = new THREE.Color("#c9b98c"), GRASS = [new THREE.Color("#7fc25a"), new THREE.Color("#96cf63"), new THREE.Color("#a9d46e")], ROCK = new THREE.Color("#a08f7a"), ROCK2 = new THREE.Color("#8a7a68");
   for (let i = 0; i < pos.length / 3; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
     const slope = hyp(terrain(x + 3, z) - terrain(x - 3, z), terrain(x, z + 3) - terrain(x, z - 3)) / 6;
@@ -125,6 +125,7 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
     c.copy(GRASS[0]).lerp(GRASS[1], patch).lerp(GRASS[2], smooth(clamp(y / 45, 0, 1)) * 0.7);
     c2.copy(ROCK).lerp(ROCK2, patch);
     c.lerp(c2, smooth(clamp((slope - 0.3) / 0.7, 0, 1)));
+    if (World.waterAt(x, z) > -Infinity) c.lerp(LAKEBED, 0.85);   // (owner, 2026-11-09) sand under the water
     cols.set([c.r, c.g, c.b], i * 3); uvs.set([x / 9, z / 9], i * 2);
   }
   g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
@@ -147,7 +148,8 @@ function box(w, h, d, c, x, y, z, parent, shadow = true) { const m = new THREE.M
   // its underside: a cliff face at the edge, then rock tapering away below
   const RINGS = [[1, 0], [1.01, -9], [0.9, -30], [0.72, -62], [0.48, -98], [0.22, -132]], up = [], ui = [];
   for (let k = 0; k < RINGS.length; k++) for (let i = 0; i < NA; i += 3) {
-    const a = (i / NA) * TAU, e = edgeR(a), top = terrain(Math.cos(a) * e, Math.sin(a) * e), j = k ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * RINGS[k][0] * j;
+    const a = (i / NA) * TAU, e = edgeR(a), top = terrain(Math.cos(a) * e, Math.sin(a) * e), atFall = World.RIVERS.some((R) => R.fall && Math.abs(Math.atan2(Math.sin(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])), Math.cos(a - Math.atan2(R.pts[R.pts.length - 1][1], R.pts[R.pts.length - 1][0])))) < 0.1);
+    const j = k && !atFall ? 1 + (Math.sin(i * 1.7 + k * 3.1) * 0.5 + 0.5) * 0.08 : 1, r = e * (atFall && k === 1 ? 0.97 : RINGS[k][0]) * j;   // (owner, 2026-11-09) no rock bulging out under a waterfall
     up.push(Math.cos(a) * r, k ? Math.min(top - 2, 0) + RINGS[k][1] - (k > 1 ? Math.abs(Math.sin(i * 0.37 + k)) * 12 : 0) : top, Math.sin(a) * r);
   }
   up.push(0, -165, 0); const NU = NA / 3, apex = up.length / 3 - 1;
@@ -178,69 +180,111 @@ ROADS.forEach((R, k) => {
 const waterTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ffffff"; g.fillRect(0, 0, 128, 128); g.strokeStyle = "rgba(255,255,255,0.0)"; for (let k = 0; k < 40; k++) { const x = Math.random() * 128, y = Math.random() * 128, w = 8 + Math.random() * 18; g.strokeStyle = `rgba(190,225,255,${0.5 + Math.random() * 0.5})`; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + w / 2, y - 3, x + w, y); g.stroke(); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
 const fallTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#cfeaff"; g.fillRect(0, 0, 64, 128); for (let k = 0; k < 70; k++) { g.fillStyle = `rgba(255,255,255,${0.4 + Math.random() * 0.6})`; g.fillRect(Math.random() * 64, Math.random() * 128, 1 + Math.random() * 3, 10 + Math.random() * 40); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
 const mistTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(255,255,255,0.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
-const mists = [];
+const mists = [], lakeTex = waterTex, riverTex = waterTex.clone();
+const FALLS = [];   // where each outflowing river pours over the edge: { x, z, fx, fz, a, y, hw }
+for (const R of World.RIVERS) if (R.fall) {
+  let e = R.pts.findIndex(([x, z]) => !inside(x, z)); if (e < 1) continue;
+  const [px, pz] = R.pts[Math.max(0, e - 4)], [qx, qz] = R.pts[e], dl = hyp(qx - px, qz - pz) || 1, fx = (qx - px) / dl, fz = (qz - pz) / dl;
+  const a = Math.atan2(qz, qx), er = edgeR(a); FALLS.push({ x: Math.cos(a) * er, z: Math.sin(a) * er, fx, fz, a, y: R.y[e - 1], hw: R.hw });
+}
 {
-  const { x0, step: G, n, w: WAT } = World.waterGrid(), pos = [], col = [], uv = [], idx = [], vid = new Map(), c = new THREE.Color();
+  const { x0, step: G, n, w: WAT, wet: WETN } = World.waterGrid(), c = new THREE.Color();
   const DEEP = new THREE.Color("#2f7fc4"), SHALLOW = new THREE.Color("#5cc3e8"), FOAM = new THREE.Color("#f2fbff");
-  const vert = (i, j) => {
-    const k = j * n + i; if (vid.has(k)) return vid.get(k);
-    const x = x0 + i * G, z = x0 + j * G, y = WAT[k], d = clamp((y - terrain(x, z)) / 2.5, 0, 1);
-    const sl = Math.max(Math.abs((WAT[k + 1] > -1e8 ? WAT[k + 1] : y) - y), Math.abs((WAT[k + n] > -1e8 ? WAT[k + n] : y) - y), Math.abs((WAT[k - 1] > -1e8 ? WAT[k - 1] : y) - y), Math.abs((WAT[k - n] > -1e8 ? WAT[k - n] : y) - y)) / G;
-    c.copy(SHALLOW).lerp(DEEP, d).lerp(FOAM, smooth(clamp((sl - 0.25) / 0.6, 0, 1)));
-    pos.push(x, y + 0.02, z); col.push(c.r, c.g, c.b); uv.push(x / 14, z / 14); vid.set(k, pos.length / 3 - 1); return pos.length / 3 - 1;
+  // (owner, 2026-11-09: the stream looked like it ran uphill) along each river the ripples run downstream, stretched
+  // (so faster) where it's steep; the lake drifts gently
+  for (const R of World.RIVERS) { R.V = [0]; for (let q = 1; q < R.pts.length; q++) { const ds = R.S[q] - R.S[q - 1], sl = Math.abs(R.y[q] - R.y[q - 1]) / (ds || 1); R.V.push(R.V[q - 1] + ds / (1 + 6 * sl)); } }
+  const flowAt = (x, z) => {
+    const L = World.LAKE, dl = hyp(x - L.x, z - L.z) - L.r; let best = null, bd = Math.max(dl, 0) + 3;
+    for (const R of World.RIVERS) for (let q = 0; q < R.pts.length; q++) { const d = hyp(R.pts[q][0] - x, R.pts[q][1] - z); if (d < bd) { bd = d; const nq = R.pts[Math.min(q + 1, R.pts.length - 1)], pq = R.pts[Math.max(q - 1, 0)], tx = nq[0] - pq[0], tz = nq[1] - pq[1], tl = hyp(tx, tz) || 1; best = { u: ((x - R.pts[q][0]) * -tz + (z - R.pts[q][1]) * tx) / tl / 8, v: R.V[q] / 8 }; } }
+    return best;
   };
-  for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
-    const k = j * n + i; if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + n] < -1e8 || WAT[k + n + 1] < -1e8) continue;
-    const x = x0 + i * G, z = x0 + j * G; if (![[0, 0], [G, 0], [0, G], [G, G]].some(([a, b]) => terrain(x + a, z + b) < WAT[k] - 0.05)) continue;
-    const a = vert(i, j), b = vert(i + 1, j), cc = vert(i, j + 1), d = vert(i + 1, j + 1); idx.push(a, cc, b, b, cc, d);
-  }
-  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-  const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: waterTex, transparent: true, opacity: 0.86, depthWrite: false })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
-  // the waterfalls: where each outflowing river crosses the edge, a sheet of water pours over and down, thinning out
+  const build = (river) => {
+    const pos = [], col = [], uv = [], idx = [], vid = new Map();
+    const vert = (i, j, f) => {
+      const k = j * n + i; if (vid.has(k)) return vid.get(k);
+      let x = x0 + i * G, z = x0 + j * G; const y = WAT[k], d = clamp((y - terrain(x, z)) / 2.5, 0, 1);
+      const sl = Math.max(Math.abs((WAT[k + 1] > -1e8 ? WAT[k + 1] : y) - y), Math.abs((WAT[k + n] > -1e8 ? WAT[k + n] : y) - y), Math.abs((WAT[k - 1] > -1e8 ? WAT[k - 1] : y) - y), Math.abs((WAT[k - n] > -1e8 ? WAT[k - n] : y) - y)) / G;
+      c.copy(SHALLOW).lerp(DEEP, d).lerp(FOAM, smooth(clamp((sl - 0.25) / 0.6, 0, 1)));
+      if (!inside(x, z, 0.3)) { const a = Math.atan2(z, x), r = edgeR(a) - 0.3; x = Math.cos(a) * r; z = Math.sin(a) * r; }   // never past the island's edge
+      pos.push(x, y + 0.02, z); col.push(c.r, c.g, c.b); if (f) uv.push(f.u, f.v); else uv.push(x / 14, z / 14); vid.set(k, pos.length / 3 - 1); return pos.length / 3 - 1;
+    };
+    for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) {
+      const k = j * n + i; if (WAT[k] < -1e8 || WAT[k + 1] < -1e8 || WAT[k + n] < -1e8 || WAT[k + n + 1] < -1e8) continue;
+      if (!(WETN[k] | WETN[k + 1] | WETN[k + n] | WETN[k + n + 1])) continue;   // only the water itself (not over its banks)
+      const x = x0 + i * G, z = x0 + j * G; if (![[0, 0], [G, 0], [0, G], [G, G]].some(([a, b]) => terrain(x + a, z + b) < WAT[k] - 0.05)) continue;
+      const f = flowAt(x + G / 2, z + G / 2); if (!!f !== river) continue;
+      const fl = (a, b) => (river ? flowAt(x + a, z + b) || f : null);
+      vid.clear();   // each cell's corners carry their own flow coordinates
+      const A = vert(i, j, fl(0, 0)), B = vert(i + 1, j, fl(G, 0)), C = vert(i, j + 1, fl(0, G)), D = vert(i + 1, j + 1, fl(G, G)); idx.push(A, C, B, B, C, D);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, map: river ? riverTex : lakeTex, transparent: true, opacity: 0.86, depthWrite: false, side: THREE.DoubleSide })); m.receiveShadow = true; m.renderOrder = 1; scene.add(m);
+  };
+  build(false); build(true);
+  // the waterfalls: from the lip at the island's edge, a sheet of water pours out and down, clear of the rock below
   const fallM = new THREE.MeshBasicMaterial({ map: fallTex, transparent: true, vertexColors: true, side: THREE.DoubleSide, depthWrite: false });
-  for (const R of World.RIVERS) if (R.fall) {
-    let e = R.pts.findIndex(([x, z]) => !inside(x, z)); if (e < 1) continue; e--;
-    const [ex, ez] = R.pts[e], [px, pz] = R.pts[Math.max(0, e - 3)], dl = hyp(ex - px, ez - pz) || 1, fx = (ex - px) / dl, fz = (ez - pz) / dl, rx = -fz, rz = fx, y0 = R.y[e];
-    const fp = [], fc = [], fu = [], fi = [], COLS = 6, ROWS = 18;
-    for (let r = 0; r <= ROWS; r++) { const t = r / ROWS, drop = t * t * 130 + t * 6, out = 1 + Math.sqrt(t) * 9; for (let q = 0; q <= COLS; q++) { const s = (q / COLS - 0.5) * 2 * R.hw * (1 + t * 0.6); fp.push(ex + fx * out + rx * s, y0 - drop, ez + fz * out + rz * s); fc.push(1, 1, 1, (1 - t) * (0.95 - Math.abs(q / COLS - 0.5) * 0.6)); fu.push(q / COLS, t * 6); } }
+  for (const F of FALLS) {
+    const rx = -F.fz, rz = F.fx, fp = [], fc = [], fu = [], fi = [], COLS = 6, ROWS = 20;
+    for (let r = 0; r <= ROWS; r++) { const t = r / ROWS, drop = t * t * 130 + t * 4, out = 0.3 + Math.sqrt(t) * 16; for (let q = 0; q <= COLS; q++) { const s2 = (q / COLS - 0.5) * 2 * F.hw * (1 + t * 0.6); fp.push(F.x + F.fx * out + rx * s2, F.y - drop, F.z + F.fz * out + rz * s2); fc.push(1, 1, 1, (1 - t) * (0.95 - Math.abs(q / COLS - 0.5) * 0.6)); fu.push(q / COLS, t * 6); } }
     for (let r = 0; r < ROWS; r++) for (let q = 0; q < COLS; q++) { const a = r * (COLS + 1) + q, b = a + 1, c2 = a + COLS + 1, d = c2 + 1; fi.push(a, c2, b, b, c2, d); }
     const fg = new THREE.BufferGeometry(); fg.setAttribute("position", new THREE.Float32BufferAttribute(fp, 3)); fg.setAttribute("color", new THREE.Float32BufferAttribute(fc, 4)); fg.setAttribute("uv", new THREE.Float32BufferAttribute(fu, 2)); fg.setIndex(fi);
     const fm = new THREE.Mesh(fg, fallM); fm.renderOrder = 2; scene.add(fm);
-    for (let k = 0; k < 7; k++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.55, depthWrite: false })), t = k / 6, out = 2 + Math.sqrt(t) * 9; s.position.set(ex + fx * out + rx * (Math.random() - 0.5) * R.hw, y0 - t * t * 60 - 1, ez + fz * out + rz * (Math.random() - 0.5) * R.hw); s.userData = { y: s.position.y, ph: k * 1.3, sz: 5 + t * 10 }; s.scale.setScalar(s.userData.sz); scene.add(s); mists.push(s); }
+    for (let k = 0; k < 7; k++) { const s2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: mistTex, transparent: true, opacity: 0.55, depthWrite: false })), t = k / 6, out = 1 + Math.sqrt(t) * 16; s2.position.set(F.x + F.fx * out + rx * (Math.random() - 0.5) * F.hw, F.y - t * t * 60 - 1, F.z + F.fz * out + rz * (Math.random() - 0.5) * F.hw); s2.userData = { y: s2.position.y, ph: k * 1.3, sz: 5 + t * 10 }; s2.scale.setScalar(s2.userData.sz); scene.add(s2); mists.push(s2); }
   }
 }
+// (owner, 2026-11-09) the camera under the water: everything goes a hazy blue
+const UNDER = new THREE.Color("#2b6f9e");
+function underwater() { const w = World.waterAt(camera.position.x, camera.position.z); if (w > camera.position.y) { scene.fog.color.copy(UNDER); scene.background.copy(UNDER); scene.fog.near = 0.5; scene.fog.far = 38; } }
 function waterStep(dt) {
-  waterTex.offset.x += dt * 0.015; waterTex.offset.y += dt * 0.01; fallTex.offset.y += dt * 1.6;
+  lakeTex.offset.x += dt * 0.015; lakeTex.offset.y += dt * 0.01; riverTex.offset.y -= dt * 0.45; fallTex.offset.y -= dt * 1.6;   // rivers run downstream, falls pour down
   for (const s of mists) { const u = s.userData; s.position.y = u.y + Math.sin(clock * 0.8 + u.ph) * 0.6; s.scale.setScalar(u.sz * (1 + Math.sin(clock * 1.3 + u.ph) * 0.12)); }
 }
-// ---- speed boosts (owner, 2026-11-09): glowing arrow pads on the roads, rings in the air and rings on the water; run,
-// fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too) ----
-const PAD_BOOST = 1.6, PAD_TIME = 5000;
+// ---- speed boosts (owner, 2026-11-09): glowing arrow pads laid on the roads, rings in the air and whirlpools on the
+// water; run, fly or swim through one and your pet goes 1.6x for 5 s (with Speed Candy too). The rings are only there
+// for fliers and gliders, the whirlpools only for swimmers; both fade out with distance. ----
+const PAD_BOOST = 1.6, PAD_TIME = 5000, BOOST_SEE = 120, BOOST_FADE = 45;
 const BOOSTS = [];
 {
   for (const R of ROADS) for (let s = 45; s < R.len - 20; s += 115) { const p = World.roadAt(R, s); if (hyp(p.x, p.z) < PLAZA + 12) continue; BOOSTS.push({ k: "pad", x: p.x, y: terrain(p.x, p.z) + ROAD_LIFT, z: p.z, yaw: Math.atan2(p.fx, p.fz), r: 3 }); }
   for (let n = 0; n < 14; n++) { const a = (n / 14) * TAU + 0.35, r = n % 2 ? 95 : 160, x = Math.cos(a) * r, z = Math.sin(a) * r; BOOSTS.push({ k: "air", x, y: terrain(x, z) + 16 + (n % 3) * 9, z, yaw: a, r: 4 }); }
   for (const [x, z, y] of [[0, 8, 34], [0, 18, 48], [-40, -20, 60], [60, 40, 70], [-90, -70, 80], [20, 110, 82]]) BOOSTS.push({ k: "air", x, y, z, yaw: Math.atan2(x, z), r: 4 });
-  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 3 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 3 });
-  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)], q2 = R.pts[Math.floor(R.pts.length * f) + 1]; BOOSTS.push({ k: "water", x: q[0], z: q[1], yaw: Math.atan2(q2[0] - q[0], q2[1] - q[1]), r: 3 }); }
-  for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); if (b.yaw === undefined) b.yaw = 0; }
+  const L = World.LAKE; BOOSTS.push({ k: "water", x: L.x + 5, z: L.z - 4, r: 2.6 }, { k: "water", x: L.x - 6, z: L.z + 3, r: 2.6 });
+  for (const [ri, f] of [[0, 0.35], [0, 0.7], [1, 0.45], [2, 0.3], [2, 0.65]]) { const R = World.RIVERS[ri], q = R.pts[Math.floor(R.pts.length * f)]; BOOSTS.push({ k: "water", x: q[0], z: q[1], r: 2.6 }); }
+  for (const b of BOOSTS) if (b.k === "water") { b.y = World.waterAt(b.x, b.z); b.yaw = 0; }
   const arrowTex = (() => { const c = document.createElement("canvas"); c.width = 64; c.height = 128; const g = c.getContext("2d"); g.fillStyle = "#ff9f1a"; g.fillRect(0, 0, 64, 128); g.fillStyle = "#fff4c2"; for (const y of [18, 58, 98]) { g.beginPath(); g.moveTo(8, y + 22); g.lineTo(32, y); g.lineTo(56, y + 22); g.lineTo(56, y + 34); g.lineTo(32, y + 12); g.lineTo(8, y + 34); g.fill(); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapT = THREE.RepeatWrapping; return t; })();
-  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
-  const ringM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff" }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff" }) };
-  const glowM = { air: new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }), water: new THREE.MeshBasicMaterial({ color: "#8f9bff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }) };
-  const padG = new THREE.PlaneGeometry(3.4, 5).rotateX(-Math.PI / 2), ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), wringG = new THREE.TorusGeometry(2.4, 0.3, 8, 28);
+  const swirlTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"); g.translate(64, 64); for (let arm = 0; arm < 3; arm++) { g.beginPath(); for (let t = 0; t < 1; t += 0.01) { const a = arm * (TAU / 3) + t * 7, r = 4 + t * 58; g.lineTo(Math.cos(a) * r, Math.sin(a) * r); } g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 7; g.lineCap = "round"; g.stroke(); } const rg = g.createRadialGradient(0, 0, 0, 0, 0, 62); rg.addColorStop(0, "rgba(40,60,190,0.9)"); rg.addColorStop(0.7, "rgba(110,130,255,0.5)"); rg.addColorStop(1, "rgba(150,170,255,0)"); g.globalCompositeOperation = "destination-over"; g.fillStyle = rg; g.beginPath(); g.arc(0, 0, 62, 0, TAU); g.fill(); return new THREE.CanvasTexture(c); })();
+  const padM = new THREE.MeshBasicMaterial({ map: arrowTex, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8 });
+  const ringG = new THREE.TorusGeometry(3.2, 0.32, 8, 32), glowG = new THREE.TorusGeometry(3.2, 0.9, 8, 32), swirlG = new THREE.CircleGeometry(2.6, 32).rotateX(-Math.PI / 2);
   for (const b of BOOSTS) {
+    if (b.k === "pad") {   // (owner, 2026-11-09: pads cut through the road) laid on the road itself, vertex by vertex
+      const c = Math.cos(b.yaw), sn = Math.sin(b.yaw), pos = [], uv = [], idx = [], NX = 4, NZ = 8;
+      for (let zi = 0; zi <= NZ; zi++) for (let xi = 0; xi <= NX; xi++) { const lx = (xi / NX - 0.5) * 3.4, lz = (zi / NZ - 0.5) * 5, x = b.x + lx * c + lz * sn, z = b.z - lx * sn + lz * c; pos.push(x, terrain(x, z) + ROAD_LIFT + 0.05, z); uv.push(xi / NX, zi / NZ); }
+      for (let zi = 0; zi < NZ; zi++) for (let xi = 0; xi < NX; xi++) { const a = zi * (NX + 1) + xi, bb = a + 1, cc = a + NX + 1, d = cc + 1; idx.push(a, cc, bb, bb, cc, d); }
+      const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
+      b.g = new THREE.Mesh(g, padM); scene.add(b.g); continue;
+    }
     const g = new THREE.Group(); g.position.set(b.x, b.y, b.z); g.rotation.y = b.yaw; scene.add(g); b.g = g;
-    if (b.k === "pad") { const m = new THREE.Mesh(padG, padM); m.position.y = 0.04; g.add(m); }
-    else { const big = b.k === "air", m = new THREE.Mesh(big ? ringG : wringG, ringM[b.k]), gl = new THREE.Mesh(big ? glowG : wringG, glowM[b.k]); if (!big) gl.scale.setScalar(1.25); m.position.y = gl.position.y = big ? 0 : 0.6; g.add(m, gl); }
+    if (b.k === "air") { b.m = [new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true }), new THREE.MeshBasicMaterial({ color: "#5fe3ff", transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })]; g.add(new THREE.Mesh(ringG, b.m[0]), new THREE.Mesh(glowG, b.m[1])); }
+    else { b.m = [new THREE.MeshBasicMaterial({ map: swirlTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })]; const w = new THREE.Mesh(swirlG, b.m[0]); w.position.y = 0.06; w.renderOrder = 3; g.add(w); b.spin = w; }
   }
   BOOSTS.tex = arrowTex;
 }
-function boostStep(dt) { BOOSTS.tex.offset.y -= dt * 1.5; for (const b of BOOSTS) if (b.k !== "pad") b.g.children[1].material.opacity = 0.18 + Math.sin(clock * 4) * 0.1; }
-function boostTouch(now) {
+// which boosts this pet can use: road pads any pet riding; rings fliers and gliders; whirlpools swimmers
+const boostFor = (b, kind) => kind !== "foot" && (b.k === "pad" || (b.k === "air" ? kind === "fly" || kind === "glide" : swims()));
+function boostStep(dt) {
+  BOOSTS.tex.offset.y -= dt * 1.5; const kind = me.foot ? "foot" : moveKind();
   for (const b of BOOSTS) {
-    const dy = b.k === "pad" ? me.y - b.y : b.k === "water" ? me.y - b.y + 0.4 : me.y + 0.8 - b.y;
-    if (hyp(me.x - b.x, me.z - b.z) < b.r && dy > -1.5 && dy < (b.k === "pad" ? 1.5 : 2.5)) {
+    if (b.k === "pad") continue;
+    const a = boostFor(b, kind) ? clamp((BOOST_SEE - hyp(b.x - me.x, b.z - me.z, (b.y - me.y) * 0.6)) / BOOST_FADE, 0, 1) : 0;
+    b.g.visible = a > 0.01; if (!b.g.visible) continue;
+    if (b.k === "air") { b.m[0].opacity = a; b.m[1].opacity = (0.18 + Math.sin(clock * 4) * 0.1) * a; } else { b.m[0].opacity = a; b.spin.rotation.y -= dt * 2.5; }
+  }
+}
+function boostTouch(now, kind) {
+  for (const b of BOOSTS) {
+    if (!boostFor(b, kind)) continue;
+    const dy = b.k === "pad" ? me.y - b.y : b.k === "water" ? me.y - b.y + 0.6 : me.y + 0.8 - b.y;
+    if (hyp(me.x - b.x, me.z - b.z) < b.r && dy > (b.k === "water" ? -3 : -1.5) && dy < (b.k === "pad" ? 1.5 : 2.5)) {
       if (me.padUntil < now - 600 || !me.padUntil) emitSparks(me.x, me.y + 1, me.z, 26, 6, b.k === "pad" ? ["#ff9f1a", "#fff4c2"] : b.k === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.7, 0);
       me.padUntil = now + PAD_TIME; me.padC = b.k; return;
     }
@@ -575,7 +619,10 @@ const LOOK = {
   butterfly: { plan: "butterfly" },
 };
 const RAINBOW = ["#ff6b6b", "#ffb84d", "#ffe66b", "#7ee08a", "#6bb8ff", "#b48cff"];
+// (owner, 2026-11-09) a pet grows with its level but its rider stays the same size, so a big pet feels big
+function sizePet(m, sc) { m.g.scale.setScalar(sc); if (m.rider) { m.rider.scale.setScalar(0.8 / sc); m.rider.position.y = m.seat - 0.52 / sc; m.top = m.seat * sc + 1.4; } else m.top *= sc; }
 function petModel(sp, rider) {
+  let riderG = null;
   const s = SPECIES[sp], L = LOOK[sp] || LOOK.pup, k = s.size, g = new THREE.Group(), body = new THREE.Group(); g.add(body);
   const legs = [], wings = [], tails = [], head = new THREE.Group();
   const C = s.c, A = s.a;
@@ -712,9 +759,9 @@ function petModel(sp, rider) {
   }
   let top = seat;
   if (rider) {   // the courier, seated (a little smaller): hips just above the pet's back
-    const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4;
+    const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4; riderG = r.g;
   }
-  return { g, body, legs, wings, head, tails, k, top, butterfly: L.plan === "butterfly", fly: !!s.fly, hop: !!L.hop, plan: L.plan };
+  return { g, body, legs, wings, head, tails, k, top, seat, rider: riderG, butterfly: L.plan === "butterfly", fly: !!s.fly, hop: !!L.hop, plan: L.plan };
 }
 function animatePet(m, t, moving, speed, airborne) {
   const f = 6 + speed * 0.5, sw = moving && !airborne ? Math.sin(t * f) * 0.6 : 0;
@@ -793,7 +840,7 @@ let mine = null, myBubble = null;
 let mountKey = "", sentPet = "";
 const petKey = () => riding().sp + "|" + riding().lv;
 function petSync() { const k = petKey(); if (k !== mountKey) mount(); if (netOk && k !== sentPet) { sentPet = k; netSend({ t: "pet", sp: riding().sp, lv: riding().lv }); } }
-function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
+function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); sizePet(mine, petScale(riding().lv)); mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
 // only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
@@ -1456,7 +1503,7 @@ function nameTag(name, stars) {
 }
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
-  const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); m.g.scale.setScalar(sc); m.top *= sc; const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
+  const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); sizePet(m, sc); const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
   tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g);
   others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, inst: p.inst || 0, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
 }
@@ -1527,6 +1574,19 @@ function onNet(m) {
 // (owner, 2026-11-08) updates: when a new build of the page is live, everyone reloads onto it (progress is saved on the
 // server); this page's own build is read from version.json when it loads
 let myBuild = null;
+// (owner, 2026-11-09) what's new: once an update is live, a small panel shows the latest entry of the front page's
+// Updates (the game's lines) until you close it; it comes back only when that entry changes. Someone new to the game
+// doesn't get it.
+fetch("index.html?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.text() : "")).then((html) => {
+  const art = new DOMParser().parseFromString(html, "text/html").querySelector("article.update"); if (!art) return;
+  const items = [...art.querySelectorAll("li")].map((li) => li.textContent.replace(/^\s*Pet Delivery Co\.:\s*/, "").trim()).filter(Boolean); if (!items.length) return;
+  const t = art.querySelector("time"), key = (t ? t.getAttribute("datetime") : "") + "|" + items.join("|");
+  let seen = null; try { seen = localStorage.getItem("petdelivery.news"); } catch (e) { return; }
+  const remember = () => { try { localStorage.setItem("petdelivery.news", key); } catch (e) { /* private mode */ } };
+  if (seen === key) return; if (seen === null && !getTok()) { remember(); return; }
+  $("newsd").textContent = t ? t.textContent : ""; $("newsl").innerHTML = ""; for (const it of items) { const li = document.createElement("li"); li.textContent = it[0].toUpperCase() + it.slice(1); $("newsl").appendChild(li); }
+  $("news").style.display = "block"; $("newsx").onclick = () => { $("news").style.display = "none"; remember(); };
+}).catch(() => {});
 fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j && j.v) myBuild = j.v; }).catch(() => {});
 function stale(web, told, by) {
   if (!told && (!web || !myBuild || web === myBuild)) return false;
@@ -2082,13 +2142,14 @@ function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn();
 function ui() {
   acts = context();
   const kind = me.foot ? "foot" : moveKind(), mine2 = onMyPlot();
-  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
+  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!me.flying + "|" + !!me.swim + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
-  $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
-  $("btn-down").style.display = kind === "fly" && me.flying && !building ? "" : "none";
+  $("btn-jump").textContent = me.swim ? "Swim ▲" : kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
+  $("btn-down").textContent = me.swim ? "Swim ▼" : "Fly ▼";
+  $("btn-down").style.display = ((kind === "fly" && me.flying) || me.swim) && !building ? "" : "none";
   $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
@@ -2210,11 +2271,16 @@ function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
   if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
   if (!inside(x, z)) return -200;
-  const w = World.waterAt(x, z); if (w > -Infinity) return w - SWIM_SINK;   // (owner, 2026-11-09) in the water you float
+  // (owner, 2026-11-09) in the water: a swimmer goes down to the bottom (it swims, below), a flier or glider hovers
+  // over it, and anyone else would float (but is put back on the shore: only swimmers go in the water)
+  const w = World.waterAt(x, z); if (w > -Infinity) return waterMode === "swim" ? terrain(x, z) + 0.25 : waterMode === "hover" ? w + 0.8 : w - SWIM_SINK;
   return terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0);
 }
 // (owner, 2026-11-09) swimmers swim fast; anyone else paddles slowly, and can't wade in from the shore (they can jump in)
-const SWIM_SINK = 0.55, SWIM_FAST = 1.35, PADDLE = 0.4;
+const SWIM_SINK = 0.55, SWIM_FAST = 1.35, SWIM_UP = 0.7;
+let waterMode = "float";
+// the nearest dry ground (on the island) to a spot in the water
+function nearestDry(x, z) { for (let r = 1; r < 50; r += 1) for (let k = 0; k < 24; k++) { const a = (k / 24) * TAU, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (inside(px, pz, 2) && World.waterAt(px, pz) === -Infinity && World.waterAt(px + Math.cos(a), pz + Math.sin(a)) === -Infinity) return [px + Math.cos(a), pz + Math.sin(a)]; } return [SPAWN.x, SPAWN.z]; }
 const swims = () => !!SPECIES[riding().sp].swim;
 function floorAt(x, z, y) { return Math.max(groundAt(x, z, y), houseSurface(x, z, y)); }
 function step(dt) {
@@ -2235,17 +2301,18 @@ function step(dt) {
   const hs0 = houseSurface(me.x, me.z, me.y), pl0 = me.inst ? null : World.plotAt(me.x, me.z);
   me.foot = (pl0 && me.y < pl0.y + LEVELS * LEVEL_H + 1.5) || (hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y));
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
+  waterMode = kind !== "foot" && swims() ? "swim" : kind === "fly" || kind === "glide" ? "hover" : "float";
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   // (owner, 2026-11-09) a flier walks on the ground until Space takes it up; off the ground it's always flying
   if (kind !== "fly") me.flying = false; else if (me.y - floor0 > 1.2) me.flying = true;
   const flying = kind === "fly" && me.flying;
   if (grounded) me.flapped = false;
-  if (!me.inst && kind !== "foot") boostTouch(now);
+  if (!me.inst && kind !== "foot") boostTouch(now, kind);
   let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
   sp *= windRideFactor(kind, me.y - floor0 > 1.2, mx, mz);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
-  const wNow = World.waterAt(me.x, me.z), wet = wNow > -Infinity && me.y < wNow - 0.2;
-  if (wet && kind !== "foot") sp *= swims() ? SWIM_FAST : PADDLE;
+  const wNow = World.waterAt(me.x, me.z), wet = waterMode === "swim" && wNow > -Infinity && me.y < wNow - 0.2;
+  if (wet) sp *= SWIM_FAST;
   me.moving = ml > 0.08 && !stunned;
   if (!me.moving) stuckFor = 0;
   if (me.moving) {
@@ -2255,7 +2322,7 @@ function step(dt) {
       if (flying) return true;
       const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z) && !inArena(x, z, 1.5)) return false;   // the edge (gliders can step off)
-      if (!wet && !swims() && World.waterAt(x, z) > me.y - 0.3) return false;   // the shore: only swimmers walk in
+      if (waterMode !== "swim" && !flying && World.waterAt(x, z) > me.y - 2.5) return false;   // (owner, 2026-11-09) only swimmers go in the water
       if (wet && !inside(x, z, 2.5)) return false;   // not over the waterfall
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05 + (wet ? 1.1 : 0);   // too steep to climb (a jump gets you up a ledge; out of the water too)
     };
@@ -2272,9 +2339,16 @@ function step(dt) {
   if (kind === "fly" && me.flying) {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Shift / Fly ▼ (down); hovers otherwise
     me.vy = 0; jumpQueued = 0;
     if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
-    me.y = Math.min(me.y, FLY_TOP); if (me.y <= floor) { me.y = floor; if (!upH) me.flying = false; }   // back on the ground: walking
+    me.y = Math.min(me.y, FLY_TOP); if (me.y <= floor) { me.y = floor; if (!upH && World.waterAt(me.x, me.z) === -Infinity) me.flying = false; }   // back on the ground: walking (over water it keeps flying)
   } else {
     if (kind === "fly") jumpQueued = 0;   // a walking flier doesn't jump (Space takes off)
+    const surf = wNow - SWIM_SINK, swimming = wet && me.y <= surf + 0.05 && !(me.vy > 0);
+    if (swimming && jumpQueued > now && me.y > surf - 0.3 && !stunned) { me.vy = 8.5; me.y = surf + 0.06; jumpQueued = 0; }   // a leap out at the surface
+    else if (swimming) {   // (owner, 2026-11-09) swimmers swim underwater: Space (or Swim ▲) up, Shift (or Swim ▼) down; they drift up to the surface
+      me.vy = 0; if (jumpQueued && jumpQueued < now) jumpQueued = 0;
+      if (!stunned) me.y += (upH ? 1 : downH ? -1 : 0.3) * sp * SWIM_UP * dt;
+      me.y = clamp(me.y, floor, surf); me.longJump = false;
+    } else {
     if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
     else if (jumpQueued > now && kind === "glide" && !grounded && !me.flapped && !stunned) { me.vy = 8; me.flapped = true; jumpQueued = 0; }   // a glider's one flap up
     me.vy = (me.vy || 0) - GRAV * dt;
@@ -2283,9 +2357,16 @@ function step(dt) {
     if (me.y <= floor || (grounded && me.vy <= 0 && me.y - floor < 0.6)) { me.y = floor; me.vy = 0; me.longJump = false; }
     if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
+    }
   }
+  // (owner, 2026-11-09) only swimmers go in the water: anyone else who ends up on it (a jump, a glide, a teleport) is put on the nearest shore
+  if (waterMode !== "swim" && !(kind === "fly" && me.flying) && !me.inst && World.waterAt(me.x, me.z) > -Infinity && me.y - floorAt(me.x, me.z, me.y) < 0.3) {
+    const [dx, dz] = nearestDry(me.x, me.z); me.x = dx; me.z = dz; me.y = floorAt(dx, dz, me.y + 3); me.vy = 0; emitSparks(me.x, me.y + 0.5, me.z, 14, 3, ["#ffffff", "#bfe6ff"], 0.6, 4); sendPos(true);
+  }
+  if (wet && me.y < wNow - SWIM_SINK - 0.6 && me.moving && Math.random() < dt * 10) emitSparks(me.x, me.y + 1, me.z, 1, 0.6, ["#ffffff", "#cfefff"], 1.2, -2, 0.6);   // bubbles
   if (me.padUntil > now && me.moving && Math.random() < dt * 24) emitSparks(me.x - Math.sin(me.yaw) * 0.8, me.y + 0.8, me.z - Math.cos(me.yaw) * 0.8, 2, 1.2, me.padC === "pad" ? ["#ff9f1a", "#fff4c2"] : me.padC === "air" ? ["#5fe3ff", "#ffffff"] : ["#8f9bff", "#ffffff"], 0.45, 0, 0.8);   // a boost's trail
-  if (wet && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
+  me.swim = wet;
+  if (wet && me.y > wNow - SWIM_SINK - 0.3 && me.moving && Math.random() < dt * 14) emitSparks(me.x, wNow + 0.1, me.z, 2, 1.6, ["#ffffff", "#bfe6ff"], 0.5, 5, 0.7);   // a splash
   // (owner, 2026-11-09) a strong wind (from 12 mph, most at 40) gently pushes a flier or glider in the air along with it
   // and bumps it about a little; never on the ground, at home or inside
   const gust = me.inst || stunned || !me.airborne || (kind !== "fly" && kind !== "glide") ? 0 : clamp((windNow.mph - 12) / 28, 0, 1);
@@ -2353,7 +2434,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [AR.x + Math.cos(OBS[arNext].a) * TRM, AR.y, AR.z + Math.sin(OBS[arNext].a) * TRM] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -2370,4 +2451,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get mine() { return mine; }, BOOSTS, nearestDry, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get daylight() { return skyNow.day; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
