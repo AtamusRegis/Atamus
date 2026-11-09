@@ -398,7 +398,7 @@ const rain = new THREE.LineSegments(rainG, new THREE.LineBasicMaterial({ color: 
 const drops = Array.from({ length: RAIN_N }, () => ({ x: (Math.random() - 0.5) * 70, y: Math.random() * 40, z: (Math.random() - 0.5) * 70, v: 26 + Math.random() * 10 }));
 // wind: pale streaks blowing past
 const windTex = (() => { const cv = document.createElement("canvas"); cv.width = 64; cv.height = 4; const x = cv.getContext("2d"), gr = x.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(0.5, "rgba(255,255,255,1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 4); return new THREE.CanvasTexture(cv); })();
-const winds = Array.from({ length: 36 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 0.12), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
+const winds = Array.from({ length: 72 }, () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(12, 0.18), new THREE.MeshBasicMaterial({ map: windTex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); scene.add(m); return { m, life: 0, max: 1, x: 0, y: 0, z: 0 }; });
 // (owner, 2026-11-09) the wind, the same for everyone (timed off the clock): 3 to 40 mph, easing to a new strength every
 // 3 minutes (windier in the rain) with gusts on top, its direction swinging slowly round. WIND is where it blows to.
 const WIND_BLOCK = 180, WIND_MIN = 3, WIND_MAX = 40;
@@ -445,14 +445,14 @@ function skyStep(dt, cx, cy, cz) {
   }
   if (rain.visible) rainG.attributes.position.needsUpdate = true;
   // wind streaks, more of them the windier it is, up high and in the rain
-  const windK = me.inst ? 0 : 0.1 + windNow.mph / WIND_MAX * 0.45 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
+  const windK = me.inst ? 0 : 0.3 + windNow.mph / WIND_MAX * 0.65 + rainK * 0.3 + clamp((me.y - terrain(me.x, me.z)) / 40, 0, 0.5);
   for (const w of winds) {
     w.life -= dt;
     if (w.life <= 0) { if (Math.random() > windK) { w.m.material.opacity = 0; w.life = 0.3 + Math.random(); continue; } w.max = w.life = 2 + Math.random() * 2; const a = Math.random() * TAU, r = 20 + Math.random() * 30; w.x = cx + Math.cos(a) * r - WIND.x * 10; w.y = cy - 6 + Math.random() * 16; w.z = cz + Math.sin(a) * r - WIND.z * 10; }   // (owner, 2026-11-08) out of the way, never right at the camera
     w.x += WIND.x * wsp * dt; w.z += WIND.z * wsp * dt; w.m.position.set(w.x, w.y + Math.sin(w.life * 3) * 0.3, w.z);
     tmpV.copy(camera.position).sub(w.m.position); tmpV.addScaledVector(WIND, -tmpV.dot(WIND)).normalize(); tmpV2.crossVectors(tmpV, WIND);   // long side along the wind, flat face to the camera
     tmpM.makeBasis(WIND, tmpV2, tmpV); w.m.quaternion.setFromRotationMatrix(tmpM);
-    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.16 * (0.4 + 0.6 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
+    w.m.material.opacity = Math.sin((w.life / w.max) * Math.PI) * 0.34 * (0.75 + 0.25 * day) * clamp((hyp(w.x - cx, w.z - cz) - 12) / 8, 0, 1);
   }
   // god rays: brightest with the sun low, gone at night and in the rain
   const rk = me.inst ? 0 : day * (1 - rainK) * (0.35 + dusk * 0.9) * 0.22;
@@ -1071,8 +1071,9 @@ function hud() {
   const key = [Math.floor(save.coins), me.bag.length, cap, online, netOk, save.items.snack, save.items.ribbon, save.items.ticket, me.boostUntil > performance.now(), me.stars, c && [c.done, c.goal, c.mine, left, c.kind]].join("|");
   // (owner, 2026-11-09) the wind: an arrow the way it blows (turned with the camera) and its speed; hidden inside
   const wf = -WIND.x * Math.sin(cam.yaw) - WIND.z * Math.cos(cam.yaw), wr = WIND.x * Math.cos(cam.yaw) - WIND.z * Math.sin(cam.yaw);
-  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3;
-  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winda").style.transform = `rotate(${deg}deg)`; } }
+  const rideWind = windRideFactor(moveKind(), me.airborne && me.moving, Math.sin(me.yaw), Math.cos(me.yaw)), pct = Math.round((rideWind - 1) * 100);
+  const wkey = me.inst ? "-" : Math.round(windNow.mph) + "|" + Math.round(Math.atan2(wr, wf) * 180 / Math.PI / 3) * 3 + "|" + pct;
+  if (wkey !== windKey) { windKey = wkey; $("windp").style.display = me.inst ? "none" : "inline-flex"; if (!me.inst) { const [mph, deg, effect] = wkey.split("|"); $("windn").textContent = mph + " mph"; $("winde").textContent = +effect ? (+effect > 0 ? "+" : "") + effect + "%" : ""; $("windp").classList.toggle("tailwind", +effect > 0); $("windp").classList.toggle("headwind", +effect < 0); $("winda").style.transform = `rotate(${deg}deg)`; } }
   if (key === hudKey) return; hudKey = key;
   if (openPanel === "p-shop" && Math.floor(save.coins) !== shopCoins) renderShop();
   $("coins").textContent = fmt(save.coins); $("bagn").textContent = me.bag.length + "/" + cap; $("who").textContent = save.name;
@@ -2031,6 +2032,13 @@ const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // walk, off your pet.
 const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, glide: { ground: 0.95, air: 1.25 }, foot: { ground: 1, air: 1 } };
 const FOOT_SPEED = 5.5;
+// (owner, 2026-11-09) airborne fliers and gliders gain up to 10% pointing downwind and lose up to 5% pointing into it.
+// The dot product makes the change taper smoothly to no change while crossing the wind.
+function windRideFactor(kind, airborne, dx, dz, wx = WIND.x, wz = WIND.z) {
+  const d = hyp(dx, dz); if (!airborne || (kind !== "fly" && kind !== "glide") || d < 0.08) return 1;
+  const along = clamp((dx * wx + dz * wz) / d, -1, 1);
+  return 1 + along * (along >= 0 ? 0.1 : 0.05);
+}
 function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
   if (inArena(x, z) && y > AR.y - 3) return AR.y + arenaFloor(x, z);
@@ -2062,6 +2070,7 @@ function step(dt) {
   if (grounded) me.flapped = false;
   if (!me.inst && kind !== "foot") boostTouch(now);
   let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (me.padUntil > now && kind !== "foot" ? PAD_BOOST : 1) * (grounded ? M.ground : M.air);
+  sp *= windRideFactor(kind, me.y - floor0 > 1.2, mx, mz);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
   const wNow = World.waterAt(me.x, me.z), wet = wNow > -Infinity && me.y < wNow - 0.2;
   if (wet && kind !== "foot") sp *= swims() ? SWIM_FAST : PADDLE;
@@ -2187,4 +2196,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, get arena() { return { AR, OBS, next: arNext, TRM }; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, buyMount, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, MOUNT_PRICE, SPECIES, PICKUP, SHOP, MOUNT, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, get wind() { return { mph: windNow.mph, x: WIND.x, z: WIND.z }; }, windRideFactor, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
