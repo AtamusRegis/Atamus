@@ -86,6 +86,9 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below you; off the map they sit on its edge), a fading wedge of what the camera sees, and you in the middle as an
   arrow in your shirt colour the way your pet faces. It darkens at night and hides in a home. A tap (or click) zooms:
   40, 80, 170 or 300 m from the middle to the edge, remembered in the browser. Redrawn about 30 times a second.
+- **Home marker (owner, 2026-11-09):** a compact Home pill shows the distance and compass direction to your plot (or Here
+  when you are there), and a gold house marker shows that plot on the minimap, including at its edge when out of view.
+  On a computer, jumping uses Space rather than a right-side Jump button; touch controls keep the button.
 - **Townsfolk and talking (owner, 2026-11-09):** six visibly different people live around the shops and post office,
   with their names above them, individual clothes, skin tones, idle movements and voices: Hazel keeps the Egg Shop,
   Rusty keeps the Mount Shop, Mabel sorts mail, Gus sweeps and wanders, Ziggy dances and Penny runs around. They wave
