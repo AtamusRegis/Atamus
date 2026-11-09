@@ -59,10 +59,16 @@ try {
   await page2.click("text=Create account");
   await user2.waitFor({ state: "hidden", timeout: 20000 });
   await page2.evaluate(() => { const P = window.Pets; P.teleport(P.me.x + 6, P.me.z, 40); });
-  await page.waitForTimeout(1500);
-  const seen = await page.evaluate(() => [...window.Pets.others.values()].map((o) => { const s = o.buf[o.buf.length - 1]; return s ? s.y : null; }));
-  if (!seen.length) problems.push("the first player doesn't see the second");
-  else if (!(seen[0] > 30)) problems.push(`the second player looks frozen to the first (last height seen ${seen[0]}, it is at 40)`);
+  // the highest the first sees them, over a few seconds (a land pet falls back down from 40 m in under 2 s, and a slow
+  // machine can read only after the landing, so a single late look isn't enough)
+  let seen = null;
+  for (let i = 0; i < 40 && !(seen > 30); i++) {
+    await page.waitForTimeout(100);
+    const ys = await page.evaluate(() => [...window.Pets.others.values()].map((o) => Math.max(...o.buf.map((s) => s.y))));
+    if (ys.length) seen = Math.max(seen ?? -Infinity, ys[0]);
+  }
+  if (seen === null) problems.push("the first player doesn't see the second");
+  else if (!(seen > 30)) problems.push(`the second player looks frozen to the first (highest seen ${seen}, it went up to 40)`);
 } catch (e) { problems.push(`could not ${step}: ${e.message.split("\n")[0]}`); }
 await browser.close(); if (browser2) await browser2.close(); server.close();
 if (problems.length) { console.error("SMOKE FAILED (browser)\n" + problems.map((p) => "  " + p).join("\n")); process.exit(1); }
