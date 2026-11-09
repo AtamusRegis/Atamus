@@ -1365,6 +1365,37 @@ plotIsland(VIP_ISLAND); const extraIsland = plotIsland(EXTRA_ISLAND); extraIslan
 const LIFT = { x: 18, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
 const liftBeamM = new THREE.MeshBasicMaterial({ color: "#7fd8ff", transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
 for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; }
+// (owner, 2026-11-09) a speech-bubble label floats over each place, saying what it is: clear up close, fading out with
+// distance (and hidden while building)
+const POIS = [
+  { x: PICKUP.x, y: 7.5, z: PICKUP.z - 1, name: "Post Office", what: "Pick up parcels here" },
+  { x: BOARD.x, y: 4.6, z: BOARD.z - 1.5, name: "Contract Board", what: "Start a contract with your room" },
+  { x: SHOP_B.x, y: 12, z: SHOP_B.z, name: "Egg Shop", what: "Buy eggs to hatch new pets" },
+  { x: MOUNT_B.x, y: 11.5, z: MOUNT_B.z, name: "Mount Shop", what: "Buy pets to ride" },
+  { x: TRAIN.x, y: 4.5, z: TRAIN.z, name: "Training Yard", what: "Train the pet you ride" },
+  { x: POUND.x, y: 8.5, z: POUND.z + 3, name: "Animal Control", what: "Where caught couriers end up" },
+  { x: LIFT.x, y: 6, z: LIFT.z, name: "Sky Lift", what: "Up to your plot" },
+  { x: LIFTS[1].x, y: LIFTS[1].y + 6, z: LIFTS[1].z, name: "Sky Lift", what: "Down to the plaza" },
+  { x: LIFTS[2].x, y: LIFTS[2].y + 6, z: LIFTS[2].z, name: "Sky Lift", what: "Down to the plaza", extra: true },
+];
+function poiBubble(name, what) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 176; const g = c.getContext("2d");
+  g.font = "800 46px system-ui, sans-serif"; const w1 = g.measureText(name).width; g.font = "600 32px system-ui, sans-serif"; const w2 = g.measureText(what).width;
+  const w = Math.min(500, Math.max(w1, w2) + 56);
+  g.fillStyle = "rgba(255,255,255,.95)"; g.beginPath(); g.roundRect((512 - w) / 2, 6, w, 136, 30); g.fill();
+  g.beginPath(); g.moveTo(236, 140); g.lineTo(256, 170); g.lineTo(276, 140); g.fill();
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#23303b"; g.font = "800 46px system-ui, sans-serif"; g.fillText(name, 256, 54, 470);
+  g.fillStyle = "#5a6a78"; g.font = "600 32px system-ui, sans-serif"; g.fillText(what, 256, 104, 470);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(6.4, 2.2, 1); sp.renderOrder = 4; return sp;
+}
+for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
+function poiStep() {
+  for (const q of POIS) {
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), a = building || (q.extra && !extraIsland.visible) ? 0 : clamp((70 - d) / 25, 0, 1);
+    q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 20) / 60, 0, 1); q.s.scale.set(6.4 * k, 2.2 * k, 1);
+  }
+}
 // each plot: a pale outline on the ground and a sign with its owner's name
 const plotLines = PLOTS.map((p) => {
   const g = new THREE.Group(), o = plotOrigin(p), m = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
@@ -1466,6 +1497,33 @@ function houseSurface(x, z, y) {
   }
   return best;
 }
+// a ceiling over me (a floor or roof above my head): inside a house means under one
+function houseCeiling(x, z, y) {
+  for (const col of nearPlots(x, z, 0)) {
+    for (const s2 of col.surfaces) if (x > s2[0] && x < s2[1] && z > s2[2] && z < s2[3] && s2[4] > y + 2) return true;
+    for (const r of col.ramps) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && r.y0 > y + 2) return true;
+  }
+  return false;
+}
+// (owner, 2026-11-09: stuck inside houses) is the room I'm in shut: no doorway or open side to the outside of the plot
+// and no stairs or slope to another level, going square by square through anything that isn't a wall or window?
+function enclosed() {
+  const pl = World.plotAt(me.x, me.z), st = pl && plotState.get(pl.id); if (!st) return false;
+  const o = plotOrigin(pl), l = clamp(Math.floor((me.y - pl.y + 0.6) / LEVEL_H), 0, LEVELS - 1), sx = Math.floor((me.x - o.x) / CELL), sz = Math.floor((me.z - o.z) / CELL);
+  const shut = new Set(); for (const t of st.pieces) if ((t.k === "wall" || t.k === "window") && t.l === l) { const [dx, dz] = SIDE[t.s]; shut.add((t.x * 2 + 1 + dx) + "," + (t.z * 2 + 1 + dz)); }
+  const seen = new Set([sx + "," + sz]), q = [[sx, sz]];
+  while (q.length) {
+    const [x, z] = q.pop();
+    if (st.pieces.some((t) => (t.k === "stairs" || t.k === "slope") && t.x === x && t.z === z && (t.l === l || t.l === l - 1))) return false;
+    for (const [dx, dz] of SIDE) {
+      if (shut.has((x * 2 + 1 + dx) + "," + (z * 2 + 1 + dz))) continue;
+      const nx = x + dx, nz = z + dz; if (nx < 0 || nz < 0 || nx >= GRID || nz >= GRID) return false;   // out to the open plot
+      const k = nx + "," + nz; if (!seen.has(k)) { seen.add(k); q.push([nx, nz]); }
+    }
+  }
+  return true;
+}
+let stuckFor = 0;
 function houseWall(x, z, y) {
   const R = 0.45;
   for (const col of nearPlots(x, z)) for (const w of col.walls) if (x > w[0] - R && x < w[1] + R && z > w[4] - R && z < w[5] + R && y + 0.3 < w[3] && y + 1.9 > w[2]) return true;
@@ -1709,13 +1767,15 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05;
+  // (owner, 2026-11-09) on foot only inside: on a house's floor with a ceiling over it; open-air floors keep you riding
+  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05 && houseCeiling(me.x, me.z, me.y);
   const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
   if (grounded) me.flapped = false;
   let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
   if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
   me.moving = ml > 0.08 && !stunned;
+  if (!me.moving) stuckFor = 0;
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
@@ -1725,7 +1785,11 @@ function step(dt) {
       if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
     };
+    const bx = me.x, bz = me.z;
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
+    // shut in a room with no way out (walled over, or dropped in from above): pushing on, you're put out in front of the plot
+    if (hyp(me.x - bx, me.z - bz) < v * 0.2 && kind !== "fly") stuckFor += dt; else stuckFor = 0;
+    if (stuckFor > 1.5) { stuckFor = 0; if (enclosed()) { const pl = World.plotAt(me.x, me.z); me.x = pl.x; me.z = pl.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, pl.y + 3); me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 24, 4, ["#7fd8ff", "#ffffff"], 0.7, -1); sendPos(true); } }
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
@@ -1798,7 +1862,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  cutaway(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); poiStep(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
