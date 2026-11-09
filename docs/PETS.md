@@ -46,12 +46,14 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
 - **How pets move (owner, 2026-11-08):** a pet only turns to face where it's going (it never tilts up or down).
-  - **Land pets** jump (Space / Jump): high from standing, far on the run (1.6× speed in the air); a jump gets them up a
+  - **Space (or the Jump / Fly ▲ / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08).**
+  - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): moving forward climbs or dives the way the camera looks
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): Space rises straight up; moving forward climbs or dives the way the camera looks
     (look up, from below, to climb; the camera can go below them); they hover when stopped; up to 130 m. They fly at
     0.75× and walk at 0.7× their speed.
-  - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb; they jump and glide, sinking 1.6 m/s (faster
+  - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
+    up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
 - **Every kind has its own build (owner, 2026-11-08):** body shape and size (boxy, round, upright birds, two-legged
   dinosaurs), leg length, a neck on horses, deer and dragons, head and snout, ears, tail and extras: floppy ears and a
@@ -88,9 +90,10 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   nearest few houses always count). Riding a flier or glider, islands in that reach get parcels too.
 - Riding into the pickup ring fills your bag with parcels (as many as your pet's bag holds), each for a house in reach;
   on a flapping flier about 3 in 10 are for island houses in reach (any island), on a glider the low ones only. Switching to a pet that can't fly hands island parcels back.
-- **The guide (owner, 2026-11-08):** a long glowing arrow drawn on the screen around your pet always points toward the
-  nearest house you have a parcel for (or the post office when the bag's empty), and a glowing marker bobs over the
-  place when it's in view; hidden within 6 m and at home.
+- **The guide (owner, 2026-11-08):** a long glowing arrow lying flat around your pet points toward the nearest house
+  you have a parcel for (or the post office when the bag's empty); it tilts up only halfway toward a place above or
+  below (fully when it's more than 4 m above you); a glowing marker bobs over the place when it's in view. Hidden
+  within 6 m and while building.
 - Each house you have a parcel for shows a gold beam (pink for an island house) with a spinning parcel over its mailbox; a gold arrow over your pet
   points to the nearest one (or back to the post office when the bag's empty).
 - Riding within 3.6 m of that mailbox delivers: **8 coins + 1 per 10 m from the post office**, **double
@@ -113,6 +116,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Fliers (owner, 2026-11-08):** climb to 11 m above the land while moving (higher near an island), over houses and
   trucks, and come down when stopped or within 10 m of a parcel's house, the post office, the shops or the board; they
   land on islands. Shown with a wing by their name in the menus.
+- **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
+  Glider: teal with spread wings) and the card's frame and tint in that colour, also when an egg hatches.
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
@@ -178,24 +183,36 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   press Ready (any change un-readies both) the server swaps them. Everyone keeps at least one pet, and nobody goes over
   their bed limit with what they get. Closing the panel cancels.
 
-## Homes (owner, 2026-11-08)
+## Houses on plots (owner, 2026-11-08)
 
-- Buy a house: at any town or island house's door, **E** (or Home) opens Home: Buy for $2,500 ($5,000 on an island).
-  One house each; a green ring marks your door.
-- **E** at your door (Enter) takes you into your own copy of it, far off in the sky; only people in it see each other.
-  **E** on the doormat (Exit) takes you back out. **G** (Invite) asks your party in (Visit home).
-- Inside, rooms are 14 m squares with full walls (3.6 m) under a roof, open to each other; the door is in the middle of
-  the first room's front. The camera stays inside the walls and under the roof (the roof hides when the camera's
-  above it, while building). Homes are always bright and dry inside.
-- **Build (freebuild, owner 2026-11-08):** **Room** ($1,500 × rooms so far, up to 6) on any free square next to one you
-  have (not in front of the door) and **Window** ($200) in any third of an outside wall (not the door): tap a green
-  marker. **Bed** ($400, 2 more pets) and **Playpen** ($800) go anywhere on the floor: the piece follows the pointer
-  (green where it fits, red where not: clear of walls, the doormat and other furniture; half-metre steps), R or ⟳ turns
-  it, a tap puts it down (and you can keep placing). **Remove:** tap furniture or a window to take it away, a room twice
-  (only an empty room, never the first, and the rest must stay joined); you get half its price back. ✕ or Escape stops.
-  Up to 60 pieces.
-- **Playpens:** tap one in your home to choose its pet (not the one you ride, or — to empty it): it wanders there and earns coins a minute (2 / 3.5 / 5.5 / 8 by rarity, +5% per level), up
-  to 8 hours' worth, collected when you come home. A pet in a playpen can't be ridden, traded or sent to the farm.
+- **Plots** (20 x 20 m, `PLOTS` in pets-world.js): 3 near the middle of town, 2 on the **VIP island** floating above
+  the middle (60 m up), 5 around town, and 6 on an **extra island** off the town's edge (400 m out) that appears when a
+  room has more than 10 players. Town plots are flattened and kept clear of houses and trees; each shows a pale outline
+  and, when someone has it, a sign with their name.
+- Each player in a room gets a plot when they join (the server decides): VIPs one of the VIP island's two; then the
+  three near the middle, first come first served; then one of the five around town at random; then the extra island.
+  It's freed when they leave. **VIP** is given or taken by admins in the Admin panel (from their next login).
+- Everyone's house stands on their plot and **everyone sees it** (the server sends each house, and changes to it).
+- **Lifts:** a lift at the plaza (teal ring and beam; E or Home ▲) takes you to the front of your plot; lifts on the
+  VIP and extra islands (E or ▼) bring you back to the plaza.
+- **Building** (Build, on your own plot; the camera rises over it): a bar of pieces with prices: Floor 20, Wall 30,
+  Window 50, Door 60, Roof 25, Slope roof 35, Stairs 80, Pet bed 400, Pet pen 800, Chair 60, Table 100, Shelf 90,
+  Cabinet 120, Plant 40, Rug 50, Poster 30; 12 colours. The chosen piece follows the pointer on the level you're
+  building (green, or red when you can't afford it): floors, roofs, slopes and stairs snap to a 4 m square of the 5 x 5
+  grid, walls, windows and doors to the nearest edge of one, furniture to half a metre; a tap puts it down (the same
+  structural piece in the same place isn't doubled). ⟳ (or R) turns it; ▲ ▼ change the level (3 floors of 4.5 m);
+  the colour paints what you put down; **Paint** recolours what you tap; **Remove** takes away what you tap for half its
+  price. ✕ / Done (or Escape) stops. Up to 300 pieces. Everyone starts with a little house (a 3 x 3 room with a door,
+  windows and a roof).
+- **Inside a house** (standing on its floors, steps or roof) you're off your pet, walking (5.5 m/s); walls (4.5 m)
+  block, doors are gaps, stairs and slopes climb; the floors above you (and the roof) hide while you're inside so you can
+  see in. Others see you walking too.
+- **Beds** (pet beds) each hold 2 more pets (6 + 2 per bed). **Playpens:** tap one on your plot to choose its pet (not
+  the one you ride, or — to empty it): it wanders there (others see it) and earns coins a minute (2 / 3.5 / 5.5 / 8 by
+  rarity, +5% per level), up to 8 hours' worth, collected when you come onto your plot. A pet in a playpen can't be
+  ridden, traded or sent to the farm.
+- Homes from before plots (bought houses with rooms inside) became the starter house, their pet beds and pens moved
+  into it (with their pets), and what was paid for the house, rooms and windows given back, once.
 
 ## Staff (owner, 2026-11-08)
 

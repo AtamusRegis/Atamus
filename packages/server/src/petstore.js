@@ -6,7 +6,7 @@ const newToken = () => crypto.randomBytes(24).toString("hex");
 
 export function pgStore(pool) {
   const ms = (t) => (t === null || t === undefined ? 0 : t === Infinity || String(t) === "infinity" ? Infinity : new Date(t).getTime());
-  const row = (r) => (r ? { id: Number(r.id), name: r.name, pass: r.pass, data: r.data, rev: r.rev, role: r.role || "player", muteUntil: ms(r.mute_until), banUntil: ms(r.ban_until) } : null);
+  const row = (r) => (r ? { id: Number(r.id), name: r.name, pass: r.pass, data: r.data, rev: r.rev, role: r.role || "player", vip: !!r.vip, muteUntil: ms(r.mute_until), banUntil: ms(r.ban_until) } : null);
   const ts = (v) => (!v ? null : v === Infinity ? "infinity" : new Date(v).toISOString());
   return {
     async byName(name) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE name_lc = $1", [name.toLowerCase()]); return row(rows[0]); },
@@ -22,6 +22,7 @@ export function pgStore(pool) {
     async setRole(id, role) { await pool.query("UPDATE pet_accounts SET role = $2 WHERE id = $1", [id, role]); },
     async setMute(id, until) { await pool.query("UPDATE pet_accounts SET mute_until = $2 WHERE id = $1", [id, ts(until)]); },
     async setBan(id, until) { await pool.query("UPDATE pet_accounts SET ban_until = $2 WHERE id = $1", [id, ts(until)]); },
+    async setVip(id, on) { await pool.query("UPDATE pet_accounts SET vip = $2 WHERE id = $1", [id, !!on]); },
     async search(q) { const { rows } = await pool.query("SELECT * FROM pet_accounts WHERE name_lc LIKE $1 ORDER BY name_lc LIMIT 30", [String(q).toLowerCase().replace(/[%_\\]/g, "\\$&") + "%"]); return rows.map(row); },
     async log(by, target, action, detail) { await pool.query("INSERT INTO pet_admin_log (by_name, target_name, action, detail) VALUES ($1, $2, $3, $4)", [by, target, action, detail || null]); },
   };
@@ -39,6 +40,7 @@ export function memStore() {
     async setRole(id, role) { const a = accts.get(id); if (a) a.role = role; },
     async setMute(id, until) { const a = accts.get(id); if (a) a.muteUntil = until || 0; },
     async setBan(id, until) { const a = accts.get(id); if (a) a.banUntil = until || 0; },
+    async setVip(id, on) { const a = accts.get(id); if (a) a.vip = !!on; },
     async search(q) { q = String(q).toLowerCase(); return [...accts.values()].filter((a) => a.name.toLowerCase().startsWith(q)).slice(0, 30).map((a) => ({ ...a })); },
     async log() {},
   };

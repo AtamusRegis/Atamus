@@ -5,8 +5,10 @@
 // - Rooms of up to 16: where everyone is (10 times a second, stamped with the server's clock so pages play it back
 //   smoothly), which pet they ride, animal control (pets-world.js, the same file the page uses) and wanted levels,
 //   contracts (every delivery in the room counts, the reward split by deliveries) and chat.
-// - Parties and trades between players, checked and carried out here; homes: a player inside their house (or visiting
-//   a party member's) is in that house's copy, seen only by others in it.
+// - Parties and trades between players, checked and carried out here.
+// - Housing plots (owner, 2026-11-08): each player in a room gets a plot their house (kept in their data) stands on, seen
+//   by everyone: VIPs the two on the VIP island, then the three near the middle (first come, first served), then one of
+//   five around town at random; past 10 players the extra island's plots.
 // Connections that go quiet are dropped; logging in again replaces the old connection. A new website build reloads
 // everyone onto it.
 import { WebSocketServer } from "ws";
@@ -36,12 +38,28 @@ const GIVE_ITEMS = new Set(["snack", "ribbon", "ticket"]);
 
 function roomFor() {
   let r = rooms.find((q) => q.players.size < ROOM_MAX);
-  if (!r) { r = { players: new Map(), contract: null, vs: makeVehicles(), last: Date.now() }; rooms.push(r); }
+  if (!r) { r = { players: new Map(), contract: null, vs: makeVehicles(), last: Date.now(), plots: new Array(16).fill(null) }; rooms.push(r); }
   return r;
 }
 const send = (ws, o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 const all = (r, o, skip) => { const s = JSON.stringify(o); for (const p of r.players.values()) if (p !== skip && p.ws.readyState === 1) p.ws.send(s); };
-const pub = (p) => ({ id: p.id, name: p.name, sp: p.sp, lv: p.lv, shirt: p.shirt, x: p.x, y: p.y, z: p.z, yaw: p.yaw, stars: p.stars, inst: p.inst });
+const pub = (p) => ({ id: p.id, name: p.name, sp: p.sp, lv: p.lv, shirt: p.shirt, x: p.x, y: p.y, z: p.z, yaw: p.yaw, stars: p.stars, inst: p.inst, ft: p.ft });
+const plotMsg = (plot, p) => {
+  if (!p) return { t: "plot", plot, id: 0, name: "", pieces: [] };
+  const d = p.acct.data, penSp = {};   // which kind of pet is in each playpen, so others see it
+  for (const t of d.home.pieces) if (t.k === "pen" && t.pet) { const q = d.pets.find((x) => x.id === t.pet); if (q) penSp[t.pet] = q.sp; }
+  return { t: "plot", plot, id: p.id, name: p.name, pieces: d.home.pieces, penSp };
+};
+function assignPlot(r, p) {
+  const free = (ids) => ids.filter((i) => !r.plots[i]);
+  let pick = null;
+  if (p.acct.vip) pick = free([3, 4])[0];
+  if (pick === undefined || pick === null) pick = free([0, 1, 2])[0];
+  if (pick === undefined) { const f = free([5, 6, 7, 8, 9]); pick = f.length ? f[Math.floor(Math.random() * f.length)] : undefined; }
+  if (pick === undefined) pick = free([10, 11, 12, 13, 14, 15])[0];
+  if (pick === undefined) return;
+  r.plots[pick] = p; p.plot = pick;
+}
 function contractFor(r, p) {
   const c = r.contract; if (!c) return null;
   return { kind: c.kind, goal: c.goal, done: c.done, mine: c.by.get(p.id) || 0, left: Math.max(0, (c.ends - Date.now()) / 1000), pool: c.pool };
@@ -99,16 +117,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
     changed(A.p); changed(B.p); flush(A.p.acct); flush(B.p.acct); pushData(A.p); pushData(B.p);
     endTrade(T, "done", true);
   }
-  // ---- homes ----
-  function homeFor(host) {
-    const d = host.acct.data; if (!d.home) return null;
-    const pens = d.home.items.map((t) => (t.k === "pen" && t.pet ? d.pets.find((q) => q.id === t.pet) || null : null)).map((q) => (q ? { sp: q.sp, lv: q.lv } : null));
-    return { t: "home", host: host.id, hostName: host.name, home: d.home, pens, inst: host.acct.id };
-  }
-  function visitorsOf(host) { return host.room ? [...host.room.players.values()].filter((q) => q !== host && q.inst === host.acct.id) : []; }
-
   // ---- the admin panel (owner, 2026-11-08) ----
-  const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
+  const staffView = (a, p) => ({ id: a.id, name: a.name, role: rankOf(a) === 3 ? "owner" : a.role, vip: !!a.vip, online: !!p, muted: a.muteUntil > Date.now() ? (a.muteUntil === Infinity ? -1 : a.muteUntil) : 0, banned: a.banUntil > Date.now() ? (a.banUntil === Infinity ? -1 : a.banUntil) : 0 });
   async function admin(me, m) {
     const my = rankOf(me.acct); if (my < 1) return;
     const reply = (msg) => send(me.ws, { t: "admin_msg", msg });
@@ -130,6 +140,10 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         a.role = role; await store.setRole(a.id, role); if (p) send(p.ws, { t: "role", role }); log("role", role); break;
       }
       case "mute": { const u = m.mins === "off" ? 0 : until(m.mins); a.muteUntil = u; await store.setMute(a.id, u); if (p) send(p.ws, { t: "muted", until: u === Infinity ? -1 : u }); log("mute", String(m.mins)); break; }
+      case "vip": {   // (owner, 2026-11-08) admins give or take VIP (the VIP island's plots, from their next login)
+        if (my < 2) return reply("Not allowed");
+        a.vip = !!m.on; await store.setVip(a.id, a.vip); if (p) send(p.ws, { t: "vip", on: a.vip }); log("vip", String(a.vip)); break;
+      }
       case "kick": if (p) { send(p.ws, { t: "kicked", why: "kick" }); p.ws.terminate(); } log("kick"); break;
       case "ban": {
         const u = m.mins === "off" ? 0 : until(m.mins); a.banUntil = u; await store.setBan(a.id, u);
@@ -183,16 +197,19 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
         if (!acct || ws.readyState !== 1) return;
         if (acct.banUntil > Date.now()) return authErr("banned", acct.banUntil === Infinity ? -1 : acct.banUntil);
         if (acct.name.toLowerCase() === OWNER && acct.role !== "admin") { acct.role = "admin"; store.setRole(acct.id, "admin"); }
-        acct.data = cleanData(acct.data, SPECIES);
+        const wasOld = !!(acct.data && acct.data.home && !Array.isArray(acct.data.home.pieces));
+        acct.data = cleanData(acct.data, SPECIES); if (wasOld) { acct.rev++; dirty.add(acct); }   // a home from before plots, turned into a house (and the refund) once
         const old = online.get(acct.id);
         if (old) { send(old.ws, { t: "kicked" }); old.ws.terminate(); gone(old); acct = old.acct; }   // logged in again: the old connection goes
         room = roomFor();
         me = { id: nextId++, ws, room, acct, name: acct.name, sp: SPECIES.has(m.sp) ? m.sp : "pup", lv: Math.max(1, Math.min(20, m.lv | 0)), shirt: color(m.shirt),
-          x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null };
+          x: num(m.x, 6000), y: num(m.y, 300), z: num(m.z, 6000), yaw: 0, mv: 0, lastDel: 0, lastChat: 0, stars: old ? old.stars : 0, lastChased: 0, lastStar: 0, immuneUntil: 0, inst: 0, party: null, trade: null, plot: -1, ft: 0 };
         online.set(acct.id, me);
-        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars });
+        assignPlot(room, me);
+        send(ws, { t: "welcome", web: websiteBuild(), id: me.id, name: me.name, role: rankOf(acct) >= 2 ? "admin" : acct.role, token, data: acct.data, rev: acct.rev, players: [...room.players.values()].map(pub), contract: null, stars: me.stars, vip: !!acct.vip, plot: me.plot, plots: room.plots.map((p, i) => (p ? plotMsg(i, p) : null)).filter(Boolean) });
         room.players.set(me.id, me);
         all(room, { t: "join", p: pub(me) }, me);
+        if (me.plot >= 0) all(room, plotMsg(me.plot, me), me);
         send(ws, { t: "contract", c: contractFor(room, me) });
       } catch (e) { console.error("[pets] auth", e.message); authErr("server"); }
       finally { busy = false; }
@@ -201,8 +218,8 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       if (p.gone) return; p.gone = true;
       if (p.trade) endTrade(p.trade, "left");
       leaveParty(p);
-      for (const v of visitorsOf(p)) { v.inst = 0; send(v.ws, { t: "home_left" }); }
       const r = p.room; if (r && r.players.get(p.id) === p) {
+        if (p.plot >= 0 && r.plots[p.plot] === p) { r.plots[p.plot] = null; all(r, plotMsg(p.plot, null)); }
         r.players.delete(p.id); all(r, { t: "leave", id: p.id });
         if (!r.players.size) { r.contract = null; rooms.splice(rooms.indexOf(r), 1); }
       }
@@ -216,13 +233,13 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const d = me.acct.data;
       switch (m.t) {
         // (owner, 2026-11-08: rubber-banding) each position carries the sender's own clock, passed on so others replay it at its true pace
-        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.fresh = true; break;
+        case "pos": me.x = num(m.x, 6000); me.y = num(m.y, 300); me.z = num(m.z, 6000); me.yaw = num(m.yaw, 10); me.mv = m.mv ? 1 : 0; me.ct = Number.isFinite(+m.ct) ? +m.ct : 0; me.bag = Math.max(0, Math.min(99, m.bag | 0)); me.ft = m.ft ? 1 : 0; me.fresh = true; break;
         case "pet": if (SPECIES.has(m.sp)) { me.sp = m.sp; me.lv = Math.max(1, Math.min(20, m.lv | 0)); all(room, { t: "pet", id: me.id, sp: me.sp, lv: me.lv }, me); } break;
         case "save": {
           if (m.rev !== me.acct.rev) { pushData(me); break; }
           const before = JSON.stringify(d.home);
           me.acct.data = cleanData(m.data, SPECIES); changed(me); send(ws, { t: "saved", rev: me.acct.rev });
-          if (JSON.stringify(me.acct.data.home) !== before) { const h = homeFor(me); for (const v of visitorsOf(me)) { if (!h) v.inst = 0; send(v.ws, h || { t: "home_left" }); } }
+          if (JSON.stringify(me.acct.data.home) !== before && me.plot >= 0) all(room, plotMsg(me.plot, me), me);   // everyone sees the house change
           break;
         }
         case "chat": {   // (owner, 2026-11-08)
@@ -261,9 +278,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           } else if (kind === "trade") {
             if (me.trade || from.trade) break;
             const T = { a: { p: from, pets: [], coins: 0, ready: false }, b: { p: me, pets: [], coins: 0, ready: false } }; from.trade = me.trade = T; sendTrade(T);
-          } else if (kind === "home") {
-            const h = homeFor(from); if (!h || from.inst !== from.acct.id) break;
-            me.inst = from.acct.id; send(ws, h);
           }
           break;
         }
@@ -280,18 +294,6 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
           if (T.a.ready && T.b.ready) doTrade(T); else sendTrade(T); break;
         }
         case "trade_cancel": if (me.trade) endTrade(me.trade, "cancel"); break;
-        // homes (owner, 2026-11-08)
-        case "home_enter": { const h = homeFor(me); if (!h) break; me.inst = me.acct.id; send(ws, h); break; }
-        case "home_invite": {
-          if (me.inst !== me.acct.id || !me.party) break;
-          for (const q of me.party.members) if (q !== me && q.room === room) { invites.set(`${q.id}:${me.id}:home`, Date.now() + INVITE_MS); send(q.ws, { t: "invited", from: me.id, name: me.name, kind: "home" }); }
-          break;
-        }
-        case "home_exit": {
-          const was = me.inst; me.inst = 0;
-          if (was === me.acct.id) for (const v of visitorsOf(me)) { v.inst = 0; send(v.ws, { t: "home_left" }); }
-          break;
-        }
       }
     });
     ws.on("close", () => { if (me) gone(me); });
@@ -310,7 +312,7 @@ export function attachPets(server, { origins = [], allowLocal = false, store = m
       const players = [...r.players.values()];
       for (const e of stepVehicles(r.vs, players.filter((p) => !p.inst), dt, now / 1000)) { const p = r.players.get(e.id); if (p) send(p.ws, { t: e.k, stars: e.stars || 0 }); }
       if (r.tick = !r.tick) all(r, { t: "veh", ts: now, v: r.vs.map((v) => [r2(v.x), r2(v.y), r2(v.z), r2(v.yaw), v.mode, v.target]) });   // vehicles 10 times a second
-      if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
+      if (players.length > 1) { const ps = players.filter((p) => p.fresh || r.tick).map((p) => { p.fresh = false; return [p.id, p.x, p.z, p.yaw, p.mv, p.y, p.stars, p.inst, p.ct || 0, p.ft]; }); if (ps.length) all(r, { t: "snap", ts: now, ps }); }
       if (r.contract && now > r.contract.ends) finish(r, false);
     }
   }, SNAP_MS).unref();

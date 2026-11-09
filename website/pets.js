@@ -84,7 +84,7 @@ let seed = 20261108; const srnd = () => ((seed = (seed * 16807) % 2147483647) / 
 const pick2 = (a) => a[Math.floor(srnd() * a.length)];
 const HOUSE_C = ["#f6d9b8", "#cfe6f7", "#f7cfd8", "#d8f0c8", "#fbe7a8", "#e3d4f5", "#f9f4ea"], ROOF_C = ["#c8553d", "#3b6ea8", "#5a8f3e", "#8a5a3a", "#6b5b95"];
 for (const h of houses) { h.c = pick2(HOUSE_C); h.roof = pick2(ROOF_C); }
-const LIMIT = 360;   // how far out anyone can go
+const LIMIT = 460;   // how far out anyone can go (the extra plot island is at 400)
 
 // ---- 3D ----
 const canvas = $("gl");
@@ -545,21 +545,37 @@ const me = { inst: 0, vy: 0, longJump: false, x: SPAWN.x + (Math.random() - 0.5)
 let mine = null, myBubble = null;
 function mount() { if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); const sc = petScale(riding().lv); mine.g.scale.setScalar(sc); mine.top *= sc; mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
-// a gold arrow over my pet pointing to the nearest house I have a parcel for (or the post office when the bag's empty)
-// (owner, 2026-11-08: the 3D arrow could look like a circle) a long glowing arrow drawn on the screen around my pet,
-// always pointing toward where to go, and a glowing marker over the place itself when it's in view
-const guideEl = $("guide"), pinEl = $("pin"), gv = new THREE.Vector3(), gp = new THREE.Vector3(), gt = new THREE.Vector3();
+// the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
+// only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
+// glowing marker bobs over the place itself on screen when it's in view
+const pinEl = $("pin"), gt = new THREE.Vector3();
+const arrowShape = new THREE.Shape(); arrowShape.moveTo(-0.32, 0); arrowShape.lineTo(0.32, 0); arrowShape.lineTo(0.32, 2.4); arrowShape.lineTo(0.85, 2.4); arrowShape.lineTo(0, 3.8); arrowShape.lineTo(-0.85, 2.4); arrowShape.lineTo(-0.32, 2.4); arrowShape.closePath();
+const arrowGeo = new THREE.ShapeGeometry(arrowShape); arrowGeo.rotateX(Math.PI / 2);   // lying flat, pointing +z
+const arrow = new THREE.Group(), arrowTilt = new THREE.Group(); arrow.add(arrowTilt); scene.add(arrow);
+{ const core = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffe27a", side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false, fog: false })); core.position.z = 1.6; core.renderOrder = 4; arrowTilt.add(core);
+  for (const [s2, o] of [[1.35, 0.35], [1.8, 0.16]]) { const g = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({ color: "#ffb800", side: THREE.DoubleSide, transparent: true, opacity: o, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); g.scale.set(s2, s2, s2); g.position.z = 1.6 - 3.8 * (s2 - 1) * 0.4; g.renderOrder = 3; arrowTilt.add(g); } }
 function drawGuide(tx, ty, tz, on) {
-  if (!on) { guideEl.style.display = pinEl.style.display = "none"; return; }
-  const W = innerWidth, H = innerHeight;
-  gp.set(me.x, me.y + mine.top * 0.55, me.z).project(camera); const px = ((gp.x + 1) / 2) * W, py = ((1 - gp.y) / 2) * H;
-  gt.set(tx, ty + 2.5, tz); gv.copy(gt).applyMatrix4(camera.matrixWorldInverse);
-  let ang;
-  if (gv.z < -0.5) { gt.project(camera); const qx = ((gt.x + 1) / 2) * W, qy = ((1 - gt.y) / 2) * H; ang = Math.atan2(qy - py, qx - px); const vis = gt.x > -0.94 && gt.x < 0.94 && gt.y > -0.9 && gt.y < 0.86; pinEl.style.display = vis ? "block" : "none"; if (vis) pinEl.style.transform = `translate(${qx}px, ${qy}px)`; }
-  else { pinEl.style.display = "none"; ang = Math.atan2(1, gv.x / Math.max(1, Math.abs(gv.z))); }   // behind the camera: point down and to its side
-  guideEl.style.display = "block"; guideEl.style.transform = `translate(${px + Math.cos(ang) * 46}px, ${py + Math.sin(ang) * 46}px) rotate(${ang}rad)`;
+  arrow.visible = on; if (!on) { pinEl.style.display = "none"; return; }
+  const dx = tx - me.x, dz = tz - me.z, d = hyp(dx, dz), up = ty - me.y, el = Math.atan2(up, Math.max(1, d));
+  const tilt = up > 4 ? el : el * 0.5;
+  arrow.position.set(me.x, me.y + 0.6, me.z); arrow.rotation.y = Math.atan2(dx, dz); arrowTilt.rotation.x = -clamp(tilt, -0.6, 1.2);
+  const pulse = 1 + Math.sin(clock * 5) * 0.06; arrowTilt.scale.set(pulse, pulse, pulse);
+  gt.set(tx, ty + 2.5, tz); const v = gt.clone().applyMatrix4(camera.matrixWorldInverse);
+  if (v.z < -0.5) { gt.project(camera); const vis = gt.x > -0.94 && gt.x < 0.94 && gt.y > -0.9 && gt.y < 0.86; pinEl.style.display = vis ? "block" : "none"; if (vis) pinEl.style.transform = `translate(${((gt.x + 1) / 2) * innerWidth}px, ${((1 - gt.y) / 2) * innerHeight}px)`; }
+  else pinEl.style.display = "none";
 }
-const arrow = new THREE.Group(); arrow.visible = false;
+// the courier on foot (inside houses): legs that walk
+function walkerModel(shirt) {
+  const g = new THREE.Group(), legs = [];
+  for (const x of [-0.14, 0.14]) { const l = new THREE.Group(); l.position.set(x, 0.75, 0); box(0.2, 0.75, 0.22, "#3d4650", 0, -0.37, 0, l); g.add(l); legs.push(l); }
+  box(0.55, 0.75, 0.35, shirt, 0, 1.12, 0, g); box(0.45, 0.45, 0.45, "#f1c9a5", 0, 1.75, 0, g); box(0.5, 0.15, 0.55, "#3a6ea8", 0, 2.03, 0.05, g); box(0.5, 0.06, 0.3, "#3a6ea8", 0, 1.97, 0.32, g);
+  box(0.25, 0.42, 0.5, "#a0703f", 0.38, 1.0, -0.02, g);
+  for (const x of [-0.36, 0.36]) box(0.14, 0.6, 0.16, shirt, x, 1.15, 0, g);
+  g.traverse((o) => (o.castShadow = true)); scene.add(g); g.visible = false;
+  return { g, legs };
+}
+const walker = walkerModel(save.shirt);
+function animateWalker(w, t, moving) { const sw = moving ? Math.sin(t * 9) * 0.7 : 0; w.legs[0].rotation.x = sw; w.legs[1].rotation.x = -sw; }
 // dizzy stars when animal control catches me
 const dizzy = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: "#ffd84a" })); s.position.set(Math.cos((k * TAU) / 4) * 0.8, 0, Math.sin((k * TAU) / 4) * 0.8); dizzy.add(s); } dizzy.visible = false; scene.add(dizzy);
 // a beam over each house I have a parcel for (pink over the islands: double pay)
@@ -704,14 +720,12 @@ function fadeHouses(dt, cx, cy, cz) {
   }
 }
 function placeCamera(dt) {
-  if (me.inst && house && !placing) { cam.pitch = Math.min(cam.pitch, 0.45); cam.goalDist = Math.min(cam.goalDist, 9); }
   cam.dist += (cam.goalDist - cam.dist) * Math.min(1, dt * 8); cam.y += (me.y - cam.y) * Math.min(1, dt * 10);
   let d = cam.dist, cx, cz, cy;
   for (let i = 0; i < 14; i++) {   // at home (not while building) the camera stays inside the walls and under the roof
     cx = me.x + Math.sin(cam.yaw) * d * Math.cos(cam.pitch); cz = me.z + Math.cos(cam.yaw) * d * Math.cos(cam.pitch); cy = cam.y + 1.5 + d * Math.sin(cam.pitch);
-    if (!me.inst || !house || placing || (inHouse(cx, cz, 0.45) && cy < WALL_H - 0.25)) break; d *= 0.82;
+    break;
   }
-  if (house) house.ceiling.visible = cy < WALL_H - 0.1;
   if (inside(cx, cz)) cy = Math.max(cy, terrain(cx, cz) + 1.2);
   const isl = islandAt(cx, cz); if (isl && cy < isl.y + 1.2 && cy > isl.y - 3) cy = isl.y + 1.2;
   camera.position.set(cx, cy, cz); camera.lookAt(me.x, cam.y + 1.8, me.z);
@@ -751,10 +765,10 @@ canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); cam.goalDist = clamp(cam.goalDist * Math.exp(e.deltaY * 0.001), 7, 45); }, { passive: false });
 const typing = () => { const a = document.activeElement; return !!a && a.tagName === "INPUT" && a.offsetParent !== null; };
 addEventListener("keydown", (e) => {
-  if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (placing) stopPlacing(); closePanels(); }
+  if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
-  if (e.code === "Space") { e.preventDefault(); jumpQueued = performance.now() + 150; }
-  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR") runAct("R");
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held
+  if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => keys.clear());
@@ -777,16 +791,21 @@ function hud() {
   const items = $("items"); items.innerHTML = "";
   if (save.items.snack > 0) { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${CANDY}<span class="n">${save.items.snack}</span>`; b.title = ITEMS.snack.name; b.disabled = me.boostUntil > performance.now(); b.onclick = useSnack; items.appendChild(b); }
 }
-const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-home", "p-admin"];
+const panels = ["p-pets", "p-shop", "p-train", "p-board", "p-player", "p-trade", "p-build", "p-admin"];
 let openPanel = null;
-function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderBuild(); if (id === "p-home") renderHomeBuy(); if (id === "p-admin") renderAdmin(); }
-function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; picking = -1; }
+function show(id) { for (const p of panels) $(p).style.display = p === id ? "block" : "none"; openPanel = id; if (id === "p-pets") renderPets(); if (id === "p-shop") renderShop(); if (id === "p-train") renderTrain(); if (id === "p-board") renderBoard(); if (id === "p-player") renderPlayer(); if (id === "p-trade") renderTrade(); if (id === "p-build") renderPenPick(); if (id === "p-admin") renderAdmin(); }
+function closePanels() { if (openPanel === "p-trade" && trading) netSend({ t: "trade_cancel" }); for (const p of panels) $(p).style.display = "none"; openPanel = null; }
 for (const p of panels) $(p).querySelector(".x").onclick = closePanels;
 $("btn-pets").onclick = () => (openPanel === "p-pets" ? closePanels() : show("p-pets"));
 const WING = `<svg class="ico" viewBox="0 0 14 12" style="width:14px;height:12px;vertical-align:-1px"><path d="M1 10C3 3 8 1 13 1c-1 5-5 9-12 9z" fill="#3a8ee6"/></svg>`;
+// (owner, 2026-11-08: make fliers and gliders obvious) a coloured badge on every card: Flier (sky blue, flapping wings)
+// or Glider (teal, spread wings), and the card's frame in that colour
+const GLIDE_ICO = `<svg class="ico" viewBox="0 0 24 14" style="width:20px;height:12px"><path d="M1 6c4-3 7-4 11-1 4-3 7-2 11 1-4 0-7 1-11 4C8 7 5 6 1 6z" fill="currentColor"/></svg>`;
+const FLY_ICO = `<svg class="ico" viewBox="0 0 24 16" style="width:20px;height:14px"><path d="M12 13C9 6 5 2 1 2c1 5 4 9 11 11zm0 0c3-7 7-11 11-11-1 5-4 9-11 11z" fill="currentColor"/></svg>`;
+const moveBadge = (sp) => { const f = SPECIES[sp].fly; return f === "fly" ? `<span class="mbadge fly">${FLY_ICO}Flier</span>` : f === "glide" ? `<span class="mbadge glide">${GLIDE_ICO}Glider</span>` : ""; };
 function card(sp, lines, on, onclick) {
-  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "");
-  d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84"><span class="nm">${s.name}${s.fly ? " " + WING : ""}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
+  const s = SPECIES[sp], d = document.createElement("div"); d.className = "card" + (on ? " on" : "") + (s.fly ? " " + s.fly : "");
+  d.innerHTML = `<img alt="" src="${portrait(sp)}" width="84" height="84">${moveBadge(sp)}<span class="nm">${s.name}</span><span class="rar" style="color:${RARITY[s.r].c}">${RARITY[s.r].name}</span>${lines}`;
   if (onclick) d.onclick = onclick; return d;
 }
 const statLine = (p) => `<span class="stats"><span>Lv ${p.lv}</span><span>${petSpeed(p).toFixed(1)} m/s</span><span>${petBag(p)} bag</span></span>`;
@@ -843,7 +862,7 @@ function buyEgg(egg, ticket) {
 // (owner, 2026-11-08) hatching: the egg shakes harder and cracks, then bursts in a flash of fireworks to the pet, rays
 // behind it in its rarity's color
 function hatch(p, egg) {
-  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").textContent = s.name; $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
+  const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
   $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
@@ -1058,6 +1077,7 @@ function connect() {
     if (ws === sock) ws = null;
     const was = netOk; netOk = false; myId = null; clockOff = null; saving = false; for (const id of [...others.keys()]) dropOther(id); online = 1; if (contract && !contract.local) contract = null; hudKey = "";
     party = []; renderParty(); if (trading) { trading = null; if (openPanel === "p-trade") closePanels(); }
+    if (building) closeBuild(); for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = -1;
     $("lgo").disabled = $("lnew").disabled = true;
     if (was && !hidden) toast("Offline");
     if (!hidden && !kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
@@ -1100,7 +1120,7 @@ function adopt(data, r) {
   save = Object.assign(World.cleanData(data, SPECIES_SET), { name: myName }); rev = r; saveDirty = false;
   mount(); if (!SPECIES[riding().sp].fly) me.bag = me.bag.filter((i) => !houses[i].sky);
   syncBeams(); hudKey = ""; uiKey = ""; if (openPanel && openPanel !== "p-trade") show(openPanel);
-  if (house && house.mine) buildHouse(houseMsgMine());
+  refreshMyPlot();
 }
 
 function nameTag(name, stars) {
@@ -1132,7 +1152,8 @@ function onNet(m) {
       if (again && saveDirty && m.rev === rev) { save.name = myName; flushSave(true); } else adopt(m.data, m.rev);   // back after a drop: my unsaved progress goes up
       if (!again) { chatHist.length = 0; $("chatlog").innerHTML = ""; }   // a fresh login starts a fresh chat history
       myRole = m.role || "player";
-      if (me.inst) leaveHouseLocal();
+      isVip = !!m.vip; for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = m.plot >= 0 ? m.plot : -1;
+      for (const q of m.plots || []) if (q.id !== myId) setPlot(q.plot, q.id, q.name, q.pieces, q.penSp); refreshMyPlot();
       for (const p of m.players) addOther(p); online = m.players.length + 1; setContract(m.contract); me.stars = m.stars || 0; hudKey = ""; uiKey = "";
       break;
     }
@@ -1148,8 +1169,8 @@ function onNet(m) {
     case "leave": dropOther(m.id); online = others.size + 1; hudKey = ""; break;
     case "snap":
       serverTime(m.ts);
-      for (const [id, x, z, yaw, mv, y, st, inst, ct] of m.ps) {
-        const o = others.get(id); if (!o) continue;
+      for (const [id, x, z, yaw, mv, y, st, inst, ct, ft] of m.ps) {
+        const o = others.get(id); if (!o) continue; o.foot = !!ft;
         if ((inst || 0) !== o.inst) { o.inst = inst || 0; o.buf.length = 0; o.snap = true; }
         // stamped with the sender's own clock: how far it is from mine, from the quickest-arriving updates
         const t = ct || m.ts, est = performance.now() - t;
@@ -1171,8 +1192,8 @@ function onNet(m) {
     case "party": party = m.members || []; renderParty(); uiKey = ""; break;
     case "trade": { const first = !trading; trading = m; if (first) { offer = { pets: new Set(), coins: 0 }; show("p-trade"); } else if (openPanel === "p-trade") renderTrade(); break; }
     case "trade_end": trading = null; if (openPanel === "p-trade") closePanels(); toast(m.done ? "Traded!" : "Trade cancelled", m.done ? "#3fb36b" : undefined); if (m.done) emitConfetti(me.x, me.y + 3, me.z, 60, 4, 7); break;
-    case "home": enterHome(m); break;
-    case "home_left": leaveHouseLocal(); break;
+    case "plot": if (m.id !== myId) setPlot(m.plot, m.id, m.name, m.pieces, m.penSp); break;
+    case "vip": isVip = !!m.on; toast(m.on ? "VIP ★" : "VIP ✕", "#e08a00"); break;
   }
 }
 // (owner, 2026-11-08) updates: when a new build of the page is live, everyone reloads onto it (progress is saved on the
@@ -1187,9 +1208,9 @@ function stale(web, told) {
   flushSave(true); banner("Updating!", "#ffd35a"); setTimeout(() => location.reload(), 1500); return true;
 }
 function sendPos(force) {
-  const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0, me.bag.length].join();
+  const s = [me.x.toFixed(2), me.y.toFixed(1), me.z.toFixed(2), me.yaw.toFixed(2), me.moving ? 1 : 0, me.bag.length, me.foot ? 1 : 0].join();
   if (!force && s === lastPos) return;
-  netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0, ct: Math.round(performance.now()), bag: me.bag.length }); lastPos = s; lastActual = performance.now();
+  netSend({ t: "pos", x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), mv: me.moving ? 1 : 0, ct: Math.round(performance.now()), bag: me.bag.length, ft: me.foot ? 1 : 0 }); lastPos = s; lastActual = performance.now();
 }
 
 // ---- players (owner, 2026-11-08): F next to someone opens a menu to trade with them or invite them to your party;
@@ -1244,110 +1265,138 @@ function renderTrade() {
   row.appendChild(ready); el.append(mineH, theirs, row);
 }
 
-// ---- homes (owner, 2026-11-08): buy a house in town; its door (E) takes you into your own copy of it, far off in the
-// sky where nobody else is: walled rooms under a roof. Freebuild: rooms on any free square next to one you have, beds
-// (each holds 2 more pets), playpens (a pet in one earns coins while you're away, collected when you come home) and
-// windows anywhere they fit; anything can be taken away again for half its price. Tap a playpen to choose its pet.
-// Invite your party in. ----
-const HOME = World.HOME, RS = HOME.roomSize, IN = { x: 5000, z: 5000 }, WALL_H = 3.6;
-const cellsOf = (home) => home.cells || Array.from({ length: home.rooms }, (_, k) => [k % 3, Math.floor(k / 3)]);
-const roomAt = (k, home = house ? house.msg.home : save.home) => { const c = cellsOf(home)[k] || [0, 0]; return { x: IN.x + c[0] * RS, z: IN.z + c[1] * RS }; };
-const hasCell = (home, x, z) => cellsOf(home).some(([a, b]) => a === x && b === z);
-const SIZE = { bed: [2.4, 3.2], pen: [5.6, 5.6] };
-const footprint = (t) => { const [w, d] = SIZE[t.k], sw = t.r % 2 ? d : w, sd = t.r % 2 ? w : d; return [IN.x + t.x - sw / 2, IN.x + t.x + sw / 2, IN.z + t.z - sd / 2, IN.z + t.z + sd / 2]; };
-let house = null;   // { msg, mine, g, rects, pens, picks (meshes to tap), ceiling }
-const doorOf = (i) => { const h = houses[i]; return { x: h.x + Math.sin(h.yaw) * 5.4, z: h.z + Math.cos(h.yaw) * 5.4, y: h.base }; };
-const houseMsgMine = () => ({ host: myId, hostName: myName, home: save.home, pens: save.home ? save.home.items.map((t) => { const p = t.k === "pen" && t.pet && save.pets.find((q) => q.id === t.pet); return p ? { sp: p.sp, lv: p.lv } : null; }) : [], inst: -1, mine: true });
-const myRing = new THREE.Mesh(RINGG(1.6), ringM("#3fb36b")); myRing.visible = false; scene.add(myRing);
-const glassM = new THREE.MeshBasicMaterial({ color: "#bfe6ff", transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide });
-// a wall along one side of a room, in thirds: plain, a window, or (the front of the first room) the door
-function wallSide(g, cx, cz, side, wins, door) {
-  const o = { x: IN.x + cx * RS, z: IN.z + cz * RS }, third = RS / 3, C = "#f4ead8", T = 0.3;
-  for (let p = 0; p < 3; p++) {
-    // centre of this third along the wall, and which way the wall runs
-    const along = (p + 0.5) * third, alongX = side >= 2;
-    const at = (a, y, w, h) => { const x = alongX ? o.x + a : o.x + (side === 1 ? RS : 0), z = alongX ? o.z + (side === 3 ? RS : 0) : o.z + a; return box(alongX ? w : T, h, alongX ? T : w, C, x, y, z, g); };
-    if (door && p === 1) { at(along - third / 2 + 0.6, WALL_H / 2, 1.2, WALL_H); at(along + third / 2 - 0.6, WALL_H / 2, 1.2, WALL_H); at(along, 2.6 + (WALL_H - 2.6) / 2, third - 2.4, WALL_H - 2.6); continue; }
-    if (wins.has(p)) {
-      at(along, 0.55, third, 1.1); at(along, 2.9 + (WALL_H - 2.9) / 2, third, WALL_H - 2.9);
-      at(along - third / 2 + 0.4, 2.0, 0.8, 1.8); at(along + third / 2 - 0.4, 2.0, 0.8, 1.8);
-      const gl = new THREE.Mesh(BOX, glassM); gl.scale.set(alongX ? third - 1.6 : 0.06, 1.8, alongX ? 0.06 : third - 1.6); gl.position.set(alongX ? o.x + along : o.x + (side === 1 ? RS : 0), 2.0, alongX ? o.z + (side === 3 ? RS : 0) : o.z + along); g.add(gl);
-      const sill = at(along, 1.12, third - 1.4, 0.08); sill.material = mat("#c98b4f");
-      continue;
-    }
-    at(along, WALL_H / 2, third, WALL_H);
+// ---- houses on plots (owner, 2026-11-08): everyone in a room gets a plot (20 x 20 m) where their house stands, seen
+// by everyone: 3 near the middle (first come, first served), 2 on the VIP island above the middle, 5 around town (given
+// at random), and an island off the edge with more when a room has more than 10 players. Build it however you like
+// from pieces (floors, walls, windows, doors, roofs, slopes, stairs on a 5 x 5 grid of 4 m squares, up to 3 floors;
+// furniture anywhere), in any wall colour. Inside a house you're on foot. Tap a playpen to choose its pet. ----
+const { PLOTS, PLOT, CELL, GRID, LEVELS, LEVEL_H, PIECES, COLORS, VIP_ISLAND, EXTRA_ISLAND } = World;
+const plotState = new Map();   // plot id -> { id (player), name, pieces, g, col: { walls, surfaces, ramps }, pens }
+let myPlot = -1, isVip = false;
+const plotOrigin = (p) => ({ x: p.x - PLOT / 2, z: p.z - PLOT / 2, y: p.y });
+// the islands for plots: the VIP island above the middle, the extra island off the edge (shown when it's in use)
+function plotIsland(isl) {
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(isl.r, isl.r * 0.94, 1.6, 36), mat("#86c95f")); top.position.set(isl.x, isl.y - 0.8, isl.z); top.receiveShadow = true; g.add(top);
+  const rock = new THREE.Mesh(new THREE.ConeGeometry(isl.r * 0.94, isl.r * 1.3, 12).rotateX(Math.PI), mat("#8a7f72")); rock.position.set(isl.x, isl.y - 1.6 - isl.r * 0.65, isl.z); g.add(rock);
+  scene.add(g); return g;
+}
+plotIsland(VIP_ISLAND); const extraIsland = plotIsland(EXTRA_ISLAND); extraIsland.visible = false;
+// lifts: one at the plaza takes you to your plot; one on each plot island brings you back down
+const LIFT = { x: 18, z: 22 }, LIFTS = [{ x: LIFT.x, z: LIFT.z, y: 0, to: "plot" }, { x: VIP_ISLAND.x, z: VIP_ISLAND.z + 18, y: VIP_ISLAND.y, to: "plaza" }, { x: EXTRA_ISLAND.x, z: EXTRA_ISLAND.z + 30, y: EXTRA_ISLAND.y, to: "plaza" }];
+const liftBeamM = new THREE.MeshBasicMaterial({ color: "#7fd8ff", transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide });
+for (const l of LIFTS) { const r = new THREE.Mesh(RINGG(2.2), ringM("#2bb3c0")); r.position.set(l.x, l.y + 0.18, l.z); scene.add(r); const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 14, 20, 1, true), liftBeamM); b.position.set(l.x, l.y + 7, l.z); scene.add(b); l.ring = r; }
+// each plot: a pale outline on the ground and a sign with its owner's name
+const plotLines = PLOTS.map((p) => {
+  const g = new THREE.Group(), o = plotOrigin(p), m = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 });
+  for (const [w, d, x, z] of [[PLOT, 0.25, PLOT / 2, 0], [PLOT, 0.25, PLOT / 2, PLOT], [0.25, PLOT, 0, PLOT / 2], [0.25, PLOT, PLOT, PLOT / 2]]) { const b = new THREE.Mesh(BOX, m); b.scale.set(w, 0.06, d); b.position.set(o.x + x, o.y + 0.08, o.z + z); g.add(b); }
+  scene.add(g); g.visible = p.kind !== "extra"; return g;
+});
+// one mesh per house: every box of every piece in one geometry, coloured per vertex (glass on its own)
+function Merger() { this.p = []; this.n = []; this.c = []; this.i = []; }
+const unitBox = new THREE.BoxGeometry(1, 1, 1), mtx = new THREE.Matrix4(), nmx = new THREE.Matrix3(), qq = new THREE.Quaternion(), ee = new THREE.Euler(), vv = new THREE.Vector3(), sc = new THREE.Vector3(), colr = new THREE.Color();
+Merger.prototype.box = function (w, h, d, x, y, z, ry, color, rx = 0) {
+  ee.set(rx, ry, 0, "YXZ"); qq.setFromEuler(ee); mtx.compose(vv.set(x, y, z), qq, sc.set(w, h, d)); nmx.getNormalMatrix(mtx); colr.set(color);
+  const P = unitBox.attributes.position, N = unitBox.attributes.normal, I = unitBox.index, base = this.p.length / 3, t = new THREE.Vector3();
+  for (let k = 0; k < P.count; k++) { t.fromBufferAttribute(P, k).applyMatrix4(mtx); this.p.push(t.x, t.y, t.z); t.fromBufferAttribute(N, k).applyMatrix3(nmx).normalize(); this.n.push(t.x, t.y, t.z); this.c.push(colr.r, colr.g, colr.b); }
+  for (let k = 0; k < I.count; k++) this.i.push(base + I.getX(k));
+};
+Merger.prototype.mesh = function (material) {
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(this.p, 3)); g.setAttribute("normal", new THREE.Float32BufferAttribute(this.n, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(this.c, 3)); g.setIndex(this.i);
+  const m = new THREE.Mesh(g, material); m.castShadow = true; m.receiveShadow = true; return m;
+};
+const houseMat = new THREE.MeshLambertMaterial({ vertexColors: true }), houseGlass = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.4, depthWrite: false });
+const SIDE = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+// a piece's boxes (into M, glass into G) and what it does to walking (into col)
+function pieceBoxes(t, o, M, G, col) {
+  const lb = o.y + t.l * LEVEL_H, C = COLORS[t.c] || COLORS[0], cx = o.x + t.x * CELL + CELL / 2, cz = o.z + t.z * CELL + CELL / 2;
+  const T = 0.25, H = LEVEL_H;
+  if (t.k === "floor") { M.box(CELL, 0.25, CELL, cx, lb + 0.125, cz, 0, t.c === 0 ? "#c9a27e" : C); col.surfaces.push([cx - 2, cx + 2, cz - 2, cz + 2, lb + 0.25]); return; }
+  if (t.k === "roof") { M.box(CELL + 0.2, 0.3, CELL + 0.2, cx, lb + H + 0.15, cz, 0, C); col.surfaces.push([cx - 2.1, cx + 2.1, cz - 2.1, cz + 2.1, lb + H + 0.3]); return; }
+  if (t.k === "slope" || t.k === "stairs") {
+    const [dx, dz] = [[0, 1], [1, 0], [0, -1], [-1, 0]][t.r], ry = (t.r * Math.PI) / 2, rise = t.k === "slope" ? 2.2 : H, y0 = t.k === "slope" ? lb + H : lb + 0.25;
+    if (t.k === "slope") { const len = hyp(CELL, rise), ang = Math.atan2(rise, CELL); M.box(CELL + 0.2, 0.25, len + 0.1, cx, y0 + rise / 2 + 0.12, cz, ry, C, -ang); }
+    else for (let n = 0; n < 8; n++) { const sh = ((n + 1) / 8) * rise; M.box(CELL - 0.6, sh, CELL / 8, cx + dx * (-CELL / 2 + (n + 0.5) * (CELL / 8)), y0 + sh / 2 - 0.25, cz + dz * (-CELL / 2 + (n + 0.5) * (CELL / 8)), ry, n % 2 ? "#b88a5e" : "#a87a4e"); }
+    col.ramps.push({ x0: cx - 2, x1: cx + 2, z0: cz - 2, z1: cz + 2, y0, rise, dx, dz, cx, cz });
+    return;
+  }
+  if (PIECES[t.k].t === "edge") {
+    const [sx, sz] = SIDE[t.s], ex = cx + sx * CELL / 2, ez = cz + sz * CELL / 2, alongX = sx === 0;
+    // a run of wall from a to b (metres along the edge from its start), between heights y0 and y1
+    const seg = (a, b, y0, y1, color = C, glass = false) => { const mid = (a + b) / 2 - CELL / 2, w = b - a, x = alongX ? ex + mid : ex, z = alongX ? ez : ez + mid; (glass ? G : M).box(alongX ? w : glass ? 0.06 : T, y1 - y0, alongX ? (glass ? 0.06 : T) : w, x, lb + (y0 + y1) / 2, z, 0, color); if (!glass) col.walls.push([x - (alongX ? w / 2 : T / 2), x + (alongX ? w / 2 : T / 2), lb + y0, lb + y1, z - (alongX ? T / 2 : w / 2), z + (alongX ? T / 2 : w / 2)]); };
+    if (t.k === "wall") seg(0, CELL, 0, H);
+    else if (t.k === "window") { seg(0, 1, 0, H); seg(3, 4, 0, H); seg(1, 3, 0, 1.1); seg(1, 3, 2.7, H); seg(1, 3, 1.1, 2.7, "#bfe6ff", true); }
+    else { seg(0, 1.1, 0, H); seg(2.9, 4, 0, H); seg(1.1, 2.9, 2.8, H); const fr = (a) => { const x = alongX ? ex + a - 2 : ex, z = alongX ? ez : ez + a - 2; M.box(alongX ? 0.12 : 0.32, 2.8, alongX ? 0.32 : 0.12, x, lb + 1.4, z, 0, "#8a5a3a"); }; fr(1.1); fr(2.9); }
+    return;
+  }
+  // furniture, turned by r, standing on its level's floor
+  const fx = o.x + t.x, fz = o.z + t.z, ry = (t.r * Math.PI) / 2, cs = Math.cos(ry), sn = Math.sin(ry), y = lb + 0.25;
+  const at = (lx, ly, lz, w, h, d, color) => M.box(w, h, d, fx + lx * cs + lz * sn, y + ly, fz - lx * sn + lz * cs, ry, color);
+  switch (t.k) {
+    case "bed": at(0, 0.15, 0, 1.8, 0.3, 1.4, "#8a5a3a"); at(0, 0.33, 0, 1.5, 0.16, 1.1, C === COLORS[0] ? "#9ad0ff" : C); at(0, 0.45, -0.62, 1.8, 0.6, 0.16, "#8a5a3a"); at(-0.82, 0.38, 0, 0.16, 0.45, 1.4, "#8a5a3a"); at(0.82, 0.38, 0, 0.16, 0.45, 1.4, "#8a5a3a"); break;
+    case "pen": for (let n = 0; n < 12; n++) { const a = (n / 12) * TAU; at(Math.cos(a) * 1.9, 0.45, Math.sin(a) * 1.9, 0.14, 0.9, 0.14, "#c98b4f"); } for (let n = 0; n < 4; n++) { const a = (n / 4) * TAU + Math.PI / 4; at(Math.cos(a) * 1.35, 0.8, Math.sin(a) * 1.35, n % 2 ? 0.08 : 2.6, 0.08, n % 2 ? 2.6 : 0.08, "#c98b4f"); } at(0, 0.02, 0, 3.6, 0.04, 3.6, "#9bd66f"); break;
+    case "chair": at(0, 0.45, 0, 0.6, 0.08, 0.6, C === COLORS[0] ? "#c98b4f" : C); at(0, 0.85, -0.27, 0.6, 0.8, 0.08, C === COLORS[0] ? "#c98b4f" : C); for (const [a, b] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) at(a, 0.22, b, 0.07, 0.45, 0.07, "#7a4f28"); break;
+    case "table": at(0, 0.8, 0, 1.8, 0.1, 1.1, C === COLORS[0] ? "#b88a5e" : C); for (const [a, b] of [[-0.8, -0.45], [0.8, -0.45], [-0.8, 0.45], [0.8, 0.45]]) at(a, 0.38, b, 0.1, 0.76, 0.1, "#7a4f28"); break;
+    case "shelf": at(-0.78, 1, 0, 0.06, 2, 0.4, "#8a5a3a"); at(0.78, 1, 0, 0.06, 2, 0.4, "#8a5a3a"); for (const h of [0.1, 0.7, 1.3, 1.95]) at(0, h, 0, 1.6, 0.06, 0.4, "#8a5a3a"); for (const [a, h, c] of [[-0.5, 0.85, "#e5534b"], [-0.3, 0.85, "#3a8ee6"], [0.4, 1.45, "#f2b01e"], [0.1, 0.25, "#3fb36b"]]) at(a, h, 0, 0.14, 0.24, 0.26, c); break;
+    case "cabinet": at(0, 0.7, 0, 1.2, 1.4, 0.6, C === COLORS[0] ? "#c9a27e" : C); at(0, 0.7, 0.31, 0.03, 1.3, 0.02, "#7a4f28"); at(-0.1, 0.8, 0.32, 0.05, 0.15, 0.04, "#f2b01e"); at(0.1, 0.8, 0.32, 0.05, 0.15, 0.04, "#f2b01e"); break;
+    case "plant": at(0, 0.25, 0, 0.5, 0.5, 0.5, "#c8553d"); at(0, 0.8, 0, 0.7, 0.6, 0.7, "#4fae4a"); at(0.15, 1.2, 0.1, 0.45, 0.5, 0.45, "#5fbe5a"); at(-0.15, 1.15, -0.1, 0.4, 0.45, 0.4, "#3f9e3a"); break;
+    case "rug": at(0, 0.015, 0, 2.6, 0.03, 1.8, C === COLORS[0] ? "#e5739d" : C); at(0, 0.02, 0, 2.2, 0.03, 1.4, "#fbe7a8"); break;
+    case "poster": at(0, 1.7, 0, 1.0, 1.4, 0.05, "#ffffff"); at(0, 1.75, 0.03, 0.85, 0.75, 0.02, C === COLORS[0] ? "#3a8ee6" : C); at(0, 1.25, 0.03, 0.85, 0.15, 0.02, "#f2b01e"); break;
   }
 }
-function buildHouse(msg) {
-  if (house) scene.remove(house.g);
-  const g = new THREE.Group(), home = msg.home, rects = [], pens = [], picks = [], cells = cellsOf(home), ceiling = new THREE.Group();
-  cells.forEach(([cx, cz], k) => {
-    const o = roomAt(k, home), has = (dx, dz) => hasCell(home, cx + dx, cz + dz);
-    const floor = box(RS, 0.3, RS, (cx + cz) % 2 ? "#e7cfa4" : "#dcc093", o.x + RS / 2, -0.15, o.z + RS / 2, g, false); floor.userData.cell = [cx, cz]; picks.push(floor);
-    box(RS + 0.3, 0.3, RS + 0.3, "#efe6d4", o.x + RS / 2, WALL_H + 0.15, o.z + RS / 2, ceiling, false);   // the roof (a light ceiling from inside)
-    [[-1, 0, 0], [1, 0, 1], [0, -1, 2], [0, 1, 3]].forEach(([dx, dz, side]) => {
-      if (has(dx, dz)) return;
-      const wins = new Set(home.items.filter((t) => t.k === "window" && t.c[0] === cx && t.c[1] === cz && t.s === side).map((t) => t.p));
-      wallSide(g, cx, cz, side, wins, k === 0 && side === 2);
-    });
+function buildPlot(id) {
+  const st = plotState.get(id), p = PLOTS[id]; if (!st) return;
+  if (st.g) scene.remove(st.g);
+  // in layers by floor (a level's roof belongs to the one above it), so the floors above me hide while I'm inside
+  const o = plotOrigin(p), Ms = [], Gs = [], col = { walls: [], surfaces: [], ramps: [] }, g = new THREE.Group(), pens = [];
+  for (let k = 0; k <= LEVELS; k++) { Ms.push(new Merger()); Gs.push(new Merger()); }
+  st.pieces.forEach((t) => {
+    if (!PIECES[t.k]) return; const layer = t.k === "roof" || t.k === "slope" ? t.l + 1 : t.l; pieceBoxes(t, o, Ms[layer], Gs[layer], col);
+    if (t.k === "pen" && t.pet) { const pet = (st.id === myId ? save.pets : []).find((q) => q.id === t.pet), sp = pet ? pet.sp : st.penSp && st.penSp[t.pet]; if (sp && SPECIES[sp]) { const m = petModel(sp); m.g.scale.setScalar(0.7); g.add(m.g); const x = o.x + t.x, z = o.z + t.z, y = o.y + t.l * LEVEL_H + 0.25; pens.push({ m, cx: x, cz: z, x, z, y, yaw: 0, tx: x, tz: z, wait: 0 }); } }
   });
-  g.add(ceiling);
-  box(3.6, 0.06, 1.6, "#c8553d", IN.x + RS / 2, 0.03, IN.z + 1, g, false);   // the doormat: E here to go back out
-  home.items.forEach((t, i) => {
-    if (t.k === "window") {   // something to tap when taking it away
-      const side = t.s, alongX = side >= 2, a = (t.p + 0.5) * (RS / 3), o = { x: IN.x + t.c[0] * RS, z: IN.z + t.c[1] * RS };
-      const m = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ visible: false })); m.scale.set(alongX ? 3 : 0.6, 1.9, alongX ? 0.6 : 3); m.position.set(alongX ? o.x + a : o.x + (side === 1 ? RS : 0), 2, alongX ? o.z + (side === 3 ? RS : 0) : o.z + a); m.userData.item = i; g.add(m); picks.push(m);
-      return;
-    }
-    const it = new THREE.Group(); it.position.set(IN.x + t.x, 0, IN.z + t.z); it.rotation.y = (t.r * Math.PI) / 2; g.add(it);
-    if (t.k === "bed") { box(2.4, 0.5, 3.2, "#8a5a3a", 0, 0.25, 0, it); box(2.2, 0.35, 3, "#9ad0ff", 0, 0.65, 0, it); box(1.6, 0.3, 0.7, "#ffffff", 0, 0.95, -1.05, it); box(2.4, 1.1, 0.2, "#8a5a3a", 0, 0.55, -1.6, it); }
-    else {
-      for (let n = 0; n < 12; n++) { const a = (n / 12) * TAU; box(0.15, 1, 0.15, "#c98b4f", Math.cos(a) * 2.6, 0.5, Math.sin(a) * 2.6, it); }
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(2.6, 0.07, 6, 32).rotateX(Math.PI / 2), mat("#c98b4f")); ring.position.y = 0.85; it.add(ring);
-      const grass = new THREE.Mesh(new THREE.CircleGeometry(2.5, 24).rotateX(-Math.PI / 2), mat("#9bd66f")); grass.position.y = 0.02; it.add(grass);
-      const pp = msg.pens && msg.pens[i];
-      if (pp && SPECIES[pp.sp]) { const m = petModel(pp.sp); m.g.scale.setScalar(0.8 * petScale(pp.lv)); g.add(m.g); pens.push({ m, cx: IN.x + t.x, cz: IN.z + t.z, x: IN.x + t.x, z: IN.z + t.z, yaw: 0, tx: IN.x + t.x, tz: IN.z + t.z, wait: 0 }); }
-    }
-    const hit = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ visible: false })); const [w, d] = SIZE[t.k]; hit.scale.set(w, 1.4, d); hit.position.y = 0.7; hit.userData.item = i; it.add(hit); picks.push(hit);
-    rects.push(footprint(t));
-  });
-  scene.add(g); house = { msg, mine: !!msg.mine || msg.host === myId, g, rects, pens, picks, ceiling };
+  const layers = [];
+  for (let k = 0; k <= LEVELS; k++) { const lg = new THREE.Group(); if (Ms[k].p.length) lg.add(Ms[k].mesh(houseMat)); if (Gs[k].p.length) lg.add(Gs[k].mesh(houseGlass)); g.add(lg); layers.push(lg); }
+  // the owner's name on a post at the front
+  if (st.name) { const tag = nameTag(st.name, 0); tag.position.set(o.x + 1, o.y + 3.4, o.z - 0.6); g.add(tag); box(0.15, 2.4, 0.15, "#8a5a3a", o.x + 1, o.y + 1.2, o.z - 0.6, g); }
+  scene.add(g); st.g = g; st.col = col; st.pens = pens; st.layers = layers;
 }
-// (owner, 2026-11-08: couldn't walk into new rooms) inside any room, kept off its outside walls only
-function inHouse(x, z, m = 0.7) {
-  if (!house) return false;
-  return inRooms(house.msg.home, x, z, m);
+// inside a house (on foot on its floors) the layers above my level are hidden
+function cutaway() {
+  const pl = me.foot ? World.plotAt(me.x, me.z) : null;
+  for (const [id, st] of plotState) {
+    if (!st.layers) continue;
+    const L = pl && pl.id === id ? Math.floor((me.y - PLOTS[id].y + 0.6) / LEVEL_H) : 99;
+    st.layers.forEach((lg, k) => (lg.visible = k <= L));
+  }
 }
-function inRooms(home, x, z, m) {
-  const cx = Math.floor((x - IN.x) / RS), cz = Math.floor((z - IN.z) / RS);
-  if (!hasCell(home, cx, cz)) return false;
-  const lx = x - IN.x - cx * RS, lz = z - IN.z - cz * RS;
-  if (lx < m && !hasCell(home, cx - 1, cz)) return false; if (lx > RS - m && !hasCell(home, cx + 1, cz)) return false;
-  if (lz < m && !hasCell(home, cx, cz - 1)) return false; if (lz > RS - m && !hasCell(home, cx, cz + 1)) return false;
-  return true;
+function setPlot(id, owner, name, pieces, penSp) {
+  const st = plotState.get(id); if (st && st.g) scene.remove(st.g);
+  if (!owner) plotState.delete(id);
+  else { plotState.set(id, { id: owner, name, pieces: pieces || [], penSp: penSp || {} }); buildPlot(id); }
+  extraIsland.visible = PLOTS.some((p) => p.kind === "extra" && plotState.has(p.id));
+  PLOTS.forEach((p, i) => (plotLines[i].visible = p.kind !== "extra" || extraIsland.visible));
 }
-const houseBlocked = (x, z) => house.rects.some((r) => x > r[0] - 0.6 && x < r[1] + 0.6 && z > r[2] - 0.6 && z < r[3] + 0.6);
-function enterHome(msg) {
-  const mineToo = msg.host === myId; if (mineToo) msg.mine = true;
-  closePanels(); buildHouse(msg); me.inst = msg.inst || -1; me.bagBefore = me.bag.slice();
-  me.x = IN.x + RS / 2; me.z = IN.z + 2.6; me.y = 0; me.vy = 0; me.yaw = 0; cam.yaw = Math.PI; cam.pitch = 0.3; cam.goalDist = 7; cam.y = 0;
-  if (mineToo) collectPens();
-  else toast(msg.hostName);
-  uiKey = ""; sendPos(true);
+function refreshMyPlot() { if (myPlot >= 0 && save.home) setPlot(myPlot, myId, myName, save.home.pieces); }
+// walking in houses: the floor (or roof, step or slope) under me, and walls in the way
+function nearPlots(x, z, m = 2) { const out = []; for (const [id, st] of plotState) { const p = PLOTS[id]; if (st.col && Math.abs(x - p.x) < PLOT / 2 + m && Math.abs(z - p.z) < PLOT / 2 + m) out.push(st.col); } return out; }
+function houseSurface(x, z, y) {
+  let best = -Infinity;
+  for (const col of nearPlots(x, z)) {
+    for (const s of col.surfaces) if (x > s[0] && x < s[1] && z > s[2] && z < s[3] && s[4] <= y + 0.6 && s[4] > best) best = s[4];
+    for (const r of col.ramps) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) { const t = clamp(((x - r.cx) * r.dx + (z - r.cz) * r.dz) / CELL + 0.5, 0, 1), h = r.y0 + t * r.rise; if (h <= y + 0.6 && h > best) best = h; }
+  }
+  return best;
 }
-function leaveHouseLocal() {
-  if (!house) { me.inst = 0; return; }
-  const i = house.msg.home.house, d = doorOf(i), h = houses[i];
-  stopPlacing(); scene.remove(house.g); house = null; me.inst = 0;
-  me.x = d.x + Math.sin(h.yaw) * 2; me.z = d.z + Math.cos(h.yaw) * 2; me.y = floorAt(me.x, me.z, d.y + 1); me.vy = 0; me.yaw = h.yaw; cam.yaw = h.yaw + Math.PI; cam.y = me.y; cam.goalDist = 14; cam.pitch = 0.5;
-  if (openPanel === "p-build") closePanels(); uiKey = ""; sendPos(true);
+function houseWall(x, z, y) {
+  const R = 0.45;
+  for (const col of nearPlots(x, z)) for (const w of col.walls) if (x > w[0] - R && x < w[1] + R && z > w[4] - R && z < w[5] + R && y + 0.3 < w[3] && y + 1.9 > w[2]) return true;
+  return false;
 }
-function exitHome() { netSend({ t: "home_exit" }); leaveHouseLocal(); }
-// coins the playpens have made since they were last collected
+// playpens: their coins (collected when you come to your plot), and choosing their pet
 function collectPens() {
   if (!save.home) return 0;
   let total = 0; const now = Date.now();
-  for (const t of save.home.items) if (t.k === "pen" && t.pet) {
+  for (const t of save.home.pieces) if (t.k === "pen" && t.pet) {
     const p = save.pets.find((q) => q.id === t.pet); if (!p) { delete t.pet; continue; }
     const min = Math.min((now - (t.since || now)) / 60000, World.PEN_MAX_H * 60);
     total += min * World.PEN_RATE[SPECIES[p.sp].r] * (1 + 0.05 * (p.lv - 1)); t.since = now;
@@ -1356,181 +1405,144 @@ function collectPens() {
   if (total > 0) { save.coins += total; toast("+" + fmt(total), "#e08a00"); emitConfetti(me.x, me.y + 3, me.z, 40, 4, 7); hudKey = ""; }
   persist(); return total;
 }
-function buyHouse(i) {
-  const price = World.housePrice(i); if (save.home || save.coins < price) return;
-  save.coins -= price; save.home = { house: i, rooms: 1, cells: [[0, 0]], items: [] }; persist(); flushSave(true);
-  closePanels(); banner("Home!", "#3fb36b"); firework(me.x, me.y + 2, me.z); emitConfetti(me.x, me.y + 3, me.z, 80, 5, 8); uiKey = ""; hudKey = "";
+let picking = -1;
+function renderPenPick() {
+  const el = $("build"), t = save.home.pieces[picking]; el.innerHTML = ""; if (!t || t.k !== "pen") { closePanels(); return; }
+  const pens = World.penPets(save), grid = document.createElement("div"); grid.className = "grid";
+  const none = document.createElement("div"); none.className = "card"; none.innerHTML = `<span class="nm">—</span>`; none.onclick = () => setPen(picking, null); grid.appendChild(none);
+  for (const p of save.pets) if (p.id !== save.ride && (!pens.has(p.id) || t.pet === p.id)) grid.appendChild(card(p.sp, statLine(p), t.pet === p.id, () => setPen(picking, p.id)));
+  el.appendChild(grid);
 }
-function renderHomeBuy() {
-  const el = $("homebuy"), i = homeTarget, price = World.housePrice(i); el.innerHTML = "";
-  const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.style.width = "100%";
-  b.innerHTML = `Buy <span class="coin" style="display:inline-block;vertical-align:-3px"></span> ${fmt(price)}`; b.disabled = save.coins < price || !netOk; b.onclick = () => buyHouse(i);
-  el.appendChild(b);
+function setPen(i, id) {
+  collectPens(); const t = save.home.pieces[i]; if (!t) return;
+  if (id) { t.pet = id; t.since = Date.now(); } else { delete t.pet; delete t.since; }
+  picking = -1; persist(); flushSave(true); refreshMyPlot(); closePanels();
 }
-let homeTarget = -1, picking = -1;
-// ---- building ----
-function freeCells() {
-  const h = save.home, out = [];
-  for (const [x, z] of cellsOf(h)) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = x + dx, b = z + dz; if (Math.abs(a) > 4 || Math.abs(b) > 4 || (a === 0 && b === -1) || hasCell(h, a, b) || out.some((c) => c[0] === a && c[1] === b)) continue; out.push([a, b]); }
-  return out;
+
+// ---- building (on your own plot): pick a piece in the bar, it follows the pointer on the level you're building
+// (floors, roofs, slopes and stairs snap to a square, walls, windows and doors to the nearest edge of one, furniture
+// to half a metre); a tap puts it down; R or ⟳ turns it; ▲ ▼ change the level; a colour paints what you put down
+// (and Paint recolours what you tap); Remove takes away what you tap for half its price ----
+const TOOLS = [["floor", "Floor"], ["wall", "Wall"], ["window", "Window"], ["door", "Door"], ["roof", "Roof"], ["slope", "Slope roof"], ["stairs", "Stairs"],
+  ["bed", "Pet bed"], ["pen", "Pet pen"], ["chair", "Chair"], ["table", "Table"], ["shelf", "Shelf"], ["cabinet", "Cabinet"], ["plant", "Plant"], ["rug", "Rug"], ["poster", "Poster"]];
+let building = null;   // { tool, level, r, color, bghost, at }
+const ghostM = new THREE.MeshBasicMaterial({ color: "#3fb36b", transparent: true, opacity: 0.45, depthWrite: false }), ghostBad = new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.45, depthWrite: false });
+const bghost = new THREE.Mesh(BOX, ghostM); bghost.visible = false; scene.add(bghost);
+const onMyPlot = (m = 2) => myPlot >= 0 && Math.abs(me.x - PLOTS[myPlot].x) < PLOT / 2 + m && Math.abs(me.z - PLOTS[myPlot].z) < PLOT / 2 + m;
+let camSave = null;
+function openBuild() {
+  if (myPlot < 0) return;
+  building = { tool: "floor", level: 0, r: 0, color: 0, at: null }; closePanels(); renderBuildBar(); $("buildbar").style.display = "flex";
+  camSave = { d: cam.goalDist, p: cam.pitch }; cam.goalDist = 38; cam.pitch = 1.05; uiKey = "";
 }
-function freeWindows() {
-  const h = save.home, cells = cellsOf(h), out = [];
-  for (const c of cells) for (let side = 0; side < 4; side++) {
-    if (!World.outerSide(cells, c, side)) continue;
-    for (let p = 0; p < 3; p++) { if (c[0] === 0 && c[1] === 0 && side === 2 && p === 1) continue; if (h.items.some((t) => t.k === "window" && t.c[0] === c[0] && t.c[1] === c[1] && t.s === side && t.p === p)) continue; out.push({ c: [c[0], c[1]], s: side, p }); }
+function closeBuild() { building = null; bghost.visible = false; $("buildbar").style.display = "none"; if (camSave) { cam.goalDist = camSave.d; cam.pitch = camSave.p; camSave = null; } uiKey = ""; }
+function renderBuildBar() {
+  const el = $("buildbar"); el.innerHTML = "";
+  const row1 = document.createElement("div"); row1.className = "bbrow";
+  for (const [k, name] of TOOLS) { const b = document.createElement("button"); b.type = "button"; b.className = "bbtool" + (building.tool === k ? " on" : ""); b.innerHTML = `<b>${name}</b><span><span class="coin"></span>${PIECES[k].p}</span>`; b.onclick = () => { building.tool = k; renderBuildBar(); }; row1.appendChild(b); }
+  const row2 = document.createElement("div"); row2.className = "bbrow";
+  for (let c = 0; c < COLORS.length; c++) { const b = document.createElement("button"); b.type = "button"; b.className = "swatch" + (building.color === c ? " on" : ""); b.style.background = COLORS[c]; b.onclick = () => { building.color = c; renderBuildBar(); }; row2.appendChild(b); }
+  const tool = (label, on, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "bbbtn " + cls + (on ? " on" : ""); b.textContent = label; b.onclick = fn; row2.appendChild(b); return b; };
+  tool("Paint", building.tool === "paint", () => { building.tool = "paint"; renderBuildBar(); });
+  tool("Remove", building.tool === "remove", () => { building.tool = "remove"; renderBuildBar(); }, "red");
+  tool("⟳", false, () => { building.r = (building.r + 1) % 4; });
+  tool("▼", false, () => { building.level = Math.max(0, building.level - 1); renderBuildBar(); }).disabled = building.level === 0;
+  const lv = document.createElement("span"); lv.className = "bblevel"; lv.textContent = building.level + 1; row2.appendChild(lv);
+  tool("▲", false, () => { building.level = Math.min(LEVELS - 1, building.level + 1); renderBuildBar(); }).disabled = building.level === LEVELS - 1;
+  tool("✕", false, closeBuild);
+  el.append(row1, row2);
+}
+// where the pointer is on the level being built, as a piece of the chosen kind
+function aimAt(px, py) {
+  if (!building || myPlot < 0) return null;
+  const p = PLOTS[myPlot], o = plotOrigin(p), y = o.y + building.level * LEVEL_H + 0.25;
+  ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); plane.constant = -y;
+  if (!ray.ray.intersectPlane(plane, hitV)) return null;
+  const lx = hitV.x - o.x, lz = hitV.z - o.z; if (lx < -1 || lz < -1 || lx > PLOT + 1 || lz > PLOT + 1) return null;
+  return { lx: clamp(lx, 0, PLOT - 0.01), lz: clamp(lz, 0, PLOT - 0.01), y };
+}
+function pieceFor(k, a) {
+  const t = PIECES[k] ? PIECES[k].t : null, l = building.level, c = building.color, x = Math.floor(a.lx / CELL), z = Math.floor(a.lz / CELL);
+  if (t === "cell") return { k, x, z, l, r: building.r, c };
+  if (t === "edge") { const fx = a.lx - x * CELL, fz = a.lz - z * CELL, d = [fx, CELL - fx, fz, CELL - fz], s = d.indexOf(Math.min(...d)); return { k, x, z, l, s, c }; }
+  return { k, x: Math.round(a.lx * 2) / 2, z: Math.round(a.lz * 2) / 2, l, r: building.r, c };
+}
+// the piece at a point (what Remove and Paint act on): furniture first, then walls near the point, then the square's pieces
+function pieceAt(a) {
+  const ps = save.home.pieces, l = building.level, x = Math.floor(a.lx / CELL), z = Math.floor(a.lz / CELL), fx = a.lx - x * CELL, fz = a.lz - z * CELL;
+  let i = ps.findIndex((t) => PIECES[t.k].t === "free" && t.l === l && hyp(t.x - a.lx, t.z - a.lz) < 1.3); if (i >= 0) return i;
+  const d = [fx, CELL - fx, fz, CELL - fz], s = d.indexOf(Math.min(...d));
+  if (d[s] < 0.9) { const [dx, dz] = SIDE[s], ex = x * 2 + 1 + dx, ez = z * 2 + 1 + dz; i = ps.findIndex((t) => PIECES[t.k].t === "edge" && t.l === l && t.x * 2 + 1 + SIDE[t.s][0] === ex && t.z * 2 + 1 + SIDE[t.s][1] === ez); if (i >= 0) return i; }
+  for (const k of ["stairs", "slope", "roof", "floor"]) { i = ps.findIndex((t) => t.k === k && t.l === l && t.x === x && t.z === z); if (i >= 0) return i; }
+  return -1;
+}
+function showGhost(px, py) {
+  if (!building || building.tool === "remove" || building.tool === "paint") { bghost.visible = false; return; }
+  const a = aimAt(px, py); if (!a) { bghost.visible = false; return; }
+  const t = pieceFor(building.tool, a), o = plotOrigin(PLOTS[myPlot]), lb = o.y + t.l * LEVEL_H;
+  bghost.visible = true; bghost.rotation.set(0, 0, 0); bghost.material = save.coins >= PIECES[t.k].p ? ghostM : ghostBad;
+  const kind = PIECES[t.k].t;
+  if (kind === "cell") { const h = t.k === "floor" ? 0.3 : t.k === "stairs" ? LEVEL_H : 0.4; bghost.scale.set(CELL, h, CELL); bghost.position.set(o.x + t.x * CELL + 2, t.k === "roof" || t.k === "slope" ? lb + LEVEL_H + 0.2 : lb + h / 2 + 0.1, o.z + t.z * CELL + 2); bghost.rotation.y = (t.r * Math.PI) / 2; }
+  else if (kind === "edge") { const [sx, sz] = SIDE[t.s]; bghost.scale.set(sx === 0 ? CELL : 0.35, LEVEL_H, sx === 0 ? 0.35 : CELL); bghost.position.set(o.x + t.x * CELL + 2 + sx * 2, lb + LEVEL_H / 2, o.z + t.z * CELL + 2 + sz * 2); }
+  else { bghost.scale.set(t.k === "rug" ? 2.6 : t.k === "pen" ? 4 : 1.4, t.k === "rug" ? 0.1 : 1.2, t.k === "rug" ? 1.8 : t.k === "pen" ? 4 : 1); bghost.position.set(o.x + t.x, lb + 0.8, o.z + t.z); bghost.rotation.y = (t.r * Math.PI) / 2; }
+}
+function buildTap(px, py) {
+  const a = aimAt(px, py); if (!a) return false;
+  const ps = save.home.pieces;
+  if (building.tool === "remove") { const i = pieceAt(a); if (i < 0) return true; const t = ps[i]; if (t.k === "pen") collectPens(); ps.splice(i, 1); save.coins += Math.floor(PIECES[t.k].p / 2); }
+  else if (building.tool === "paint") { const i = pieceAt(a); if (i < 0) return true; ps[i].c = building.color; }
+  else {
+    const t = pieceFor(building.tool, a), price = PIECES[t.k].p; if (save.coins < price || ps.length >= World.MAX_PIECES) return true;
+    // the same structural piece in the same place is replaced, not doubled
+    if (PIECES[t.k].t !== "free") { const before = World.cleanData({ pets: save.pets, home: { pieces: ps.concat([t]) } }, SPECIES_SET).home.pieces.length; if (before === ps.length) return true; }
+    ps.push(t); save.coins -= price;
   }
-  return out;
+  persist(); flushSave(true); refreshMyPlot(); hudKey = ""; emitSparks(me.x, me.y + 2, me.z, 8, 3, ["#ffffff", "#ffd35a"], 0.5, 1); return true;
 }
-// can furniture go here? on the floor, clear of walls, the doormat and other furniture
-function fits(t, skip) {
-  const r = footprint(t), home = save.home;
-  for (const [x, z] of [[r[0], r[2]], [r[1], r[2]], [r[0], r[3]], [r[1], r[3]], [(r[0] + r[1]) / 2, (r[2] + r[3]) / 2], [(r[0] + r[1]) / 2, r[2]], [(r[0] + r[1]) / 2, r[3]], [r[0], (r[2] + r[3]) / 2], [r[1], (r[2] + r[3]) / 2]]) if (!inRooms(home, x, z, 0.3)) return false;
-  if (r[0] < IN.x + RS / 2 + 2.3 && r[1] > IN.x + RS / 2 - 2.3 && r[2] < IN.z + 2.8) return false;   // the doormat and the way in
-  return home.items.every((o, i) => i === skip || o.k === "window" || (() => { const q = footprint(o); return r[1] <= q[0] + 0.1 || r[0] >= q[1] - 0.1 || r[3] <= q[2] + 0.1 || r[2] >= q[3] - 0.1; })());
-}
-function priceOf(t) { return t.k === "room" ? World.roomPrice(cellsOf(save.home).length - 1) : HOME[t.k]; }
-function build(kind, where) {
-  const h = save.home; if (!h) return false;
-  const price = kind === "room" ? World.roomPrice(h.rooms) : HOME[kind];
-  if (save.coins < price) return false;
-  if (kind === "room") {
-    if (h.rooms >= HOME.maxRooms || !where || !freeCells().some((q) => q[0] === where[0] && q[1] === where[1])) return false;
-    h.cells = cellsOf(h).concat([[where[0], where[1]]]); h.rooms = h.cells.length;
-  } else if (kind === "window") {
-    if (!where || !freeWindows().some((q) => q.c[0] === where.c[0] && q.c[1] === where.c[1] && q.s === where.s && q.p === where.p)) return false;
-    h.items.push({ k: "window", c: where.c, s: where.s, p: where.p });
-  } else {
-    if (h.items.length >= HOME.maxItems) return false;
-    const t = { k: kind, x: where.x, z: where.z, r: where.r || 0 }; if (!fits(t, -1)) return false; h.items.push(t);
-  }
-  save.coins -= price; persist(); flushSave(true); buildHouse(houseMsgMine()); hudKey = "";
-  emitConfetti(me.x, me.y + 2.5, me.z, 30, 3, 6); return true;
-}
-// take something away: half its price back; a room only when it's empty, isn't the first and the rest stay joined up
-function demolish(target) {
-  const h = save.home; if (!h) return false;
-  if (target.cell) {
-    const [x, z] = target.cell, cells = cellsOf(h); if ((!x && !z) || cells.length < 2) return false;
-    const rest = cells.filter(([a, b]) => a !== x || b !== z);
-    if (h.items.some((t) => t.k !== "window" && (() => { const r = footprint(t); return r[1] > IN.x + x * RS && r[0] < IN.x + (x + 1) * RS && r[3] > IN.z + z * RS && r[2] < IN.z + (z + 1) * RS; })())) { toast("✕"); return false; }
-    const seen = new Set(["0,0"]), q = [[0, 0]]; while (q.length) { const [a, b] = q.pop(); for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = a + dx + "," + (b + dz); if (!seen.has(k) && rest.some(([c, d]) => c === a + dx && d === b + dz)) { seen.add(k); q.push([a + dx, b + dz]); } } }
-    if (seen.size !== rest.length) { toast("✕"); return false; }
-    h.cells = rest; h.rooms = rest.length; save.coins += Math.floor(World.roomPrice(rest.length) / 2);
-    h.items = h.items.filter((t) => t.k !== "window" || (rest.some(([a, b]) => a === t.c[0] && b === t.c[1]) && World.outerSide(rest, t.c, t.s)));
-  } else {
-    const t = h.items[target.item]; if (!t) return false;
-    if (t.k === "pen") collectPens();
-    h.items.splice(target.item, 1); save.coins += Math.floor(HOME[t.k] / 2);
-  }
-  persist(); flushSave(true); buildHouse(houseMsgMine()); hudKey = ""; emitSparks(me.x, me.y + 1.5, me.z, 20, 4, ["#ffffff", "#ffd35a"], 0.7, 1); return true;
-}
-// placing: furniture follows the pointer (green where it fits, red where not; R or ⟳ turns it) and a tap puts it down;
-// rooms and windows show green markers to tap; removing: tap what to take away
-let placing = null;   // { kind, g, picks?, ghost?, r, at }
-const pickM = new THREE.MeshBasicMaterial({ color: "#3fb36b", transparent: true, opacity: 0.45, depthWrite: false });
-const badM = new THREE.MeshBasicMaterial({ color: "#e5534b", transparent: true, opacity: 0.45, depthWrite: false });
-let camBefore = null;
-function startPlacing(kind) {
-  stopPlacing(); closePanels();
-  const g = new THREE.Group(), picks = [];
-  if (kind === "room") for (const c of freeCells()) { const m = new THREE.Mesh(new THREE.BoxGeometry(RS - 1, 0.2, RS - 1), pickM); m.position.set(IN.x + c[0] * RS + RS / 2, 0.1, IN.z + c[1] * RS + RS / 2); g.add(m); picks.push({ mesh: m, where: c }); }
-  else if (kind === "window") for (const w of freeWindows()) { const alongX = w.s >= 2, a = (w.p + 0.5) * (RS / 3), o = { x: IN.x + w.c[0] * RS, z: IN.z + w.c[1] * RS }; const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 3 : 0.7, 1.8, alongX ? 0.7 : 3), pickM); m.position.set(alongX ? o.x + a : o.x + (w.s === 1 ? RS : 0), 2, alongX ? o.z + (w.s === 3 ? RS : 0) : o.z + a); g.add(m); picks.push({ mesh: m, where: w }); }
-  else if (kind !== "remove") { const [w, d] = SIZE[kind]; const ghostM = new THREE.Mesh(new THREE.BoxGeometry(w, 0.9, d), pickM); ghostM.position.set(me.x, 0.45, me.z + 4); g.add(ghostM); placing = { kind, g, ghost: ghostM, r: 0, at: null }; }
-  if ((kind === "room" || kind === "window") && !picks.length) return;
-  scene.add(g); if (!placing) placing = { kind, g, picks };
-  camBefore = camBefore || { d: cam.goalDist, p: cam.pitch }; cam.goalDist = Math.max(cam.goalDist, kind === "room" ? 36 : 26); cam.pitch = Math.max(cam.pitch, 1.0); uiKey = "";
-}
-function stopPlacing() { if (placing) { scene.remove(placing.g); placing = null; uiKey = ""; } if (camBefore) { cam.goalDist = camBefore.d; cam.pitch = camBefore.p; camBefore = null; } }
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
-function aim(px, py) { ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); }
-function moveGhost(px, py) {   // furniture under the pointer, on a half-metre grid
-  if (!placing || !placing.ghost) return null;
-  aim(px, py); if (!ray.ray.intersectPlane(floorPlane, hitV)) return null;
-  const at = { x: Math.round((hitV.x - IN.x) * 2) / 2, z: Math.round((hitV.z - IN.z) * 2) / 2, r: placing.r };
-  placing.at = at; placing.ghost.position.set(IN.x + at.x, 0.45, IN.z + at.z); placing.ghost.rotation.y = (at.r * Math.PI) / 2;
-  placing.ghost.material = fits({ k: placing.kind, ...at }, -1) ? pickM : badM; return at;
-}
-function turnGhost() { if (placing && placing.ghost) { placing.r = (placing.r + 1) % 4; if (placing.at) { placing.at.r = placing.r; placing.ghost.rotation.y = (placing.r * Math.PI) / 2; placing.ghost.material = fits({ k: placing.kind, ...placing.at }, -1) ? pickM : badM; } } }
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitV = new THREE.Vector3();
 function tapAt(px, py) {
-  if (!house) return false;
-  aim(px, py);
-  if (placing) {
-    if (placing.ghost) { const at = moveGhost(px, py); if (at && build(placing.kind, at)) { const k = placing.kind, r = placing.r; stopPlacing(); if (save.coins >= HOME[k]) { startPlacing(k); placing.r = r; } } return true; }
-    if (placing.kind === "remove") {
-      const hit = ray.intersectObjects(house.picks)[0]; if (!hit) return true;
-      if (hit.object.userData.item !== undefined) { demolish({ item: hit.object.userData.item }); return true; }
-      const c = hit.object.userData.cell, key = c.join();   // a whole room: tap it twice
-      if (placing.armed === key) { placing.armed = null; demolish({ cell: c }); } else { placing.armed = key; toast("Sure?", "#e5534b"); }
-      return true;
+  if (building) return buildTap(px, py);
+  // tap a playpen on your plot to choose its pet
+  if (myPlot >= 0 && onMyPlot(4)) {
+    const o = plotOrigin(PLOTS[myPlot]);
+    ndc.set((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+    for (let l = LEVELS - 1; l >= 0; l--) {
+      plane.constant = -(o.y + l * LEVEL_H + 0.6); if (!ray.ray.intersectPlane(plane, hitV)) continue;
+      const i = save.home.pieces.findIndex((t) => t.k === "pen" && t.l === l && hyp(o.x + t.x - hitV.x, o.z + t.z - hitV.z) < 2);
+      if (i >= 0) { picking = i; show("p-build"); return true; }
     }
-    const hit = ray.intersectObjects(placing.picks.map((p) => p.mesh))[0]; if (!hit) return false;
-    const p = placing.picks.find((q) => q.mesh === hit.object), kind = placing.kind; stopPlacing(); build(kind, p.where); return true;
-  }
-  if (house.mine) {   // (owner, 2026-11-08) tap a playpen to choose which pet lives in it
-    const hit = ray.intersectObjects(house.picks)[0], i = hit && hit.object.userData.item;
-    if (i !== undefined && save.home.items[i] && save.home.items[i].k === "pen") { picking = i; show("p-build"); return true; }
   }
   return false;
 }
-canvas.addEventListener("pointermove", (e) => { if (placing && placing.ghost && e.pointerType === "mouse") moveGhost(e.clientX, e.clientY); });
-function renderBuild() {
-  const el = $("build"), h = save.home; el.innerHTML = ""; if (!h) return;
-  if (picking >= 0 && h.items[picking]) {   // choosing a pet for a playpen
-    const pens = World.penPets(save), grid = document.createElement("div"); grid.className = "grid";
-    const none = document.createElement("div"); none.className = "card"; none.innerHTML = `<span class="nm">—</span>`; none.onclick = () => setPen(picking, null); grid.appendChild(none);
-    for (const p of save.pets) if (p.id !== save.ride && (!pens.has(p.id) || h.items[picking].pet === p.id)) grid.appendChild(card(p.sp, statLine(p), h.items[picking].pet === p.id, () => setPen(picking, p.id)));
-    el.appendChild(grid); return;
-  }
-  picking = -1;
-  const row = document.createElement("div"); row.className = "buildrow";
-  const opt = (label, kind, price, ok) => { const b = document.createElement("button"); b.className = "btn gold"; b.type = "button"; b.innerHTML = `${label}<br><span class="coin" style="display:inline-block;width:12px;height:12px;vertical-align:-2px"></span> ${fmt(price)}`; b.disabled = !ok || save.coins < price; b.onclick = () => startPlacing(kind); row.appendChild(b); };
-  opt("Room", "room", World.roomPrice(h.rooms), h.rooms < HOME.maxRooms && freeCells().length > 0); opt("Bed", "bed", HOME.bed, h.items.length < HOME.maxItems); opt("Playpen", "pen", HOME.pen, h.items.length < HOME.maxItems); opt("Window", "window", HOME.window, freeWindows().length > 0);
-  const rm = document.createElement("button"); rm.className = "btn"; rm.type = "button"; rm.textContent = "Remove"; rm.style.background = "var(--red)"; rm.onclick = () => startPlacing("remove"); row.appendChild(rm);
-  el.appendChild(row);
-  const cap = document.createElement("div"); cap.className = "stats"; cap.style.margin = "10px 0"; cap.innerHTML = `<span>${save.pets.length} / ${World.petCap(save)}</span>`; el.appendChild(cap);
-}
-function setPen(i, id) {
-  collectPens(); const t = save.home.items[i]; if (!t) return;
-  if (id) { t.pet = id; t.since = Date.now(); } else { delete t.pet; delete t.since; }
-  picking = -1; persist(); flushSave(true); buildHouse(houseMsgMine()); closePanels();
-}
-$("btn-build").onclick = () => { picking = -1; stopPlacing(); if (openPanel === "p-build") closePanels(); else show("p-build"); };
+canvas.addEventListener("pointermove", (e) => { if (building && e.pointerType === "mouse") showGhost(e.clientX, e.clientY); });
+$("btn-build").onclick = () => (building ? closeBuild() : openBuild());
 
-// ---- what I can do where I am: talk to someone (F), a door or the doormat (E); buttons for them on a phone ----
+// ---- what I can do where I am: talk to someone (F), take a lift (E); buttons for them on a phone ----
 let uiKey = "", acts = [];
-function nearDoor() {
-  if (me.inst) return -1;
-  for (let i = 0; i < houses.length; i++) { const d = doorOf(i); if (Math.abs(me.y - d.y) < 3 && hyp(me.x - d.x, me.z - d.z) < 2.6) return i; }
-  return -1;
+function nearLift() { return LIFTS.find((l) => hyp(me.x - l.x, me.z - l.z) < 2.6 && Math.abs(me.y - l.y) < 3 && (l.to === "plaza" || myPlot >= 0)); }
+function ride_lift(l) {   // up to my plot (in front of it), or back down to the plaza
+  if (l.to === "plaza") { me.x = LIFT.x + 3; me.z = LIFT.z; me.y = terrain(me.x, me.z); }
+  else { const p = PLOTS[myPlot]; me.x = p.x; me.z = p.z - PLOT / 2 - 2.5; me.y = floorAt(me.x, me.z, p.y + 3); cam.yaw = Math.PI; }
+  me.vy = 0; cam.y = me.y; emitSparks(me.x, me.y + 1, me.z, 30, 5, ["#7fd8ff", "#ffffff"], 0.8, -1); sendPos(true);
 }
 function context() {
   const a = [], pl = netOk ? nearPlayer() : null;
   if (pl !== null) { const o = others.get(pl); a.push({ key: "F", label: o.name, fn: () => { target = pl; show("p-player"); } }); }
-  if (me.inst && house) {
-    if (hyp(me.x - (IN.x + RS / 2), me.z - (IN.z + 1)) < 2.4) a.push({ key: "E", label: "Exit", fn: exitHome });
-    if (house.mine && party.length > 1) a.push({ key: "G", label: "Invite", fn: () => { netSend({ t: "home_invite" }); toast("→ Party"); } });
-    if (placing && placing.ghost) a.push({ key: "R", label: "⟳", fn: turnGhost });
-    if (placing) a.push({ key: "Escape", label: "✕", fn: stopPlacing });
-  } else if (loggedIn) {
-    const i = nearDoor();
-    if (i >= 0 && save.home && save.home.house === i) a.push({ key: "E", label: "Enter", fn: () => (netOk ? netSend({ t: "home_enter" }) : null) });
-    else if (i >= 0 && !save.home) a.push({ key: "E", label: "Home", fn: () => { homeTarget = i; show("p-home"); } });
-  }
+  const l = loggedIn && nearLift(); if (l) a.push({ key: "E", label: l.to === "plaza" ? "▼" : "Home ▲", fn: () => ride_lift(l) });
   return a;
 }
 function runAct(key) { const a = acts.find((q) => q.key === key); if (a) a.fn(); }
 function ui() {
   acts = context();
-  const kind = me.inst ? "land" : moveKind();
-  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + !!(house && house.mine) + "|" + party.length + "|" + myRole;
+  const kind = me.foot ? "foot" : moveKind(), mine2 = onMyPlot();
+  const key = acts.map((a) => a.key + a.label).join("|") + "|" + kind + "|" + mine2 + "|" + !!building + "|" + party.length + "|" + myRole;
   if (key === uiKey) return; uiKey = key;
   const el = $("acts"); el.innerHTML = "";
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
-  $("btn-jump").style.display = kind === "fly" ? "none" : "";
-  $("btn-build").style.display = house && house.mine ? "" : "none";
+  $("btn-jump").style.display = building ? "none" : "";
+  $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
+  $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
-  myRing.visible = !!save.home; if (save.home) { const d = doorOf(save.home.house); myRing.position.set(d.x, d.y + 0.12, d.z); }
 }
 
 // ---- staff (owner, 2026-11-08): Nyssary is admin and makes admins; admins make moderators and give items; moderators
@@ -1564,6 +1576,7 @@ function renderAdmin() {
     const mute = sel(TIMES.map(([v, t]) => [v, v ? "Mute " + t : "Mute"]), "", (v) => v && adminSend({ op: "mute", id: p.id, mins: v })); acts.appendChild(mute);
     const ban = sel(TIMES.map(([v, t]) => [v, v ? "Ban " + t : "Ban"]), "", (v) => v && adminSend({ op: "ban", id: p.id, mins: v })); acts.appendChild(ban);
     if (p.online) { const k = document.createElement("button"); k.className = "btn small"; k.type = "button"; k.textContent = "Kick"; k.onclick = () => adminSend({ op: "kick", id: p.id }); acts.appendChild(k); }
+    if (myRole === "admin") { const v = document.createElement("button"); v.className = "btn small" + (p.vip ? " gold" : ""); v.type = "button"; v.textContent = p.vip ? "VIP ★" : "VIP"; v.onclick = () => adminSend({ op: "vip", id: p.id, on: !p.vip }); acts.appendChild(v); }
     if (myRole === "admin") { const g = document.createElement("button"); g.className = "btn gold small"; g.type = "button"; g.textContent = "Give"; g.onclick = () => { giveTo = p; giveWhat = null; renderAdmin(); }; acts.appendChild(g); }
     r.appendChild(acts); rows.appendChild(r);
   }
@@ -1593,12 +1606,16 @@ let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
 const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // (owner, 2026-11-08) how each pet gets around: land pets jump (high from standing, far on the run); flapping fliers go
 // anywhere but fly and walk slower; gliders are fast but can't climb, sinking slowly as they glide, and walk well
-const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, glide: { ground: 0.95, air: 1.25 } };
-function floorAt(x, z, y) {
-  if (me.inst) return 0;
+// (owner, 2026-11-08) Space, pressed each time: land pets jump (straight up when not moving, far when running); a flier
+// rises straight up; a glider jumps off the ground and gets one flap up in the air. Inside a house (on its floors) you
+// walk, off your pet.
+const MOVE = { land: { ground: 1, air: 1 }, fly: { ground: 0.7, air: 0.75 }, glide: { ground: 0.95, air: 1.25 }, foot: { ground: 1, air: 1 } };
+const FOOT_SPEED = 5.5;
+function groundAt(x, z, y) {
   const isl = islandAt(x, z); if (isl && y > isl.y - 3) return isl.y;
   return inside(x, z) ? terrain(x, z) + (World.roadDist(x, z) < ROAD_HALF + 0.3 ? ROAD_LIFT : 0) : -200;
 }
+function floorAt(x, z, y) { return Math.max(groundAt(x, z, y), houseSurface(x, z, y)); }
 function step(dt) {
   clock += dt;
   const now = performance.now();
@@ -1612,37 +1629,44 @@ function step(dt) {
   const l = hyp(jx, jy); if (l > 1) { jx /= l; jy /= l; }
   const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
   const mx = fx * -jy + rx * jx, mz = fz * -jy + rz * jx, ml = hyp(mx, mz);
-  const kind = me.inst ? "land" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
+  const hs0 = houseSurface(me.x, me.z, me.y); me.foot = hs0 > -Infinity && me.y - hs0 < 0.35 && hs0 > groundAt(me.x, me.z, me.y) + 0.05;
+  const kind = me.foot ? "foot" : moveKind(), M = MOVE[kind], p = riding(), stunned = me.stunUntil > now;
   const floor0 = floorAt(me.x, me.z, me.y), grounded = me.y - floor0 < 0.08;
-  let sp = petSpeed(p) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
-  if (kind === "land" && !grounded && me.longJump) sp *= 1.6;
+  if (grounded) me.flapped = false;
+  let sp = (kind === "foot" ? FOOT_SPEED : petSpeed(p)) * (me.boostUntil > now ? SNACK_BOOST : 1) * (grounded ? M.ground : M.air);
+  if ((kind === "land" || kind === "foot") && !grounded && me.longJump) sp *= 1.6;
   me.moving = ml > 0.08 && !stunned;
   if (me.moving) {
     const v = sp * Math.min(1, ml) * dt, nx = me.x + (mx / ml) * v, nz = me.z + (mz / ml) * v;
     const ok = (x, z) => {
-      if (me.inst) return inHouse(x, z) && !houseBlocked(x, z);
-      if (hyp(x, z) > LIMIT || blocked(x, z, me.y)) return false;
+      if (hyp(x, z) > LIMIT || blocked(x, z, me.y) || houseWall(x, z, me.y)) return false;
       if (kind === "fly") return true;
-      if (kind === "land" && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
+      const hs = houseSurface(x, z, me.y); if (hs > -Infinity && hs >= groundAt(x, z, me.y) && hs - me.y <= 0.6) return true;   // floors, steps and slopes of houses
+      if ((kind === "land" || kind === "foot") && !inside(x, z, 1.5) && !islandAt(x, z)) return false;   // the edge (gliders can step off)
       return floorAt(x, z, me.y) - me.y <= SLOPE * v + 0.05;   // too steep to climb (a jump gets you up a ledge)
     };
     if (ok(nx, me.z)) me.x = nx; if (ok(me.x, nz)) me.z = nz;   // slide along walls
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (never tilting)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped
+  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped; Space rises straight up
     const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
-    me.y += climb * fwd * sp * FLY_SPEED_UP * dt; me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor; me.vy = 0;
+    if (jumpQueued > now && !stunned) { me.vy = 10; jumpQueued = 0; }
+    me.y += (climb * fwd * sp * FLY_SPEED_UP + (me.vy || 0)) * dt; me.vy = (me.vy || 0) * Math.exp(-2.5 * dt); if (me.vy < 0.2) me.vy = 0;
+    me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
   } else {
-    if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? 7.5 : 11; me.longJump = me.moving; jumpQueued = 0; }
+    if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
+    else if (jumpQueued > now && kind === "glide" && !grounded && !me.flapped && !stunned) { me.vy = 8; me.flapped = true; jumpQueued = 0; }   // a glider's one flap up
     me.vy = (me.vy || 0) - GRAV * dt;
     if (kind === "glide" && me.vy < 0 && me.y - floor > 1.2) me.vy = Math.max(me.vy, -(1.6 + Math.max(0, cam.pitch - 0.42) * 10));   // gliding down
     me.y += me.vy * dt;
-    if (me.y <= floor || (grounded && me.vy <= 0 && me.y - floor < 0.6)) { me.y = floor; me.vy = 0; me.longJump = false; }   // landed (and keeping to the ground going downhill)
+    if (me.y <= floor || (grounded && me.vy <= 0 && me.y - floor < 0.6)) { me.y = floor; me.vy = 0; me.longJump = false; }
+    if (jumpQueued && jumpQueued < now) jumpQueued = 0;   // landed (and keeping to the ground going downhill)
     if (me.y < -150) { me.x = SPAWN.x; me.z = SPAWN.z; me.y = terrain(me.x, me.z); me.vy = 0; toast("Whoosh!"); }   // fell off into the clouds: back to the plaza
   }
   me.airborne = me.y - floor > 1.2;
   const low = me.y - floor < 3.5;
+  const atHome = onMyPlot(1); if (atHome && !me.atHome) collectPens(); me.atHome = atHome;   // playpen coins, collected on coming home
   if (!me.inst) {
     // the post office fills my bag; a mailbox I have a parcel for takes it
     if (hyp(me.x - PICKUP.x, me.z - PICKUP.z) < PICKUP.r && low) fillBag();
@@ -1664,23 +1688,28 @@ function step(dt) {
 }
 function draw(dt) {
   const now = performance.now();
-  mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0);
+  mine.g.position.set(me.x, me.y, me.z); mine.g.rotation.set(0, me.yaw, 0); mine.g.visible = !me.foot;
+  walker.g.visible = !!me.foot; if (me.foot) { walker.g.position.set(me.x, me.y, me.z); walker.g.rotation.y = me.yaw; animateWalker(walker, clock, me.moving); }
   animatePet(mine, clock, me.moving, petSpeed(riding()), me.airborne);
   dizzy.visible = me.stunUntil > now; if (dizzy.visible) { dizzy.position.set(me.x, me.y + mine.top + 0.5, me.z); dizzy.rotation.y = clock * 6; }
   for (const o of others.values()) {
-    const vis = o.inst === me.inst; o.m.g.visible = vis; if (!vis) continue;
+    const vis = o.inst === me.inst; o.m.g.visible = vis && !o.foot;
+    if (o.foot && !o.walker) o.walker = walkerModel(o.shirt || "#3a8ee6"); if (o.walker) o.walker.g.visible = vis && !!o.foot;
+    if (!vis) continue;
     // replayed a little in the past on its own clock; a correction after a guess ahead is eased in, never snapped
     if (o.off !== undefined && sampleAt(o.buf, performance.now() - o.off - OTHER_DELAY, tmpS)) {
       if (o.snap || hyp(tmpS.x - o.x, tmpS.z - o.z) > 25) { o.x = tmpS.x; o.y = tmpS.y; o.z = tmpS.z; o.snap = false; }
       const k = Math.min(1, dt * 18); o.x += (tmpS.x - o.x) * k; o.y += (tmpS.y - o.y) * k; o.z += (tmpS.z - o.z) * k; o.yaw = lerpYaw(o.yaw, tmpS.yaw, k);
     }
     o.m.g.position.set(o.x, o.y, o.z); o.m.g.rotation.y = o.yaw;
+    if (o.walker && o.foot) { o.walker.g.position.set(o.x, o.y, o.z); o.walker.g.rotation.y = o.yaw; animateWalker(o.walker, clock + o.x, o.moving); }
+    if (o.foot) o.tag.position.y = 2.6; else o.tag.position.y = o.m.top + 1.2;
     animatePet(o.m, clock + o.x * 0.1, o.moving, 10, o.m.fly && o.y - (inside(o.x, o.z) ? terrain(o.x, o.z) : -60) > 1.2);
   }
   vehiclesDraw(dt);
-  if (house) for (const q of house.pens) {   // pets in playpens wander about
-    if (q.wait > 0) q.wait -= dt; else { const dx = q.tx - q.x, dz = q.tz - q.z, d = hyp(dx, dz); if (d < 0.1) { const a = Math.random() * TAU, r = Math.random() * 1.6; q.tx = q.cx + Math.cos(a) * r; q.tz = q.cz + Math.sin(a) * r; q.wait = 1 + Math.random() * 2; } else { const s = Math.min(d, dt * 1.5); q.x += (dx / d) * s; q.z += (dz / d) * s; q.yaw = lerpYaw(q.yaw, Math.atan2(dx, dz), Math.min(1, dt * 6)); } }
-    q.m.g.position.set(q.x, 0, q.z); q.m.g.rotation.y = q.yaw; animatePet(q.m, clock + q.cx, q.wait <= 0, 3, false);
+  for (const st of plotState.values()) for (const q of st.pens || []) {   // pets in playpens wander about
+    if (q.wait > 0) q.wait -= dt; else { const dx = q.tx - q.x, dz = q.tz - q.z, d = hyp(dx, dz); if (d < 0.1) { const a = Math.random() * TAU, r = Math.random() * 1.2; q.tx = q.cx + Math.cos(a) * r; q.tz = q.cz + Math.sin(a) * r; q.wait = 1 + Math.random() * 2; } else { const s2 = Math.min(d, dt * 1.5); q.x += (dx / d) * s2; q.z += (dz / d) * s2; q.yaw = lerpYaw(q.yaw, Math.atan2(dx, dz), Math.min(1, dt * 6)); } }
+    q.m.g.position.set(q.x, q.y, q.z); q.m.g.rotation.y = q.yaw; animatePet(q.m, clock + q.cx, q.wait <= 0, 3, false);
   }
   // the arrow: to the nearest house in my bag, else back to the post office
   let tx = PICKUP.x, tz = PICKUP.z, best = 1e9;
@@ -1688,7 +1717,7 @@ function draw(dt) {
   const ti = me.bag.find((i) => houses[i].mx === tx && houses[i].mz === tz), ty = ti !== undefined ? houses[ti].my : 0;
   for (const b of beams.values()) { b.userData.parcel.rotation.y = clock * 2; b.userData.parcel.position.y = 3 + Math.sin(clock * 3) * 0.3; }
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
-  placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !me.inst && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
+  cutaway(); placeCamera(dt); camera.updateMatrixWorld(); drawGuide(tx, ty, tz, loggedIn && !building && hyp(tx - me.x, tz - me.z) > 6); skyStep(dt, camera.position.x, camera.position.y, camera.position.z);
   renderer.render(scene, camera);
 }
 function frame(now) {
@@ -1703,4 +1732,4 @@ syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
 
 // for tests
-window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get house() { return house; }, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, buyHouse, build, setPen, collectPens, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, doorOf, contractOver, emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, placingPicks: () => (placing ? placing.picks : []), inHouseTest: (x, z) => inHouse(x, z) && !houseBlocked(x, z), startPlacingTest: startPlacing, stopPlacingTest: stopPlacing, demolishTest: demolish, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };
+window.Pets = { get save() { return save; }, me, houses, get contract() { return contract; }, get online() { return online; }, get netOk() { return netOk; }, get loggedIn() { return loggedIn; }, get others() { return others; }, get myPlot() { return myPlot; }, plotState, get party() { return party; }, get trading() { return trading; }, step, deliver, fillBag, buyEgg, train, startContract, ride, setPen, collectPens, openBuild, closeBuild, get building() { return building; }, buildTap, showGhost, runAct, netSend, EGGS, SPECIES, PICKUP, SHOP, TRAIN, BOARD, ISLANDS, World, vehs, localVs, cam, terrain, contractOver, houseSurface, houseWall, refreshTest: () => refreshMyPlot(), emitConfetti, firework, caught, trade, persist, flushSave, set skyOffset(v) { skyOffset = v; }, reach, camera, V3: THREE.Vector3, teleport: (x, z, y) => { me.x = x; me.z = z; me.y = y === undefined ? terrain(x, z) : y; me.vy = 0; } };

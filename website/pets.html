@@ -122,6 +122,24 @@
     #pin svg { animation: bob 1s ease-in-out infinite; }
     @keyframes glow { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
     @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    .mbadge { display: inline-flex; align-items: center; gap: 4px; font: 800 11px ui-rounded, system-ui, sans-serif; padding: 3px 8px; border-radius: 999px; color: #fff; letter-spacing: .02em; }
+    .mbadge.fly { background: #3a8ee6; box-shadow: 0 0 0 2px #cfe6ff; }
+    .mbadge.glide { background: #18a39a; box-shadow: 0 0 0 2px #c9f2ee; }
+    .card.fly { border-color: #9cc9f5; background: linear-gradient(#f0f7ff, #fff 60%); }
+    .card.glide { border-color: #8fdcd4; background: linear-gradient(#ecfbf9, #fff 60%); }
+    #hatch .nm .mbadge { font-size: 14px; vertical-align: middle; }
+    #buildbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 7; display: none; flex-direction: column; gap: 6px; padding: 8px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: var(--card); box-shadow: 0 -6px 20px rgba(0,0,0,.18); }
+    .bbrow { display: flex; gap: 6px; overflow-x: auto; align-items: center; scrollbar-width: thin; }
+    .bbtool { flex: none; border: 2px solid var(--line); border-radius: 12px; background: #fff; padding: 6px 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; font: 700 12px ui-rounded, system-ui, sans-serif; color: var(--ink); cursor: pointer; }
+    .bbtool span { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; opacity: .8; }
+    .bbtool .coin { width: 11px; height: 11px; border-width: 1px; }
+    .bbtool.on { border-color: var(--blue); background: #eef6ff; }
+    .swatch { flex: none; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; }
+    .swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--blue); }
+    .bbbtn { flex: none; border: 0; border-radius: 12px; padding: 8px 12px; font: 800 13px ui-rounded, system-ui, sans-serif; background: #e9eef3; color: var(--ink); cursor: pointer; min-width: 40px; }
+    .bbbtn.on { background: var(--blue); color: #fff; } .bbbtn.red.on { background: var(--red); }
+    .bbbtn:disabled { opacity: .4; }
+    .bblevel { font: 800 16px ui-rounded, system-ui, sans-serif; min-width: 18px; text-align: center; }
     @media (max-width: 420px) { #coins { font-size: 21px; } .btn { min-height: 48px; padding: 10px 13px; font-size: 14px; } }
   </style>
 </head>
@@ -141,7 +159,6 @@
     </div>
   </div>
   <div id="joy"><i></i></div>
-  <div id="guide"><svg viewBox="0 0 120 36" width="120" height="36"><defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#ffd35a" stop-opacity="0"/><stop offset=".35" stop-color="#ffd35a"/><stop offset="1" stop-color="#fff3c0"/></linearGradient></defs><path d="M2 14h82V3l34 15-34 15V22H2z" fill="url(#gg)" stroke="#fff8dc" stroke-width="2" stroke-linejoin="round"/></svg></div>
   <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
   <div id="side">
     <div id="items"></div>
@@ -157,8 +174,8 @@
   <div class="panel" id="p-train"><h2>Training Yard <button class="x" type="button">✕</button></h2><div id="train"></div></div>
   <div class="panel" id="p-player"><h2><span id="pname"></span> <button class="x" type="button">✕</button></h2><div class="row2" id="player"></div></div>
   <div class="panel" id="p-trade"><h2><span>Trade · <span id="tname"></span></span> <button class="x" type="button">✕</button></h2><div id="trade"></div></div>
-  <div class="panel" id="p-build"><h2>Build <button class="x" type="button">✕</button></h2><div id="build"></div></div>
-  <div class="panel" id="p-home"><h2>Home <button class="x" type="button">✕</button></h2><div id="homebuy"></div></div>
+  <div class="panel" id="p-build"><h2>Pet pen <button class="x" type="button">✕</button></h2><div id="build"></div></div>
+  <div id="buildbar"></div>
   <div class="panel wide" id="p-admin"><h2>Admin <button class="x" type="button">✕</button></h2><div id="admin"></div></div>
   <div class="panel" id="p-board"><h2>Contracts <button class="x" type="button">✕</button></h2><div id="board"></div></div>
   <div id="chatlog"></div>
@@ -174,6 +191,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><button class="btn green" id="hatchok" type="button">Ride</button></div>
-  <script type="module" src="pets.js?v=1793100009"></script>
+  <script type="module" src="pets.js?v=1793100010"></script>
 </body>
 </html>

@@ -164,6 +164,7 @@ export async function migrate() {
     ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'player';
     ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS mute_until TIMESTAMPTZ;
     ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ;
+    ALTER TABLE pet_accounts ADD COLUMN IF NOT EXISTS vip BOOLEAN NOT NULL DEFAULT false;   -- (owner, 2026-11-08) VIP plots
     CREATE TABLE IF NOT EXISTS pet_admin_log (
       id BIGSERIAL PRIMARY KEY, at TIMESTAMPTZ NOT NULL DEFAULT now(), by_name TEXT NOT NULL, target_name TEXT NOT NULL,
       action TEXT NOT NULL, detail TEXT
