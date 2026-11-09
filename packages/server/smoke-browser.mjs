@@ -23,7 +23,7 @@ if (!chrome) {
 const { attachPets } = await import("./src/pets.js");
 const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
-attachPets(server, { allowLocal: true });
+attachPets(server, { allowLocal: true, packageEveryMs: 50 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -57,6 +57,24 @@ try {
   for (let i = 0; i < 50 && !restored; i++) { restored = await page.evaluate(() => window.Pets.environment.weather === "auto" && window.Pets.environment.time === "auto"); if (!restored) await page.waitForTimeout(100); }
   if (!restored) throw new Error("the automatic environment settings were not restored");
   await page.click("#p-admin .x");
+  step = "see and claim a Package Rush prize";
+  for (let i = 0; i < 50 && !(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0)); i++) await page.waitForTimeout(100);
+  if (!(await page.evaluate(() => window.Pets.packageEvent && window.Pets.packageMeshes.size > 0))) throw new Error("Package Rush did not start");
+  for (let i = 0; i < 10 && (await page.evaluate(() => getComputedStyle(document.getElementById("packageevent")).display === "none")); i++) await page.waitForTimeout(50);
+  const packageUi = await page.evaluate(() => ({
+    title: document.getElementById("eventtitle").textContent,
+    flash: document.getElementById("eventflash").classList.contains("go"),
+    pill: getComputedStyle(document.getElementById("packageevent")).display,
+    count: window.Pets.packageMeshes.size,
+  }));
+  if (packageUi.title !== "Package Rush!" || !packageUi.flash || packageUi.pill === "none" || !packageUi.count) problems.push("Package Rush announcement is missing: " + JSON.stringify(packageUi));
+  const beforePackages = packageUi.count;
+  await page.evaluate(() => { const P = window.Pets, b = P.packageEvent.boxes.values().next().value; P.teleport(b.x, b.z, b.y); });
+  for (let i = 0; i < 50 && !(await page.evaluate((before) => window.Pets.packageMeshes.size < before, beforePackages)); i++) await page.waitForTimeout(100);
+  if (!(await page.evaluate((before) => window.Pets.packageMeshes.size < before, beforePackages))) throw new Error("package was not claimed");
+  const packagePrize = await page.evaluate(() => ({ title: document.getElementById("eventtitle").textContent, sub: document.getElementById("eventsub").textContent, flash: document.getElementById("eventflash").classList.contains("go") }));
+  if (packagePrize.title !== "Prize package!" || !packagePrize.sub || !packagePrize.flash) problems.push("package reward celebration is missing: " + JSON.stringify(packagePrize));
+  await page.evaluate(() => window.Pets.teleport(0, 14));
   step = "check animal-control lights by day and night";
   const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
   const waitForLights = async (day) => {
@@ -130,5 +148,5 @@ try {
 } catch (e) { problems.push(`could not ${step}: ${e.message.split("\n")[0]}`); }
 await browser.close(); if (browser2) await browser2.close(); server.close();
 if (problems.length) { console.error("SMOKE FAILED (browser)\n" + problems.map((p) => "  " + p).join("\n")); process.exit(1); }
-console.log("browser smoke passed: the game loads, an account is created, the town runs without errors and a second player is seen moving");
+console.log("browser smoke passed: the game loads, Package Rush works, the town runs without errors and a second player is seen moving");
 process.exit(0);
