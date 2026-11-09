@@ -94,7 +94,7 @@ const LIMIT = 460;   // how far out anyone can go (the extra plot island is at 4
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !touchy });
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, touchy ? 1.6 : 2));
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = false;   // (owner, 2026-11-09) baked shadows instead: darker ground under houses and trees, a soft spot under everyone
 const scene = new THREE.Scene();
 scene.background = new THREE.Color("#8fd3ff"); scene.fog = new THREE.Fog("#bfe6ff", 150, 560);
 const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1000);
@@ -118,6 +118,22 @@ let snowCover;
   // (owner, 2026-11-08: smooth it out) colors blend gradually: by the slope of the land over a few metres (so cliffs
   // fade into rock), by height, and in broad patches; a fine speckled texture on top
   const cols = new Float32Array((pos.length / 3) * 3), uvs = new Float32Array((pos.length / 3) * 2), c = new THREE.Color(), c2 = new THREE.Color();
+  // (owner, 2026-11-09) shadows baked into the ground: each house, building and tree darkens the ground under it and a
+  // little to one side (as if the sun were high in the north-west), softly at the edges
+  const SH = new Map(), shKey = (x, z) => Math.floor(x / 10) + "," + Math.floor(z / 10), addSh = (o) => { for (let gx = Math.floor((o.x - o.r) / 10); gx <= Math.floor((o.x + o.r) / 10); gx++) for (let gz = Math.floor((o.z - o.r) / 10); gz <= Math.floor((o.z + o.r) / 10); gz++) { const k = gx + "," + gz; if (!SH.has(k)) SH.set(k, []); SH.get(k).push(o); } };
+  for (const h of houses) if (!h.sky) addSh({ x: h.x + 1.6, z: h.z + 1.6, c: Math.cos(h.yaw), s: Math.sin(h.yaw), hw: 5.2, hd: 5.2, r: 9, k: 0.6 });
+  for (const t of trees) addSh({ x: t.x + 1.1 * t.s, z: t.z + 1.1 * t.s, rr: 2.3 * t.s, r: 3 * t.s, k: 0.68 });
+  for (const [b, hw, hd] of [[POST, 9.5, 5.5], [SHOP_B, 6.5, 4.5], [MOUNT_B, 6.5, 4.5], [{ x: POUND.x, z: POUND.z + 3 }, 8.5, 4.5]]) addSh({ x: b.x + 2, z: b.z + 2, c: 1, s: 0, hw, hd, r: 12, k: 0.68 });
+  function bakedShade(x, z) {
+    let f = 1;
+    for (const o of SH.get(shKey(x, z)) || []) {
+      let e;   // how far inside the shadow's edge (m)
+      if (o.rr) e = o.rr - hyp(x - o.x, z - o.z);
+      else { const dx = x - o.x, dz = z - o.z, lx = Math.abs(dx * o.c - dz * o.s), lz = Math.abs(dx * o.s + dz * o.c); e = Math.min(o.hw - lx, o.hd - lz); }
+      if (e > -1.2) f = Math.min(f, 1 - (1 - o.k) * smooth(clamp((e + 1.2) / 2.4, 0, 1)));
+    }
+    return f;
+  }
   const LAKEBED = new THREE.Color("#c9b98c"), GRASS = [new THREE.Color("#7fc25a"), new THREE.Color("#96cf63"), new THREE.Color("#a9d46e")], ROCK = new THREE.Color("#a08f7a"), ROCK2 = new THREE.Color("#8a7a68");
   for (let i = 0; i < pos.length / 3; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
@@ -127,6 +143,7 @@ let snowCover;
     c2.copy(ROCK).lerp(ROCK2, patch);
     c.lerp(c2, smooth(clamp((slope - 0.3) / 0.7, 0, 1)));
     if (World.waterAt(x, z) > -Infinity) c.lerp(LAKEBED, 0.85);   // (owner, 2026-11-09) sand under the water
+    c.multiplyScalar(bakedShade(x, z));
     cols.set([c.r, c.g, c.b], i * 3); uvs.set([x / 9, z / 9], i * 2);
   }
   g.setAttribute("color", new THREE.BufferAttribute(cols, 3)); g.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
@@ -604,6 +621,24 @@ function faceMat(skin, blush) {   // the head's front: skin with two tall oval e
 }
 const FACE_M = faceMat(SKIN);
 // look (townsfolk only): { skin, pants, sleeve (the arms' colour: long sleeves), blush }
+// (owner, 2026-11-09) people and pets stay bright at night: their materials are their own copies that glow with their
+// own colour as it gets dark (nightGlow), and a soft dark spot lies on the ground under each (blobs)
+const CHAR_MATS = new Map();
+function charMat(m) { if (!CHAR_MATS.has(m)) { const c = m.clone(); c.emissive = m.color ? m.color.clone() : new THREE.Color("#ffffff"); c.emissiveMap = m.map || null; c.emissiveIntensity = nightGlow; CHAR_MATS.set(m, c); } return CHAR_MATS.get(m); }
+let nightGlow = 0;
+function brighten(g) { g.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshLambertMaterial && !CHAR_MATS.has(o.material) && ![...CHAR_MATS.values()].includes(o.material)) o.material = charMat(o.material); }); return g; }
+const BLOB_TEX = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"), r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, "rgba(0,0,0,0.42)"); r.addColorStop(0.6, "rgba(0,0,0,0.22)"); r.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+const BLOB_G = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), blobs = [];
+function blobUnder(g, size) { const b = new THREE.Mesh(BLOB_G, new THREE.MeshBasicMaterial({ map: BLOB_TEX, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 })); b.renderOrder = 1; scene.add(b); blobs.push({ g, b, size }); return b; }
+function blobStep() {
+  for (let i = blobs.length - 1; i >= 0; i--) {
+    const q = blobs[i]; if (!q.g.parent) { scene.remove(q.b); blobs.splice(i, 1); continue; }
+    let vis = q.g.visible; for (let p = q.g.parent; p && vis; p = p.parent) vis = p.visible;
+    q.b.visible = vis; if (!vis) continue;
+    const x = q.g.position.x, z = q.g.position.z, y = q.g.position.y, f = floorAt(x, z, y + 0.3), h = y - f, k = clamp(1 - h / 12, 0, 1);
+    q.b.position.set(x, f + 0.05, z); const s = q.size * (q.g.scale.x || 1) * (0.6 + 0.4 * k); q.b.scale.set(s, 1, s); q.b.material.opacity = k;
+  }
+}
 function courierModel(shirt, seated, look) {
   const g = new THREE.Group(), legs = [], arms = [];
   const part = (w, h, d, m, x, y, z, parent, r = 0.025, seg = 2) => { const o = new THREE.Mesh(roundBox(w, h, d, r, seg), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
@@ -800,6 +835,7 @@ function petModel(sp, rider) {
   if (rider) {   // the courier, seated (a little smaller): hips just above the pet's back
     const r = courierModel(rider, true); r.g.scale.setScalar(0.8); r.g.position.set(0, seat - 0.52, seatZ); body.add(r.g); top = seat + 1.4; riderG = r.g;
   }
+  brighten(g);
   return { g, body, legs, wings, head, tails, k, top, seat, rider: riderG, butterfly: L.plan === "butterfly", fly: !!s.fly, hop: !!L.hop, plan: L.plan };
 }
 function animatePet(m, t, moving, speed, airborne) {
@@ -881,7 +917,7 @@ let mine = null, myBubble = null;
 let mountKey = "", sentPet = "";
 const petKey = () => riding().sp + "|" + riding().lv;
 function petSync() { const k = petKey(); if (k !== mountKey) mount(); if (netOk && k !== sentPet) { sentPet = k; netSend({ t: "pet", sp: riding().sp, lv: riding().lv }); } }
-function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); sizePet(mine, petScale(riding().lv)); mine.g.traverse((o) => (o.castShadow = true)); scene.add(mine.g); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
+function mount() { mountKey = petKey(); if (mine) scene.remove(mine.g); mine = petModel(riding().sp, save.shirt); sizePet(mine, petScale(riding().lv)); scene.add(mine.g); blobUnder(mine.g, 2.2 * (mine.k || 1)); if (myBubble) { mine.g.add(myBubble.s); myBubble.s.position.y = mine.top + 2.4; } }
 mount();
 // the guide (owner, 2026-11-08): a long glowing arrow lying flat around my pet, turned toward where to go; it tilts up
 // only halfway toward a place above or below (fully when the place is well above me), so it never stands on end; a
@@ -903,7 +939,7 @@ function drawGuide(tx, ty, tz, on) {
   else pinEl.style.display = "none";
 }
 // the courier on foot (inside houses): legs that walk, arms that swing against them
-function walkerModel(shirt) { const w = courierModel(shirt); scene.add(w.g); w.g.visible = false; return w; }
+function walkerModel(shirt) { const w = courierModel(shirt); brighten(w.g); scene.add(w.g); w.g.visible = false; blobUnder(w.g, 1.6); return w; }
 const walker = walkerModel(save.shirt);
 // (owner, 2026-11-09) fliers and gliders point nose-up while climbing and nose-down while diving or gliding down, by
 // how they're really moving (height gained against ground covered); level on the ground. The body turns about its
@@ -1045,7 +1081,7 @@ function heliModel() {
   return { g, body, red, blue, rotor, tail, lens, spot, beam, ba: 0, bd: 15 };
 }
 const localVs = World.makeVehicles();
-const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
+const vehs = localVs.map((v) => { const m = v.kind ? heliModel() : vanModel(v.style); scene.add(m.g); blobUnder(m.g, v.kind ? 7 : 5); return Object.assign(m, { kind: v.kind, buf: [], x: v.x, y: v.y, z: v.z, yaw: v.yaw, mode: 0, target: 0, pitch: 0 }); });
 const meP = { id: 0, x: 0, y: 0, z: 0, stars: 0, lastChased: 0, lastStar: 0, immuneUntil: 0 };   // me, for running them offline
 const tmpS = {}, beamB = {}, DOWN = new THREE.Vector3(0, -1, 0);
 function vehiclesDraw(dt) {
@@ -1614,10 +1650,10 @@ function nameTag(name, stars) {
 function addOther(p) {
   if (p.id === myId) return; const old = others.get(p.id); dropOther(p.id);
   const sp = SPECIES[p.sp] ? p.sp : "pup", m = petModel(sp, p.shirt || "#3a8ee6"), lv = clamp(p.lv | 0, 1, MAXLV), sc = petScale(lv); sizePet(m, sc); const stars = p.stars || 0, tag = nameTag(String(p.name || "Courier").slice(0, 18), stars);
-  tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g);
+  tag.position.y = m.top + 1.2; m.g.add(tag); const y = Number.isFinite(p.y) ? p.y : terrain(p.x, p.z); m.g.position.set(p.x, y, p.z); scene.add(m.g); blobUnder(m.g, 2.2 * (m.k || 1));
   others.set(p.id, { name: p.name, sp, lv, shirt: p.shirt, stars, inst: p.inst || 0, buf: old ? old.buf : [], x: p.x, y, z: p.z, yaw: p.yaw || 0, moving: false, m, tag, bub: null });
 }
-function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); if (o.bub) clearTimeout(o.bub.timer); others.delete(id); }
+function dropOther(id) { const o = others.get(id); if (!o) return; scene.remove(o.m.g); if (o.walker) scene.remove(o.walker.g); if (o.bub) clearTimeout(o.bub.timer); others.delete(id); }
 function setContract(c) {
   const before = contract;
   contract = c ? { kind: c.kind || "big", goal: c.goal, done: c.done, mine: c.mine || 0, ends: performance.now() + c.left * 1000, pool: c.pool } : null;
@@ -2008,7 +2044,7 @@ function openShop(kind) { endTalk(); SHOP_OPEN[kind](); return null; }
 for (const n of TOWN) {
   if (n.only && !n.only()) { n.off = true; continue; }
   Object.assign(n, { hx: n.x, hz: n.z, home: [n.x, n.z], tx: n.x, tz: n.z, wait: Math.random() * 3, talks: 0, ph: Math.random() * 10, dance: 0, high5: 0, wave: 0, waved: false, cool: 0, walking: false, y: terrain(n.x, n.z), face: n.yaw });
-  n.w = courierModel(n.look.shirt, false, n.look); DRESS[n.id](n.w, n.w.g);
+  n.w = courierModel(n.look.shirt, false, n.look); DRESS[n.id](n.w, n.w.g); brighten(n.w.g); blobUnder(n.w.g, 1.6 * (n.s || 1));
   n.tag = townTag(n.name, n.color); n.tag.position.y = 3.05; n.w.g.add(n.tag);
   n.w.g.scale.setScalar(n.s); n.w.g.position.set(n.x, n.y, n.z); n.w.g.rotation.y = n.yaw; n.w.g.traverse((o) => { o.userData.npc = n; }); scene.add(n.w.g);
 }
@@ -3053,6 +3089,7 @@ function draw(dt) {
   drawPackages();
   pickRing.material.opacity = 0.55 + Math.sin(clock * 4) * 0.3; bigEgg.rotation.y = clock * 0.6;
   folkStep(dt); talkStep(dt); cutaway(); poiStep(); waterStep(dt); boostStep(dt); placeCamera(dt); camera.updateMatrixWorld(); const gd = inArena() ? [obsSpot(OBS[arNext])[0], AR.y, obsSpot(OBS[arNext])[1]] : [tx, ty, tz]; drawGuide(gd[0], gd[1], gd[2], loggedIn && !building && !talk && (me.bag.length > 0 || save.settings.followArrowWhenEmpty) && hyp(gd[0] - me.x, gd[2] - me.z) > 6); drawMap(now, gd[0], gd[2], ti !== undefined && houses[ti].sky, loggedIn && !building && !talk); skyStep(dt, camera.position.x, camera.position.y, camera.position.z); underwater();
+  nightGlow = me.inst ? 0 : clamp((1 - skyNow.day) * 0.85, 0, 0.85); for (const m of CHAR_MATS.values()) m.emissiveIntensity = nightGlow; blobStep();
   renderer.render(scene, camera);
 }
 function frame(now) {

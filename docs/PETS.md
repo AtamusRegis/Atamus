@@ -105,7 +105,12 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
 - Roads are laid on the land vertex by vertex (5 across, every ~2 m) just above it, and pets stand on the road surface.
-- No flicker: shadows are biased against acne and the vans' overlapping faces are offset.
+- **Shadows are baked (owner, 2026-11-09):** no live shadows; the ground is darker under and a little to one side of
+  every house, plaza building and tree (soft-edged, painted in once), and a soft dark spot lies on the ground under
+  every pet, person, walker and van (smaller and fainter the higher they are). The vans' overlapping faces are offset
+  (no flicker).
+- **Bright at night (owner, 2026-11-09):** pets, riders, walkers and the townsfolk glow with their own colors as it
+  gets dark, so they look about as bright at night as by day.
 
 ## The courier
 
@@ -417,6 +422,7 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 ## Rejected / removed
 
+- Live (dynamic) shadows (owner, 2026-11-09): replaced by baked ones.
 - Gliders (owner, 2026-11-09): Parrot, Pegasus, Phoenix and Pterodactyl fly like the other fliers; the Flier / Glider / Swimmer badges became the Ground / Air / Water types.
 - Building on the lot itself on a 5 x 5 grid with a level picker (owner, 2026-11-09): replaced by the 5 houses outside and freeform building inside.
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
