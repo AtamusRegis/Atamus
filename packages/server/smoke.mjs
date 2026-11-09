@@ -44,18 +44,19 @@ const xp = E.packageReward(rewardData, 20, seq(0.2, 0.999));
 ok(xp.kind === "xp" && xp.n === 100 && rewardData.pets[0].lv === 4 && rewardData.pets[0].tp === 28, "training-point prizes can cross several levels");
 const pet = E.packageReward(rewardData, 20, seq(0.01, 0.99, 0, 0));
 ok(pet.kind === "pet" && pet.sp === "dragon" && rewardData.pets.length === 2, "a package can award a legendary pet");
-const heliEventsAt = (start) => {
+const heliEventsAt = (start, daylightOverride) => {
   const heli = W.makeVehicles().find((v) => v.kind === 1), litPlayer = { id: 2, bag: 1, stars: 0, lastChased: start, lastStar: 0, immuneUntil: 0 }, events = [];
   for (let i = 0; i < 8; i++) {
     const b = W.beamOf(heli), along = 12;
     Object.assign(litPlayer, { x: b.lx + b.dx * along, y: b.ly + b.dy * along - 1, z: b.lz + b.dz * along });
-    events.push(...W.stepVehicles([heli], [litPlayer], 0.1, start + i * 0.1));
+    events.push(...W.stepVehicles([heli], [litPlayer], 0.1, start + i * 0.1, daylightOverride));
   }
   return events;
 };
 ok(W.isDaylight(300) && !W.isDaylight(900), "the shared clock identifies daylight and night");
 ok(!heliEventsAt(300).some((e) => e.k === "chase" || e.k === "caught"), "helicopter searchlights do not work in daylight");
 ok(heliEventsAt(900).some((e) => e.k === "caught"), "helicopter searchlights catch parcel carriers at night");
+ok(heliEventsAt(300, false).some((e) => e.k === "caught") && !heliEventsAt(900, true).some((e) => e.k === "caught"), "admin time overrides control searchlights too");
 
 // ---- the server ----
 const { attachPets } = await import("./src/pets.js");
@@ -107,7 +108,13 @@ try {
   a.send({ t: "chat", text: "hello" }); await b.wait((m) => m.t === "chat" && m.text === "hello", "chat");
   // (owner, 2026-11-09) admins' quick commands: by name on another player and on yourself; a player's are ignored
   const n = client("N"); await n.open; n.send({ t: "register", user: "Nyssary", pass: "pass1234", sp: "pup", lv: 1, x: 0, y: 0, z: 14 });
-  ok((await n.wait((m) => m.t === "welcome", "owner welcome")).role === "admin", "the owner is admin");
+  const wn = await n.wait((m) => m.t === "welcome", "owner welcome");
+  ok(wn.role === "admin" && wn.environment.weather === "auto" && wn.environment.time === "auto", "the owner is admin and sees the automatic environment");
+  n.send({ t: "admin", op: "environment", weather: "storm", time: "night" });
+  const env = await b.wait((m) => m.t === "environment", "admin environment change");
+  ok(env.environment.weather === "storm" && env.environment.time === "night", "an admin changes weather and time for everyone");
+  await n.wait((m) => m.t === "environment", "owner's environment change");
+  b.send({ t: "admin", op: "environment", weather: "clear", time: "day" });   // a player: ignored
   n.send({ t: "admin", op: "quick", cmd: "everything", name: "smokeB" });
   const db1 = (await b.wait((m) => m.t === "data", "B's data after Everything")).data;
   ok(db1.coins >= 1e6 && db1.pets.length >= 23 && db1.pets.every((p) => p.lv === 20) && db1.items.ticket >= 100 && db1.treats.dragon >= 100, "Everything gives coins, every pet at 20, items and Treats");
@@ -119,7 +126,8 @@ try {
   n.ws.close();
   // logging in again replaces the old connection
   const a2 = client("A2"); await a2.open; a2.send({ t: "resume", token: wa.token, sp: "pup" });
-  await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  const wa2 = await a2.wait((m) => m.t === "welcome" && m.name === "smokeA", "resume");
+  ok(wa2.environment.weather === "storm" && wa2.environment.time === "night", "a player's environment command is ignored and new logins see the admin setting");
   await a.wait((m) => m.t === "kicked", "old connection kicked");
   for (const c of [a2, b]) c.ws.close();
 } catch (e) { fail(e.message); }
