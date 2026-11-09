@@ -616,7 +616,7 @@ const walker = walkerModel(save.shirt);
 function flightPitch(m, x, y, z, dt, airborne) {
   const f = m.fp || (m.fp = { x, y, z, a: 0 }), d = Math.max(dt, 1e-3), hs = hyp(x - f.x, z - f.z) / d, vy = (y - f.y) / d;
   f.x = x; f.y = y; f.z = z;
-  const want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(-Math.atan2(vy, hs + 3), -0.7, 0.7) : 0;   // not on a teleport
+  const a = -Math.atan2(vy, hs + 3), want = m.fly && airborne && hs < 120 && Math.abs(vy) < 120 ? clamp(a > 0 ? a * 1.4 : a, -0.7, 0.95) : 0;   // not on a teleport; (owner, 2026-11-09) going down tips further
   f.a += (want - f.a) * Math.min(1, dt * 5);
   const c = (m.top / m.g.scale.y) * 0.45;   // the middle of pet and rider
   m.body.rotation.x = f.a; m.body.position.y += c * (1 - Math.cos(f.a)); m.body.position.z = -c * Math.sin(f.a);
@@ -911,7 +911,7 @@ function buyEgg(egg, ticket) {
 function hatch(p, egg) {
   const s = SPECIES[p.sp], rc = RARITY[s.r].c; $("hatchn").innerHTML = s.name + (s.fly ? " " + moveBadge(p.sp) : ""); $("hatchr").textContent = RARITY[s.r].name; $("hatchr").style.color = rc;
   const c = $("hatchc"), g = c.getContext("2d"), img = new Image(); img.src = portrait(p.sp);
-  $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
+  $("hatch").style.display = "flex"; $("hatchok").style.visibility = "hidden"; $("hatchno").style.visibility = "hidden"; $("hatchn").style.visibility = "hidden"; $("hatchr").style.visibility = "hidden";
   const t0 = performance.now(), parts = []; let burst = 0, lastT = 0;
   const pop = (x, y, n, sp, cols) => { for (let i = 0; i < n; i++) { const a = Math.random() * TAU, v = sp * (0.3 + Math.random() * 0.7); parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 + Math.random() * 0.6, c: pick(cols), r: 3 + Math.random() * 5, star: Math.random() < 0.3 }); } };
   const cols = s.r === 3 ? ["#ffd35a", "#ffb020", "#fff4c0", "#ff7ac8"] : s.r === 2 ? ["#c58bff", "#a352e0", "#fff", "#ff7ac8"] : s.r === 1 ? ["#7fc0ff", "#3a8ee6", "#fff", "#3fb36b"] : PARTY;
@@ -941,14 +941,16 @@ function hatch(p, egg) {
       else { g.beginPath(); g.arc(q.x, q.y, q.r, 0, TAU); g.fill(); }
       g.globalAlpha = 1;
     }
-    if (t > 1.7) { $("hatchn").style.visibility = "visible"; $("hatchr").style.visibility = "visible"; $("hatchok").style.visibility = "visible"; }
+    if (t > 1.7) { $("hatchn").style.visibility = "visible"; $("hatchr").style.visibility = "visible"; $("hatchok").style.visibility = "visible"; $("hatchno").style.visibility = "visible"; }
     if (t < 5 || parts.length) requestAnimationFrame(anim);
   };
   anim();
-  $("hatchok").onclick = () => {
-    $("hatch").style.display = "none"; ride(p.id); if (openPanel === "p-shop") renderShop();
+  // (owner, 2026-11-09) Not now keeps you on the pet you're riding; the new one waits in your Pets list
+  const done = (go) => {
+    $("hatch").style.display = "none"; if (go) ride(p.id); if (openPanel === "p-shop") renderShop();
     emitConfetti(me.x, me.y + 3, me.z, 90, 6, 9); firework(me.x - 4, me.y + 2, me.z); if (s.r >= 2) { firework(me.x + 4, me.y + 2, me.z, 0.3); firework(me.x, me.y + 2, me.z - 4, 0.6, [rc, "#ffffff"]); }
   };
+  $("hatchok").onclick = () => done(true); $("hatchno").onclick = () => done(false);
 }
 function renderTrain() {
   const p = riding(), el = $("train"), cost = trainCost(p), max = p.lv >= MAXLV;
@@ -1111,7 +1113,7 @@ let ws = null, netOk = false, myId = null, online = 1, retry = 1000, lastSent = 
 const others = new Map();   // id -> { name, sp, lv, shirt, stars, inst, buf, x, y, z, yaw, moving, m, tag, bub }
 function netSend(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 function connect() {
-  if (hidden || ws || kicked) return;
+  if (ws || kicked) return;
   try { ws = new WebSocket(WS_URL); } catch (e) { ws = null; setTimeout(connect, retry); return; }
   const sock = ws;
   ws.onopen = () => {
@@ -1128,13 +1130,14 @@ function connect() {
     if (building) closeBuild(); for (const id of [...plotState.keys()]) setPlot(id, 0); myPlot = -1;
     $("lgo").disabled = $("lnew").disabled = true;
     if (was && !hidden) toast("Offline");
-    if (!hidden && !kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
+    if (!kicked) { setTimeout(connect, retry); retry = Math.min(15000, retry * 2); }
   };
   ws.onerror = () => {};
 }
+// (owner, 2026-11-09) a tab that's put away (minimized, behind another window) stays in the game: you stop where you are
 document.addEventListener("visibilitychange", () => {
   hidden = document.hidden;
-  if (hidden) { flushSave(true); if (ws) ws.close(); } else { retry = 1000; last = performance.now(); connect(); }
+  if (hidden) { keys.clear(); joy.id = null; joy.x = joy.y = 0; joyEl.style.display = "none"; drags.clear(); me.moving = false; sendPos(true); flushSave(true); } else { retry = 1000; last = performance.now(); connect(); }
 });
 addEventListener("pagehide", () => flushSave(true));
 
@@ -1363,8 +1366,8 @@ function poiBubble(name, what) {
 for (const q of POIS) { q.s = poiBubble(q.name, q.what); q.s.position.set(q.x, q.y, q.z); scene.add(q.s); }
 function poiStep() {
   for (const q of POIS) {
-    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), a = building || (q.extra && !extraIsland.visible) ? 0 : clamp((70 - d) / 25, 0, 1);
-    q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 20) / 60, 0, 1); q.s.scale.set(6.4 * k, 2.2 * k, 1);
+    const d = hyp(q.x - me.x, q.z - me.z, (q.y - me.y) * 0.5), f = clamp((45 - d) / 35, 0, 1), a = building || (q.extra && !extraIsland.visible) ? 0 : f * f;   // (owner, 2026-11-09) fainter the further, gone past 45 m
+    q.s.visible = a > 0.01; q.s.material.opacity = a; const k = 1 + clamp((d - 15) / 60, 0, 0.3); q.s.scale.set(6.4 * k, 2.2 * k, 1);
   }
 }
 // each plot: a pale outline on the ground and a sign with its owner's name

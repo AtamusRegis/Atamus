@@ -37,7 +37,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Place labels (owner, 2026-11-09):** a speech bubble floats over each place saying what it is (Post Office: Pick up
   parcels here; Contract Board: Start a contract with your room; Egg Shop: Buy eggs to hatch new pets; Training Yard:
   Train the pet you ride; Animal Control: Where caught couriers end up; Sky Lift: Up to your plot / Down to the plaza),
-  clear within 45 m and fading out by 70 m, growing a little with distance; hidden while building.
+  clear within 10 m and fainter the further you are (owner, 2026-11-09), gone past 45 m, so you mostly see them in the
+  middle of town; growing a little with distance; hidden while building.
 - Houses and buildings are solid (you slide along their walls). **A house between the camera and you fades (owner,
   2026-11-08):** the more of you it hides (5 points on you), the more see-through it gets (down to 18%), easing in and
   out.
@@ -57,8 +58,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   the screen for a joystick there; drag elsewhere to turn the camera (up/down tilts it); two fingers pinch to zoom.
   **Computer:** WASD / arrows, drag to turn, the wheel zooms. Movement is relative to the camera.
 - **How pets move (owner, 2026-11-08; pitch 2026-11-09):** a pet turns to face where it's going. Fliers and gliders in the
-  air also pitch with how they're really moving: nose-up climbing, nose-down diving or gliding down, up to about 40°,
-  eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
+  air also pitch with how they're really moving: nose-up climbing (up to about 40°), nose-down diving or gliding down (1.4× steeper than
+  the path, up to about 55°: owner, 2026-11-09), eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
   tilt. (The tilt removed on 2026-11-08 followed the camera, not the flight.)
   - **Space (or the Jump / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08)**, except on a flapping
     flier, where it's held (below).
@@ -137,7 +138,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Pets** (button) lists yours (best first) with level, speed and bag; tap one to ride it.
 - **Egg shop** (ride into its ring): Basic Egg $150 (Common 72%, Rare 24%, Epic 4%), Golden Egg $1,500 (Rare 60%, Epic 32%,
   Legendary 8%); the pet is any of that rarity. The egg shakes harder and cracks, then bursts in a flash and fireworks (more for Epic and Legendary) with rays
-  in the rarity's color; Ride puts you on it (with fireworks and confetti around you).
+  in the rarity's color; Ride puts you on it (with fireworks and confetti around you), **Not now** (owner, 2026-11-09)
+  keeps you on the pet you're riding and the new one waits in your Pets list (the same celebration).
 - **Pet Farm and Treats (owner, 2026-11-08, like a kind's candy):** a spare pet (you have another of its kind, and
   you're not riding it) shows **Pet Farm +N** in the Pets list; tap it, then **Sure?**, and it goes to live on the farm,
   leaving **N Treats** for its kind (5 + 1 per level it had). Treats show on that kind's cards. In the training yard a
@@ -157,9 +159,11 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   (animal control 10, stamped with its clock). Pages replay each player 170 ms in the past on that player's own clock
   (so speeds stay even), guessing ahead up to 0.2 s if an update's late (not if they'd stopped) and easing any
   correction in. Nothing is checked by the server (no anti-cheat).
-- **Leaving (owner, 2026-11-08: ghosts and clones):** a tab that's put away disconnects and reconnects when it's back;
-  the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
+- **Leaving (owner, 2026-11-08: ghosts and clones):** the server drops connections that don't answer its ping within 10 s; a page that reconnects (same tab) replaces its
   old connection (keeping its wanted level).
+- **Staying in the game while away (owner, 2026-11-09):** a tab that's put away (minimized, behind another window, another
+  tab) stays connected: you stop where you are, your keys and joystick let go, and others keep seeing you there. If the
+  connection does drop (a phone suspending the page), it reconnects as soon as it can and when the tab is back.
 - **Updates (owner, 2026-11-08):** when a new build of the site goes live, the server tells every connected page and it
   reloads onto it ("Updating!"); a page that connects with an older build than the server last saw reloads too (at most
   once a minute). Progress is in the browser, so nothing's lost but the parcels in the bag.
