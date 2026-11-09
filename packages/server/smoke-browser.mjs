@@ -7,6 +7,7 @@ process.env.ATAMUS_PTR = "1";   // no live website to watch
 import http from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import express from "express";
 import { chromium } from "playwright-core";
 
@@ -20,7 +21,7 @@ if (!chrome) {
 }
 
 const { attachPets } = await import("./src/pets.js");
-const app = express(); app.use(express.static(new URL("../../website/", import.meta.url).pathname));
+const app = express(); app.use(express.static(fileURLToPath(new URL("../../website/", import.meta.url))));
 const server = http.createServer(app);
 attachPets(server, { allowLocal: true });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -43,6 +44,20 @@ try {
   await page.fill("input[placeholder=Password]", "smoke-check-1");
   await page.click("text=Create account");
   await user.waitFor({ state: "hidden", timeout: 20000 });
+  step = "check animal-control lights by day and night";
+  const setSkyPhase = (phase) => page.evaluate((p) => { window.Pets.skyOffset = p * window.Pets.World.DAY_S - (Date.now() / 1000) % window.Pets.World.DAY_S; }, phase);
+  const waitForLights = async (day) => {
+    for (let i = 0; i < 50; i++) {
+      const ready = await page.evaluate((wantDay) => wantDay === (window.Pets.daylight >= 0.5) && window.Pets.vehs.every((v) => v.kind ? v.beam.visible !== wantDay && (v.spot.intensity > 0) !== wantDay : v.lit.visible !== wantDay), day);
+      if (ready) return;
+      await page.waitForTimeout(100);
+    }
+    throw new Error(`animal-control lights did not turn ${day ? "off in daylight" : "on at night"}`);
+  };
+  await setSkyPhase(0.25);
+  await waitForLights(true);
+  await setSkyPhase(0.75);
+  await waitForLights(false);
   step = "ride for a moment";
   await page.keyboard.down("KeyW"); await page.waitForTimeout(1500); await page.keyboard.up("KeyW"); await page.waitForTimeout(500);
   if (!(await page.locator("canvas").count())) problems.push("no game canvas");

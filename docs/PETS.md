@@ -108,15 +108,16 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 - **Vans** spot a player near them (16 m, plus 7 m per wanted star; only players on or near the ground) and chase them
   straight for a short while (3 s, plus 0.8 s per star), lights flashing, at 9.5 m/s plus 1.3 per star, so a faster pet
   gets away.
-- **Van headlights (owner, 2026-11-09):** on while a van is moving: lit lamps, two beams reaching ahead and a pool of
-  light on the road; faint by day, bright at night.
+- **Van headlights (owner, 2026-11-09):** on after daylight fades while a van is moving: lit lamps, two beams reaching
+  ahead and a pool of light on the road. Headlights and the red/blue light bars do not work in daylight.
 - **Helicopter searchlights (owner, 2026-11-09):** a helicopter no longer chases. It circles over town shining a
   searchlight down from under its nose: the beam turns slowly (about 15-35° a second), easing round to the other way
   every 3-8 s, while its spot drifts in and out from 6 to 24 m out from under the helicopter. It's a real light: it
   lights the ground, houses and pets where it lands, and the beam stops where it hits. **A parcel carrier inside the
   beam (anywhere along it, in the air too) for half a second is caught**; entering it flashes the helicopter's lights
-  and shows "Animal control!". The beam can be seen by day but is brightest at night. The server and the page test the
-  same cone (pets-world.js `beamOf`), the server sending each helicopter's beam heading and reach.
+  and shows "Animal control!". Helicopters keep circling in daylight, but their searchlights and red/blue lights are
+  off and cannot spot or catch anyone until daylight fades. The server and the page test the same cone (pets-world.js
+  `beamOf`), the server sending each helicopter's beam heading and reach.
 - **Caught** (a van touching you on the ground, or half a second in a searchlight): you're taken straight to the
   pound's yard (no stun, owner 2026-11-08), your parcels go back to the post office and your wanted level is cleared; 7 s before you can be
   caught again.

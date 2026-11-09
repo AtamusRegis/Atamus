@@ -7,6 +7,12 @@
 
 export const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), hyp = Math.hypot, smooth = (t) => t * t * (3 - 2 * t);
+export const DAY_S = 1200;
+export function daylightAt(t) {
+  const el = Math.sin(((t % DAY_S) / DAY_S) * TAU) + 0.2;
+  return smooth(clamp((el + 0.08) / 0.35, 0, 1));
+}
+export const isDaylight = (t) => daylightAt(t) >= 0.5;
 
 // ---- noise ----
 function hash(ix, iz) { let h = (Math.imul(ix, 374761393) + Math.imul(iz, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
@@ -329,11 +335,14 @@ function catchPlayer(p, vs, now, ev) {
 export function stepVehicles(vs, players, dt, now) {
   const ev = [];
   for (const p of players) if (p.stars > 0 && now - p.lastChased > WANTED_COOL) { p.stars--; p.lastChased = now; ev.push({ k: "stars", id: p.id, stars: p.stars }); }
-  // the helicopters' searchlights
+  // The helicopters keep circling by day, but their searchlights only work once daylight has faded.
+  const daylight = isDaylight(now);
   const inLight = new Set();
   for (const v of vs) {
     if (v.kind !== 1) continue;
-    stepHeli(v, dt, now); beamOf(v, beamTmp); v.mode = 0;
+    stepHeli(v, dt, now); v.mode = 0;
+    if (daylight) continue;
+    beamOf(v, beamTmp);
     for (const p of players) {
       if (p.immuneUntil > now || !insideWorld(p) || !p.bag || !lit(beamTmp, p)) continue;
       inLight.add(p); v.mode = 1; v.target = p.id;
