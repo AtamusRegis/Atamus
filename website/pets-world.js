@@ -428,7 +428,7 @@ export function starterHouse() {
 const int = (v, lo, hi, d = lo) => (Number.isFinite(+v) ? Math.max(lo, Math.min(hi, Math.floor(+v))) : d);
 export function cleanData(d, species) {
   d = d && typeof d === "object" ? d : {};
-  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => ({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }));
+  const pets = (Array.isArray(d.pets) ? d.pets : []).filter((p) => p && species.has(p.sp)).slice(0, 400).map((p) => Object.assign({ id: int(p.id, 1, 1e9), sp: p.sp, lv: int(p.lv, 1, 20, 1) }, int(p.tp, 0, 999, 0) ? { tp: int(p.tp, 0, 999, 0) } : {}));   // tp: training points toward the next level (owner, 2026-11-09)
   const ids = new Set(); const uniq = pets.filter((p) => !ids.has(p.id) && ids.add(p.id));
   if (!uniq.length) uniq.push({ id: 1, sp: "pup", lv: 1 });
   const items = d.items || {}, treats = {};
