@@ -258,8 +258,19 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   below them. Kept on the account (`pet_accounts.role`, `mute_until`, `ban_until`); every action is logged
   (`pet_admin_log`).
 - **Admin** button (staff only) opens the panel: everyone online, and any account by name (type to search). Each shows
-  online, role, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma, Off),
-  Ban (the same), Kick (online), Give (admins).
+  online, role, VIP, muted / banned (with time left), and: role (who's allowed), Mute (10m, 1h, 1d, 7d, 30d, Perma,
+  Off), Ban (the same), Kick (online), Quick, VIP and Give (admins). Online players first; your own row has no mute,
+  ban or kick. The search box keeps its focus while the list refreshes.
+- **Quick commands (owner, 2026-11-09, admins):** a "Me" grid at the top of the panel runs them on yourself, each
+  row's Quick menu on that player (anyone below you, online or not): +10K / +100K / +1M coins, All pets (one level-1
+  pet of every kind they don't have), Max levels (every pet to 20), Items (+100 of each), Treats (+100 of every
+  kind), Clear wanted (stars to 0, online only), Everything (a million coins, every missing kind at level 20, all
+  pets to 20, the items and the Treats). Logged like every other action.
+- **Chat commands (staff):** a chat line starting with "/" from a moderator or admin is a command, never sent as chat
+  (a player's "/" line is ordinary chat). `/coins 50k` (k / m), `/allpets`, `/maxlv`, `/items`, `/treats`,
+  `/everything` (or `/all`), `/unwanted`, each on yourself or on the player named after it (`/coins 1m Name`);
+  `/kick Name`, `/mute Name 1h`, `/ban Name 7d` (minutes, or m / h / d, `perma`, `off`; 1 hour if left out).
+  Anything else: "Unknown". The server's own rules decide, as in the panel (moderators can't run the quick ones).
 - **Give:** type to narrow the list of everything (Coins, Speed Candy, Training Ribbon, Egg Ticket, every pet, every
   kind's Treats; pets carry their Flier / Glider badge, owner 2026-11-09), pick one, the amount (and level for a pet), Give; it lands in their data straight away (online or
   not).
