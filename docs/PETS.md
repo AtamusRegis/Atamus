@@ -79,12 +79,15 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   air also pitch with how they're really moving: nose-up climbing (up to about 40°), nose-down diving or gliding down (1.4× steeper than
   the path, up to about 55°: owner, 2026-11-09), eased in, about the middle of pet and rider, the same for everyone's pets; level on the ground. Land pets never
   tilt. (The tilt removed on 2026-11-08 followed the camera, not the flight.)
-  - **Space (or the Jump / Fly ▲ / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08).**
+  - **Space (or the Jump / Flap ▲ button) is pressed each time, never held (owner, 2026-11-08)**, except on a flapping
+    flier, where it's held (below).
   - **Land pets** jump: straight up when not moving, far on the run (1.6× speed in the air); a jump gets them up a
     ledge.
-  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon): Space rises straight up; moving forward climbs or dives the way the camera looks
-    (look up, from below, to climb; the camera can go below them); they hover when stopped; up to 130 m. They fly at
-    0.75× and walk at 0.7× their speed.
+  - **Flapping fliers** (Butterfly, Owl, Dragon, Ice Dragon) (owner, 2026-11-09): only two controls go up and down:
+    hold Space (or Fly ▲) to keep rising, hold Ctrl (or Fly ▼, shown only on a flier) to keep sinking; otherwise they
+    hold their height, moving or not (the camera's angle no longer climbs or dives); up to 130 m, down to the ground.
+    Vertical speed is 0.85× their flying speed. They fly at 0.75× and walk at 0.7× their speed. On a computer, a
+    "Space Up · Ctrl Down" key strip shows at the bottom of the screen only while riding one (not while building).
   - **Gliders** (Parrot, Pegasus, Phoenix, Pterodactyl): can't climb, but Space jumps off the ground and gives one flap
     up in the air; they glide, sinking 1.6 m/s (faster
     looking down) at 1.25× speed, and walk at 0.95×; they can step off the edge.
@@ -154,9 +157,8 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
   - Epic: Deer 11.5/3, Sea Turtle ≈ 10.5/6, Bear 10/6, Horse 12.5/4, Owl ✈ 11/4, Triceratops 11/6, Raptor 13/3
   - Legendary: Dragon ✈ 15/5, Unicorn 16/4, Pegasus ✈ 15.5/4, Phoenix ✈ 17/3, T-Rex 14.5/7, Pterodactyl ✈ 15/5,
     Ice Dragon ✈ 16/5
-- **Fliers (owner, 2026-11-08):** climb to 11 m above the land while moving (higher near an island), over houses and
-  trucks, and come down when stopped or within 10 m of a parcel's house, the post office, the shops or the board; they
-  land on islands. Shown with a wing by their name in the menus.
+- **Fliers (owner, 2026-11-08):** fly over houses and trucks and land on islands; they go up and down only as the
+  player holds (see Riding). Shown with a wing by their name in the menus.
 - **Fliers and gliders are marked (owner, 2026-11-08):** a badge on every card (Flier: sky blue with flapping wings;
   Glider: teal with spread wings) and the card's frame and tint in that color, also when an egg hatches. **Swimmers
   (owner, 2026-11-09):** Duck, Otter, Penguin, Sea Turtle: an indigo Swimmer badge with waves and an indigo card. The
@@ -314,4 +316,6 @@ Asked (owner): a web game on atamus.io (not Roblox), on its own page; the cargo 
 
 - Training for coins (owner, 2026-11-09): replaced by the training arena's obstacle course.
 - The courier's cap and mail bag (owner, 2026-11-09): replaced by the R6-style figure.
+- Fliers climbing or diving the way the camera looks, and Space as a single rise per press on a flier (owner,
+  2026-11-09): replaced by holding Space / Ctrl.
 - Helicopters spotting players by distance and chasing them down (owner, 2026-11-09): replaced by the searchlight.

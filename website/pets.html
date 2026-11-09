@@ -32,6 +32,7 @@
     #contract .bar { height: 10px; border-radius: 6px; background: #e3eaf0; overflow: hidden; }
     #contract .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #ffd35a); }
     #contract .row { display: flex; justify-content: space-between; font-size: 13px; }
+    #flykeys { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 4; pointer-events: none; gap: 10px; }
     #side { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; align-items: flex-end; z-index: 5; }
     .btn { border: 0; border-radius: 16px; padding: 12px 16px; min-width: 64px; min-height: 52px; font: 800 15px ui-rounded, system-ui, sans-serif; color: #fff; background: var(--blue); box-shadow: 0 4px 0 rgba(0,0,0,.18); cursor: pointer; position: relative; }
     .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,.18); }
@@ -177,6 +178,7 @@
   </div>
   <div id="joy"><i></i></div>
   <div id="pin"><svg viewBox="0 0 40 52" width="40" height="52"><path d="M20 50 4 28h10V2h12v26h10z" fill="#ffd35a" stroke="#fff8dc" stroke-width="2.5" stroke-linejoin="round"/></svg></div>
+  <div class="pill" id="flykeys" style="display:none"><span><kbd>Space</kbd>Up</span><span><kbd>Ctrl</kbd>Down</span></div>
   <div id="side">
     <div id="items"></div>
     <div id="acts"></div>
@@ -184,6 +186,7 @@
     <button class="btn" id="btn-build" type="button" style="display:none">Build</button>
     <button class="btn ghost" id="btn-chat" type="button">Chat</button>
     <button class="btn green" id="btn-jump" type="button">Jump</button>
+    <button class="btn green" id="btn-down" type="button" style="display:none">Fly ▼</button>
     <button class="btn" id="btn-pets" type="button">Pets</button>
   </div>
   <div class="panel" id="p-pets"><h2>Pets <button class="x" type="button">✕</button></h2><div class="grid" id="petlist"></div></div>
@@ -208,6 +211,6 @@
   <div id="toast"></div>
   <div id="banner"></div>
   <div id="hatch"><canvas id="hatchc" width="440" height="440"></canvas><span class="nm" id="hatchn"></span><span class="rar" id="hatchr"></span><div class="hatchb"><button class="btn ghost" id="hatchno" type="button">Not now</button><button class="btn green" id="hatchok" type="button">Ride</button></div></div>
-  <script type="module" src="pets.js?v=1793100032"></script>
+  <script type="module" src="pets.js?v=1793100035"></script>
 </body>
 </html>
