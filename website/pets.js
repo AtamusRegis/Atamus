@@ -940,7 +940,8 @@ const typing = () => { const a = document.activeElement; return !!a && a.tagName
 addEventListener("keydown", (e) => {
   if (typing()) return; keys.add(e.code); if (e.code === "Escape") { if (building) closeBuild(); closePanels(); }
   if ((e.code === "Enter" || e.code === "Slash") && loggedIn) { e.preventDefault(); openChat(); }
-  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held
+  if (e.code === "Space") { e.preventDefault(); if (!e.repeat) jumpQueued = performance.now() + 150; }   // (owner, 2026-11-08) a press each time, never held (a flier holds it: step)
+  if (e.ctrlKey && !me.foot && moveKind() === "fly" && /^(Key|Arrow|Digit)/.test(e.code)) e.preventDefault();   // Ctrl held to fly down: keep the browser's Ctrl shortcuts out of the way
   if (e.code === "KeyF") runAct("F"); if (e.code === "KeyE") runAct("E"); if (e.code === "KeyG") runAct("G"); if (e.code === "KeyR" && building) building.r = (building.r + 1) % 4;
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -1784,6 +1785,8 @@ function ui() {
   for (const a of acts) { const b = document.createElement("button"); b.className = "btn ghost"; b.type = "button"; b.innerHTML = touchy || a.key.length > 1 ? a.label : `<kbd>${a.key}</kbd> ${a.label}`; b.onclick = () => runAct(a.key); el.appendChild(b); }
   $("btn-jump").style.display = building ? "none" : "";
   $("btn-jump").textContent = kind === "fly" ? "Fly ▲" : kind === "glide" ? "Flap ▲" : "Jump";
+  $("btn-down").style.display = kind === "fly" && !building ? "" : "none";
+  $("flykeys").style.display = kind === "fly" && !building && !touchy ? "" : "none";   // (owner, 2026-11-09) only on a flier
   $("btn-build").style.display = mine2 || building ? "" : "none"; $("btn-build").textContent = building ? "Done" : "Build";
   $("btn-admin").style.display = isStaff() ? "" : "none";
 }
@@ -1884,7 +1887,7 @@ function slash(text) {
 }
 
 // ---- the loop ----
-let last = performance.now(), clock = 0, zone = null, jumpQueued = 0;
+let last = performance.now(), clock = 0, zone = null, jumpQueued = 0, flyUp = false, flyDown = false;   // flyUp / flyDown: Fly ▲ / Fly ▼ held
 const SLOPE = 0.8, FLY_TOP = 130, FLY_SPEED_UP = 0.85, GRAV = 26;
 // (owner, 2026-11-08) how each pet gets around: land pets jump (high from standing, far on the run); flapping fliers go
 // anywhere but fly and walk slower; gliders are fast but can't climb, sinking slowly as they glide, and walk well
@@ -1947,10 +1950,10 @@ function step(dt) {
     me.yaw = lerpYaw(me.yaw, Math.atan2(mx, mz), Math.min(1, dt * 12));   // turn to where it's going (fliers also pitch: flightPitch)
   }
   const floor = floorAt(me.x, me.z, me.y);
-  if (kind === "fly") {   // climbs or dives as it flies forward, the way the camera looks; hovers when stopped; Space rises straight up
-    const fwd = me.moving ? clamp(-jy, 0, 1) : 0, climb = clamp((0.42 - cam.pitch) * 1.8, -1, 1);
-    if (jumpQueued > now && !stunned) { me.vy = 10; jumpQueued = 0; }
-    me.y += (climb * fwd * sp * FLY_SPEED_UP + (me.vy || 0)) * dt; me.vy = (me.vy || 0) * Math.exp(-2.5 * dt); if (me.vy < 0.2) me.vy = 0;
+  if (kind === "fly") {   // (owner, 2026-11-09) up and down only by holding Space / Fly ▲ (up) and Ctrl / Fly ▼ (down); hovers otherwise
+    const held = loggedIn && !typing(), upH = flyUp || (held && keys.has("Space")), downH = flyDown || (held && (keys.has("ControlLeft") || keys.has("ControlRight")));
+    me.vy = 0; jumpQueued = 0;
+    if (!stunned) me.y += ((upH ? 1 : 0) - (downH ? 1 : 0)) * sp * FLY_SPEED_UP * dt;
     me.y = Math.min(me.y, FLY_TOP); if (me.y < floor) me.y = floor;
   } else {
     if (jumpQueued > now && grounded && !stunned) { me.vy = me.moving ? (kind === "glide" ? 9 : 7.5) : kind === "glide" ? 10 : 11; me.longJump = me.moving && kind !== "glide"; jumpQueued = 0; }
@@ -2039,7 +2042,9 @@ function frame(now) {
   draw(dt); hud(); ui(); if (invites.length && invites[0].until < now) renderInvite();
   requestAnimationFrame(frame);
 }
-$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; });
+$("btn-jump").addEventListener("pointerdown", (e) => { e.preventDefault(); jumpQueued = performance.now() + 150; flyUp = true; });
+$("btn-down").addEventListener("pointerdown", (e) => { e.preventDefault(); flyDown = true; });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) { $("btn-jump").addEventListener(ev, () => { flyUp = false; }); $("btn-down").addEventListener(ev, () => { flyDown = false; }); }
 me.y = terrain(me.x, me.z); cam.y = me.y;
 syncBeams(); hud(); requestAnimationFrame(frame); connect();
 $("lgo").disabled = $("lnew").disabled = true;
